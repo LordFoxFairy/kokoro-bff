@@ -2,7 +2,13 @@ import { createHash, randomUUID } from "node:crypto"
 
 import { EventSchemas, EventType } from "@ag-ui/core"
 
-import type { AgentDispatchOutboxClaimInput, AgentDispatchOutboxRepository, CommitChatTurn } from "../../application/ports/agent-dispatch-outbox-repository.js"
+import type {
+  AgentDispatchOutboxClaimInput,
+  AgentDispatchOutboxRepository,
+  CommitChatTurn,
+  ChatTurnSelectionInput,
+  ChatTurnSelection,
+} from "../../application/ports/agent-dispatch-outbox-repository.js"
 import { agentDispatchFailureProjection } from "../../application/agui/agent-dispatch-failure.js"
 import {
   parseAgentDispatchPayload,
@@ -13,7 +19,7 @@ import {
 } from "../../domain/chat/agent-dispatch.js"
 import type { PoolClient } from "pg"
 import type { PostgresBffDatabase } from "./client.js"
-import { commitChatTurn } from "./chat-turn-commit.js"
+import { commitChatTurn, prepareChatTurnSelection } from "./chat-turn-commit.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
 import { instant } from "./chat-repository-mappers.js"
 
@@ -266,6 +272,10 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     )
     if (advanced.rowCount !== 1) throw new Error("CHAT_QUEUED_CURSOR_ALLOCATION_FAILED")
     return cursor
+  }
+
+  public async prepareChatTurnSelection(input: ChatTurnSelectionInput): Promise<ChatTurnSelection | null> {
+    return prepareChatTurnSelection(this.database, input)
   }
 
   public async commitChatTurn(command: CommitChatTurn): Promise<AgentDispatchReceipt | null> {

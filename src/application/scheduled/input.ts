@@ -1,8 +1,9 @@
+import { CALENDAR_FIELDS, calendarFromWire, freezeCalendar } from "../../domain/scheduled-task/calendar.js"
 import type { ScheduledTaskCreateInput, ScheduledTaskPatch } from "../ports/scheduled-task-repository.js"
-import { isIanaTimezone, parseUtcTimestamp } from "../../domain/scheduled-task/task.js"
+import { parseUtcTimestamp } from "../../domain/scheduled-task/task.js"
 
-const CREATE_FIELDS = new Set(["project_id", "title", "prompt", "frequency", "time", "timezone", "recurrence_anchor_at", "expires_at", "auto_approve"])
-const PATCH_FIELDS = new Set(["title", "prompt", "frequency", "time", "timezone", "recurrence_anchor_at", "expires_at", "auto_approve", "enabled", "status"])
+const CREATE_FIELDS = new Set(["project_id", "title", "prompt", ...CALENDAR_FIELDS, "expires_at", "auto_approve"])
+const PATCH_FIELDS = new Set(["title", "prompt", ...CALENDAR_FIELDS, "expires_at", "auto_approve", "enabled", "status"])
 
 function exactProjectReference(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.trim() === value
@@ -25,31 +26,21 @@ export function scheduledCreateInput(json: Record<string, unknown>, projectId?: 
   const projectReference = projectId ?? (typeof json.project_id === "string" ? json.project_id : undefined)
   const title = typeof json.title === "string" ? json.title.trim() : ""
   const prompt = typeof json.prompt === "string" ? json.prompt.trim() : ""
-  const frequency = json.frequency
-  const time = typeof json.time === "string" ? json.time.trim() : ""
-  const timezone = typeof json.timezone === "string" ? json.timezone.trim() : ""
-  const recurrenceAnchorAt =
-    json.recurrence_anchor_at === undefined ? new Date() : instant(json.recurrence_anchor_at, "SCHEDULED_TASK_RECURRENCE_ANCHOR_INVALID")
-  const expiresAt = json.expires_at === undefined ? undefined : json.expires_at === null ? null : instant(json.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID")
-  if (
-    title === "" ||
-    prompt === "" ||
-    (frequency !== "daily" && frequency !== "weekly") ||
-    !/^([01]\d|2[0-3]):[0-5]\d$/u.test(time) ||
-    timezone === "" ||
-    !isIanaTimezone(timezone) ||
-    recurrenceAnchorAt === null ||
-    expiresAt === null
-  )
+  const calendar = calendarFromWire(json)
+  if (calendar === null) return null
+  let rule
+  try {
+    rule = freezeCalendar(calendar)
+  } catch {
     return null
+  }
+  const expiresAt = json.expires_at === undefined ? undefined : json.expires_at === null ? null : instant(json.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID")
+  if (title === "" || prompt === "" || expiresAt === null) return null
   return {
     ...(projectReference === undefined ? {} : { projectId: projectReference }),
     title,
     prompt,
-    frequency,
-    time,
-    timezone,
-    recurrenceAnchorAt,
+    ...rule,
     ...(expiresAt === undefined ? {} : { expiresAt }),
     autoApprove: typeof json.auto_approve === "boolean" ? json.auto_approve : false,
   }
@@ -66,22 +57,14 @@ export function scheduledPatchInput(json: Record<string, unknown>): ScheduledTas
     if (typeof json.prompt !== "string" || json.prompt.trim() === "") return null
     input.prompt = json.prompt.trim()
   }
-  if (json.frequency !== undefined) {
-    if (json.frequency !== "daily" && json.frequency !== "weekly") return null
-    input.frequency = json.frequency
-  }
-  if (json.time !== undefined) {
-    if (typeof json.time !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(json.time)) return null
-    input.time = json.time
-  }
-  if (json.timezone !== undefined) {
-    if (typeof json.timezone !== "string" || json.timezone.trim() === "" || !isIanaTimezone(json.timezone.trim())) return null
-    input.timezone = json.timezone.trim()
-  }
-  if (json.recurrence_anchor_at !== undefined) {
-    const recurrenceAnchorAt = instant(json.recurrence_anchor_at, "SCHEDULED_TASK_RECURRENCE_ANCHOR_INVALID")
-    if (recurrenceAnchorAt === null) return null
-    input.recurrenceAnchorAt = recurrenceAnchorAt
+  if (CALENDAR_FIELDS.some((field) => Object.hasOwn(json, field))) {
+    const calendar = calendarFromWire(json)
+    if (calendar === null) return null
+    try {
+      Object.assign(input, freezeCalendar(calendar))
+    } catch {
+      return null
+    }
   }
   if (json.expires_at !== undefined) {
     if (json.expires_at === null) {

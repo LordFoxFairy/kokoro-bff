@@ -33,6 +33,12 @@ X-Forwarded-*、tenant 或 actor header 作为 authority，也不把 session Bea
 permission enforcement。Project、ScheduledTask、Conversation 等 resource owner predicate 独立校验；Task 2 已关闭
 已知的同 tenant 跨用户访问缺口，并在 receipt replay 与 Agent I/O 前返回与缺失一致的 404。
 
+## AUTH-P3 Skills/Platform 机器身份（源码候选，2026-10-16）
+
+BFF→Platform 六用途只消费固定 owner auth profile 1.0.0：每用途独立 owner-only 文件、caller kokoro-bff、single surface、固定 tenant，逐请求读取当前完整文件。catalog/skills_admin 与既有四种直接用途同样无 OAuth mint/cache/retire/fallback；旧 OAuth 配置名拒绝，不解释旧 JSON。文件权限、上限、取消/截止与轮换均失败关闭；解析错误不回显文件片段。配置名只引用路径，secret 不进入代码、异常、日志或公开响应。
+
+Skills 命令和 Admin 读取继续要求当前 Product Session 与 fresh human action。session 的 UI 管理员标记或机器 Bearer 不替代当前 skill.admin 授权；owner subject/tenant/资源/CAS/receipt 判断保持。Agent execution、System global-register 与第三方 MCP OAuth 不由此片放行。正常配对激活必须使用本地私有配置与成对回滚，不将源码验证当部署成功。
+
 ## 出站控制
 
 - owner base URL 来自 server config，协议限制为 HTTP/HTTPS。
@@ -43,7 +49,7 @@ permission enforcement。Project、ScheduledTask、Conversation 等 resource own
 
 ## 数据与 secret
 
-- secret 只来自环境变量，不写入日志、receipt 或 contract 示例。
+- secret 只来自部署环境或 owner-only secret 文件/mount；代码与示例只保留配置名/路径占位符，不写入日志、receipt 或 contract 实值。
 - `response_body` receipt 可能包含业务响应；当前没有字段级敏感数据分类、加密或 TTL，需在扩大 payload 前补齐。
 - `bff_agui_event.event_payload` 保存公开 AG-UI frame，可能含用户文本、tool result 或 delivery metadata；frame retention
   与 tombstone GC 已实现，但尚无字段级加密，数据库角色、备份和诊断查询必须按用户内容处理，禁止把 payload 写入普通日志。

@@ -28,6 +28,51 @@
     },
     {
       "method": "GET",
+      "path": "/v1/account/sessions",
+      "operation_id": "listAccountSessions"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/account/sessions/{session_id}",
+      "operation_id": "revokeAccountSession"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/account/profile",
+      "operation_id": "updateAccountProfile"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/preferences/knowledge",
+      "operation_id": "listSelfKnowledge"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/preferences/knowledge/{knowledge_id}",
+      "operation_id": "getSelfKnowledge"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/preferences/knowledge/{knowledge_id}",
+      "operation_id": "replaceSelfKnowledge"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/preferences/knowledge/{knowledge_id}",
+      "operation_id": "deleteSelfKnowledge"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/preferences/knowledge-usage",
+      "operation_id": "getSelfKnowledgeUsage"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/preferences/knowledge-usage",
+      "operation_id": "replaceSelfKnowledgeUsage"
+    },
+    {
+      "method": "GET",
       "path": "/v1/preferences/personalization",
       "operation_id": "getSelfPersonalization"
     },
@@ -332,9 +377,14 @@
       "operation_id": "uploadProjectResources"
     },
     {
-      "method": "PATCH",
-      "path": "/v1/projects/{projectId}/skills/{skill}",
-      "operation_id": "updateProjectSkill"
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/skill-selection",
+      "operation_id": "getProjectSkillSelection"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/{projectId}/skill-selection",
+      "operation_id": "replaceProjectSkillSelection"
     },
     {
       "method": "POST",
@@ -388,6 +438,36 @@
     },
     {
       "method": "POST",
+      "path": "/v1/projects/{projectId}/skill-installations",
+      "operation_id": "installProjectSkill"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/skill-installations",
+      "operation_id": "listProjectSkillInstallations"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}",
+      "operation_id": "getProjectSkillInstallation"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}",
+      "operation_id": "removeProjectSkillInstallation"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/enabled",
+      "operation_id": "setProjectSkillInstallationEnabled"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/update",
+      "operation_id": "updateProjectSkillInstallation"
+    },
+    {
+      "method": "POST",
       "path": "/v1/skill-installations",
       "operation_id": "installPersonalSkill"
     },
@@ -415,6 +495,11 @@
       "method": "PUT",
       "path": "/v1/skill-installations/{installation_id}/enabled",
       "operation_id": "setPersonalSkillInstallationEnabled"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skill-installations/{installation_id}/update",
+      "operation_id": "updatePersonalSkillInstallation"
     },
     {
       "method": "POST",
@@ -572,6 +657,31 @@
       "operation_id": "getSkillPackageDirectory"
     },
     {
+      "method": "POST",
+      "path": "/v1/admin/mcp/packages/{package_id}/uploads",
+      "operation_id": "beginAdminMcpPackageUpload"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}",
+      "operation_id": "getAdminMcpPackageUploadStatus"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/complete",
+      "operation_id": "completeAdminMcpPackageUpload"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/abort",
+      "operation_id": "abortAdminMcpPackageUpload"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/mcp/packages/{package_id}/publish",
+      "operation_id": "publishAdminMcpPackage"
+    },
+    {
       "method": "GET",
       "path": "/v1/admin/mcp/providers",
       "operation_id": "listAdminMcpProviders"
@@ -715,21 +825,6 @@
       "method": "GET",
       "path": "/skill-downloads/{handle}",
       "operation_id": "downloadSkillBytes"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/account/sessions",
-      "operation_id": "listAccountSessions"
-    },
-    {
-      "method": "DELETE",
-      "path": "/v1/account/sessions/{session_id}",
-      "operation_id": "revokeAccountSession"
-    },
-    {
-      "method": "PATCH",
-      "path": "/v1/account/profile",
-      "operation_id": "updateAccountProfile"
     }
   ]
 }

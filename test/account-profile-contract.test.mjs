@@ -1,3 +1,4 @@
+import { restoreClosureMainContract, closureMainBaseline } from "../scripts/verify-closure-integration-contract.mjs"
 import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "../scripts/archived-tasks-public-contract.mjs"
 import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "../scripts/shared-tasks-public-contract.mjs"
 import assert from "node:assert/strict"
@@ -5,8 +6,8 @@ import { readFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import test from "node:test"
 import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "../scripts/account-profile-public-contract.mjs"
-const currentSource = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-const currentBaseline = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+const currentSource = restoreClosureMainContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+const currentBaseline = closureMainBaseline(JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations)
 const source = restorePublic152SharedTasksContract(restorePublic153ArchivedTasksContract(currentSource))
 const baseline = sharedTasksParentBaseline(archivedTasksParentBaseline(currentBaseline))
 const digest = (value) => createHash("sha256").update(value).digest("hex")

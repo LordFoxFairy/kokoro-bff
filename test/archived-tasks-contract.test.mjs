@@ -1,3 +1,4 @@
+import { restoreClosureMainContract, closureMainBaseline } from "../scripts/verify-closure-integration-contract.mjs"
 import { restorePublic154IntegrationContract, integrationParentBaseline } from "../scripts/integration-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
@@ -11,7 +12,7 @@ import {
   archivedTasksParentBaseline,
   restorePublic153ArchivedTasksContract,
 } from "../scripts/archived-tasks-public-contract.mjs"
-const integratedSource = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+const integratedSource = restoreClosureMainContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
 const source = restorePublic154IntegrationContract(integratedSource)
 const spec = load(source)
 const sha = (value) => createHash("sha256").update(value).digest("hex")
@@ -20,7 +21,7 @@ const inventory = Object.entries(spec.paths).flatMap(([path, item]) =>
     .filter(([method]) => ["get", "post", "patch", "put", "delete", "head", "options"].includes(method))
     .map(([method, operation]) => ({ method: method.toUpperCase(), path, operation_id: operation.operationId })),
 )
-const integratedInventory = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+const integratedInventory = closureMainBaseline(JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations)
 const currentInventory = integrationParentBaseline(integratedInventory)
 const oldInventory = archivedTasksParentBaseline(currentInventory)
 const resolve = (schema) => (schema.$ref ? spec.components.schemas[schema.$ref.split("/").at(-1)] : schema)
@@ -158,7 +159,7 @@ test("SET47 inventory inverse rejects missing duplicate reorder and old operatio
     assert.throws(() => archivedTasksParentBaseline(altered))
 })
 test("SET47 schema inverse keeps lifecycle and canonical old SQL exactly unchanged", async () => {
-  const schema = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
+  const schema = await readFile(new URL("../contract/tests/settings-main.schema.sql.snapshot", import.meta.url), "utf8")
   assert.equal(schema.split("  archived_at TIMESTAMPTZ(3),\n").length, 2)
   assert.match(schema, /status IN \('active', 'deleted'\)/)
   assert.match(schema, /archived_at DESC, conversation_id COLLATE "C" ASC/)

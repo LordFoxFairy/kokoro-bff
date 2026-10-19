@@ -74,6 +74,7 @@ export async function authorizeLocalSkillImportWrite(
   return { ok: true } as const
 }
 export function skillActionForRequest(method: string, path: string[]): import("./skill-authorization.types.js").SkillAuthorizationInput["action"] | null {
+  if (path[0] === "projects" && path[2] === "skill-installations") path = path.slice(2)
   if (path[0] === "admin" && path[1] === "skills") {
     if (method === "GET") return "admin_read"
     if (method === "POST" && path.length === 2) return "admin_create_draft"
@@ -88,6 +89,7 @@ export function skillActionForRequest(method: string, path: string[]): import(".
     }
     return method === "POST" && path.length === 4 ? (actions[path[3]!] ?? null) : null
   }
+  if (path.length === 3 && path[0] === "skill-installations" && path[2] === "update" && method === "POST") return "install"
   if (path[0] === "skill-installations" && method !== "GET")
     return method === "DELETE" ? "remove_installation" : path.length === 1 ? "install" : "set_installation_enabled"
   if (path[0] === "self" && path[1] === "skills" && method === "POST")

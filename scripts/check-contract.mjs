@@ -1,3 +1,4 @@
+import { inspectClosureIntegrationContract } from "./verify-closure-integration-contract.mjs"
 import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "./archived-tasks-public-contract.mjs"
 import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "./shared-tasks-public-contract.mjs"
 import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "./account-profile-public-contract.mjs"
@@ -66,6 +67,21 @@ export function parseOpenApiOperations(source) {
 }
 
 function expectedIdempotency(operation) {
+  if (
+    new Set(["DELETE /v1/account/sessions/{session_id} revokeAccountSession", "PATCH /v1/account/profile updateAccountProfile"]).has(
+      `${operation.method} ${operation.path} ${operation.fields.get("operationId")}`,
+    )
+  )
+    return "none"
+  if (
+    new Set([
+      "PUT /v1/preferences/knowledge/{knowledge_id} replaceSelfKnowledge",
+      "DELETE /v1/preferences/knowledge/{knowledge_id} deleteSelfKnowledge",
+      "PUT /v1/preferences/knowledge-usage replaceSelfKnowledgeUsage",
+    ]).has(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)
+  )
+    return "none"
+
   if (["GET", "HEAD", "OPTIONS"].includes(operation.method)) return "none"
   if (operation.method === "POST" && SPECIFICATION_BROWSER_READS.get(operation.path) === operation.fields.get("operationId")) return "none"
   if (operation.fields.get("operationId") === "previewGithubSkill") return "none"
@@ -164,7 +180,12 @@ export function inspectOpenApiGovernance(source) {
       errors.push(`${label} must declare x-kokoro-idempotency=${expected}`)
     }
     const permission = operation.fields.get("x-kokoro-permission")
-    if (permission !== undefined && !/^(?:anonymous|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/u.test(permission)) {
+    const formalIamPermission = new Map([
+      ["GET /v1/account/sessions listAccountSessions", "iam:account-session.read"],
+      ["DELETE /v1/account/sessions/{session_id} revokeAccountSession", "iam:account-session.revoke"],
+      ["PATCH /v1/account/profile updateAccountProfile", "iam:account-profile.write"],
+    ]).get(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)
+    if (permission !== undefined && permission !== formalIamPermission && !/^(?:anonymous|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/u.test(permission)) {
       errors.push(`${label} has invalid x-kokoro-permission=${permission}`)
     }
   }
@@ -256,7 +277,7 @@ async function main() {
       operation.fields.get("operationId") === "getManagedPersonalSkillPackage" || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
   )
   const errors = [
-    ...(/^  version: (?:15\.4|16\.0)\.0$/mu.test(openapi) && parsedBaseline.operations.length === 146 ? [] : ["SET49 current public release must be16.0/146"]),
+    ...inspectClosureIntegrationContract(openapi, parsedBaseline.operations),
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),
     ...(parsedBaseline.operations.length === currentOperations.length ? [] : ["public operation inventory must contain one entry for every current operation"]),

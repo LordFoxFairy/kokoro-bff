@@ -41,7 +41,13 @@ export const createRun = <ThrowOnError extends boolean = false>(
 ): RequestResult<CreateRunResponses, CreateRunErrors, ThrowOnError> =>
   (options.client ?? client).post<CreateRunResponses, CreateRunErrors, ThrowOnError>({
     responseValidator: async (data) => await zCreateRunResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "AgentServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/v1/runs",
     ...options,
     headers: {
@@ -58,7 +64,13 @@ export const controlRun = <ThrowOnError extends boolean = false>(
 ): RequestResult<ControlRunResponses, ControlRunErrors, ThrowOnError> =>
   (options.client ?? client).post<ControlRunResponses, ControlRunErrors, ThrowOnError>({
     responseValidator: async (data) => await zControlRunResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "AgentServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/v1/runs/{run_id}/control",
     ...options,
     headers: {
@@ -75,7 +87,13 @@ export const replaySessionEvents = <ThrowOnError extends boolean = false>(
 ): RequestResult<ReplaySessionEventsResponses, ReplaySessionEventsErrors, ThrowOnError> =>
   (options.client ?? client).get<ReplaySessionEventsResponses, ReplaySessionEventsErrors, ThrowOnError>({
     responseValidator: async (data) => await zReplaySessionEventsResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "AgentServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/v1/sessions/{session_id}/events",
     ...options,
   })

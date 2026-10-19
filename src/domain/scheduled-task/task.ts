@@ -1,4 +1,5 @@
-export type ScheduledTaskFrequency = "daily" | "weekly"
+import type { ScheduledCalendar } from "./calendar.js"
+export type { ScheduledTaskFrequency } from "./calendar.js"
 export type ScheduledTaskStatus = "active" | "paused" | "failed"
 
 /**
@@ -8,16 +9,11 @@ export type ScheduledTaskStatus = "active" | "paused" | "failed"
  * wall-clock rule remains a string paired with an IANA timezone; it is not
  * converted to a server-local timezone.
  */
-export type ScheduledTaskFact = {
+export type ScheduledTaskFact = ScheduledCalendar & {
   id: string
   projectId?: string
   title: string
   prompt: string
-  frequency: ScheduledTaskFrequency
-  time: string
-  timezone: string
-  recurrenceAnchorAt: Date
-  nextRunAt: Date | null
   expiresAt?: Date
   autoApprove: boolean
   enabled: boolean

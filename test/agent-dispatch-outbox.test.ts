@@ -29,6 +29,10 @@ class RecordingRepository implements AgentDispatchOutboxRepository {
   public unknown: Array<{ lease: AgentDispatchLease; delayMs: number; errorCode: string }> = []
   public notAdmitted: Array<{ lease: AgentDispatchLease; errorCode: string }> = []
 
+  public async prepareChatTurnSelection(_input): Promise<import("../dist/application/ports/agent-dispatch-outbox-repository.js").ChatTurnSelection> {
+    return { kind: "new", projectId: null, installationIds: [] }
+  }
+
   public async commitChatTurn(command: CommitChatTurn): Promise<AgentDispatchReceipt> {
     this.commits.push(command)
     return {
@@ -126,6 +130,52 @@ describe("durable Chat turn admission", () => {
     assert.equal(repository.commits[0]?.payload.launch.message_id, first?.user_message_id)
     assert.equal(repository.commits[0]?.payload.launch.session_id, input.conversationId)
   })
+})
+
+it("inherits exact project defaults only for omitted selection and freezes the original request intent", async () => {
+  const repository = new RecordingRepository()
+  const preparations = []
+  repository.prepareChatTurnSelection = async (input) => {
+    preparations.push(input)
+    return { kind: "new", projectId: "project_fixture", installationIds: ["installation_a"] }
+  }
+  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const input = {
+    tenantId: "tenant_fixture",
+    conversationId: "conversation_fixture",
+    subjectId: "subject_fixture",
+    actorId: "actor_fixture",
+    requestId: "r",
+    idempotencyKey: "k",
+    content: "hello",
+  }
+  let resolved = 0
+  const resolver = async (project, ids) => {
+    resolved++
+    assert.equal(project, "project_fixture")
+    assert.deepEqual(ids, ["installation_a"])
+    return ["skill:version_a"]
+  }
+  await service.submit(input, resolver)
+  await service.submit({ ...input, selectedSkillSourceRefs: [] }, resolver)
+  assert.equal(resolved, 1)
+  assert.equal(preparations.length, 1)
+  assert.deepEqual(repository.commits[0].payload.launch.selected_skill_source_refs, ["skill:version_a"])
+  assert.deepEqual(repository.commits[0].skillSelection, { projectId: "project_fixture", installationIds: ["installation_a"] })
+  assert.deepEqual(repository.commits[1].payload.launch.selected_skill_source_refs, [])
+  assert.notEqual(repository.commits[0].requestDigest, repository.commits[1].requestDigest)
+  repository.prepareChatTurnSelection = async () => ({
+    kind: "replay",
+    receipt: { run_id: "original", user_message_id: "original-user", assistant_message_id: "original-assistant" },
+  })
+  assert.equal(
+    (
+      await service.submit(input, async () => {
+        throw Error("must not resolve replay")
+      })
+    ).run_id,
+    "original",
+  )
 })
 
 describe("Agent dispatch outbox worker", () => {
@@ -307,7 +357,7 @@ it("freezes ordered Skill selection in v2 payload and digest, rejecting old dura
   const empty = buildAgentDispatchPayload(input, ids)
   assert.equal(empty.schema_version, 2)
   assert.deepEqual(empty.launch.selected_skill_source_refs, [])
-  assert.equal(agentDispatchRequestMaterial(input), agentDispatchRequestMaterial({ ...input, selectedSkillSourceRefs: [] }))
+  assert.notEqual(agentDispatchRequestMaterial(input), agentDispatchRequestMaterial({ ...input, selectedSkillSourceRefs: [] }))
   assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical").launch.trace.project_ref, "project-canonical")
   assert.equal(
     Object.hasOwn(

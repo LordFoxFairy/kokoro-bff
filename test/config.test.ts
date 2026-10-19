@@ -371,3 +371,18 @@ describe("kokoro-bff optional Agent configuration", () => {
     }
   })
 })
+
+it("uses explicit direct Skills credential paths and rejects retired OAuth variables without aliases", () => {
+  const configured = loadConfig({
+    ...runtimeEnv,
+    KOKORO_PLATFORM_BASE_URL: "http://platform.invalid",
+    KOKORO_BFF_PLATFORM_CATALOG_SERVICE_CREDENTIAL_FILE: "/fixture/catalog-direct.json",
+    KOKORO_BFF_PLATFORM_SKILLS_ADMIN_SERVICE_CREDENTIAL_FILE: "/fixture/skills-admin-direct.json",
+  })
+  assert.equal(configured.skillDraft.credentialFile, "/fixture/catalog-direct.json")
+  assert.equal(configured.skillAdminCredentialFile, "/fixture/skills-admin-direct.json")
+  assert.equal(configured.iamBaseUrl, null)
+  for (const old of ["KOKORO_BFF_PLATFORM_CATALOG_CREDENTIALS_FILE", "KOKORO_BFF_SKILLS_ADMIN_CREDENTIAL_FILE"]) {
+    assert.throws(() => loadConfig({ ...runtimeEnv, [old]: "/fixture/retired.json" }), /retired.+credential/iu)
+  }
+})

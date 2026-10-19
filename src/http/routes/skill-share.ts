@@ -34,6 +34,15 @@ export async function skillShareRoute(
       assertSkillWireKnown(owner)
       return projectSkillPackageInspectionResponse(owner, { sourceRef })
     }
+    const readSummary = async (sourceRef: string) => {
+      signal.throwIfAborted()
+      if (!specification) throw new ConnectError("Share metadata unavailable", Code.Unavailable)
+      const raw = await specification.revisionSummary(sourceRef, { ...context, humanBearer: context.humanBearer ?? "" }, signal, deadlineAt)
+      signal.throwIfAborted()
+      const parsed = sharedSkillSummarySchema.safeParse(raw)
+      if (!parsed.success || sourceRef !== `skill:${parsed.data.skill_id}`) throw new Error("skill_response_invalid")
+      return parsed.data
+    }
     if (path.length === 3 && path[2] === "skill" && request.method === "GET") {
       assertSkillReadRequest(request)
       const shareId = skillIdSchema.parse(path[1])
@@ -48,11 +57,7 @@ export async function skillShareRoute(
       signal.throwIfAborted()
       if (!valid(before) || !before) throw new ConnectError("Share missing", Code.NotFound)
       const frozen = { sourceRef: before.sourceRef, url: before.url, createdAt: before.createdAt.valueOf(), expiresAt: before.expiresAt?.valueOf() }
-      if (!specification) throw new ConnectError("Share metadata unavailable", Code.Unavailable)
-      const raw = await specification.revisionSummary(frozen.sourceRef, { ...context, humanBearer: context.humanBearer ?? "" }, signal, deadlineAt)
-      signal.throwIfAborted()
-      const parsed = sharedSkillSummarySchema.safeParse(raw)
-      if (!parsed.success || frozen.sourceRef !== `skill:${parsed.data.skill_id}`) throw new Error("skill_response_invalid")
+      const summary = await readSummary(frozen.sourceRef)
       const after = await repository.findActive(scope.tenantId, shareId)
       if (
         !valid(after) ||
@@ -64,7 +69,7 @@ export async function skillShareRoute(
       )
         throw new ConnectError("Share missing", Code.NotFound)
       signal.throwIfAborted()
-      send(response, 200, { data: { share_id: shareId, source_ref: frozen.sourceRef, skill: parsed.data } })
+      send(response, 200, { data: { share_id: shareId, source_ref: frozen.sourceRef, skill: summary } })
       return
     }
     let share
@@ -80,6 +85,7 @@ export async function skillShareRoute(
       const expiresAt = input.expires_at === undefined || input.expires_at === null ? null : new Date(input.expires_at)
       if (expiresAt !== null && (expiresAt.valueOf() <= Date.now() || expiresAt.valueOf() > Date.now() + 31_536_000_000))
         throw new ConnectError("Expiry invalid", Code.InvalidArgument)
+      await readSummary(input.source_ref)
       await inspect(input.source_ref)
       share = await repository.create(scope, input.source_ref, (id) => `${publicOrigin}/skills/shared/${encodeURIComponent(id)}`, expiresAt)
       if (
@@ -90,13 +96,17 @@ export async function skillShareRoute(
       )
         throw new Error("skill_response_invalid")
       await inspect(share.sourceRef)
+      await readSummary(share.sourceRef)
     } else {
       assertSkillReadRequest(request)
       const shareId = skillIdSchema.parse(path[1])
       if (request.method === "DELETE") share = await repository.revoke(scope, shareId)
       else if (request.method === "GET") {
         share = await repository.findActive(scope.tenantId, shareId)
-        if (share) await inspect(share.sourceRef)
+        if (share) {
+          await readSummary(share.sourceRef)
+          await inspect(share.sourceRef)
+        }
       } else throw new ConnectError("Share route invalid", Code.InvalidArgument)
     }
     if (!share || share.tenantId !== scope.tenantId || (request.method === "DELETE" && share.creatorSubjectId !== scope.creatorSubjectId))

@@ -1,0 +1,195 @@
+import { ZodError } from "zod"
+import { assertSkillWireKnown, projectSkillProductFacts } from "./skill-product-response.js"
+import { skillCategoryKeysSchema, skillSourceRefSchema, skillMetadataInputSchema } from "./skill-product-schema.js"
+import { parseSkillExamplePrompts } from "./skill-example-prompts.js"
+import type { Timestamp } from "@bufbuild/protobuf/wkt"
+import {
+  SkillAcquisitionKind,
+  SkillInstallationChange,
+  SkillStatus,
+  type ProductSkillInstallation,
+} from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
+
+const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u,
+  SOURCE = /^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u,
+  EVENT = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
+const changes: Record<number, string> = {
+  1: "installed",
+  2: "upgraded",
+  3: "reinstalled",
+  4: "enabled",
+  5: "disabled",
+  6: "removed",
+  7: "unchanged",
+}
+const sourceStatuses: Partial<Record<SkillStatus, string>> = {
+  [SkillStatus.ACTIVE]: "active",
+  [SkillStatus.DISABLED]: "disabled",
+  [SkillStatus.WITHDRAWN]: "withdrawn",
+  [SkillStatus.QUARANTINED]: "quarantined",
+}
+function installationAcquisition(value: SkillAcquisitionKind | undefined): "unknown" | "direct" | "hub" {
+  switch (value) {
+    case SkillAcquisitionKind.UNKNOWN:
+      return "unknown"
+    case SkillAcquisitionKind.DIRECT:
+      return "direct"
+    case SkillAcquisitionKind.HUB:
+      return "hub"
+    default:
+      throw new Error("skill_installation_response_invalid")
+  }
+}
+function instant(value: Timestamp | undefined, required: boolean): string | undefined {
+  if (!value) {
+    if (required) throw new Error("skill_installation_response_invalid")
+    return undefined
+  }
+  if (value.seconds < -62135596800n || value.seconds > 253402300799n || value.nanos < 0 || value.nanos > 999999999)
+    throw new Error("skill_installation_response_invalid")
+  const milliseconds = Number(value.seconds * 1000n + BigInt(Math.floor(value.nanos / 1_000_000)))
+  const date = new Date(milliseconds)
+  if (!Number.isSafeInteger(milliseconds) || Number.isNaN(date.valueOf())) throw new Error("skill_installation_response_invalid")
+  return date.toISOString()
+}
+export function projectInstallation(value: ProductSkillInstallation | undefined) {
+  try {
+    const sourceStatus = value === undefined ? undefined : sourceStatuses[value.sourceStatus]
+    if (
+      !value?.installationId ||
+      !ID.test(value.installationId.value) ||
+      !value.sourceRef ||
+      !SOURCE.test(value.sourceRef.value) ||
+      !value.seriesId ||
+      !ID.test(value.seriesId.value) ||
+      value.revision < 1n ||
+      value.revision > 18446744073709551615n ||
+      value.displayName.length > 255 ||
+      !/\S/u.test(value.displayName) ||
+      value.summary.length > 65535 ||
+      sourceStatus === undefined
+    )
+      throw new Error("skill_installation_response_invalid")
+    assertSkillWireKnown(value)
+    installationAcquisition(value.acquisitionKind)
+    if (value.categoryKeys === undefined || value.product === undefined) throw new Error("skill_installation_response_invalid")
+    skillMetadataInputSchema.parse({
+      display_name: value.displayName,
+      summary: value.summary,
+      tags: value.tags,
+    })
+    const product = projectSkillProductFacts(value.product)
+    const categoryKeys = skillCategoryKeysSchema.parse(value.categoryKeys.keys)
+    let availableUpdate: { source_ref: string; revision: string } | undefined
+    if (value.availableUpdate !== undefined) {
+      const update = value.availableUpdate
+      if (update.revision <= value.revision || update.revision > 18_446_744_073_709_551_615n || update.sourceRef?.value === value.sourceRef.value)
+        throw new Error("skill_installation_response_invalid")
+      availableUpdate = {
+        source_ref: skillSourceRefSchema.parse(update.sourceRef?.value),
+        revision: update.revision.toString(),
+      }
+    }
+    let examplePrompts: string[]
+    try {
+      if (value.examplePrompts === undefined || (value.examplePrompts.$unknown?.length ?? 0) !== 0) throw new Error("missing or unknown examples")
+      examplePrompts = parseSkillExamplePrompts(value.examplePrompts.prompts)
+    } catch {
+      throw new Error("skill_installation_response_invalid")
+    }
+    const installedAt = instant(value.installedAt, true),
+      updatedAt = instant(value.updatedAt, true),
+      removedAt = instant(value.removedAt, false),
+      skillUpdatedAt = instant(value.skillUpdatedAt, true)
+    if (
+      (value.installed && removedAt !== undefined) ||
+      (!value.installed && (value.enabled || removedAt === undefined)) ||
+      new Date(updatedAt!).valueOf() < new Date(installedAt!).valueOf() ||
+      (removedAt && new Date(removedAt).valueOf() < new Date(installedAt!).valueOf())
+    )
+      throw new Error("skill_installation_response_invalid")
+    return {
+      installation_id: value.installationId.value,
+      source_ref: value.sourceRef.value,
+      series_id: value.seriesId.value,
+      revision: value.revision.toString(),
+      installed: value.installed,
+      enabled: value.enabled,
+      installed_at: installedAt,
+      updated_at: updatedAt,
+      ...(removedAt === undefined ? {} : { removed_at: removedAt }),
+      display_name: value.displayName,
+      summary: value.summary,
+      tags: value.tags,
+      example_prompts: examplePrompts,
+      category_keys: categoryKeys,
+      product,
+      ...(availableUpdate === undefined ? {} : { available_update: availableUpdate }),
+      source_status: sourceStatus,
+      skill_updated_at: skillUpdatedAt,
+    }
+  } catch (error) {
+    if (error instanceof ZodError || (error instanceof Error && error.message === "skill_response_invalid"))
+      throw new Error("skill_installation_response_invalid", { cause: error })
+    throw error
+  }
+}
+export function projectInstallationAck(value: {
+  installation?: ProductSkillInstallation | undefined
+  change: SkillInstallationChange
+  eventId?: string | undefined
+  replayed: boolean
+}) {
+  const change = changes[value.change]
+  if (!change) throw new Error("skill_installation_response_invalid")
+  if (change === "unchanged" ? value.eventId !== undefined : typeof value.eventId !== "string" || !EVENT.test(value.eventId))
+    throw new Error("skill_installation_response_invalid")
+  return {
+    installation: projectInstallation(value.installation),
+    change,
+    ...(value.eventId === undefined ? {} : { event_id: value.eventId }),
+    replayed: value.replayed,
+  }
+}
+export function projectInstallationUpdateAck(value: Parameters<typeof projectInstallationAck>[0], installationId: string, sourceRef: string) {
+  try {
+    assertSkillWireKnown(value)
+  } catch (cause) {
+    throw new Error("skill_installation_response_invalid", { cause })
+  }
+  const ack = projectInstallationAck(value)
+  if (
+    ack.change !== "upgraded" ||
+    ack.installation.installation_id !== installationId ||
+    ack.installation.source_ref !== sourceRef ||
+    !ack.installation.installed ||
+    ack.installation.removed_at !== undefined
+  )
+    throw new Error("skill_installation_response_invalid")
+  return ack
+}
+export function projectInstallationList(value: { installations: ProductSkillInstallation[]; page?: { nextCursor?: string | undefined } | undefined }) {
+  const ids = new Set<string>()
+  const data = value.installations.map((item) => projectInstallation(item))
+  for (const item of data) {
+    if (ids.has(item.installation_id)) throw new Error("skill_installation_response_invalid")
+    ids.add(item.installation_id)
+  }
+  const cursor = value.page?.nextCursor
+  if (cursor !== undefined && (!cursor || Buffer.byteLength(cursor, "utf8") > 4096)) throw new Error("skill_installation_response_invalid")
+  return {
+    data,
+    ...(cursor === undefined ? {} : { meta: { next_cursor: cursor } }),
+  }
+}
+
+/** Exact source facts for the specification representation, not the legacy installation envelope. */
+export function projectInstallationSourceFacts(value: ProductSkillInstallation) {
+  const owner = value.sourceOwnerScope
+  if (!owner || !ID.test(owner.id) || !/^[a-z][a-z0-9_]{0,31}$/u.test(owner.kind)) throw new Error("skill_installation_response_invalid")
+  assertSkillWireKnown(owner)
+  const created = instant(value.skillCreatedAt, true)!
+  const updated = instant(value.skillUpdatedAt, true)!
+  if (Date.parse(created) > Date.parse(updated)) throw new Error("skill_installation_response_invalid")
+  return { acquisition_kind: installationAcquisition(value.acquisitionKind), skill_created_at: created, source_owner_scope: { kind: owner.kind, id: owner.id } }
+}

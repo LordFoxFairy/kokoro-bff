@@ -1,3 +1,4 @@
+import { restoreClosureMainContract } from "../scripts/verify-closure-integration-contract.mjs"
 import { restorePublic153ArchivedTasksContract } from "../scripts/archived-tasks-public-contract.mjs"
 import { restorePublic152SharedTasksContract } from "../scripts/shared-tasks-public-contract.mjs"
 import { restorePublic151AccountProfileContract } from "../scripts/account-profile-public-contract.mjs"
@@ -339,9 +340,25 @@ test("the repository exposes executable contract, schema, and strictness gates",
   assert.equal(packageJson.scripts["contract:check:skill-download"], "node --import tsx scripts/generate-skill-download-policy.mjs --check")
   assert.equal(packageJson.scripts["contract:generate:scheduler"], "node scripts/generate-scheduler-contracts.mjs --write")
   assert.equal(packageJson.scripts["contract:check:scheduler"], "node scripts/generate-scheduler-contracts.mjs --check")
-  assert.equal(
-    packageJson.scripts["contract:check"],
-    "pnpm contract:check:agent && pnpm contract:check:billing && pnpm contract:check:platform-http && pnpm contract:check:iam && pnpm contract:check:system && pnpm contract:check:iam-relay && pnpm contract:check:skill-download && pnpm contract:check:scheduler && pnpm contract:check:platform && pnpm contract:check:storage && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
+  assert.equal(packageJson.scripts["contract:check:connector-command-errors"], "node --import tsx scripts/generate-connector-command-errors.mjs")
+  assert.deepEqual(
+    packageJson.scripts["contract:check"].split(" && ").sort(),
+    [
+      "pnpm contract:check:connector-command-errors",
+      "pnpm contract:check:agent",
+      "pnpm contract:check:billing",
+      "pnpm contract:check:platform-http",
+      "pnpm contract:check:iam",
+      "pnpm contract:check:system",
+      "pnpm contract:check:iam-relay",
+      "pnpm contract:check:skill-download",
+      "pnpm contract:check:scheduler",
+      "pnpm contract:check:platform",
+      "pnpm contract:check:storage",
+      "pnpm contract:lint",
+      "pnpm contract:semantic",
+      "pnpm contract:test",
+    ].sort(),
   )
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
   assert.equal(packageJson.devDependencies.prettier, "3.9.6")
@@ -355,8 +372,8 @@ test("the repository exposes executable contract, schema, and strictness gates",
 })
 
 test("the Scheduler consumer pins immutable producer-owned control and webhook contracts", async () => {
-  const ownerCommit = "92bf9e7e6724c591bab4b7fa27f08d694b59a67e"
-  const ownerDigest = "6ec2f6d5d71efa60b92bba1eb2dd0c81b7439734e2bc4450caa221e952e24183"
+  const ownerCommit = "3bb7ff61b0d72418aa048ca35b8c3f144a33f13e"
+  const ownerDigest = "d349eae8bba207074b1edf91acd9f08e94f39a27363441f45186c1799159c999"
   const [manifestDocument, vendor, config, lockfile, packageDocument] = await Promise.all([
     readFile(new URL("../contract/dependencies/scheduler.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-scheduler/${ownerCommit}/openapi.yaml`, import.meta.url)),
@@ -395,7 +412,7 @@ test("the Scheduler consumer pins immutable producer-owned control and webhook c
     owner: {
       repository_path: "apps/kokoro-scheduler",
       repository_commit: ownerCommit,
-      contract_version: "1.0.0",
+      contract_version: "3.0.0",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },
@@ -412,19 +429,21 @@ test("the Scheduler consumer pins immutable producer-owned control and webhook c
   assert.equal(sha256(vendor), ownerDigest)
   // The owner publishes JSON bytes as valid YAML; preserve them without reserialization.
   const owner = JSON.parse(vendor.toString("utf8"))
-  assert.equal(owner.info.version, "1.0.0")
+  assert.equal(owner.info.version, "3.0.0")
   const control = owner.paths["/internal/scheduler/v1/schedules/{name}"]
+  assert.equal(control.get.operationId, "getCurrentSchedule")
   assert.equal(control.post.operationId, "createSchedule")
   assert.equal(control.put.operationId, "replaceSchedule")
   assert.equal(control.delete.operationId, "deleteSchedule")
   assert.deepEqual(control.post["x-kokoro-control-error-codes"], {
-    409: "schedule_already_exists",
+    409: ["schedule_already_exists"],
   })
   assert.deepEqual(control.put["x-kokoro-control-error-codes"], {
-    404: "schedule_not_found",
+    404: ["schedule_not_found"],
+    409: ["schedule_changed"],
   })
   assert.deepEqual(control.delete["x-kokoro-control-error-codes"], {
-    404: "schedule_not_found",
+    404: ["schedule_not_found"],
   })
   assert.equal(
     Object.keys(owner.paths).some((name) => name.includes(`/${["jo", "bs"].join("")}`)),
@@ -755,7 +774,9 @@ test("SET13 rejects closed permission and non-Team historical drift", async () =
   const source = restorePublic15AccountSessionContract(
     restorePublic151AccountProfileContract(
       restorePublic152SharedTasksContract(
-        restorePublic153ArchivedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+        restorePublic153ArchivedTasksContract(
+          restoreClosureMainContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+        ),
       ),
     ),
   )

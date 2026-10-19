@@ -3,21 +3,82 @@ import { describe, it } from "node:test"
 
 import { scheduledCreateInput, scheduledPatchInput } from "../dist/application/scheduled/input.js"
 
+describe("explicit calendar periods", () => {
+  const base = { title: "Review", prompt: "Review once due.", time: "08:15", timezone: "UTC" }
+  it("stores multiple selected weekdays and month days without an inferred anchor", async () => {
+    const { scheduledCreateInput: parse } = await r73ScheduledInputSource()
+    assert.deepEqual(parse({ ...base, frequency: "weekly", weekdays: [6, 0, 2] }), { ...base, frequency: "weekly", weekdays: [0, 2, 6], autoApprove: false })
+    assert.deepEqual(parse({ ...base, frequency: "monthly", month_days: [31, 18] }), { ...base, frequency: "monthly", monthDays: [18, 31], autoApprove: false })
+  })
+  it("resolves once date in the selected zone, not the machine zone or current date", async () => {
+    const { scheduledCreateInput: parse } = await r73ScheduledInputSource()
+    const parsed = parse({ ...base, frequency: "once", local_date: "2030-01-01", timezone: "Asia/Kathmandu" })
+    assert.ok(parsed !== null)
+    assert.equal(parsed.localDate, "2030-01-01")
+    assert.equal(parsed.runAt.toISOString(), "2030-01-01T02:30:00.000Z")
+    assert.equal(Object.hasOwn(parsed, "recurrenceAnchorAt"), false)
+  })
+  it("rejects gaps and invalid dates, chooses the earlier repeated local instant", async () => {
+    const { scheduledCreateInput: parse } = await r73ScheduledInputSource()
+    assert.equal(parse({ ...base, frequency: "once", local_date: "2030-03-10", time: "02:30", timezone: "America/New_York" }), null)
+    assert.equal(parse({ ...base, frequency: "once", local_date: "2030-02-30" }), null)
+    assert.equal(parse({ ...base, frequency: "once", local_date: "2030-02-29" }), null)
+    const fold = parse({ ...base, frequency: "once", local_date: "2030-11-03", time: "01:30", timezone: "America/New_York" })
+    assert.ok(fold !== null)
+    assert.equal(fold.runAt.toISOString(), "2030-11-03T05:30:00.000Z")
+    const halfHour = parse({ ...base, frequency: "once", local_date: "2030-04-07", time: "01:45", timezone: "Australia/Lord_Howe" })
+    assert.ok(halfHour !== null)
+    assert.equal(halfHour.runAt.toISOString(), "2030-04-06T14:45:00.000Z")
+  })
+  it("validates shape but does not use now before immutable receipt replay", async () => {
+    const { scheduledCreateInput: parse } = await r73ScheduledInputSource()
+    assert.ok(parse({ ...base, frequency: "once", local_date: "2001-01-01" }) !== null)
+  })
+  it("rejects missing, mixed, duplicate, noninteger and out-of-range selections and retired anchor", async () => {
+    const { scheduledCreateInput: parse } = await r73ScheduledInputSource()
+    for (const rule of [
+      { frequency: "weekly" },
+      { frequency: "weekly", weekdays: [] },
+      { frequency: "weekly", weekdays: [1, 1] },
+      { frequency: "weekly", weekdays: [1.5] },
+      { frequency: "weekly", weekdays: [7] },
+      { frequency: "weekly", weekdays: ["1"] },
+      { frequency: "monthly", month_days: [0] },
+      { frequency: "monthly", month_days: [32] },
+      { frequency: "monthly", month_days: [31, 31] },
+      { frequency: "daily", weekdays: [1] },
+      { frequency: "once", local_date: "2030-01-01", month_days: [1] },
+      { frequency: "daily", recurrence_anchor_at: "2030-01-01T00:00:00Z" },
+    ])
+      assert.equal(parse({ ...base, ...rule }), null, JSON.stringify(rule))
+  })
+  it("requires a complete calendar rule for rule patches while keeping ordinary partial edits", async () => {
+    const { scheduledPatchInput: parse } = await r73ScheduledInputSource()
+    assert.equal(parse({ time: "10:30" }), null)
+    assert.equal(parse({ frequency: "weekly", weekdays: [1] }), null)
+    assert.deepEqual(parse({ frequency: "weekly", weekdays: [4, 1], time: "10:30", timezone: "UTC" }), {
+      frequency: "weekly",
+      weekdays: [1, 4],
+      time: "10:30",
+      timezone: "UTC",
+    })
+    assert.deepEqual(parse({ title: "Renamed", enabled: false, expires_at: null }), { title: "Renamed", enabled: false, expiresAt: null })
+  })
+})
+
 describe("ScheduledTask time boundary", () => {
-  it("normalizes offset-bearing instants to aware UTC Date values", () => {
+  it("normalizes offset-bearing expiry to aware UTC without inventing an anchor", () => {
     const input = scheduledCreateInput({
       title: "Review",
       prompt: "Review the project.",
       frequency: "daily",
       time: "08:00",
       timezone: "America/New_York",
-      recurrence_anchor_at: "2026-09-01T08:00:00-04:00",
       expires_at: "2026-09-02T08:00:00+00:00",
     })
 
     assert.ok(input !== null)
-    assert.ok(input.recurrenceAnchorAt instanceof Date)
-    assert.equal(input.recurrenceAnchorAt.toISOString(), "2026-09-01T12:00:00.000Z")
+    assert.equal(Object.hasOwn(input, "recurrenceAnchorAt"), false)
     assert.equal(input.expiresAt?.toISOString(), "2026-09-02T08:00:00.000Z")
   })
 
@@ -29,7 +90,6 @@ describe("ScheduledTask time boundary", () => {
         frequency: "daily",
         time: "08:00",
         timezone: "Not/AZone",
-        recurrence_anchor_at: "2026-09-01T08:00:00Z",
       }),
       null,
     )
@@ -40,7 +100,7 @@ describe("ScheduledTask time boundary", () => {
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",
-        recurrence_anchor_at: "2026-09-01T08:00:00",
+        expires_at: "2026-09-01T08:00:00",
       }),
       null,
     )
@@ -48,12 +108,14 @@ describe("ScheduledTask time boundary", () => {
 
   it("keeps patch clearing semantics while returning Date values", () => {
     const patch = scheduledPatchInput({
-      recurrence_anchor_at: "2026-09-01T08:00:00+02:00",
+      frequency: "weekly",
+      time: "08:00",
+      weekdays: [2, 4],
       expires_at: null,
       timezone: "UTC",
     })
     assert.ok(patch !== null)
-    assert.equal(patch.recurrenceAnchorAt?.toISOString(), "2026-09-01T06:00:00.000Z")
+    assert.deepEqual(patch.weekdays, [2, 4])
     assert.equal(patch.expiresAt, null)
   })
 })
@@ -71,7 +133,6 @@ function r73ScheduledPayload(): Record<string, unknown> {
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
-    recurrence_anchor_at: "2026-10-03T08:00:00.000Z",
     expires_at: "2026-11-03T08:00:00.000Z",
     auto_approve: false,
   }
@@ -92,7 +153,6 @@ describe("R73 ScheduledTask create closed input", () => {
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
-      recurrenceAnchorAt: new Date("2026-10-03T08:00:00.000Z"),
       expiresAt: new Date("2026-11-03T08:00:00.000Z"),
       autoApprove: false,
     })

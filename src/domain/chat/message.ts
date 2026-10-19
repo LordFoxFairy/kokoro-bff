@@ -21,6 +21,7 @@ export type Message = {
   runId: string | null
   role: MessageRole
   content: string
+  selectedSkillSourceRefs: string[]
   status: MessageStatus
   failure: AgentFailureProfile | null
   /** PostgreSQL BIGINT decimal; never coerced through a JavaScript Number. */

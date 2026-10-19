@@ -16,7 +16,6 @@ import type {
   FinalizeLocalSkillImportResponse,
   GetLocalSkillImportResponse,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
-import type { CatalogTokenSource } from "./catalog-token.js"
 import type { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 
 export type LocalSkillImportCommonInput = { requestId: string; tenant: string; subject: string }
@@ -35,7 +34,7 @@ export class LocalSkillImportConnectClient implements LocalSkillImportClient {
   readonly #client
   constructor(
     baseUrl: string,
-    private readonly writes: CatalogTokenSource,
+    private readonly writes: Pick<PlatformServiceCredentialSource, "get">,
     private readonly reads: PlatformServiceCredentialSource,
   ) {
     this.#client = createClient(

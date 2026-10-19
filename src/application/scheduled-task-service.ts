@@ -5,12 +5,17 @@ import type {
   ScheduledTaskMutationLineage,
   ScheduledTaskOwnerScope,
   ScheduledTaskRecord,
+  ScheduledTaskReadSnapshot,
   ScheduledTaskRepository,
 } from "./ports/scheduled-task-repository.js"
 
 /** Scheduled-task use cases. Fact and outbound command commit together; delivery is asynchronous. */
 export class ScheduledTaskService {
   public constructor(private readonly repository: ScheduledTaskRepository) {}
+
+  public snapshots(scope: ScheduledTaskOwnerScope, signal: AbortSignal, taskId?: string): Promise<ScheduledTaskReadSnapshot[]> {
+    return this.repository.readScheduledTaskSnapshots(scope, signal, taskId)
+  }
 
   public list(scope: ScheduledTaskOwnerScope): Promise<ScheduledTaskFact[]> { return this.repository.listScheduledTasks(scope) }
   public find(scope: ScheduledTaskOwnerScope, taskId: string): Promise<ScheduledTaskFact | null> {

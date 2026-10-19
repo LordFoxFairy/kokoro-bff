@@ -1,3 +1,6 @@
+import { restoreClosureLocalContract, restoreClosureMainContract } from "../../scripts/verify-closure-integration-contract.mjs"
+import { restorePublic17LibraryFilterContract, inspectLibraryFilterContract } from "../../scripts/verify-library-filter-contract.mjs"
+
 import { restorePublic153ArchivedTasksContract } from "../../scripts/archived-tasks-public-contract.mjs"
 import { restorePublic152SharedTasksContract } from "../../scripts/shared-tasks-public-contract.mjs"
 import { restorePublic151AccountProfileContract } from "../../scripts/account-profile-public-contract.mjs"
@@ -24,6 +27,36 @@ const openapiUrl = new URL("../../contract/tests/public11-historical.openapi.yam
 const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.meta.url)
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
+
+test("Public17 publishes explicit calendar selections and preserves the complete Public16.2 parent", async () => {
+  const { load } = await import("js-yaml")
+  const source = restorePublic17LibraryFilterContract(restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")))
+  const document = load(source)
+  assert.equal(document.info.version, "17.0.0")
+  assert.deepEqual(document.components.schemas.ScheduledTask.properties.frequency.enum, ["daily", "weekly", "monthly", "once"])
+  for (const name of ["ScheduledTask", "CreateScheduledTaskRequest", "ScheduledTaskPatchRequest"]) {
+    const schema = document.components.schemas[name]
+    assert.equal(Object.hasOwn(schema.properties, "recurrence_anchor_at"), false)
+    assert.equal(schema.additionalProperties, false)
+  }
+  assert.deepEqual(document.components.schemas.ScheduledTaskDetails.required, ["scheduling_state"])
+  assert.deepEqual(document.components.schemas.ScheduledTask.properties.scheduling_state.enum, ["pending", "active", "paused", "exhausted", "failed"])
+  const { restorePublic162ScheduledPeriodContract, inspectScheduledPeriodContract } = await import("../../scripts/verify-scheduled-period-contract.mjs")
+  assert.deepEqual(inspectScheduledPeriodContract(source), [])
+  const parent = restorePublic162ScheduledPeriodContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "e4c1b3b1d327994dd5e903bfb3b3a075ded24446c0173a0f1c15a75cab92ae80")
+  for (const mutation of [
+    source.replace("uniqueItems: true", "uniqueItems: false"),
+    source.replace("required: [scheduling_state]", "required: []"),
+    source.replace("maximum: 31", "maximum: 32"),
+    source.replace("required: [weekdays]", "required: []"),
+    source.replace("Current IAM-admitted Product identity projections.", "tampered unrelated identity"),
+  ]) {
+    assert.notEqual(mutation, source)
+    assert.ok(inspectScheduledPeriodContract(mutation).length > 0)
+    assert.throws(() => restorePublic162ScheduledPeriodContract(mutation), /period.*drift/u)
+  }
+})
 const SAFE_FAILURE_CODES = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -45,7 +78,7 @@ async function readContract() {
 }
 
 test("current Skills responses admit only the owner-declared current and legacy canonical identities", async () => {
-  const openapi = await readFile(currentOpenapiUrl, "utf8")
+  const openapi = restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8"))
   assert.equal([...openapi.matchAll(/pattern: \^\(\?:skill-md-v1\|zip-v2\):sha256:\[a-f0-9\]\{64\}\$/gu)].length, 2)
   assert.equal([...openapi.matchAll(/pattern: \^zip-v2:sha256:\[a-f0-9\]\{64\}\$/gu)].length, 0)
 })
@@ -1073,7 +1106,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   assert.equal(schemas.RunResumeRequest.properties.expected_pause_revision.minimum, 1)
   assert.equal(schemas.RunResumeRequest.properties.expected_pause_revision.maximum, Number.MAX_SAFE_INTEGER)
   const owner = JSON.parse(
-    await readFile(new URL("../../contract/vendor/kokoro-agent/79bf98c5aa63b9bace207afdf42d8c7aefee4fe8/openapi.json", import.meta.url), "utf8"),
+    await readFile(new URL("../../contract/vendor/kokoro-agent/7104f3da6e812e1092866cf4e60e32826a8992c1/openapi.json", import.meta.url), "utf8"),
   )
   assert.deepEqual(schemas.ResumeDecision, owner.components.schemas.ResumeDecision)
   assert.equal(schemas.SessionEventStream["x-kokoro-custom-event-values"]["kokoro.interaction.state"].$ref, "#/components/schemas/ChatInteractionState")
@@ -1122,7 +1155,6 @@ function r71ScheduledCreatePayload() {
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
-    recurrence_anchor_at: "2026-10-03T08:00:00.000Z",
     expires_at: "2026-11-03T08:00:00.000Z",
     auto_approve: false,
   }
@@ -1132,7 +1164,7 @@ async function r71ScheduledCreateSchema() {
   const { createRequire } = await import("node:module")
   // Reuse the installed YAML loader already used by this file's public4 assertions.
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
-  const { openapi } = await readContract()
+  const openapi = restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8"))
   const schema = load(openapi).components.schemas.CreateScheduledTaskRequest
   assert.ok(schema !== undefined, "the canonical ScheduledTask creation schema must exist")
   return schema
@@ -1145,7 +1177,7 @@ function r71AssertScheduledInput(input, payload) {
   assert.equal(input.frequency, payload.frequency)
   assert.equal(input.time, payload.time)
   assert.equal(input.timezone, payload.timezone)
-  assert.equal(input.recurrenceAnchorAt.toISOString(), payload.recurrence_anchor_at)
+  assert.equal(Object.hasOwn(input, "recurrenceAnchorAt"), false)
   assert.equal(input.expiresAt.toISOString(), payload.expires_at)
   assert.equal(input.autoApprove, payload.auto_approve)
   assert.equal(Object.hasOwn(input, "conversationId"), false)
@@ -1194,7 +1226,7 @@ test("R71 closed ScheduledTask creation schema declares optional nonempty projec
   const properties = Object.keys(schema.properties).sort()
   assert.deepEqual(
     properties,
-    ["title", "prompt", "frequency", "time", "timezone", "recurrence_anchor_at", "expires_at", "auto_approve", "project_id"].sort(),
+    ["title", "prompt", "frequency", "time", "timezone", "weekdays", "month_days", "local_date", "expires_at", "auto_approve", "project_id"].sort(),
     "closed public6 creation schema retains optional project_id while excluding create-only state controls and Conversation linkage",
   )
   const project = schema.properties.project_id
@@ -1324,6 +1356,35 @@ test("R75 creation schema requires exactly the five production-required properti
   }
 })
 
+test("Public16.2 historical current-read and immutable ACK inverse remains exact", async () => {
+  const { load } = await import("js-yaml")
+  const { restorePublic162ScheduledPeriodContract } = await import("../../scripts/verify-scheduled-period-contract.mjs")
+  const source = restorePublic162ScheduledPeriodContract(restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")))
+  const document = load(source)
+  assert.equal(Object.hasOwn(document.components.schemas.ScheduledTask.properties, "recurrence_anchor_at"), false)
+  const task = document.components.schemas.ScheduledTaskDetails
+  assert.deepEqual(task.allOf, [{ $ref: "#/components/schemas/ScheduledTask" }])
+  assert.ok(task.required.includes("recurrence_anchor_at"))
+  assert.deepEqual(task.properties.recurrence_anchor_at, { type: "string", format: "date-time" })
+  assert.deepEqual(document.components.schemas.ScheduledTask.properties.next_run_at, { type: ["string", "null"], format: "date-time" })
+  assert.equal(document.info.version, "16.2.0")
+  const { restorePublic161ScheduledAnchorContract } = await import("../../scripts/verify-scheduled-anchor-contract.mjs")
+  assert.equal(
+    createHash("sha256").update(restorePublic161ScheduledAnchorContract(source)).digest("hex"),
+    "930ba94677ce83655ab6ee73c6bb18404e0c84a29de602a128a77d6a7fb87ad5",
+  )
+  const start = source.indexOf("    ScheduledTaskDetails:\n")
+  const end = source.indexOf("    ScheduledTaskDetailResponse:\n", start)
+  const block = source.slice(start, end)
+  for (const changed of [
+    block.replace("required: [recurrence_anchor_at]", "required: []"),
+    block.replace("recurrence_anchor_at: { type: string, format: date-time }", "recurrence_anchor_at: { type: [string, 'null'], format: date-time }"),
+  ]) {
+    assert.notEqual(changed, block)
+    assert.throws(() => restorePublic161ScheduledAnchorContract(source.slice(0, start) + changed + source.slice(end)), /Scheduled anchor/)
+  }
+})
+
 test("R255 ScheduledTask publishes an anchor-only input and a required nullable Scheduler-confirmed next instant", async () => {
   const document = await r73ScheduledContract()
   const create = document.components.schemas.CreateScheduledTaskRequest
@@ -1371,8 +1432,7 @@ test("R75 production accepts an independent task with only the five required pro
   assert.ok(input !== null)
   for (const field of ["title", "prompt", "frequency", "time", "timezone"]) assert.equal(input[field], payload[field])
   assert.equal(input.autoApprove, false)
-  assert.ok(input.recurrenceAnchorAt instanceof Date)
-  assert.ok(Number.isFinite(input.recurrenceAnchorAt.getTime()))
+  assert.equal(Object.hasOwn(input, "recurrenceAnchorAt"), false)
   for (const field of ["projectId", "expiresAt", "conversationId", "sessionId"]) assert.equal(Object.hasOwn(input, field), false)
 })
 
@@ -2630,7 +2690,7 @@ test("Public11 ordinary lifecycle uses metadata-only CreateVersion and required 
 
 test("Public13.1 exposes skill_forbidden only on the actual Skill action 403 families", async () => {
   const { load } = await import("js-yaml")
-  const document = load(await readFile(currentOpenapiUrl, "utf8"))
+  const document = load(restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")))
   const schemas = document.components.schemas,
     responses = document.components.responses
   const baseNames = [
@@ -2679,15 +2739,83 @@ for (const [label, path] of [
 ]) {
   test(`GitHub path current ${label} matches the existing 256-character parser`, async () => {
     const { load } = await import("js-yaml")
-    const document = load(await readFile(currentOpenapiUrl, "utf8"))
+    const document = load(restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")))
     const constraint = path.reduce((value, key) => value[key], document.components.schemas)
     assert.equal(constraint.maxLength, 256)
   })
 }
 
+test("Public18 publishes bounded FINAL-metadata search and preserves the complete Public17 parent", async () => {
+  const { load } = await import("js-yaml")
+  const source = restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")),
+    document = load(source)
+  assert.equal(document.info.version, "18.1.0")
+  const parameters = document.paths["/v1/library"].get.parameters
+  assert.equal(parameters.find((p) => p.name === "q").schema.maxLength, 200)
+  assert.deepEqual(parameters.find((p) => p.name === "type").schema.enum, ["all", "slides", "documents", "spreadsheets", "images", "video", "audio", "other"])
+  assert.deepEqual(inspectLibraryFilterContract(source), [])
+  assert.equal(
+    createHash("sha256").update(restorePublic17LibraryFilterContract(source)).digest("hex"),
+    "ffc655e893b6ac90ee553acd368abbd68c7a3e77ed3a33a872643bf0d5a2a21f",
+  )
+  for (const mutated of [
+    source.replace("maxLength: 200, pattern", "maxLength: 201, pattern"),
+    source.replace("enum: [all, slides, documents, spreadsheets, images, video, audio, other]", "enum: [all]"),
+    source.replace("Current IAM-admitted Product identity projections.", "unrelated drift"),
+  ]) {
+    assert.notEqual(mutated, source)
+    assert.ok(inspectLibraryFilterContract(mutated).length > 0)
+    assert.throws(() => restorePublic17LibraryFilterContract(mutated), /(?:MCP package|Library filter).*drift/u)
+  }
+})
+
+test("Public18.1 exposes exactly five admin-only MCP package operations and preserves the full Public18 parent", async () => {
+  const { load } = await import("js-yaml")
+  const source = restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")),
+    document = load(source)
+  assert.equal(document.info.version, "18.1.0")
+  const expected = [
+    ["/v1/admin/mcp/packages/{package_id}/uploads", "post", "beginAdminMcpPackageUpload"],
+    ["/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}", "get", "getAdminMcpPackageUploadStatus"],
+    ["/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/complete", "post", "completeAdminMcpPackageUpload"],
+    ["/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/abort", "post", "abortAdminMcpPackageUpload"],
+    ["/v1/admin/mcp/packages/{package_id}/publish", "post", "publishAdminMcpPackage"],
+  ]
+  for (const [path, method, id] of expected) {
+    const operation = document.paths[path][method]
+    assert.equal(operation.operationId, id)
+    assert.equal(operation["x-kokoro-permission"], "mcp_catalog.manage")
+    assert.equal(operation["x-kokoro-idempotency"], method === "get" ? "none" : "required")
+    for (const status of ["200", "400", "401", "403", "429", "502", "503"]) assert.ok(operation.responses[status])
+  }
+  const { restorePublic18McpPackageContract } = await import("../../scripts/verify-mcp-package-admin-contract.mjs")
+  assert.equal(
+    createHash("sha256").update(restorePublic18McpPackageContract(source)).digest("hex"),
+    "beaf5441b20d769455990b1707e6b553ebf16c6dba4855cbee68a03a2b1d371a",
+  )
+  for (const name of [
+    "BeginAdminMcpPackageUploadRequest",
+    "CompleteAdminMcpPackageUploadRequest",
+    "AbortAdminMcpPackageUploadRequest",
+    "PublishAdminMcpPackageRequest",
+    "AdminMcpPackageUpload",
+    "AdminMcpPackagePublishResponse",
+  ]) {
+    assert.equal(document.components.schemas[name].additionalProperties, false)
+  }
+  assert.deepEqual(document.components.schemas.AdminMcpPackageUpload.properties.scan_state.enum, ["clean", "pending", "infected", "unknown", null])
+  for (const [before, after] of [
+    ["operationId: beginAdminMcpPackageUpload", "operationId: wrong"],
+    ["Current IAM-admitted Product identity projections.", "unrelated drift"],
+  ]) {
+    assert.notEqual(source.replace(before, after), source)
+    assert.throws(() => restorePublic18McpPackageContract(source.replace(before, after)), /MCP package.*drift/u)
+  }
+})
+
 test("SET13 exact inverse preserves the entire committed public14.7 artifact", async () => {
   const { restorePublic15TeamPermissionsContract } = await import("../../scripts/verify-openapi.ts")
-  const source = await readFile(currentOpenapiUrl, "utf8")
+  const source = restoreClosureMainContract(await readFile(currentOpenapiUrl, "utf8"))
   assert.equal(
     createHash("sha256")
       .update(

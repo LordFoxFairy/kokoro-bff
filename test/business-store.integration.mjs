@@ -1,3 +1,4 @@
+import { ProjectService } from "../dist/application/project-service.js"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { createServer } from "node:http"
@@ -123,7 +124,7 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
   let bff
   try {
     await pool.query(
-      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
+      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
@@ -180,7 +181,7 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
-      recurrence_anchor_at: "2026-09-01T08:00:00.000Z",
+
       auto_approve: false,
     })
     const createScheduled = async (owner, projectId) =>
@@ -258,13 +259,14 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
   const redis = createClient({ url: redisUrl })
   const namespace = `integration_${Date.now()}`
   const schedulerCalls = []
+  let schedulerCurrent
   const agentCalls = []
   let schedulerBase
   let agentBase
   let bff
   try {
     await schemaPool.query(
-      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
+      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project CASCADE",
     )
     await schemaPool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
@@ -274,6 +276,26 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
       request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
       request.on("end", () => {
         const raw = Buffer.concat(chunks).toString("utf8")
+        if (request.method === "GET") {
+          response.setHeader("content-type", "application/json")
+          response.setHeader("cache-control", "no-store")
+          response.setHeader("x-request-id", request.headers["x-request-id"])
+          response.end(
+            JSON.stringify({
+              data: {
+                schedule: {
+                  ...schedulerCurrent,
+                  id: "00000000-0000-4000-8000-000000000001",
+                  next_due_at: "2026-09-01T08:00:00.000Z",
+                  version: 9,
+                  status: schedulerCurrent.paused ? "paused" : "active",
+                },
+              },
+            }),
+          )
+          return
+        }
+        schedulerCurrent = raw ? JSON.parse(raw) : null
         schedulerCalls.push({
           method: request.method,
           url: request.url,
@@ -347,7 +369,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
-      recurrence_anchor_at: "2026-09-01T08:00:00.000Z",
+
       auto_approve: true,
     }
     const created = await fetch(`${base}/v1/scheduled-tasks`, { method: "POST", headers: createHeaders, body: JSON.stringify(createPayload) })
@@ -355,6 +377,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     const createdBody = await created.json()
     const taskId = createdBody.data.task.id
     assert.match(taskId, /^scheduled_[0-9a-f]{32}$/)
+    assert.equal(Object.hasOwn(createdBody.data.task, "recurrence_anchor_at"), false)
     await waitFor(() => schedulerCalls.length === 1)
     assert.equal(schedulerCalls[0].method, "POST")
     assert.equal(schedulerCalls[0].authorization, "Bearer scheduler-secret")
@@ -373,6 +396,14 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     assert.equal(patched.status, 200)
     const patchedTask = (await patched.json()).data.task
     assert.equal(patchedTask.prompt, "Review the project and report blockers.")
+    assert.equal(Object.hasOwn(patchedTask, "recurrence_anchor_at"), false)
+    for (const path of ["/v1/scheduled-tasks", `/v1/scheduled-tasks/${taskId}`]) {
+      const read = await fetch(`${base}${path}`, { headers: auth(namespace) })
+      assert.equal(read.status, 200)
+      const data = (await read.json()).data
+      const stored = data.task ?? data.tasks.find((task) => task.id === taskId)
+      assert.equal(Object.hasOwn(stored, "recurrence_anchor_at"), false)
+    }
     await waitFor(() => schedulerCalls.length === 2)
     assert.equal(schedulerCalls.at(-1).method, "PUT")
 
@@ -430,10 +461,23 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
         "x-request-id": "sched_integration_delivery_paused",
         "idempotency-key": "paused-scheduler-key",
       },
-      body: JSON.stringify(dispatchBody),
+      body: JSON.stringify(schedulerCalls.at(-1).schedule.body),
     })
     assert.equal(pausedDispatch.status, 409)
     assert.equal((await pausedDispatch.json()).error.code, "scheduled_task_not_active")
+    assert.equal(agentCalls.length, 1)
+
+    const staleDispatch = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
+      method: "POST",
+      headers: {
+        ...dispatchHeaders,
+        "x-kokoro-scheduler-occurrence": "2026-09-01T12:00:02.000000000Z",
+        "idempotency-key": "stale-scheduler-key",
+      },
+      body: JSON.stringify(dispatchBody),
+    })
+    assert.equal(staleDispatch.status, 409)
+    assert.equal((await staleDispatch.json()).error.code, "invalid_scheduler_dispatch")
     assert.equal(agentCalls.length, 1)
 
     const reactivated = await fetch(`${base}/v1/scheduled-tasks/${taskId}`, {
@@ -477,10 +521,12 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     const restartedBase = await listen(bff)
     await new Promise((resolve) => setTimeout(resolve, 100))
     const listed = await fetch(`${restartedBase}/v1/scheduled-tasks`, { headers: auth(namespace) })
+    const currentTasks = (await listed.json()).data.tasks
     assert.deepEqual(
-      (await listed.json()).data.tasks.map((task) => task.id),
+      currentTasks.map((task) => task.id),
       [taskId],
     )
+    assert.equal(Object.hasOwn(currentTasks[0], "recurrence_anchor_at"), false)
     const replayedCreate = await fetch(`${restartedBase}/v1/scheduled-tasks`, { method: "POST", headers: createHeaders, body: JSON.stringify(createPayload) })
     assert.equal(replayedCreate.status, 200)
     assert.deepEqual((await replayedCreate.json()).data.task, createdBody.data.task)
@@ -516,7 +562,7 @@ function r73CreatePayload(extra = {}) {
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
-    recurrence_anchor_at: "2026-10-03T08:00:00.000Z",
+
     auto_approve: false,
     ...extra,
   }
@@ -629,6 +675,73 @@ async function r73AssertCreated(fixture, result, key, projectId, { tenantId = fi
   assert.deepEqual(receipts[0].response_body, result.body)
   return task.id
 }
+
+integrationTest("explicit calendar HTTP persists selections, rejects retired input and replays once ACK after its due time", async (t) => {
+  const fixture = await r73CreateFixture(t)
+  for (const rule of [
+    { frequency: "weekly", weekdays: [0, 3] },
+    { frequency: "monthly", month_days: [18, 31] },
+  ]) {
+    const key = `calendar-${rule.frequency}-${fixture.suffix}`
+    const created = await fixture.create(key, r73CreatePayload(rule))
+    const id = await r73AssertCreated(fixture, created, key, null)
+    const read = await fetch(`${fixture.base}/v1/scheduled-tasks/${id}`, { headers: auth(fixture.tenant, fixture.owner) })
+    assert.equal(read.status, 200)
+    const task = (await read.json()).data.task
+    for (const [name, value] of Object.entries(rule)) assert.deepEqual(task[name], value)
+    const foreign = await fetch(`${fixture.base}/v1/scheduled-tasks/${id}`, { headers: auth(fixture.tenant, fixture.otherOwner) })
+    assert.equal(foreign.status, 404)
+  }
+  const due = new Date(Math.ceil(Date.now() / 60_000) * 60_000 + 120_000)
+  const body = r73CreatePayload({ frequency: "once", local_date: due.toISOString().slice(0, 10), time: due.toISOString().slice(11, 16) })
+  const key = `calendar-once-${fixture.suffix}`
+  const original = await fixture.create(key, body)
+  const onceId = await r73AssertCreated(fixture, original, key, null)
+  await fixture.restart()
+  try {
+    // Only the clock is controlled; HTTP, canonical PostgreSQL and receipt replay are real.
+    t.mock.timers.enable({ apis: ["Date"], now: due.getTime() + 60_000 })
+    assert.deepEqual(await fixture.create(key, body), original)
+    const before = await fixture.snapshot()
+    const past = await fixture.create(`${key}-new`, body)
+    assert.equal(past.status, 400)
+    const after = await fixture.snapshot()
+    assert.deepEqual(after.tasks, before.tasks)
+    assert.deepEqual(after.outbox, before.outbox)
+    const patch = async (commandKey, fields) => {
+      const response = await fetch(`${fixture.base}/v1/scheduled-tasks/${onceId}`, {
+        method: "PATCH",
+        headers: { ...auth(fixture.tenant, fixture.owner), "content-type": "application/json", "idempotency-key": commandKey },
+        body: JSON.stringify(fields),
+      })
+      return { status: response.status, body: await response.json() }
+    }
+    const sameRule = { frequency: body.frequency, time: body.time, timezone: body.timezone, local_date: body.local_date }
+    const firstEdit = { title: "Edited after due" }
+    const firstAck = await patch(`${key}-edit`, firstEdit)
+    assert.equal(firstAck.status, 200)
+    for (const [index, fields] of [sameRule, { enabled: false, status: "paused" }, { enabled: true, status: "active" }].entries()) {
+      const result = await patch(`${key}-same-${index}`, fields)
+      assert.equal(result.status, 200, JSON.stringify(result.body))
+    }
+    const beforeRejected = await fixture.snapshot()
+    const changedPast = await patch(`${key}-different-past`, { ...sameRule, time: new Date(due.getTime() + 60_000).toISOString().slice(11, 16) })
+    assert.equal(changedPast.status, 400)
+    const afterRejected = await fixture.snapshot()
+    assert.deepEqual(afterRejected.tasks, beforeRejected.tasks)
+    assert.deepEqual(afterRejected.outbox, beforeRejected.outbox)
+    assert.deepEqual(await patch(`${key}-edit`, firstEdit), firstAck, "replay must retain the original write ACK, not today's task")
+    assert.deepEqual(await fixture.create(key, body), original, "editing must not rewrite the original create receipt")
+  } finally {
+    t.mock.timers.reset()
+  }
+  const before = await fixture.snapshot()
+  for (const invalid of [r73CreatePayload({ recurrence_anchor_at: "2030-01-01T00:00:00Z" }), r73CreatePayload({ frequency: "weekly" })]) {
+    const rejected = await fixture.create(`retired-${fixture.suffix}`, invalid)
+    assert.equal(rejected.status, 400)
+    assert.deepEqual(await fixture.snapshot(), before, "retired request shapes must never claim a receipt or create a task")
+  }
+})
 
 integrationTest("R73 create HTTP rejects closed-input violations with no task, outbox or receipt writes", async (t) => {
   const fixture = await r73CreateFixture(t)
@@ -1042,7 +1155,7 @@ function r237Schedule(projectId) {
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
-    recurrence_anchor_at: "2099-01-01T08:00:00.000Z",
+
     auto_approve: false,
   }
 }
@@ -1062,7 +1175,7 @@ integrationTest("R237 HTTP Project active and denied ID-slug matrix leaves compl
       for (const ref of [hidden.id, hidden.slug]) {
         for (const suffix of ["", "/instruction-revisions", "/tasks"]) await f.deny(() => f.request(`projects/${ref}${suffix}`), 404, "project_not_found")
         await f.deny(() => f.request(`projects/${ref}`, "PATCH", { instruction: "Denied" }), 404, "project_not_found")
-        await f.deny(() => f.request(`projects/${ref}/skills/r237`, "PATCH", { enabled: true }), 404, "project_not_found")
+        await f.deny(() => f.request(`projects/${ref}/skill-selection`, "PUT", { installation_ids: [] }), 404, "project_not_found")
         await f.deny(() => f.request("scheduled-tasks", "POST", r237Schedule(ref)), 404, "project_not_found")
         await f.deny(() => f.request(`projects/${ref}/scheduled-tasks`, "POST", r237Schedule(ref)), 404, "project_not_found")
       }
@@ -1074,7 +1187,7 @@ integrationTest("R237 HTTP Project active and denied ID-slug matrix leaves compl
       for (const ref of [active.id, active.slug]) {
         assert.equal((await f.request(`projects/${ref}`)).status, 200)
         assert.equal((await f.request(`projects/${ref}`, "PATCH", { instruction: `Allowed ${ref}` })).status, 200)
-        assert.equal((await f.request(`projects/${ref}/skills/r237`, "PATCH", { enabled: true })).status, 200)
+        assert.equal((await f.request(`projects/${ref}/skill-selection`, "PUT", { installation_ids: [] })).status, 200)
         assert.equal((await f.request(`projects/${ref}/instruction-revisions`)).status, 200)
         assert.equal((await f.request(`projects/${ref}/tasks`)).status, 200)
         assert.equal((await f.request("scheduled-tasks", "POST", r237Schedule(ref))).status, 200)
@@ -1198,7 +1311,9 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
     const before = await f.facts()
     for (const ref of [project.id, project.slug]) {
       assert.equal(await repository.updateProjectInstruction(f.scope, ref, "Denied"), null)
-      assert.equal(await repository.setProjectSkill(f.scope, ref, "r237", true), false)
+      assert.deepEqual(await new ProjectService(repository).replaceSkillSelection(f.scope, ref, ["installation_r237"], "r237", new AbortController().signal), {
+        kind: "not_found",
+      })
     }
     assert.deepEqual(await f.facts(), before)
   })
@@ -1273,7 +1388,7 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
             frequency: "daily",
             time: "08:00",
             timezone: "UTC",
-            recurrenceAnchorAt: new Date("2099-01-01T08:00:00.000Z"),
+
             autoApprove: false,
           },
           undefined,
@@ -1382,7 +1497,14 @@ integrationTest("R237 real Project row-lock races revalidate active before Messa
           pending = f.request(`sessions/${id}/messages`, "POST", { content: "Must lose to tombstone", project_ref: project.slug })
         else if (operation.startsWith("move"))
           pending = f.request(`sessions/${id}/move`, "POST", { target_project_id: operation === "move-target" ? project.id : null })
-        else if (operation === "skill") pending = new PostgresProjectRepository({ pool: f.pool }).setProjectSkill(f.scope, project.id, "r237", true)
+        else if (operation === "skill")
+          pending = new ProjectService(new PostgresProjectRepository({ pool: f.pool })).replaceSkillSelection(
+            f.scope,
+            project.id,
+            ["installation_r237"],
+            "r237",
+            new AbortController().signal,
+          )
         else
           pending = new PostgresScheduledTaskRepository({ pool: f.pool }).createScheduledTask(
             f.scope,
@@ -1393,7 +1515,7 @@ integrationTest("R237 real Project row-lock races revalidate active before Messa
               frequency: "daily",
               time: "08:00",
               timezone: "UTC",
-              recurrenceAnchorAt: new Date("2099-01-01T08:00:00.000Z"),
+
               autoApprove: false,
             },
             undefined,
@@ -1415,7 +1537,7 @@ integrationTest("R237 real Project row-lock races revalidate active before Messa
         await blocker.query("COMMIT")
         const result = await pending
         if (operation === "scheduled-task") assert.match(result.error?.message ?? "accepted", /PROJECT_NOT_FOUND/u)
-        else if (operation === "skill") assert.equal(result.value, false)
+        else if (operation === "skill") assert.deepEqual(result.value, { kind: "not_found" })
         else {
           assert.equal(result.value?.status, 404, JSON.stringify(result.value ?? result.error))
           assert.equal(result.value.body.error.code, "session_not_found")
@@ -1461,7 +1583,7 @@ integrationTest("R237 Message existing active and Direct positive controls and t
 })
 // R241: real HTTP / owner PostgreSQL rename acceptance. IAM alone is the boundary double.
 // Root supplies the already-installed isolated database; no schema mutation or fake store here.
-async function r241Fixture(t) {
+async function r241Fixture(t, observeDeletionSignal) {
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `r241_${randomUUID().replaceAll("-", "")}`
   const owner = "r241_owner"
@@ -1507,6 +1629,13 @@ async function r241Fixture(t) {
   const start = async (configTenant = tenant) => {
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
+    if (observeDeletionSignal !== undefined) {
+      const readDeletion = store.services.projects.deletion.bind(store.services.projects)
+      store.services.projects.deletion = (scope, projectId, signal) => {
+        observeDeletionSignal(signal)
+        return readDeletion(scope, projectId, signal)
+      }
+    }
     server = createBffServer(bffConfig({ tenantId: configTenant }), {
       businessStore: store,
       sessionAdmission: admission,
@@ -2814,7 +2943,7 @@ integrationTest("R257 terminal Scheduler rejection is projected by authoritative
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",
-        recurrence_anchor_at: "2026-10-06T08:00:00.000Z",
+
         auto_approve: false,
       }),
       signal: AbortSignal.timeout(5000),
@@ -2855,7 +2984,7 @@ integrationTest("R257 terminal Scheduler rejection is projected by authoritative
     assert.equal(authoritative.next_run_at, null)
 
     const persisted = await pool.query(
-      `SELECT task.status AS task_status,task.enabled,task.revision,task.next_run_at,
+      `SELECT task.status AS task_status,task.enabled,task.revision,
               command.status AS command_status,command.last_error_code,command.completed_at,
               command.lease_owner,command.lease_token,command.lease_until
          FROM bff_scheduled_task AS task
@@ -2868,7 +2997,6 @@ integrationTest("R257 terminal Scheduler rejection is projected by authoritative
     assert.equal(persisted.rows[0].task_status, "failed")
     assert.equal(persisted.rows[0].enabled, true)
     assert.equal(Number(persisted.rows[0].revision), 1)
-    assert.equal(persisted.rows[0].next_run_at, null)
     assert.equal(persisted.rows[0].command_status, "failed")
     assert.equal(persisted.rows[0].last_error_code, "invalid_schedule")
     assert.ok(persisted.rows[0].completed_at)
@@ -2996,15 +3124,10 @@ async function r278CommitTombstoneAndPause(f, projectId, taskId) {
       ).rowCount,
       1,
     )
-    assert.equal(
-      (
-        await client.query(
-          "UPDATE bff_scheduled_task SET status='paused',enabled=false,next_run_at=NULL,revision=revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND task_id=$2",
-          [f.tenant, taskId],
-        )
-      ).rowCount,
-      1,
-    )
+    // Materialize the same paused revision AND command as the real project deletion transaction.
+    // A direct task UPDATE alone creates an impossible current-read readiness fixture.
+    const { pauseProjectScheduledTasks } = await import("../dist/infrastructure/postgres/scheduled-task-repository.js")
+    await pauseProjectScheduledTasks(client, { tenantId: f.tenant, subjectId: f.owner }, projectId, `r278-delete-${taskId}`, `r278-delete-${taskId}`)
     await client.query("COMMIT")
   } catch (error) {
     await client.query("ROLLBACK")
@@ -3126,7 +3249,7 @@ integrationTest("R278 Project then ScheduledTask lock order makes deletion and u
         project.id,
       ])
       await blocker.query(
-        "UPDATE bff_scheduled_task SET status='paused',enabled=false,next_run_at=NULL,revision=revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND task_id=$2",
+        "UPDATE bff_scheduled_task SET status='paused',enabled=false,revision=revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND task_id=$2",
         [f.tenant, task.id],
       )
       pending = f
@@ -3393,9 +3516,9 @@ integrationTest("R279 aggregate deletion freezes active and deleted members and 
   assert.equal(persisted.tasks[0].project_id, project.id)
   assert.equal(persisted.tasks[0].status, "paused")
   assert.equal(persisted.tasks[0].enabled, false)
-  assert.equal(persisted.tasks[0].next_run_at, null)
+  assert.equal(Object.hasOwn(persisted.tasks[0], "next_run_at"), false)
   assert.equal(Number(persisted.tasks[0].revision), Number(beforeTask.revision) + 1)
-  for (const field of ["title", "prompt", "frequency", "task_time", "timezone", "recurrence_anchor_at", "expires_at", "auto_approve"])
+  for (const field of ["title", "prompt", "frequency", "task_time", "timezone", "weekdays", "month_days", "local_date", "run_at", "expires_at", "auto_approve"])
     assert.deepEqual(persisted.tasks[0][field], beforeTask[field], `ScheduledTask ${field} changed during Project deletion`)
   const taskCommands = persisted.schedulerOutbox.filter((row) => row.task_id === task.id)
   assert.equal(taskCommands.length, 2)
@@ -3801,55 +3924,78 @@ integrationTest("R280 equal-count substituted Conversation scope fails closed", 
 })
 
 integrationTest("R280 cancellation after status SELECT ACK cannot leave cleanup waiting for a ROLLBACK ACK", async (t) => {
-  const f = await r241Fixture(t)
-  const project = await f.project("R280 post-ACK cancellation")
-  r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r280-ack-${randomUUID()}`), project.id, 202)
-  const abort = new AbortController()
-  let releaseSelect
-  const selectGate = new Promise((resolve) => {
-    releaseSelect = resolve
-  })
-  let releaseRollback
-  const rollbackGate = new Promise((resolve) => {
-    releaseRollback = resolve
-  })
-  let selectAck = false
-  let rollbackAckWithheld = false
-  const observer = r241ObservePool(f.ownerPool, async (_lease, event) => {
-    if (typeof event.sql === "string" && event.sql.includes("FROM bff_project_deletion d")) {
-      selectAck = true
-      await selectGate
-      queueMicrotask(() => abort.abort())
+  let observeSignal = () => {}
+  const f = await r241Fixture(t, (signal) => observeSignal(signal))
+  for (const phase of ["before-rollback", "during-rollback"]) {
+    const project = await f.project(`R280 post-ACK cancellation ${phase}`)
+    r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r280-ack-${randomUUID()}`), project.id, 202)
+    const abort = new AbortController()
+    let serverSignal
+    let signalCancelled
+    const serverCancelled = new Promise((resolve) => {
+      signalCancelled = resolve
+    })
+    observeSignal = (signal) => {
+      serverSignal = signal
+      if (signal.aborted) signalCancelled()
+      else signal.addEventListener("abort", signalCancelled, { once: true })
     }
-    if (selectAck && event.sql === "ROLLBACK") {
-      rollbackAckWithheld = true
-      await rollbackGate
+    let releaseSelect
+    const selectGate = new Promise((resolve) => {
+      releaseSelect = resolve
+    })
+    let releaseRollback
+    const rollbackGate = new Promise((resolve) => {
+      releaseRollback = resolve
+    })
+    let selectAck = false
+    let rollbackAckWithheld = false
+    const observer = r241ObservePool(f.ownerPool, async (_lease, event) => {
+      if (typeof event.sql === "string" && event.sql.includes("FROM bff_project_deletion d")) {
+        selectAck = true
+        await selectGate
+      }
+      if (selectAck && event.sql === "ROLLBACK") {
+        rollbackAckWithheld = true
+        await rollbackGate
+      }
+    })
+    let pending
+    try {
+      pending = r241Observed(f.request(`projects/${project.id}/deletion`, "GET", undefined, {}, abort.signal))
+      await r241Until(() => selectAck, 1500)
+      if (phase === "during-rollback") {
+        releaseSelect()
+        await r241Until(() => rollbackAckWithheld, 1500)
+      }
+      abort.abort()
+      // Client intent is not server cancellation. Hold the real SQL ACK until the
+      // unchanged route has propagated HTTP close to the actual repository signal.
+      await r241Until(() => serverSignal?.aborted === true, 1500)
+      await serverCancelled
+      releaseSelect()
+      await r241Until(() => observer.leases.some((lease) => lease.releases.length > 0), 1500)
+      if (phase === "before-rollback") assert.equal(rollbackAckWithheld, false, "cleanup incorrectly depends on a post-cancellation ROLLBACK ACK")
+      else assert.equal(rollbackAckWithheld, true, "fixture must hold an in-flight ROLLBACK ACK before cancellation")
+      const lease = observer.leases.find((candidate) =>
+        candidate.events.some((event) => typeof event.sql === "string" && event.sql.includes("FROM bff_project_deletion d")),
+      )
+      assert.ok(lease)
+      assert.equal(lease.releases.length, 1)
+      assert.deepEqual(
+        lease.releases.map((entry) => entry.destroy),
+        [true],
+        `${phase}: destroy must complete before releasing either ACK gate`,
+      )
+    } finally {
+      abort.abort()
+      releaseSelect?.()
+      releaseRollback?.()
+      if (pending) await pending
+      observer.restore()
     }
-  })
-  let pending
-  try {
-    pending = r241Observed(f.request(`projects/${project.id}/deletion`, "GET", undefined, {}, abort.signal))
-    await r241Until(() => selectAck, 1500)
-    releaseSelect()
-    await r241Until(() => rollbackAckWithheld || observer.leases.some((lease) => lease.releases.length > 0), 1500)
-    assert.equal(rollbackAckWithheld, false, "cleanup incorrectly depends on a post-cancellation ROLLBACK ACK")
-    const lease = observer.leases.find((candidate) =>
-      candidate.events.some((event) => typeof event.sql === "string" && event.sql.includes("FROM bff_project_deletion d")),
-    )
-    assert.ok(lease)
-    await r241Until(() => lease.releases.length === 1, 1500)
-    assert.deepEqual(
-      lease.releases.map((entry) => entry.destroy),
-      [true],
-    )
-  } finally {
-    abort.abort()
-    releaseSelect?.()
-    releaseRollback?.()
-    if (pending) await pending
-    observer.restore()
+    r279AssertProjectDeletionResource(await f.request(`projects/${project.id}/deletion`), project.id, 200)
   }
-  r279AssertProjectDeletionResource(await f.request(`projects/${project.id}/deletion`), project.id, 200)
 })
 
 integrationTest("R281 Project deletion tables enforce closed receipt, identity, digest and lease invariants", async (t) => {
@@ -4931,3 +5077,230 @@ integrationTest(
     await r241PoolUsable(f.ownerPool)
   },
 )
+
+integrationTest("current scheduled HTTP reads authoritative next, rechecks admission, and never writes receipts", async () => {
+  const { PostgresScheduledTaskRepository } = await import("../dist/infrastructure/postgres/scheduled-task-repository.js")
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff", max: 3 })
+  const suffix = `live_current_${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const subject = "owner_current"
+  const target = "http://bff.test/internal/bff/scheduled-tasks/dispatch"
+  let definition,
+    lifecycle = "active",
+    next = "2030-01-01T08:15:00Z",
+    action = async () => {},
+    gets = 0,
+    writes = 0,
+    bff,
+    owner
+  const headers = auth(suffix, subject)
+  const token = headers.authorization.slice(7)
+  const repository = new PostgresScheduledTaskRepository({ pool })
+  const isolation = await pool.connect()
+  try {
+    // Other cases deliberately retain pending commands in this owned test database.
+    // Keep their rows untouched and locked out of this fixture's real SKIP LOCKED claims.
+    await isolation.query("BEGIN")
+    await isolation.query("SET LOCAL lock_timeout = '2s'")
+    await isolation.query("SELECT outbox_id FROM bff_scheduled_task_outbox WHERE tenant_id<>$1 FOR UPDATE", [suffix])
+    owner = createServer((request, response) => {
+      const chunks = []
+      request.on("data", (chunk) => chunks.push(chunk))
+      request.on("end", async () => {
+        response.setHeader("content-type", "application/json")
+        response.setHeader("cache-control", "no-store")
+        response.setHeader("x-request-id", request.headers["x-request-id"])
+        if (request.method === "GET") {
+          gets++
+          await action(request, response)
+          if (!response.destroyed)
+            response.end(
+              JSON.stringify({
+                data: {
+                  schedule: {
+                    ...definition,
+                    id: "00000000-0000-4000-8000-000000000001",
+                    version: 1,
+                    status: lifecycle,
+                    paused: lifecycle === "exhausted" ? false : definition.paused,
+                    next_due_at: lifecycle === "exhausted" ? null : next,
+                  },
+                },
+              }),
+            )
+        } else {
+          writes++
+          definition = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+          response.end(
+            JSON.stringify({
+              data: {
+                name: definition.name,
+                status: "registered",
+                schedule: { ...definition, id: "00000000-0000-4000-8000-000000000001", version: 1, next_due_at: definition.run_at ?? next },
+              },
+              meta: { request_id: request.headers["x-request-id"] },
+            }),
+          )
+        }
+      })
+    })
+    const schedulerBase = await listen(owner)
+    bff = createBffServer(
+      { ...bffConfig({ tenantId: suffix, schedulerBase, schedulerTargetUrl: target }), upstreamTimeoutMs: 150 },
+      { sessionAdmission, scheduledTaskDispatcher: { start() {}, async stop() {} } },
+    )
+    const base = await listen(bff)
+    const createBody = { title: "Current", prompt: "No execution", frequency: "daily", time: "08:15", timezone: "UTC", auto_approve: false }
+    const mutationHeaders = { ...headers, "content-type": "application/json", "idempotency-key": "current-create" }
+    const created = await fetch(`${base}/v1/scheduled-tasks`, { method: "POST", headers: mutationHeaders, body: JSON.stringify(createBody) })
+    assert.equal(created.status, 200)
+    const original = (await created.json()).data.task
+    const read = () => fetch(`${base}/v1/scheduled-tasks/${original.id}`, { headers })
+    const pending = await read()
+    assert.equal(pending.status, 200)
+    assert.equal((await pending.json()).data.task.scheduling_state, "pending")
+    assert.equal(gets, 0)
+    const [command] = await repository.claimScheduledTaskOutbox({ workerId: suffix, limit: 1, leaseDurationMs: 30000, now: new Date() })
+    assert.equal(command.tenantId, suffix, "this fixture must not deliver another test's pending command")
+    const { SchedulerOutboxDelivery } = await import("../dist/infrastructure/clients/scheduler/outbox-delivery.js")
+    const delivered = await new SchedulerOutboxDelivery(bffConfig({ tenantId: suffix, schedulerBase, schedulerTargetUrl: target })).deliver(command)
+    assert.equal(delivered.outcome, "succeeded", JSON.stringify(delivered))
+    await repository.markScheduledTaskOutboxSucceeded(command, new Date())
+    const counts = async () =>
+      (
+        await pool.query(
+          "SELECT (SELECT count(*) FROM bff_scheduled_task_outbox WHERE tenant_id=$1) AS commands,(SELECT count(*) FROM bff_idempotency_receipt WHERE starts_with(scope,$2)) AS receipts",
+          [suffix, `${JSON.stringify([suffix]).slice(0, -1)},`],
+        )
+      ).rows[0]
+    const before = await counts()
+    next = "2030-01-02T08:15:00Z"
+    const active = await read()
+    assert.equal(active.status, 200)
+    assert.equal(active.headers.get("cache-control"), "no-store")
+    const live = (await active.json()).data.task
+    assert.equal(live.next_run_at, "2030-01-02T08:15:00.000Z")
+    assert.equal(live.scheduling_state, "active")
+    const listed = await fetch(`${base}/v1/scheduled-tasks`, { headers })
+    assert.equal(listed.status, 200)
+    assert.equal((await listed.json()).data.tasks[0].next_run_at, live.next_run_at)
+    assert.deepEqual(await counts(), before)
+    assert.equal(writes, 1)
+    const saved = definition
+    definition = { ...saved, body: { ...saved.body, owner_id: "foreign" } }
+    assert.equal((await read()).status, 503)
+    definition = saved
+    action = async () => {
+      sessionAdmission.deny(token, { ok: false, status: 401, code: "session_invalid" })
+    }
+    assert.equal((await read()).status, 401)
+    sessionAdmission.allow(token, { namespace: suffix, userId: subject })
+    action = async () => {
+      sessionAdmission.allow(token, { namespace: suffix, userId: "foreign-subject" })
+    }
+    assert.equal((await read()).status, 403, "a subject change during owner I/O is not a fresh successful read")
+    sessionAdmission.allow(token, { namespace: suffix, userId: subject })
+    action = async (_request, response) => {
+      await new Promise((resolve) => response.once("close", resolve))
+    }
+    const started = performance.now()
+    assert.equal((await read()).status, 503, "the whole read lifetime is bounded")
+    assert.ok(performance.now() - started < 1000)
+    let entered, closed
+    const ownerEntered = new Promise((resolve) => {
+      entered = resolve
+    })
+    const ownerClosed = new Promise((resolve) => {
+      closed = resolve
+    })
+    action = async (_request, response) => {
+      entered()
+      await new Promise((resolve) =>
+        response.once("close", () => {
+          closed()
+          resolve()
+        }),
+      )
+    }
+    const controller = new AbortController()
+    const disconnected = fetch(`${base}/v1/scheduled-tasks/${original.id}`, { headers, signal: controller.signal })
+    const rejected = assert.rejects(disconnected)
+    await ownerEntered
+    controller.abort()
+    await rejected
+    let watchdog
+    try {
+      await Promise.race([
+        ownerClosed,
+        new Promise((_, reject) => {
+          watchdog = setTimeout(() => reject(Error("disconnect did not close the owner query")), 1000)
+        }),
+      ])
+    } finally {
+      clearTimeout(watchdog)
+    }
+    action = async () => {
+      await repository.updateScheduledTask(
+        { tenantId: suffix, subjectId: subject },
+        original.id,
+        { title: "Changed in flight" },
+        { tenantId: suffix, actorId: subject, requestId: "req-race", idempotencyKey: "race-update" },
+      )
+    }
+    assert.equal((await read()).status, 503)
+    action = async () => {}
+    const replay = await fetch(`${base}/v1/scheduled-tasks`, { method: "POST", headers: mutationHeaders, body: JSON.stringify(createBody) })
+    assert.equal(replay.status, 200)
+    assert.deepEqual((await replay.json()).data.task, original)
+    await repository.updateScheduledTask(
+      { tenantId: suffix, subjectId: subject },
+      original.id,
+      { frequency: "once", localDate: "2030-01-01", time: "08:15", timezone: "UTC", enabled: false, status: "paused" },
+      { tenantId: suffix, actorId: subject, requestId: "req-consumed", idempotencyKey: "paused-once-current" },
+    )
+    // One aggregate is delivered serially: settle the earlier race edit before the once replacement.
+    for (let round = 0; round < 3; round++) {
+      const pendingCommands = await repository.claimScheduledTaskOutbox({
+        workerId: suffix,
+        limit: 10,
+        leaseDurationMs: 30000,
+        now: new Date(Date.now() + 1000),
+      })
+      if (!pendingCommands.length) break
+      for (const pending of pendingCommands) {
+        assert.equal(pending.tenantId, suffix)
+        const result = await new SchedulerOutboxDelivery(bffConfig({ tenantId: suffix, schedulerBase, schedulerTargetUrl: target })).deliver(pending)
+        assert.equal(result.outcome, "succeeded", JSON.stringify(result))
+        assert.equal(await repository.markScheduledTaskOutboxSucceeded(pending, new Date()), true)
+      }
+    }
+    lifecycle = "exhausted"
+    const beforeConsumedRead = await counts()
+    const consumed = await read()
+    assert.equal(consumed.status, 200)
+    const consumedTask = (await consumed.json()).data.task
+    assert.equal(consumedTask.scheduling_state, "exhausted")
+    assert.equal(consumedTask.next_run_at, null)
+    assert.deepEqual(await counts(), beforeConsumedRead)
+    const consumedDefinition = definition
+    definition = { ...definition, body: { ...definition.body, task_revision: definition.body.task_revision - 1 } }
+    assert.equal((await read()).status, 503, "consumption must not excuse a stale task revision")
+    definition = consumedDefinition
+  } finally {
+    try {
+      if (bff) await bff.shutdown()
+      if (owner) {
+        owner.closeAllConnections()
+        await close(owner)
+      }
+      for (const table of ["bff_scheduled_task_outbox", "bff_scheduled_task"]) await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [suffix])
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE starts_with(scope,$1)", [`${JSON.stringify([suffix]).slice(0, -1)},`])
+    } finally {
+      try {
+        await isolation.query("ROLLBACK")
+      } finally {
+        isolation.release()
+        await pool.end()
+      }
+    }
+  }
+})

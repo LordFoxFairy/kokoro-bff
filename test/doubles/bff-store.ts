@@ -105,7 +105,7 @@ export class MockBffStore {
     ],
   ])
 
-  readonly projectSkills = new Map<string, Map<string, boolean>>([["project_kokoro", new Map([["skill-builder", true]])]])
+  readonly projectSkills = new Map<string, string[]>([["project_kokoro", ["installation_builder"]]])
 
   readonly plans: BillingPlan[] = [
     {
@@ -191,17 +191,15 @@ export class MockBffStore {
     return this.projectInstructionHistory.get(this.findProject(projectId)?.id ?? projectId) ?? []
   }
 
-  setProjectSkillEnabled(projectId: string, name: string, enabled: boolean): boolean {
+  setProjectSkillSelection(projectId: string, ids: string[]): boolean {
     const project = this.findProject(projectId)
     if (project === undefined) return false
-    const skills = this.projectSkills.get(project.id) ?? new Map<string, boolean>()
-    skills.set(name, enabled)
-    this.projectSkills.set(project.id, skills)
+    this.projectSkills.set(project.id, [...ids])
     return true
   }
 
-  projectSkillEnabled(projectId: string, name: string): boolean | undefined {
-    return this.projectSkills.get(this.findProject(projectId)?.id ?? projectId)?.get(name)
+  projectSkillSelection(projectId: string): string[] {
+    return [...(this.projectSkills.get(this.findProject(projectId)?.id ?? projectId) ?? [])]
   }
 
   skillQuota(namespace: string): SkillQuota {
@@ -256,7 +254,7 @@ export class MockBffStore {
     }
     this.projects.push(project)
     this.projectInstructionHistory.set(project.id, [])
-    this.projectSkills.set(project.id, new Map())
+    this.projectSkills.set(project.id, [])
     return project
   }
 

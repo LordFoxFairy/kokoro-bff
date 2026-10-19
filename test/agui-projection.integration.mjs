@@ -40,7 +40,6 @@ const TABLES = [
   "bff_project_task",
   "bff_idempotency_receipt",
   "bff_project_instruction_revision",
-  "bff_project_skill",
   "bff_project",
 ]
 

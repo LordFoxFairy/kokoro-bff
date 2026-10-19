@@ -1,3 +1,9 @@
+import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
+import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
+import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
+import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
+import { Code, ConnectError } from "@connectrpc/connect"
+
 import { archivedTasksRoute } from "../http/routes/archived-tasks.js"
 import { sharedTasksRoute } from "../http/routes/shared-tasks.js"
 import { accountProfileRoute } from "../http/routes/account-profile.js"
@@ -10,14 +16,12 @@ import { skillSpecificationEnabledRoute } from "../http/routes/skill-specificati
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
 import { skillGithubImportRoute, skillGithubPreviewRoute } from "../http/routes/skill-github-import.js"
-import { assertSkillWireKnown } from "../infrastructure/clients/platform/skill-product-response.js"
-import { projectSkillPackageInspectionResponse } from "../infrastructure/clients/platform/skill-package-inspection-response.js"
 import { skillAiImportRoute } from "../http/routes/skill-ai-import.js"
 import { skillShareRoute } from "../http/routes/skill-share.js"
 import { skillUsageRoute } from "../http/routes/skill-usage.js"
 import { skillCoverRoute } from "../http/routes/skill-cover.js"
 import { publishedSkillPackageInspectionRoute } from "../http/routes/skill-download.js"
-import { runSkillRoute, startSkillRequestBudget, skillRequestRemaining, skillDraftsRoute } from "../http/routes/skill-drafts.js"
+import { startSkillRequestBudget, skillRequestRemaining, skillDraftsRoute } from "../http/routes/skill-drafts.js"
 import { skillAdminRoute } from "../http/routes/skill-admin.js"
 import { personalizationRoute } from "../http/routes/personalization.js"
 import { projectRenameRoute } from "../http/routes/project-rename.js"
@@ -271,9 +275,12 @@ async function handle(
     return
   }
   const isConnectorList = !browserPrivateMcp && isConnectorListRequest(businessPath, request.method ?? "GET")
-  const isProjectSkillAssociation = businessPath.length === 4 && businessPath[0] === "projects" && businessPath[2] === "skills" && request.method === "PATCH"
+  const isProjectSkillSelectionPath =
+    composition.routeHandler === undefined && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "skill-selection"
+  const isProjectInstallationPath = businessPath[0] === "projects" && businessPath[2] === "skill-installations"
   const hasSkillsBudget =
-    isProjectSkillAssociation ||
+    isProjectInstallationPath ||
+    isProjectSkillSelectionPath ||
     ["skills", "skill-installations", "skill-shares"].includes(businessPath[0] ?? "") ||
     (businessPath[0] === "admin" && businessPath[1] === "skills") ||
     (businessPath[0] === "self" && businessPath[1] === "skills")
@@ -282,14 +289,15 @@ async function handle(
   const isMcpPersonalOperation = browserPrivateMcp && mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
   const isCustomApiOperation = browserPrivateMcp && customApiOperation(businessPath, request.method ?? "GET") !== null
   const defersMcpPersonalReadAction = isMcpPersonalOperation && request.method === "GET"
+  const isMcpPackageAdminOperation = !browserPrivateMcp && mcpPackageAdminOperation(businessPath, request.method ?? "GET") !== null
   const isMcpProviderAdminOperation = !browserPrivateMcp && mcpProviderAdminOperation(businessPath, request.method ?? "GET") !== null
   if (browserPrivateMcp && !isMcpPersonalOperation && !isCustomApiOperation) {
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
   }
-  const hasMcpBudget = mcpAction !== null || isMcpPersonalOperation || isMcpProviderAdminOperation || isCustomApiOperation
+  const hasMcpBudget = mcpAction !== null || isMcpPersonalOperation || isMcpProviderAdminOperation || isMcpPackageAdminOperation || isCustomApiOperation
   if (hasMcpBudget) {
-    startMcpRequestBudget(request)
+    startMcpRequestBudget(request, isMcpPackageAdminOperation ? 20_000 : 10_000)
     response.setHeader("cache-control", "no-store")
     response.setHeader("x-request-id", id)
   }
@@ -338,6 +346,10 @@ async function handle(
     return
   }
 
+  const isPersonalKnowledgePath =
+    businessPath[0] === "preferences" &&
+    ((businessPath.length === 2 && ["knowledge", "knowledge-usage"].includes(businessPath[1]!)) ||
+      (businessPath.length === 3 && businessPath[1] === "knowledge"))
   const isPersonalizationPath = businessPath.length === 2 && businessPath[0] === "preferences" && businessPath[1] === "personalization"
   const isProjectRenamePath =
     composition.routeHandler === undefined &&
@@ -364,7 +376,7 @@ async function handle(
   const isSkillPackageCompletePath = segments.length === 5 && segments[1] === "skills" && segments[3] === "package-upload" && segments[4] === "complete"
   const isSkillValidatePath = segments.length === 4 && segments[1] === "skills" && segments[3] === "validate"
   const isSkillPublishPath = segments.length === 4 && segments[1] === "skills" && segments[3] === "publish"
-  const isSkillInstallationPath = businessPath[0] === "skill-installations"
+  const isSkillInstallationPath = businessPath[0] === "skill-installations" || isProjectInstallationPath
   const isPlatformProjectionRead =
     request.method === "GET" && businessPath.length === 2 && businessPath[0] === "mcp" && ["servers", "connections"].includes(businessPath[1]!)
   if (request.method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "resources")
@@ -445,7 +457,8 @@ async function handle(
         isProjectRenamePath ||
         isProjectDeletePath ||
         isProjectDeletionStatusPath ||
-        isPersonalizationPath
+        isPersonalizationPath ||
+        isPersonalKnowledgePath
       ) {
         response.setHeader("cache-control", "no-store")
         send(
@@ -479,6 +492,10 @@ async function handle(
     await connectorListRoute(request, response, config, composition, admission.context)
     return
   }
+  if (isMcpPackageAdminOperation) {
+    await mcpPackageAdminRoute(request, response, config, composition, id, businessPath)
+    return
+  }
   if (isMcpProviderAdminOperation) {
     await mcpProviderAdminRoute(request, response, config, composition, id, businessPath)
     return
@@ -493,6 +510,38 @@ async function handle(
     return
   }
   const context = admission.context
+  if (composition.routeHandler === undefined && request.method === "GET" && businessPath[0] === "scheduled-tasks" && businessPath.length <= 2) {
+    await scheduledTaskReadRoute(
+      request,
+      response,
+      context,
+      composition.scheduledTaskReader,
+      businessPath[1],
+      (signal) => authorizeUserRequest(request, config, composition.sessionAdmission, id, signal),
+      config.upstreamTimeoutMs,
+    )
+    return
+  }
+  const currentProjectAccess = async (projectRef: string, signal: AbortSignal): Promise<string> => {
+    const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+    if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
+    if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+      throw new ConnectError("Project not found", Code.NotFound)
+    const action = skillActionForRequest(request.method ?? "GET", businessPath)
+    if (action !== null) {
+      const checked = await authorizeSkillAction(composition.skillAuthorization, fresh, action, signal)
+      if (!checked.ok) throw new ConnectError("Project Skill action denied", checked.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
+    }
+    signal.throwIfAborted()
+    if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+    const project = await composition.businessStore.services.projects.find(
+      { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+      projectRef,
+    )
+    signal.throwIfAborted()
+    if (!project) throw new ConnectError("Project not found", Code.NotFound)
+    return project.id
+  }
   if (isMcpPersonalOperation) {
     await mcpPersonalRoute(request, response, config, composition, admission, businessPath)
     return
@@ -590,28 +639,16 @@ async function handle(
     return
   }
 
-  if (isProjectSkillAssociation) {
-    await runSkillRoute(request, response, context, async (signal, deadlineAt) => {
-      const client = composition.skillProductClient
-      if (!client) throw new Error("skill_dependency_unavailable")
-      const sourceRef = `skill:${businessPath[3]}`
-      const current = await client.inspect(
-        {
-          requestId: id,
-          tenant: context.identity.namespace,
-          subject: context.identity.userId,
-          sourceRef,
-        },
-        signal,
-        deadlineAt,
-      )
-      assertSkillWireKnown(current)
-      projectSkillPackageInspectionResponse(current, { sourceRef })
-      signal.throwIfAborted()
-    })
-    if (response.destroyed || response.writableEnded) return
-    // Admission and the local BFF association are not a cross-owner transaction.
-    // Runtime resolution remains responsible for current use-time eligibility.
+  if (isProjectSkillSelectionPath) {
+    await projectSkillSelectionRoute(request, response, context, composition.businessStore, composition.installationClient, (signal) =>
+      currentProjectAccess(businessPath[1] ?? "", signal),
+    )
+    return
+  }
+
+  if (isPersonalKnowledgePath) {
+    await personalKnowledgeRoute(request, response, context, composition.businessStore)
+    return
   }
 
   if (isPersonalizationPath) {
@@ -648,10 +685,11 @@ async function handle(
       request,
       response,
       context,
-      businessPath,
-      composition.personalInstallationClient,
+      isProjectInstallationPath ? businessPath.slice(2) : businessPath,
+      composition.installationClient,
       routeAbort.signal,
       config.iamBaseUrl,
+      isProjectInstallationPath ? (signal) => currentProjectAccess(businessPath[1] ?? "", signal) : undefined,
     ).finally(() => {
       request.removeListener("aborted", abortRoute)
       response.removeListener("close", abortRoute)
@@ -787,6 +825,11 @@ async function handle(
 
   if (composition.routeHandler === undefined && businessPath[0] === "admin") {
     await liveModelRoutingAdmin(request, response, config, context, businessPath)
+    return
+  }
+
+  if (composition.routeHandler === undefined && businessPath[0] === "projects" && businessPath.length === 4 && businessPath[2] === "skills") {
+    send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
     return
   }
 
@@ -1010,6 +1053,8 @@ async function handle(
         composition.idempotency,
         composition.businessStore,
         chatAuthorization,
+        composition.installationClient,
+        currentProjectAccess,
       ))
     )
       return

@@ -136,6 +136,7 @@ test("provider admin validates a create command before owner invocation", async 
 })
 
 test("provider admin accepts HTTPS directory metadata for a valid update", async () => {
+  const examples = ["  First line\nsecond line  ", "Windows\r\nlines", "Repeat", "Repeat", "😀".repeat(1000)]
   let received
   const app = await fixture({
     client: {
@@ -156,7 +157,7 @@ test("provider admin accepts HTTPS directory metadata for a valid update", async
           display_name: provider.display_name,
           directory_type: provider.directory_type,
           category_keys: provider.category_keys,
-          example_prompts: provider.example_prompts,
+          example_prompts: examples,
           connector_types: provider.connector_types,
           default_scopes: provider.default_scopes,
           authorization_required: provider.authorization_required,
@@ -170,9 +171,39 @@ test("provider admin accepts HTTPS directory metadata for a valid update", async
       }),
     })
     assert.equal(response.status, 200)
+    assert.deepEqual(received.provider.example_prompts, examples)
+    assert.deepEqual((await response.json()).data.provider.example_prompts, examples)
     assert.equal(received.provider.website, "https://github.com")
     assert.equal(received.provider.privacy_url, "https://docs.github.com/site-policy/privacy-policies/github-privacy-statement")
     assert.equal(received.provider.cover_image_url, "https://cdn.example.test/connectors/github.webp")
+  } finally {
+    await app.close()
+  }
+})
+
+test("provider admin rejects invalid examples without invoking the owner", async () => {
+  let calls = 0
+  const app = await fixture({
+    client: {
+      execute: async () => {
+        calls += 1
+        return {}
+      },
+    },
+  })
+  const input = Object.fromEntries(Object.entries(provider).filter(([name]) => !["enabled", "state_version"].includes(name)))
+  try {
+    const invalidExamples = [[""], [" \r\n\t "], ["\ud800"], ["😀".repeat(1001)], Array(11).fill("Example")]
+    for (const [index, examples] of invalidExamples.entries()) {
+      const response = await fetch(`${app.origin}/v1/admin/mcp/providers`, {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json", "idempotency-key": `invalid-examples-${index}` },
+        body: JSON.stringify({ provider: { ...input, example_prompts: examples } }),
+      })
+      assert.equal(response.status, 400, `invalid example class ${index}`)
+      assert.equal((await response.json()).error.code, "invalid_mcp_provider_admin_request")
+    }
+    assert.equal(calls, 0)
   } finally {
     await app.close()
   }

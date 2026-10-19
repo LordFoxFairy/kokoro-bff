@@ -1,4 +1,5 @@
-import { renameProject } from "./project-rename.js"
+import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
+import { renameProject, replaceProjectSkillSelection } from "./project-rename.js"
 import { deleteProjectAggregate, readProjectDeletion } from "./project-delete.js"
 import { randomUUID } from "node:crypto"
 
@@ -11,6 +12,9 @@ import type {
   ProjectRepository,
   RenameProjectCommand,
   RenameProjectResult,
+  ReplaceProjectSkillSelectionCommand,
+  ReplaceProjectSkillSelectionResult,
+  ProjectSkillSelection,
 } from "../../application/ports/project-repository.js"
 
 type ProjectRow = {
@@ -185,36 +189,19 @@ export class PostgresProjectRepository implements ProjectRepository {
     return result.rows.map(revisionFromRow)
   }
 
-  public async setProjectSkill(scope: ProjectOwnerScope, projectId: string, skillName: string, enabled: boolean): Promise<boolean> {
-    const client = await this.database.pool.connect()
-    try {
-      await client.query("BEGIN")
-      const project = await client.query<{ project_id: string }>(
-        `SELECT project_id FROM bff_project
-          WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL AND (project_id = $3 OR slug = $3)
-          FOR UPDATE`,
-        [scope.tenantId, scope.subjectId, projectId],
-      )
-      const resolvedProjectId = project.rows[0]?.project_id
-      if (resolvedProjectId === undefined) {
-        await client.query("ROLLBACK")
-        return false
-      }
-      await client.query(
-        `INSERT INTO bff_project_skill (tenant_id, project_id, skill_name, enabled)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (tenant_id, project_id, skill_name)
-         DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = CURRENT_TIMESTAMP(3)`,
-        [scope.tenantId, resolvedProjectId, skillName, enabled],
-      )
-      await client.query("COMMIT")
-      return true
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined)
-      throw error
-    } finally {
-      client.release()
-    }
+  public async projectSkillSelection(scope: ProjectOwnerScope, projectId: string): Promise<ProjectSkillSelection | null> {
+    const result = await this.database.pool.query<{ project_id: string; selected_skill_installation_ids: string[] }>(
+      `SELECT project_id, selected_skill_installation_ids FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
+      [scope.tenantId, scope.subjectId, projectId],
+    )
+    const row = result.rows[0]
+    if (!row) return null
+    const ids = parseProjectSkillSelection(row.selected_skill_installation_ids)
+    if (ids === null) throw new Error("PROJECT_SKILL_SELECTION_ROW_INVALID")
+    return { project_id: row.project_id, installation_ids: ids }
+  }
+  public replaceProjectSkillSelection(command: ReplaceProjectSkillSelectionCommand): Promise<ReplaceProjectSkillSelectionResult> {
+    return replaceProjectSkillSelection(this.database, command)
   }
 
   public async listTasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null> {

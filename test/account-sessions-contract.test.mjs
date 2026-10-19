@@ -1,3 +1,4 @@
+import { restoreClosureMainContract, closureMainBaseline } from "../scripts/verify-closure-integration-contract.mjs"
 import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "../scripts/archived-tasks-public-contract.mjs"
 import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "../scripts/shared-tasks-public-contract.mjs"
 import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "../scripts/account-profile-public-contract.mjs"
@@ -12,7 +13,9 @@ test("public account-session operations are present as authenticated owner proje
   const spec = yaml.load(
     restorePublic151AccountProfileContract(
       restorePublic152SharedTasksContract(
-        restorePublic153ArchivedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+        restorePublic153ArchivedTasksContract(
+          restoreClosureMainContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+        ),
       ),
     ),
   )
@@ -23,7 +26,9 @@ test("public account-session operations are present as authenticated owner proje
 test("SET18 exact inverse preserves all committed public15.0 bytes and the original141 operations", async () => {
   const source = restorePublic151AccountProfileContract(
     restorePublic152SharedTasksContract(
-      restorePublic153ArchivedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+      restorePublic153ArchivedTasksContract(
+        restoreClosureMainContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+      ),
     ),
   )
   assert.equal(
@@ -32,7 +37,9 @@ test("SET18 exact inverse preserves all committed public15.0 bytes and the origi
   )
   const baseline = accountProfileParentBaseline(
     sharedTasksParentBaseline(
-      archivedTasksParentBaseline(JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations),
+      archivedTasksParentBaseline(
+        closureMainBaseline(JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations),
+      ),
     ),
   )
   assert.equal(baseline.length, 144)
@@ -69,7 +76,9 @@ test("public schemas expose no token/UA/IP/online inference and preserve establi
   const spec = yaml.load(
     restorePublic151AccountProfileContract(
       restorePublic152SharedTasksContract(
-        restorePublic153ArchivedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+        restorePublic153ArchivedTasksContract(
+          restoreClosureMainContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+        ),
       ),
     ),
   )

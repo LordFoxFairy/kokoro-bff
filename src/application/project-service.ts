@@ -35,8 +35,20 @@ export class ProjectService {
   public revisions(scope: ProjectOwnerScope, idOrSlug: string): Promise<ProjectInstructionRevision[] | null> {
     return this.repository.instructionRevisions(scope, idOrSlug)
   }
-  public setSkill(scope: ProjectOwnerScope, projectId: string, skillName: string, enabled: boolean): Promise<boolean> {
-    return this.repository.setProjectSkill(scope, projectId, skillName, enabled)
+  public skillSelection(scope: ProjectOwnerScope, projectId: string) {
+    return this.repository.projectSkillSelection(scope, projectId)
+  }
+  public replaceSkillSelection(scope: ProjectOwnerScope, projectId: string, installationIds: string[], key: string, signal: AbortSignal) {
+    return this.repository.replaceProjectSkillSelection({
+      ...scope,
+      projectId,
+      installationIds,
+      signal,
+      receiptScope: JSON.stringify([scope.tenantId, scope.subjectId, "project.skill-selection:v1", projectId, key]),
+      fingerprint: createHash("sha256")
+        .update(JSON.stringify(["project.skill-selection:v1", projectId, installationIds]), "utf8")
+        .digest("hex"),
+    })
   }
   public tasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null> {
     return this.repository.listTasks(scope, projectId)

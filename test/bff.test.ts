@@ -218,23 +218,23 @@ describe("kokoro-bff v1 mock contract", () => {
       }),
     )
     const projectId = "project_kokoro"
-    const skillPath = `${base}/v1/projects/${projectId}/skills/skill-builder`
+    const skillPath = `${base}/v1/projects/${projectId}/skill-selection`
     const missingSkillKey = await fetch(skillPath, {
-      method: "PATCH",
+      method: "PUT",
       headers: { ...authHeaders(), "content-type": "application/json" },
-      body: JSON.stringify({ enabled: false }),
+      body: JSON.stringify({ installation_ids: [] }),
     })
     assert.equal(missingSkillKey.status, 400)
     assert.equal(((await missingSkillKey.json()) as { error: { code: string } }).error.code, "idempotency_key_required")
 
     const disabled = await fetch(skillPath, {
-      method: "PATCH",
+      method: "PUT",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "project-skill-disable" },
-      body: JSON.stringify({ enabled: false }),
+      body: JSON.stringify({ installation_ids: [] }),
     })
-    const disabledBody = (await disabled.json()) as { data: { skill: { project_id: string; name: string; enabled: boolean } } }
+    const disabledBody = (await disabled.json()) as { data: { project_id: string; installation_ids: string[] } }
     assert.equal(disabled.status, 200)
-    assert.deepEqual(disabledBody.data.skill, { project_id: projectId, name: "skill-builder", enabled: false })
+    assert.deepEqual(disabledBody.data, { project_id: projectId, installation_ids: [] })
 
     const scheduled = await fetch(`${base}/v1/projects/${projectId}/scheduled-tasks`, {
       method: "POST",
@@ -1093,7 +1093,7 @@ describe("kokoro-bff v1 mock contract", () => {
       "/v1/projects/{projectId}/tasks",
       "/v1/projects/{projectId}/instruction-revisions",
       "/v1/projects/{projectId}/resources",
-      "/v1/projects/{projectId}/skills/{skill}",
+      "/v1/projects/{projectId}/skill-selection",
       "/v1/projects/{projectId}/scheduled-tasks",
       "/v1/skill.list",
       "/v1/skill-installations",

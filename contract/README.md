@@ -1,3 +1,26 @@
+## 2026-10-19 既有分支集成：唯一 Public19.0.0（候选）
+
+本次只合并本地 d8634f0 与 main 16e5c711 已批准能力，不新增功能。唯一当前 /v1 契约165操作：保本地 Skills取得来源、项目精确选择/消息默认冻结、知识、完整日历与Library筛选、五项MCP包管理；承接main八项账号会话/姓名、共享/归档操作与Team完整platform/skill权限。旧名称关联PATCH及recurrence_anchor_at请求字段保持退休，不建alias或runtime fallback。两父原文/有序inventory通过本次明确增量的精确逆证保留，既有历史hash与断言不重签；全部后端入口、owner准入/取消/事务/幂等和历史回执保持。
+
+Schema只在原BFF canonical叠加main既有归档列/索引；项目/日历/知识结构与旧表删除保持。正常库不自动演进，未重启服务、启用模型/实际工具/扣费。停写后的728输入完整格式/lint/types/契约845项/架构/默认1489 PASS与3原SKIP/fresh build已通过；13文件真实PostgreSQL＋Redis 346 PASS/0 SKIP，fresh canonical安装与自有测试库回收已验证，独立审查无遗留确定P0–P2。首次资源7个失败已定位并修正既有fixture的owner search_path、HTTP7显式project_ref和ObjectStore VersionId ACK；原503、未知提交、重启与撤权恢复断言保持，未以放宽断言消除失败。新availability消费者WIP和正常mixed均未夹入；代码交付不代表正常Schema/运行服务或完整页面已配对。
+
+## 2026-10-18 当前候选 Public16.2
+
+GET列表/详情的 ScheduledTaskDetails 公开已存 required recurrence_anchor_at，与 nullable next_run_at 独立；152 operations 不变。写操作的原 ScheduledTask/ACK完整保持，历史终态不改写；不是运行时兼容分支。唯一机器源和mapper同步，新增读表示/绑定完整逆回Public16.1。候选未正常激活，Web固定producer/星期编辑和其他周期尚待后继。
+
+## 2026-10-18 当前候选 Public16.1
+
+唯一可编辑OpenAPI在原路径新增本人知识六operation，固定资源UUID＋CAS代替新建通用receipt；独立知识使用开关不改四字段profile。新增面的request/success/query绑定和完整16.0字节父逆由verify-personal-knowledge-contract校验，操作inventory正规更新。当前是未提交源码候选，不伪造固定commit，不更新Web vendor/生成物或冒正常激活；owner真实验证见docs/CURRENT。
+
+## S2 current Skill 来源投影（2026-10-17，正常配对待续）
+
+当前 canonical 为 Public15.0.0，保持 /v1/139 operations；仅 SpecificationPublicSkill.owner_type 扩 hub/device/unknown，网站/分享归属字段不变。严格完整 inverse 复原原14.8字节；历史 proof 不是 runtime 兼容层。唯一 current Platform RPC/HTTP 都固定 e172838，HTTP6.1.0 和 acquisition profile 同 bundle；生成器精确补齐 pinned SDK 漏掉的 installed/acquisition if/then。读取投影验证原始嵌套 product 后再应用 generated validator，不剥离非法字段后假成功。具体语义、实际验证与未激活范围见 docs/CURRENT 和三设计面；无正式发现/身份 producer 不宣称 Device/OpenApp 能力完成。
+
+## AUTH-P3 当前 BFF 服务认证消费（2026-10-16；源码候选）
+
+Connect owner 固定 Platform `9be81465d487be2499a68a76664c14b73c16024b`，包含 `auth/bff-service-auth-v1.json` 1.0.0 与精确 provenance/digest。该 breaking auth profile 完整覆盖六种 BFF 用途，替代剩余 catalog/skills_admin 机器 OAuth。HTTP projection 的独立6.0 pin、公开14.8/139、Proto与 generated 均不变；下文 projection-only 摘要属于先前切片，并不保留其它 BFF 用途 OAuth 的稳态例外。人类 IAM action、外部 OAuth、执行/Billing 授权不变；正常配置切换/组合验收另记 CURRENT。
+
+
 ## SET49 current integration
 
 Public16.0.0/146保留已批准main删除与设置归档增量，完整inverse回原15.4/150。Billing唯一正式pin cd92c728d8f658f54b254d5cbfd28156ca426dc1，v2 experimental.5 SHA256 b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af；三GET含catalog，缺账户只认专用404，未知路由404不可投影空账户。下方两分支既往发行记录保留为历史，不是当前pin。
@@ -301,3 +324,8 @@ R257 administrator admission consumes the pinned IAM 0.8.0 current qualification
 identity. Missing or malformed owner fields fail closed; no old-shape fallback or positive authorization cache. Web admin
 server/API gates must obtain a fresh check; the projection does not grant downstream owner commands. Normal activation
 requires coordinated IAM populated-schema evolution and strict BFF/Web consumer switching; no half deployment or startup seed.
+
+
+## Connector command browser-private error profile 1.0.0
+
+当前MCP/Custom API管理使用 `/browser/v1`，不新增public operation或改变Public14.8/139。`src/infrastructure/clients/platform/connector-command-fault.ts` 的code-first窄policy是唯一可编辑事实，正规生成只读 `connector-command-errors-v1.json`；`contract:check:connector-command-errors` 检测drift，恢复语义不授自动执行、新command或新key许可。Platform Connect唯一vendor固定当前receipt profile/provenance，旧vendor移除；Proto与独立HTTP pin原字节保持。App后继必须固定本BFF commit与该profile digest，当前尚未接UI或正常切换。

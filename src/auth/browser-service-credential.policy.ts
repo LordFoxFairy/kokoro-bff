@@ -21,6 +21,8 @@ function adminBusinessRoute(method: string, target: string): boolean {
   } catch {
     return false
   }
+  if (method === "GET" && /^\/v1\/admin\/mcp\/packages\/[^/]+\/uploads\/[^/]+$/u.test(path)) return true
+  if (method === "POST" && /^\/v1\/admin\/mcp\/packages\/[^/]+\/(uploads|publish|uploads\/[^/]+\/(complete|abort))$/u.test(path)) return true
   if (method === "GET" && path === "/v1/me") return true
   if (
     method === "GET" &&

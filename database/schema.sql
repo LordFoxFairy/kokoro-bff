@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS bff_project (
   slug TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   instruction TEXT,
+  selected_skill_installation_ids TEXT[] NOT NULL DEFAULT '{}' CONSTRAINT ck_bff_project_skill_selection CHECK (cardinality(selected_skill_installation_ids) <= 16 AND array_position(selected_skill_installation_ids, NULL) IS NULL),
   deleted_at TIMESTAMPTZ(3),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
@@ -85,15 +86,6 @@ CREATE TABLE IF NOT EXISTS bff_project_instruction_revision (
 CREATE INDEX IF NOT EXISTS ix_bff_project_instruction_revision
   ON bff_project_instruction_revision (tenant_id, project_id, updated_at DESC);
 
-CREATE TABLE IF NOT EXISTS bff_project_skill (
-  tenant_id TEXT NOT NULL,
-  project_id TEXT NOT NULL,
-  skill_name TEXT NOT NULL,
-  enabled BOOLEAN NOT NULL,
-  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (tenant_id, project_id, skill_name)
-);
-
 CREATE TABLE IF NOT EXISTS bff_project_task (
   task_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
@@ -112,15 +104,27 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_task (
   owner_id TEXT NOT NULL,
   title TEXT NOT NULL,
   prompt TEXT NOT NULL,
-  frequency TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_frequency CHECK (frequency IN ('daily', 'weekly')),
+  frequency TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_frequency CHECK (frequency IN ('daily', 'weekly', 'monthly', 'once')),
   task_time TEXT NOT NULL,
   timezone TEXT NOT NULL,
-  recurrence_anchor_at TIMESTAMPTZ(3) NOT NULL,
-  next_run_at TIMESTAMPTZ(3),
+  weekdays SMALLINT[],
+  month_days SMALLINT[],
+  local_date DATE,
+  run_at TIMESTAMPTZ(3),
   expires_at TIMESTAMPTZ(3),
   auto_approve BOOLEAN NOT NULL DEFAULT false,
   enabled BOOLEAN NOT NULL DEFAULT true,
   status TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_status CHECK (status IN ('active', 'paused', 'failed')),
+  CONSTRAINT ck_bff_scheduled_task_calendar CHECK (
+    (frequency='daily' AND weekdays IS NULL AND month_days IS NULL AND local_date IS NULL AND run_at IS NULL)
+    OR (frequency='weekly' AND weekdays IS NOT NULL AND month_days IS NULL AND local_date IS NULL AND run_at IS NULL
+      AND array_ndims(weekdays)=1 AND array_lower(weekdays,1)=1 AND cardinality(weekdays) BETWEEN 1 AND 7
+      AND weekdays <@ ARRAY[0,1,2,3,4,5,6]::smallint[] AND array_position(weekdays,NULL) IS NULL)
+    OR (frequency='monthly' AND month_days IS NOT NULL AND weekdays IS NULL AND local_date IS NULL AND run_at IS NULL
+      AND array_ndims(month_days)=1 AND array_lower(month_days,1)=1 AND cardinality(month_days) BETWEEN 1 AND 31
+      AND month_days <@ ARRAY[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31]::smallint[] AND array_position(month_days,NULL) IS NULL)
+    OR (frequency='once' AND weekdays IS NULL AND month_days IS NULL AND local_date IS NOT NULL AND run_at IS NOT NULL)
+  ),
   revision BIGINT NOT NULL DEFAULT 1 CONSTRAINT ck_bff_scheduled_task_revision CHECK (revision >= 1),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
@@ -230,6 +234,7 @@ CREATE TABLE IF NOT EXISTS bff_message (
   run_id TEXT,
   role TEXT NOT NULL CONSTRAINT ck_bff_message_role CHECK (role IN ('user', 'assistant')),
   content TEXT NOT NULL,
+  selected_skill_source_refs JSONB NOT NULL DEFAULT '[]'::jsonb CONSTRAINT ck_bff_message_skill_selection CHECK (jsonb_typeof(selected_skill_source_refs) = 'array' AND jsonb_array_length(selected_skill_source_refs) <= 16),
   status TEXT NOT NULL CONSTRAINT ck_bff_message_status CHECK (status IN ('pending', 'streaming', 'completed', 'failed')),
   agent_failure_code TEXT,
   agent_failure_retryable BOOLEAN,
@@ -938,4 +943,37 @@ CREATE TABLE IF NOT EXISTS bff_personalization (
   CONSTRAINT ck_bff_personalization_about CHECK (char_length(about) <= 2000),
   CONSTRAINT ck_bff_personalization_instructions CHECK (char_length(instructions) <= 8000),
   CONSTRAINT ck_bff_personalization_revision CHECK (revision >= 1 AND revision <= 9007199254740991)
+);
+
+-- Caller-owned bounded knowledge; tombstones retain identity but erase deleted text.
+CREATE TABLE IF NOT EXISTS bff_personal_knowledge (
+  tenant_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  knowledge_id UUID NOT NULL,
+  name TEXT NOT NULL,
+  when_to_use TEXT NOT NULL,
+  content TEXT NOT NULL,
+  revision BIGINT NOT NULL CONSTRAINT ck_bff_knowledge_revision CHECK (revision BETWEEN 1 AND 9007199254740991),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  deleted_at TIMESTAMPTZ(3),
+  CONSTRAINT pk_bff_personal_knowledge PRIMARY KEY (tenant_id, owner_id, knowledge_id),
+  CONSTRAINT ck_bff_knowledge_scope CHECK (tenant_id <> '' AND owner_id <> ''),
+  CONSTRAINT ck_bff_knowledge_content CHECK (
+    (deleted_at IS NOT NULL AND name = '' AND when_to_use = '' AND content = '') OR
+    (deleted_at IS NULL AND char_length(name) BETWEEN 1 AND 500 AND name ~ '[^[:space:]]'
+     AND char_length(when_to_use) BETWEEN 1 AND 500 AND when_to_use ~ '[^[:space:]]'
+     AND char_length(content) BETWEEN 1 AND 2000 AND content ~ '[^[:space:]]')
+  )
+);
+CREATE INDEX IF NOT EXISTS ix_bff_knowledge_owner_list
+  ON bff_personal_knowledge (tenant_id, owner_id, created_at DESC, knowledge_id ASC) WHERE deleted_at IS NULL;
+CREATE TABLE IF NOT EXISTS bff_personal_knowledge_usage (
+  tenant_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  enabled BOOLEAN NOT NULL,
+  revision BIGINT NOT NULL CONSTRAINT ck_bff_knowledge_usage_revision CHECK (revision BETWEEN 1 AND 9007199254740991),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT pk_bff_personal_knowledge_usage PRIMARY KEY (tenant_id, owner_id),
+  CONSTRAINT ck_bff_knowledge_usage_scope CHECK (tenant_id <> '' AND owner_id <> '')
 );

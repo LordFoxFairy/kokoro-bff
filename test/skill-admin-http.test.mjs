@@ -1,39 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { mkdtemp, writeFile, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-
-test("dedicated Skills admin credential rejects ordinary catalog/projection scope and rotates secret identity", async () => {
-  const module = await import("../src/infrastructure/clients/platform/skill-admin-credential.ts").catch(() => ({}))
-  assert.equal(typeof module.SkillAdminCredentialSource, "function", "dedicated machine credential missing")
-  const directory = await mkdtemp(join(tmpdir(), "kokoro-skill-admin-"))
-  const file = join(directory, "credential.json")
-  const credential = {
-    tenantId: "tenant",
-    generation: 1,
-    credentialRefVersion: "1",
-    clientId: "bff-admin",
-    clientSecret: "first",
-    resource: "https://kokoro.dev/resources/platform-internal",
-    scope: "platform:skills-admin.manage",
-  }
-  try {
-    const source = new module.SkillAdminCredentialSource(file)
-    await writeFile(file, JSON.stringify([credential]), { mode: 0o600 })
-    const first = await source.read("tenant")
-    for (const scope of ["platform:projection.read", "platform:skill-catalog.manage", "platform:skills-admin.manage platform:projection.read"]) {
-      await writeFile(file, JSON.stringify([{ ...credential, scope }]))
-      await assert.rejects(source.read("tenant"))
-    }
-    await writeFile(file, JSON.stringify([{ ...credential, clientSecret: "second" }]))
-    assert.notEqual((await source.read("tenant")).cacheKey, first.cacheKey)
-    await assert.rejects(source.read("other"))
-  } finally {
-    await rm(directory, { recursive: true, force: true })
-  }
-})
-
+import { Code, ConnectError } from "@connectrpc/connect"
 import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { createServer } from "node:http"
@@ -74,6 +41,44 @@ const correctionHeaders = {
 
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf"
 import * as wire from "../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts"
+test("Admin owner machine admission rejection is terminal service authentication failure", async (t) => {
+  for (const ownerCode of [Code.Unauthenticated, Code.PermissionDenied]) {
+    await t.test(Code[ownerCode], async () => {
+      let calls = 0
+      const server = createBffServer(correctionConfig, {
+        businessStore: null,
+        sessionAdmission: {
+          verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: true }),
+        },
+        skillAuthorization: { check: async () => ({ ok: true }) },
+        skillAdminClient: {
+          list: async () => {
+            calls++
+            throw new ConnectError("private owner admission detail", ownerCode)
+          },
+        },
+      })
+      server.listen(0, "127.0.0.1")
+      await once(server, "listening")
+      try {
+        const headers = { ...correctionHeaders }
+        delete headers["idempotency-key"]
+        delete headers["content-type"]
+        const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills`, { headers })
+        assert.equal(response.status, 403)
+        const body = await response.json()
+        assert.equal(body.error.code, "service_auth_failed")
+        assert.equal(body.error.retryable, false)
+        assert.equal(JSON.stringify(body).includes("private owner admission detail"), false)
+        assert.equal(calls, 1)
+      } finally {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
+    })
+  }
+})
+
 test("Admin real HTTP distinguishes bad protobuf owner facts and ACK from browser input", async (t) => {
   for (const fault of ["audience", "category", "ack", "input", "valid"])
     await t.test(fault, async () => {
@@ -257,4 +262,97 @@ test("Admin creates one official draft without caller-chosen identity or CAS", a
     server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))
   }
+})
+
+test("machine credentials never replace the current session and fresh Skills admin action", async (t) => {
+  for (const denied of ["session", "action", "tenant"])
+    await t.test(denied, async () => {
+      let ownerCalls = 0
+      let actionGranted = denied === "action"
+      const actions = []
+      const server = createBffServer(correctionConfig, {
+        businessStore: null,
+        sessionAdmission: {
+          verify: async () =>
+            denied === "session"
+              ? { ok: false, status: 403, code: "session_forbidden" }
+              : { ok: true, identity: { namespace: denied === "tenant" ? "other-tenant" : "tenant", userId: "user" }, platformAdmin: true },
+        },
+        skillAuthorization: {
+          check: async (input) => {
+            actions.push(input.action)
+            return denied === "action" && !actionGranted ? { ok: false, status: 403, code: "skill_permission_denied" } : { ok: true }
+          },
+        },
+        skillAdminClient: {
+          list: async () => {
+            ownerCalls++
+            throw new Error("denied read reached owner")
+          },
+          command: async (operation, context, members) => {
+            ownerCalls++
+            assert.equal(actionGranted, true, "denied command reached owner")
+            assert.equal(operation, "discardAdminSkillDraft")
+            assert.equal(context.tenant, "tenant")
+            assert.equal(context.subject, "user")
+            assert.deepEqual(members, { skill_id: { value: "disposable-draft" }, expected_state_version: "1", reason: "Denied discard" })
+            return {
+              skill: create(wire.SkillProductRecordSchema, {
+                skillId: { value: "disposable-draft" },
+                sourceRef: { value: "skill:disposable-draft" },
+                seriesId: { value: "series" },
+                revision: 2n,
+                status: wire.SkillStatus.DISCARDED,
+                packagePhase: wire.SkillPackagePhase.NONE,
+                skillUpdatedAt: { seconds: 1n, nanos: 0 },
+                metadata: { displayName: "Disposable", summary: "", categoryKeys: { keys: [] } },
+                product: { publicationAudience: "owner", stateVersion: 2n },
+              }),
+              eventId: "discard-event",
+              replayed: false,
+            }
+          },
+        },
+      })
+      server.listen(0, "127.0.0.1")
+      await once(server, "listening")
+      try {
+        if (denied === "action") {
+          const first = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills/disposable-draft/discard`, {
+            method: "POST",
+            headers: correctionHeaders,
+            body: JSON.stringify({ expected_state_version: "1", reason: "Denied discard" }),
+          })
+          assert.equal(first.status, 200)
+          assert.equal((await first.json()).data.skill.status, "discarded")
+          actionGranted = false
+        }
+        for (const [method, path, body] of [
+          ["GET", "/v1/admin/skills"],
+          ["POST", "/v1/admin/skills", { metadata: { display_name: "Denied", summary: "", tags: [] } }],
+          ["POST", "/v1/admin/skills/disposable-draft/discard", { expected_state_version: "1", reason: "Denied discard" }],
+        ]) {
+          const headers = { ...correctionHeaders }
+          if (method === "GET") {
+            delete headers["content-type"]
+            delete headers["idempotency-key"]
+          }
+          const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, {
+            method,
+            headers,
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          })
+          assert.equal(response.status, 403)
+          assert.equal(
+            (await response.json()).error.code,
+            denied === "session" ? "session_forbidden" : denied === "action" ? "skill_permission_denied" : "product_tenant_forbidden",
+          )
+        }
+        assert.equal(ownerCalls, denied === "action" ? 1 : 0)
+        assert.deepEqual(actions, denied === "action" ? ["admin_discard_draft", "admin_read", "admin_create_draft", "admin_discard_draft"] : [])
+      } finally {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
+    })
 })

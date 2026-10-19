@@ -1,3 +1,90 @@
+## 2026-10-19 既有分支集成：唯一 Public19.0.0（候选）
+
+本次只合并本地 d8634f0 与 main 16e5c711 已批准能力，不新增功能。唯一当前 /v1 契约165操作：保本地 Skills取得来源、项目精确选择/消息默认冻结、知识、完整日历与Library筛选、五项MCP包管理；承接main八项账号会话/姓名、共享/归档操作与Team完整platform/skill权限。旧名称关联PATCH及recurrence_anchor_at请求字段保持退休，不建alias或runtime fallback。两父原文/有序inventory通过本次明确增量的精确逆证保留，既有历史hash与断言不重签；全部后端入口、owner准入/取消/事务/幂等和历史回执保持。
+
+Schema只在原BFF canonical叠加main既有归档列/索引；项目/日历/知识结构与旧表删除保持。正常库不自动演进，未重启服务、启用模型/实际工具/扣费。停写后的728输入完整格式/lint/types/契约845项/架构/默认1489 PASS与3原SKIP/fresh build已通过；13文件真实PostgreSQL＋Redis 346 PASS/0 SKIP，fresh canonical安装与自有测试库回收已验证，独立审查无遗留确定P0–P2。首次资源7个失败已定位并修正既有fixture的owner search_path、HTTP7显式project_ref和ObjectStore VersionId ACK；原503、未知提交、重启与撤权恢复断言保持，未以放宽断言消除失败。新availability消费者WIP和正常mixed均未夹入；代码交付不代表正常Schema/运行服务或完整页面已配对。
+
+## HTTP7 scope投影而非持久模型扩展（2026-10-18）
+
+本片canonical SQL、outbox payload v2、Message/receipt/command digest均不改变；原trace.project_ref是BFF锁内canonical scope冻结的既有保存位置，缺失表示无项目。Agent窄adapter只把同一不可变事实投影成HTTP7显式nullable字段，不新增root项目列/重复next或修改历史JSON。Scheduled同理复用原receipt快照。旧Agent已经接纳或结果未知的请求必须在正常组合切换前独立审计，不能拿当前Conversation归属重写历史执行意图；本次不操作正常数据。
+
+## 2026-10-18 MCP 管理HTTP无新增事实
+
+公开五操作仅从当前session/权限获得可信主体并调用固定Platform SDK，不新增数据库、Upload/Package实体、receipt/outbox/cache。Storage仍拥有上传与前三项命令回执；Platform仍拥有发布及不可变版本/Server绑定。状态GET和短时PUT仅投影，签名材料不持久化。未知命令沿原owner恢复，不本地写失败覆盖未知结果。
+
+## 2026-10-18 MCP package admin 无BFF新事实
+
+本片不改canonical schema、业务表、receipt/outbox或缓存。Storage是上传/字节/scan及前三项命令回执唯一owner；Platform是不可变包发布及发布receipt唯一owner。BFF窄client只接收trusted context、生成摘要并验证owner结果，不建立本地Package/Upload实体，不持久化短时签名URL/headers。
+
+## 2026-10-18 同触发源更新沿现事实与事务
+
+不改本轮canonical Schema或新增持久字段。update锁内以当前storedCalendar与新冻结runAt精确比较，只有同once触发源免future校验；其余新建/改期保持原限制。规则、revision与outbox4仍同事务，旧receipt/execution不重写；next/lifecycle仍由Scheduler唯一持有，不在BFF复制耗尽开关或旧revision来源链。仅自有fresh资源验收，不演进正常库。
+
+## 2026-10-18 退休重复调度 next 事实（周期候选续接）
+
+从唯一 canonical fresh schema 删除 bff_scheduled_task.next_run_at，Fact/row/列投影及全部 INSERT/UPDATE 一并删除；不新增替代缓存或表。task 保规则/UTC run_at、业务 status、revision，实际 next 归 Scheduler。成功只原子结算 command，不写 task；失败的 revision/lease/fence 事务保护仍保留。历史 public receipt JSONB 与执行记录不改，仅隔离 fresh 库安装/验收；不执行正常库 DROP COLUMN、迁移或服务重载，正常演进另需备份/具名操作。
+
+## 2026-10-18 权威调度当前读取（周期候选续接）
+
+本读取片不新增表/字段/缓存。task 与其同 tenant/task/aggregate_revision 的 register/replace outbox 状态从同一个本地 SQL 快照读取；项目同主体且未删除的可用性进入前后比对；既有删除后暂停任务仍由任务本人读取，active 且项目失效则拒绝当前成功。Scheduler 当前 next/lifecycle 经正式 API 读取，不落 BFF SQL；读取后重核相同本地事实防止在途修改或删除返回旧配置。旧 next_run_at 与成功 ACK 写投影仍待后继原子退休，本片 GET 明确忽略该缓存，不将暂存列当权威。仅自有隔离资源验收，不改正常库。
+
+## 2026-10-18 ScheduledTask 多周期目标（仅fresh隔离）
+
+canonical以weekdays SMALLINT[]、month_days SMALLINT[]、local_date DATE和run_at TIMESTAMPTZ(3)替换recurrence_anchor_at；每种frequency只保存适用字段，其余NULL。数组非空/一维/范围/元素非NULL由CHECK保护，唯一排序由同owner写边界验证并规范化；once本地date与UTC runAt一同冻结，读取DATE不受驱动/宿主时区影响。next仍nullable，与规则和不可变receipt分离；旧账/历史execution不改。
+
+新命令版本4只接受新规则快照，不双解旧3或重用旧key；所有事实与新outbox保持同事务，Project→task锁序和投影revision/lease/fence不变。本切片只安装自有fresh schema；正常库字段转换、旧非终态命令退休/已登记schedule核对需单独具名操作，不能直接重载或用fresh installer覆盖正常库。
+
+## 2026-10-18 Scheduler 2.0 consumer前置
+
+本切片不改canonical schema、ScheduledTask/单anchor模型、outbox3或receipt行。当前GET仅HTTP consumer，不读取Scheduler数据库；无查询缓存、read receipt或新队列。原outbox仍以同一revision＋lease/token/fence投影原ACK，不冒完整权威next生命周期已闭合；后继业务模型切换与新current投影必须一起明确时间预算及nullable/current状态。
+
+## 周期锚点公开投影（2026-10-18）
+
+本片复用 bff_scheduled_task.recurrence_anchor_at 非空 UTC instant 和现有 repository 内部 Date，当前读取 mapper 返回相同值；写回执保持原 JSON 快照，不改 canonical schema、既有行/回执、next_run_at 投影或 Scheduler 存储。响应字段增加不构成正常数据库演进授权。
+
+## 本人知识（2026-10-18，canonical fresh候选）
+
+BFF同owner schema新增bff_personal_knowledge（tenant_id/owner_id/knowledge_id复合PK，三正文、正安全revision、UTC created/updated/deleted_at）与bff_personal_knowledge_usage（本人scope PK、enabled、正安全revision/updated_at）。不加FK、跨owner JOIN或模型记忆表。列表仅deleted_at IS NULL，scope索引按created_at DESC/knowledge_id ASC；最大100由同scope advisory xact lock下count+insert保证，数据库约束正文上限与active非空白。
+
+删除不再保存原正文：原子清name/when_to_use/content、revision+1、deleted_at写UTC；tombstone保ID和删除版本，阻止ABA/重建并支持同原expected_revision的自然204重放。tombstone不计有效额度；当前保留至账号数据清理，未新增自动物理purge。普通GET无ID不建行，开关缺省false/revision0；知识写不创建/改动独立usage或原个人资料。
+
+全部写与读取在本owner单client有限事务，未知COMMIT不报确定失败；权限来自受信tenant/subject，不信body。canonical唯一database/schema.sql，fresh installer/readiness同步；不自动改变正常库、不将fresh安装当有数据升级。具名additive演进和恢复须在正常激活前独立验收，本片保留原共享数据、角色、积分与登录配置。
+
+## ScheduledTask outbox v3：callback revision（2026-10-18，源码候选）
+
+canonical SQL 原样保持。`bff_scheduled_task_outbox.payload` 仍为原闭合 envelope/lineage/task；`task.revision` 已保存。本片 schema_version 2→3，仅明确以该 immutable revision 构造 Scheduler callback 的 task_revision；不从当前 task 重新生成旧 command，也不把 Scheduler version 当本地 revision。旧 v2 payload 解析失败并停止投递，不原地补写或自动重置 receipt。
+
+callback body 的 revision 已进入既有完整 semantic digest；首次 snapshot 的 taskRevision 固定为同一值，沿原 Scheduler receipt JSONB 与 accept task lock/CAS。持久表、锁序、主键、retention 与幂等 key scope 不变。周期修改前已物化但尚未接纳的旧 occurrence 不能以当前 revision 产生新 dispatch；已原子接纳的原 receipt/dispatch 不因本片撤销或重新执行。
+
+fresh 隔离资源用于本片真实 PG/HTTP 验证。正常库旧 command/已登记 schedule 必须在正式切换前盘点，先经具名 owner 处置将旧 v2 command 收敛到终态，再以正式任务 mutation 产生新 revision/command 并核 Scheduler 回执；不能仅产生新 revision：旧 pending/retryable/leased command 会阻挡同 task 后继，解析异常也可能拖住同批其他 command；该激活不在本片自动执行，禁止 canonical installer 覆盖非空库或批量改 payload。未观察共享数据不能宣称零旧行或迁移完成。
+
+## S4c 选择数据候选（2026-10-17，正常库未切换）
+
+用现bff_project的selected_skill_installation_ids TEXT[] NOT NULL DEFAULT '{}'保存有序默认（最多16、无空/重复ID），删除仅存名称开关的bff_project_skill。只存opaque安装ID，不复制Platform的pin/来源/启停状态；不加独立配置表、版本表或跨owner外键。默认变更沿Project行锁及现bff_idempotency_receipt原子提交，暂不新增不需要的CAS revision列。
+
+bff_message增加selected_skill_source_refs JSONB NOT NULL DEFAULT '[]'保存消息发出时exact版本，和原outbox payload同事务写；后续默认/安装修改不回写历史。消息选择预读快照由现BFF owner事实构成；外部解析在事务外，提交持原项目/会话锁逐项比对canonical项目及有序默认，不匹配不提交。旧历史消息默认[]，不猜补曾选技能；正常库不自动ALTER或从name推断ID，fresh canonical与正常切换分别验收。canonical schema已按本段修改并在自有隔离数据库安装；正常数据库仍保持原样，待消费者和运行配对后单独切换。
+
+## 项目安装接线无Schema变更（2026-10-17）
+
+真实安装/精确pin/获取来源/receipt仍归Platform，BFF只验证自己Project归属并传可信metadata，不存第二份安装表或从owner SQL读取。当前bff_project_skill名称开关没有因此变成安装事实；后继选择模型在本仓单独替换，不以本次API接线冒默认选择/Agent冻结完成。
+
+## S2 来源消费无 BFF 数据变化（2026-10-17）
+
+真实取得事实由 Platform SkillInstallation 单写；BFF只从固定RPC enum解码为窄安装事实，再计算公开owner_type，不存第二份来源/作者/Hub引用，不读Platform DB/Redis。该值不进入Browser请求、Project表、Message或receipt；本片唯一database/schema.sql和所有索引/事务保持原字节。
+
+项目选择归BFF、项目安装及exact pin归Platform、Run冻结归Agent的后继边界保持；此次读取投影不实现这些写入能力，不造空字段或假Device发现行。正常应用数据/余额/角色/凭据与服务不改。完整实施/验收顺序复用现Root计划S2与本仓TECHNICAL_DESIGN，不新增任务中心。
+
+## AUTH-P3：认证适配不新增业务数据（2026-10-16）
+
+不改本仓 `database/schema.sql`、业务表/索引、receipt、Redis 或其它 owner 数据。删除的内部 OAuth token cache 不迁移为业务记录；专用途径只引用 owner-only 部署文件中的独立固定 tenant/surface 服务凭据。用户 session/action 权限继续由 IAM 权威提供。凭据、配置实值与运行快照仅留本地 ignored，禁止持久化到源码、公共响应或日志。
+
+## SKILLS-UPDATE U3：无 BFF 数据模型变更（2026-10-16，本地源码已实现）
+
+更新安装的唯一 writer 是 Platform。BFF 不新增表/列、余额/安装副本、command receipt 或可编辑包事实；canonical `database/schema.sql` 保持。可信 tenant/user 与 path installation ID、两个明确 pin 构成 command digest；相同用户/安装/operation/key 生成同 command ID，body 变化由 owner receipt 检测为冲突，不因换 pin 生成第二 command。
+
+结果未知重试复用原 A→B/key，不能从当前回读 B 构造 B→B 或新 command；回读只供恢复展示。owner 在同一 Serializable transaction 保同安装行、installed_at 和事务 enabled，原子提交 pin/receipt/outbox；BFF 不用外部读写编排模拟原子性。已提交消息/Run 的版本引用不被安装更新改写。无 DB 安装、迁移或共享数据操作，本片集成测试采用受控 owner wire，正常产品写验收由后继显式旅程执行。
+
+
 ## SET49：主线与设置归档合同集成
 
 合并主线已批准的MCP public四写删除及既有设置/归档能力，以16.0.0/146发行（breaking删除，不冒minor）。integration-public-contract.mjs逐字节验证完整当前合同及有序清单，精确恢复原15.4全文/150后委托全部原inverse和oracle；main贡献保留，不修改Skills/MCP业务。Billing唯一pin使用正式experimental.5发行，保三读与严格专用404；当前验证进行中，正常服务不变。
@@ -2202,3 +2289,8 @@ Therefore `database/schema.sql`, all existing tables/columns/indexes, transactio
 IAM remains the authoritative owner of tenant membership, invitations and roles. The three Admin Identity reads create no BFF table, SQL query, schema change, Redis entry, cache, local audit mirror, outbox or receipt. The only per-request data is the already admitted actor context, fixed request metadata and bounded owner response. Denied, aborted, timed-out, malformed or authorization-failed reads write nothing locally.
 
 <!-- R357-ADMIN-IAM-BRIDGE-DATA-D0-END -->
+
+
+## Connector command 恢复错误消费（2026-10-16，无数据变化）
+
+只消费已发布错误metadata并输出browser-private安全分类；canonical database/schema.sql、所有业务/receipt/AG-UI状态、Redis与权限不改。不存在BFF直读Platform DB、receipt副本或恢复写入；请求原文、secret、owner内部message/details不会进入生成profile、HTTP反馈或日志。所有未知结果继续原owner保障，错误分类不授权重建资源。

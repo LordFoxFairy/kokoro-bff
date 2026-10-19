@@ -282,6 +282,7 @@ test("Installation real HTTP preserves owner response502 and browser input400", 
       const timestamp = { seconds: 1n, nanos: 0 }
       const item = create(wire.ProductSkillInstallationSchema, {
         installationId: { value: "i" },
+        acquisitionKind: wire.SkillAcquisitionKind.UNKNOWN,
         sourceRef: { value: "skill:s" },
         seriesId: { value: "series" },
         revision: 1n,
@@ -315,7 +316,7 @@ test("Installation real HTTP preserves owner response502 and browser input400", 
           session: { namespace: "tenant", userId: "user" },
         }),
         skillAuthorization: { check: async () => ({ ok: true }) },
-        personalInstallationClient: {
+        installationClient: {
           list: async () => {
             calls++
             return { installations: [item], page: {} }

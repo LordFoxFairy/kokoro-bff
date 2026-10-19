@@ -8,6 +8,7 @@ import type {
   CustomApiOperation,
 } from "../../infrastructure/clients/platform/custom-api-binding.js";
 import { send } from "../response.js";
+import { connectorCommandFault } from "../../infrastructure/clients/platform/connector-command-fault.js";
 
 const profileId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u);
 const version = z.string().regex(/^[1-9][0-9]{0,15}$/u);
@@ -128,6 +129,8 @@ function ownerFault(
   error: unknown,
   operation: CustomApiOperation,
 ): { status: number; code: string; retryable: boolean } | null {
+  const receipt = connectorCommandFault(error, "custom_api", operation !== "list" && operation !== "get");
+  if (receipt) return receipt;
   if (!(error instanceof ConnectError)) return null;
   if (error.code === Code.InvalidArgument)
     return {

@@ -8,7 +8,7 @@ import type {
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { SkillImportPhase, SkillPackageScanState } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { assertSkillWireKnown, projectSkillProductRecord, skillTimestamp } from "./skill-product-response.js"
-import { projectInstallation } from "./personal-installation-response.js"
+import { projectInstallation } from "./skill-installation-response.js"
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u,
   SHA = /^[a-f0-9]{64}$/u,
   U64 = 18_446_744_073_709_551_615n

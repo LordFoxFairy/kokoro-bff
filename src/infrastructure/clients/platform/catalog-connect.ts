@@ -1,9 +1,9 @@
+import type { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 import { fromJson, type JsonValue, type MessageShape } from "@bufbuild/protobuf"
 import { Code, ConnectError, createClient } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
 import { SkillCatalogService } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { projectSkillProductCommand } from "./create-skill-draft-projector.js"
-import type { CatalogTokenSource } from "./catalog-token.js"
 
 type Context = { requestId: string; commandId: string; digest: string; tenant: string; user: string; expectedStateVersion?: string }
 type Metadata = { displayName: string; summary: string; tags: string[]; examplePrompts?: string[]; categoryKeys?: string[] }
@@ -22,7 +22,7 @@ export class CatalogConnectClient {
   readonly #client
   constructor(
     baseUrl: string,
-    private readonly tokens: CatalogTokenSource,
+    private readonly credentials: Pick<PlatformServiceCredentialSource, "get">,
     private readonly timeoutMs: number,
   ) {
     this.#client = createClient(
@@ -41,7 +41,7 @@ export class CatalogConnectClient {
     if (remainingBudget <= 0) throw new ConnectError("catalog deadline exceeded", Code.DeadlineExceeded)
     const signal = outer ? AbortSignal.any([outer, AbortSignal.timeout(remainingBudget)]) : AbortSignal.timeout(remainingBudget)
     signal.throwIfAborted()
-    const token = await this.tokens.get(input.tenant, signal, deadlineAt)
+    const token = await this.credentials.get(input.tenant, signal, deadlineAt)
     signal.throwIfAborted()
     const remaining = Math.min(this.timeoutMs, Math.floor(deadlineAt - performance.now()))
     if (remaining <= 0) throw new ConnectError("catalog deadline exceeded", Code.DeadlineExceeded)
@@ -84,15 +84,10 @@ export class CatalogConnectClient {
       request: typeof wire,
       callOptions: typeof options,
     ) => Promise<MessageShape<(typeof SkillCatalogService.method)[K]["output"]>>
-    try {
-      const result = await rpc(wire, options)
-      if (requestId !== input.requestId || cache !== "no-store") throw new Error("skill_response_invalid")
-      signal.throwIfAborted()
-      return result
-    } catch (error) {
-      if (error instanceof ConnectError && [Code.Unauthenticated, Code.PermissionDenied].includes(error.code)) this.tokens.retire(token)
-      throw error
-    }
+    const result = await rpc(wire, options)
+    if (requestId !== input.requestId || cache !== "no-store") throw new Error("skill_response_invalid")
+    signal.throwIfAborted()
+    return result
   }
   create(input: Context & Metadata, signal?: AbortSignal, deadlineAt?: number) {
     return this.#call("createSkillDraft", input, { owner_scope: { kind: "user", id: input.user }, metadata: metadata(input) }, signal, deadlineAt)

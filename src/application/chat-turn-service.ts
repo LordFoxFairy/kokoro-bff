@@ -1,3 +1,4 @@
+import { parseSkillSourceSelection } from "../domain/chat/skill-source-selection.js"
 import {
   agentDispatchIdentityMaterial,
   agentDispatchRequestMaterial,
@@ -14,11 +15,34 @@ export class ChatTurnApplicationService {
     private readonly stableIdGenerator: StableIdGenerator,
   ) {}
 
-  public submit(input: AgentDispatchInput): Promise<AgentDispatchReceipt | null> {
+  public async submit(
+    input: AgentDispatchInput,
+    resolveProjectSkills?: (projectId: string, installationIds: string[]) => Promise<string[]>,
+    signal?: AbortSignal,
+  ): Promise<AgentDispatchReceipt | null> {
+    signal?.throwIfAborted()
     const suffix = this.stableIdGenerator.generate(agentDispatchIdentityMaterial(input))
     const runId = `run_bff_${suffix}`
     const userMessageId = `msg_bff_${suffix}_user`
     const assistantMessageId = `msg_bff_${suffix}_assistant`
+    const requestDigest = this.stableIdGenerator.generate(agentDispatchRequestMaterial(input))
+    let skillSelection: { projectId: string | null; installationIds: string[] } | undefined
+    let selectedSkillSourceRefs = input.selectedSkillSourceRefs
+    if (selectedSkillSourceRefs === undefined) {
+      const current = await this.repository.prepareChatTurnSelection({ ...input, requestDigest })
+      signal?.throwIfAborted()
+      if (current === null) return null
+      if (current.kind === "replay") return current.receipt
+      skillSelection = { projectId: current.projectId, installationIds: current.installationIds }
+      if (current.installationIds.length === 0) selectedSkillSourceRefs = []
+      else {
+        if (current.projectId === null || resolveProjectSkills === undefined) throw new Error("CHAT_SKILL_SELECTION_UNAVAILABLE")
+        selectedSkillSourceRefs = await resolveProjectSkills(current.projectId, current.installationIds)
+        if (parseSkillSourceSelection(selectedSkillSourceRefs) === null || selectedSkillSourceRefs.length !== current.installationIds.length)
+          throw new Error("CHAT_SKILL_SELECTION_INVALID")
+      }
+    }
+    signal?.throwIfAborted()
     return this.repository.commitChatTurn({
       outboxId: `agent_outbox_${suffix.slice(0, 32)}`,
       tenantId: input.tenantId,
@@ -28,13 +52,14 @@ export class ChatTurnApplicationService {
       actorId: input.actorId,
       requestId: input.requestId,
       idempotencyKey: input.idempotencyKey,
-      requestDigest: this.stableIdGenerator.generate(agentDispatchRequestMaterial(input)),
+      requestDigest,
       runId,
       userMessageId,
       assistantMessageId,
       identityAssertionRef: `bff:${suffix}`,
       content: input.content,
-      payload: buildAgentDispatchPayload(input, { runId, userMessageId }),
+      ...(skillSelection === undefined ? {} : { skillSelection }),
+      payload: buildAgentDispatchPayload({ ...input, selectedSkillSourceRefs }, { runId, userMessageId }),
     })
   }
 }

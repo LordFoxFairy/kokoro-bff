@@ -1,0 +1,80 @@
+{
+  "version": "1.0.0",
+  "vectors": [
+    {
+      "method": "BeginMcpPackageUpload",
+      "tenant_id": "tenant-1",
+      "subject_id": "publisher-1",
+      "request": {
+        "request_id": "request-1",
+        "package_id": "package-1",
+        "command": {
+          "command_id": "command-1",
+          "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "filename": "fixture.zip",
+        "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size_bytes": "104"
+      },
+      "canonical": "[\"mcp.package.upload.begin/v1\",\"tenant-1\",\"publisher-1\",\"package-1\",\"fixture.zip\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"104\"]",
+      "sha256": "f8f746283db2bc4ebb57146814ef3dfe0c9adcebb29f383597ddf7a5ed07e0dd"
+    },
+    {
+      "method": "CompleteMcpPackageUpload",
+      "tenant_id": "tenant-1",
+      "subject_id": "publisher-1",
+      "request": {
+        "request_id": "request-1",
+        "package_id": "package-1",
+        "command": {
+          "command_id": "command-1",
+          "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "upload_id": "upload-1",
+        "upload_source_version_id": "source-1",
+        "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size_bytes": "104"
+      },
+      "canonical": "[\"mcp.package.upload.complete/v1\",\"tenant-1\",\"publisher-1\",\"package-1\",\"upload-1\",\"source-1\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"104\"]",
+      "sha256": "1cb76cc9ef7e25b147cbd902cd358608a982af9d5ce33586446f72d666a59267"
+    },
+    {
+      "method": "AbortMcpPackageUpload",
+      "tenant_id": "tenant-1",
+      "subject_id": "publisher-1",
+      "request": {
+        "request_id": "request-1",
+        "package_id": "package-1",
+        "command": {
+          "command_id": "command-1",
+          "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "upload_id": "upload-1",
+        "reason": "cancelled"
+      },
+      "canonical": "[\"mcp.package.upload.abort/v1\",\"tenant-1\",\"publisher-1\",\"package-1\",\"upload-1\",\"cancelled\"]",
+      "sha256": "7fa95d967180d72be554145651bc37551c43b388a9bdc7a220f7663ac1c896e9"
+    },
+    {
+      "method": "PublishMcpPackage",
+      "tenant_id": "tenant-1",
+      "subject_id": "publisher-1",
+      "request": {
+        "request_id": "request-1",
+        "package_id": "package-1",
+        "command": {
+          "command_id": "command-1",
+          "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "provider_key": "fixture",
+        "upload_id": "upload-1",
+        "upload_source_version_id": "source-1",
+        "asset_id": "asset-1",
+        "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size_bytes": "104"
+      },
+      "canonical": "[\"mcp.package.publish/v1\",\"tenant-1\",\"publisher-1\",\"fixture\",\"package-1\",\"upload-1\",\"source-1\",\"asset-1\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"104\"]",
+      "sha256": "980f5ed46c211db95b181ac4a58e363f63877064e64ecaa581fdbe31a652bc6d"
+    }
+  ]
+}

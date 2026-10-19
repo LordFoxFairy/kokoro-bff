@@ -14,6 +14,12 @@ export type RenameProjectCommand = ProjectOwnerScope &
     signal: AbortSignal
   }>
 
+export type ProjectSkillSelection = Readonly<{ project_id: string; installation_ids: string[] }>
+export type ReplaceProjectSkillSelectionCommand = ProjectOwnerScope &
+  Readonly<{ projectId: string; installationIds: string[]; receiptScope: string; fingerprint: string; signal: AbortSignal }>
+export type ReplaceProjectSkillSelectionResult =
+  Readonly<{ kind: "replaced"; receipt: Readonly<{ data: ProjectSkillSelection }> }> | Readonly<{ kind: "not_found" | "conflict" }>
+
 export type RenameProjectReceipt = Readonly<{ data: Readonly<{ project_id: string; name: string }> }>
 export type RenameProjectResult = Readonly<{ kind: "renamed"; receipt: RenameProjectReceipt }> | Readonly<{ kind: "not_found" | "conflict" }>
 export type ProjectDeletionResource = Readonly<{
@@ -41,6 +47,7 @@ export interface ProjectRepository {
   createProject(scope: ProjectOwnerScope, name: string, description: string): Promise<Project>
   updateProjectInstruction(scope: ProjectOwnerScope, idOrSlug: string, instruction: string): Promise<Project | null>
   instructionRevisions(scope: ProjectOwnerScope, idOrSlug: string): Promise<ProjectInstructionRevision[] | null>
-  setProjectSkill(scope: ProjectOwnerScope, projectId: string, skillName: string, enabled: boolean): Promise<boolean>
+  projectSkillSelection(scope: ProjectOwnerScope, projectId: string): Promise<ProjectSkillSelection | null>
+  replaceProjectSkillSelection(command: ReplaceProjectSkillSelectionCommand): Promise<ReplaceProjectSkillSelectionResult>
   listTasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null>
 }

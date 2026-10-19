@@ -34,7 +34,6 @@ describe("canonical MessageCreateRequest parsing", () => {
     assert.deepEqual(parseMessageCreateRequest({ content: "hello" }, " project-query "), {
       content: "hello",
       projectRef: "project-query",
-      selectedSkillSourceRefs: [],
     })
   })
 
@@ -52,10 +51,13 @@ describe("canonical MessageCreateRequest parsing", () => {
   })
 })
 
-it("preserves exact ordered Skill refs and normalizes omitted selection to []", () => {
+it("preserves exact ordered Skill refs and distinguishes omitted selection from []", () => {
   const empty = parseMessageCreateRequest({ content: "hello" }, undefined)
-  assert.deepEqual(empty, { content: "hello", selectedSkillSourceRefs: [] })
-  assert.deepEqual(empty, parseMessageCreateRequest({ content: "hello", selected_skill_source_refs: [] }, undefined))
+  assert.deepEqual(empty, { content: "hello" })
+  assert.deepEqual(parseMessageCreateRequest({ content: "hello", selected_skill_source_refs: [] }, undefined), {
+    content: "hello",
+    selectedSkillSourceRefs: [],
+  })
   assert.deepEqual(parseMessageCreateRequest({ content: "hello", selected_skill_source_refs: ["skill:b", "skill:a"] }, undefined), {
     content: "hello",
     selectedSkillSourceRefs: ["skill:b", "skill:a"],
@@ -83,4 +85,9 @@ it("rejects Skill aliases, whitespace, line endings, Unicode, duplicates and ove
     assert.equal(parseMessageCreateRequest({ content: "hello", selected_skill_source_refs: value }, undefined), null, JSON.stringify(value))
   }
   assert.equal(parseMessageCreateRequest({ content: "hello", pinned_skills: [] }, undefined), null)
+})
+
+it("keeps omitted Skill selection distinct from explicit empty selection", () => {
+  assert.equal(parseMessageCreateRequest({ content: "hello" }, undefined).selectedSkillSourceRefs, undefined)
+  assert.deepEqual(parseMessageCreateRequest({ content: "hello", selected_skill_source_refs: [] }, undefined).selectedSkillSourceRefs, [])
 })

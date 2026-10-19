@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/platform-http")
 const manifestPath = path.join(root, "contract/dependencies/platform-http.json")
 const configPath = path.join(root, "openapi-ts.platform-http.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "6b4c9db6719d2f5fd37a752921e603f4b0221de6"
+const ownerCommit = "fa5c5e53151b3c72145b680a3ee4a45d92c17ec7"
 const vendorPath = path.join(root, `contract/vendor/kokoro-platform/${ownerCommit}/openapi/platform-http.openapi.json`)
-const ownerDigest = "50afde42d7a1564ecb058c78dff68e4ea81bbb3552bd96dbf6203b036ec381ae"
+const ownerDigest = "18699985514e5b75bb48dc1fbaad638f6184e88032ed5e6d242ef89e6144b0fd"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -171,6 +171,41 @@ export function assertGeneratedAllowlist(files, directories, label) {
   assert.deepEqual(directories.slice().sort(), generatedDirectories.slice().sort(), `${label} directory allowlist drifted`)
 }
 
+async function preserveSkillAcquisitionConditional(directory) {
+  // The pinned SDK generator emits `unknown & object` for this if/then and
+  // silently omits its requirement. Complete only this exact owner clause.
+  const api = JSON.parse(await readFile(vendorPath, "utf8"))
+  assert.deepEqual(
+    api.components.schemas.Skill.allOf,
+    [
+      {
+        if: { required: ["installed"], properties: { installed: { const: true } } },
+        then: { required: ["acquisition_kind"] },
+      },
+    ],
+    "Platform Skill acquisition condition drifted",
+  )
+  const file = path.join(directory, "zod.gen.ts")
+  const source = await readFile(file, "utf8")
+  const start = source.indexOf("export const zSkill = ")
+  const end = source.indexOf("export const zPublishedPersonalSkill = ", start)
+  assert.ok(start >= 0 && end > start, "generated Skill validator missing")
+  const original = source.slice(start, end)
+  const prefix = "export const zSkill = z.intersection(\n  z.unknown(),\n  z.object({"
+  const suffix = "\n  }),\n)\n\n"
+  assert.ok(original.startsWith(prefix) && original.endsWith(suffix), "generated Skill conditional representation drifted")
+  const object = original.slice(prefix.length, -suffix.length)
+  const completed = `export const zSkill = z.object({${object}
+}).superRefine((value, context) => {
+  if (value.installed === true && value.acquisition_kind === undefined)
+    context.addIssue({ code: "custom", path: ["acquisition_kind"], message: "Installed Skill acquisition is required" })
+})
+
+`
+  await writeFile(file, source.slice(0, start) + completed + source.slice(end))
+  return file
+}
+
 async function generate(directory) {
   const cli = path.join(root, "node_modules/@hey-api/openapi-ts/bin/run.js")
   await run(process.execPath, [cli, "--silent", "-f", configPath], { env: { ...process.env, PLATFORM_HTTP_CLIENT_OUTPUT: directory } })
@@ -179,6 +214,8 @@ async function generate(directory) {
   await normalizeGeneratorCompatibility(directory)
   const prettier = path.join(root, "node_modules/prettier/bin/prettier.cjs")
   await run(process.execPath, [prettier, "--no-semi", "--print-width", "160", "--write", directory])
+  const conditional = await preserveSkillAcquisitionConditional(directory)
+  await run(process.execPath, [prettier, "--no-semi", "--print-width", "160", "--write", conditional])
 }
 
 async function manifestFor(directory) {
@@ -203,7 +240,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-capability",
       repository_commit: ownerCommit,
-      contract_version: "6.0.0",
+      contract_version: "6.1.0",
       contract_path: "contract/openapi/platform-http.openapi.json",
       contract_sha256: ownerDigest,
     },

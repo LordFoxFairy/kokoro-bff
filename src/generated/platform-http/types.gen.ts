@@ -4,7 +4,7 @@ export type ClientOptions = {
   baseUrl: "http://kokoro-platform:8086" | (string & {})
 }
 
-export type Skill = {
+export type Skill = unknown & {
   series_id: string
   source_ref: string
   name: string
@@ -13,6 +13,10 @@ export type Skill = {
   scope: "personal" | "project" | "organization" | "session" | "unknown"
   revision: string
   enabled: boolean
+  /**
+   * Persisted installation acquisition, not creation method or current catalog visibility. Omitted when no installation was selected.
+   */
+  acquisition_kind?: "unknown" | "direct" | "hub"
   installed?: boolean
   skill_updated_at: string
   example_prompts: Array<string>

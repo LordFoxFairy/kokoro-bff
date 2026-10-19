@@ -2,13 +2,15 @@ import type { ScheduledTaskFact } from "../../../domain/scheduled-task/task.js"
 
 export type SchedulerScheduleInput = {
   name: string
-  schedule: string
+  schedule?: string
+  run_at?: string
   timezone: string
   url: string
   method: "POST"
   body: {
     tenant_id: string
     task_id: string
+    task_revision: number
     project_id?: string
     owner_id: string
     prompt: string
@@ -26,34 +28,30 @@ export function schedulerScheduleName(taskId: string): string {
   return `kokoro.scheduled.${taskId.replace(/[^a-zA-Z0-9._-]/gu, "-")}`.toLowerCase().slice(0, 64)
 }
 
-function weekdayInTimezone(instant: Date, timezone: string): number {
-  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(instant)
-  const index = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekday)
-  if (index < 0) throw new Error("SCHEDULE_WEEKDAY_INVALID")
-  return index
-}
-
-function localSchedule(task: ScheduledTaskFact): string {
+function trigger(task: ScheduledTaskFact): { schedule: string } | { run_at: string } {
   const match = /^(\d{2}):(\d{2})$/u.exec(task.time)
   if (match === null) throw new Error("SCHEDULE_LOCAL_TIME_INVALID")
-  const hour = Number(match[1])
-  const minute = Number(match[2])
+  const hour = Number(match[1]),
+    minute = Number(match[2])
   if (hour > 23 || minute > 59) throw new Error("SCHEDULE_LOCAL_TIME_INVALID")
-  if (task.frequency === "daily") return `${minute} ${hour} * * *`
-  if (Number.isNaN(task.recurrenceAnchorAt.getTime())) throw new Error("SCHEDULE_RECURRENCE_ANCHOR_INVALID")
-  return `${minute} ${hour} * * ${weekdayInTimezone(task.recurrenceAnchorAt, task.timezone)}`
+  if (task.frequency === "daily") return { schedule: `${minute} ${hour} * * *` }
+  if (task.frequency === "weekly" && task.weekdays !== undefined) return { schedule: `${minute} ${hour} * * ${task.weekdays.join(",")}` }
+  if (task.frequency === "monthly" && task.monthDays !== undefined) return { schedule: `${minute} ${hour} ${task.monthDays.join(",")} * *` }
+  if (task.frequency === "once" && task.runAt !== undefined && !Number.isNaN(task.runAt.getTime())) return { run_at: task.runAt.toISOString() }
+  throw new Error("SCHEDULE_CALENDAR_INVALID")
 }
 
 export function buildSchedulerSchedule(task: ScheduledTaskFact, tenantId: string, ownerId: string, targetUrl: string): SchedulerScheduleInput {
   return {
     name: schedulerScheduleName(task.id),
-    schedule: localSchedule(task),
+    ...trigger(task),
     timezone: task.timezone,
     url: targetUrl,
     method: "POST",
     body: {
       tenant_id: tenantId,
       task_id: task.id,
+      task_revision: task.revision,
       ...(task.projectId === undefined ? {} : { project_id: task.projectId }),
       owner_id: ownerId,
       prompt: task.prompt,

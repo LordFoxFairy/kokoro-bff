@@ -1,3 +1,132 @@
+## 2026-10-19 既有分支集成：唯一 Public19.0.0（候选）
+
+本次只合并本地 d8634f0 与 main 16e5c711 已批准能力，不新增功能。唯一当前 /v1 契约165操作：保本地 Skills取得来源、项目精确选择/消息默认冻结、知识、完整日历与Library筛选、五项MCP包管理；承接main八项账号会话/姓名、共享/归档操作与Team完整platform/skill权限。旧名称关联PATCH及recurrence_anchor_at请求字段保持退休，不建alias或runtime fallback。两父原文/有序inventory通过本次明确增量的精确逆证保留，既有历史hash与断言不重签；全部后端入口、owner准入/取消/事务/幂等和历史回执保持。
+
+Schema只在原BFF canonical叠加main既有归档列/索引；项目/日历/知识结构与旧表删除保持。正常库不自动演进，未重启服务、启用模型/实际工具/扣费。停写后的728输入完整格式/lint/types/契约845项/架构/默认1489 PASS与3原SKIP/fresh build已通过；13文件真实PostgreSQL＋Redis 346 PASS/0 SKIP，fresh canonical安装与自有测试库回收已验证，独立审查无遗留确定P0–P2。首次资源7个失败已定位并修正既有fixture的owner search_path、HTTP7显式project_ref和ObjectStore VersionId ACK；原503、未知提交、重启与撤权恢复断言保持，未以放宽断言消除失败。新availability消费者WIP和正常mixed均未夹入；代码交付不代表正常Schema/运行服务或完整页面已配对。
+
+## Agent HTTP7 窄消费者（2026-10-18，正常尚未配对）
+
+只升级内部固定Agent artifact到7104f3d/7.0.0，public18.1及157 operations原字节保持。SDK仍只生成Run POST、events GET、control POST，不开放新增usage-evidence读、更不触发模型/收费。Launch网络必含project_ref:string|null，从BFF原durable scope投影，直聊显式null；不会信任浏览器trace或重新读取移动后的项目。当前strict生成源/provenance与本地manifest由同一正式命令校验。
+
+两个派发client在写socket前统一校验owner request闭集；拒绝无效BFF保存形状，不生成第二套request schema或自动旧版本fallback。原request_id/run/session/message、selected_skill_source_refs、key、身份headers与成功/错误/HITL语义不变。正常激活/历史未知admission核对独立验收，模型/扣费继续暂停。
+
+## 2026-10-18 Public18.1 MCP 包管理目标
+
+新增POST /v1/admin/mcp/packages/{package_id}/uploads、GET同路径/{upload_id}、POST同路径/{upload_id}/complete与/abort、POST /v1/admin/mcp/packages/{package_id}/publish。四写单Idempotency-Key≤191 ASCII，命令摘要仅可信主体与固定意义由SDK生成；路径package/upload保持精确绑定。Complete/Publish size_bytes为1..33554432十进制字符串，SHA lowercase64；staging source版本不是运行版本。Publish body含provider_key和精确上传/asset事实，无任意command/env/URL。
+
+所有操作当前人类平台管理员＋mcp_catalog.manage、固定租户、no-store/x-request-id。Begin/Complete/Abort/Status/Publish统一200，表示当前owner结果而非虚构新BFF资源；Begin的PUT引用只短时返回。Pending/Unknown扫描如实返回；发布不是启用/执行许可。公开错误稳定脱敏：400输入、401/403身份、404资源、409回执冲突/处理中、412资格、413包预算、429准入限流、502坏owner响应、503依赖/超时/未知。四写未知保原key/body，GET状态不证明发布未提交；Publish只能原命令恢复。Public18.1是新增五操作/157，现18其余内容用完整逆证精确保留，不加运行时旧版本fallback。
+
+## 2026-10-18 MCP package admin 内部消费者
+
+公开API继续Public18/原operation集合，本片不增路由。固定Platform fa5c5e5新独立五方法及mcp-package-admin-v1/profile、vectors和descriptor；沿现direct owner-only BFF mcp_admin凭据/固定tenant，不新增IAM scope。SDK本地command摘要绑定tenant/subject/package/source/provider完整业务意义，四命令保留原commandId，status无command。输出严格校验后投影，不返回生成message、身份header或依赖错误详情；pending/unknown scan不转clean，发布ACK不当执行许可。
+
+## 2026-10-18 Artifact 服务端检索实施边界（候选，未正常加载）
+
+延续 BFF Library 关系与 Storage FINAL 元数据现有边界，在唯一 GET /v1/library 的 artifact 查询新增 q/type；分页按 Storage 当前经授权验证的 title/filename/mime 匹配，不用未核实的 BFF source claims 代替，也不建立第二份 Final metadata 表、索引、worker 或跨 owner SQL。复用原 min(500,limit*5) 候选上限与30秒取消预算，每次查询只走一个受界候选窗口；可能返回空 items 且仍有 next_cursor，消费者必须显式区分“当前窗口未匹配、可继续”与已穷尽的无结果，不自动扫完整库。
+
+BFF 拥有产品分类/查询规范化和分页位置，Storage 保持原17 RPC与唯一 FINAL+CLEAN真值。查询为不区分大小写的 NFC 子串，匹配最终 title/filename；类型使用既有八类 UI taxonomy（all加七个结果类型），mime/title规则在 API 文档明确，后续消费者不再对已加载页二次决定搜索结果。结果按原 delivery keyset 排序，不宣称 BM25、向量、相关性排名或索引全量搜索性能。
+
+因为 cursor 从旧无filter形状收敛为单一完整 filter tuple，唯一 Public18 正式声明该失效边界；退休旧cursor解码，不双读旧协议。file 查询拒绝 q/type，非默认/默认 artifact 均由同一个严格规范化 tuple 绑定 kind/tenant/subject/limit/query/type，改查询不可复用游标；每页身份和 Storage 当前资格重验。无模型/工具/扣费。先改 canonical/query/行为测试并隔离验收，producer和App固定消费及正常配对前不重载正常 BFF，也不修改正常App使其提前发送新query。
+
+## 2026-10-18 固定 Scheduler 3.0（实施门）
+
+owner固定3bb7ff61b0d72418aa048ca35b8c3f144a33f13e／3.0.0／d349eae8bba207074b1edf91acd9f08e94f39a27363441f45186c1799159c999。mutation Schedule.next_due_at条件nullable，null必须once run_at且paused=false；data.status仍命令结果，BFF只把updated的该形状当同触发源耗尽，不拿旧ACK充current。新canonical条件在唯一生成器正规补全，拒非法cron/null、错误paused/缺字段或绑定漂移。
+
+Public17与现业务字段不变；同一冻结once instant的普通/完整规则编辑和启停允许past，不代表重新调度或执行；不同instant、新建/recurring转once仍future。next_run_at由当前owner读，exhausted返回null；仅该已证终态允许与产品paused意图不同，完整正文/revision仍匹配。后继正常切换仍需旧未知命令退休与消费者配对，不提前重载。
+
+## 2026-10-18 退休重复调度 next 事实（周期候选续接）
+
+不改 Public17 当前读/写形状和固定 Scheduler2 wire；新 mutation snapshot 的 next_run_at 总为 null（登记异步且未知），旧已持久 ACK 原 JSON 不改写。Details 仅用权威 current reader 的 next 与 scheduling_state，不从写回执或旧 BFF 列恢复。内部 outbox success port 只结算 command，不返回/接受 next projection。
+
+## 2026-10-18 权威调度当前读取（周期候选续接）
+
+Public17 未发行候选补当前 Details 必需 scheduling_state=pending|active|paused|exhausted|failed；next_run_at 只在已核验 active owner current 时返回，否则为 null。业务 status 与调度状态分开，exhausted 不表示 Agent 成功。登记已成功却读到404、绑定不符或依赖失败返回503，不伪装 pending/空列表。写回执保持原不可变表示，不增加 current 字段，不改旧 ACK。完整16.2逆回保护原契约字节；消费者配对与正常激活另验。
+
+## 2026-10-18 Public17 多周期目标（隔离候选）
+
+frequency扩为daily/weekly/monthly/once；保time/timezone，weekly必需weekdays唯一0..6，monthly必需month_days唯一1..31，once必需local_date真实ISO日期，其他频率不接受这些字段。recurrence_anchor_at退出输入和当前读，无别名；next_run_at仍必需nullable且只来自Scheduler。PATCH触碰规则须携带完整frequency/time/timezone与对应选择，其他字段保持部分更新。写ACK仍不可变；仍符合当前请求形状的同key/body重放原JSON，退休anchor/缺少周选择等旧请求在claim前拒绝，不新增双parser或alias。历史回执保留原样，正常切换前必须先收敛未知ACK；新当前详情/列表严格执行规则条件，不用历史ACK回填编辑器。到点后的同key回放不再执行未来校验；新建/改期只接受未来once。
+
+公开版本17.0.0，operation不新增；机器变更完整逆回16.2精确SHA，再接原16.1/16.0保护。内部Scheduler保持固定2.0，BFF将本地规则转成cron或run_at，冻结command使用outbox4，无任意callback URL或凭据输入。正常消费者未配对前不重载。
+
+## 2026-10-18 Scheduler 2.0固定消费
+
+内部Scheduler source固定8a26c91aa24d1f48a760b6234ab1ed5855d20936与完整digest；公开BFF仍16.2/152 operations不变。旧1.0 vendor替换，SDK正规生成并校验drift。新增owner current GET消费，输入path name与可信tenant/request ID，不传Idempotency-Key/body/query；响应是data.schedule，request ID只在header，不套旧mutation meta。
+
+当前读取保持owner的schedule/run_at恰一和status/next联合约束；跨资源name错配、非法calendar/精度、错误条件或超限响应不投影成成功。业务写ACK/current读取生命周期仍分开；本切片不放宽mutation next，暂不把新的once形状塞入旧daily/weekly产品input。历史回执不改写，body与key保持原语义。
+
+## Public16.2：当前 ScheduledTask 读取返回周期锚点（2026-10-18，源码候选）
+
+GET /v1/scheduled-tasks 列表项与 GET /v1/scheduled-tasks/{id} 详情使用 ScheduledTaskDetails：复用原 ScheduledTask 字段，增加 required recurrence_anchor_at:string/date-time。它是 BFF 保存的规则 UTC instant；next_run_at 仍必需 nullable，只代表 Scheduler 确认的下次时间，不能互代。
+
+写操作 ScheduledTaskResponse/原 ScheduledTask 快照不变，新写入和历史终态均保持相同 ACK 格式；不为新增读字段改历史回执或用当前事实补齐旧结果。创建/PATCH输入、身份/幂等、callback与数据库不变。消费者需固定16.2并区分当前读取与不可变ACK，不加缺字段fallback；正常旧实例未配对激活前不宣称返回新读字段。
+
+## Public16.1 本人知识（2026-10-18，目标机器与源码候选）
+
+唯一机器源新增六operation：GET /v1/preferences/knowledge（可选单一query，≤500 Unicode scalar值，字面case-insensitive子串）；GET/PUT/DELETE /v1/preferences/knowledge/{knowledge_id}（lowercase UUIDv4）；GET/PUT /v1/preferences/knowledge-usage。身份只取IAM准入context。无身份selector、Idempotency-Key或ETag条件头。当前四字段profile原样保持，知识不等于记忆导入。
+
+列表data为{items,max_items:100}，全部有效项至多100，created_at DESC/knowledge_id ASC；不返回cursor或宣称跨请求快照。item为knowledge_id/name/when_to_use/content/revision/created_at/updated_at；原文保留，三个required字段须非空白且各≤500/500/2000。PUT body恰为expected_revision/name/when_to_use/content；expected0创建201+Location，正revision替换200。DELETE body恰为正expected_revision，成功204无正文；删除后ID永不复用，相同删除前revision重试204，其他409；缺失/foreign404。
+
+usage data为enabled/revision，缺省false/0且读不写；PUT body恰为expected_revision/enabled，CAS成功200。关闭不删知识，不暗示已应用到Agent。所有写拒绝重复/未知JSON key、非fatal UTF8、NUL/孤立surrogate、非安全整数及超65536原始bytes；GET无body。错误为closed {error:{code,message,retryable}}，no-store/x-request-id；409知识版本冲突/耗尽/上限，503 unavailable或save_unknown。未知COMMIT仅GET核实，不自动重复命令。
+
+六operation为public/beta、owner kokoro-bff、knowledge.self.read/write、idempotency=none（明确CAS/固定资源ID而非无幂等保护）。正常库/consumer激活未发生；完整父逆保证原16.0所有surface字节不变，禁止第二public契约或假发布commit。
+
+## 调度 callback 的任务版本（2026-10-18，内部语义切片）
+
+`POST /internal/bff/scheduled-tasks/dispatch` 继续使用固定 Scheduler generated webhook 的服务认证、header、occurrence 与幂等身份。该 owner 契约将 body 定义为 opaque JSON；BFF 自己注册的 body 新增 required `task_revision`：JSON number、正安全整数，精确等于对应 BFF command 的 frozen task revision；不是 Scheduler schedule.version。缺失、字符串、null、非正、非整数或溢出在零 receipt claim 前返回 400 invalid_scheduler_dispatch。其余既有身份/正文校验保持。
+
+首次接纳的 body revision 与当前 task 不符返回 durable 409 invalid_scheduler_dispatch，不准备新 launch；相同 key/body 复现原终态，不按新规则重试，异 body 仍 409 idempotency_conflict。匹配时原 revision 进入 frozen snapshot；恢复已有 snapshot 也须与 body revision 相等，并由已有锁内 accept 再核当前 task revision；在途规则变更拒绝而不派发。原 snapshot 已接受后重放不表示当前规则再次执行。
+
+本片不改变 public16.0.0 OpenAPI、不新增 public 字段或路由，不修改 Scheduler opaque schema/vendor/generated。配对激活要求及 v2 command 退休见 TECHNICAL_DESIGN；未盘点和更新的旧 schedule 不能冒称可继续运行。
+
+## S4c 项目选择本地契约候选（2026-10-17，尚未发行）
+
+当前预激活Public15.1替换为单一Public16，路径仍/v1：移除旧PATCH /projects/{projectId}/skills/{skill}，增加GET/PUT /projects/{projectId}/skill-selection。表示为data.project_id与data.installation_ids；PUT closed body {installation_ids:[...]}，最多16个、唯一、精确installation ID，[]清空，必需原Idempotency-Key，响应no-store。身份只取受信tenant/subject与当前BFF项目；PUT在写前核正式Project安装，错误/不可用不部分保存。替换事实和完成receipt同事务，原key重放不恢复已被后续修改的旧默认。
+
+MessageCreateRequest字段名与Agent wire保持；只纠正省略继承项目默认、显式[]不继承。消息历史返回其已冻结selected_skill_source_refs。新消息选择快照与项目/Conversation移动冲突返回409，原意图可明确重试；已提交命令重放先取原receipt、不重新解析现默认。唯一OpenAPI已更新为Public16.0.0／146 operations，新增Message坏owner响应502，并以完整Public15.1父契约逆证保留未受影响字段；本地源码已接线，消费者固定版本与正常运行切换尚未完成。
+
+## 项目安装 Public15.1（2026-10-17）
+
+新增六operation：POST/GET /v1/projects/{projectId}/skill-installations、GET/DELETE同集合/{installation_id}、PUT同ID/enabled、POST同ID/update。input/ACK/错误/Idempotency-Key/10秒预算沿个人安装，项目身份只来自已校验pathname与当前BFF项目事实；body不接project/tenant/subject，响应沿原安装组件。write每次fresh当前Skill action，项目资格及身份在owner调用前后复核；跨tenant/user/project不转owner。正式Project response project_ref严格回绑canonical ID，拒个人ACK/错误project/未知wire，不能以URL或旧receipt代替权限。
+
+public artifact15.1.0为additive145 operations，先精确移除四新增path并逆回完整Public15.0，再运行原历史检查；网站Skill ownerType和公开八类不变。没有新BFF资金/模型许可或正常环境激活。
+
+## S2 skill.list 八类当前源码契约（2026-10-17，正常激活待续）
+
+固定 Platform `e17283888ae1a8cf10365dfc8dd670115d6d187c`：RPC enum1 UNKNOWN/2 DIRECT/3 HUB；0/缺失/非法值拒绝。HTTP6.1.0及acquisition profile/provenance同commit。公开唯一/v1/skill.list的SpecificationPublicSkill.owner_type为personal/official/team/project/app/hub/device/unknown；仅此公开item改词表，不新增字段、required、alias或mutation输入。artifact15.0.0表示响应枚举配对切换，不是HTTP/v15。原14.8完整SHA `a9729722383de5571821961357051499612d12c76aa835b8774828adea82a577` 通过严格去三枚举值/还原version逆回，不改任何其它operation/schema/metadata。
+
+hub来自已提交安装取得事实；unknown来自显式未知取得或合法但未识别的ownership；direct才按真实owner/官方分类映射。内部非法enum/绑定不转unknown。网站ownerType、共享revision owner_type与source_kind各保原语义，不复用公开八类替换所有字段。无正式Device发现/OpenApp准入不宣称这些入口已可用；不改变现人类身份范围来模仿Manus APIKey/OAuth。
+
+项目query保原BFF项目当前资格和前后复核，返回安装exact revision但id仍稳定series，停用安装照常列出，列出不启用。creator_info仍仅真实IAM creator，不借publisher替代。生成、实际wire与产品组合分层验收；尚未执行的消费者/正常数据库和服务切换不算完成。
+
+## 2026-10-16 skill.list 官方参考复核（当前差距，不发行新契约）
+
+当前业务源码b4292b6及唯一canonical `contract/openapi/v1/openapi.yaml`不变。重新读取[官方skill.list](https://open.manus.ai/docs/v2/skill.list)及[官方v2 OpenAPI](https://open.manus.ai/docs/v2/openapi_v2.json)，解析其Skill组件而非只看示例：七个字段名与当前SpecificationPublicSkill相同，双方item均未声明required；现有presence不应因示例全出现就改成全部必填。官方owner_type现为personal/official/team/project/app/hub/device/unknown，当前canonical/runtime仍五类；下文2026-10-09五类是历史快照，不再代表当前完整官方词表。hub/device真实来源生产及unknown语义仍待现有设计确认，不只扩枚举、不从ZIP/GitHub/audience推导来源，也不把损坏owner响应降级成unknown。
+
+公开读取职责仍是已安装可供任务选择，包含停用项，读取不启用；当前聚合只传installed=true而不传enabled过滤，按精确安装source事实组装稳定series ID、真实作者和Unix秒，project_id先后两次按同tenant/subject核项目资格。稳定ID是既定Kokoro裁决，不改成revision UID；但列表回包不证明所返ID已通过项目默认/显式空选择与Agent pin继承端到端执行。正式个人更新保持精确pin，不能让新来源分类顺带改变更新/执行选择。
+
+官方按API Key、standard OAuth Open App、trusted client区分返回范围与project_id资格；当前/v1/skill.list明确只调用既有fresh human Product Session admission、无第二API-key/Open-App主体入口。该差异须沿IAM可信caller与owner能力设计裁决，不能在BFF按header/body自报client类别、把机器身份当人类，或为对齐页面临时放权。既有网站私有RPC另有camelCase视图，既不是公开skill.list的替代，也不是应凭名称删除的兼容alias。
+
+本轮没有改Schema、公开机器源或生成物，没有调用Manus业务API/取得凭据，也未发送模型/Tool/计费请求。现有skill-specification-http文件在Node22以concurrency2重验64PASS/0SKIP；真实loopback HTTP、受控owner/IAM及纯聚合层的证据不冒正常API Key/OAuth、真实项目安装或Agent执行验收。原始官方摘要SHA和逐字段比较只留本地ignored收据，非Root可编辑机器契约。
+
+## 2026-10-16 Skill Share 创建与 Resolve 的活动版本校验（既有协议内修复）
+
+Create 与 Resolve 使用和既有 Shared Summary 相同的精确 revision active/valid 资格，严格核 `source_ref` 与 owner UID，继续原包检查。POST 在持久化前和回执前读取；已有活动 locator 复用也必须重新核资格。withdrawn/disabled/draft/quarantined 或不可见仍为既有404，缺元数据依赖503，非法 owner 表示502；不新增 status/code/字段或放宽本人包预览，也不借 share 赋予权限。DELETE 继续原 creator/tenant 边界，不要求源仍 active，才能撤销失效链接。
+
+预检查拒绝不调用 create；若预检后、BFF create 已提交才发生 owner 撤回，后检拒绝误导201，但已保存 locator 可能仍在。GET 不隐式删除或撤销它，不构造跨 owner 原子事务/回滚承诺；后续读取仍实时拒绝。原机器契约闭集、幂等身份/expiry、public 当前14.8/139与独立 browser-private profile 不变。
+
+## AUTH-P3：BFF→Platform auth 消费边界（实施设计，2026-10-16）
+
+普通 BFF 全部 Platform surface 固定新 owner auth profile 的 commit/version/digest；catalog 与 skills_admin 从 IAM workload token 切换专用本地服务 Bearer，projection/MCP/Custom API 沿现 direct 模式。此为内部 breaking auth 消费，不改 Public14.8、139 operations、HTTP body/status、OpenAPI 或浏览器认证。人类 IAM session/action、第三方 OAuth、Agent 执行 proof 与 Billing 资金授权不变。只接受新严格凭据文件，不为旧 OAuth 文件加 fallback。机器 profile 与源码/正常配对的证据分别记录。
+
+## SKILLS-UPDATE U3：个人安装更新 public 契约（本地源码已实现，未正常激活；2026-10-16）
+
+唯一机器源 `contract/openapi/v1/openapi.yaml` 现为 14.8.0 additive：`POST /v1/skill-installations/{installation_id}/update`，operationId `updatePersonalSkillInstallation`，public/beta、owner kokoro-bff、idempotency required、permission `product.skill.install`（复用当前 IAM install action，无新授权词）。body 必有且仅有两个严格 source-ref 字符串 `expected_source_ref`/`source_ref`；path ID、单 Idempotency-Key 沿现安装闭集，禁止 query/重复 JSON keys/未知键/显式 null/非 UTF-8/超 65536 bytes。内容类型仅 application/json，身份与 command digest 不由 body 提供。
+
+成功 200 `{data:{installation,change:"upgraded",event_id,replayed}}`；安装 leaf 沿唯一 SkillInstallation，event_id 必需。实现再核 ID 等于 path、source_ref 等于请求目标、installed=true 且无 removed_at，保 enabled 的 false。错误沿现状态专属组件：400 invalid_skill_installation_request/缺 key，401/403 当前 session/service/action denial，404 不可见，409 idempotency_conflict/command_in_progress，412 precondition_failed，413 body too large，429 rate_limited，502 response_invalid，503 dependency_unavailable，504 dependency_timeout；不暴露内部异常/provider响应。每次含 replay 都重新用户/动作准入，响应 no-store 与 x-request-id。
+
+owner 唯一 Proto 的 Update 请求只含 request_id/command/installation_id/expected_source_ref/source_ref，使用原 `product-personal-installation/1.0.0`。本仓固定 owner `11cb7604a5385047fd872cedc8a55273eae59043` 的 Proto/descriptor/update profile/provenance digest 并正规生成，不导入 sibling 源码；HTTP projection 的独立 pin 不因本 RPC 加法移动。本地 client/route 与机器已接线；正常服务未切换，本节不代表 API 已正常激活；旧 Install/Enable/Remove 各自语义不变。
+
+
 ## SET49：主线与设置归档合同集成
 
 合并主线已批准的MCP public四写删除及既有设置/归档能力，以16.0.0/146发行（breaking删除，不冒minor）。integration-public-contract.mjs逐字节验证完整当前合同及有序清单，精确恢复原15.4全文/150后委托全部原inverse和oracle；main贡献保留，不修改Skills/MCP业务。Billing唯一pin使用正式experimental.5发行，保三读与严格专用404；当前验证进行中，正常服务不变。
@@ -2871,3 +3000,12 @@ The machine source of truth will be the existing `contract/openapi/v1/openapi.ya
 Audit、全局用户目录、用户生命周期、session revoke、角色 grant 与任何 mutation 不属于本 contract。新增它们前必须先发布相应 IAM owner operation，固定 vendor artifact、再生成 BFF client 和版本化 public schema；不得通过 internal URL、手写 wire type 或 generic relay 绕过 owner。
 
 <!-- R357-ADMIN-IAM-BRIDGE-API-D0-END -->
+
+
+## Connector command browser-private 恢复错误（2026-10-16，候选）
+
+本片修正历史计划“接public OpenAPI”的表述：现/browser/v1/mcp/*、/browser/v1/connectors/custom-apis*不是public139 operations，Public14.8原字节保持。唯一code-first窄错误policy在src/infrastructure/clients/platform/connector-command-fault.ts，正规生成contract/connector-command-errors-v1.json；与local-import private policy一致，不新增外部operation或错误envelope。
+
+只有Platform固定receipt metadata/code组合才能映射本仓恢复错误，RPC的unknown/expired/conflict/ownership-lost不表示未提交。无marker按原领域处理，畸形/未知/重复/错code/混合detail及read上的marker统一response_invalid/502。MCP三项既有PersonalMcpErrorDetail原因独立可辨，不能按message猜。具体HTTP code/status/retryable/recovery以本仓生成profile为准；成功/CAS/key/no-store/x-request-id/human准入不变。所有恢复指引都不授自动执行、新command或新key许可，未消费App前不声称UX闭环。
+
+本片核实 needs_client/auth_method_unsupported 来自原生 OAuth 服务，故共享 typed 前置条件分类也承接 Begin/Reconnect/Complete/CreateConnection，而不限 Prepare。URL server 分支仍要求已有 typed detail；原生 OAuth 无 detail 的合法 CAS 前置失败保持 generic412，未知/混合 detail 则502。原生 OAuth 不添加 Idempotency-Key；只移动错误职责至窄 connector-command-fault 模块，删除旧 server-response 中的错误 export，不留 alias。

@@ -106,13 +106,31 @@ function validExamples(value: unknown): boolean {
     return false
   }
 }
-const visibleSkill = zSkill
-  .extend({
-    example_prompts: z.custom<string[]>(validExamples),
-    category_keys: skillCategoryKeysSchema,
-    product: z.unknown().transform(projectSkillProductJson),
+const visibleSkill = z
+  .preprocess((input, context) => {
+    if (typeof input !== "object" || input === null || Array.isArray(input)) return input
+    try {
+      const value = input as Record<string, unknown>
+      // Validate original nested facts before generated object parsers can
+      // strip unknown product/publisher/provenance members.
+      return { ...value, product: projectSkillProductJson(value.product) }
+    } catch {
+      context.addIssue({ code: "custom", message: "Skill product facts are invalid" })
+      return z.NEVER
+    }
+  }, zSkill.strict())
+  .transform((value, context) => {
+    try {
+      return {
+        ...value,
+        example_prompts: parseSkillExamplePrompts(value.example_prompts),
+        category_keys: skillCategoryKeysSchema.parse(value.category_keys),
+      }
+    } catch {
+      context.addIssue({ code: "custom", message: "Skill source facts are invalid" })
+      return z.NEVER
+    }
   })
-  .strict()
   .refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
 const publishedSkill = zPublishedPersonalSkill
   .extend({

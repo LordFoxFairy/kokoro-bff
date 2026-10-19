@@ -1,8 +1,19 @@
+import {
+  inspectClosureIntegrationContract,
+  restoreClosureLocalContract,
+  restoreClosureMainContract,
+  closureLocalBaseline,
+  closureMainBaseline,
+} from "./verify-closure-integration-contract.mjs"
+import { inspectMcpPackageAdminContract } from "./verify-mcp-package-admin-contract.mjs"
+import { inspectLibraryFilterContract } from "./verify-library-filter-contract.mjs"
+import { inspectScheduledPeriodContract } from "./verify-scheduled-period-contract.mjs"
+import { inspectPersonalKnowledgeContract } from "./verify-personal-knowledge-contract.mjs"
+import { inspectSkillProductContract, inspectCurrentSkillsSpecificationContract } from "./verify-skill-product-contract.mjs"
 import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "./archived-tasks-public-contract.mjs"
 import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "./shared-tasks-public-contract.mjs"
 import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "./account-profile-public-contract.mjs"
 import { restorePublic15AccountSessionContract, accountSessionParentBaseline } from "./account-session-public-contract.mjs"
-import { inspectSkillProductContract } from "./verify-skill-product-contract.mjs"
 import { inspectSkillExamplePromptsContract, stripSkillExamplePromptsSource } from "./verify-skill-example-prompts-contract.mjs"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -3134,26 +3145,39 @@ export function restorePublic15TeamPermissionsContract(source: string): string {
 }
 
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
+  const currentSource = source,
+    currentBaseline = baseline
+  const integrationErrors = inspectClosureIntegrationContract(currentSource, currentBaseline)
+  if (integrationErrors.length > 0) return integrationErrors
+  source = restoreClosureLocalContract(currentSource)
+  baseline = closureLocalBaseline(currentBaseline)
   try {
-    if (/^  version: (?:15\.4|16\.0)\.0$/mu.test(source)) {
-      source = restorePublic153ArchivedTasksContract(source)
-      baseline = archivedTasksParentBaseline(baseline)
-    }
-    if (/^  version: 15\.3\.0$/mu.test(source)) {
-      source = restorePublic152SharedTasksContract(source)
-      baseline = sharedTasksParentBaseline(baseline)
-    }
-    if (/^  version: 15\.2\.0$/mu.test(source)) {
-      source = restorePublic151AccountProfileContract(source)
-      baseline = accountProfileParentBaseline(baseline)
-    }
-    source = restorePublic15AccountSessionContract(source)
-    baseline = accountSessionParentBaseline(baseline)
-    source = restorePublic15TeamPermissionsContract(source)
+    let settingsSource = restoreClosureMainContract(currentSource)
+    let settingsBaseline = closureMainBaseline(currentBaseline)
+    settingsSource = restorePublic153ArchivedTasksContract(settingsSource)
+    settingsBaseline = archivedTasksParentBaseline(settingsBaseline)
+    settingsSource = restorePublic152SharedTasksContract(settingsSource)
+    settingsBaseline = sharedTasksParentBaseline(settingsBaseline)
+    settingsSource = restorePublic151AccountProfileContract(settingsSource)
+    settingsBaseline = accountProfileParentBaseline(settingsBaseline)
+    settingsSource = restorePublic15AccountSessionContract(settingsSource)
+    settingsBaseline = accountSessionParentBaseline(settingsBaseline)
+    settingsSource = restorePublic15TeamPermissionsContract(settingsSource)
+    const settingsErrors = [...inspectOpenApiGovernance(settingsSource), ...compareOperationBaseline(settingsSource, settingsBaseline)]
+    if (settingsErrors.length > 0) return settingsErrors
   } catch (error) {
-    return [error instanceof Error ? error.message : "SET13 inverse failed"]
+    return [error instanceof Error ? error.message : "settings integration parent proof failed"]
   }
-  const errors = [...inspectOpenApiGovernance(source), ...compareOperationBaseline(source, baseline)]
+  const errors = [
+    ...inspectOpenApiGovernance(source),
+    ...compareOperationBaseline(source, baseline),
+    ...inspectCurrentSkillsSpecificationContract(source),
+    ...inspectPersonalKnowledgeContract(source),
+    ...inspectScheduledPeriodContract(source),
+    ...inspectLibraryFilterContract(source),
+    ...inspectMcpPackageAdminContract(source),
+  ]
+  if (!/^  version: 18\.1\.0$/mu.test(source)) errors.push("current public artifact version must be 18.1.0")
   if (/^  \/v1\/self\/mcp\//mu.test(source)) errors.push("public OpenAPI must not expose browser-private MCP lifecycle routes")
   const connectorList = /^  \/v1\/connector\.list:[\s\S]*?^      operationId: listConnectors$/mu.test(source)
   if (!connectorList) errors.push("public OpenAPI must expose GET /v1/connector.list with operationId listConnectors")

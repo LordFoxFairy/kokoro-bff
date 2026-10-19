@@ -1,3 +1,7 @@
+import { McpPackageAdminConnectClient } from "../infrastructure/clients/platform/mcp-package-admin-connect.js"
+import { ScheduledTaskReadService } from "../application/scheduled-task-read-service.js"
+import { SchedulerTaskStateReader } from "../infrastructure/clients/scheduler/task-state-reader.js"
+import { SchedulerControlClient } from "../infrastructure/clients/scheduler/control-client.js"
 import { McpPersonalConnectClient } from "../infrastructure/clients/platform/mcp-personal-connect.js"
 import { McpProviderAdminConnectClient } from "../infrastructure/clients/platform/mcp-provider-admin-connect.js"
 import { CustomApiConnectClient } from "../infrastructure/clients/platform/custom-api-connect.js"
@@ -11,8 +15,6 @@ import { McpAuthorizationClient } from "../auth/mcp-authorization.client.js"
 import { SkillAuthorizationClient } from "../auth/skill-authorization.client.js"
 import { SkillProductConnectClient } from "../infrastructure/clients/platform/skill-product-connect.js"
 import { SkillAdminConnectClient } from "../infrastructure/clients/platform/skill-admin-connect.js"
-import { SkillAdminCredentialSource } from "../infrastructure/clients/platform/skill-admin-credential.js"
-import { SkillAdminTokenSource } from "../infrastructure/clients/platform/skill-admin-token.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { randomUUID } from "node:crypto"
 
@@ -36,17 +38,15 @@ import { PostgresBffRepositories } from "../infrastructure/postgres/repositories
 import type { RequestContext } from "../domain/request-context.js"
 import { SessionAdmissionClient } from "../auth/session-admission.client.js"
 import type { SessionAdmission } from "../auth/session-admission.types.js"
-import { CatalogCredentialSource } from "../infrastructure/clients/platform/catalog-credential.js"
-import { CatalogTokenSource } from "../infrastructure/clients/platform/catalog-token.js"
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
-import { PersonalInstallationConnectClient } from "../infrastructure/clients/platform/personal-installation-connect.js"
+import { SkillInstallationConnectClient } from "../infrastructure/clients/platform/skill-installation-connect.js"
 import { PlatformServiceCredentialSource } from "../infrastructure/clients/platform/platform-service-credential.js"
 import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
 import type { LocalSkillImportClient } from "../http/routes/local-skill-import.js"
 import { LocalSkillImportConnectClient } from "../infrastructure/clients/platform/local-skill-import-connect.js"
 import { ExactSkillDownloadService, exactInstallationRecord, exactManagedRecord, type ExactSkillDownloadSource } from "../application/exact-skill-download.js"
-import { projectInstallation } from "../infrastructure/clients/platform/personal-installation-response.js"
+import { projectInstallation } from "../infrastructure/clients/platform/skill-installation-response.js"
 import { projectSkillPackageInspectionResponse } from "../infrastructure/clients/platform/skill-package-inspection-response.js"
 import { assertSkillWireKnown, skillTimestamp } from "../infrastructure/clients/platform/skill-product-response.js"
 
@@ -78,6 +78,7 @@ export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 export type BffServerComposition = {
   mcpPersonalClient:
     (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
+  mcpPackageAdminClient: (Pick<McpPackageAdminConnectClient, "execute"> & Partial<Pick<McpPackageAdminConnectClient, "close">>) | null
   mcpProviderAdminClient: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
   customApiClient: (Pick<CustomApiConnectClient, "execute"> & Partial<Pick<CustomApiConnectClient, "close">>) | null
   localSkillImportClient?: LocalSkillImportClient
@@ -89,8 +90,9 @@ export type BffServerComposition = {
   skillProductClient: SkillProductConnectClient | null
   skillAdminClient: SkillAdminConnectClient | null
   skillDraftClient: CatalogConnectClient | null
-  personalInstallationClient: PersonalInstallationConnectClient | null
+  installationClient: SkillInstallationConnectClient | null
   businessStore: BffBusinessStore | null
+  scheduledTaskReader: ScheduledTaskReadService | null
   sessionAdmission: SessionAdmission
   idempotency: Map<string, IdempotencyEntry>
   agUiRuntime: AgUiSessionRuntime
@@ -114,6 +116,7 @@ export type BffServerComposition = {
 export type BffCompositionOptions = {
   mcpPersonalClient?:
     (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
+  mcpPackageAdminClient?: (Pick<McpPackageAdminConnectClient, "execute"> & Partial<Pick<McpPackageAdminConnectClient, "close">>) | null
   mcpProviderAdminClient?: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
   customApiClient?: (Pick<CustomApiConnectClient, "execute"> & Partial<Pick<CustomApiConnectClient, "close">>) | null
   localSkillImportClient?: LocalSkillImportClient
@@ -124,7 +127,7 @@ export type BffCompositionOptions = {
   skillProductClient?: SkillProductConnectClient | null
   skillAdminClient?: SkillAdminConnectClient | null
   skillDraftClient?: CatalogConnectClient | null
-  personalInstallationClient?: PersonalInstallationConnectClient | null
+  installationClient?: SkillInstallationConnectClient | null
   /** Supplying null is an explicit test composition; omitted means real persistence. */
   businessStore?: BffBusinessStore | null
   sessionAdmission?: SessionAdmission
@@ -188,10 +191,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const skillProductClient =
     options.skillProductClient !== undefined
       ? options.skillProductClient
-      : config.skillDraft?.platformBaseUrl && config.skillDraft.credentialFile && config.platformProjection?.credentialFile && config.iamBaseUrl
+      : config.skillDraft?.platformBaseUrl && config.skillDraft.credentialFile && config.platformProjection?.credentialFile
         ? new SkillProductConnectClient(
             config.skillDraft.platformBaseUrl,
-            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
             new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
             config.skillDraft.timeoutMs,
           )
@@ -199,35 +202,34 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const skillAdminClient =
     options.skillAdminClient !== undefined
       ? options.skillAdminClient
-      : config.skillDraft?.platformBaseUrl && config.skillAdminCredentialFile && config.iamBaseUrl
+      : config.skillDraft?.platformBaseUrl && config.skillAdminCredentialFile
         ? new SkillAdminConnectClient(
             config.skillDraft.platformBaseUrl,
-            new SkillAdminTokenSource(config.iamBaseUrl, new SkillAdminCredentialSource(config.skillAdminCredentialFile), config.skillDraft.timeoutMs),
+            new PlatformServiceCredentialSource(config.skillAdminCredentialFile, "skills_admin"),
             config.skillDraft.timeoutMs,
           )
         : null
   const skillDraftClient =
     options.skillDraftClient !== undefined
       ? options.skillDraftClient
-      : config.skillDraft && config.skillDraft.platformBaseUrl !== null && config.skillDraft.credentialFile !== null && config.iamBaseUrl !== null
+      : config.skillDraft && config.skillDraft.platformBaseUrl !== null && config.skillDraft.credentialFile !== null
         ? new CatalogConnectClient(
             config.skillDraft.platformBaseUrl,
-            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
             config.skillDraft.timeoutMs,
           )
         : null
-  const personalInstallationClient =
-    options.personalInstallationClient !== undefined
-      ? options.personalInstallationClient
+  const installationClient =
+    options.installationClient !== undefined
+      ? options.installationClient
       : config.skillDraft &&
           config.skillDraft.platformBaseUrl !== null &&
           config.skillDraft.credentialFile !== null &&
           config.platformProjection?.credentialFile !== null &&
-          config.platformProjection?.credentialFile !== undefined &&
-          config.iamBaseUrl !== null
-        ? new PersonalInstallationConnectClient(
+          config.platformProjection?.credentialFile !== undefined
+        ? new SkillInstallationConnectClient(
             config.skillDraft.platformBaseUrl,
-            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
             new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
             config.skillDraft.timeoutMs,
           )
@@ -235,10 +237,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const localSkillImportClient =
     options.localSkillImportClient !== undefined
       ? options.localSkillImportClient
-      : config.skillDraft?.platformBaseUrl && config.skillDraft.credentialFile && config.platformProjection?.credentialFile && config.iamBaseUrl
+      : config.skillDraft?.platformBaseUrl && config.skillDraft.credentialFile && config.platformProjection?.credentialFile
         ? new LocalSkillImportConnectClient(
             config.skillDraft.platformBaseUrl,
-            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
             new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
           )
         : undefined
@@ -250,6 +252,18 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : (() => {
           throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime")
         })()
+  const scheduledTaskReader =
+    businessStore === null
+      ? null
+      : new ScheduledTaskReadService(
+          { snapshots: (scope, signal, taskId) => businessStore.services.scheduledTasks.snapshots(scope, signal, taskId) },
+          new SchedulerTaskStateReader(
+            config.upstreams.scheduler == null || config.schedulerServiceToken === null
+              ? null
+              : new SchedulerControlClient(config.upstreams.scheduler, config.schedulerServiceToken, config.upstreamTimeoutMs, config.upstreamMaxResponseBytes),
+            config.schedulerTargetUrl,
+          ),
+        )
   const storeReadiness =
     options.readiness ??
     (businessStore === null
@@ -380,6 +394,15 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
             new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"),
           )
         : null
+  const mcpPackageAdminClient =
+    options.mcpPackageAdminClient !== undefined
+      ? options.mcpPackageAdminClient
+      : config.mcpProviderAdmin
+        ? new McpPackageAdminConnectClient(
+            config.mcpProviderAdmin.baseUrl,
+            new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"),
+          )
+        : null
   const customApiClient =
     options.customApiClient !== undefined
       ? options.customApiClient
@@ -392,6 +415,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     closePromise = (async (): Promise<void> => {
       mcpPersonalClient?.close?.()
       mcpProviderAdminClient?.close?.()
+      mcpPackageAdminClient?.close?.()
       customApiClient?.close?.()
       await stopWorkers()
       skillDownloadHandles.clear()
@@ -402,20 +426,17 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   return {
     mcpPersonalClient,
     mcpProviderAdminClient,
+    mcpPackageAdminClient,
     customApiClient,
     ...(localSkillImportClient === undefined ? {} : { localSkillImportClient }),
     skillSpecificationSource:
       options.skillSpecificationSource !== undefined
         ? options.skillSpecificationSource
-        : skillProductClient &&
-            personalInstallationClient &&
-            config.platformProjection?.baseUrl &&
-            config.platformProjection.credentialFile &&
-            config.iamBaseUrl
+        : skillProductClient && installationClient && config.platformProjection?.baseUrl && config.platformProjection.credentialFile && config.iamBaseUrl
           ? new SkillSpecificationService({
               owner: new PlatformSkillSpecificationFacade({
                 product: skillProductClient,
-                installations: personalInstallationClient,
+                installations: installationClient,
                 projection: projectionClient!,
               }),
               ...(businessStore?.services.projects === undefined ? {} : { projects: businessStore.services.projects }),
@@ -428,7 +449,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     exactSkillDownloadSource:
       options.exactSkillDownloadSource !== undefined
         ? options.exactSkillDownloadSource
-        : skillProductClient && personalInstallationClient && projectionClient && businessStore?.services.skillShares
+        : skillProductClient && installationClient && projectionClient && businessStore?.services.skillShares
           ? new ExactSkillDownloadService({
               handles: skillDownloadHandles,
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
@@ -461,7 +482,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
               installation: async (id, context, signal) => {
                 const value = projectInstallation(
                   (
-                    await personalInstallationClient.get(
+                    await installationClient.get(
                       {
                         requestId: context.requestId,
                         tenant: context.identity.namespace,
@@ -521,8 +542,9 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     skillAuthorization,
     skillProductClient,
     skillAdminClient,
-    personalInstallationClient,
+    installationClient,
     businessStore,
+    scheduledTaskReader,
     sessionAdmission,
     idempotency: options.idempotency ?? new Map<string, IdempotencyEntry>(),
     agUiRuntime: options.agUiRuntime ?? createAgUiRuntime(config),

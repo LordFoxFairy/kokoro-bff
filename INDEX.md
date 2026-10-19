@@ -1,3 +1,38 @@
+## 2026-10-19 集成证明入口
+
+唯一当前 Public19/165：`contract/openapi/v1/openapi.yaml`。`scripts/verify-closure-integration-contract.mjs` 与 `test/contract/closure-integration.test.mjs` 验证两个批准父全文/有序操作、当前wire与仅新增归档Schema；历史proof不是运行时兼容层。现有业务组件与owner不扩展。
+
+### 2026-10-18 MCP 管理HTTP入口
+
+`src/http/mcp-package-admin-input.ts` 负责严格wire→SDK输入与受界正文；`src/http/routes/mcp-package-admin.ts` 负责五HTTP操作、当前管理员准入和公开错误/结果。现 `bootstrap/server.ts` 共用20秒请求预算、`runtime.ts` 沿原配置装配/关闭 SDK，`auth/browser-service-credential.policy.ts` 只给 Admin 浏览服务精确新增五入口。唯一公开契约18.1及 `scripts/verify-mcp-package-admin-contract.mjs` 保留完整Public18历史逆证；`test/mcp-package-admin-http.test.ts` 覆盖端到端route行为而非源码/CSS字符串。
+
+### 2026-10-18 MCP 受管包内部消费者
+
+`src/infrastructure/clients/platform/mcp-package-admin-{input,response,connect}.ts` 分担严格输入/固定摘要、安全投影和 Native Connect 生命周期。单一 `scripts/generate-platform-connect-client.mjs` 从固定 Platform fa5c5e5 增独立 Proto/descriptor/profile/vectors；原 HTTP 发行物随同一 bundle 固定，旧生成业务字节不变。`test/mcp-package-admin-client.test.ts` 覆盖五操作、凭据鲜读、精确回执/两种预算错误、取消与坏响应；没有第二套上传实体、公开路由或正常装配。
+
+### 2026-10-18 自动化规则当前读取
+
+`src/application/scheduled/mappers.ts` 分别维护原不可变写快照与 `scheduledTaskDetails` 当前规则读取；`live-bff.ts` 仅 GET 列表/详情使用后者，`helpers.ts` 列表类型相应收敛。`contracts/scheduled.ts` 的 Details 复用原字段并要求保存的 UTC anchor，不猜下次时间。`scripts/verify-scheduled-anchor-contract.mjs` 仅验证 Public16.2 新读表示与完整16.1逆证，不是 runtime fallback。正常激活/Web星期编辑仍待后继。
+
+### 2026-10-18 本人知识（源码候选，尚未正常激活）
+
+- `src/http/personal-knowledge-input.ts`：固定UUIDv4、严格JSON/Unicode/正文界限与CAS输入。
+- `src/http/routes/personal-knowledge.ts`：本人六operation、查询/请求生命周期和安全结果映射。
+- `src/application/ports/personal-knowledge-repository.ts` 与 `src/infrastructure/postgres/personal-knowledge-repository.ts`：本人知识/独立usage、同client事务、限额锁、删除tombstone及未知COMMIT；不增加转发service。
+- `database/schema.sql`：本owner两事实表；`scripts/verify-personal-knowledge-contract.mjs`：Public16.1新增面与完整16.0父逆。fresh资源测试不等于正常库演进。
+
+### 项目安装当前入口（2026-10-17）
+
+Platform5ec8538／Public15.1.0项目六operation复用 `src/http/routes/skill-installations.ts` 与 `src/infrastructure/clients/platform/skill-installation-{connect,projector,response}.ts`；原 personal-installation-* 已重命名，无alias。server核当前项目资格，skill-specification-facade项目读取使用正式Project RPC；实际验证与未接的选择/执行见docs/CURRENT.md。
+
+### S2 来源事实与公开 skill.list 当前入口（2026-10-17）
+
+Public15.0.0/139 operations 与 Platform e172838 的 RPC/HTTP6.1.0 使用唯一当前固定 bundle；窄安装事实由 personal-installation-response 解码，skill-specification 仅对公开列表投影八类。网站及分享保原归属词表，真实数据 owner、精确版本与鉴权不变。SDK if/then 补全在既有 generate-platform-http-client 流程，projection-http 在 generated strip 前检验原始 product；测试仍复用现有 suite。实际验证、正常未激活及项目/Agent 后继见 docs/CURRENT，不以当前枚举代替 Device/App producer 或完整执行。
+
+### 2026-10-16 Skill Share 活动版本资格
+
+`src/http/routes/skill-share.ts` 复用 `SkillSpecificationSource.revisionSummary` 的精确 active/valid 元数据资格、strict schema 与 source_ref/UID 绑定；POST 持久化前/返回前及 Resolve 重新检查。本人可预览已撤回/草稿包不代表可生成分享，原包检查仍保留。DELETE 只沿原 creator/tenant，不因撤回阻断；没有新协议或 SQL。`test/skill-share-http.test.mjs` 原用例承接拒绝零创建、已有链接重核、迟到取消与提交后撤回，不假称跨 owner 原子回滚。
+
 ## SET47 Conversation归档实现候选
 
 `src/http/archived-tasks-input.ts`、`routes/archived-tasks.ts`、`src/infrastructure/postgres/archived-tasks.ts`与`archive-sql-lease.ts`沿既有Chat/HTTP入口实现本人归档列表/状态/命令；唯一事实为Conversation.archived_at，当前canonical15.4/150。`scripts/archived-tasks-public-contract.mjs`完整逆恢复15.3后委托原门。纯门/真实PG待验及发行状态以`docs/CURRENT.md`为准，不将归档当删除、取消Run或撤分享。
@@ -63,7 +98,7 @@ Root完整check第一正确Node22尝试contract 289PASS/9FAIL：六既有test旧
 
 - `src/http/{create-personal-skill-version-input,withdraw-personal-skill-input}.ts`：两个命令的严格原始输入与稳定 command ID。
 - `src/http/routes/{create-personal-skill-version,withdraw-personal-skill,personal-skill-lifecycle}.ts`：具名 public route及仅两命令共用的单10秒/取消/完整错误回复后未完成body退役。
-- `src/infrastructure/clients/platform/{create-personal-skill-version-projector,withdraw-personal-skill-projector}.ts`：正式 owner 3.0 canonical digest；现 `catalog-connect.ts` 两具名调用，现 `catalog-token.ts` 单调deadline/取消fence。
+- `src/infrastructure/clients/platform/{create-personal-skill-version-projector,withdraw-personal-skill-projector}.ts`：正式 owner 3.0 canonical digest；现 `catalog-connect.ts` 两具名调用，现 `platform-service-credential.ts` 逐请求读取直接服务凭据并保持单调 deadline/取消 fence；内部 OAuth token source 已删除。
 - `test/personal-skill-lifecycle-http.test.mjs`：受控 HTTP、真正 generated Connect binary、两固定 owner 向量及错误/资源边界；不冒真实 IAM/PG 或用户 E2E。
 
 当前机器103是候选，正常BFF930028b/101与Web不变；完整验收与后继见 `docs/CURRENT.md`。
@@ -123,6 +158,15 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 - Team 只读投影：`src/http/routes/team.ts` 与 `src/infrastructure/clients/iam-team.ts`；事实和分页 cursor 仍由 IAM 拥有
 - 资源说明：[`docs/api/README.md`](./docs/api/README.md)
 - AG-UI：[`docs/api/v1/agui-chat.md`](./docs/api/v1/agui-chat.md)
+- System / Model / Billing / Capability：当前由 `src/http/routes/owner.ts` 投影
+- Library：`src/http/routes/library-file-list.ts` 与 `src/http/library-file-list-input.ts` 在 IAM admission 后按 file/artifact 分流。
+  personal 列表/上传/下载消费既有 Storage personal scope；Artifact 通过 BFF 自有 Conversation/Project 关系
+  和 `src/infrastructure/clients/storage/final-artifact.ts` 的 conversation-scoped FINAL/CLEAN 读取保持可见性。
+  Public18 搜索候选由 `src/application/library-artifact-filter.ts` 规范化 q/type 并匹配当前最终元数据，
+  `src/http/routes/library-artifact-list.ts` 保存有界候选窗口/完整 query cursor，稀疏页可继续而不误报穷尽。
+  canonical 发布及前版逆变门为 `scripts/verify-library-filter-contract.mjs`；语义/边界见 `docs/api/v1/library.md`。
+  当前正常环境仍 Public17；未完成消费者固定/配对前不重载候选或宣称页面搜索已完成。
+
 - System / Model / Billing / Capability：当前由 `src/http/routes/owner.ts` 投影；Billing 套餐目录经 `src/infrastructure/clients/owner/billing-catalog.ts` 消费固定 owner generated client，完整分页后投影，checkout 未开放。
 - Library：IAM admission 后由 `src/http/routes/library-file-list.ts`、`src/http/library-file-list-input.ts` 与
   `src/infrastructure/clients/storage/personal-file-list.ts` 消费 Storage personal Connect 列表；`kind=file` 必填，
@@ -160,3 +204,8 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 - `src/infrastructure/clients/agent/interaction-state.ts` 严格解码固定 owner schema；`src/application/agui/interaction-state.ts` 校验完整 revision/no-op；`src/application/chat-run-control.ts` 校验当前 pause 的完整 decision 集合。
 - `bff_agui_run_interaction` 是最新 run read projection；source/CUSTOM/cursor 与它同事务。`chat-repository.ts` 在授权 RR 中校验 head、完整 state 与 ledger provenance；ACK 不清除 pause。
 - 本轮静态/纯测试证据与未决 fixture 见 `docs/CURRENT.md`。真实 PG/Redis/HTTP、发布及 Web 消费归 Root 后续验收，不能以源码候选代替。
+
+
+### Connector command 恢复错误
+
+Platform Connect 固定消费 receipt metadata profile；`src/infrastructure/clients/platform/connector-command-fault.ts` 是MCP/Custom API两边界的唯一窄错误映射与code-first恢复policy，独立于资源投影。`scripts/generate-connector-command-errors.mjs` 正规发布只读 `contract/connector-command-errors-v1.json`，后继App固定commit/digest消费。unknown/expired/lost不自动重放或授权新key；MCP原生OAuth的三项typed原因独立可辨，缺detail的原生CAS与URL typed约束不混淆。真实HTTP/Connect组合与未知/错码/重复/混合/read负控位于现MCP/Custom API测试，非正常IAM/DB/OAuth验收。

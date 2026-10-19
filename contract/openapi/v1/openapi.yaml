@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 16.0.0
+  version: 19.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -867,6 +867,1545 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SharedTasksError503' }
+  /v1/account/sessions:
+    get:
+      tags:
+        - Account Sessions
+      operationId: listAccountSessions
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: none
+      x-kokoro-permission: iam:account-session.read
+      summary: Current Product user account sessions
+      responses:
+        '200':
+          description: Owner-confirmed safe account session projection
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionsResponse'
+        '400':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError400'
+        '401':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError401'
+        '403':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError403'
+        '404':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError404'
+        '409':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError409'
+        '413':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError413'
+        '429':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Retry-After:
+              schema:
+                type: string
+                pattern: ^[1-9][0-9]{0,4}$
+                description: Validated delta seconds from 1 through 86400.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError429'
+        '502':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError502'
+        '503':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError503'
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+  /v1/account/sessions/{session_id}:
+    delete:
+      tags:
+        - Account Sessions
+      operationId: revokeAccountSession
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: none
+      x-kokoro-permission: iam:account-session.revoke
+      summary: Current Product user account sessions
+      responses:
+        '200':
+          description: Owner-confirmed safe account session projection
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionRevokeResponse'
+        '400':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError400'
+        '401':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError401'
+        '403':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError403'
+        '404':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError404'
+        '409':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError409'
+        '413':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError413'
+        '429':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Retry-After:
+              schema:
+                type: string
+                pattern: ^[1-9][0-9]{0,4}$
+                description: Validated delta seconds from 1 through 86400.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError429'
+        '502':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError502'
+        '503':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError503'
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+  /v1/account/profile:
+    patch:
+      tags:
+        - Account Profile
+      operationId: updateAccountProfile
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: none
+      x-kokoro-permission: iam:account-profile.write
+      summary: Update current Product user display name
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountProfileInput'
+      responses:
+        '200':
+          description: Owner-confirmed current subject and exact saved name
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileResponse'
+        '400':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError400'
+        '401':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError401'
+        '403':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError403'
+        '409':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError409'
+        '413':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError413'
+        '429':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Retry-After:
+              schema:
+                type: string
+                pattern: ^[1-9][0-9]{0,4}$
+                description: Validated delta seconds from1 through86400.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError429'
+        '500':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError500'
+        '502':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError502'
+        '503':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError503'
+  /v1/preferences/knowledge:
+    get:
+      tags:
+        - Personalization
+      operationId: listSelfKnowledge
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.read
+      summary: listSelfKnowledge
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      responses:
+        '200':
+          description: Current caller facts
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeListResponse'
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+      parameters:
+        - in: query
+          name: query
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+            pattern: ^[^\u0000]*$
+          description: Literal case-insensitive substring in name, when_to_use, or content. Complete bounded list; no cursor.
+  /v1/preferences/knowledge/{knowledge_id}:
+    parameters:
+      - in: path
+        name: knowledge_id
+        required: true
+        schema:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+    get:
+      tags:
+        - Personalization
+      operationId: getSelfKnowledge
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.read
+      summary: getSelfKnowledge
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      responses:
+        '200':
+          description: Current caller facts
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeItemResponse'
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '404':
+          description: Knowledge not visible
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+    put:
+      tags:
+        - Personalization
+      operationId: replaceSelfKnowledge
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.write
+      summary: replaceSelfKnowledge
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplacePersonalKnowledgeRequest'
+      responses:
+        '200':
+          description: Current caller facts
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeItemResponse'
+        '201':
+          description: Created at the requested immutable identity
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+            Location:
+              required: true
+              schema:
+                type: string
+                pattern: ^/v1/preferences/knowledge/[0-9a-f-]+$
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeItemResponse'
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '404':
+          description: Knowledge not visible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '409':
+          description: Revision conflict, exhausted revision or knowledge capacity
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '413':
+          description: Raw body exceeds 65536 bytes
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+    delete:
+      tags:
+        - Personalization
+      operationId: deleteSelfKnowledge
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.write
+      summary: deleteSelfKnowledge
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeletePersonalKnowledgeRequest'
+      responses:
+        '204':
+          description: Deleted or replay of the same deletion
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '404':
+          description: Knowledge not visible
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '409':
+          description: Revision conflict, exhausted revision or knowledge capacity
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '413':
+          description: Raw body exceeds 65536 bytes
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+  /v1/preferences/knowledge-usage:
+    get:
+      tags:
+        - Personalization
+      operationId: getSelfKnowledgeUsage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.read
+      summary: getSelfKnowledgeUsage
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      responses:
+        '200':
+          description: Current caller facts
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeUsageResponse'
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+    put:
+      tags:
+        - Personalization
+      operationId: replaceSelfKnowledgeUsage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.write
+      summary: replaceSelfKnowledgeUsage
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplacePersonalKnowledgeUsageRequest'
+      responses:
+        '200':
+          description: Current caller facts
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeUsageResponse'
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '409':
+          description: Revision conflict, exhausted revision or knowledge capacity
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '413':
+          description: Raw body exceeds 65536 bytes
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
   /v1/preferences/personalization:
     get:
       tags: [Personalization]
@@ -1859,6 +3398,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       tags: [Chat]
@@ -1902,6 +3442,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
         '429':
           description: IAM session admission is rate limited
@@ -3121,49 +4662,162 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
-  /v1/projects/{projectId}/skills/{skill}:
+  /v1/projects/{projectId}/skill-selection:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
-      - $ref: '#/components/parameters/SkillName'
-    patch:
+    get:
       tags: [Projects]
-      operationId: updateProjectSkill
+      operationId: getProjectSkillSelection
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.read
+      summary: Read current project default Skill installations
+      responses:
+        '200':
+          description: Current selection, or the original committed selection on exact replay
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-Request-Id: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelection' }
+        '400':
+          description: Invalid closed request or headers
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '401':
+          description: Session authentication required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '403':
+          description: Current subject is forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '404':
+          description: Current project was not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '409':
+          description: Idempotency key conflicts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '412':
+          description: Selected installation is not currently usable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '429':
+          description: Admission rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '502':
+          description: Invalid owner response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '503':
+          description: Dependency unavailable or commit result unknown
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '504':
+          description: Request deadline exceeded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+    put:
+      tags: [Projects]
+      operationId: replaceProjectSkillSelection
       x-kokoro-owner: kokoro-bff
       x-kokoro-visibility: public
       x-kokoro-stability: beta
       x-kokoro-idempotency: required
       x-kokoro-permission: project.update
-      summary: Update project skill state
+      summary: Replace project default Skill installations
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/ProjectSkillRequest'
+            schema: { $ref: '#/components/schemas/ReplaceProjectSkillSelectionRequest' }
       responses:
         '200':
-          description: Project skill state
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProjectSkillResponse'
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '429':
-          description: IAM session admission is rate limited
+          description: Current selection, or the original committed selection on exact replay
           headers:
-            Retry-After:
-              description: Bounded delay in seconds before retrying admission
-              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-Request-Id: { schema: { type: string } }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+              schema: { $ref: '#/components/schemas/ProjectSkillSelection' }
+        '400':
+          description: Invalid closed request or headers
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '401':
+          description: Session authentication required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '403':
+          description: Current subject is forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '404':
+          description: Current project was not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '409':
+          description: Idempotency key conflicts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '412':
+          description: Selected installation is not currently usable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '429':
+          description: Admission rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '502':
+          description: Invalid owner response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '503':
+          description: Dependency unavailable or commit result unknown
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '504':
+          description: Request deadline exceeded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
   /v1/projects/{projectId}/scheduled-tasks:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -3573,6 +5227,263 @@ paths:
         '429': { $ref: '#/components/responses/SkillPublishRateLimited' }
         '502': { $ref: '#/components/responses/SkillPublishBadGateway' }
         '503': { $ref: '#/components/responses/SkillPublishUnavailable' }
+  /v1/projects/{projectId}/skill-installations:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    post:
+      tags:
+        - Skills
+      operationId: installProjectSkill
+      summary: Install a project Skill
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.install
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - source_ref
+              properties:
+                source_ref:
+                  type: string
+                  pattern: ^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$
+      responses:
+        "200":
+          $ref: "#/components/responses/SkillInstallationMutationSuccess"
+        "400":
+          $ref: "#/components/responses/SkillInstallationBadRequest"
+        "401":
+          $ref: "#/components/responses/SkillInstallationUnauthorized"
+        "403":
+          $ref: "#/components/responses/SkillInstallationMutationForbidden"
+        "404":
+          $ref: "#/components/responses/SkillInstallationNotFound"
+        "409":
+          $ref: "#/components/responses/SkillInstallationConflict"
+        "412":
+          $ref: "#/components/responses/SkillInstallationPreconditionFailed"
+        "413":
+          $ref: "#/components/responses/SkillInstallationPayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/SkillInstallationRateLimited"
+        "502":
+          $ref: "#/components/responses/SkillInstallationBadGateway"
+        "503":
+          $ref: "#/components/responses/SkillInstallationUnavailable"
+        "504":
+          $ref: "#/components/responses/SkillInstallationTimeout"
+    get:
+      tags:
+        - Skills
+      operationId: listProjectSkillInstallations
+      summary: List project Skill installations
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.installation.read
+      parameters:
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+        - name: installed
+          in: query
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 4096
+        - name: source_kind
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - project
+              - official
+              - third_party
+        - name: query
+          in: query
+          required: false
+          description: Trimmed literal substring of name or summary, 1 to 1024 Unicode scalars; bound to the owner cursor before pagination
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 1024
+      responses:
+        "200":
+          $ref: "#/components/responses/SkillInstallationListSuccess"
+        "400":
+          $ref: "#/components/responses/SkillInstallationBadRequest"
+        "401":
+          $ref: "#/components/responses/SkillInstallationUnauthorized"
+        "403":
+          $ref: "#/components/responses/SkillInstallationForbidden"
+        "413":
+          $ref: "#/components/responses/SkillInstallationPayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/SkillInstallationRateLimited"
+        "502":
+          $ref: "#/components/responses/SkillInstallationBadGateway"
+        "503":
+          $ref: "#/components/responses/SkillInstallationUnavailable"
+        "504":
+          $ref: "#/components/responses/SkillInstallationTimeout"
+  /v1/projects/{projectId}/skill-installations/{installation_id}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: installation_id
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+    get:
+      tags: [Skills]
+      operationId: getProjectSkillInstallation
+      summary: Get a project Skill installation
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.installation.read
+      responses:
+        '200': { $ref: '#/components/responses/SkillInstallationReadSuccess' }
+        '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
+        '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
+        '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillInstallationForbidden' }
+        '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
+        '429': { $ref: '#/components/responses/SkillInstallationRateLimited' }
+        '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
+        '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
+        '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
+    delete:
+      tags: [Skills]
+      operationId: removeProjectSkillInstallation
+      summary: Remove a project Skill installation
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.installation.remove
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200':
+          { $ref: '#/components/responses/SkillInstallationMutationSuccess' }
+        '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
+        '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
+        '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillInstallationMutationForbidden' }
+        '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
+        '409': { $ref: '#/components/responses/SkillInstallationConflict' }
+        '412':
+          { $ref: '#/components/responses/SkillInstallationPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillInstallationRateLimited' }
+        '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
+        '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
+        '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
+  /v1/projects/{projectId}/skill-installations/{installation_id}/enabled:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: installation_id
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+    put:
+      tags: [Skills]
+      operationId: setProjectSkillInstallationEnabled
+      summary: Set project Skill installation enabled state
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.installation.enable
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties: { enabled: { type: boolean } }
+      responses:
+        '200':
+          { $ref: '#/components/responses/SkillInstallationMutationSuccess' }
+        '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
+        '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
+        '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillInstallationMutationForbidden' }
+        '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
+        '409': { $ref: '#/components/responses/SkillInstallationConflict' }
+        '412':
+          { $ref: '#/components/responses/SkillInstallationPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillInstallationRateLimited' }
+        '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
+        '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
+        '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
+  /v1/projects/{projectId}/skill-installations/{installation_id}/update:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: installation_id
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+    post:
+      tags: [Skills]
+      operationId: updateProjectSkillInstallation
+      summary: Explicitly update one project Skill installation pin
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.install
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_source_ref, source_ref]
+              properties:
+                expected_source_ref: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+                source_ref: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+      responses:
+        '200':
+          { $ref: '#/components/responses/SkillInstallationUpdateSuccess' }
+        '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
+        '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
+        '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillInstallationMutationForbidden' }
+        '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
+        '409': { $ref: '#/components/responses/SkillInstallationConflict' }
+        '412':
+          { $ref: '#/components/responses/SkillInstallationPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillInstallationRateLimited' }
+        '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
+        '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
+        '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
   /v1/skill-installations:
     post:
       tags:
@@ -3799,6 +5710,48 @@ paths:
       responses:
         '200':
           { $ref: '#/components/responses/SkillInstallationMutationSuccess' }
+        '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
+        '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
+        '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillInstallationMutationForbidden' }
+        '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
+        '409': { $ref: '#/components/responses/SkillInstallationConflict' }
+        '412':
+          { $ref: '#/components/responses/SkillInstallationPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillInstallationRateLimited' }
+        '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
+        '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
+        '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
+  /v1/skill-installations/{installation_id}/update:
+    parameters:
+      - name: installation_id
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+    post:
+      tags: [Skills]
+      operationId: updatePersonalSkillInstallation
+      summary: Explicitly update one personal Skill installation pin
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.install
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_source_ref, source_ref]
+              properties:
+                expected_source_ref: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+                source_ref: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+      responses:
+        '200':
+          { $ref: '#/components/responses/SkillInstallationUpdateSuccess' }
         '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
         '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
         '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
@@ -4413,7 +6366,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ScheduledTaskResponse'
+                $ref: '#/components/schemas/ScheduledTaskDetailResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
@@ -4574,7 +6527,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: storage.library.read
       summary: List private library files or delivered Artifacts
-      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. Artifact pages revalidate Storage metadata and bind the opaque cursor to kind, tenant, subject and limit; a cursor never grants access.
+      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. Artifact search matches current authorized FINAL metadata, not unverified delivery claims. Artifact-only q is a case-insensitive NFC substring over title or filename; type uses the documented product taxonomy. Cursors bind kind, tenant, subject, limit and the normalized complete filter tuple. Each request scans at most min(500, limit * 5) authorized candidates within the existing 30-second deadline; a sparse page may be empty and still have next_cursor. Only next_cursor=null means exhausted. Delivery keyset order is preserved, without relevance ranking or snapshot isolation. Public18 invalidates prior Artifact cursors; clients must restart the query. A cursor never grants access.
       parameters:
         - name: kind
           in: query
@@ -4586,6 +6539,14 @@ paths:
         - name: cursor
           in: query
           schema: { type: string, minLength: 1, maxLength: 4096 }
+        - name: q
+          in: query
+          description: Artifact-only search, at most 200 Unicode code points before normalization; trim, NFC and locale-independent lowercase are applied. C0 control characters and DEL are rejected. Empty means no text filter; file queries reject this parameter.
+          schema: { type: string, maxLength: 200, pattern: '^[^\x00-\x1f\x7f]*$', default: '' }
+        - name: type
+          in: query
+          description: Artifact-only product type, matched against current FINAL MIME/title according to the Library API taxonomy; file queries reject this parameter.
+          schema: { type: string, enum: [all, slides, documents, spreadsheets, images, video, audio, other], default: all }
       responses:
         '200':
           description: Bounded private file or Artifact page, selected by kind
@@ -4602,7 +6563,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '502':
-          description: Storage owner page did not match the pinned v2 contract
+          description: Storage owner page did not match the fixed v3 contract
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -6687,6 +8648,154 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SkillProductErrorResponse"
+  /v1/admin/mcp/packages/{package_id}/uploads:
+    parameters:
+      - { $ref: '#/components/parameters/AdminMcpPackageId' }
+    post:
+      tags: [Connectors]
+      operationId: beginAdminMcpPackageUpload
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: beginAdminMcpPackageUpload
+      description: Current session platform administrator and mcp_catalog.manage required. One 20-second budget includes body and admission. Storage owns uploads and scanning; Platform owns publication. No tool execution. Unknown writes require the original key and body, never a replacement command. Status does not prove that publication was not committed.
+      parameters: [{ $ref: '#/components/parameters/AdminMcpPackageIdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/BeginAdminMcpPackageUploadRequest' } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminMcpPackageBeginOk' }
+        '400': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '401': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '403': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '404': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '409': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '412': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '413': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '429': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '502': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '503': { $ref: '#/components/responses/AdminMcpPackageError' }
+  /v1/admin/mcp/packages/{package_id}/uploads/{upload_id}:
+    parameters:
+      - { $ref: '#/components/parameters/AdminMcpPackageId' }
+      - { $ref: '#/components/parameters/AdminMcpPackageUploadId' }
+    get:
+      tags: [Connectors]
+      operationId: getAdminMcpPackageUploadStatus
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: mcp_catalog.manage
+      summary: getAdminMcpPackageUploadStatus
+      description: Current session platform administrator and mcp_catalog.manage required. One 20-second budget includes body and admission. Storage owns uploads and scanning; Platform owns publication. No tool execution. Unknown writes require the original key and body, never a replacement command. Status does not prove that publication was not committed.
+      responses:
+        '200': { $ref: '#/components/responses/AdminMcpPackageUploadOk' }
+        '400': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '401': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '403': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '404': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '409': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '412': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '413': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '429': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '502': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '503': { $ref: '#/components/responses/AdminMcpPackageError' }
+  /v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/complete:
+    parameters:
+      - { $ref: '#/components/parameters/AdminMcpPackageId' }
+      - { $ref: '#/components/parameters/AdminMcpPackageUploadId' }
+    post:
+      tags: [Connectors]
+      operationId: completeAdminMcpPackageUpload
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: completeAdminMcpPackageUpload
+      description: Current session platform administrator and mcp_catalog.manage required. One 20-second budget includes body and admission. Storage owns uploads and scanning; Platform owns publication. No tool execution. Unknown writes require the original key and body, never a replacement command. Status does not prove that publication was not committed.
+      parameters: [{ $ref: '#/components/parameters/AdminMcpPackageIdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/CompleteAdminMcpPackageUploadRequest' } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminMcpPackageUploadOk' }
+        '400': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '401': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '403': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '404': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '409': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '412': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '413': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '429': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '502': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '503': { $ref: '#/components/responses/AdminMcpPackageError' }
+  /v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/abort:
+    parameters:
+      - { $ref: '#/components/parameters/AdminMcpPackageId' }
+      - { $ref: '#/components/parameters/AdminMcpPackageUploadId' }
+    post:
+      tags: [Connectors]
+      operationId: abortAdminMcpPackageUpload
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: abortAdminMcpPackageUpload
+      description: Current session platform administrator and mcp_catalog.manage required. One 20-second budget includes body and admission. Storage owns uploads and scanning; Platform owns publication. No tool execution. Unknown writes require the original key and body, never a replacement command. Status does not prove that publication was not committed.
+      parameters: [{ $ref: '#/components/parameters/AdminMcpPackageIdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/AbortAdminMcpPackageUploadRequest' } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminMcpPackageAbortOk' }
+        '400': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '401': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '403': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '404': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '409': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '412': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '413': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '429': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '502': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '503': { $ref: '#/components/responses/AdminMcpPackageError' }
+  /v1/admin/mcp/packages/{package_id}/publish:
+    parameters:
+      - { $ref: '#/components/parameters/AdminMcpPackageId' }
+    post:
+      tags: [Connectors]
+      operationId: publishAdminMcpPackage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: publishAdminMcpPackage
+      description: Current session platform administrator and mcp_catalog.manage required. One 20-second budget includes body and admission. Storage owns uploads and scanning; Platform owns publication. No tool execution. Unknown writes require the original key and body, never a replacement command. Status does not prove that publication was not committed.
+      parameters: [{ $ref: '#/components/parameters/AdminMcpPackageIdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PublishAdminMcpPackageRequest' } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminMcpPackagePublishOk' }
+        '400': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '401': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '403': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '404': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '409': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '412': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '413': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '429': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '502': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '503': { $ref: '#/components/responses/AdminMcpPackageError' }
   /v1/admin/mcp/providers:
     get:
       tags: [Connectors]
@@ -11335,549 +13444,6 @@ paths:
           schema:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
-  /v1/account/sessions:
-    get:
-      tags:
-        - Account Sessions
-      operationId: listAccountSessions
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: stable
-      x-kokoro-idempotency: none
-      x-kokoro-permission: iam:account-session.read
-      summary: Current Product user account sessions
-      responses:
-        '200':
-          description: Owner-confirmed safe account session projection
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionsResponse'
-        '400':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError400'
-        '401':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError401'
-        '403':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError403'
-        '404':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError404'
-        '409':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError409'
-        '413':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError413'
-        '429':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-            Retry-After:
-              schema:
-                type: string
-                pattern: ^[1-9][0-9]{0,4}$
-                description: Validated delta seconds from 1 through 86400.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError429'
-        '502':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError502'
-        '503':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError503'
-      security:
-        - serviceHeader: []
-          internalSecret: []
-          userBearer: []
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 25
-        - name: cursor
-          in: query
-          required: false
-          schema:
-            type: string
-            minLength: 1
-            maxLength: 2048
-  /v1/account/sessions/{session_id}:
-    delete:
-      tags:
-        - Account Sessions
-      operationId: revokeAccountSession
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: stable
-      x-kokoro-idempotency: none
-      x-kokoro-permission: iam:account-session.revoke
-      summary: Current Product user account sessions
-      responses:
-        '200':
-          description: Owner-confirmed safe account session projection
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionRevokeResponse'
-        '400':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError400'
-        '401':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError401'
-        '403':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError403'
-        '404':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError404'
-        '409':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError409'
-        '413':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError413'
-        '429':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-            Retry-After:
-              schema:
-                type: string
-                pattern: ^[1-9][0-9]{0,4}$
-                description: Validated delta seconds from 1 through 86400.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError429'
-        '502':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError502'
-        '503':
-          description: Sanitized account session failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountSessionError503'
-      security:
-        - serviceHeader: []
-          internalSecret: []
-          userBearer: []
-      parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema:
-            type: string
-            minLength: 1
-            maxLength: 255
-  /v1/account/profile:
-    patch:
-      tags:
-        - Account Profile
-      operationId: updateAccountProfile
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: stable
-      x-kokoro-idempotency: none
-      x-kokoro-permission: iam:account-profile.write
-      summary: Update current Product user display name
-      security:
-        - serviceHeader: []
-          internalSecret: []
-          userBearer: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AccountProfileInput'
-      responses:
-        '200':
-          description: Owner-confirmed current subject and exact saved name
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountProfileResponse'
-        '400':
-          description: Sanitized account profile failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountProfileError400'
-        '401':
-          description: Sanitized account profile failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountProfileError401'
-        '403':
-          description: Sanitized account profile failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountProfileError403'
-        '409':
-          description: Sanitized account profile failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountProfileError409'
-        '413':
-          description: Sanitized account profile failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountProfileError413'
-        '429':
-          description: Sanitized account profile failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-            Retry-After:
-              schema:
-                type: string
-                pattern: ^[1-9][0-9]{0,4}$
-                description: Validated delta seconds from1 through86400.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountProfileError429'
-        '500':
-          description: Sanitized account profile failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountProfileError500'
-        '502':
-          description: Sanitized account profile failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountProfileError502'
-        '503':
-          description: Sanitized account profile failure
-          headers:
-            x-request-id:
-              schema:
-                $ref: '#/components/schemas/RequestId'
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountProfileError503'
 components:
   securitySchemes:
     serviceHeader:
@@ -11893,6 +13459,24 @@ components:
       scheme: bearer
       bearerFormat: opaque-session-token
   parameters:
+    AdminMcpPackageId:
+      name: package_id
+      in: path
+      required: true
+      description: Client-chosen exact package scope, not an installed or runnable version
+      schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+    AdminMcpPackageUploadId:
+      name: upload_id
+      in: path
+      required: true
+      description: Exact Storage upload identifier
+      schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+    AdminMcpPackageIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Exactly one command key, reused only with the original body and identity
+      schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
     McpProviderAdminKey:
       name: provider_key
       in: path
@@ -12150,12 +13734,6 @@ components:
         type: string
         minLength: 1
       example: export_mori_1
-    SkillName:
-      name: skill
-      in: path
-      required: true
-      schema:
-        type: string
     ScheduledTaskId:
       name: id
       in: path
@@ -13262,6 +14840,306 @@ components:
               minLength: 1
         meta:
           $ref: '#/components/schemas/RequestMeta'
+    BeginAdminMcpPackageUploadRequest:
+      type: object
+      required: [filename, content_sha256, size_bytes]
+      additionalProperties: false
+      properties:
+        filename: { type: string, minLength: 1, maxLength: 255, description: 'Trimmed ZIP filename, at most 255 UTF-8 bytes, no path separators, controls or unpaired surrogates' }
+        content_sha256: { type: string, minLength: 64, maxLength: 64, pattern: '^[a-f0-9]{64}$' }
+        size_bytes: { type: string, pattern: '^(?:[1-9][0-9]{0,6}|[12][0-9]{7}|3[0-2][0-9]{6}|33[0-4][0-9]{5}|335[0-4][0-9]{4}|3355[0-3][0-9]{3}|33554[0-3][0-9]{2}|335544[0-2][0-9]|3355443[0-2])$' }
+    CompleteAdminMcpPackageUploadRequest:
+      type: object
+      required: [upload_source_version_id, content_sha256, size_bytes]
+      additionalProperties: false
+      properties:
+        upload_source_version_id: { type: string, minLength: 1, maxLength: 512, pattern: '^[\x21-\x7e]+$' }
+        content_sha256: { type: string, minLength: 64, maxLength: 64, pattern: '^[a-f0-9]{64}$' }
+        size_bytes: { type: string, pattern: '^(?:[1-9][0-9]{0,6}|[12][0-9]{7}|3[0-2][0-9]{6}|33[0-4][0-9]{5}|335[0-4][0-9]{4}|3355[0-3][0-9]{3}|33554[0-3][0-9]{2}|335544[0-2][0-9]|3355443[0-2])$' }
+    AbortAdminMcpPackageUploadRequest:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 512, description: 'Trimmed cancellation reason, at most 512 UTF-8 bytes, no controls or unpaired surrogates' }
+    PublishAdminMcpPackageRequest:
+      type: object
+      required: [provider_key, upload_id, upload_source_version_id, asset_id, content_sha256, size_bytes]
+      additionalProperties: false
+      properties:
+        provider_key: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z0-9][a-z0-9._-]{0,63}$' }
+        upload_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+        upload_source_version_id: { type: string, minLength: 1, maxLength: 512, pattern: '^[\x21-\x7e]+$' }
+        asset_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+        content_sha256: { type: string, minLength: 64, maxLength: 64, pattern: '^[a-f0-9]{64}$' }
+        size_bytes: { type: string, pattern: '^(?:[1-9][0-9]{0,6}|[12][0-9]{7}|3[0-2][0-9]{6}|33[0-4][0-9]{5}|335[0-4][0-9]{4}|3355[0-3][0-9]{3}|33554[0-3][0-9]{2}|335544[0-2][0-9]|3355443[0-2])$' }
+    AdminMcpPackageUpload:
+      type: object
+      required: [upload_id, state, content_sha256, size_bytes, scan_state]
+      additionalProperties: false
+      properties:
+        upload_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+        state: { type: string, enum: [pending, completed, aborted] }
+        content_sha256: { type: string, minLength: 64, maxLength: 64, pattern: '^[a-f0-9]{64}$' }
+        size_bytes: { type: string, pattern: '^(?:[1-9][0-9]{0,6}|[12][0-9]{7}|3[0-2][0-9]{6}|33[0-4][0-9]{5}|335[0-4][0-9]{4}|3355[0-3][0-9]{3}|33554[0-3][0-9]{2}|335544[0-2][0-9]|3355443[0-2])$' }
+        upload_source_version_id: { type: string, minLength: 1, maxLength: 512, pattern: '^[\x21-\x7e]+$' }
+        asset_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+        scan_state: { type: [string, 'null'], enum: [clean, pending, infected, unknown, null] }
+      allOf:
+        - if: { properties: { state: { const: completed } } }
+          then: { required: [asset_id, upload_source_version_id] }
+        - if: { required: [asset_id] }
+          then: { properties: { scan_state: { type: string } } }
+          else: { properties: { scan_state: { type: 'null' } } }
+    AdminMcpPackageBeginResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [package_id, upload_id, transfer_reference]
+          additionalProperties: false
+          properties:
+            package_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+            upload_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+            transfer_reference:
+              type: object
+              required: [url, method, required_headers, expires_at]
+              additionalProperties: false
+              description: Transient no-store PUT; never persist in receipts or send BFF credentials to its URL.
+              properties:
+                url: { type: string, format: uri, maxLength: 32768 }
+                method: { type: string, const: PUT }
+                expires_at: { type: string, format: date-time }
+                required_headers:
+                  type: object
+                  maxProperties: 32
+                  additionalProperties: { type: string, minLength: 1, maxLength: 1024 }
+    AdminMcpPackageUploadResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/AdminMcpPackageUpload' }
+    AdminMcpPackageAbortResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [upload_id, state]
+          additionalProperties: false
+          properties:
+            upload_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+            state: { type: string, const: aborted }
+    AdminMcpPackagePublishResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [package_version_id, server_id, replayed]
+          additionalProperties: false
+          properties:
+            package_version_id: { type: string, format: uuid }
+            server_id: { type: string, format: uuid }
+            replayed: { type: boolean }
+    AdminMcpPackageErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, minLength: 1, maxLength: 128 }
+            message: { type: string, minLength: 1, maxLength: 256 }
+            retryable: { type: boolean }
+    PersonalKnowledgeItem:
+      type: object
+      additionalProperties: false
+      required:
+        - knowledge_id
+        - name
+        - when_to_use
+        - content
+        - revision
+        - created_at
+        - updated_at
+      properties:
+        knowledge_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+        when_to_use:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ReplacePersonalKnowledgeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+        - name
+        - when_to_use
+        - content
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        name:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+        when_to_use:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+    DeletePersonalKnowledgeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+    PersonalKnowledgeUsage:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - revision
+      properties:
+        enabled:
+          type: boolean
+        revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+    ReplacePersonalKnowledgeUsageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+        - enabled
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        enabled:
+          type: boolean
+    PersonalKnowledgeItemResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/PersonalKnowledgeItem'
+    PersonalKnowledgeListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - items
+            - max_items
+          properties:
+            items:
+              type: array
+              maxItems: 100
+              items:
+                $ref: '#/components/schemas/PersonalKnowledgeItem'
+            max_items:
+              type: integer
+              const: 100
+    PersonalKnowledgeUsageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/PersonalKnowledgeUsage'
+    PersonalKnowledgeErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_knowledge_request
+                - knowledge_not_found
+                - knowledge_revision_conflict
+                - knowledge_revision_exhausted
+                - knowledge_limit_exceeded
+                - knowledge_unavailable
+                - knowledge_save_unknown
+                - request_body_too_large
+                - method_not_allowed
+                - service_auth_failed
+                - session_authentication_required
+                - session_invalid
+                - session_forbidden
+                - session_rate_limited
+                - product_tenant_not_configured
+                - product_tenant_forbidden
+                - iam_admission_unavailable
+            message:
+              type: string
+            retryable:
+              type: boolean
     SpecificationPublicSkill:
       type: object
       properties:
@@ -13279,6 +15157,9 @@ components:
             - team
             - project
             - app
+            - hub
+            - device
+            - unknown
         creator_info:
           type: object
           properties:
@@ -16305,6 +18186,11 @@ components:
       required: [message_id, role, content, status, created_at]
       additionalProperties: false
       properties:
+        selected_skill_source_refs:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
         message_id: { type: string, minLength: 1 }
         role:
           type: string
@@ -16962,7 +18848,7 @@ components:
           maxItems: 16
           uniqueItems: true
           x-kokoro-json-byte-limit: 4096
-          description: Exact ordered Skill source references; omission means []. Compact UTF-8 JSON must not exceed 4096 bytes.
+          description: Exact ordered Skill source references. Omission inherits current project defaults; explicit [] selects none. Compact UTF-8 JSON must not exceed 4096 bytes.
           items:
             type: string
             minLength: 7
@@ -17603,48 +19489,132 @@ components:
       additionalProperties: false
       properties:
         instruction: { type: string }
-    ProjectSkillRequest:
+    ProjectSkillSelectionError:
       type: object
-      required: [enabled]
+      required: [error]
       additionalProperties: false
       properties:
-        enabled: { type: boolean }
-    ProjectSkillResponse:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, minLength: 1 }
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean }
+    ProjectSkillSelection:
       type: object
-      required: [data, meta]
+      required: [data]
+      additionalProperties: false
       properties:
         data:
           type: object
-          required: [skill]
+          required: [project_id, installation_ids]
+          additionalProperties: false
           properties:
-            skill:
-              type: object
-              required: [project_id, name, enabled]
-              properties:
-                project_id: { type: string }
-                name: { type: string }
-                enabled: { type: boolean }
-        meta: { $ref: '#/components/schemas/RequestMeta' }
+            project_id: { type: string, minLength: 1 }
+            installation_ids: { $ref: '#/components/schemas/ProjectSkillInstallationIds' }
+    ProjectSkillInstallationIds:
+      type: array
+      maxItems: 16
+      uniqueItems: true
+      items:
+        type: string
+        minLength: 1
+        maxLength: 191
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
+    ReplaceProjectSkillSelectionRequest:
+      type: object
+      required: [installation_ids]
+      additionalProperties: false
+      properties:
+        installation_ids: { $ref: '#/components/schemas/ProjectSkillInstallationIds' }
+    ScheduledTaskWeekdays:
+      type: array
+      minItems: 1
+      maxItems: 7
+      uniqueItems: true
+      items: { type: integer, minimum: 0, maximum: 6 }
+      description: Selected weekdays, Sunday=0 through Saturday=6; persisted in ascending order.
+    ScheduledTaskMonthDays:
+      type: array
+      minItems: 1
+      maxItems: 31
+      uniqueItems: true
+      items: { type: integer, minimum: 1, maximum: 31 }
+      description: Selected days of month; missing dates are skipped, not moved to month end.
+    ScheduledTaskLocalDate:
+      type: string
+      format: date
+      pattern: '^\d{4}-\d{2}-\d{2}$'
+      description: Calendar date in the selected IANA timezone. Gaps are rejected and repeated times use the earlier instant.
     ScheduledTask:
       type: object
       required: [id, title, prompt, frequency, time, timezone, next_run_at, auto_approve, enabled, status]
+      additionalProperties: false
+      description: Immutable mutation snapshot. Original snapshots remain unchanged; only requests valid under this contract replay them. Retired request shapes are rejected before receipt claim; read current details before editing.
       properties:
         id: { type: string }
         project_id: { type: string }
         title: { type: string }
         prompt: { type: string }
-        frequency:
-          type: string
-          enum: [daily, weekly]
-        time: { type: string }
-        timezone: { type: string }
+        frequency: { type: string, enum: [daily, weekly, monthly, once] }
+        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
+        timezone: { type: string, minLength: 1 }
+        weekdays: { $ref: '#/components/schemas/ScheduledTaskWeekdays' }
+        month_days: { $ref: '#/components/schemas/ScheduledTaskMonthDays' }
+        local_date: { $ref: '#/components/schemas/ScheduledTaskLocalDate' }
         next_run_at: { type: [string, 'null'], format: date-time }
+        scheduling_state: { type: string, enum: [pending, active, paused, exhausted, failed] }
         expires_at: { type: string, format: date-time }
         auto_approve: { type: boolean }
         enabled: { type: boolean }
-        status:
-          type: string
-          enum: [active, paused, failed]
+        status: { type: string, enum: [active, paused, failed] }
+    ScheduledTaskDetails:
+      type: object
+      required: [scheduling_state]
+      description: Current scheduling lifecycle, distinct from immutable mutation ACKs and Agent execution outcomes. next_run_at is authoritative only for active scheduling; dependency failure returns 503.
+      allOf:
+        - $ref: '#/components/schemas/ScheduledTask'
+      oneOf:
+      - properties:
+          frequency: { const: daily }
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [month_days]
+            - required: [local_date]
+      - properties:
+          frequency: { const: weekly }
+        required: [weekdays]
+        not:
+          anyOf:
+            - required: [month_days]
+            - required: [local_date]
+      - properties:
+          frequency: { const: monthly }
+        required: [month_days]
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [local_date]
+      - properties:
+          frequency: { const: once }
+        required: [local_date]
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [month_days]
+    ScheduledTaskDetailResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [task]
+          properties:
+            task: { $ref: '#/components/schemas/ScheduledTaskDetails' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     ScheduledTaskResponse:
       type: object
       required: [data, meta]
@@ -17665,7 +19635,7 @@ components:
           properties:
             tasks:
               type: array
-              items: { $ref: '#/components/schemas/ScheduledTask' }
+              items: { $ref: '#/components/schemas/ScheduledTaskDetails' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
     CreateScheduledTaskRequest:
       type: object
@@ -17679,32 +19649,99 @@ components:
           description: Exact nonempty visible Project ID or slug; leading and trailing whitespace are rejected, not trimmed.
         title: { type: string }
         prompt: { type: string }
-        frequency:
-          type: string
-          enum: [daily, weekly]
-        time: { type: string }
-        timezone: { type: string }
-        recurrence_anchor_at: { type: string, format: date-time }
+        frequency: { type: string, enum: [daily, weekly, monthly, once] }
+        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
+        timezone: { type: string, minLength: 1 }
+        weekdays: { $ref: '#/components/schemas/ScheduledTaskWeekdays' }
+        month_days: { $ref: '#/components/schemas/ScheduledTaskMonthDays' }
+        local_date: { $ref: '#/components/schemas/ScheduledTaskLocalDate' }
         expires_at: { type: string, format: date-time }
         auto_approve: { type: boolean }
+      oneOf:
+      - properties:
+          frequency: { const: daily }
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [month_days]
+            - required: [local_date]
+      - properties:
+          frequency: { const: weekly }
+        required: [weekdays]
+        not:
+          anyOf:
+            - required: [month_days]
+            - required: [local_date]
+      - properties:
+          frequency: { const: monthly }
+        required: [month_days]
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [local_date]
+      - properties:
+          frequency: { const: once }
+        required: [local_date]
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [month_days]
     ScheduledTaskPatchRequest:
       type: object
       additionalProperties: false
       properties:
         title: { type: string }
         prompt: { type: string }
-        frequency:
-          type: string
-          enum: [daily, weekly]
-        time: { type: string }
-        timezone: { type: string }
-        recurrence_anchor_at: { type: string, format: date-time }
+        frequency: { type: string, enum: [daily, weekly, monthly, once] }
+        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
+        timezone: { type: string, minLength: 1 }
+        weekdays: { $ref: '#/components/schemas/ScheduledTaskWeekdays' }
+        month_days: { $ref: '#/components/schemas/ScheduledTaskMonthDays' }
+        local_date: { $ref: '#/components/schemas/ScheduledTaskLocalDate' }
         expires_at: { type: [string, 'null'], format: date-time }
         auto_approve: { type: boolean }
         enabled: { type: boolean }
-        status:
-          type: string
-          enum: [active, paused, failed]
+        status: { type: string, enum: [active, paused, failed] }
+      allOf:
+        - if:
+            anyOf:
+              - required: [frequency]
+              - required: [time]
+              - required: [timezone]
+              - required: [weekdays]
+              - required: [month_days]
+              - required: [local_date]
+          then:
+            required: [frequency, time, timezone]
+            oneOf:
+              - properties:
+                  frequency: { const: daily }
+                not:
+                  anyOf:
+                    - required: [weekdays]
+                    - required: [month_days]
+                    - required: [local_date]
+              - properties:
+                  frequency: { const: weekly }
+                required: [weekdays]
+                not:
+                  anyOf:
+                    - required: [month_days]
+                    - required: [local_date]
+              - properties:
+                  frequency: { const: monthly }
+                required: [month_days]
+                not:
+                  anyOf:
+                    - required: [weekdays]
+                    - required: [local_date]
+              - properties:
+                  frequency: { const: once }
+                required: [local_date]
+                not:
+                  anyOf:
+                    - required: [weekdays]
+                    - required: [month_days]
     McpConnectionProjection:
       type: object
       required: [connection_id, connector_id, server_id, provider_key, transport, status]
@@ -18758,6 +20795,41 @@ components:
             retryable: { type: boolean }
 
   responses:
+    AdminMcpPackageBeginOk:
+      description: Current owner result, not tool execution permission
+      headers:
+        x-request-id: { schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/AdminMcpPackageBeginResponse' } }
+    AdminMcpPackageUploadOk:
+      description: Current owner result, not tool execution permission
+      headers:
+        x-request-id: { schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/AdminMcpPackageUploadResponse' } }
+    AdminMcpPackageAbortOk:
+      description: Current owner result, not tool execution permission
+      headers:
+        x-request-id: { schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/AdminMcpPackageAbortResponse' } }
+    AdminMcpPackagePublishOk:
+      description: Current owner result, not tool execution permission
+      headers:
+        x-request-id: { schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/AdminMcpPackagePublishResponse' } }
+    AdminMcpPackageError:
+      description: Closed sanitized package administration failure; retry unknown writes only with original command
+      headers:
+        x-request-id: { schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/AdminMcpPackageErrorResponse' } }
     McpProviderAdminListOk:
       description: Current platform administrator provider directory
       headers: { x-request-id: { required: true, schema: { type: string } }, Cache-Control: { required: true, schema: { type: string, const: no-store } } }
@@ -19503,6 +21575,31 @@ components:
                 data:
                   { $ref: "#/components/schemas/SkillInstallationMutation" },
               }
+    SkillInstallationUpdateSuccess:
+      description: Explicit update receipt; disabled state is preserved and the exact selected source is installed
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [data]
+            properties:
+              data:
+                allOf:
+                  - $ref: '#/components/schemas/SkillInstallationMutation'
+                  - type: object
+                    required: [event_id]
+                    properties:
+                      change: { const: upgraded }
+                      event_id: { type: string, minLength: 1, maxLength: 191 }
+                      installation:
+                        type: object
+                        properties:
+                          installed: { const: true }
+                          removed_at: false
     SkillInstallationBadRequest:
       description: Invalid request
       headers:

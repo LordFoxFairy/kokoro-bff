@@ -1,3 +1,15 @@
+## 2026-10-19 当前 Public19 集成交付
+
+当前唯一契约为 Public19.0.0 / 165 operations。保留本地Skills、项目选择冻结、知识、调度日历、Library与MCP包管理，并合入main账号会话/姓名、共享/归档及完整Team权限；不恢复旧名称关联或旧anchor字段。双父精确证明在 `scripts/verify-closure-integration-contract.mjs`；真实验证和正常配对边界见 `docs/CURRENT.md`。以下日期段是历史切片，不替代当前机器契约。
+
+### 2026-10-18 MCP 管理HTTP接线（未正常加载）
+
+Public18.1 新增受管包 Begin/Complete/Abort/Status/Publish 五操作；沿现 mcpProviderAdmin 配置与正式 SDK、当前人类平台管理员及 mcp_catalog.manage 准入。只有元数据与短时 PUT 引用经 BFF，字节仍直接传 Storage；无新表、配置、自动重试或模型/工具执行。Admin 上传/发布恢复页面待后继，完整验证与未验边界见 docs/CURRENT.md。
+
+### 2026-10-18 MCP 受管包内部消费者
+
+Platform 固定发行物统一至 fa5c5e53151b3c72145b680a3ee4a45d92c17ec7，新增 MCP 包管理五方法窄 client；沿现 mcp_admin direct 服务凭据、固定摘要与总预算，不执行对象上传/工具，不新增公开路由或正常配置。人类管理员 HTTP 准入及 Admin 上传页面仍待接线；发布回执不是运行授权。实际验证与剩余项见 docs/CURRENT.md。
+
 ## R356 普通 Skills 生命周期 Public11 预激活纠正（2026-10-09）
 
 唯一当前契约为 Public11.0.0，同 `/v1`、132 operations。普通 CreateVersion 只接 strict metadata，不接收或转发 expected_state_version；Platform 在事务内核当前主体/owner与 active/disabled base，分配新 revision 并创建独立 draft/stateVersion=1，不改 base。普通 Withdraw 实际修改原 Skill，严格要求当前 expected_state_version；原 key/body、digest、receipt、current IAM、取消与绝对预算保持。Admin version、Publish 及其他真实 CAS 不变。

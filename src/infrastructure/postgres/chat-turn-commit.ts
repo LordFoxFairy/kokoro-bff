@@ -1,8 +1,9 @@
+import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
 import { performance } from "node:perf_hooks"
 
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 
-import type { CommitChatTurn } from "../../application/ports/agent-dispatch-outbox-repository.js"
+import type { CommitChatTurn, ChatTurnSelectionInput, ChatTurnSelection } from "../../application/ports/agent-dispatch-outbox-repository.js"
 import { bindAgentDispatchPayloadProjectScope, parseAgentDispatchPayload, type AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
 import { firstMessageConversationTitle, isClientCreatedConversationId } from "../../domain/chat/conversation.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
@@ -79,6 +80,81 @@ async function acquireClient(database: PostgresBffDatabase, deadline: number): P
       )
     }
     throw error
+  }
+}
+
+/** The pre-resolution read shares Chat's bounded checkout and late-client cleanup. */
+export async function prepareChatTurnSelection(database: PostgresBffDatabase, input: ChatTurnSelectionInput): Promise<ChatTurnSelection | null> {
+  const deadline = performance.now() + CHAT_TURN_TOTAL_BUDGET_MS
+  const client = await acquireClient(database, deadline)
+  let destroyClient = false
+  const onError = () => {
+    destroyClient = true
+  }
+  client.on("error", onError)
+  try {
+    type SelectionRow = {
+      missing_project: boolean
+      project_id: string | null
+      installation_ids: string[] | null
+      request_digest: string | null
+      run_id: string | null
+      user_message_id: string | null
+      assistant_message_id: string | null
+    }
+    const config = {
+      text: `WITH current_conversation AS (
+        SELECT project_ref FROM bff_conversation WHERE tenant_id=$1 AND owner_id=$2 AND conversation_id=$3 AND status='active'
+      ), requested_project AS (
+        SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND deleted_at IS NULL AND (project_id=$5 OR slug=$5) LIMIT 1
+      ), current_scope AS (
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM current_conversation) THEN (SELECT project_ref FROM current_conversation) ELSE (SELECT project_id FROM requested_project) END AS project_ref,
+          (NOT EXISTS (SELECT 1 FROM current_conversation) AND $5::text IS NOT NULL AND NOT EXISTS (SELECT 1 FROM requested_project)) AS missing_project
+        WHERE EXISTS (SELECT 1 FROM current_conversation) OR (
+          $6 AND NOT EXISTS (SELECT 1 FROM bff_conversation WHERE conversation_id=$3)
+        )
+      )
+      SELECT s.missing_project,p.project_id, CASE WHEN s.project_ref IS NULL THEN '{}'::text[] ELSE p.selected_skill_installation_ids END AS installation_ids,
+             o.request_digest,o.run_id,o.user_message_id,o.assistant_message_id
+        FROM current_scope s
+        LEFT JOIN bff_project p ON p.tenant_id=$1 AND p.owner_id=$2 AND p.deleted_at IS NULL AND (p.project_id=s.project_ref OR p.slug=s.project_ref)
+        LEFT JOIN bff_agent_dispatch_outbox o ON o.tenant_id=$1 AND o.subject_id=$2 AND o.conversation_id=$3 AND o.idempotency_key=$4
+       WHERE s.project_ref IS NULL OR p.project_id IS NOT NULL`,
+      values: [
+        input.tenantId,
+        input.subjectId,
+        input.conversationId,
+        input.idempotencyKey,
+        input.projectRef ?? null,
+        isClientCreatedConversationId(input.conversationId),
+      ],
+      query_timeout: 4500,
+    }
+    const result = await startWithin(
+      deadline,
+      "CHAT_TURN_BUDGET_EXHAUSTED",
+      () => client.query<SelectionRow>(config),
+      () => {
+        destroyClient = true
+      },
+    )
+    const row = result.rows[0]
+    if (!row) return null
+    if (row.missing_project) throw new Error("CHAT_TURN_PROJECT_NOT_FOUND")
+    if (row.request_digest !== null) {
+      if (row.request_digest !== input.requestDigest) throw new Error("CHAT_TURN_IDEMPOTENCY_CONFLICT")
+      if (!row.run_id || !row.user_message_id || !row.assistant_message_id) throw new Error("AGENT_DISPATCH_LINEAGE_MISMATCH")
+      return { kind: "replay", receipt: { run_id: row.run_id, user_message_id: row.user_message_id, assistant_message_id: row.assistant_message_id } }
+    }
+    const ids = parseProjectSkillSelection(row.installation_ids)
+    if (ids === null) throw new Error("CHAT_SKILL_SELECTION_INVALID")
+    return { kind: "new", projectId: row.project_id, installationIds: ids }
+  } finally {
+    try {
+      client.release(destroyClient)
+    } finally {
+      client.removeListener("error", onError)
+    }
   }
 }
 
@@ -289,6 +365,19 @@ export async function commitChatTurn(
           assistant_message_id: existingRow.assistant_message_id,
         }
       }
+      if (command.skillSelection !== undefined) {
+        if (command.skillSelection.projectId !== scope.canonicalProjectId) throw new Error("CHAT_SKILL_SELECTION_CHANGED")
+        const defaults =
+          scope.canonicalProjectId === null
+            ? []
+            : (
+                await query<{ selected_skill_installation_ids: string[] }>(
+                  `SELECT selected_skill_installation_ids FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
+                  [command.tenantId, command.subjectId, scope.canonicalProjectId],
+                )
+              ).rows[0]?.selected_skill_installation_ids
+        if (JSON.stringify(defaults) !== JSON.stringify(command.skillSelection.installationIds)) throw new Error("CHAT_SKILL_SELECTION_CHANGED")
+      }
       if (command.projectRef !== undefined && (scope.callerProjectId === null || scope.callerProjectId !== scope.canonicalProjectId)) {
         await rollback()
         return null
@@ -330,9 +419,18 @@ export async function commitChatTurn(
       )
       if (outbox.rowCount !== 1) throw new Error("AGENT_DISPATCH_INSERT_FAILED")
       const inserted = await query(
-        `INSERT INTO bff_message (message_id,tenant_id,conversation_id,run_id,role,content,status,message_seq)
-         VALUES ($1,$2,$3,$4,'user',$5,'completed',$6::bigint),($7,$2,$3,$4,'assistant','','pending',$6::bigint+1)`,
-        [command.userMessageId, command.tenantId, command.conversationId, command.runId, command.content, nextSequence, command.assistantMessageId],
+        `INSERT INTO bff_message (message_id,tenant_id,conversation_id,run_id,role,content,status,message_seq,selected_skill_source_refs)
+         VALUES ($1,$2,$3,$4,'user',$5,'completed',$6::bigint,$8::jsonb),($7,$2,$3,$4,'assistant','','pending',$6::bigint+1,'[]'::jsonb)`,
+        [
+          command.userMessageId,
+          command.tenantId,
+          command.conversationId,
+          command.runId,
+          command.content,
+          nextSequence,
+          command.assistantMessageId,
+          JSON.stringify(payload.launch.selected_skill_source_refs),
+        ],
       )
       if (inserted.rowCount !== 2) throw new Error("CHAT_MESSAGE_INSERT_FAILED")
       const queuedCursor = await startWithin(

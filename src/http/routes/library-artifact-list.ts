@@ -7,19 +7,20 @@ import { FinalArtifactClient, type FinalArtifactContext, type FinalArtifact } fr
 import { failure, ok } from "../../contracts/index.js"
 import { send } from "../response.js"
 
-type PageInput = Readonly<{ kind: "artifact"; limit: number; cursor: string }>
+import type { ArtifactLibraryPageInput } from "../library-file-list-input.js"
+import { matchesLibraryArtifact, type LibraryArtifactFilter } from "../../application/library-artifact-filter.js"
 
 function positionOf(association: ArtifactAssociation): ArtifactPosition {
   return { deliveredAt: association.deliveredAt, conversationId: association.conversationId, artifactId: association.artifactId }
 }
 
-function encodeCursor(tenantId: string, subjectId: string, limit: number, position: ArtifactPosition): string {
-  return `art1_${Buffer.from(JSON.stringify({ kind: "artifact", tenantId, subjectId, limit, ...position })).toString("base64url")}`
+function encodeCursor(tenantId: string, subjectId: string, limit: number, filter: LibraryArtifactFilter, position: ArtifactPosition): string {
+  return `art2_${Buffer.from(JSON.stringify({ kind: "artifact", tenantId, subjectId, limit, query: filter.query, type: filter.type, ...position })).toString("base64url")}`
 }
 
-function decodeCursor(cursor: string, tenantId: string, subjectId: string, limit: number): ArtifactPosition | null {
+function decodeCursor(cursor: string, tenantId: string, subjectId: string, limit: number, filter: LibraryArtifactFilter): ArtifactPosition | null {
   if (cursor === "") return null
-  if (!cursor.startsWith("art1_")) throw new ProjectResourceError("invalid_library_page", 400)
+  if (!cursor.startsWith("art2_")) throw new ProjectResourceError("invalid_library_page", 400)
   const encoded = cursor.slice(5)
   if (encoded.length === 0 || Buffer.from(encoded, "base64url").toString("base64url") !== encoded) throw new ProjectResourceError("invalid_library_page", 400)
   let value: unknown
@@ -31,11 +32,13 @@ function decodeCursor(cursor: string, tenantId: string, subjectId: string, limit
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new ProjectResourceError("invalid_library_page", 400)
   const fields = value as Record<string, unknown>
   if (
-    Object.keys(fields).sort().join(",") !== "artifactId,conversationId,deliveredAt,kind,limit,subjectId,tenantId" ||
+    Object.keys(fields).sort().join(",") !== "artifactId,conversationId,deliveredAt,kind,limit,query,subjectId,tenantId,type" ||
     fields.kind !== "artifact" ||
     fields.tenantId !== tenantId ||
     fields.subjectId !== subjectId ||
     fields.limit !== limit ||
+    fields.query !== filter.query ||
+    fields.type !== filter.type ||
     typeof fields.deliveredAt !== "string" ||
     !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/u.test(fields.deliveredAt) ||
     !Number.isFinite(Date.parse(fields.deliveredAt)) ||
@@ -54,7 +57,7 @@ export async function libraryArtifactListRoute(
   response: ServerResponse,
   config: BffConfig,
   context: RequestContext,
-  input: PageInput,
+  input: ArtifactLibraryPageInput,
   repository: ArtifactLibraryRepository | undefined,
   clientFactory: (config: NonNullable<BffConfig["storage"]>, context: FinalArtifactContext) => Pick<FinalArtifactClient, "get"> = (storage, scope) =>
     new FinalArtifactClient(storage, scope),
@@ -71,7 +74,7 @@ export async function libraryArtifactListRoute(
     if (repository === undefined || config.storage === undefined) throw new ProjectResourceError("artifact_library_unavailable", 503, true)
     const tenantId = context.identity.namespace
     const subjectId = context.identity.userId
-    const position = decodeCursor(input.cursor, tenantId, subjectId, input.limit)
+    const position = decodeCursor(input.cursor, tenantId, subjectId, input.limit, input)
     const budget = Math.min(500, input.limit * 5)
     const candidates = await repository.listCandidates(tenantId, subjectId, position, budget + 1)
     if (candidates.length > budget + 1) throw new ProjectResourceError("business_store_unavailable", 503, true)
@@ -85,14 +88,17 @@ export async function libraryArtifactListRoute(
           candidate,
           signal,
         )
-        items.push(item)
+        signal.throwIfAborted()
+        if (matchesLibraryArtifact({ title: item.title, filename: item.filename, mimeType: item.mime_type }, input)) items.push(item)
       } catch (error) {
         if (!(error instanceof ProjectResourceError && error.status === 404)) throw error
       }
       if (items.length === input.limit) break
     }
     const nextCursor =
-      last !== undefined && (candidates.length > budget || candidates.at(-1) !== last) ? encodeCursor(tenantId, subjectId, input.limit, positionOf(last)) : null
+      last !== undefined && (candidates.length > budget || candidates.at(-1) !== last)
+        ? encodeCursor(tenantId, subjectId, input.limit, input, positionOf(last))
+        : null
     send(response, 200, ok({ items, next_cursor: nextCursor }, context.requestId))
   } catch (error) {
     if (response.destroyed) return

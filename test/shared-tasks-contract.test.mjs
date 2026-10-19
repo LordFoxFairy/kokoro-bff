@@ -1,10 +1,13 @@
+import { restoreClosureMainContract, closureMainBaseline } from "../scripts/verify-closure-integration-contract.mjs"
 import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "../scripts/archived-tasks-public-contract.mjs"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import test from "node:test"
 import { load } from "js-yaml"
 
-const spec = load(restorePublic153ArchivedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")))
+const spec = load(
+  restorePublic153ArchivedTasksContract(restoreClosureMainContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))),
+)
 const resolveSchema = (schema) => (schema?.$ref ? spec.components.schemas[schema.$ref.split("/").at(-1)] : schema)
 test("shared tasks additive public release registers one canonical GET with owner metadata", () => {
   assert.equal(spec.info.version, "15.3.0")
@@ -34,8 +37,12 @@ test("shared tasks canonical success is closed and cannot expose share capabilit
 test("shared tasks outer inverse restores complete committed15.2 and ordered145 inventory", async () => {
   const { restorePublic152SharedTasksContract, sharedTasksParentBaseline } = await import("../scripts/shared-tasks-public-contract.mjs")
   const { createHash } = await import("node:crypto")
-  const source = restorePublic153ArchivedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
-  const baseline = archivedTasksParentBaseline(JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations)
+  const source = restorePublic153ArchivedTasksContract(
+    restoreClosureMainContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+  )
+  const baseline = archivedTasksParentBaseline(
+    closureMainBaseline(JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations),
+  )
   const sha = (v) => createHash("sha256").update(v).digest("hex")
   assert.equal(sha(restorePublic152SharedTasksContract(source)), "3214e32d273fbc514db1c1f2307f7855b623f1f613fb1da710cc51d23c41f453")
   assert.equal(sha(JSON.stringify(sharedTasksParentBaseline(baseline))), "6c0bb394736038b61c247a2a5f40ca8dee18850fbc45ad5bb114d0df0ab00f46")

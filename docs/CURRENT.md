@@ -1,3 +1,234 @@
+## 2026-10-19 既有分支集成：唯一 Public19.0.0（候选）
+
+本次只合并本地 d8634f0 与 main 16e5c711 已批准能力，不新增功能。唯一当前 /v1 契约165操作：保本地 Skills取得来源、项目精确选择/消息默认冻结、知识、完整日历与Library筛选、五项MCP包管理；承接main八项账号会话/姓名、共享/归档操作与Team完整platform/skill权限。旧名称关联PATCH及recurrence_anchor_at请求字段保持退休，不建alias或runtime fallback。两父原文/有序inventory通过本次明确增量的精确逆证保留，既有历史hash与断言不重签；全部后端入口、owner准入/取消/事务/幂等和历史回执保持。
+
+Schema只在原BFF canonical叠加main既有归档列/索引；项目/日历/知识结构与旧表删除保持。正常库不自动演进，未重启服务、启用模型/实际工具/扣费。停写后的728输入完整格式/lint/types/契约845项/架构/默认1489 PASS与3原SKIP/fresh build已通过；13文件真实PostgreSQL＋Redis 346 PASS/0 SKIP，fresh canonical安装与自有测试库回收已验证，独立审查无遗留确定P0–P2。首次资源7个失败已定位并修正既有fixture的owner search_path、HTTP7显式project_ref和ObjectStore VersionId ACK；原503、未知提交、重启与撤权恢复断言保持，未以放宽断言消除失败。新availability消费者WIP和正常mixed均未夹入；代码交付不代表正常Schema/运行服务或完整页面已配对。
+
+## Agent HTTP7 消费配对（2026-10-18，本地候选，正常环境未激活）
+
+沿既有已存dispatch v2，Chat/Scheduled窄delivery共用strict投影：只从BFF冻结的trace scope产生required nullable project_ref，不查询当前项目、不修改历史payload/key/digest。固定Agent7104f3d原始HTTP7/provenance，唯一生成器仍仅三operation；旧vendor已移除，usage读取未接入。无SQL、公开API、持久模型、依赖或配置变化。
+
+真实RED证明旧consumer缺显式scope且未拒坏正文；本片相关HTTP14 PASS。隔离真实Agent HTTP鉴权/Ingress/PG验收四组合（Chat/Scheduled×direct/project）各重复一次，八次接纳只有四条dispatch，scope与原保存正文均保持。队列为受控FakeBus，不启动共享Redis/Worker、模型或扣费；自有schema已清理、前后schema目录完全一致。首fixture漏必填lease TTL，改用原config.run_repository后通过，没有改业务规则。
+
+完整owner工程/contract/默认门的停写证据见Root有效计划；正常dist/服务/数据库未更新。正常切换前仍须核旧Agent已有/未知接纳，公开人类旅程、页面Manus对照与MCP全部能力仍未因此完成；远端Git/PR/CI及Root index/gitlink保持暂停。
+
+## 2026-10-18 Public18.1 MCP 受管包管理接线（未正常加载）
+
+沿feb42f4窄SDK/Platform fa5c5e5，唯一canonical Public18.1新增五个管理员包操作，157 operations；其余152 operation及完整Public18原字节经逆证保留。feature-local HTTP input/body与route、现server/runtime/Nest协议adapter接线及Admin浏览服务精确allowlist已实现；复用现mcpProviderAdmin配置/原direct凭据，无新Schema、身份、scope、依赖或上传/receipt/cache事实。当前session＋platformAdmin＋mcp_catalog.manage、可信tenant/subject与原命令key，正文前共同20秒/32KiB、严格重复/未知JSON/路径/查询/头、取消/关闭和公开安全错误保持。
+
+主方650工程输入停写无漂移，独占源码候选完整format/lint/typecheck/build/contract/architecture/原默认manifest均exit0；contract699 PASS、architecture35 PASS、default1301 PASS/3既有资源SKIP。原契约新增1例和四HTTP独有风险案例，未加UI测试；新公开case真实版本RED→GREEN，HTTP4FAIL→4PASS。首次root运行tsx解析失败属设置问题，随后正确owner入口真实RED；首TS字段联合收窄失败改显式四kind/map及switch投影，无放宽类型规则。首逆证夹具误用非行首anchor已校正到实际唯一块边界，完整Public18 SHA beaf5441...及旧152精确保留，未改旧原始事实来凑绿。
+
+私有源码实测公开HTTP→真实BFF配置装配/SDK→真实Platform fa5 Native Nest＋正式服务准入＋自有fresh PG：Begin/实际对象PUT/Complete/Status、Pending拒发布、CLEAN发布、原命令回放和独立Pending取消，1 PASS/2未选，版本/receipt各1。人类IAM准入与Storage为受控peer、对象真实loopback PUT/GET；不是实际IAM/Storage/正常账号/Admin UI整链。自有库回收/catalog92→92 exact、Platform副本回收。最终静态独审无确定剩余P0–P2；原始日志与验证器仅Root ignored var/dev/bff-mcp-package-http-20261018。
+
+后继仍需Admin同源包上传/扫描/发布恢复页面、Runtime stdio不可变材料/Agent受控链及产品对照/手册；不以HTTP完成冒整体闭环。正常dist/服务/库/配置/账号/权限/积分/任务未动，模型/实际工具/扣费/CI/远端继续暂停。原mixed知识文档/ADR、资料库Unicode断言保留不夹入提交，Root index/gitlink不动。
+
+## 2026-10-18 MCP 受管包固定内部消费者（未正常装配）
+
+本地源码固定 Platform fa5c5e53151b3c72145b680a3ee4a45d92c17ec7 的独立五方法 Proto/descriptor/profile/摘要向量，沿唯一生成链升级现 Connect 与 HTTP bundle，原20个 generated 文件逐字保持。新增三职责窄 client：严格输入/固定摘要、安全结果投影、Native Connect 与原 mcp_admin direct 服务凭据鲜读；继承 caller 绝对预算且最多20秒/32KiB，取消与 close 贯穿。不新增公开路由、Schema、配置、上传实体、服务身份或正常装配；Storage 上传事实与 Platform 发布回执仍各归原 owner。
+
+主方最终646工程输入停写无漂移，格式/lint/typecheck/build/contract/architecture/原默认manifest全exit0：contract694 PASS、architecture35 PASS、default1296 PASS/3既有资源SKIP；四个新风险案例覆盖五操作/严格拒绝/凭据与未知命令恢复/取消。独审发现 package_limit_exceeded 合法 FailedPrecondition 被剥除，原Native案例真实3PASS1FAIL→4PASS，保原 ResourceExhausted 并仅加已发布组合，最终静态审查无确定剩余P0–P2。未增加UI测试或放宽原断言。
+
+私有源码副本中真实BFF Node22 SDK→Platform fa5 Node24 Native Nest＋正式本地服务准入＋自有fresh PG实测：Begin→实际对象PUT→Complete→Pending拒发布→CLEAN后发布→同命令回放→另一Pending取消，1 PASS/2未选，不把未选当通过。不可变版本与发布receipt各1；Storage为受控Native peer、Redis为受控资源，尚非真实Storage/人类HTTP/Admin产品整链。首私有夹具误把8次调用写成至少9次，纠正为精确8后重跑；原失败留证，生产实现未为该夹具改动。自有库清理/catalog92→92 exact、Platform私有副本回收。
+
+工程门在独占候选运行，不覆盖正常dist；其他mixed知识文档/ADR、资料库Unicode断言保持不纳入本片提交。原始材料只在Root ignored var/dev/bff-mcp-package-20261018。后继仍须公开五操作/当前人类管理员准入、同源Admin页面、Runtime stdio不可变材料与Agent受控整链及产品手册；完整goal仍OPEN。正常服务/库/账号/权限/积分/任务开关、模型/实际工具/扣费/CI/远端及Root index/gitlink未动。
+
+## 2026-10-18 Public18 Artifact 服务端筛选候选（未加载正常环境）
+
+沿 a577625 同需求分支，新增 artifact-only q/type：在既有 BFF 授权关系候选窗口内，通过 Storage 固定 v3 FINAL 读取后的 title/filename/MIME 匹配，不用未验证 source claims、不新建 metadata 副本/索引/worker。原 min(500,limit*5)/30秒预算保持，游标记录最后扫描而非最后命中位置；空items+next可继续，只有next=null是穷尽，不宣称索引/相关性搜索。file严格拒绝新参数。单一art2将规范化查询、type、kind、tenant、subject、limit和keyset一并绑定；Public18明确退休旧Artifact游标，无旧版本fallback或路径alias。
+
+原query/真实HTTP-Connect案例3 FAIL后实现8 PASS；同一新增案例补owner迟到返回的取消，先实际误200 RED，await后再核signal后GREEN。Unicode200码点/控制字符、八类、FINAL filename而非旧source、跨窗口后页命中、query/type/limit/actor/tenant互换零owner读、旧cursor拒绝、503不假空均覆盖；原HTTP入口真实走正式准入/最终解码，Storage与对象网络为controlled peers，不称真实Provider/工具执行。另独占PG原R237 Artifact关系权限案例1 PASS/0SKIP，临时库已清理；它证明Postgres身份/项目关系边界，不冒充整个新筛选HTTP与真实Storage完整组合。
+
+Public18完整逆变精确还原Public17 SHA ffc655e893b6ac90ee553acd368abbd68c7a3e77ed3a33a872643bf0d5a2a21f，原period等历史门继续保留。首次完整contract门遗漏原Skills current版本断言（17→18），已精确更新唯一版本值，不削弱Skills字段/权限/路由断言；原失败日志保留。独立只读审未发现确定P0–P2。最终641个工程输入停写一致：format/lint/typecheck/contract/architecture/build及默认原manifest均0，contract694 PASS、architecture35 PASS、默认1292 PASS/3原资源SKIP；源码验证范围与原始收据只留Root ignored var/dev/library-filter-20261018。此为后端候选交付，不代替前端或正常环境验收。
+
+当前App仍对已加载页做本地过滤，尚未固定此候选或展示稀疏页继续状态；后继必须接服务端query/reset/abort/cursor与UI实测后再称资料库筛选完成。正常BFF/App/Scheduler未为本片重载，正常Schema/账号/登录/权限/积分/任务不动；模型、实际工具、扣费、CI及远端PR继续暂停。原知识/正常配对文档余diff保留，不夹入本候选写区。
+
+## 2026-10-18 Public17／Scheduler3 正常本地配对已验收（覆盖下文未激活记录）
+
+用户明确授权备份恢复演练后更新正常环境。本轮先导出 BFF/Scheduler 两 owner schema，在独占临时库恢复并精确比较全部行及列；再演进 BFF 显式日历字段、退役 anchor/重复 next 列，Scheduler 增加 once/current 所需列与约束。演进目标与各 owner canonical 指定表的列和约束精确一致；两条原任务的内容、revision、暂停状态及历史 outbox/receipt 保留。演练失败尝试保留，只有最终成功证据用于切换；自有临时库均清理。
+
+停止并确认旧进程终止后，正常环境按同一受检操作演进、加载 BFF a577625 与 Scheduler 3bb7ff6。另定位一条历史 daily 登记缺 task_revision：通过正式 Scheduler replace 管理接口以当前 BFF 完整定义/当前 revision/paused=true 配对，追加一个新 receipt；相同 key/body 实际重放 ACK 相同，原 receipt 逐行精确保留。不直接 SQL 修 Scheduler payload，不重写历史 BFF 命令。
+
+最终复用正式 SchedulerTaskStateReader 核完整 trigger/body/tenant/subject/revision/target/policy，两个当前状态均 paused、next=null；BFF 全部事实与演练后的摘要精确一致，Scheduler occurrence/dispatch 仍零。正常 Web 同源页面真实回读两条任务，周三保留；多选菜单保持展开、Escape 返回触发器、取消草稿不落库，刷新后侧栏及任务正常。此次不是新建/启用任务、Agent/MCP 执行或模型验收。
+
+本轮实际 BFF build 通过；本次生产源码与已完成本地 producer a577625 精确一致，沿用其完整门禁证据。正常配对原始收据仅 Root ignored var/dev/scheduled-normal17-20261018；无账号、权限、登录、积分、模型配置变化，无其他服务重启。模型/工具/扣费、CI及远端 PR 继续暂停，Agent 定时 MCP 管理及其他开放项不因此完成。
+
+## 2026-10-18 Scheduler 3.0 配对与同一次触发管理（未正常激活）
+
+基于d31455e同需求工作树固定Scheduler `3bb7ff61b0d72418aa048ca35b8c3f144a33f13e`／3.0.0，canonical SHA256 `d349eae8bba207074b1edf91acd9f08e94f39a27363441f45186c1799159c999`；唯一vendor/生成SDK配对，不双读。Public17／152 operations候选保持，当前3.0增量不再改SQL。锁内比较同一冻结once instant，允许到期后普通/完整规则编辑及启停，新建或改变instant仍须未来；不复制Scheduler耗尽事实或旧revision来源链。
+
+ACK仅updated＋once/null next/paused=false承接耗尽，完整trigger、正文/revision、目标与策略仍核验；当前GET只有已证exhausted的once允许耗尽盖过产品paused，next为null。历史receipt不改写，当前读不从旧ACK恢复next。原定向规则与真实PG/HTTP先RED后GREEN，暂停/重新启用不复活同一次触发。
+
+最终639非文档/README工程输入停写逐项一致：Node22 format/lint/typecheck/contract/architecture/build及默认原manifest全清单通过，contract692 PASS、architecture35 PASS、默认1290 PASS／3原资源SKIP；另独占fresh PG四个完整相关资源文件231 PASS／0 FAIL／0 SKIP，自有库清理。首contract门遗漏固定owner新增409目录的消费断言，已精确配对schedule_changed；首资源门230 PASS/1 FAIL定位为当前读fixture抢取R73保留的其他tenant pending command，两个原案例联跑实际RED复现tenant身份后，以独立事务锁住其他fixture行供真实SKIP LOCKED隔离，原权限/回执/耗尽断言保持，finally回滚释放。最终完整门全部重跑，原失败证据保留；独立只读审未发现确定P0–P2。
+
+真实源码Scheduler3＋固定SDK/正式Delivery隔离HTTP已验同触发源past与consumed replace、当前读取/tenant404/错误凭据401和原ACK重放；实际等待planner以skip耗尽一次，4定义/7receipt/1 skipped occurrence/0dispatch，自有进程退出0、库清理。不是实际Agent/MCP执行或全产品浏览器验收。原始收据仅Root ignored `var/dev/bff-scheduler3-20261018/`。
+
+正常库、进程与任务未加载候选；App17及Manus页面对照、旧非终态命令/未知ACK的正式收敛、Agent定时MCP管理与生产resolver仍OPEN。不得单独重载新owner或称自动化/MCP全链完成；模型/实际工具、扣费、CI和远端PR继续暂停，原正常知识演进文档/ADR及其他工作保留。
+
+## 2026-10-18 调度 next 重复事实退休与取消观察修正（未正常激活）
+
+沿同一 `d31455e568ca80f9d332bc9d3ab69a48409d7de9` 基线未提交周期候选，从 canonical fresh SQL、Fact/row/全部 task SQL 删除私有 next_run_at；不新增替代缓存、alias 或可选旧参数。Scheduler ACK 仍核完整定义/trigger/精度，但成功只用原 outbox ID＋owner/token/fence 原子结算 command，不写 task；失败同事务 task.status/revision 围栏保持。新 mutation ACK 的 next 为 null，历史 receipt JSON 不改；Details 继续读 Scheduler current。仅保原围栏语义，不冒称仅 lease_until 到时但未被接管也拒绝结算。
+
+R280 已定位为测试观察竞态，而非改写 Project 生产取消流程：原客户端 abort 后，服务端可能尚未收到断线，先派出 ROLLBACK，再在 ACK 仍被 gate 阻挡时收到取消并销毁连接。私有两次时序记录分别复现通过与原断言失败；正式原案例改为同步真实服务端 signal，分别覆盖取消先于 ROLLBACK、ROLLBACK ACK 已在途两个窗口，两者均保未释放 gate 时恰好一次 destroy 及随后 GET200。没有删除断言、放宽 timeout 或改 Project 生产代码。12 个独立真实 PG/HTTP 定向子进程均通过双窗口；最终四资源文件完整 229 PASS/0 FAIL/0 SKIP，含本片六个替换缓存风险的原案例及原失败/revision/rollback保障。隔离 fresh installer 成功，自有库已清理；旧失败日志保留，不能以旧一次独立重跑替代本次定位。
+
+直接固定 Scheduler8a 源码 smoke 再验 weekly/monthly/once ACK 和 current：4 definitions/4 receipts/0 occurrences/0 dispatches；无 next projection，严格 paused/null 读取，原 receipt 到点后重放与401/跨tenant404保持。自有子进程正常 exit0、测试库清理。只读复核未见本片新增确定 P0–P2，不替代主方验证。
+
+主方最终冻结639个非文档输入，Node22按原配置串行执行 format:check、lint、typecheck、contract:check、test:architecture、build 及默认 test 原文件清单（只限制并发2）全部 exit0；contract692 PASS、architecture35 PASS、默认1290 PASS/0 FAIL/3原资源SKIP，验证前后输入无漂移。BFF git diff --check通过；Root有效计划原557–558两处历史尾空格保留，未因本片顺手整理。未把默认资源SKIP或229项相关PG组合冒全部集成套件通过。
+
+正常库/源码进程、App Public16.2、正常任务均未变；未做本片浏览器对照，Public17仍未发行。过去 once 的普通编辑/暂停/重新排期、消费者和 Agent 定时 MCP 的可信管理/生产 resolver 仍待闭合。未提交、未更 Root index/gitlink；模型、实际 MCP 工具执行、扣费、CI 和远端 PR 继续暂停。原正常知识文档及其他未交接工作保留。证据仅 Root ignored `var/dev/bff-next-retirement-20261018/` 及 `var/dev/bff-periods-20261018/next-*`。
+
+## 2026-10-18 ScheduledTask 权威当前读取（本地候选，正常环境未切换）
+
+在 `d31455e568ca80f9d332bc9d3ab69a48409d7de9` 及原多周期未提交候选上接通正式列表/详情 GET：同 owner 单 SQL 读取任务及精确 revision 的登记状态；pending 不读 Scheduler，失败独立表示，成功才读固定 Scheduler2 current 并核完整冻结定义。4 路并发、当前读取阶段共享5s monotonic deadline、断线/超时取消贯穿；owner 返回后先重新准入，再核本地事实及项目可用性。本人删除后已暂停任务保留读取语义，active 且项目失效拒绝。Public17 未发行候选 Details 新增必需 `scheduling_state`，与业务 status 和 Agent 结果分开；旧 mutation ACK 原样，GET 不写 receipt/outbox，也不取旧 next 缓存。
+
+主方冻结639个非文档输入，实际 format/lint/typecheck/contract/architecture/build/default manifest 全过且无输入漂移：contract 692 PASS，architecture 35 PASS，默认1290 PASS/3原资源SKIP。新 current 行为有真实 owner PG/HTTP 证据：next 推进、原 ACK 重放、错误主体/在途身份变化、任务改动、deadline/断线、SQL锁等待取消和耗尽连接池晚到归还。受控 SessionAdmission 与 Scheduler HTTP fixture 不冒真实 IAM；另直接对固定 Scheduler `8a26c91aa24d1f48a760b6234ab1ed5855d20936` 源码验 paused weekly/monthly/once，4 schedules/4 receipts、0 occurrences/0 dispatches，子进程正常退出且自有测试库均清理。
+
+保留实际失败而不以重跑抹去：首轮完整 contract 690 PASS/2 FAIL 源于 runtime 过早解析无关测试 store 的 scheduled service，改为窄闭包延迟解析后原18 focused通过。下一轮 architecture 暴露 reader 越过唯一 generated 边界；decoder归回 control-client，未放宽 allowlist，72 focused通过。只依赖 timer 的预算路径有真实1项 RED，补同一 monotonic deadline 后4相关用例通过。四文件真实 PG/HTTP 曾229 PASS；最终源码重跑为228 PASS/1 FAIL：原 R280 post-SELECT-ACK cancellation 的 ROLLBACK 观察断言失败。该用例独立再跑1 PASS，不能据此称修复或确定为既存问题；原 Project 生产路径和该用例断言未改，取消时序仍待具名定位。R278 fixture仅将孤立 task UPDATE改为真实同事务暂停 helper，承接 task revision 与 command，原历史读取/回执断言保留。
+
+本片未提交，正常库/运行进程未加载候选，Web仍待固定 Public17 和页面配对；未做本片浏览器验收或宣称 Manus 布局已对齐。旧 BFF next 列/ACK成功投影退休、once 到期后的编辑/暂停/重新排期、Agent 定时 MCP 可信管理入口与完整执行链均未完成，沿原需求继续。模型、实际工具调用、扣费、CI与远端 PR 暂停；Root index/gitlink未改，既有无关修改保留。
+
+## 2026-10-18 多周期规则、存储和调度命令候选（未正常激活）
+
+沿d31455e工作树继续，未提交/发布。Public17.0.0／152 operations，canonical SHA256 `927061352ba9a257b59b86a2be1a744a013bbc3d5758137fe6e53a162654a18a`，局部旧block完整逆回16.2再串原历史链。新增独立calendar边界：weekly多星期、monthly多日期、once本地日期/IANA→冻结UTC；完整规则PATCH清旧选择，不再推断或接受anchor。canonical arrays/date/run_at、repo事务、outbox4及cron/run_at映射同步，锁序和revision/lease/fence保持。Temporal0.5.1及jsbi4.3.2固定；八份依赖manifest只由既有generator更新lock摘要，generated源码无差异。
+
+新输入6项、映射/冻结2项及契约先实际RED后实现；fresh真实PG从23514约束失败到规则切换、时区无关DATE、once未来检查/回放通过；原outbox资源文件已配对23 PASS。新增真实HTTP/PG验证周/月选择、跨subject404、服务重启后once原ACK回放；只控制Date时钟，不把它冒实际等待到点。退休请求在claim前400/零写，仍有效请求保持原终态；旧unknown ACK必须在正常切换前收敛。
+
+两次完整相关格式/lint/type/contract/architecture/build与默认原manifest通过，最后一次完整门为contract692 PASS、default1285 PASS/3原资源SKIP，635非文档输入停写一致。随后发现owner一次性timestamp去零序列化差异：loopback正控RED，改为完整instant身份比较，并保纳秒不同due拒绝；outbox4另拒绝会被Date归一化/截断的非canonical instant。最后两文件增量后，fresh build、正式格式/lint/type与151 focused PASS/0SKIP，636非文档/README输入停写一致；未把此前完整默认门冒增量后的再次全量门。
+
+真实源码Scheduler 8a26c91＋固定SDK/正式Delivery接通三类规则与原回执验证：4个paused定义、4receipt、0occurrence/dispatch，进程退出0且自有库清理。四个真实PG/HTTP相关资源文件首轮226 PASS/1 FAIL（R280 Project取消ACK时序）；未修改该生产逻辑或断言，基线d31455e同组合225 PASS，当前完整重跑227 PASS/0SKIP，不宣称已修复这项间歇问题。最后timestamp两文件修复单独通过上述151及真实Scheduler，不冒所有资源的最终停写全量重跑。完整资源证据仅Root ignored var/dev/bff-periods-20261018，自有基线归档/库/进程已回收。
+
+未改正常数据库、进程、任务开关或App消费者；SQL/API候选与正常16.2/旧anchor仍须正式配对。持续权威next投影、once耗尽后的暂停/普通编辑/重启用语义、App/Manus对照和Agent定时MCP可信管理/实际resolver仍OPEN，不因基础规则通过称完整自动化完成。模型/实际工具执行、扣费、CI及远端PR仍暂停；原正常知识文档dirty与ADR保留。
+
+## 2026-10-18 Scheduler 2.0 固定消费前置已验（未正常激活）
+
+沿基线1dbfd826固定Scheduler producer 8a26c91aa24d1f48a760b6234ab1ed5855d20936／2.0.0及完整digest，替换旧vendor并正规生成。当前GET与不可变写ACK分离；生成流程从唯一固定owner文档派生互斥trigger、required/closed与耗尽条件，不手改generated。current client保可信tenant/request ID、专用service token、no-store及资源绑定；caller取消贯穿Request/stream，完整纳秒instant比较不截断。
+
+原条件缺口与独审两项P2均实际RED→GREEN：两个trigger/缺trigger、非法current；请求发出后的取消及亚毫秒不等值。最终633非文档输入停写hash一致；Node22 format/lint/typecheck/contract/architecture/build均通过，contract691 PASS/0SKIP、默认原manifest仅限2workers为1276 PASS/3既有资源SKIP。首全门失败来自私有runner的umask077将测试0644文件收紧为0600，已实测077→600、022→644，恢复子进程正常mask后原18例及完整门通过；未改该测试或产品鉴权。
+
+固定SDK→独占fresh PG/源码Scheduler真实HTTP通过：current读取、tenant404隔离、错误服务凭据401、暂停once跨due后原ACK精确重放；1定义/1receipt/0occurrence/0dispatch。自有进程退出0且临时库已删除，不冒实际MCP/模型执行。独审P2关闭；完整BFF资源integration未运行，此前组合缺口不变。
+
+本片Public16.2/SQL/任务模型/outbox3不变，未在30s lease链盲加GET，未改正常库/重载正常服务或启任务。多星期/月内多日期/一次性本地日期、持续next投影、App配对与Agent定时MCP管理/可信执行仍待后继；模型、工具执行、扣费、CI及远端PR继续暂停。
+
+## 2026-10-18 自动化权威锚点当前读取（本地候选，未正常激活）
+
+沿56c262c补当前GET列表/详情的ScheduledTaskDetails，返回已存UTC recurrence_anchor_at，与nullable next_run_at独立；原写快照/schema/mapper完整保持，历史终态原样重放，不改通用幂等、数据库或回执。Public16.2／152 operations，SHA-256 `e4c1b3b1d327994dd5e903bfb3b3a075ded24446c0173a0f1c15a75cab92ae80`，新增读表示完整逆回16.1；Web固定消费/星期编辑尚未接，不冒正常页面完成。
+
+初版共用响应required字段虽测试通过，复核确认旧终态绕过mapper的P2；正常库仅只读计数15条成功旧ACK均缺anchor，未读出正文或修改。先改三面裁决，再用原weekly case及当前契约case复现RED2→GREEN2，收敛当前读/不可变ACK两个真实生命周期。独审13个停写非文档SHA匹配、复核P2关闭且无新增确定P0–P2。只新增一个契约case，原weekly/PG用例扩断言，没有新suite。
+
+最终Node22配置format/lint/type/build、contract691 PASS、architecture35 PASS、focused62 PASS均通过；默认原manifest全清单仅限2workers，1272 PASS／0 FAIL／3原资源SKIP。独占fresh canonical PG/HTTP原用例1 PASS／0 SKIP，覆盖原格式写ACK、当前列表/详情anchor、重启读及原样创建重放；Scheduler/Agent仅受控loopback，不冒正常调度或模型执行，自有库已清理。首完整contract一项旧版本字面已精确16.1→16.2；首默认与contract内部清dist/build重叠导致模块缺失，未改断言或缩范围，最终全部串行复验。13源码输入停写前后保持；原始收据仅Root ignored运行目录。
+
+没有改正常数据库/配置/登录/权限/积分或重载正常进程；模型/实际工具执行、扣费、CI、远端PR与Root gitlink均未操作。完整真实integration本片未跑，此前组合两失败仍OPEN；知识正常激活、记忆导入、其他周期及全产品/正常浏览器验收继续待办，不以本局部候选满足合并条件。
+
+## 2026-10-18 本人知识后端（候选已验；Web/正常库未激活）
+
+沿基线24dcf7d与前轮调度mixed继续，主方唯一writer，未提交/发布。本人知识与独立usage新增六正式候选operation：Public16.1.0/152，完整剥离新增块后逐字节恢复原Public16.0 SHA e15758fa…；旧Skills/MCP/个人资料wire、外部owner pin/generated、角色/凭据/依赖不变。正文500/500/2000，最多100有效项、全量字面查询；固定UUID＋CAS，删除清正文留tombstone防ABA，关闭不删知识，未知COMMIT只读核实。
+
+三设计面、canonical两表与readiness/原服务装配同步；input/HTTP/port/PG按职责拆分，无新服务/转发service/receipt/cursor/向量或模型。新功能初始真实HTTP404与预期列表不符RED后实现。独审发现并实测修复三项：chunked mutation被误拒、已退休请求仍有I/O、新operation未绑定正确wire schema；对应RED→GREEN和正式semantic变异复核关闭，无剩余确定P0/P1/P2反馈。不以静态审查替代测试。
+
+最终607源码/测试/契约/配置输入停写hash一致：正式format:check、lint、typecheck、contract:check、architecture、build均exit0；contract690 PASS/0SKIP（保原3warnings），architecture35 PASS，原default全清单仅限并发2：1271 PASS/0FAIL/3原资源SKIP。首完整门的新CHECK未具名和active版本断言仍16.0两类失败已分别改为具名约束、明确16.1 current断言，82项定向80PASS/2原SKIP后重跑完整门通过；旧版本及完整父逆未放宽。
+
+final fresh canonical PG/HTTP知识整文件6 PASS/0SKIP：可信主体隔离/输入拒绝零写、原文/字面查询、CAS竞争、删除不可复活、独立开关、99项时并发限额、真实chunkedPUT/DELETE及413、实际COMMIT后Proxy抛错的unknown恢复、INSERT ACK后abort回滚、真实advisory锁等待取消。unknown不是TCP ACK丢失；未冒正常IAM或进程重启矩阵。另以独立fresh库回归原Scheduler receipt/outbox两文件37 PASS/0SKIP。自有库均删除、残留0；无正常业务库、服务主动重载、模型/Agent/Tool/Billing、CI、远端或Rootgitlink操作。精确证据只在Root ignored var/dev/knowledge-20261018。
+
+后继：具名正常库additive演进/备份恢复、固定producer提交后Web正规消费及真实用户界面验收、可信Agent消费与记忆导入仍OPEN；不把后端候选称已应用到所有任务。完整真实integration没有重跑/宣称通过，前轮广组合两项时序/fixture失败仍保留，不以本次43个定向PASS抹掉。调度旧v2处置与monthly/once/持续next继续推进，聊天/项目后置；模型/扣费/CI继续暂停，PR等本轮功能收尾后再推进。
+
+## 2026-10-18 调度 callback 版本围栏（源码候选；正常激活未验）
+
+基线 `24dcf7d99a85ae620d279c2a6147e9237377c2e6`，主方唯一 writer，未提交。沿原 BFF ScheduledTask→Scheduler opaque callback→receipt→锁内 accept 接线：outgoing 带 frozen task_revision，缺失/非法 revision 在 receipt claim 前拒绝，首次及恢复 snapshot 均核原版本；现 accept 行锁/CAS继续承接读取后竞态。outbox schema_version2→3，不复用旧 key 改造 payload；无 public16/SQL/vendor/generated/依赖变化，无新服务/模型/扣费或正常进程主动重载。
+
+原回归真实 RED 四项（旧回调错误接纳、非法值进入claim、outbound缺版本、旧outbox版本）→focused23 PASS；恢复snapshot错版本追加实际 RED→GREEN。独立只读审查抓到业务集成暂停fixture错用旧revision，主方独占 fresh PG 复现1 FAIL后更新为当前revision暂停正控，并保旧revision拒绝断言，最终1 PASS。不为过旧fixture调换生产校验顺序。
+
+停写生产后完整 format:check/lint/typecheck/contract:check/test:architecture/build exit0，contract687 PASS、architecture35 PASS；原默认清单 concurrency2：1268 PASS/0 FAIL/3既有资源 SKIP，598 tracked验证输入hash稳定。之后唯一测试变动是 business-store.integration.mjs，该文件不在默认test/contract清单；补做其格式检查与真实PG新旧revision主路径1 PASS。最终真实PG按独占库再验原 Scheduler receipt/outbox两文件37 PASS/0 SKIP，未启动真实Agent/模型；自有库全部删除、余量0。证据仅Root ignored var/dev/schedule-revision-20261018。
+
+扩大到业务集成整文件的组合尝试为210 PASS/2 FAIL，**不称完整 integration 通过**：R280 Project status取消清理用例在组合中失败；在原HEAD独立候选与当前源码各自fresh隔离均1 PASS，尚未定位组合/时序原因，不定性为历史产品缺陷。另一receiver Agent调用计数2!=1，按文件fresh隔离重跑37 PASS；跨文件共享fixture的干扰原因仍须核实，不能以重跑抹掉失败。项目业务按用户顺序后置，完整owner/PR验收仍OPEN。
+
+激活停止线：未核正常库旧v2 command/已登记schedule。旧未终态v2 claim后解析失败可阻挡同task后继并影响同批投递，仅正式mutation产生新revision不足以迁移；先具名owner处置到终态再重新登记/核回执，未完成不激活本候选、不改共享行、不清receipt。monthly/once、anchor回投/持续next、知识CRUD/记忆导入及完整功能页仍未完成。本片不冒整链或正常调度闭环；模型/扣费/CI持续暂停，现PR仅在本轮完整收尾后推进。
+
+## Provider 示例内容校验（2026-10-17，局部源码修复）
+
+基线 a804b0f。`mcp-provider-admin-input.ts` 原将示例套入 trim-equality 标识校验，拒绝 owner/canonical 已允许的首尾空白；仅改 example_prompts 的专用校验，保持非空白、1000 codepoints、合法 Unicode 和最多10项，保原字符串及顺序/重复。其他身份、URL、scope、CAS/权限/命令恢复不变；无 wire、pin、SQL 或依赖变化。
+
+现 HTTP suite 的合法更新真实 RED400→GREEN200，回包/owner入参保 LF/CRLF/首尾空白/重复和1000😀；非法空白、孤立 surrogate、1001😀、11项均400且零 owner 调用。focused7通过；Node22 lint/typecheck/build/format:check/contract:check/architecture/default均0，contract687 PASS、architecture35 PASS、default1266 PASS/3既有资源SKIP（原 manifest 全文件，仅限2workers）。未跑真实 PG/Redis集成，未涉及事务或 Schema。
+
+正常后台沿旧 BFF 已验 LF/重复创建/改名/回读/停用；新首尾空白 parser 尚未重启正常 BFF，不冒正常已激活。Skills F/6仅草稿，E/5与已安装版本未修改；无模型/Tool/Billing调用、配置/角色/积分或远端/Root gitlink变化。完整Skills/MCP、来源caller、真实执行/资金与PR聚合仍 OPEN。
+
+## 项目 Skills 安装 API 已接线（2026-10-17，本地源码）
+
+BFF 固定 Platform `5ec8538`，Public15.1.0／145 operations 接入项目安装、显式更新、启停、移除、详情与列表。复用现安装 route/client/digest/mapper（统一命名 skill-installation-*），无新表、依赖或兼容入口。项目身份取当前 BFF 项目资格，调用前后复核；owner 回包绑定项目、请求资源与操作状态，错资源/错操作/未知 wire 不作为成功或可重试依赖故障。public skill.list 的项目读取已切正式 Project RPC。
+
+原 HTTP 旅程内补回归，错资源实测 RED→GREEN；Node22 完整 lint/typecheck/contract:check/test:architecture/test/build/format:check 通过，contract686 PASS、default1263 PASS／3 原资源 SKIP、architecture35 PASS，测试仅限2 workers但未缩文件列表。首次旧 HTTP pin fixture 两失败已更新当前 commit 字面，原摘要/断言保留；最终源61/61冻结一致，独立只读复核无确定P0–P2。未跑真实PG/Redis或正常浏览器，此片无SQL变化；正常服务/配置/权限/积分及模型/Tool/Billing未动。
+
+下一步配对退休 Platform Personal 项目读取，再替换项目名称开关和会话缺省／显式[]选择，接App/Agent精确版本冻结。本次只交API接线，不代表项目功能、正常组合或整体目标完成；远端CI/push/PR/merge及Root index/gitlink继续暂停。
+
+## S2 来源事实消费（源码候选，2026-10-17）
+
+沿 a7dd8e7 精确固定 Platform e172838 的 acquisition/RPC/HTTP6.1.0/profile，当前公开 artifact15.0.0（仍/v1/139 operations）仅将 skill.list 的 owner_type 扩为八类；网站与分享维持真实归属五类。hub/unknown/direct 据正式安装事实投影，坏 enum/绑定拒绝；没有 Device 发现或 OpenApp 身份 producer。只替换原 current RPC/HTTP vendor，其他仍用政策 pin 保留；acquisition 不进入全部个人 ACK/详情字段。
+
+固定 hey-api 0.99 将 owner if/then 生成 unknown intersection并遗漏条件，实际 RED 后由原生成流程精确补齐 installed=true 必须带 acquisition_kind；没有手改 generated 或放宽 owner 条件。随后独审 P2 指出 generated 会先剥离嵌套未知 product 字段，原 HTTP 负控复现；改为 preprocess 原始严格 product，再走 generated acquisition/顶层 strict，实际 RED→GREEN。原 R345 源码字符串断言随重构退役，其风险由同一既有真实 HTTP shape/UTC/examples/额外字段矩阵承接，不为了消除失败删行为负控。86 相关测试、typecheck/build 通过。首完整 contract 为678 PASS/4 FAIL，均回溯到 local-import 成功 fixture 缺新 acquisition 字段；显式补 DIRECT 后该文件与原 HTTP 矩阵46 PASS，不改业务或删拒绝断言。publisher 负控细化为合法 personal/first_party/iam 正向基线，仅加嵌套未知字段，避免同时依赖配对错误。最终48/48非文档冻结匹配，增量只读复核确认 P2 闭环、无新增确定 P0–P2。
+
+停写后主方 Node22 完整 format:check/lint/typecheck、contract:check 全链、默认 test、test:architecture 和 build 均 exit0。contract **682 PASS / 0 SKIP / 55.33s**，默认 **1259 PASS / 0 FAIL / 3 既有资源 SKIP / 57.45s**，architecture **35 PASS / 0 SKIP**；contract/default 使用原 manifest 全部文件，仅显式限2workers，没有省略文件或永久改 package脚本。两生成器 --check 包含两轮 byte-identical，公开139 operations、14.8完整inverse保持；原3项lint warnings仍在。不新建suite，不重复3k项Web测试。canonical SQL、lockfile与六文档原基线suffix逐字保留；未运行真实PG/Redis完整组合，无Schema变化不冒真实事务证明。
+
+本片无 SQL/Schema/lockfile、配置/登录/权限/积分、正常进程或模型/Tool/Billing 变化；HTTP/Connect 为真实 loopback、owner/IAM 受控，不冒正常应用数据库配对或完整用户验收。App/Admin 固定消费与项目选择/exact installation/Agent Run冻结仍未交，正常 BFF 行为仍 b4292b6，正常 Platform 仍行为0581429。远端 CI/push/PR/merge 与 Root index/gitlink继续暂停，完整目标保持进行中。
+
+## 2026-10-16 skill.list 核心能力复核（文档纠正）
+
+沿b4292b6重新核官方v2文档/机器源与当前公开canonical及聚合/路由；没有更改生产源码。七个字段及双方均未声明item required已相等；来源词表尚缺hub/device/unknown，不能用旧五类记录宣称完整对齐。包含停用安装且GET不启用、项目资格返回前重核、真实creator/时间与stable series ID已有现实现和受控证据；任务选择/项目默认与Agent pin端到端仍未闭环。
+
+重点区分官方caller矩阵与现有Kokoro fresh human admission：原APIKey/OAuth资格OPEN并未因网页可登录而关闭，后继应由IAM可信caller事实与owner资格正式承接，禁止body/header自报或服务凭据替代人类。网站RPC与公开skill.list是不同现行契约，不按名称任意删别名。详见API_CONTRACT本日前缀；它修正参考/current/target的边界，不发行新的枚举或临时认证入口。
+
+现有 `node --import tsx --test --test-concurrency=2 test/contract/skill-specification-http.test.mjs`：**64 PASS / 0 FAIL / 0 SKIP / 1.710s**，无新增测试；HTTP为真实loopback但owner/IAM受控，不冒真实资源/普通账号完整验收。第一次本地元数据比较未解析官方items.$ref而停止，未收集产品测试/改源码；改为显式解析官方Skill组件后字段比较完成，不把脚本启动错误当产品缺陷。此为文档任务，仅diff及新增链接检查，不重复构建/完整业务门。无新服务、数据库/权限/资金/模型/远端/Rootgitlink变动，完整目标保持未完成。
+
+## 2026-10-16 Skill Share 创建/Resolve 活动版本资格（本地交付）
+
+基线c6bb5d3。正常产品已证明本人withdrawn revision2仍Inspect200，原Create201/Resolve200却Summary404；不是Web需停认证或允许撤回摘要。创建是BFF-owned locator，不新增资源ACL，每次owner仍按当前调用者判断。原route只用允许本人预览的inspect作share资格，遗漏已存在的exact active/valid metadata约束。
+
+主方唯一writer沿原route抽取同文件readSummary（既有strict schema/source绑定/取消），Create在持久化前及回执前、Resolve重新读取，保原inspect与creator DELETE。不换current/不fallback、不改Schema/wire/owner/鉴权或增加依赖。原HTTP同一用例改为inspect可成功但summary拒绝nonactive，实际RED为withdrawn resolve200!=404；扩四种inactive/已有locator/缺依赖/坏UID或额外字段/迟到取消/提交后撤回，仍原4case。三相关HTTP文件73PASS，manifest lint/type通过；该仓没有eslint，误调用未启动检查，随后使用正式manifest入口，无安装或降门。
+
+独立只读复核无确定新增P0–P2。曾推演inspect忽略取消导致后续create，但追到正式Connect client后确认await后已有abort guard，撤销该生产P2判断，不用缺保障的double冒真实缺陷。取消回归覆盖summary的延迟返回；原caller identity、返回前准入与正式client预算保持。预检失败零create；创建已提交后撤回只阻止误导201，不能声称BFF locator回滚或自动revoke。SQL/真实PG未改，本片先按最低充分层HTTP资格与现repo事务证据分工，不把mock当真实资源集成。
+
+停写冻结五路径后，主方 Node22 完整 format:check、lint、typecheck、contract:check、test:architecture、默认 test 和 build 均 exit 0：contract 678 PASS / 0 SKIP、architecture 36 PASS / 0 SKIP，默认 test 原 manifest 清单以 concurrency=2 执行，1257 PASS / 0 FAIL / 3 既有资源 SKIP（61.40s，测试本体57.46s）。独立复核冻结5/5 SHA一致、无新增确定P0–P2。没有新增 suite/case，也未运行全量真实 PostgreSQL/Redis 集成；HTTP double 不冒充真实 owner 事务。
+
+正常受管 BFF 通过原管理器 SIGTERM 后加载同字节源码，旧三进程退出，管理器参数/环境与已指纹配置文件原字节不变；App/Platform 未重启，三服务健康200。正常3310产品会话实测：原 withdrawn revision2 的 Share POST404 skill_not_found，UI显示失败；原旧链接 Resolve404。active 样本 Share201并复用既有同一 locator，随后 Resolve/Summary/package 全200，source_ref/decimal revision 精确一致，真实 SKILL.md 可读、原已安装状态保留。未调用启用/安装/撤销，未对正常库计数或声称正常零写；拒绝零create来自HTTP回归证据，clipboard桥仍未证明。
+
+前端cd78cb9另已真实验 active 分享在390×480中实际 scrollTop324，自然120s重核后仍324、同Dialog；非默认嵌套文件仍仅受控证据。临时tab49关闭，Network关闭，无新增常驻服务，测试/临时预览端口已释放。完整Skills/MCP/Admin/手册及远端聚合继续OPEN，远端CI/push/PR/merge与Rootindex/gitlink保持暂停。
+
+## SKILLS-ADMIN：discard 当前准入与重放负控（2026-10-16；测试增量）
+
+基线 `d176e3d`，仅扩现有 `test/skill-admin-http.test.mjs` 的 machine-credential 拒绝用例，无生产源码、公开契约、Schema、依赖或凭据变化。保留原 root GET/POST，加入 discard 和 admitted tenant 错配；session/tenant 拒绝均零 owner 调用。action 用例先成功 discard，再撤销 fresh action，以相同 key/body/CAS 再请求，得到 403 且 owner 调用仍只有首次一次，确认服务身份与已成功命令都不替代当前人类 action。授权成功路径另核 native discard operation、可信 tenant/subject 与原请求成员。
+
+主方 Node22：focused 文件 **15 PASS / 0 SKIP**；正常完整默认入口以相同 manifest 文件清单、显式 test-concurrency=2 执行，**1257 PASS / 0 FAIL / 3 既有资源 SKIP / 57.77s**，lint/typecheck/format:check/build 均 exit 0。未新增 suite，只增加一个 tenant 参数风险；未重新生成/发行 contract 或宣称实际 IAM 撤权、真实 owner 数据事务及正常 Admin 页面全部通过。该 HTTP 为真实 loopback listener，session/action/owner 为受控替身；真实事务由 Platform 独占 PostgreSQL receipt 文件 47 PASS 独立证明，各层证据不互相冒充。
+
+本片无正常服务重启、账号/角色/积分/模型请求或共享库写入。后台新样本的终态删除仍待单独确认；远端 CI/push/PR/merge 与 Root gitlink 不变。
+
+## AUTH-P3：BFF 全 Platform 用途移除内部机器 OAuth（源码候选，2026-10-16）
+
+沿基线 96089d8，本仓固定 Platform `9be81465d487be2499a68a76664c14b73c16024b` 的独立 auth profile 1.0.0、provenance 与 digest；当前 Buf module 与唯一 Connect vendor 一致。六用途 catalog/projection/skills_admin/mcp_personal/mcp_admin/custom_api_personal 都使用直接服务凭据；删除 Catalog/Skills Admin 四个 OAuth parser/token/cache source 及 retire。旧专属环境变量拒绝且无 alias，新路径见 `.env.local.example`。每次仍做 Product Session/fresh human action 检查；机器身份不替代权限，用户 Bearer 不传 owner。
+
+公开14.8/139 operations、HTTP6 独立 pin、Proto/两套 generated、canonical SQL 与 lockfile 原字节不变；build 先清理候选 dist，避免已删除 OAuth 入口残留。旧 OAuth-only 测试随已删实现退役，其文件权限/轮换/取消/close 风险由现直接凭据套件承接；新增真实 factory loopback 验五 client 精确 purpose/零机器 IAM，本地导入四正式路由亦为 direct/零 mint。session 与 fresh admin action 拒绝时 GET/POST 均零 owner 调用。malformed private JSON 错误原会带入输入片段，实际 RED 后改通用错误、不挂 cause。
+
+最终 Node22 全门：typecheck/lint/build 通过；contract:check 668 PASS/0 SKIP（保留原3 warnings）、默认 test 1247 PASS/0 FAIL/3 原资源 SKIP；相关格式/diff检查通过。只读审查指出失效 Buf 路径 P2，实际 RED→修正 canonical module/生成器输入检查→重生 manifest→5 pin tests PASS，已复核关闭。最初两项 local-import 测试仍断言机器 IAM 配置/旧 OAuth fixture，迁为 direct fixture并保原四路由/取消/10秒预算，不删风险断言。日志仅本地 `/private/tmp/kokoro-authp3-bff-*`。
+
+源码候选不等正常配对。正常 physical 仍保持 96089d8/Platform e157011，未重启或改私有凭据/用户登录配置；新独立服务凭据部署与配对启用已另行请求确认。没有数据库/积分/模型写入，未操作远端 CI/push/PR/merge 或 Root gitlink。真实 Admin 运营生命周期、完整执行链、MC-01/System/Agent/Billing 仍为后继。
+
+## SKILLS-UPDATE 正常产品组合后补验收（2026-10-16）
+
+业务源码 BFF `615b16a`、Platform `11cb760`、App `d40c839` 已在用户批准的本地源切换后完成正常 Product Session 的自有安装 v1→v2。Web 显式确认前无写，确认后唯一 update 200、同安装 GET/列表 GET 200；独立正常登录回读确认同 installation/series/installed_at/enabled=true、精确原 offered target、更新入口消失且刷新保持。无 Remove/Install、直库写、模型调用或充值，积分/held/流水内容未变。
+
+认证边界仍有 ADR-035 后继：个人安装写默认 CatalogTokenSource、Skills Admin 默认 SkillAdminTokenSource 仍是内部 IAM OAuth；本次业务成功不证明这两条链已改 direct service credentials。人类 session/action IAM 检查继续保留，后继按 ADR-035 收敛全部 Platform 用途，不新增兼容 fallback。
+
+本轮仅该操作 happy path 和新版示例交接，不把健康检查、受控 RPC loopback、未知 ACK/并发单元或隔离 PG 扩成正常浏览器全故障验收；Admin 消费基线及正式 Agent/Billing 执行仍有后继。未改 canonical/machine pin/SQL/配置/凭据，远程 CI/push/PR/merge 与 Root gitlink 保持暂停。下节“未正常激活”保留为前一源码阶段记录，由本节后补事实续接。
+
+## SKILLS-UPDATE U3：显式更新 BFF 源码已接，App/正常产品验收未完成（2026-10-16）
+
+组合基线 `d845164` 保留当前 MCP/Custom API 生命周期与 direct service credential；本地新增 public 14.8.0 的 `POST /v1/skill-installations/{installation_id}/update`（139 operations）。Connect 唯一 current pin 为 Platform `11cb7604a5385047fd872cedc8a55273eae59043`，从精确 Git publication 复制 Proto/descriptor/update profile/provenance 并正规生成；原 current Connect vendor 被替换，不留双读。独立 HTTP projection `6b4c9db`/6.0 pin、SQL/schema、依赖与运行配置保持原字节。
+
+更新每次（含重放）fresh session/tenant + IAM install action；strict UTF-8 两 pin 输入拒重复键/未知身份/尾换行/null。command ID 绑定 operation/可信本人/安装/key，digest 绑定两 pin，未知重放仍用原 A→B/key。同 ID、精确目标、installed=true、upgraded/event_id、无 unknown wire 是 ACK 出口条件，enabled=false 不被自动打开。无 BFF receipt/数据 writer、Remove→Install、自动重试或运行时协议 fallback。
+
+审查补收旧共享 reader 的实际缺口：partial JSON 停住时旧 iterator 不再收到 chunk，超过原绝对预算仍等；新增实际 listener 先 RED（直到客户端 1 秒兜底仍无返回），修为按原单调预算/取消清理 reader，update 到期返回 typed 504/no-store/Connection:close，未完成请求不再 keep-alive。最终用例在回复后等待自然 close、不由客户端主动 destroy，owner 零调用；413 排空/先回复和其它 Skills 正常输入保持。
+
+主方 Node22 本地候选验收：lint/typecheck/build、完整 contract:check 均 exit0（contract 661 PASS/0 SKIP；3 项既存 lint warnings），默认 test **1247 PASS/0 FAIL/3 原资源 SKIP**；具名 input/HTTP/pin 32 PASS。官方 generated binary Connect loopback验证 exact request/credential/FQ method、原 key/pin 重放、改 pin 同 key 409、disabled 保持与错误 ACK 拒绝；owner 独立 digest fixture一致。真实 IAM/Platform/Storage/PG 正常组合、本地当前账号 A→B/刷新和 App 显式更新仍未验；loopback 不是 owner 事务证明，后者见 Platform 的独占 PG 证据。
+
+正常 physical BFF/Platform/App 本轮均未重启、切分支或修改配置，没有模型/资金调用、充值、远端 CI/PR/push/merge 或 Root gitlink；保留原 PR。下一步为 App 固定 BFF contract、同版本更新/试用意图与正常产品旅程。MC-01 的连接版本切换已获用户明确确认，沿原 System/Agent 计划实施；正式资金许可前不发送模型请求。完整 Skills/Admin/MCP 目标仍未完成。
+
+
 ## SET49完整隔离资源门终态
 
 正式合并artifact commit 30df0c428c592ed2710d62035ceb5855d20c7506；public16.0.0/146 digest b4e91483e425fdcc9547eac8bcda554273cbee0863ccb0ddfb185fae18e4e267，Billing唯一pin cd92c728d8f658f54b254d5cbfd28156ca426dc1不变。完整fresh canonical integration实际321PASS/11FAIL/332，自有四归档用例全部PASS；完整资源门FAILED。失败包含既往Project拒绝矩阵、upload503/502与原生SQL/schema边界，另terminal/deletion race此次failureClaim为undefined触发tenantId TypeError；该test及outbox repository与合并前源码字节相同，但不将本轮失败冒旧通过或已修复。未修改任何失败oracle，未宣正常IAM/模型旅程。自有fixture精确清理后PG数据库/Redis库存恢复，正常服务未动。证据追加提交不改变已发行public字节或消费者pin。
@@ -1681,3 +1912,10 @@ Skill record 对应值的 `UNSPECIFIED`、`INTENT` 及未知值 fail closed。Fi
 基线`e380066`。BFF现候选保持参考DownloadSkill的series-current语义，并新增三条browser-private exact准备动作；closed qualifier区分catalog current、installation、managed version与share，统一现60秒/128容量opaque handle及字节spool前后资格确认。private policy由`skill-download.policy.ts`唯一生成；public/generated/Platform contract及SQL不变。Node22候选工作树实际门为focused 87 PASS、contract 715 PASS、默认1311 PASS/0 FAIL/3 SKIP，format/typecheck/lint/build均exit 0；基线隔离真HTTP对installation准备动作返回404，证明新行为原先不存在。以上仍待Root独审、正式提交、服务重载与Web消费，不能宣称正常浏览器下载完成。
 
 <!-- R357-BFF-EXACT-SKILL-DOWNLOAD-CURRENT-END -->
+
+
+## Connector command 恢复错误消费候选（2026-10-16，未正常启用）
+
+Platform Connect 固定 ac56a1f8e9491e3e8383bff833b0f9f771fae3b1 receipt error profile/provenance并正规生成，旧vendor删除；Public14.8/139、Proto与HTTP独立pin未变。窄错误mapper/私有恢复policy区分原receipt状态和MCP原生OAuth三项typed原因，拒绝未知/重复/错码/混合/read marker；不按message猜、不自动重放或新key。原server-response错误export删除并移至对应client错误边界，无alias。code-first profile正规发布为只读JSON，App尚未消费，正常服务无watch/未重启。
+
+原unknown被误报generic retryable及原生OAuth typed原因被丢失均实际HTTP RED后修复；真实两个HTTP hop使用production Connect client确认expired不被旧typed-detail guard误报502。HTTP/SDK是真实传输，owner/凭据/IAM仍为受控fixture，不冒真实receipt DB、正常用户或第三方授权。完整门禁、独审与最终commit由Root有效计划收口。

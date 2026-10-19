@@ -1531,6 +1531,7 @@ integrationTest("R215 Message scope churn shares one deadline across four real a
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          selected_skill_source_refs: [],
           content: "R215 scope churn",
           model: "r215-model",
           project_ref: projectP,
@@ -1963,8 +1964,8 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     assert.equal(persistedSelection.rows[0].payload.schema_version, 2)
     assert.deepEqual(persistedSelection.rows[0].payload.launch.selected_skill_source_refs, selectedBody.selected_skill_source_refs)
     const explicitEmptyReplay = await send("first-turn", titleSource, conversationId, { selected_skill_source_refs: [] })
-    assert.equal(explicitEmptyReplay.status, 202)
-    assert.deepEqual((await explicitEmptyReplay.json()).data, receipt)
+    assert.equal(explicitEmptyReplay.status, 409)
+    assert.equal((await explicitEmptyReplay.json()).error.code, "idempotency_conflict")
 
     const rollbackId = `conv_${randomUUID()}`
     const rollbackRunId = `run_${randomUUID()}`
@@ -4662,7 +4663,7 @@ integrationTest(
         const response = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
           method: "POST",
           headers: { ...identity, "idempotency-key": key, "content-type": "application/json" },
-          body: JSON.stringify({ content: `R149 ${key}`, project_ref: projectRef }),
+          body: JSON.stringify({ selected_skill_source_refs: [], content: `R149 ${key}`, project_ref: projectRef }),
           signal: AbortSignal.timeout(9000),
         })
         return { response, body: await response.json() }
@@ -5168,7 +5169,7 @@ integrationTest("R190 omitted Message scope serializes with Move and client-crea
       const response = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
         method: "POST",
         headers: { ...identity, "idempotency-key": key, "content-type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ selected_skill_source_refs: [], content }),
         signal: AbortSignal.timeout(12_000),
       })
       return { response, body: await response.json() }
@@ -5330,6 +5331,128 @@ integrationTest("R190 omitted Message scope serializes with Move and client-crea
         cause: testError ?? cleanupErrors[0],
       })
     }
+  }
+})
+
+integrationTest("project Skill defaults freeze exact message refs, reject concurrent changes and do not replay tombstones", { timeout: 20000 }, async () => {
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const store = new PostgresBffRepositories(postgresUrl, redisUrl)
+  const tenant = `selection_${randomUUID()}`,
+    subject = "selection-owner",
+    scope = { tenantId: tenant, subjectId: subject },
+    signal = new AbortController().signal
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    const project = await store.services.projects.create(scope, "Selection test", "")
+    const other = await store.services.projects.create(scope, "Other project", "")
+    const save = (ids, key) => store.services.projects.replaceSkillSelection(scope, project.id, ids, key, signal)
+    assert.equal((await save(["installation_a"], "first-default")).kind, "replaced")
+    assert.equal((await save(["installation_b"], "second-default")).kind, "replaced")
+    assert.deepEqual((await save(["installation_a"], "first-default")).receipt.data.installation_ids, ["installation_a"])
+    assert.deepEqual((await store.services.projects.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
+    assert.equal((await save(["installation_c"], "first-default")).kind, "conflict")
+    assert.equal(await store.services.projects.skillSelection({ ...scope, subjectId: "other-owner" }, project.id), null)
+    const fault = `selection_fault_${randomUUID().replaceAll("-", "")}`
+    const faultScope = JSON.stringify([tenant, subject, "project.skill-selection:v1", project.id, "rollback-default"])
+    await pool.query(`CREATE FUNCTION ${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      IF NEW.scope = '${faultScope.replaceAll("'", "''")}' THEN RAISE EXCEPTION 'selection_receipt_failure'; END IF;
+      RETURN NEW; END $$`)
+    try {
+      await pool.query(`CREATE TRIGGER ${fault} BEFORE INSERT ON bff_idempotency_receipt FOR EACH ROW EXECUTE FUNCTION ${fault}()`)
+      await assert.rejects(save(["installation_failed"], "rollback-default"), /selection_receipt_failure/)
+      assert.deepEqual((await store.services.projects.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
+      assert.equal((await pool.query("SELECT 1 FROM bff_idempotency_receipt WHERE scope=$1", [faultScope])).rowCount, 0)
+    } finally {
+      await pool.query(`DROP TRIGGER IF EXISTS ${fault} ON bff_idempotency_receipt`)
+      await pool.query(`DROP FUNCTION ${fault}()`)
+    }
+    const input = {
+      tenantId: tenant,
+      subjectId: subject,
+      actorId: subject,
+      conversationId: `conv_${randomUUID()}`,
+      projectRef: project.id,
+      requestId: "selection-turn",
+      idempotencyKey: "turn",
+      content: "hello",
+    }
+    let resolutions = 0
+    const resolver = async (id, ids) => {
+      resolutions++
+      assert.equal(id, project.id)
+      assert.deepEqual(ids, ["installation_b"])
+      return ["skill:version_b"]
+    }
+    const receipt = await store.services.chatTurns.submit(input, resolver)
+    assert.ok(receipt)
+    const frozen = await pool.query("SELECT selected_skill_source_refs FROM bff_message WHERE message_id=$1", [receipt.user_message_id])
+    assert.deepEqual(frozen.rows[0].selected_skill_source_refs, ["skill:version_b"])
+    const dispatched = await pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [
+      tenant,
+      input.conversationId,
+    ])
+    assert.deepEqual(dispatched.rows[0].payload.launch.selected_skill_source_refs, ["skill:version_b"])
+    await save(["installation_c"], "changed-default")
+    assert.deepEqual(
+      await store.services.chatTurns.submit(input, async () => {
+        throw Error("replay must not resolve current defaults")
+      }),
+      receipt,
+    )
+    assert.equal(resolutions, 1)
+    await assert.rejects(store.services.chatTurns.submit({ ...input, selectedSkillSourceRefs: [] }), /CHAT_TURN_IDEMPOTENCY_CONFLICT/)
+    const empty = await store.services.chatTurns.submit({ ...input, idempotencyKey: "explicit-empty", selectedSkillSourceRefs: [] }, async () => {
+      throw Error("explicit empty must not inherit")
+    })
+    assert.deepEqual(
+      (await pool.query("SELECT selected_skill_source_refs FROM bff_message WHERE message_id=$1", [empty.user_message_id])).rows[0].selected_skill_source_refs,
+      [],
+    )
+    const raced = { ...input, conversationId: `conv_${randomUUID()}`, idempotencyKey: "defaults-race" }
+    await assert.rejects(
+      store.services.chatTurns.submit(raced, async () => {
+        await save([], "clear-during-resolve")
+        return ["skill:version_c"]
+      }),
+      /CHAT_SKILL_SELECTION_CHANGED/,
+    )
+    assert.equal((await pool.query("SELECT 1 FROM bff_conversation WHERE conversation_id=$1", [raced.conversationId])).rowCount, 0)
+    await save(["installation_m"], "move-default")
+    const movedId = `conv_${randomUUID()}`
+    await pool.query("INSERT INTO bff_conversation(conversation_id,tenant_id,owner_id,project_ref,title,status) VALUES($1,$2,$3,$4,'move-race','active')", [
+      movedId,
+      tenant,
+      subject,
+      project.id,
+    ])
+    await assert.rejects(
+      store.services.chatTurns.submit({ ...input, conversationId: movedId, idempotencyKey: "move-race" }, async () => {
+        const moved = await store.services.chat.moveConversation(
+          { requestId: "selection-move", identity: { namespace: tenant, userId: subject } },
+          movedId,
+          other.id,
+          "move-key",
+          signal,
+        )
+        assert.equal(moved.kind, "moved")
+        return ["skill:version_m"]
+      }),
+      /CHAT_SKILL_SELECTION_CHANGED/,
+    )
+    assert.equal((await pool.query("SELECT 1 FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2", [tenant, movedId])).rowCount, 0)
+    assert.equal(await store.services.chat.deleteConversation(tenant, subject, input.conversationId, "delete-selection", project.id), true)
+    const before = (await pool.query("SELECT count(*)::int AS n FROM bff_message WHERE tenant_id=$1", [tenant])).rows[0].n
+    assert.equal(
+      await store.services.chatTurns.submit(input, async () => {
+        throw Error("deleted conversation must not resolve")
+      }),
+      null,
+    )
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM bff_message WHERE tenant_id=$1", [tenant])).rows[0].n, before)
+  } finally {
+    await store.close()
+    await pool.end()
   }
 })
 

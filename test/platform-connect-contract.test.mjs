@@ -36,19 +36,37 @@ async function sourceBytes() {
 }
 
 test("Platform consumer pins one current v1 owner contract bundle", async () => {
+  assert.deepEqual(JSON.parse(await requiredFile("buf.platform.json")), {
+    version: "v2",
+    modules: [{ path: `contract/vendor/kokoro-platform/${ownerCommit}/proto` }],
+  })
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-capability",
     repository_commit: ownerCommit,
     package_name: "kokoro.platform.v1",
     sources: Object.entries(sources).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
-    artifacts: ["execution-operations/custom-api-v1.json", "execution-operations/mcp-private-server-v1.json", "descriptor/platform-v1.binpb"].map((file) => ({
+    artifacts: [
+      "errors/command-receipt-v1.json",
+      "auth/bff-service-auth-v1.json",
+      "execution-operations/skill-installation-update-v1.json",
+      "execution-operations/custom-api-v1.json",
+      "execution-operations/mcp-private-server-v1.json",
+      "descriptor/platform-v1.binpb",
+      "execution-operations/skill-acquisition-v1.json",
+      "execution-operations/project-skill-installation-v1.json",
+      "openapi/platform-http.openapi.json",
+      "mcp-package-admin/v1/profile.json",
+      "mcp-package-admin/v1/request-vectors.json",
+      "descriptor/mcp-package-admin-v1.binpb",
+    ].map((file) => ({
       path: `contract/${file}`,
       sha256: artifacts[file],
     })),
     provenance: { path: "contract/provenance.json", sha256: artifacts["provenance.json"], combined_sha256: combinedSha256 },
     generated: ownerGenerated,
   })
+  assert.equal(manifest.owner.repository_commit, "fa5c5e53151b3c72145b680a3ee4a45d92c17ec7")
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.lockfile_sha256, sha256(await requiredFile("pnpm-lock.yaml")))
   for (const [file, bytes] of Object.entries(await sourceBytes())) assert.equal(sha256(bytes), sources[file])
@@ -80,11 +98,20 @@ test("Platform generator rejects input, artifact, provenance and vendor-layout d
   assert.doesNotThrow(() => assertArtifactDigests(artifactBytes))
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, extra: Buffer.from("") }), /artifact allowlist/u)
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, "execution-operations/mcp-private-server-v1.json": Buffer.from("{}") }), /artifact digest/u)
+  assert.throws(() => assertArtifactDigests({ ...artifactBytes, "auth/bff-service-auth-v1.json": Buffer.from("{}") }), /artifact digest/u)
+  assert.throws(() => assertArtifactDigests({ ...artifactBytes, "errors/command-receipt-v1.json": Buffer.from("{}") }), /artifact digest/u)
+  assert.throws(() => assertArtifactDigests({ ...artifactBytes, "mcp-package-admin/v1/profile.json": Buffer.from("{}") }), /artifact digest/u)
+  assert.throws(() => assertArtifactDigests({ ...artifactBytes, "execution-operations/skill-acquisition-v1.json": Buffer.from("{}") }), /artifact digest/u)
   assert.doesNotThrow(() =>
     assertVendorLayout({
       directories: [
+        "auth",
         "descriptor",
+        "errors",
         "execution-operations",
+        "mcp-package-admin",
+        "mcp-package-admin/v1",
+        "openapi",
         "proto",
         "proto/kokoro",
         "proto/kokoro/common",
@@ -101,13 +128,25 @@ test("Platform generator rejects input, artifact, provenance and vendor-layout d
   assert.doesNotThrow(() =>
     assertGeneratedTree({
       directories: ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1", "kokoro/storage", "kokoro/storage/v3"],
-      files: ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"],
+      files: [
+        "command-receipt-errors.ts",
+        "kokoro/common/v1/common_pb.ts",
+        "kokoro/platform/v1/mcp_package_admin_pb.ts",
+        "kokoro/platform/v1/platform_runtime_pb.ts",
+        "kokoro/storage/v3/storage_pb.ts",
+      ],
     }),
   )
 })
 
 test("one generated client exposes Skills, private MCP v1 and provider administration", async () => {
   const generated = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { McpPackageAdminService } = await import("../dist/generated/platform-connect/kokoro/platform/v1/mcp_package_admin_pb.js")
+  assert.deepEqual(
+    McpPackageAdminService.methods.map((method) => method.name),
+    ["BeginMcpPackageUpload", "CompleteMcpPackageUpload", "AbortMcpPackageUpload", "GetMcpPackageUploadStatus", "PublishMcpPackage"],
+  )
+
   for (const [service, methods] of [
     ["SkillCatalogService", ["createSkillDraft", "publishSkill"]],
     [

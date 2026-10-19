@@ -931,7 +931,7 @@ test("private URL MCP maps typed owner business reasons to stable 412", async ()
     })
     assert.equal(response.status, 412)
     assert.deepEqual((await response.json()).error, {
-      code: "mcp_personal_precondition_failed",
+      code: "mcp_personal_needs_client",
       message: "Personal MCP request failed",
       retryable: false,
     })
@@ -982,6 +982,142 @@ test("A3 OAuth lifecycle rejects callback ambiguity and command keys before Plat
       assert.equal(response.status, 400)
     }
     assert.equal(calls, 0)
+  } finally {
+    await f.close()
+  }
+})
+
+test("private MCP preserves published receipt states rather than retrying or exposing owner metadata", async () => {
+  const { Code, ConnectError } = await import("@connectrpc/connect")
+  let calls = 0,
+    failure
+  const f = await fixture(true, {
+    mcpPersonalClient: {
+      read: async () => ({}),
+      server: async () => {
+        calls++
+        throw failure
+      },
+    },
+  })
+  try {
+    for (const [reason, rpcCode, status, code, retryable] of [
+      ["in_progress", Code.Aborted, 409, "mcp_personal_command_in_progress", true],
+      ["outcome_unknown", Code.Unavailable, 503, "mcp_personal_command_outcome_unknown", false],
+      ["replay_expired", Code.FailedPrecondition, 412, "mcp_personal_command_replay_expired", false],
+      ["identity_conflict", Code.AlreadyExists, 409, "mcp_personal_idempotency_conflict", false],
+      ["ownership_lost", Code.Aborted, 409, "mcp_personal_command_ownership_lost", false],
+      ["invalid", Code.Internal, 502, "mcp_personal_response_invalid", false],
+    ]) {
+      failure = new ConnectError("private marker must not escape", rpcCode, { "x-kokoro-error-code": `command_receipt_${reason}` })
+      const before = calls
+      const response = await fetch(f.origin + "/browser/v1/mcp/servers/server-one/prepare", {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-prepare" },
+        body: JSON.stringify({ expected_state_version: "1" }),
+      })
+      assert.equal(response.status, status)
+      assert.deepEqual((await response.json()).error, { code, message: "Personal MCP request failed", retryable })
+      assert.equal(response.headers.get("x-kokoro-error-code"), null)
+      assert.equal(response.headers.get("x-request-id"), headers["x-request-id"])
+      assert.equal(calls, before + 1)
+    }
+    const read = await fetch(f.origin + "/browser/v1/mcp/servers/server-one", { headers })
+    assert.equal(read.status, 502)
+    assert.equal((await read.json()).error.code, "mcp_personal_response_invalid")
+  } finally {
+    await f.close()
+  }
+})
+
+test("published expiry crosses a real Connect hop and the admitted browser adapter without becoming typed-detail 502", async () => {
+  const { Code, ConnectError } = await import("@connectrpc/connect")
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { ProductMcpPersonalService } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { McpPersonalConnectClient } = await import("../dist/infrastructure/clients/platform/mcp-personal-connect.js")
+  let upstreamCalls = 0,
+    credentialReads = 0
+  // Controlled owner/auth boundaries; both HTTP hops and the production SDK are real.
+  const upstream = createServer(
+    connectNodeAdapter({
+      routes(router) {
+        router.rpc(ProductMcpPersonalService.method.preparePersonalMcpServer, (request, context) => {
+          upstreamCalls++
+          assert.equal(request.command.commandId, "original-expired-prepare")
+          assert.equal(request.expectedStateVersion, 1n)
+          assert.equal(request.serverId.value, "server-one")
+          assert.equal(context.requestHeader.get("x-kokoro-tenant"), "tenant-server")
+          assert.equal(context.requestHeader.get("x-kokoro-subject"), "human-one")
+          assert.equal(context.requestHeader.get("authorization"), "Bearer fixture-service-only-not-a-real-credential")
+          throw new ConnectError("private owner expiry", Code.FailedPrecondition, { "x-kokoro-error-code": "command_receipt_replay_expired" })
+        })
+      },
+    }),
+  )
+  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve))
+  const client = new McpPersonalConnectClient(`http://127.0.0.1:${upstream.address().port}`, {
+    get: async (tenant) => {
+      assert.equal(tenant, "tenant-server")
+      credentialReads++
+      return "fixture-service-only-not-a-real-credential"
+    },
+  })
+  let f
+  try {
+    f = await fixture(true, { mcpPersonalClient: client })
+    const response = await fetch(f.origin + "/browser/v1/mcp/servers/server-one/prepare", {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-expired-prepare" },
+      body: JSON.stringify({ expected_state_version: "1" }),
+    })
+    assert.equal(response.status, 412)
+    assert.deepEqual((await response.json()).error, { code: "mcp_personal_command_replay_expired", message: "Personal MCP request failed", retryable: false })
+    assert.equal(response.headers.get("x-kokoro-error-code"), null)
+    assert.equal(upstreamCalls, 1)
+    assert.equal(credentialReads, 1)
+  } finally {
+    client.close()
+    await f?.close()
+    upstream.closeAllConnections()
+    await new Promise((resolve) => upstream.close(resolve))
+  }
+})
+
+test("native OAuth exposes its typed needs-client failure without weakening an untyped CAS rejection", async () => {
+  const { Code, ConnectError } = await import("@connectrpc/connect")
+  const { PersonalMcpErrorDetailSchema, PersonalMcpErrorReason } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  let failure = new ConnectError("private auth context", Code.FailedPrecondition, undefined, [
+    { desc: PersonalMcpErrorDetailSchema, value: { reason: PersonalMcpErrorReason.NEEDS_CLIENT } },
+  ])
+  const f = await fixture(true, {
+    mcpPersonalClient: {
+      read: async () => ({}),
+      authorization: async () => {
+        throw failure
+      },
+    },
+  })
+  try {
+    for (const [error, status, code] of [
+      [failure, 412, "mcp_personal_needs_client"],
+      [new ConnectError("private CAS", Code.FailedPrecondition), 412, "mcp_personal_precondition_failed"],
+      [
+        new ConnectError("private unknown reason", Code.FailedPrecondition, undefined, [
+          { desc: PersonalMcpErrorDetailSchema, value: { reason: PersonalMcpErrorReason.UNSPECIFIED } },
+        ]),
+        502,
+        "mcp_personal_response_invalid",
+      ],
+    ]) {
+      failure = error
+      const response = await fetch(f.origin + "/browser/v1/mcp/connectors/connector-one/authorization", {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json" },
+        body: JSON.stringify({ server_id: "server-one", expected_state_version: "1" }),
+      })
+      assert.equal(response.status, status)
+      assert.deepEqual((await response.json()).error, { code, message: "Personal MCP request failed", retryable: false })
+    }
   } finally {
     await f.close()
   }

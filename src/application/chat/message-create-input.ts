@@ -5,7 +5,7 @@ export type MessageCreateInput = {
   model?: string
   agent?: string
   thinking?: boolean
-  selectedSkillSourceRefs: string[]
+  selectedSkillSourceRefs?: string[]
   mcpServers?: string[]
   projectRef?: string
 }
@@ -40,7 +40,7 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
   const agent = optionalTrimmedString(json.agent)
   const bodyProjectRef = optionalTrimmedString(json.project_ref)
   const fallbackProjectRef = optionalTrimmedString(queryProjectRef)
-  const selectedSkillSourceRefs = parseSkillSourceSelection(json.selected_skill_source_refs === undefined ? [] : json.selected_skill_source_refs)
+  const selectedSkillSourceRefs = json.selected_skill_source_refs === undefined ? undefined : parseSkillSourceSelection(json.selected_skill_source_refs)
   const mcpServers = optionalTrimmedStrings(json.mcp_servers)
   if (
     model === null ||
@@ -59,7 +59,7 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
     ...(model === undefined ? {} : { model }),
     ...(agent === undefined ? {} : { agent }),
     ...(json.thinking === undefined ? {} : { thinking: json.thinking }),
-    selectedSkillSourceRefs,
+    ...(selectedSkillSourceRefs === undefined ? {} : { selectedSkillSourceRefs }),
     ...(mcpServers === undefined ? {} : { mcpServers }),
     ...(projectRef === undefined ? {} : { projectRef }),
   }

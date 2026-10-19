@@ -5,8 +5,8 @@ import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { BffServerComposition } from "../../bootstrap/runtime.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
-import { setPersonalEnabledDigest } from "../../infrastructure/clients/platform/personal-installation-projector.js"
-import { projectInstallationAck } from "../../infrastructure/clients/platform/personal-installation-response.js"
+import { setSkillEnabledDigest } from "../../infrastructure/clients/platform/skill-installation-projector.js"
+import { projectInstallationAck } from "../../infrastructure/clients/platform/skill-installation-response.js"
 import { exactIdempotencyKey, installationCommandId } from "../skill-installation-input.js"
 import { send } from "../response.js"
 import { setSkillInstallationEnabledRequestSchema } from "../skill-specification-schema.js"
@@ -109,12 +109,12 @@ export async function skillSpecificationEnabledRoute(
       )
       return true
     }
-    if (composition.personalInstallationClient === null) throw new ConnectError("Skill installation owner unavailable", Code.Unavailable)
+    if (composition.installationClient === null) throw new ConnectError("Skill installation owner unavailable", Code.Unavailable)
     if (performance.now() >= deadlineAt) throw new ConnectError("Skill installation deadline exceeded", Code.DeadlineExceeded)
     const tenant = admission.context.identity.namespace
     const subject = admission.context.identity.userId
     const result = await within(
-      composition.personalInstallationClient.setEnabled(
+      composition.installationClient.setEnabled(
         {
           requestId,
           tenant,
@@ -122,7 +122,7 @@ export async function skillSpecificationEnabledRoute(
           installationId: input.installationId,
           enabled: input.enabled,
           commandId: installationCommandId("set-enabled", tenant, subject, input.installationId, key),
-          digest: setPersonalEnabledDigest(tenant, subject, input.installationId, input.enabled),
+          digest: setSkillEnabledDigest(tenant, subject, input.installationId, input.enabled),
         },
         controller.signal,
       ),

@@ -363,6 +363,7 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
   const body = {
     tenant_id: tenant,
     task_id: taskId,
+    task_revision: 1,
     owner_id: owner,
     prompt: "frozen prompt",
     auto_approve: false,
@@ -414,8 +415,7 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",
-        recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
-        nextRunAt: null,
+
         autoApprove: false,
       },
       taskId,
@@ -472,7 +472,12 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
     const deadline = Date.now() + 3000
     while (agentCalls.length === 0 && Date.now() < deadline) await delay(20)
     assert.equal(agentCalls.length, 1)
-    assert.deepEqual(agentCalls[0].launch, frozenLaunch)
+    assert.equal(Object.hasOwn(frozenLaunch, "project_ref"), false, "durable internal v2 payload remains unchanged")
+    assert.deepEqual(
+      agentCalls[0].launch,
+      { ...frozenLaunch, project_ref: null },
+      "HTTP7 explicitly projects a null project without rewriting the durable launch",
+    )
     assert.equal(agentCalls[0].launch.request_id, `transport-first-${suffix}`)
     assert.equal(agentCalls[0].requestId, `transport-first-${suffix}`)
     const replay = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
@@ -519,8 +524,7 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",
-        recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
-        nextRunAt: null,
+
         autoApprove: false,
       },
       taskId,
@@ -623,8 +627,7 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
           frequency: "daily",
           time: "08:00",
           timezone: "UTC",
-          recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
-          nextRunAt: null,
+
           autoApprove: false,
         },
         taskId,
@@ -766,7 +769,7 @@ async function r66LifecycleFixture(context) {
   const schedule = `kokoro.scheduled.${taskId}`
   const occurrence = "2026-09-01T12:00:00.123456789Z"
   const key = `lifecycle-${suffix}`
-  const body = { tenant_id: tenant, task_id: taskId, owner_id: owner, prompt: "go", auto_approve: false, timezone: "UTC" }
+  const body = { tenant_id: tenant, task_id: taskId, task_revision: 1, owner_id: owner, prompt: "go", auto_approve: false, timezone: "UTC" }
   const scopes = new Set()
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
@@ -831,8 +834,7 @@ async function r66LifecycleFixture(context) {
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
-      recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
-      nextRunAt: null,
+
       autoApprove: false,
     },
     taskId,
@@ -876,6 +878,7 @@ async function r66LifecycleFixture(context) {
     assert.ok(task !== null)
     assert.equal(task.enabled, active)
     assert.equal(task.status, active ? "active" : "paused")
+    return task
   }
   const prepare = async () => {
     const record = await store.services.scheduledTasks.findRecord(tenant, taskId)
@@ -939,6 +942,41 @@ function r66AssertInactive(result) {
   assert.equal(result.body.error.code, "scheduled_task_not_active")
 }
 
+receiverIntegrationTest("cadence-only change rejects unprepared old callbacks and accepts only the new frozen revision", async (context) => {
+  const fixture = await r66LifecycleFixture(context)
+  const changed = await fixture.store.services.scheduledTasks.update(
+    { tenantId: fixture.tenant, subjectId: fixture.owner },
+    fixture.taskId,
+    { frequency: "weekly", time: "08:00", timezone: "UTC", weekdays: [1] },
+    { tenantId: fixture.tenant, actorId: fixture.owner, requestId: `${fixture.key}-change`, idempotencyKey: `${fixture.key}-change` },
+  )
+  assert.equal(changed.revision, 2)
+  assert.equal(changed.prompt, fixture.body.prompt)
+  const stale = await fixture.callback()
+  assert.equal(stale.status, 409)
+  assert.equal(stale.body.error.code, "invalid_scheduler_dispatch")
+  assert.deepEqual(await fixture.facts(), fixture.emptyFacts)
+  const rejectedReceipt = await fixture.receipt()
+  assert.equal(rejectedReceipt.status, 409)
+  assert.equal(rejectedReceipt.response_body.snapshot, null)
+  await fixture.restart()
+  assert.deepEqual(await fixture.callback(), stale)
+  assert.deepEqual(await fixture.facts(), fixture.emptyFacts)
+  const fresh = { callbackKey: `${fixture.key}-new`, callbackBody: { ...fixture.body, task_revision: changed.revision } }
+  const accepted = await fixture.callback(fresh)
+  assert.equal(accepted.status, 202)
+  const facts = await fixture.facts()
+  assert.equal(facts.bff_scheduled_agent_dispatch.length, 1)
+  assert.equal((await fixture.receipt(fresh.callbackKey)).response_body.snapshot.taskRevision, changed.revision)
+  await fixture.restart()
+  assert.deepEqual(await fixture.callback(fresh), accepted)
+  assert.deepEqual(await fixture.callback(), stale)
+  const changedBodySameKey = await fixture.callback({ callbackBody: fresh.callbackBody })
+  assert.equal(changedBodySameKey.status, 409)
+  assert.equal(changedBodySameKey.body.error.code, "idempotency_conflict")
+  assert.deepEqual(await fixture.facts(), facts)
+})
+
 receiverIntegrationTest("R66 prepared occurrence paused before acceptance is durably rejected after restart without execution facts", async (context) => {
   const fixture = await r66LifecycleFixture(context)
   const prepared = await fixture.prepare()
@@ -965,11 +1003,15 @@ receiverIntegrationTest("R66 resume preserves old rejection while a new occurren
   await fixture.restart()
   const rejected = await fixture.callback()
   assert.deepEqual(await fixture.facts(), fixture.emptyFacts)
-  await fixture.setActive(true)
+  const resumed = await fixture.setActive(true)
   await fixture.restart()
   const oldReplay = await fixture.callback()
   assert.deepEqual(await fixture.facts(), fixture.emptyFacts)
-  const next = { callbackKey: `${fixture.key}-next`, callbackOccurrence: "2026-09-02T12:00:00.123456789Z" }
+  const next = {
+    callbackKey: `${fixture.key}-next`,
+    callbackOccurrence: "2026-09-02T12:00:00.123456789Z",
+    callbackBody: { ...fixture.body, task_revision: resumed.revision },
+  }
   const accepted = await fixture.callback(next)
   assert.equal(accepted.status, 202)
   assert.equal(accepted.body.data.task_id, fixture.taskId)

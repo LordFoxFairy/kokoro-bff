@@ -1,3 +1,5 @@
+import { restorePublic16KnowledgeContract } from "./verify-personal-knowledge-contract.mjs"
+import { readFileSync } from "node:fs"
 import { createHash } from "node:crypto"
 import { createRequire } from "node:module"
 import { inspectOpenApiGovernance, compareOperationBaseline, parseOpenApiOperations } from "./check-contract.mjs"
@@ -183,8 +185,9 @@ function inspectSkillsSpecificationSurface(source, expectedVersion) {
       canonicalManifestPattern, `${schemaName}.manifest_identity must accept only exact lowercase canonical skill-md-v1 or legacy zip-v2 identities`)
   const skill = schemas.SpecificationPublicSkill?.properties ?? {}
   for (const key of ["id", "name", "description"]) require(skill[key]?.type === "string", `Public Skill ${key} must be string`)
-  require(JSON.stringify(skill.owner_type?.enum) ===
-    JSON.stringify(["personal", "official", "team", "project", "app"]), "Public owner_type must retain original enum")
+  const ownership = ["personal", "official", "team", "project", "app"]
+  const ownerTypes = expectedVersion === null ? [...ownership, "hub", "device", "unknown"] : ownership
+  require(JSON.stringify(skill.owner_type?.enum) === JSON.stringify(ownerTypes), "Public owner_type must match its current or historical vocabulary")
   for (const key of ["created_at", "updated_at"])
     require(skill[key]?.type === "integer" && skill[key]?.format === "int64", `Public ${key} must be int64 Unix seconds`)
   require(skill.creator_info?.properties?.user_id?.type === "string" &&
@@ -228,8 +231,83 @@ function inspectSkillsSpecificationSurface(source, expectedVersion) {
 }
 
 /** Checks the active Skill surface without coupling it to unrelated API version increments. */
+/** Public16 replaces only name associations and selection presence; offline parent proof, never a runtime alias. */
+export function restorePublic151ProjectSelectionContract(source) {
+  source = restorePublic16KnowledgeContract(source)
+  if (!/^  version: 16\.0\.0$/mu.test(source)) throw new Error("Project selection version drift")
+  const raw = readFileSync(new URL("../contract/tests/project-skill-selection-parent-v15.1.json", import.meta.url))
+  if (hash(raw) !== "a90cf26b4c2855f113730bee6e9791ed579de95e0001ad82cb17521ab814d221") throw new Error("Project selection parent fixture drift")
+  const parent = JSON.parse(raw.toString("utf8"))
+  let restored = source
+  const current = {
+    "path:/v1/sessions/{id}/messages": "e8c250ca71ffeea7c788b3a12b7a2747fb4b427bcabf60e63aa3eb17e04ed9d9",
+    "path:/v1/projects/{projectId}/skill-selection": "a313761b4e0d6aec8dd84e44059ab2e9cfd6ae7e32b4bd77fd37efb07b037a6c",
+    "schema:ProjectSkillSelectionError": "60913ea2b24012a1ae0fbbbd141cfbab515a8c26dd809f0418ca0149f9fc3a81",
+    "schema:ProjectSkillSelection": "0475990fe3a9eeb8f80f4bbe851be07accfb87e9760b1d485cca03a7abd0c79c",
+    "schema:ProjectSkillInstallationIds": "89b8c49c331d8e4e2936c14608bb2c6c4914219978c2ad3ebe68db8d6c568002",
+    "schema:ReplaceProjectSkillSelectionRequest": "c8809eb178ea6d6efd6dc00c6948c36b3773c511fcf7328cbebbc411b727396b",
+    "schema:MessageCreateRequest": "dc6e0a67ecc730c3dfdc7322e0856a8ca7123a6a5f2c7d2cc301753620cf9908",
+    "schema:ChatMessage": "8c1db891e42716bd423d271ea84d07bb7d3b94f8735987de4914eb7124fc5556",
+  }
+  for (const [key, digest] of Object.entries(current)) {
+    const split = key.indexOf(":"),
+      kind = key.slice(0, split),
+      name = key.slice(split + 1)
+    const value = namedBlock(restored, kind, name)
+    if (value === null || hash(value) !== digest) throw new Error("Project selection current block drift: " + name)
+    let prior = parent.blocks[key] ?? ""
+    if (kind === "path" && name.endsWith("/skill-selection")) prior = parent.blocks["path:/v1/projects/{projectId}/skills/{skill}"]
+    if (name === "ProjectSkillSelectionError") prior = parent.blocks["schema:ProjectSkillRequest"] + parent.blocks["schema:ProjectSkillResponse"]
+    restored = restored.replace(value, () => prior)
+  }
+  restored = restored.replace("    ScheduledTaskId:\n", () => parent.blocks["parameter:SkillName"] + "    ScheduledTaskId:\n")
+  restored = restored.replace("  version: 16.0.0", "  version: 15.1.0")
+  if (hash(restored) !== parent.sha256) throw new Error("Project selection complete Public15.1 parent inverse drift")
+  return restored
+}
+/** Additive project paths reuse the exact personal wire rules, not an installation alias. */
+export function restorePublic15ProjectInstallationsContract(source) {
+  if (!/^  version: 15\.1\.0$/mu.test(source)) throw new Error("Project installations version drift")
+  let parent = source
+  for (const suffix of ["", "/{installation_id}", "/{installation_id}/enabled", "/{installation_id}/update"]) {
+    const personalPath = `/v1/skill-installations${suffix}`
+    const projectPath = `/v1/projects/{projectId}/skill-installations${suffix}`
+    const original = namedBlock(source, "path", personalPath)
+    const current = namedBlock(source, "path", projectPath)
+    let expected = original?.replace(personalPath, projectPath).replaceAll("Personal", "Project").replaceAll("personal", "project")
+    expected = expected?.startsWith(`  ${projectPath}:\n    parameters:\n`)
+      ? expected.replace("    parameters:\n", '    parameters:\n      - $ref: "#/components/parameters/ProjectId"\n')
+      : expected?.replace(`${projectPath}:\n`, `${projectPath}:\n    parameters:\n      - $ref: "#/components/parameters/ProjectId"\n`)
+    if (current === null || current !== expected) throw new Error("Project installations exact path delta drift")
+    parent = parent.replace(current, "")
+  }
+  parent = parent.replace("  version: 15.1.0", "  version: 15.0.0")
+  if (hash(parent) !== "e3f70ab1111295d1df10775853ff9c20bf85ea466da32996a73d37a8b16d54c0")
+    throw new Error("Project installations complete Public15.0 parent inverse drift")
+  return parent
+}
+/** Only the public item vocabulary and artifact version differ from Public14.8. */
+export function restorePublic148SkillOwnerTypesContract(source) {
+  source = restorePublic16KnowledgeContract(source)
+  if (/^  version: 16\.0\.0$/mu.test(source)) source = restorePublic151ProjectSelectionContract(source)
+  if (/^  version: 15\.1\.0$/mu.test(source)) source = restorePublic15ProjectInstallationsContract(source)
+  if (!/^  version: 15\.0\.0$/mu.test(source)) throw new Error("Skill owner-type major version drift")
+  const block = namedBlock(source, "schema", "SpecificationPublicSkill")
+  const delta = "            - hub\n            - device\n            - unknown\n"
+  if (block === null || block.split(delta).length !== 2) throw new Error("Skill owner-type exact delta missing")
+  const parent = source.replace(block, () => block.replace(delta, "")).replace("  version: 15.0.0", "  version: 14.8.0")
+  if (hash(parent) !== "a9729722383de5571821961357051499612d12c76aa835b8774828adea82a577")
+    throw new Error("Skill owner-type complete Public14.8 parent inverse drift")
+  return parent
+}
 export function inspectCurrentSkillsSpecificationContract(source) {
-  return inspectSkillsSpecificationSurface(source, null)
+  const errors = inspectSkillsSpecificationSurface(source, null)
+  try {
+    restorePublic148SkillOwnerTypesContract(source)
+  } catch (error) {
+    errors.push(error.message)
+  }
+  return errors
 }
 
 /** Historical Public12 proof retained for the Public13 inverse contract. */

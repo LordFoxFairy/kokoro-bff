@@ -94,6 +94,7 @@ integrationTest("personal upload survives lost Complete response and lost public
       const chunks = []
       for await (const chunk of request) chunks.push(chunk)
       objectPuts.push({ uploadId: request.url?.slice(1), body: Buffer.concat(chunks) })
+      response.setHeader("x-amz-version-id", `version-${request.url?.slice(1)}`)
       response.writeHead(200)
       response.end()
     })
@@ -142,13 +143,15 @@ integrationTest("personal upload survives lost Complete response and lost public
                 expectedSha256: upload.sha256,
                 expectedSizeBytes: upload.sizeBytes,
                 mimeType: upload.mimeType,
-                ...(upload.completed ? { assetId: upload.assetId } : {}),
+                ...(upload.completed ? { assetId: upload.assetId, sourceVersionId: upload.sourceVersionId } : {}),
               }
             },
             completeUpload(command) {
               const upload = uploads.get(command.uploadId)
               assert.ok(upload)
               assert.equal(command.contentSha256, upload.sha256)
+              assert.equal(command.sourceVersionId, `version-${command.uploadId}`)
+              upload.sourceVersionId = command.sourceVersionId
               upload.completed = true
               upload.completes++
               return { uploadId: command.uploadId, assetId: upload.assetId, scanState: ScanState.CLEAN }

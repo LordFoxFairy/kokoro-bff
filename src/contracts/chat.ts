@@ -27,6 +27,7 @@ export type ChatMessage = {
   message_id: string
   role: ChatMessageRole
   content: string
+  selected_skill_source_refs?: string[]
   status: "pending" | "streaming" | "completed" | "failed"
   created_at: string
   run_id?: string

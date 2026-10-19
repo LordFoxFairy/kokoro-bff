@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/scheduler")
 const manifestPath = path.join(root, "contract/dependencies/scheduler.json")
 const configPath = path.join(root, "openapi-ts.scheduler.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "92bf9e7e6724c591bab4b7fa27f08d694b59a67e"
+const ownerCommit = "3bb7ff61b0d72418aa048ca35b8c3f144a33f13e"
 const vendorPath = path.join(root, `contract/vendor/kokoro-scheduler/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "6ec2f6d5d71efa60b92bba1eb2dd0c81b7439734e2bc4450caa221e952e24183"
+const ownerDigest = "d349eae8bba207074b1edf91acd9f08e94f39a27363441f45186c1799159c999"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -171,12 +171,93 @@ export function assertGeneratedAllowlist(files, directories, label) {
   assert.deepEqual(directories.slice().sort(), generatedDirectories.slice().sort(), `${label} directory allowlist drifted`)
 }
 
+// openapi-ts 0.99 erases required-only oneOf branches and if/then. Derive
+// the known trigger/lifecycle constraints from the pinned document, never a second schema.
+async function normalizeSchedulerConditions(directory) {
+  const owner = JSON.parse(await readFile(vendorPath, "utf8"))
+  const schemas = owner.components.schemas
+  const file = path.join(directory, "zod.gen.ts")
+  let source = await readFile(file, "utf8")
+  for (const name of ["ScheduleInput", "Schedule", "CurrentSchedule"]) {
+    const schema = schemas[name]
+    assert.equal(schema.additionalProperties, false, `${name} closure changed`)
+    assert.ok(Array.isArray(schema.oneOf) && schema.oneOf.length === 2, `${name} trigger branches changed`)
+    const required = schema.oneOf.map((branch) => {
+      assert.deepEqual(Object.keys(branch), ["required"], `${name} unsupported trigger branch`)
+      assert.ok(Array.isArray(branch.required) && branch.required.length === 1)
+      return branch.required[0]
+    })
+    assert.equal(new Set(required).size, 2, `${name} repeated trigger branch`)
+    for (const field of required) assert.equal(schema.properties[field].type, "string")
+    let guard = `z.unknown().refine((value) => {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+      if (Object.keys(value).some((field) => !${JSON.stringify(Object.keys(schema.properties))}.includes(field))) return false
+      if (!${JSON.stringify(schema.required)}.every((field) => Object.hasOwn(value, field))) return false
+      const row = value as Record<string, unknown>
+      const retry = row["retry"]
+      if (retry !== undefined) {
+        if (typeof retry !== "object" || retry === null || Array.isArray(retry)) return false
+        if (Object.keys(retry).some((field) => !${JSON.stringify(Object.keys(schemas[name === "ScheduleInput" ? "RetryPolicy" : "ResolvedRetryPolicy"].properties))}.includes(field))) return false
+        if (!${JSON.stringify(schemas[name === "ScheduleInput" ? "RetryPolicy" : "ResolvedRetryPolicy"].required ?? [])}.every((field) => Object.hasOwn(retry, field))) return false
+      }
+      return ${JSON.stringify(required)}.filter((field) => Object.hasOwn(value, field)).length === 1
+    }, { message: "exactly one trigger is required" })`
+    if (name === "Schedule") {
+      assert.equal(schema.allOf.length, 1, "unsupported mutation lifecycle conditions")
+      const condition = schema.allOf[0]
+      const [nextField] = Object.keys(condition.if.properties)
+      assert.equal(condition.if.properties[nextField].type, "null")
+      assert.deepEqual(condition.if.required, [nextField])
+      assert.ok(Array.isArray(condition.then.required) && condition.then.required.length === 1)
+      const [pausedField] = Object.keys(condition.then.properties)
+      const consumedPaused = condition.then.properties[pausedField].const
+      assert.equal(consumedPaused, false)
+      guard += `.refine((value) => {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+        const row = value as Record<string, unknown>
+        return row[${JSON.stringify(nextField)}] !== null ||
+          (${JSON.stringify(condition.then.required)}.every((field) => Object.hasOwn(row, field)) && row[${JSON.stringify(pausedField)}] === ${JSON.stringify(consumedPaused)})
+      }, { message: "consumed mutation must be once and not paused" })`
+    } else if (name === "CurrentSchedule") {
+      assert.equal(schema.allOf.length, 1, "unsupported current lifecycle conditions")
+      const condition = schema.allOf[0]
+      const [statusField] = Object.keys(condition.if.properties)
+      const exhausted = condition.if.properties[statusField].const
+      const [nextField] = Object.keys(condition.then.properties)
+      assert.equal(condition.then.properties[nextField].type, "null")
+      assert.equal(condition.else.properties[nextField].type, "string")
+      assert.ok(Array.isArray(condition.then.required) && condition.then.required.length === 1)
+      guard += `.refine((value) => {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+        const row = value as Record<string, unknown>
+        return row[${JSON.stringify(statusField)}] === ${JSON.stringify(exhausted)}
+          ? row[${JSON.stringify(nextField)}] === null && ${JSON.stringify(condition.then.required)}.every((field) => Object.hasOwn(row, field))
+          : typeof row[${JSON.stringify(nextField)}] === "string"
+      }, { message: "current status and next instant must agree" })`
+    }
+    const begin = source.indexOf(`export const z${name} = `)
+    assert.ok(begin >= 0, `${name} generated declaration missing`)
+    const next = source.indexOf("export const ", begin + 1)
+    let declaration = source.slice(begin, next === -1 ? undefined : next)
+    declaration = replaceExactInSource(declaration, "z.unknown(),", guard + ",", 1, `${name} conditional guard`)
+    declaration = replaceExactInSource(declaration, "z.object({", "z.strictObject({", 1, `${name} closed properties`)
+    source = source.slice(0, begin) + declaration + (next === -1 ? "" : source.slice(next))
+  }
+  const begin = source.indexOf("export const zCurrentScheduleResponse = ")
+  const end = source.indexOf("export const ", begin + 1)
+  assert.ok(begin >= 0 && end > begin)
+  const response = replaceExactInSource(source.slice(begin, end), "z.object({", "z.strictObject({", 2, "current response closure")
+  source = source.slice(0, begin) + response + source.slice(end)
+  await writeFile(file, source)
+}
+
 async function generate(directory) {
   const cli = path.join(root, "node_modules/@hey-api/openapi-ts/bin/run.js")
   await run(process.execPath, [cli, "--silent", "-f", configPath], { env: { ...process.env, SCHEDULER_CLIENT_OUTPUT: directory } })
   const tree = await generatedTree(directory)
   assertGeneratedAllowlist(tree.files, tree.directories, "generated")
   await normalizeGeneratorCompatibility(directory)
+  await normalizeSchedulerConditions(directory)
   const prettier = path.join(root, "node_modules/prettier/bin/prettier.cjs")
   await run(process.execPath, [prettier, "--no-semi", "--print-width", "160", "--write", directory])
 }
@@ -203,7 +284,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-scheduler",
       repository_commit: ownerCommit,
-      contract_version: "1.0.0",
+      contract_version: "3.0.0",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },

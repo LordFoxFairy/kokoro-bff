@@ -110,6 +110,7 @@ function dispatchSnapshot(leaseRemainingMs: number) {
       idempotencyKey: "budget-key",
       actorId: "owner_fixture",
       taskId: "scheduled_fixture",
+      taskRevision: 1,
       launch: {
         requestId: "snapshot-request",
         body: { request_id: "snapshot-request", run_id: "run_fixture", content: "go" },
@@ -134,10 +135,98 @@ function dispatchHeaders(idempotencyKey = "budget-key", requestId = "transport-r
 }
 
 function dispatchBody(extra = ""): string {
-  return `{"tenant_id":"tenant_fixture","task_id":"scheduled_fixture","owner_id":"owner_fixture","prompt":"go","auto_approve":false,"timezone":"UTC"${extra}}`
+  return `{"tenant_id":"tenant_fixture","task_id":"scheduled_fixture","task_revision":1,"owner_id":"owner_fixture","prompt":"go","auto_approve":false,"timezone":"UTC"${extra}}`
 }
 
 describe("Scheduler receiver admission", () => {
+  it("rejects missing or malformed task revisions before claiming a receipt", async () => {
+    let claims = 0
+    const store = {
+      services: { scheduledTasks: { findRecord: async () => null } },
+      schedulerDispatchReceipts: {
+        claim: async () => {
+          claims += 1
+          return { outcome: "pending" }
+        },
+      },
+      ready: async () => undefined,
+      close: async () => undefined,
+    }
+    const bff = createBffServer(config(null), { businessStore: store as never, readiness: async () => undefined })
+    const base = await listen(bff)
+    try {
+      const original = JSON.parse(dispatchBody()) as Record<string, unknown>
+      for (const value of [undefined, null, "1", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+        const body = { ...original, task_revision: value }
+        const result = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
+          method: "POST",
+          headers: dispatchHeaders(),
+          body: JSON.stringify(body),
+        })
+        assert.equal(result.status, 400, `invalid revision ${String(value)}`)
+      }
+      assert.equal(claims, 0)
+    } finally {
+      await close(bff)
+    }
+  })
+
+  it("rejects an old cadence revision without preparing or accepting a launch", async () => {
+    let prepared = 0
+    let accepted = 0
+    let recovered: ReturnType<typeof dispatchSnapshot>["snapshot"] | null = null
+    const store = {
+      services: {
+        scheduledTasks: {
+          findRecord: async () => ({
+            ownerId: "owner_fixture",
+            task: { id: "scheduled_fixture", prompt: "go", autoApprove: false, timezone: "UTC", revision: 2, enabled: true, status: "active" },
+          }),
+        },
+      },
+      schedulerDispatchReceipts: {
+        claim: async () => ({ outcome: "claimed", claim: { ...dispatchSnapshot(60_000), snapshot: recovered } }),
+        prepareSnapshot: async () => {
+          prepared += 1
+          return {}
+        },
+        complete: async () => true,
+      },
+      scheduledAgentDispatch: {
+        accept: async () => {
+          accepted += 1
+          return { outcome: "accepted" }
+        },
+      },
+      ready: async () => undefined,
+      close: async () => undefined,
+    }
+    const bff = createBffServer(config(null), { businessStore: store as never, readiness: async () => undefined })
+    const base = await listen(bff)
+    try {
+      const result = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
+        method: "POST",
+        headers: dispatchHeaders(),
+        body: dispatchBody(),
+      })
+      assert.equal(result.status, 409)
+      assert.equal(((await result.json()) as { error: { code: string } }).error.code, "invalid_scheduler_dispatch")
+      assert.equal(prepared, 0)
+      assert.equal(accepted, 0)
+      recovered = { ...dispatchSnapshot(60_000).snapshot, taskRevision: 2 }
+      const retry = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
+        method: "POST",
+        headers: dispatchHeaders("recovered-key"),
+        body: dispatchBody(),
+      })
+      assert.equal(retry.status, 409)
+      assert.equal(prepared, 0)
+      assert.equal(accepted, 0)
+    } finally {
+      await close(bff)
+    }
+  })
+
   it("returns 400 for raw 1e400 JSON without receipt or Agent I/O", async () => {
     let receiptClaims = 0
     let agentCalls = 0
@@ -343,7 +432,6 @@ describe("Scheduler receiver admission", () => {
         time: "08:00",
         timezone: "UTC",
         recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
-        nextRunAt: null,
         autoApprove: false,
         enabled: true,
         status: "active",

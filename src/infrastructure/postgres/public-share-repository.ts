@@ -67,7 +67,7 @@ export class PostgresPublicShareRepository implements PublicShareRepository {
   public async listSharedMessages(shareId: string, tenantId: string, conversationId: string, limit: number): Promise<MessagePage | null> {
     const result = await this.database.pool.query<MessageRow>(
       `SELECT message.message_id, message.tenant_id, message.conversation_id, message.run_id,
-              message.role, message.content, message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
+              message.role, message.selected_skill_source_refs, message.content, message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
               message.created_at, message.updated_at
          FROM bff_message AS message
         WHERE message.tenant_id = $1

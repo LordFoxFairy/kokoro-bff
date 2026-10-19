@@ -3,7 +3,6 @@ import { createConnectTransport } from "@connectrpc/connect-node"
 import { fromJson, type JsonValue } from "@bufbuild/protobuf"
 import { SkillCatalogService, ProductSkillReadService } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { projectSkillProductCommand } from "./create-skill-draft-projector.js"
-import type { CatalogTokenSource } from "./catalog-token.js"
 import type { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 
 export type SkillProductContext = { requestId: string; tenant: string; subject: string }
@@ -22,7 +21,7 @@ export class SkillProductConnectClient {
   readonly #reads
   constructor(
     baseUrl: string,
-    private readonly writes: CatalogTokenSource,
+    private readonly writes: Pick<PlatformServiceCredentialSource, "get">,
     private readonly reads: PlatformServiceCredentialSource,
     private readonly timeoutMs: number,
   ) {
@@ -31,7 +30,7 @@ export class SkillProductConnectClient {
     this.#reads = createClient(ProductSkillReadService, transport)
   }
   async #invoke<T>(
-    source: { get(tenant: string, signal?: AbortSignal, deadlineAt?: number): Promise<string>; retire?(token: string): void },
+    source: Pick<PlatformServiceCredentialSource, "get">,
     context: SkillProductContext,
     signal: AbortSignal,
     deadlineAt: number,
@@ -44,29 +43,24 @@ export class SkillProductConnectClient {
     if (remaining <= 0) throw new ConnectError("Skill deadline exceeded", Code.DeadlineExceeded)
     let requestId: string | null = null,
       cache: string | null = null
-    try {
-      const result = await call({
-        signal,
-        timeoutMs: remaining,
-        headers: {
-          authorization: `Bearer ${token}`,
-          "x-kokoro-request-id": context.requestId,
-          "x-kokoro-tenant": context.tenant,
-          "x-tenant-ref": context.tenant,
-          "x-kokoro-subject": context.subject,
-        },
-        onHeader: (headers) => {
-          requestId = headers.get("x-kokoro-request-id")
-          cache = headers.get("cache-control")
-        },
-      })
-      if (requestId !== context.requestId || cache !== "no-store") throw new Error("skill_response_invalid")
-      signal.throwIfAborted()
-      return result
-    } catch (error) {
-      if (error instanceof ConnectError && [Code.PermissionDenied, Code.Unauthenticated].includes(error.code)) source.retire?.(token)
-      throw error
-    }
+    const result = await call({
+      signal,
+      timeoutMs: remaining,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-kokoro-request-id": context.requestId,
+        "x-kokoro-tenant": context.tenant,
+        "x-tenant-ref": context.tenant,
+        "x-kokoro-subject": context.subject,
+      },
+      onHeader: (headers) => {
+        requestId = headers.get("x-kokoro-request-id")
+        cache = headers.get("cache-control")
+      },
+    })
+    if (requestId !== context.requestId || cache !== "no-store") throw new Error("skill_response_invalid")
+    signal.throwIfAborted()
+    return result
   }
   async command(
     operation: SkillProductCommand,

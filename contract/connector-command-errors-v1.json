@@ -1,0 +1,104 @@
+{
+  "profile": "connector-command-recovery-errors",
+  "version": "1.0.0",
+  "owner": "kokoro-bff",
+  "visibility": "browser-private",
+  "automatic_retries": false,
+  "new_command_authorized": false,
+  "mcp": {
+    "in_progress": {
+      "status": 409,
+      "code": "mcp_personal_command_in_progress",
+      "retryable": true,
+      "recovery": "same_command"
+    },
+    "outcome_unknown": {
+      "status": 503,
+      "code": "mcp_personal_command_outcome_unknown",
+      "retryable": false,
+      "recovery": "same_command"
+    },
+    "replay_expired": {
+      "status": 412,
+      "code": "mcp_personal_command_replay_expired",
+      "retryable": false,
+      "recovery": "inspect_owner"
+    },
+    "identity_conflict": {
+      "status": 409,
+      "code": "mcp_personal_idempotency_conflict",
+      "retryable": false,
+      "recovery": "inspect_owner"
+    },
+    "ownership_lost": {
+      "status": 409,
+      "code": "mcp_personal_command_ownership_lost",
+      "retryable": false,
+      "recovery": "same_command"
+    },
+    "invalid": {
+      "status": 502,
+      "code": "mcp_personal_response_invalid",
+      "retryable": false,
+      "recovery": "inspect_owner"
+    }
+  },
+  "custom_api": {
+    "in_progress": {
+      "status": 409,
+      "code": "custom_api_command_in_progress",
+      "retryable": true,
+      "recovery": "same_command"
+    },
+    "outcome_unknown": {
+      "status": 503,
+      "code": "custom_api_command_outcome_unknown",
+      "retryable": false,
+      "recovery": "same_command"
+    },
+    "replay_expired": {
+      "status": 412,
+      "code": "custom_api_command_replay_expired",
+      "retryable": false,
+      "recovery": "inspect_owner"
+    },
+    "identity_conflict": {
+      "status": 409,
+      "code": "custom_api_conflict",
+      "retryable": false,
+      "recovery": "inspect_owner"
+    },
+    "ownership_lost": {
+      "status": 409,
+      "code": "custom_api_command_ownership_lost",
+      "retryable": false,
+      "recovery": "same_command"
+    },
+    "invalid": {
+      "status": 502,
+      "code": "custom_api_response_invalid",
+      "retryable": false,
+      "recovery": "inspect_owner"
+    }
+  },
+  "mcp_preconditions": {
+    "not_prepared": {
+      "status": 412,
+      "code": "mcp_personal_not_prepared",
+      "retryable": false,
+      "recovery": "prepare"
+    },
+    "needs_client": {
+      "status": 412,
+      "code": "mcp_personal_needs_client",
+      "retryable": false,
+      "recovery": "configure_oauth_client"
+    },
+    "auth_method_unsupported": {
+      "status": 412,
+      "code": "mcp_personal_auth_method_unsupported",
+      "retryable": false,
+      "recovery": "unsupported_auth"
+    }
+  }
+}

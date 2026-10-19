@@ -7,7 +7,8 @@ import { parseMcpPersonalJsonImport } from "../src/http/mcp-personal-json-import
 import { bindMcpPersonalServerCommand, bindMcpPersonalServerRegistration } from "../src/infrastructure/clients/platform/mcp-personal-server-binding.js"
 import { bindMcpPersonalJsonImport } from "../src/infrastructure/clients/platform/mcp-personal-json-import-binding.js"
 import { projectMcpPersonalJsonImport } from "../src/infrastructure/clients/platform/mcp-personal-json-import-response.js"
-import { mcpPersonalServerFault, projectMcpPersonalServer } from "../src/infrastructure/clients/platform/mcp-personal-server-response.js"
+import { projectMcpPersonalServer } from "../src/infrastructure/clients/platform/mcp-personal-server-response.js"
+import { mcpPersonalPreconditionFault } from "../src/infrastructure/clients/platform/connector-command-fault.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 import {
   PersonalMcpErrorDetailSchema,
@@ -730,21 +731,81 @@ test("private URL MCP Connect client forwards only the command body plus trusted
 })
 
 test("private URL MCP decodes only the typed owner precondition detail to stable 412", () => {
-  for (const reason of [PersonalMcpErrorReason.NOT_PREPARED, PersonalMcpErrorReason.NEEDS_CLIENT, PersonalMcpErrorReason.AUTH_METHOD_UNSUPPORTED])
+  for (const [reason, code] of [
+    [PersonalMcpErrorReason.NOT_PREPARED, "mcp_personal_not_prepared"],
+    [PersonalMcpErrorReason.NEEDS_CLIENT, "mcp_personal_needs_client"],
+    [PersonalMcpErrorReason.AUTH_METHOD_UNSUPPORTED, "mcp_personal_auth_method_unsupported"],
+  ] as const)
     assert.deepEqual(
-      mcpPersonalServerFault(
+      mcpPersonalPreconditionFault(
         new ConnectError("private owner detail", Code.FailedPrecondition, undefined, [{ desc: PersonalMcpErrorDetailSchema, value: { reason } }]),
+        true,
       ),
       {
         status: 412,
-        code: "mcp_personal_precondition_failed",
+        code,
         retryable: false,
       },
     )
-  assert.deepEqual(mcpPersonalServerFault(new ConnectError("missing detail", Code.FailedPrecondition)), {
+  assert.deepEqual(mcpPersonalPreconditionFault(new ConnectError("missing detail", Code.FailedPrecondition), true), {
     status: 502,
     code: "mcp_personal_response_invalid",
     retryable: false,
   })
-  assert.equal(mcpPersonalServerFault(new ConnectError("unavailable", Code.Unavailable)), null)
+  assert.equal(mcpPersonalPreconditionFault(new ConnectError("unavailable", Code.Unavailable), true), null)
+})
+
+test("connector receipt classifiers consume only the pinned marker/code and publish one private recovery policy", async () => {
+  const { connectorCommandFault, CONNECTOR_COMMAND_FAULT_POLICY } = await import("../src/infrastructure/clients/platform/connector-command-fault.js")
+  const { readFile } = await import("node:fs/promises")
+  assert.deepEqual(JSON.parse(await readFile(new URL("../contract/connector-command-errors-v1.json", import.meta.url), "utf8")), CONNECTOR_COMMAND_FAULT_POLICY)
+  assert.equal(CONNECTOR_COMMAND_FAULT_POLICY.automatic_retries, false)
+  assert.equal(CONNECTOR_COMMAND_FAULT_POLICY.new_command_authorized, false)
+  for (const surface of ["mcp", "custom_api"] as const) {
+    for (const [reason, rpcCode] of [
+      ["in_progress", Code.Aborted],
+      ["outcome_unknown", Code.Unavailable],
+      ["replay_expired", Code.FailedPrecondition],
+      ["identity_conflict", Code.AlreadyExists],
+      ["ownership_lost", Code.Aborted],
+      ["invalid", Code.Internal],
+    ] as const) {
+      const expected = CONNECTOR_COMMAND_FAULT_POLICY[surface][reason]
+      const actual = connectorCommandFault(
+        new ConnectError("not a decision source", rpcCode, { "x-kokoro-error-code": `command_receipt_${reason}` }),
+        surface,
+        true,
+      )
+      assert.deepEqual(actual, { status: expected.status, code: expected.code, retryable: expected.retryable })
+    }
+  }
+})
+
+test("connector receipt markers fail closed when ambiguous, out of scope or inconsistent, without message guessing", async () => {
+  const { connectorCommandFault } = await import("../src/infrastructure/clients/platform/connector-command-fault.js")
+  const marker = "command_receipt_outcome_unknown"
+  for (const surface of ["mcp", "custom_api"] as const) {
+    const cases: Array<[unknown, boolean]> = [
+      [new ConnectError("safe", Code.AlreadyExists, { "x-kokoro-error-code": marker }), true],
+      [new ConnectError("safe", Code.Unavailable, { "x-kokoro-error-code": "command_receipt_future" }), true],
+      [new ConnectError("safe", Code.Unavailable, { "x-kokoro-error-code": `${marker}, ${marker}` }), true],
+      [new ConnectError("safe", Code.Unavailable, { "x-kokoro-error-code": "" }), true],
+      [new ConnectError("safe", Code.Unavailable, { "x-kokoro-error-code": "publish_dependency_unavailable" }), true],
+      [new ConnectError("safe", Code.Unavailable, { "x-kokoro-error-code": marker }), false],
+      [
+        new ConnectError("safe", Code.Unavailable, { "x-kokoro-error-code": marker }, [
+          { desc: PersonalMcpErrorDetailSchema, value: { reason: PersonalMcpErrorReason.NEEDS_CLIENT } },
+        ]),
+        true,
+      ],
+    ]
+    for (const [failure, mutation] of cases)
+      assert.deepEqual(connectorCommandFault(failure, surface, mutation), {
+        status: 502,
+        code: surface === "mcp" ? "mcp_personal_response_invalid" : "custom_api_response_invalid",
+        retryable: false,
+      })
+    assert.equal(connectorCommandFault(new Error(marker), surface, true), null)
+    assert.equal(connectorCommandFault(new ConnectError(marker, Code.Unavailable), surface, true), null)
+  }
 })

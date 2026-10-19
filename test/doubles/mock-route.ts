@@ -1,3 +1,4 @@
+import { parseProjectSkillSelection } from "../../dist/domain/project/skill-selection.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { AgentConnectionSetup, Project, ScheduledTask, Skill } from "../../src/contracts/index.ts"
@@ -241,17 +242,18 @@ export async function mockBusiness(
         status = 404
         payload = failure("project_not_found", "Project was not found", context.requestId)
       } else payload = { ok: true }
-    } else if (segments.length === 4 && segments[2] === "skills" && method === "PATCH") {
+    } else if (segments.length === 3 && segments[2] === "skill-selection" && ["GET", "PUT"].includes(method)) {
       const project = store.findProject(segments[1] || "")
+      const ids = method === "GET" ? [] : parseProjectSkillSelection(json.installation_ids)
       if (project === undefined) {
         status = 404
         payload = failure("project_not_found", "Project was not found", context.requestId)
-      } else if (typeof json.enabled !== "boolean") {
+      } else if (ids === null) {
         status = 400
-        payload = failure("invalid_project_skill", "Skill enabled must be a boolean", context.requestId)
+        payload = failure("invalid_project_skill_selection", "Installation IDs are invalid", context.requestId)
       } else {
-        store.setProjectSkillEnabled(project.id, segments[3] || "", json.enabled)
-        payload = { skill: { project_id: project.id, name: segments[3] || "", enabled: json.enabled } }
+        if (method === "PUT") store.setProjectSkillSelection(project.id, ids)
+        payload = { project_id: project.id, installation_ids: store.projectSkillSelection(project.id) }
       }
     } else if (segments.length === 3 && segments[2] === "scheduled-tasks" && method === "POST") {
       const project = store.findProject(segments[1] || "")

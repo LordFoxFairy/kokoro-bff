@@ -1,10 +1,9 @@
-import type { CreateRunData } from "../../../generated/agent-http/types.gen.js"
 import type { AgentDispatchDeliveryPort, AgentDispatchDeliveryResult } from "../../../application/ports/agent-dispatch-delivery.js"
 import type { BffConfig } from "../../../config/runtime.js"
 import type { AgentDispatchCommand } from "../../../domain/chat/agent-dispatch.js"
 import { isRecord } from "../../../domain/json.js"
 import { proxyUpstream } from "../../../upstream.js"
-import { parseAgentErrorCode, parseAgentHttpJson, parseLaunchReceipt } from "./http-wire.js"
+import { parseAgentErrorCode, parseAgentHttpJson, parseLaunchReceipt, projectSavedAgentLaunch } from "./http-wire.js"
 import { agentIdentityHeaders } from "./identity.js"
 
 export type AgentDispatchAttempt = { kind: "response"; status: number; body: unknown } | { kind: "transport"; errorCode: string }
@@ -49,8 +48,9 @@ export class AgentOutboxDelivery implements AgentDispatchDeliveryPort {
       "content-type": "application/json",
       "idempotency-key": command.idempotencyKey,
     })
+    const launch = projectSavedAgentLaunch(command.payload.launch)
+    if (launch === null) return { outcome: "not_admitted", errorCode: "agent_launch_invalid" }
     try {
-      const launch: CreateRunData["body"] = command.payload.launch
       const upstream = await proxyUpstream(
         this.config,
         baseUrl,

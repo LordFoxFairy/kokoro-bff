@@ -3,6 +3,7 @@ import test from "node:test"
 import { createServer } from "node:http"
 import { createHash } from "node:crypto"
 import { create } from "@bufbuild/protobuf"
+import { TimestampSchema } from "@bufbuild/protobuf/wkt"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { SkillDownloadHandles } from "../../src/application/skill-download-handles.ts"
 import { createBffServer } from "../../src/bootstrap/server.ts"
@@ -434,6 +435,7 @@ test("T-K03.19 SetSkillInstallationEnabled uses only owner-issued installation i
   const calls = []
   const installation = {
     installationId: { value: "installation-stable" },
+    acquisitionKind: 1,
     sourceRef: { value: "skill:version-one" },
     seriesId: { value: "stable-series" },
     revision: 1n,
@@ -470,7 +472,7 @@ test("T-K03.19 SetSkillInstallationEnabled uses only owner-issued installation i
     },
     undefined,
     {},
-    { personalInstallationClient: client },
+    { installationClient: client },
   )
   try {
     const command = website + "SetSkillInstallationEnabled"
@@ -485,7 +487,10 @@ test("T-K03.19 SetSkillInstallationEnabled uses only owner-issued installation i
     assert.equal(calls[0].installationId, "installation-stable")
     assert.equal(calls[0].commandId, calls[1].commandId)
     assert.notEqual(calls[1].digest, calls[2].digest)
-    assert.equal(calls.some((call) => JSON.stringify(call).includes("清单整理助手")), false)
+    assert.equal(
+      calls.some((call) => JSON.stringify(call).includes("清单整理助手")),
+      false,
+    )
     const displayName = await app.request(
       command,
       { installationId: "清单整理助手", enabled: false },
@@ -503,7 +508,7 @@ test("R357 active public contract declares original skill.list and distinct obse
   const { readFile } = await import("node:fs/promises")
   const { load } = await import("js-yaml")
   const document = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
-  assert.match(document.info.version, /^\d+\.\d+\.\d+$/)
+  assert.equal(document.info.version, "19.0.0")
   assert.equal(document.paths["/v1/skill.list"].get.operationId, "listSkills")
   for (const path of [website + "ListSkills", website + "ListHubSkills", website + "GetSkill", "/skill.v1.SkillService/DownloadSkill"]) {
     assert.equal(document.paths[path].post["x-kokoro-visibility"], "browser-private")
@@ -516,6 +521,16 @@ test("R357 active public contract declares original skill.list and distinct obse
   assert.ok(document.paths["/v1/skill-installations"].post)
   assert.ok(document.paths["/skill-downloads/{handle}"].get)
   assert.equal(document.components.schemas.SpecificationPublicSkill.properties.created_at.format, "int64")
+  assert.deepEqual(document.components.schemas.SpecificationPublicSkill.properties.owner_type.enum, [
+    "personal",
+    "official",
+    "team",
+    "project",
+    "app",
+    "hub",
+    "device",
+    "unknown",
+  ])
   assert.deepEqual(Object.keys(document.components.schemas.SpecificationHubRequest.properties), [
     "pageSize",
     "shuffle",
@@ -537,6 +552,8 @@ test("R357 active contract rejects observed-field/type/error/alias/auth/cache dr
     (d) => (d.paths["/v1/skill.list"].get.security = []),
     (d) => d.paths["/v1/skill.list"].get.parameters.push({ name: "tenant", in: "query" }),
     (d) => (d.components.schemas.SpecificationPublicSkill.properties.created_at.type = "string"),
+    (d) => d.components.schemas.SpecificationPublicSkill.properties.owner_type.enum.pop(),
+    (d) => d.components.schemas.SpecificationPublicSkill.properties.owner_type.enum.push("forged"),
     (d) => (d.components.schemas.SpecificationHubRequest.properties.cursor = { type: "string" }),
     (d) => (d.components.schemas.SpecificationHubRequest.properties.includeOfficialSkills.type = "string"),
     (d) => (d.components.schemas.SpecificationDownloadInfo.properties.downloadInfo.properties.expiresAt.type = "integer"),
@@ -829,7 +846,11 @@ async function specificationServiceFixture() {
     categoryKeys: { keys: ["programming"] },
     product,
   })
-  Object.assign(installation, { skillCreatedAt: { seconds: 1749999990n, nanos: 0 }, sourceOwnerScope: { kind: "project", id: "source-project" } })
+  Object.assign(installation, {
+    acquisitionKind: 2,
+    skillCreatedAt: create(TimestampSchema, { seconds: 1749999990n }),
+    sourceOwnerScope: create(p.OwnerScopeSchema, { kind: "project", id: "source-project" }),
+  })
   const calls = []
   let changed = false
   const deps = {
@@ -888,6 +909,7 @@ async function specificationServiceFixture() {
                 revision: "2",
                 enabled: false,
                 installed: true,
+                acquisition_kind: "unknown",
                 skill_updated_at: "2025-06-15T15:06:41.000Z",
                 example_prompts: ["Real prompt"],
                 category_keys: ["programming"],
@@ -947,6 +969,69 @@ async function specificationServiceFixture() {
     },
   }
 }
+
+test("S2 public skill.list admits the eight declared values without changing its item fields", async () => {
+  const values = ["personal", "official", "team", "project", "app", "hub", "device", "unknown"]
+  // Device is only a wire fixture here, not a fabricated discovery producer.
+  const app = await fixture({
+    async read() {
+      return values.map((owner_type) => ({ ...publicSkill, owner_type }))
+    },
+  })
+  try {
+    const response = await app.request("/v1/skill.list")
+    assert.equal(response.status, 200)
+    assert.deepEqual(
+      response.body.data.map((item) => item.owner_type),
+      values,
+    )
+    assert.deepEqual(Object.keys(response.body.data[0]).sort(), Object.keys(publicSkill).sort())
+  } finally {
+    await app.close()
+  }
+})
+
+test("S2 installation acquisition decides public classification without rewriting website ownership or source provenance", async () => {
+  for (const [acquisition, kind, source, expected, website] of [
+    [3, "project", "official", "hub", "official"],
+    [1, "project", "official", "unknown", "official"],
+    [2, "user", "personal", "personal", "personal"],
+    [2, "user", "official", "official", "official"],
+    [2, "organization", "personal", "team", "team"],
+    [2, "project", "personal", "project", "project"],
+    [2, "app", "personal", "app", "app"],
+    [2, "future_owner", "personal", "unknown", undefined],
+  ]) {
+    const app = await specificationServiceFixture()
+    app.installation.acquisitionKind = acquisition
+    app.installation.sourceOwnerScope.kind = kind
+    app.installation.product.sourceKind = source
+    app.deps.projection.read = async () => ({ ok: true, status: 200, data: { skills: [] } })
+    const data = await app.service.read("skill.list", {}, app.context, app.signal, app.deadline)
+    assert.equal(data[0].owner_type, expected, `${acquisition}/${kind}/${source}`)
+    const list = await app.service.read("ListSkills", {}, app.context, app.signal, app.deadline)
+    assert.equal(list.userAddedSkills[0].ownerType, website)
+    assert.equal(app.installation.product.sourceKind, source)
+    assert.equal(app.installation.sourceOwnerScope.kind, kind)
+    assert.equal(app.installation.enabled, false)
+    assert.equal(
+      app.calls.some((call) => call.kind === "current"),
+      false,
+    )
+  }
+})
+
+test("S2 missing or unsupported owner acquisition fails closed rather than becoming public unknown", async () => {
+  for (const acquisition of [0, 4, -1, undefined]) {
+    const app = await specificationServiceFixture()
+    app.installation.acquisitionKind = acquisition
+    await assert.rejects(app.service.read("skill.list", {}, app.context, app.signal, app.deadline), /skill_installation_response_invalid/)
+    assert.equal(
+      app.calls.some((call) => call.kind === "profiles" || call.kind === "current"),
+      false,
+    )
+  }
+})
 
 test("R357 formal aggregation lists stopped exact installations, resolves actual creator distinct from publisher and never substitutes current timestamps", async () => {
   const app = await specificationServiceFixture()
@@ -1031,7 +1116,7 @@ test("R357 production composition uses the formal Skills aggregation rather than
     businessStore: null,
     sessionAdmission: { async verify() {} },
     skillProductClient: {},
-    personalInstallationClient: {},
+    installationClient: {},
   })
   try {
     assert.ok(composition.skillSpecificationSource instanceof SkillSpecificationService)
@@ -1128,34 +1213,49 @@ test("R357 successor Hub sends official exclusion and initial shuffle to owner, 
 })
 
 test("R357 successor native binary installation client sends canonical project only as trusted metadata, never request body or write headers", async () => {
-  const { PersonalInstallationConnectClient } = await import("../../src/infrastructure/clients/platform/personal-installation-connect.ts")
+  const { SkillInstallationConnectClient } = await import("../../src/infrastructure/clients/platform/skill-installation-connect.ts")
   const p = await import("../../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts")
   const { create, fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const sample = await specificationServiceFixture()
+  sample.installation.acquisitionKind = p.SkillAcquisitionKind.HUB
   const requests = []
   const owner = createServer(async (req, res) => {
     const chunks = []
     for await (const b of req) chunks.push(b)
-    requests.push({ headers: req.headers, body: fromBinary(p.ListPersonalSkillInstallationsRequestSchema, Buffer.concat(chunks)) })
+    const project = req.url === "/kokoro.platform.v1.ProductProjectSkillInstallationService/ListProjectSkillInstallations"
+    requests.push({
+      headers: req.headers,
+      body: fromBinary(project ? p.ListProjectSkillInstallationsRequestSchema : p.ListPersonalSkillInstallationsRequestSchema, Buffer.concat(chunks)),
+      project,
+    })
     res.writeHead(200, { "content-type": "application/proto", "cache-control": "no-store" })
-    res.end(toBinary(p.ListPersonalSkillInstallationsResponseSchema, create(p.ListPersonalSkillInstallationsResponseSchema)))
+    const schema = project ? p.ListProjectSkillInstallationsResponseSchema : p.ListPersonalSkillInstallationsResponseSchema
+    res.end(toBinary(schema, create(schema, { installations: [sample.installation], ...(project ? { projectRef: "canonical-project" } : {}) })))
   })
   await new Promise((r) => owner.listen(0, "127.0.0.1", r))
   try {
-    const client = new PersonalInstallationConnectClient(
+    const client = new SkillInstallationConnectClient(
       `http://127.0.0.1:${owner.address().port}`,
       { get: async () => "write-token" },
       { get: async () => "projection-token" },
       1000,
     )
     const input = { requestId: "native-project", tenant: "tenant", subject: "human", installed: true, limit: 1 }
-    await client.list({ ...input, projectRef: "canonical-project" })
+    const { PlatformSkillSpecificationFacade } = await import("../../src/infrastructure/clients/platform/skill-specification-facade.ts")
+    const facade = new PlatformSkillSpecificationFacade({ product: sample.deps.product, projection: sample.deps.projection, installations: client })
+    const page = await facade.listInstallations({ ...input, projectRef: "canonical-project" }, new AbortController().signal)
+    assert.equal(page.items[0].acquisition_kind, "hub")
     await client.list(input)
+    assert.equal(requests[0].project, true)
+    assert.equal(requests[1].project, false)
     assert.equal(requests[0].headers["x-kokoro-project-ref"], "canonical-project")
     assert.equal(requests[0].headers["x-kokoro-subject"], "human")
     assert.equal(requests[0].headers.authorization, "Bearer projection-token")
     assert.equal(requests[1].headers["x-kokoro-project-ref"], undefined)
     assert.equal(requests[0].body.installed, true)
     assert.equal(requests[0].body.enabled, undefined)
+    sample.installation.acquisitionKind = p.SkillAcquisitionKind.UNSPECIFIED
+    await assert.rejects(facade.listInstallations(input, new AbortController().signal), /skill_installation_response_invalid/)
     assert.equal(Object.hasOwn(requests[0].body, "projectId"), false)
     assert.equal(Object.hasOwn(requests[0].body, "projectRef"), false)
     assert.deepEqual(
@@ -1163,6 +1263,7 @@ test("R357 successor native binary installation client sends canonical project o
       [
         ["skill_created_at", 19],
         ["source_owner_scope", 20],
+        ["acquisition_kind", 21],
       ],
     )
   } finally {

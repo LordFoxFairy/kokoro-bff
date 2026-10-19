@@ -1,3 +1,4 @@
+import { calendarFromWire, calendarWire, freezeCalendar, type ScheduledCalendar, type ScheduledTaskFrequency } from "../../domain/scheduled-task/calendar.js"
 import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
 
@@ -15,25 +16,19 @@ import {
   type ScheduledTaskOutboxTask,
 } from "../../domain/scheduled-task/outbox.js"
 import { utcDate, type ScheduledTaskFact } from "../../domain/scheduled-task/task.js"
-import type {
-  ScheduledTaskNextProjection,
-  ScheduledTaskOutboxClaimInput,
-  ScheduledTaskOutboxRepository,
-} from "../../application/ports/scheduled-task-outbox-repository.js"
+import type { ScheduledTaskOutboxClaimInput, ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
 import type {
   ScheduledTaskCreateInput,
   ScheduledTaskMutationLineage,
   ScheduledTaskOwnerScope,
   ScheduledTaskPatch,
   ScheduledTaskRecord,
+  ScheduledTaskReadSnapshot,
   ScheduledTaskRepository,
 } from "../../application/ports/scheduled-task-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
 import type { StableIdGenerator } from "../../application/ports/stable-id-generator.js"
-import {
-  scheduledTaskOutboxId,
-  Sha256StableIdGenerator,
-} from "../identifiers/scheduled-task-outbox-id.js"
+import { scheduledTaskOutboxId, Sha256StableIdGenerator } from "../identifiers/scheduled-task-outbox-id.js"
 
 type ScheduledTaskRow = {
   task_id: string
@@ -42,11 +37,13 @@ type ScheduledTaskRow = {
   owner_id: string
   title: string
   prompt: string
-  frequency: "daily" | "weekly"
+  frequency: ScheduledTaskFrequency
   task_time: string
   timezone: string
-  recurrence_anchor_at: Date | string
-  next_run_at: Date | string | null
+  weekdays: number[] | null
+  month_days: number[] | null
+  local_date: string | null
+  run_at: Date | string | null
   expires_at: Date | string | null
   auto_approve: boolean
   enabled: boolean
@@ -85,7 +82,7 @@ type ScheduledTaskProjectRow = {
 }
 
 const TASK_COLUMNS = `task_id, tenant_id, project_id, owner_id, title, prompt, frequency, task_time, timezone,
-              recurrence_anchor_at, next_run_at, expires_at, auto_approve, enabled, status, revision, created_at, updated_at`
+              weekdays, month_days, to_char(local_date, 'YYYY-MM-DD') AS local_date, run_at, expires_at, auto_approve, enabled, status, revision, created_at, updated_at`
 
 function dbDate(value: Date | string, errorCode: string): Date {
   const parsed = value instanceof Date ? value : new Date(value)
@@ -104,11 +101,7 @@ function scheduledTaskFromRow(row: ScheduledTaskRow): ScheduledTaskFact {
     ...(row.project_id === null ? {} : { projectId: row.project_id }),
     title: row.title,
     prompt: row.prompt,
-    frequency: row.frequency,
-    time: row.task_time,
-    timezone: row.timezone,
-    recurrenceAnchorAt: dbDate(row.recurrence_anchor_at, "SCHEDULED_TASK_RECURRENCE_ANCHOR_INVALID"),
-    nextRunAt: row.next_run_at === null ? null : dbDate(row.next_run_at, "SCHEDULED_TASK_NEXT_RUN_INVALID"),
+    ...storedCalendar(row),
     ...(row.expires_at === null ? {} : { expiresAt: dbDate(row.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID") }),
     autoApprove: row.auto_approve,
     enabled: row.enabled,
@@ -117,23 +110,31 @@ function scheduledTaskFromRow(row: ScheduledTaskRow): ScheduledTaskFact {
   }
 }
 
-function outboxTaskFromRow(row: ScheduledTaskRow): ScheduledTaskOutboxTask {
-  return {
-    taskId: row.task_id,
-    ...(row.project_id === null ? {} : { projectId: row.project_id }),
-    ownerId: row.owner_id,
-    title: row.title,
-    prompt: row.prompt,
+function storedCalendar(row: ScheduledTaskRow): ScheduledCalendar {
+  const calendar = calendarFromWire({
     frequency: row.frequency,
     time: row.task_time,
     timezone: row.timezone,
-    recurrenceAnchorAt: dbDate(row.recurrence_anchor_at, "SCHEDULED_TASK_RECURRENCE_ANCHOR_INVALID"),
-    ...(row.expires_at === null ? {} : { expiresAt: dbDate(row.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID") }),
-    autoApprove: row.auto_approve,
-    enabled: row.enabled,
-    status: row.status,
-    revision: safeInteger(row.revision, "SCHEDULED_TASK_REVISION"),
-  }
+    ...(row.weekdays === null ? {} : { weekdays: row.weekdays }),
+    ...(row.month_days === null ? {} : { month_days: row.month_days }),
+    ...(row.local_date === null ? {} : { local_date: row.local_date }),
+  })
+  if (calendar === null || (row.frequency === "once") !== (row.run_at !== null)) throw new Error("SCHEDULED_TASK_CALENDAR_INVALID")
+  return { ...calendar, ...(row.run_at === null ? {} : { runAt: dbDate(row.run_at, "SCHEDULED_TASK_RUN_AT_INVALID") }) }
+}
+
+function newCalendar(input: ScheduledCalendar, now: Date, currentRunAt?: Date): ScheduledCalendar {
+  const parsed = calendarFromWire(calendarWire(input))
+  if (parsed === null) throw new Error("SCHEDULED_TASK_CALENDAR_INVALID")
+  const calendar = freezeCalendar(parsed)
+  if (calendar.runAt !== undefined && calendar.runAt.getTime() !== currentRunAt?.getTime() && calendar.runAt.getTime() <= now.getTime())
+    throw new Error("SCHEDULED_TASK_ONCE_NOT_FUTURE")
+  return calendar
+}
+
+function outboxTaskFromRow(row: ScheduledTaskRow): ScheduledTaskOutboxTask {
+  const { id, ...task } = scheduledTaskFromRow(row)
+  return { ...task, taskId: id, ownerId: row.owner_id }
 }
 
 async function insertScheduledTaskOutbox(
@@ -177,7 +178,7 @@ export async function pauseProjectScheduledTasks(
   const generator = new Sha256StableIdGenerator()
   for (const task of tasks.rows) {
     const updated = await client.query<ScheduledTaskRow>(
-      `UPDATE bff_scheduled_task SET enabled=FALSE,status='paused',next_run_at=NULL,revision=revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND owner_id=$2 AND task_id=$3 RETURNING ${TASK_COLUMNS}`,
+      `UPDATE bff_scheduled_task SET enabled=FALSE,status='paused',revision=revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND owner_id=$2 AND task_id=$3 RETURNING ${TASK_COLUMNS}`,
       [scope.tenantId, scope.subjectId, task.task_id],
     )
     const row = updated.rows[0]
@@ -213,22 +214,25 @@ function validPositiveInteger(value: number, name: string): number {
 }
 
 function commandLineageMatches(row: ScheduledTaskOutboxRow, payload: ScheduledTaskOutboxPayload, stableIdGenerator: StableIdGenerator): boolean {
-  const operation = row.command_type === "scheduler.register"
-    ? "register"
-    : row.command_type === "scheduler.replace"
-      ? "replace"
-      : row.command_type === "scheduler.delete"
-        ? "delete"
-        : null
+  const operation =
+    row.command_type === "scheduler.register"
+      ? "register"
+      : row.command_type === "scheduler.replace"
+        ? "replace"
+        : row.command_type === "scheduler.delete"
+          ? "delete"
+          : null
   if (operation === null) return false
-  return payload.command_type === row.command_type
-    && payload.lineage.tenant_id === row.tenant_id
-    && payload.lineage.actor_id === row.actor_id
-    && payload.lineage.request_id === row.request_id
-    && payload.lineage.idempotency_key === row.idempotency_key
-    && payload.task.task_id === row.task_id
-    && payload.task.revision === safeInteger(row.aggregate_revision, "SCHEDULED_TASK_OUTBOX_REVISION")
-    && scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, row.idempotency_key, stableIdGenerator) === row.outbox_id
+  return (
+    payload.command_type === row.command_type &&
+    payload.lineage.tenant_id === row.tenant_id &&
+    payload.lineage.actor_id === row.actor_id &&
+    payload.lineage.request_id === row.request_id &&
+    payload.lineage.idempotency_key === row.idempotency_key &&
+    payload.task.task_id === row.task_id &&
+    payload.task.revision === safeInteger(row.aggregate_revision, "SCHEDULED_TASK_OUTBOX_REVISION") &&
+    scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, row.idempotency_key, stableIdGenerator) === row.outbox_id
+  )
 }
 
 function claimedCommandFromRow(row: ScheduledTaskOutboxRow, stableIdGenerator: StableIdGenerator): ScheduledTaskOutboxCommand {
@@ -263,7 +267,61 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
   public constructor(
     private readonly database: PostgresBffDatabase,
     private readonly stableIdGenerator: StableIdGenerator = new Sha256StableIdGenerator(),
+    private readonly clock: () => Date = () => new Date(),
   ) {}
+
+  /** One owner-local snapshot, with cancellation of pool acquisition and blocked reads. */
+  public async readScheduledTaskSnapshots(scope: ScheduledTaskOwnerScope, signal: AbortSignal, taskId?: string): Promise<ScheduledTaskReadSnapshot[]> {
+    signal.throwIfAborted()
+    let client: PoolClient | undefined
+    let released = false
+    const release = (destroy: boolean): void => {
+      if (client !== undefined && !released) {
+        released = true
+        client.release(destroy)
+      }
+    }
+    let cancel: (() => void) | undefined
+    const aborted = new Promise<never>((_resolve, reject) => {
+      cancel = (): void => {
+        release(true)
+        reject(Error("scheduled_task_read_cancelled"))
+      }
+      signal.addEventListener("abort", cancel, { once: true })
+    })
+    const acquisition = this.database.pool.connect().then((value) => {
+      client = value
+      if (signal.aborted) release(true)
+      return value
+    })
+    try {
+      await Promise.race([acquisition, aborted])
+      signal.throwIfAborted()
+      const result = await Promise.race([
+        client!.query<ScheduledTaskRow & { delivery_status: ScheduledTaskOutboxStatus | null; project_available: boolean }>(
+          `SELECT ${TASK_COLUMNS},
+                (SELECT o.status FROM bff_scheduled_task_outbox o
+                  WHERE o.tenant_id = t.tenant_id AND o.task_id = t.task_id
+                    AND o.aggregate_revision = t.revision
+                    AND o.command_type IN ('scheduler.register', 'scheduler.replace')
+                  ORDER BY o.created_at DESC, o.outbox_id DESC LIMIT 1) AS delivery_status,
+                (t.project_id IS NULL OR EXISTS
+                  (SELECT 1 FROM bff_project p WHERE p.project_id = t.project_id
+                    AND p.tenant_id = t.tenant_id AND p.owner_id = t.owner_id AND p.deleted_at IS NULL)) AS project_available
+           FROM bff_scheduled_task t
+          WHERE t.tenant_id = $1 AND t.owner_id = $2 AND ($3::text IS NULL OR t.task_id = $3)
+          ORDER BY t.created_at ASC, t.task_id ASC`,
+          [scope.tenantId, scope.subjectId, taskId ?? null],
+        ),
+        aborted,
+      ])
+      signal.throwIfAborted()
+      return result.rows.map((row) => ({ task: scheduledTaskFromRow(row), deliveryStatus: row.delivery_status, projectAvailable: row.project_available }))
+    } finally {
+      if (cancel !== undefined) signal.removeEventListener("abort", cancel)
+      release(signal.aborted)
+    }
+  }
 
   public async listScheduledTasks(scope: ScheduledTaskOwnerScope): Promise<ScheduledTaskFact[]> {
     const result = await this.database.pool.query<ScheduledTaskRow>(
@@ -316,12 +374,12 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
       if (input.projectId !== undefined && ownedProjectId === null) {
         throw new Error("PROJECT_NOT_FOUND")
       }
-      const recurrenceAnchorAt = input.recurrenceAnchorAt ?? new Date()
+      const calendar = newCalendar(input, this.clock())
       const inserted = await client.query<ScheduledTaskRow>(
         `INSERT INTO bff_scheduled_task
           (task_id, tenant_id, project_id, owner_id, title, prompt, frequency, task_time, timezone,
-           recurrence_anchor_at, next_run_at, expires_at, auto_approve, enabled, status, revision)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, NULL, $11::timestamptz, $12, true, 'active', 1)
+           weekdays, month_days, local_date, run_at, expires_at, auto_approve, enabled, status, revision)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::smallint[], $11::smallint[], $12::date, $13::timestamptz, $14::timestamptz, $15, true, 'active', 1)
          ON CONFLICT (task_id) DO NOTHING
          RETURNING ${TASK_COLUMNS}`,
         [
@@ -331,10 +389,13 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
           scope.subjectId,
           input.title,
           input.prompt,
-          input.frequency,
-          input.time,
-          input.timezone,
-          recurrenceAnchorAt,
+          calendar.frequency,
+          calendar.time,
+          calendar.timezone,
+          calendar.weekdays ?? null,
+          calendar.monthDays ?? null,
+          calendar.localDate ?? null,
+          calendar.runAt ?? null,
           input.expiresAt ?? null,
           input.autoApprove,
         ],
@@ -374,10 +435,13 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
         return scheduledTaskFromRow(current)
       }
       if (project !== null && project.deleted_at !== null) throw new Error("PROJECT_NOT_FOUND")
+      const changedRule = ["frequency", "time", "timezone", "weekdays", "monthDays", "localDate", "runAt"].some((field) => Object.hasOwn(input, field))
+      const priorCalendar = storedCalendar(current)
+      const calendar = changedRule ? newCalendar(input as ScheduledCalendar, this.clock(), priorCalendar.runAt) : priorCalendar
       const updated = await client.query<ScheduledTaskRow>(
         `UPDATE bff_scheduled_task SET title = $4, prompt = $5, frequency = $6, task_time = $7,
-          timezone = $8, recurrence_anchor_at = $9::timestamptz, next_run_at = NULL, expires_at = $10::timestamptz,
-          auto_approve = $11, enabled = $12, status = $13, revision = revision + 1,
+          timezone = $8, weekdays = $9::smallint[], month_days = $10::smallint[], local_date = $11::date, run_at = $12::timestamptz, expires_at = $13::timestamptz,
+          auto_approve = $14, enabled = $15, status = $16, revision = revision + 1,
           updated_at = CURRENT_TIMESTAMP(3)
          WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3
          RETURNING ${TASK_COLUMNS}`,
@@ -387,10 +451,13 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
           taskId,
           input.title ?? current.title,
           input.prompt ?? current.prompt,
-          input.frequency ?? current.frequency,
-          input.time ?? current.task_time,
-          input.timezone ?? current.timezone,
-          input.recurrenceAnchorAt ?? dbDate(current.recurrence_anchor_at, "SCHEDULED_TASK_RECURRENCE_ANCHOR_INVALID"),
+          calendar.frequency,
+          calendar.time,
+          calendar.timezone,
+          calendar.weekdays ?? null,
+          calendar.monthDays ?? null,
+          calendar.localDate ?? null,
+          calendar.runAt ?? null,
           input.expiresAt === undefined ? current.expires_at : input.expiresAt,
           input.autoApprove ?? current.auto_approve,
           input.enabled ?? current.enabled,
@@ -411,10 +478,11 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
       if (current === null) return this.outboxExists(client, scope.tenantId, taskId, "delete", taskLineage.idempotencyKey, scope.subjectId)
       if (await this.outboxExists(client, scope.tenantId, taskId, "delete", taskLineage.idempotencyKey, scope.subjectId)) return true
       await this.insertOutbox(client, "delete", taskLineage, current)
-      const deleted = await client.query(
-        "DELETE FROM bff_scheduled_task WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3",
-        [scope.tenantId, scope.subjectId, taskId],
-      )
+      const deleted = await client.query("DELETE FROM bff_scheduled_task WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3", [
+        scope.tenantId,
+        scope.subjectId,
+        taskId,
+      ])
       return deleted.rowCount === 1
     })
   }
@@ -464,61 +532,22 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
     return result.rows.map((row) => claimedCommandFromRow(row, this.stableIdGenerator))
   }
 
-  public async markScheduledTaskOutboxSucceeded(lease: ScheduledTaskOutboxLease, completedAt: Date, projection: ScheduledTaskNextProjection): Promise<boolean> {
+  public async markScheduledTaskOutboxSucceeded(lease: ScheduledTaskOutboxLease, completedAt: Date): Promise<boolean> {
     assertLease(lease)
     const completedTimestamp = dbDate(completedAt, "SCHEDULED_TASK_OUTBOX_COMPLETED_AT_INVALID")
-    if (projection !== null) {
-      requiredIdentity(projection.taskId, "SCHEDULED_TASK_PROJECTION_TASK_ID")
-      validPositiveInteger(projection.taskRevision, "SCHEDULED_TASK_PROJECTION_REVISION")
-      dbDate(projection.nextRunAt, "SCHEDULED_TASK_PROJECTION_NEXT_RUN_INVALID")
-    }
-    return this.transaction(async (client) => {
-      const command = await client.query<ScheduledTaskOutboxRow>(
-        `SELECT outbox_id, tenant_id, task_id, command_type, aggregate_revision, payload,
-                actor_id, request_id, idempotency_key, status, attempt_count, available_at,
-                lease_owner, lease_token, lease_until, fence, last_error_code
-           FROM bff_scheduled_task_outbox
-          WHERE outbox_id = $1 AND status = 'leased' AND lease_owner = $2
-            AND lease_token = $3 AND fence = $4
-          FOR UPDATE`,
-        [lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence],
-      )
-      const row = command.rows[0]
-      if (row === undefined) return false
-      const revision = safeInteger(row.aggregate_revision, "SCHEDULED_TASK_OUTBOX_REVISION")
-      if (projection === null) {
-        if (row.command_type !== "scheduler.delete") throw new Error("SCHEDULED_TASK_PROJECTION_REQUIRED")
-      } else {
-        if (row.command_type === "scheduler.delete" || projection.taskId !== row.task_id || projection.taskRevision !== revision) {
-          throw new Error("SCHEDULED_TASK_PROJECTION_MISMATCH")
-        }
-        await client.query(
-          `UPDATE bff_scheduled_task
-              SET next_run_at = CASE WHEN enabled AND status = 'active' THEN $4::timestamptz ELSE NULL END,
-                  updated_at = CURRENT_TIMESTAMP(3)
-            WHERE tenant_id = $1 AND task_id = $2 AND revision = $3`,
-          [row.tenant_id, row.task_id, revision, projection.nextRunAt],
-        )
-      }
-      const settled = await client.query(
-        `UPDATE bff_scheduled_task_outbox
-            SET status = 'succeeded', completed_at = $5::timestamptz,
-                lease_owner = NULL, lease_token = NULL, lease_until = NULL,
-                last_error_code = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP(3)
-          WHERE outbox_id = $1 AND status = 'leased' AND lease_owner = $2
-            AND lease_token = $3 AND fence = $4`,
-        [lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, completedTimestamp],
-      )
-      return settled.rowCount === 1
-    })
+    const settled = await this.database.pool.query(
+      `UPDATE bff_scheduled_task_outbox
+          SET status = 'succeeded', completed_at = $5::timestamptz,
+              lease_owner = NULL, lease_token = NULL, lease_until = NULL,
+              last_error_code = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP(3)
+        WHERE outbox_id = $1 AND status = 'leased' AND lease_owner = $2
+          AND lease_token = $3 AND fence = $4`,
+      [lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, completedTimestamp],
+    )
+    return settled.rowCount === 1
   }
 
-  public async markScheduledTaskOutboxRetryable(
-    lease: ScheduledTaskOutboxLease,
-    nextAttemptAt: Date,
-    errorCode: string,
-    failedAt: Date,
-  ): Promise<boolean> {
+  public async markScheduledTaskOutboxRetryable(lease: ScheduledTaskOutboxLease, nextAttemptAt: Date, errorCode: string, failedAt: Date): Promise<boolean> {
     assertLease(lease)
     const nextAttemptTimestamp = dbDate(nextAttemptAt, "SCHEDULED_TASK_OUTBOX_NEXT_ATTEMPT_AT_INVALID")
     const failedTimestamp = dbDate(failedAt, "SCHEDULED_TASK_OUTBOX_FAILED_AT_INVALID")
@@ -537,11 +566,7 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
     return result.rowCount === 1
   }
 
-  public async markScheduledTaskOutboxFailed(
-    lease: ScheduledTaskOutboxLease,
-    errorCode: string,
-    failedAt: Date,
-  ): Promise<boolean> {
+  public async markScheduledTaskOutboxFailed(lease: ScheduledTaskOutboxLease, errorCode: string, failedAt: Date): Promise<boolean> {
     assertLease(lease)
     const failedTimestamp = dbDate(failedAt, "SCHEDULED_TASK_OUTBOX_FAILED_AT_INVALID")
     if (errorCode.trim() === "") throw new Error("SCHEDULED_TASK_OUTBOX_ERROR_CODE_REQUIRED")
@@ -561,7 +586,7 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
       if (row.command_type === "scheduler.register" || row.command_type === "scheduler.replace") {
         await client.query(
           `UPDATE bff_scheduled_task
-              SET status = 'failed', next_run_at = NULL, updated_at = CURRENT_TIMESTAMP(3)
+              SET status = 'failed', updated_at = CURRENT_TIMESTAMP(3)
             WHERE tenant_id = $1 AND task_id = $2 AND revision = $3
               AND enabled AND status = 'active'`,
           [row.tenant_id, row.task_id, safeInteger(row.aggregate_revision, "SCHEDULED_TASK_OUTBOX_REVISION")],

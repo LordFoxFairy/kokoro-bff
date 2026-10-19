@@ -29,40 +29,40 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "79bf98c5aa63b9bace207afdf42d8c7aefee4fe8",
-        contract_version: "5.0.0",
+        repository_commit: "7104f3da6e812e1092866cf4e60e32826a8992c1",
+        contract_version: "7.0.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2",
+        contract_sha256: "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "12c0f7ad3e6f7de6ff2183410fdae986119e99bd6975e9f07ee71f23dc2d22ca",
+        provenance_sha256: "e87d077af7729317f8e20ad8423d6c96ac14ad46f002f410274401486a8bf8ec",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2",
+        source_sha256: "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
     assert.match(manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256 ?? "", /^[0-9a-f]{64}$/u)
   })
 
-  it("uses one HTTP5 publication for process, delivery and interaction with no split source pin", async () => {
+  it("uses one HTTP7 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "79bf98c5aa63b9bace207afdf42d8c7aefee4fe8")
+    assert.equal(manifest.owner.repository_commit, "7104f3da6e812e1092866cf4e60e32826a8992c1")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2",
+      "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/79bf98c5aa63b9bace207afdf42d8c7aefee4fe8/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/7104f3da6e812e1092866cf4e60e32826a8992c1/openapi.json", import.meta.url), "utf8"),
     )
     assert.doesNotThrow(() => assertInteractionContractSchema(owner))
     for (const change of [
@@ -314,4 +314,97 @@ it("R123 owner replay envelope accepts the published HTTP5 Todo and safe activit
   const envelope = { data: { events: safeEvents, next_seq: 3, watermark: 3 }, meta: { request_id: "r123_http5" } }
 
   assert.deepEqual(parseReplayPage(200, envelope), envelope)
+})
+
+describe("Agent HTTP7 frozen BFF project projection", () => {
+  async function peer(exercise) {
+    const { createServer } = await import("node:http")
+    const received = []
+    const server = createServer(async (request, response) => {
+      const chunks = []
+      for await (const chunk of request) chunks.push(chunk)
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+      received.push({ body, key: request.headers["idempotency-key"] })
+      response.writeHead(202, { "content-type": "application/json" })
+      response.end(JSON.stringify({ data: { run_id: body.run_id, session_id: body.session_id, replayed: false }, meta: { request_id: body.request_id } }))
+    })
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+    try {
+      const url = `http://127.0.0.1:${server.address().port}`
+      const config = { agentEnabled: true, upstreams: { agents: url }, domain: "fixture.invalid", upstreamSecret: "fixture-secret" }
+      const { AgentOutboxDelivery } = await import("../dist/infrastructure/clients/agent/outbox-delivery.js")
+      const { ScheduledAgentDispatchDelivery } = await import("../dist/infrastructure/clients/agent/scheduled-dispatch-delivery.js")
+      await exercise(received, new AgentOutboxDelivery(config), new ScheduledAgentDispatchDelivery(config))
+    } finally {
+      server.closeAllConnections()
+      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    }
+  }
+  function saved(source, project) {
+    return {
+      request_id: "request_1",
+      run_id: "run_1",
+      session_id: "session_1",
+      feature_key: "chat",
+      message_id: "message_1",
+      content: "unchanged",
+      selected_skill_source_refs: [],
+      trace: { source, ...(project === undefined ? {} : { project_ref: project }) },
+    }
+  }
+  function command(payload) {
+    return {
+      tenantId: "tenant",
+      subjectId: "user",
+      actorId: "user",
+      identityAssertionRef: "assertion",
+      requestId: "request_1",
+      runId: "run_1",
+      conversationId: "session_1",
+      idempotencyKey: "same-command",
+      payload,
+    }
+  }
+  it("sends explicit nullable scope for Chat and Scheduled without rewriting the frozen command", async () => {
+    await peer(async (received, chat, scheduled) => {
+      for (const [delivery, source] of [
+        [chat, "kokoro-bff"],
+        [scheduled, "kokoro-bff-scheduler"],
+      ]) {
+        for (const project of [undefined, "project_frozen_original"]) {
+          const launch = saved(source, project)
+          const payload = delivery === chat ? { schema_version: 2, launch } : launch
+          const before = JSON.stringify(payload)
+          assert.deepEqual(await delivery.deliver(command(payload), 2000), { outcome: "admitted" })
+          const wire = received.at(-1)
+          assert.equal(wire.body.project_ref, project ?? null)
+          assert.equal(wire.key, "same-command")
+          assert.equal(JSON.stringify(payload), before)
+          assert.deepEqual(wire.body.selected_skill_source_refs, [])
+        }
+      }
+      assert.equal(received.length, 4)
+    })
+  })
+  it("rejects forged or malformed saved scopes before any owner request", async () => {
+    await peer(async (received, chat, scheduled) => {
+      for (const [delivery, source] of [
+        [chat, "kokoro-bff"],
+        [scheduled, "kokoro-bff-scheduler"],
+      ]) {
+        const base = saved(source, "project_frozen_original")
+        for (const launch of [
+          { ...base, project_ref: "project_forged" },
+          { ...base, trace: { ...base.trace, project_ref: null } },
+          { ...base, trace: { ...base.trace, project_ref: "not a project" } },
+          { ...base, trace: { source: "browser" } },
+          { ...base, extra: true },
+        ]) {
+          const payload = delivery === chat ? { schema_version: 2, launch } : launch
+          assert.deepEqual(await delivery.deliver(command(payload), 2000), { outcome: "not_admitted", errorCode: "agent_launch_invalid" })
+        }
+      }
+      assert.equal(received.length, 0)
+    })
+  })
 })

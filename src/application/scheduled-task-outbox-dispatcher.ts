@@ -124,7 +124,7 @@ export class ScheduledTaskOutboxDispatcher {
     const settledAt = this.clock()
     const lease = leaseFor(command)
     if (result.outcome === "succeeded") {
-      await this.repository.markScheduledTaskOutboxSucceeded(lease, settledAt, result.projection).catch(() => false)
+      await this.repository.markScheduledTaskOutboxSucceeded(lease, settledAt).catch(() => false)
       return
     }
     if (result.outcome === "failed" || command.attemptCount >= this.maxAttempts) {
