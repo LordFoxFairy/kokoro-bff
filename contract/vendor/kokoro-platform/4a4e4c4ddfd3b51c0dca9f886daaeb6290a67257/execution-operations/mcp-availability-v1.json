@@ -1,0 +1,79 @@
+{
+  "profile": "mcp-local-availability-v1",
+  "version": "1.0.0",
+  "owner": "Platform/MCP",
+  "visibility": "internal-owner",
+  "status": "prepared",
+  "runtime_verified": false,
+  "http_version": "6.2.0",
+  "enum": {
+    "UNSPECIFIED": 0,
+    "AVAILABLE": 1,
+    "REFRESH_REQUIRED": 2,
+    "REFRESHING": 3,
+    "REAUTHORIZATION_REQUIRED": 4,
+    "UNAVAILABLE": 5
+  },
+  "response_fields": {
+    "PersonalMcpConnector": 13,
+    "PersonalMcpServer": 15
+  },
+  "json_values": [
+    "available",
+    "refresh_required",
+    "refreshing",
+    "reauthorization_required",
+    "unavailable"
+  ],
+  "semantics": {
+    "zero": "invalid output; never infer available from missing, default or unknown",
+    "read": "same bounded owner snapshot and database observation; no remote I/O or mutation",
+    "meaning": "local qualification only, not network liveness or execution permission",
+    "receipt": "business ACK remains historical; every current response reprojects availability instead of storing it in the receipt",
+    "global_oauth": "unavailable until a formal global runtime-material reader exists"
+  },
+  "affected_oauth_responses": [
+    "BeginPersonalMcpConnectorAuthorizationResponse.connector",
+    "CompletePersonalMcpConnectorAuthorizationResponse.connector",
+    "ReconnectPersonalMcpConnectorAuthorizationResponse.connector"
+  ],
+  "historical_oauth_profile": "mcp-personal-oauth-v1 1.0.0 remains its original frozen CUSTOM_API parent graph; this successor covers its embedded connector delta",
+  "parents": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+      "path": "contract/descriptor/platform-mcp-availability-parent.proto.snapshot",
+      "sha256": "e6ae73055a6e03a6a3c188fbede2e35480977f9cd50eae994e7bdb8ace982503"
+    },
+    "contract/descriptor/platform-v1.binpb": {
+      "path": "contract/descriptor/platform-mcp-availability-parent.descriptor.snapshot",
+      "sha256": "7c0d0873a82ad55637cd7a6faca1b0e55db2ac6c5536900581ba0fd3972ee637"
+    },
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+      "path": "contract/descriptor/platform-mcp-availability-parent.generated.snapshot",
+      "sha256": "df9db350b03627fb9e0195c3277b368eda72155f1a4eaa781346333486e58884"
+    },
+    "contract/openapi/platform-http.openapi.json": {
+      "path": "contract/descriptor/platform-mcp-availability-parent.http.snapshot",
+      "sha256": "18699985514e5b75bb48dc1fbaad638f6184e88032ed5e6d242ef89e6144b0fd"
+    },
+    "contract/execution-operations/mcp-personal-product-v1.json": {
+      "path": "contract/descriptor/platform-mcp-availability-parent.personal-product-1.0.profile.snapshot",
+      "sha256": "269dc9fddb5e02e931108b690aec67aaeab88ecebdfa4f37da90e63e8a272648"
+    },
+    "contract/execution-operations/mcp-private-server-v1.json": {
+      "path": "contract/descriptor/platform-mcp-availability-parent.private-server-1.3.profile.snapshot",
+      "sha256": "0cdc5a0f44f11efbac5a5304d9e7df8d722f97660c73026c19577764b41471bf"
+    }
+  },
+  "current": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "11f916c33abe33230509b1e12f0ca7b24e3e8fd8e4b9e81fe05ca70d345137c6",
+    "contract/descriptor/platform-v1.binpb": "d3e3c4d102db0a6026c339a13101b4cc883ffddc3f8140978eec38537f004e2d",
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "963b932c6cdf1f0d1765ac4059e1fb944d50e696587436870596948b049289b8",
+    "contract/openapi/platform-http.openapi.json": "0cbae3cc2874314a7af2722f76e8dbf4a307ce49d7f25aceb596782a87faae40"
+  },
+  "runtime_dependency_refresh": {
+    "profile": "mcp-runtime-material-v1",
+    "version": "1.2.0",
+    "reason": "imported Platform descriptor only; the two Runtime methods, request binding3.0 and vectors are unchanged"
+  },
+  "unchanged_requests": "all methods, request messages, command digests, proof policy and request vectors unchanged"
+}

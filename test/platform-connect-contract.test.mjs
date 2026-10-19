@@ -59,6 +59,8 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
       "mcp-package-admin/v1/profile.json",
       "mcp-package-admin/v1/request-vectors.json",
       "descriptor/mcp-package-admin-v1.binpb",
+      "execution-operations/mcp-personal-product-v1.json",
+      "execution-operations/mcp-availability-v1.json",
     ].map((file) => ({
       path: `contract/${file}`,
       sha256: artifacts[file],
@@ -66,7 +68,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     provenance: { path: "contract/provenance.json", sha256: artifacts["provenance.json"], combined_sha256: combinedSha256 },
     generated: ownerGenerated,
   })
-  assert.equal(manifest.owner.repository_commit, "fa5c5e53151b3c72145b680a3ee4a45d92c17ec7")
+  assert.equal(manifest.owner.repository_commit, "4a4e4c4ddfd3b51c0dca9f886daaeb6290a67257")
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.lockfile_sha256, sha256(await requiredFile("pnpm-lock.yaml")))
   for (const [file, bytes] of Object.entries(await sourceBytes())) assert.equal(sha256(bytes), sources[file])
@@ -187,4 +189,21 @@ test("BFF initializes one strict Protobuf text codec", () => {
   assert.equal(getTextEncoding(), codec)
   assert.equal(codec.decodeUtf8(new Uint8Array([0xef, 0xbb, 0xbf, 0x61]), true), "\uFEFFa")
   assert.throws(() => codec.decodeUtf8(new Uint8Array([0xff]), true), TypeError)
+})
+
+test("MCP availability publication pins the exact required enum without activating normal execution", async () => {
+  const profile = JSON.parse(await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/execution-operations/mcp-availability-v1.json`))
+  const { McpAvailability } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  assert.equal(profile.profile, "mcp-local-availability-v1")
+  assert.equal(profile.version, "1.0.0")
+  assert.equal(profile.status, "prepared")
+  assert.equal(profile.runtime_verified, false)
+  assert.deepEqual(
+    profile.enum,
+    Object.fromEntries(
+      ["UNSPECIFIED", "AVAILABLE", "REFRESH_REQUIRED", "REFRESHING", "REAUTHORIZATION_REQUIRED", "UNAVAILABLE"].map((name) => [name, McpAvailability[name]]),
+    ),
+  )
+  assert.deepEqual(profile.response_fields, { PersonalMcpConnector: 13, PersonalMcpServer: 15 })
+  assert.deepEqual(profile.json_values, ["available", "refresh_required", "refreshing", "reauthorization_required", "unavailable"])
 })

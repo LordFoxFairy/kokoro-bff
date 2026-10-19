@@ -7,9 +7,15 @@ import {
   PersonalMcpConnectorSchema,
   GetPersonalMcpConnectionResponseSchema,
 } from "../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
-import { projectMcpPersonalResponse, validateMcpPersonalPublic, mcpPersonalFault } from "../src/infrastructure/clients/platform/mcp-personal-response.js"
+import {
+  projectMcpPersonalConnector,
+  projectMcpPersonalResponse,
+  validateMcpPersonalPublic,
+  mcpPersonalFault,
+} from "../src/infrastructure/clients/platform/mcp-personal-response.js"
 const input = { tenant: "tenant", subject: "user", requestId: "test" }
 const connector = {
+  availability: "unavailable",
   connector_id: "connector",
   connector_type: "mcp",
   provider_key: "github",
@@ -21,6 +27,7 @@ const connector = {
 }
 const wireConnector = () =>
   create(PersonalMcpConnectorSchema, {
+    availability: 5,
     connectorId: { value: "connector" },
     connectorType: 3,
     providerKey: "github",
@@ -135,4 +142,20 @@ test("bounded real Connect transport binds body/header identity and rejects owne
 
 test("owner opaque cursor rejection is the only InvalidArgument mapped to public 400", () => {
   assert.equal(mcpPersonalFault(new ConnectError("cursor", Code.InvalidArgument), true).status, 400)
+})
+
+// Local availability is an independent required owner fact, never inferred from durable active/enabled.
+test("projects all current owner availability values and rejects missing, default or coerced values", () => {
+  for (const [wire, expected] of [
+    [1, "available"],
+    [2, "refresh_required"],
+    [3, "refreshing"],
+    [4, "reauthorization_required"],
+    [5, "unavailable"],
+  ] as const) {
+    const raw = Object.assign(wireConnector(), { availability: wire })
+    assert.equal(projectMcpPersonalConnector(raw).availability, expected)
+  }
+  for (const invalid of [undefined, null, 0, -1, 6, "1", true])
+    assert.throws(() => projectMcpPersonalConnector(Object.assign(wireConnector(), { availability: invalid })))
 })

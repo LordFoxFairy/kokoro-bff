@@ -5,8 +5,8 @@ import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 
 const root = new URL("../", import.meta.url)
-const ownerCommit = "fa5c5e53151b3c72145b680a3ee4a45d92c17ec7"
-const ownerDigest = "18699985514e5b75bb48dc1fbaad638f6184e88032ed5e6d242ef89e6144b0fd"
+const ownerCommit = "4a4e4c4ddfd3b51c0dca9f886daaeb6290a67257"
+const ownerDigest = "0cbae3cc2874314a7af2722f76e8dbf4a307ce49d7f25aceb596782a87faae40"
 const ownerUrl = new URL(`contract/vendor/kokoro-platform/${ownerCommit}/openapi/platform-http.openapi.json`, root)
 
 test("Platform HTTP client pins the same current owner bundle", async () => {
@@ -17,7 +17,7 @@ test("Platform HTTP client pins the same current owner bundle", async () => {
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-capability")
   assert.equal(manifest.owner.repository_commit, ownerCommit)
-  assert.equal(manifest.owner.contract_version, "6.1.0")
+  assert.equal(manifest.owner.contract_version, "6.2.0")
   assert.equal(manifest.owner.contract_sha256, ownerDigest)
   assert.equal(createHash("sha256").update(source).digest("hex"), ownerDigest)
 })

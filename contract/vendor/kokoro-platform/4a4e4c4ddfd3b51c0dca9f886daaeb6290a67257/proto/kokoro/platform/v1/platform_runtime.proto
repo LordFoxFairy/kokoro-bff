@@ -1172,6 +1172,15 @@ message PersonalMcpPageRequest {
   optional string cursor = 2;
 }
 
+enum McpAvailability {
+  MCP_AVAILABILITY_UNSPECIFIED = 0;
+  MCP_AVAILABILITY_AVAILABLE = 1;
+  MCP_AVAILABILITY_REFRESH_REQUIRED = 2;
+  MCP_AVAILABILITY_REFRESHING = 3;
+  MCP_AVAILABILITY_REAUTHORIZATION_REQUIRED = 4;
+  MCP_AVAILABILITY_UNAVAILABLE = 5;
+}
+
 message PersonalMcpConnector {
   kokoro.platform.v1.McpConnectorId connector_id = 1;
   kokoro.platform.v1.McpConnectorType connector_type = 2;
@@ -1185,6 +1194,7 @@ message PersonalMcpConnector {
   optional string created_at = 10;
   optional string updated_at = 11;
   optional kokoro.platform.v1.McpServerId server_id = 12;
+  kokoro.platform.v1.McpAvailability availability = 13;
 }
 
 message PersonalMcpConnection {
@@ -2103,6 +2113,7 @@ message GetPersonalMcpServerRequest {
 }
 message PersonalMcpServer {
   kokoro.platform.v1.McpServerId server_id = 1; string display_name = 2; string server_url = 3; string status = 4; uint64 state_version = 5; optional string notes = 6; repeated kokoro.platform.v1.PersonalMcpHeaderDescriptor headers = 7; optional kokoro.platform.v1.PersonalMcpOAuthClientDescriptor oauth_client = 8; kokoro.platform.v1.PersonalMcpPrepareStatus prepare_status = 9; optional string authorization_status = 10; repeated kokoro.platform.v1.PersonalMcpDeclaredSelector declarations = 11; optional string declaration_digest = 12; optional kokoro.platform.v1.McpConnectionId connection_id = 13; optional bool declarations_available = 14;
+  kokoro.platform.v1.McpAvailability availability = 15;
 }
 message RegisterPersonalMcpServerResponse { kokoro.platform.v1.PersonalMcpServer server = 1; kokoro.platform.v1.PersonalMcpConnector connector = 2; bool replayed = 3; }
 message ImportPersonalMcpJsonRequest {

@@ -67,6 +67,7 @@ test("A3 connection binding has the owner operation, identity, CAS, selectors an
 
 test("A3 authorization projects only browser-required URL metadata and owner facts", () => {
   const connector = create(PersonalMcpConnectorSchema, {
+    availability: 5,
     connectorId: { value: "connector" },
     connectorType: 3,
     providerKey: "provider",
@@ -89,6 +90,7 @@ test("A3 authorization projects only browser-required URL metadata and owner fac
     },
     connector: {
       connector_id: "connector",
+      availability: "unavailable",
       connector_type: "mcp",
       provider_key: "provider",
       status: "pending",
@@ -101,6 +103,7 @@ test("A3 authorization projects only browser-required URL metadata and owner fac
   assert.deepEqual(projectMcpPersonalAuthorization("complete", completed, { ...identity }), {
     connector: {
       connector_id: "connector",
+      availability: "unavailable",
       connector_type: "mcp",
       provider_key: "provider",
       status: "active",
@@ -134,6 +137,7 @@ test("A3 authorization projects only browser-required URL metadata and owner fac
 
 test("A3 authorization admits a loopback callback target in local development", () => {
   const connector = create(PersonalMcpConnectorSchema, {
+    availability: 5,
     connectorId: { value: "connector" },
     connectorType: 3,
     providerKey: "provider",
@@ -178,7 +182,15 @@ test("A3 real Connect lifecycle forwards opaque callback values and exact connec
             context.responseHeader.set("cache-control", "no-store")
             context.responseHeader.set("x-request-id", request.requestId)
             return {
-              connector: { connectorId: { value: "connector" }, connectorType: 3, providerKey: "provider", status: 2, enabled: false, stateVersion: 3n },
+              connector: {
+                availability: 5,
+                connectorId: { value: "connector" },
+                connectorType: 3,
+                providerKey: "provider",
+                status: 2,
+                enabled: false,
+                stateVersion: 3n,
+              },
             }
           },
           createPersonalMcpConnection: (request, context) => {

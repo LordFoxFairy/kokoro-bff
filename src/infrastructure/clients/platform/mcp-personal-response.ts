@@ -1,6 +1,7 @@
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { Message } from "@bufbuild/protobuf"
 import { z } from "zod"
+import { McpAvailability } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import type { McpPersonalCommandOperation, McpPersonalCommandInput } from "./mcp-personal-command-binding.js"
 
 const text = (min: number, max: number) =>
@@ -42,9 +43,28 @@ const selectors = z
       .refine((value) => value.trim() === value),
   )
   .refine((values) => new Set(values).size === values.length)
+export const mcpPersonalAvailabilitySchema = z.enum(["available", "refresh_required", "refreshing", "reauthorization_required", "unavailable"])
+/** Exact owner enum only: never coerce a string, default, or lifecycle status into current qualification. */
+export function projectMcpPersonalAvailability(value: unknown): z.infer<typeof mcpPersonalAvailabilitySchema> {
+  switch (value) {
+    case McpAvailability.AVAILABLE:
+      return "available"
+    case McpAvailability.REFRESH_REQUIRED:
+      return "refresh_required"
+    case McpAvailability.REFRESHING:
+      return "refreshing"
+    case McpAvailability.REAUTHORIZATION_REQUIRED:
+      return "reauthorization_required"
+    case McpAvailability.UNAVAILABLE:
+      return "unavailable"
+    default:
+      throw new Error("mcp_personal_response_invalid")
+  }
+}
 const connector = z
   .object({
     connector_id: id,
+    availability: mcpPersonalAvailabilitySchema,
     connector_type: z.enum(["builtin", "byok", "mcp"]),
     provider_key: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/u),
     status: z.enum(["pending", "active", "error", "revoked"]),
@@ -173,6 +193,7 @@ function projectConnector(raw: unknown) {
   const value = object(raw)
   return {
     connector_id: identity(value.connectorId),
+    availability: projectMcpPersonalAvailability(value.availability),
     connector_type: ({ 1: "builtin", 2: "byok", 3: "mcp" } as Record<number, string>)[Number(value.connectorType)],
     provider_key: value.providerKey,
     status: ({ 1: "pending", 2: "active", 3: "error", 4: "revoked" } as Record<number, string>)[Number(value.status)],

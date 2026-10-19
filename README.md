@@ -1,3 +1,9 @@
+## 2026-10-19 MCP availability 消费者候选
+
+修既有跨仓版本不配对，不新增功能模块。Platform固定已合入4a4e4c4/HTTP6.2，原HTTP/Connect生成链产物固定摘要；Connector/Server按owner五态独立投影当前可用性，不由status/enabled猜测，不兼容旧缺字段或跳过unknown。Public19/165、SQL、权限与独立错误profile保持。
+
+当前原四套projector先33PASS/11FAIL，再44PASS；补原HTTP夹具的必需字段后相关九套108PASS/0SKIP。两方真实descriptor与实际构建decoder/projector证明五态接通、零值/未知enum/额外wire仍拒绝。此前BFF旧descriptor真实拒绝字段13的负控保留。最终747输入冻结无漂移，format/lint/typecheck/contract/architecture/default/build七门均exit0；contract847 PASS、architecture36 PASS、默认1492 PASS/3原资源SKIP。新增仅三条独有风险测试，重复fixture字段已删除并重跑全门。未另跑真实PG/Redis、owner业务HTTP或正常运行/App/Admin整链。正常原mixed不动，模型、实际工具、扣费和远端PR不启用。
+
 ## 2026-10-19 当前 Public19 集成交付
 
 当前唯一契约为 Public19.0.0 / 165 operations。保留本地Skills、项目选择冻结、知识、调度日历、Library与MCP包管理，并合入main账号会话/姓名、共享/归档及完整Team权限；不恢复旧名称关联或旧anchor字段。双父精确证明在 `scripts/verify-closure-integration-contract.mjs`；真实验证和正常配对边界见 `docs/CURRENT.md`。以下日期段是历史切片，不替代当前机器契约。

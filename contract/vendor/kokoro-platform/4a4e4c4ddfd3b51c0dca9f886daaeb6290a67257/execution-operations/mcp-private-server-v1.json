@@ -1,6 +1,6 @@
 {
   "profile": "mcp-private-server-v1",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "owner": "Platform/MCP",
   "visibility": "internal-owner",
   "service": "kokoro.platform.v1.ProductMcpPersonalService",
@@ -115,5 +115,14 @@
       "transport",
       "provider_key"
     ]
+  },
+  "availability_publication": {
+    "path": "contract/execution-operations/mcp-availability-v1.json",
+    "base_profile": {
+      "path": "contract/descriptor/platform-mcp-availability-parent.private-server-1.3.profile.snapshot",
+      "sha256": "0cdc5a0f44f11efbac5a5304d9e7df8d722f97660c73026c19577764b41471bf"
+    },
+    "response_field": "PersonalMcpServer.availability#15",
+    "base_deltas": "source_delta/wire_delta retain the exact prior publication; the additive successor is defined in mcp-availability-v1"
   }
 }

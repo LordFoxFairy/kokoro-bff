@@ -136,6 +136,7 @@ test("private URL MCP registration admits loopback HTTP only in a development ru
 
 test("private URL MCP GET projects declarations_available and the full safe declaration snapshot in one response", () => {
   const server = create(PersonalMcpServerSchema, {
+    availability: 5,
     serverId: { value: "server-one" },
     displayName: input.displayName,
     serverUrl: input.serverUrl,
@@ -163,6 +164,7 @@ test("private URL MCP GET projects declarations_available and the full safe decl
   assert.deepEqual(projectMcpPersonalServer("server", create(GetPersonalMcpServerResponseSchema, { server }), { ...input, id: "server-one" }), {
     server: {
       server_id: "server-one",
+      availability: "unavailable",
       display_name: input.displayName,
       server_url: input.serverUrl,
       status: "registered",
@@ -188,6 +190,7 @@ test("private URL MCP GET projects declarations_available and the full safe decl
   try {
     process.env.NODE_ENV = "development"
     const local = create(PersonalMcpServerSchema, {
+      availability: 5,
       ...server,
       serverUrl: "http://127.0.0.1:43191/mcp",
     })
@@ -390,6 +393,7 @@ test("private URL MCP delete projects only the owner acknowledgement", () => {
 
 test("private URL MCP projection returns the complete safe descriptor without secret values", () => {
   const server = create(PersonalMcpServerSchema, {
+    availability: 5,
     serverId: { value: "server-one" },
     displayName: input.displayName,
     serverUrl: input.serverUrl,
@@ -415,6 +419,7 @@ test("private URL MCP projection returns the complete safe descriptor without se
     declarationsAvailable: false,
   })
   const connector = create(PersonalMcpConnectorSchema, {
+    availability: 5,
     connectorId: { value: "connector-one" },
     connectorType: 3,
     providerKey: "private-server-one",
@@ -438,6 +443,7 @@ test("private URL MCP projection returns the complete safe descriptor without se
   assert.deepEqual(projected, {
     server: {
       server_id: "server-one",
+      availability: "unavailable",
       display_name: input.displayName,
       server_url: input.serverUrl,
       status: "pending",
@@ -464,6 +470,7 @@ test("private URL MCP projection returns the complete safe descriptor without se
     },
     connector: {
       connector_id: "connector-one",
+      availability: "unavailable",
       connector_type: "mcp",
       provider_key: "private-server-one",
       server_id: "server-one",
@@ -482,6 +489,7 @@ test("private URL MCP projection returns the complete safe descriptor without se
 
 test("JSON import projects newly allocated server descriptors without inventing a selector", () => {
   const server = create(PersonalMcpServerSchema, {
+    availability: 5,
     serverId: { value: "server-imported" },
     displayName: "Imported MCP",
     serverUrl: "https://imported.example/mcp",
@@ -491,6 +499,7 @@ test("JSON import projects newly allocated server descriptors without inventing 
     declarationsAvailable: false,
   })
   const connector = create(PersonalMcpConnectorSchema, {
+    availability: 5,
     connectorId: { value: "connector-imported" },
     connectorType: 3,
     providerKey: "private-server-imported",
@@ -523,6 +532,7 @@ test("JSON import projects newly allocated server descriptors without inventing 
         {
           server: {
             server_id: "server-imported",
+            availability: "unavailable",
             display_name: "Imported MCP",
             server_url: "https://imported.example/mcp",
             status: "pending",
@@ -534,6 +544,7 @@ test("JSON import projects newly allocated server descriptors without inventing 
           },
           connector: {
             connector_id: "connector-imported",
+            availability: "unavailable",
             connector_type: "mcp",
             provider_key: "private-server-imported",
             server_id: "server-imported",
@@ -575,6 +586,7 @@ test("private URL MCP Connect client forwards only the command body plus trusted
             context.responseHeader.set("x-kokoro-request-id", input.requestId)
             return {
               server: {
+                availability: 5,
                 serverId: { value: "server-one" },
                 displayName: input.displayName,
                 serverUrl: input.serverUrl,
@@ -600,6 +612,7 @@ test("private URL MCP Connect client forwards only the command body plus trusted
                 declarationsAvailable: false,
               },
               connector: {
+                availability: 5,
                 connectorId: { value: "connector-one" },
                 connectorType: 3,
                 providerKey: "private-server-one",
@@ -660,6 +673,7 @@ test("private URL MCP Connect client forwards only the command body plus trusted
     assert.deepEqual(result, {
       server: {
         server_id: "server-one",
+        availability: "unavailable",
         display_name: input.displayName,
         server_url: input.serverUrl,
         status: "registered",
@@ -686,6 +700,7 @@ test("private URL MCP Connect client forwards only the command body plus trusted
       },
       connector: {
         connector_id: "connector-one",
+        availability: "unavailable",
         connector_type: "mcp",
         provider_key: "private-server-one",
         server_id: "server-one",
@@ -808,4 +823,29 @@ test("connector receipt markers fail closed when ambiguous, out of scope or inco
     assert.equal(connectorCommandFault(new Error(marker), surface, true), null)
     assert.equal(connectorCommandFault(new ConnectError(marker, Code.Unavailable), surface, true), null)
   }
+})
+
+// Returned descriptors retain revoked history; only input/current execution configuration has a 32-active limit.
+test("private server reads retain revoked header history alongside 32 current slots", () => {
+  const server = create(PersonalMcpServerSchema, {
+    availability: 5,
+    serverId: { value: "server-history" },
+    displayName: "History",
+    serverUrl: "https://tools.example/mcp",
+    status: "pending",
+    stateVersion: 1n,
+    prepareStatus: PersonalMcpPrepareStatus.PENDING_PREPARE,
+    declarationsAvailable: false,
+    headers: Array.from({ length: 33 }, (_, index) => ({
+      name: `x-fixture-${index}`,
+      configured: index !== 0,
+      status: index === 0 ? "revoked" : "active",
+      stateVersion: 1n,
+    })),
+  })
+  const result = projectMcpPersonalServer("server", create(GetPersonalMcpServerResponseSchema, { server }), { ...input, id: "server-history" }) as {
+    server: { headers: { configured: boolean }[]; availability: string }
+  }
+  assert.equal(result.server.headers.length, 33)
+  assert.equal(result.server.headers.filter((row) => row.configured).length, 32)
 })

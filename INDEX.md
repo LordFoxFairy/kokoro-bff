@@ -1,3 +1,7 @@
+## MCP 当前可用性消费
+
+原 `mcp-personal-response.ts` 负责严格enum→五态及Connector投影；原 `mcp-personal-server-response.ts` 复用同一投影并保完整安全header描述。原两个Platform生成器固定同一个已合4a4e4c4 /HTTP6.2发布物，测试仍在原MCP suites内承接，无新模块/持久事实。
+
 ## 2026-10-19 集成证明入口
 
 唯一当前 Public19/165：`contract/openapi/v1/openapi.yaml`。`scripts/verify-closure-integration-contract.mjs` 与 `test/contract/closure-integration.test.mjs` 验证两个批准父全文/有序操作、当前wire与仅新增归档Schema；历史proof不是运行时兼容层。现有业务组件与owner不扩展。

@@ -161,7 +161,13 @@ export type SkillProductFacts = {
   presentation_kind?: "first_party" | "github_repository"
 }
 
+/**
+ * Current local configuration and credential qualification only; not network liveness, execution authorization or tool success.
+ */
+export type McpAvailability = "available" | "refresh_required" | "refreshing" | "reauthorization_required" | "unavailable"
+
 export type PersonalMcpConnector = {
+  availability: McpAvailability
   connector_id: string
   connector_type: 1 | 2 | 3
   provider_key: string
