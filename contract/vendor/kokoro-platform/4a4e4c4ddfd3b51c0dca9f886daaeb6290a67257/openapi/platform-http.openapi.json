@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kokoro Platform Business HTTP API",
-    "version": "6.1.0",
+    "version": "6.2.0",
     "description": "Platform read-only projections. A Platform-local fixed-tenant service bearer authenticates BFF; authenticated BFF then supplies its Product Session subject."
   },
   "servers": [
@@ -1491,10 +1491,22 @@
           }
         }
       },
+      "McpAvailability": {
+        "type": "string",
+        "enum": [
+          "available",
+          "refresh_required",
+          "refreshing",
+          "reauthorization_required",
+          "unavailable"
+        ],
+        "description": "Current local configuration and credential qualification only; not network liveness, execution authorization or tool success."
+      },
       "PersonalMcpConnector": {
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "availability",
           "connector_id",
           "connector_type",
           "provider_key",
@@ -1504,6 +1516,9 @@
           "state_version"
         ],
         "properties": {
+          "availability": {
+            "$ref": "#/components/schemas/McpAvailability"
+          },
           "connector_id": {
             "type": "string",
             "minLength": 1,

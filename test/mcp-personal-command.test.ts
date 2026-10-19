@@ -56,6 +56,7 @@ test("A2 digest exactly binds owner method/tenant/subject/enum and canonical CAS
 test("A2 projects true metadata and presence without fabricated historical name or date", () => {
   const input = { ...identity, id: "connector" }
   const connector = create(PersonalMcpConnectorSchema, {
+    availability: 5,
     connectorId: { value: "connector" },
     connectorType: 3,
     providerKey: "test",
@@ -66,6 +67,7 @@ test("A2 projects true metadata and presence without fabricated historical name 
   assert.deepEqual(projectMcpPersonalResponse("connector", create(GetPersonalMcpConnectorResponseSchema, { connector }), input), {
     connector: {
       connector_id: "connector",
+      availability: "unavailable",
       connector_type: "mcp",
       provider_key: "test",
       status: "pending",
@@ -90,6 +92,7 @@ test("A2 projects true metadata and presence without fabricated historical name 
 test("A2 command ACK never creates connection/replay facts and is identity/state bound", () => {
   const connector = {
     connector_id: "connector",
+    availability: "unavailable",
     connector_type: "mcp",
     provider_key: "test",
     status: "revoked",
@@ -162,6 +165,7 @@ test("A2 typed command errors preserve conflict/precondition/unknown semantics",
 test("A2 Create projects actual generated disabled initial ACK and rejects fabricated enabled CAS or status", () => {
   const input = { ...identity, providerKey: "test", connectorType: "mcp" as const, displayName: "Real", description: "" }
   const connector = create(PersonalMcpConnectorSchema, {
+    availability: 5,
     connectorId: { value: "connector" },
     connectorType: 3,
     providerKey: "test",
@@ -202,6 +206,7 @@ test("A2 real Connect command sends exact generated digest/key/CAS and uses shar
             context.responseHeader.set("x-kokoro-request-id", request.requestId)
             return {
               connector: {
+                availability: 5,
                 connectorId: request.connectorId,
                 connectorType: 3,
                 providerKey: "test",

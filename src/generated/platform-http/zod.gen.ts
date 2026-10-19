@@ -205,7 +205,13 @@ export const zSelfManagedSkill = z.object({
   product: zSkillProductFacts,
 })
 
+/**
+ * Current local configuration and credential qualification only; not network liveness, execution authorization or tool success.
+ */
+export const zMcpAvailability = z.enum(["available", "refresh_required", "refreshing", "reauthorization_required", "unavailable"])
+
 export const zPersonalMcpConnector = z.object({
+  availability: zMcpAvailability,
   connector_id: z.string().min(1).max(191),
   connector_type: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   provider_key: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/),

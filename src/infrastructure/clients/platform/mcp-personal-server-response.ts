@@ -1,6 +1,11 @@
 import { z } from "zod"
 import type { McpPersonalServerInput, McpPersonalServerOperation } from "./mcp-personal-server-binding.js"
-import { assertMcpPersonalWireKnown, projectMcpPersonalConnector } from "./mcp-personal-response.js"
+import {
+  assertMcpPersonalWireKnown,
+  projectMcpPersonalConnector,
+  projectMcpPersonalAvailability,
+  mcpPersonalAvailabilitySchema,
+} from "./mcp-personal-response.js"
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u)
 const digest = z.string().regex(/^[a-f0-9]{64}$/u)
@@ -81,12 +86,13 @@ const declaration = z.discriminatedUnion("kind", [
 const server = z
   .object({
     server_id: id,
+    availability: mcpPersonalAvailabilitySchema,
     display_name: text(1, 100),
     server_url: serverUrl,
     status: z.enum(["pending", "registered", "disabled"]),
     state_version: version,
     notes: text(1, 4000).optional(),
-    headers: z.array(header).max(32),
+    headers: z.array(header),
     oauth_client: oauth.optional(),
     prepare_status: z.enum(["pending_prepare", "prepare_failed", "needs_oauth", "ready"]),
     authorization_status: z.enum(["pending", "approved", "revoked", "failed"]).optional(),
@@ -149,6 +155,7 @@ function projectServer(raw: unknown): z.infer<typeof server> {
   const valueOauth = value.oauthClient === undefined ? undefined : object(value.oauthClient)
   return server.parse({
     server_id: identity(value.serverId),
+    availability: projectMcpPersonalAvailability(value.availability),
     display_name: value.displayName,
     server_url: value.serverUrl,
     status: value.status,

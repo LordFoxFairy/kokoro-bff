@@ -127,6 +127,7 @@ async function fixture(decision, { realSession = false, check, routeHandler, mcp
 }
 
 const connector = {
+  availability: "unavailable",
   connector_id: "connector-one",
   connector_type: "mcp",
   provider_key: "test",
@@ -138,6 +139,7 @@ const connector = {
   description: "",
 }
 const privateServer = {
+  availability: "unavailable",
   server_id: "server-one",
   display_name: "Private tools",
   server_url: "https://tools.example/mcp",
