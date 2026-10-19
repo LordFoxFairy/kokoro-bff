@@ -1,3 +1,7 @@
+## HTTP7 scope投影而非持久模型扩展（2026-10-18）
+
+本片canonical SQL、outbox payload v2、Message/receipt/command digest均不改变；原trace.project_ref是BFF锁内canonical scope冻结的既有保存位置，缺失表示无项目。Agent窄adapter只把同一不可变事实投影成HTTP7显式nullable字段，不新增root项目列/重复next或修改历史JSON。Scheduled同理复用原receipt快照。旧Agent已经接纳或结果未知的请求必须在正常组合切换前独立审计，不能拿当前Conversation归属重写历史执行意图；本次不操作正常数据。
+
 ## 2026-10-18 MCP 管理HTTP无新增事实
 
 公开五操作仅从当前session/权限获得可信主体并调用固定Platform SDK，不新增数据库、Upload/Package实体、receipt/outbox/cache。Storage仍拥有上传与前三项命令回执；Platform仍拥有发布及不可变版本/Server绑定。状态GET和短时PUT仅投影，签名材料不持久化。未知命令沿原owner恢复，不本地写失败覆盖未知结果。

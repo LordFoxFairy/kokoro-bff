@@ -1,3 +1,11 @@
+## Agent HTTP7 项目上下文配对（2026-10-18，既定模型内实施）
+
+BFF pin Agent7104f3d的原始HTTP7/provenance，由现唯一生成器及三operation allowlist生成；新增usage读取不装配、不调用。现唯一durable dispatch v2已在Conversation/Project锁内把canonical scope冻结到launch.trace.project_ref，Scheduled receipt也冻结其任务scope。本片在Agent窄adapter统一将这份BFF自己持有的已存scope投影为HTTP7 required nullable project_ref；无Project时显式null，绝不读当前Project/Message、外部header或远端trace来重算。Agent只读显式字段，不从trace恢复授权。
+
+这不是旧/新payload双读：存储仍只有现行v2、网络只有HTTP7，没有新增字段事实源/表/版本切换、历史JSON重写或兼容fallback。两个既有delivery共用一次严格wire projection，拒绝输入自带root project_ref、坏trace/source/项目值及其他无效字段，正文前失败为固定not_admitted/agent_launch_invalid；保原ID/key/参数、deadline/取消和unknown判定。投影不修改原对象，重投从同一已存事实导出同一body。移除旧vendor，generated不手改，原Failure/HITL/process规则保持。
+
+实现/回归先在独占源码副本；不改正常库、dispatcher/服务/模型/积分/登录。正常组合切换还必须核对旧Agent已有Run与未知admission，不能把consumer编译通过当历史请求已可安全重发；既有历史请求和回执原样保留。
+
 ## 2026-10-18 MCP 包管理公开接线实施门
 
 沿既定D6-B/feb42f4窄SDK，不新建owner/上传实体：BFF发布五个管理员HTTP操作，复用现mcpProviderAdmin地址/凭据及Nest内部协议adapter；每次当前session＋platformAdmin＋mcp_catalog.manage后调用owner。20秒总预算从BFF入口含准入/正文开始，32KiB raw正文、严格无未知/重复JSON、canonical路径/单Idempotency-Key、请求断开取消，未知写只原key/body显式恢复，不自动重试。body/URL不授信tenant、subject、digest；status不接受正文/key/query。

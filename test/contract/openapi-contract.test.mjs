@@ -1100,7 +1100,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   assert.equal(schemas.RunResumeRequest.properties.expected_pause_revision.minimum, 1)
   assert.equal(schemas.RunResumeRequest.properties.expected_pause_revision.maximum, Number.MAX_SAFE_INTEGER)
   const owner = JSON.parse(
-    await readFile(new URL("../../contract/vendor/kokoro-agent/79bf98c5aa63b9bace207afdf42d8c7aefee4fe8/openapi.json", import.meta.url), "utf8"),
+    await readFile(new URL("../../contract/vendor/kokoro-agent/7104f3da6e812e1092866cf4e60e32826a8992c1/openapi.json", import.meta.url), "utf8"),
   )
   assert.deepEqual(schemas.ResumeDecision, owner.components.schemas.ResumeDecision)
   assert.equal(schemas.SessionEventStream["x-kokoro-custom-event-values"]["kokoro.interaction.state"].$ref, "#/components/schemas/ChatInteractionState")

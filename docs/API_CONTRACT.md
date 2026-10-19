@@ -1,3 +1,9 @@
+## Agent HTTP7 窄消费者（2026-10-18，正常尚未配对）
+
+只升级内部固定Agent artifact到7104f3d/7.0.0，public18.1及157 operations原字节保持。SDK仍只生成Run POST、events GET、control POST，不开放新增usage-evidence读、更不触发模型/收费。Launch网络必含project_ref:string|null，从BFF原durable scope投影，直聊显式null；不会信任浏览器trace或重新读取移动后的项目。当前strict生成源/provenance与本地manifest由同一正式命令校验。
+
+两个派发client在写socket前统一校验owner request闭集；拒绝无效BFF保存形状，不生成第二套request schema或自动旧版本fallback。原request_id/run/session/message、selected_skill_source_refs、key、身份headers与成功/错误/HITL语义不变。正常激活/历史未知admission核对独立验收，模型/扣费继续暂停。
+
 ## 2026-10-18 Public18.1 MCP 包管理目标
 
 新增POST /v1/admin/mcp/packages/{package_id}/uploads、GET同路径/{upload_id}、POST同路径/{upload_id}/complete与/abort、POST /v1/admin/mcp/packages/{package_id}/publish。四写单Idempotency-Key≤191 ASCII，命令摘要仅可信主体与固定意义由SDK生成；路径package/upload保持精确绑定。Complete/Publish size_bytes为1..33554432十进制字符串，SHA lowercase64；staging source版本不是运行版本。Publish body含provider_key和精确上传/asset事实，无任意command/env/URL。

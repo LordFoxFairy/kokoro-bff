@@ -1,10 +1,9 @@
-import type { CreateRunData } from "../../../generated/agent-http/types.gen.js"
 import type { ScheduledAgentDispatchDeliveryPort, ScheduledAgentDeliveryResult } from "../../../application/ports/scheduled-agent-dispatch-delivery.js"
 import type { ScheduledAgentDispatchCommand } from "../../../domain/scheduled-task/agent-dispatch.js"
 import type { BffConfig } from "../../../config/runtime.js"
 import { isRecord } from "../../../domain/json.js"
 import { proxyUpstream } from "../../../upstream.js"
-import { parseAgentErrorCode, parseAgentHttpJson, parseLaunchReceipt } from "./http-wire.js"
+import { parseAgentErrorCode, parseAgentHttpJson, parseLaunchReceipt, projectSavedAgentLaunch } from "./http-wire.js"
 import { agentIdentityHeaders } from "./identity.js"
 
 export function classifyScheduledDeliveryStatus(status: number): "unknown" | "not_admitted" {
@@ -19,8 +18,9 @@ export class ScheduledAgentDispatchDelivery implements ScheduledAgentDispatchDel
   public async deliver(command: ScheduledAgentDispatchCommand, timeoutMs: number): Promise<ScheduledAgentDeliveryResult> {
     const base = this.config.upstreams.agents ?? null
     if (!this.config.agentEnabled || base === null) return { outcome: "not_admitted", errorCode: "agent_not_configured" }
+    const body = projectSavedAgentLaunch(command.payload)
+    if (body === null) return { outcome: "not_admitted", errorCode: "agent_launch_invalid" }
     try {
-      const body: CreateRunData["body"] = command.payload as CreateRunData["body"]
       const upstream = await proxyUpstream(
         this.config,
         base,

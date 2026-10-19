@@ -1,3 +1,11 @@
+## Agent HTTP7 消费配对（2026-10-18，本地候选，正常环境未激活）
+
+沿既有已存dispatch v2，Chat/Scheduled窄delivery共用strict投影：只从BFF冻结的trace scope产生required nullable project_ref，不查询当前项目、不修改历史payload/key/digest。固定Agent7104f3d原始HTTP7/provenance，唯一生成器仍仅三operation；旧vendor已移除，usage读取未接入。无SQL、公开API、持久模型、依赖或配置变化。
+
+真实RED证明旧consumer缺显式scope且未拒坏正文；本片相关HTTP14 PASS。隔离真实Agent HTTP鉴权/Ingress/PG验收四组合（Chat/Scheduled×direct/project）各重复一次，八次接纳只有四条dispatch，scope与原保存正文均保持。队列为受控FakeBus，不启动共享Redis/Worker、模型或扣费；自有schema已清理、前后schema目录完全一致。首fixture漏必填lease TTL，改用原config.run_repository后通过，没有改业务规则。
+
+完整owner工程/contract/默认门的停写证据见Root有效计划；正常dist/服务/数据库未更新。正常切换前仍须核旧Agent已有/未知接纳，公开人类旅程、页面Manus对照与MCP全部能力仍未因此完成；远端Git/PR/CI及Root index/gitlink保持暂停。
+
 ## 2026-10-18 Public18.1 MCP 受管包管理接线（未正常加载）
 
 沿feb42f4窄SDK/Platform fa5c5e5，唯一canonical Public18.1新增五个管理员包操作，157 operations；其余152 operation及完整Public18原字节经逆证保留。feature-local HTTP input/body与route、现server/runtime/Nest协议adapter接线及Admin浏览服务精确allowlist已实现；复用现mcpProviderAdmin配置/原direct凭据，无新Schema、身份、scope、依赖或上传/receipt/cache事实。当前session＋platformAdmin＋mcp_catalog.manage、可信tenant/subject与原命令key，正文前共同20秒/32KiB、严格重复/未知JSON/路径/查询/头、取消/关闭和公开安全错误保持。
