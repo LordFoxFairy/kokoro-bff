@@ -2,7 +2,7 @@
 
 修既有跨仓版本不配对，不新增功能模块。Platform固定已合入4a4e4c4/HTTP6.2，原HTTP/Connect生成链产物固定摘要；Connector/Server按owner五态独立投影当前可用性，不由status/enabled猜测，不兼容旧缺字段或跳过unknown。Public19/165、SQL、权限与独立错误profile保持。
 
-当前原四套projector先33PASS/11FAIL，再44PASS；补原HTTP夹具的必需字段后相关九套108PASS/0SKIP。两方真实descriptor与实际构建decoder/projector证明五态接通、零值/未知enum/额外wire仍拒绝。此前BFF旧descriptor真实拒绝字段13的负控保留。最终747输入冻结无漂移，format/lint/typecheck/contract/architecture/default/build七门均exit0；contract847 PASS、architecture36 PASS、默认1492 PASS/3原资源SKIP。新增仅三条独有风险测试，重复fixture字段已删除并重跑全门。未另跑真实PG/Redis、owner业务HTTP或正常运行/App/Admin整链。正常原mixed不动，模型、实际工具、扣费和远端PR不启用。
+当前原四套projector先33PASS/11FAIL，再44PASS；补原HTTP夹具的必需字段后相关九套108PASS/0SKIP。两方真实descriptor与实际构建decoder/projector证明五态接通、零值/未知enum/额外wire仍拒绝。此前BFF旧descriptor真实拒绝字段13的负控保留。最终747输入冻结无漂移，format/lint/typecheck/contract/architecture/default/build七门均exit0；contract847 PASS、architecture36 PASS、默认1492 PASS/3原资源SKIP。新增仅三条独有风险测试，重复fixture字段已删除并重跑全门。未另跑真实PG/Redis、owner业务HTTP或正常运行/App/Admin整链。正常原mixed不动，模型、实际工具与扣费不启用；隔离验收完成后沿既有授权集中PR交付，不等待CI但不冒称CI通过。
 
 ## 2026-10-19 已合 owner 发布物的固定配对（集成收尾）
 

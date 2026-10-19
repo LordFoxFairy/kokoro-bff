@@ -2,7 +2,7 @@
 
 沿用户已确认的独立实时可用性/Platform使用前续期方案，修已在main复现的owner字段13被旧descriptor拒绝；不重做协调器。唯一当前Platform bundle配对实际已合入4a4e4c4/HTTP6.2，使用owner Git原始artifact/摘要与原两生成链；旧当前vendor退休，不接受双版或忽略unknown。Connector/Server的availability为必需五态，与durable status/enabled独立；零值、缺失、未知、字符串冒充enum仍拒绝。原browser/v1入口、身份、租户、幂等回执、总预算/取消及错误恢复不变；不改Product Public19/165或独立command-error/历史profile。
 
-读响应包括OAuth内嵌及现命令ACK的当次owner投影；BFF不自己猜过期/刷新、不发AS请求。Server保全部安全历史header描述，32项只限制owner当前active配置；仍受既有wire字节预算，不重建缓存/状态机。SQL/canonical/schema与数据模型不变，无新API/owner/网关/worker/依赖。App/Admin和真实整链按同一契约依赖续接，不因本BFF局部通过冒称完整闭环。正常687输入及原availability mixed保留，全部变更在独占候选；不重载正常服务/数据库，不启模型、实际工具或扣费，不新增远端PR。
+读响应包括OAuth内嵌及现命令ACK的当次owner投影；BFF不自己猜过期/刷新、不发AS请求。Server保全部安全历史header描述，32项只限制owner当前active配置；仍受既有wire字节预算，不重建缓存/状态机。SQL/canonical/schema与数据模型不变，无新API/owner/网关/worker/依赖。App/Admin和真实整链按同一契约依赖续接，不因本BFF局部通过冒称完整闭环。正常687输入及原availability mixed保留，全部变更在独占候选；不重载正常服务/数据库，不启模型、实际工具或扣费，不拆零碎PR；隔离验收完成后沿既有授权集中交付。
 
 验收：原真实descriptor负控，固定生成/漂移、五态与缺失/unknown拒绝、真实Connect transport/主体与版本回执/历史header安全、当前全部相关门。原失败保留，不放宽已有安全断言。本切片最终工程门与descriptor负控/正控已通过，具体证据及未运行整链见当前事实；不将局部验证冒称正常激活。
 
