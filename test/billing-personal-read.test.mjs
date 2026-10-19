@@ -124,7 +124,7 @@ test("personal Credit summary uses only the admitted subject and the fixed five-
   )
   assert.equal(received.length, 1)
   assert.equal(received[0].method, "GET")
-  assert.equal(received[0].url, "/v2/billing/me/credit-account")
+  assert.equal(received[0].url, "/v1/billing/me/credit-account")
   assert.equal(received[0].headers["x-kokoro-service"], "web-bff")
   assert.equal(received[0].headers["x-request-id"], "billing-summary")
   assert.equal(received[0].headers["x-kokoro-internal-secret"], "billing-internal-secret")
@@ -152,7 +152,7 @@ test("personal Credit ledger forwards only the bounded owner pagination query an
     },
   )
   assert.equal(received.length, 1)
-  assert.equal(received[0].url, `/v2/billing/me/credit-ledger?limit=25&cursor=${publicCursor}`)
+  assert.equal(received[0].url, `/v1/billing/me/credit-ledger?limit=25&cursor=${publicCursor}`)
 })
 
 test("personal Credit transport preserves the maximum admitted Unicode identities as canonical unpadded u1 headers", async () => {
@@ -291,7 +291,7 @@ test("personal Credit reads map missing accounts, invalid successes and dependen
     },
     {
       status: 404,
-      body: { statusCode: 404, error: "Not Found", message: "Route GET:/v2/billing/me/credit-account not found" },
+      body: { statusCode: 404, error: "Not Found", message: "Route GET:/v1/billing/me/credit-account not found" },
       expectedStatus: 502,
       expectedCode: "upstream_response_invalid",
     },

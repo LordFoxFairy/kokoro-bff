@@ -901,7 +901,7 @@ describe("kokoro-bff v1 mock contract", () => {
       request.on("end", () => {
         received.push({ url: request.url, body: Buffer.concat(chunks).toString("utf8"), service: request.headers["x-kokoro-service"]?.toString() })
         response.setHeader("content-type", "application/json")
-        if (request.url?.startsWith("/v2/commerce/catalog?")) {
+        if (request.url?.startsWith("/v1/commerce/catalog?")) {
           response.end(
             JSON.stringify({
               data: {
@@ -968,7 +968,7 @@ describe("kokoro-bff v1 mock contract", () => {
       error: { code: "billing_unavailable", message: "Billing checkout is unavailable" },
       meta: { request_id: "billing-checkout" },
     })
-    assert.equal(received[0]?.url, "/v2/commerce/catalog?limit=100")
+    assert.equal(received[0]?.url, "/v1/commerce/catalog?limit=100")
     assert.equal(received[0]?.service, "web-bff")
     assert.equal(received.length, 1)
   })
@@ -982,7 +982,7 @@ describe("kokoro-bff v1 mock contract", () => {
         subject: request.headers["x-kokoro-subject"]?.toString(),
       })
       response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "billing-owner" })
-      if (request.url === "/v2/billing/me/credit-account") {
+      if (request.url === "/v1/billing/me/credit-account") {
         response.end(
           JSON.stringify({
             data: {
@@ -1021,8 +1021,8 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(ledger.status, 200)
     assert.deepEqual(await ledger.json(), { data: { items: [], page: { next_cursor: null } }, meta: { request_id: "billing-ledger" } })
     assert.deepEqual(received, [
-      { url: "/v2/billing/me/credit-account", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
-      { url: "/v2/billing/me/credit-ledger?limit=50", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
+      { url: "/v1/billing/me/credit-account", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
+      { url: "/v1/billing/me/credit-ledger?limit=50", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
     ])
   })
 

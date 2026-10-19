@@ -10098,6 +10098,7 @@
                           "type": "string",
                           "enum": [
                             "DIRECT_USER_CURRENT",
+                            "EXECUTION_BINDING_NOT_CURRENT",
                             "GLOBAL_OPERATION_UNSUPPORTED",
                             "OPERATION_UNSUPPORTED",
                             "IDENTITY_KIND_UNSUPPORTED",
@@ -10191,6 +10192,38 @@
                             "additionalProperties": false
                           }
                         },
+                        "skill_execution_context": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "project_ref": {
+                              "nullable": true,
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 255,
+                              "pattern": "^[^\\s\\x00-\\x1f\\x7f]+$"
+                            },
+                            "selected_skill_source_refs": {
+                              "maxItems": 16,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])"
+                              },
+                              "uniqueItems": true
+                            },
+                            "selection_digest": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{64}$"
+                            }
+                          },
+                          "required": [
+                            "project_ref",
+                            "selected_skill_source_refs",
+                            "selection_digest"
+                          ],
+                          "additionalProperties": false
+                        },
                         "expires_at": {
                           "type": "string",
                           "allOf": [
@@ -10219,6 +10252,7 @@
                         "run_id",
                         "execution_session_id",
                         "effective_owner_scopes",
+                        "skill_execution_context",
                         "expires_at",
                         "decision_ref"
                       ],
@@ -10831,7 +10865,7 @@
   "info": {
     "title": "Kokoro IAM Internal API",
     "description": "IAM-owned liveness, Tenancy, Authorization and Audit operations.",
-    "version": "0.13.0",
+    "version": "0.14.0",
     "contact": {}
   },
   "tags": [],
