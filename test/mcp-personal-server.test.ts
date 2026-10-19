@@ -8,6 +8,7 @@ import { bindMcpPersonalServerCommand, bindMcpPersonalServerRegistration } from 
 import { bindMcpPersonalJsonImport } from "../src/infrastructure/clients/platform/mcp-personal-json-import-binding.js"
 import { projectMcpPersonalJsonImport } from "../src/infrastructure/clients/platform/mcp-personal-json-import-response.js"
 import { projectMcpPersonalServer } from "../src/infrastructure/clients/platform/mcp-personal-server-response.js"
+import { mcpPersonalFault } from "../src/infrastructure/clients/platform/mcp-personal-response.js"
 import { mcpPersonalPreconditionFault } from "../src/infrastructure/clients/platform/connector-command-fault.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 import {
@@ -745,7 +746,7 @@ test("private URL MCP Connect client forwards only the command body plus trusted
   }
 })
 
-test("private URL MCP decodes only the typed owner precondition detail to stable 412", () => {
+test("private URL MCP strictly decodes typed owner preconditions and rejects invalid nonempty details", () => {
   for (const [reason, code] of [
     [PersonalMcpErrorReason.NOT_PREPARED, "mcp_personal_not_prepared"],
     [PersonalMcpErrorReason.NEEDS_CLIENT, "mcp_personal_needs_client"],
@@ -754,7 +755,6 @@ test("private URL MCP decodes only the typed owner precondition detail to stable
     assert.deepEqual(
       mcpPersonalPreconditionFault(
         new ConnectError("private owner detail", Code.FailedPrecondition, undefined, [{ desc: PersonalMcpErrorDetailSchema, value: { reason } }]),
-        true,
       ),
       {
         status: 412,
@@ -762,12 +762,22 @@ test("private URL MCP decodes only the typed owner precondition detail to stable
         retryable: false,
       },
     )
-  assert.deepEqual(mcpPersonalPreconditionFault(new ConnectError("missing detail", Code.FailedPrecondition), true), {
-    status: 502,
-    code: "mcp_personal_response_invalid",
-    retryable: false,
-  })
-  assert.equal(mcpPersonalPreconditionFault(new ConnectError("unavailable", Code.Unavailable), true), null)
+  for (const details of [
+    [{ desc: PersonalMcpErrorDetailSchema, value: { reason: PersonalMcpErrorReason.UNSPECIFIED } }],
+    [{ desc: PersonalMcpErrorDetailSchema, value: { reason: 99 } }],
+    [
+      { desc: PersonalMcpErrorDetailSchema, value: { reason: PersonalMcpErrorReason.NOT_PREPARED } },
+      { desc: PersonalMcpErrorDetailSchema, value: { reason: PersonalMcpErrorReason.NEEDS_CLIENT } },
+    ],
+    [{ type: "unexpected.Detail", value: new Uint8Array() }],
+    [{ type: PersonalMcpErrorDetailSchema.typeName, value: new Uint8Array([255]) }],
+  ])
+    assert.deepEqual(mcpPersonalPreconditionFault(new ConnectError("not a classification input", Code.FailedPrecondition, undefined, details)), {
+      status: 502,
+      code: "mcp_personal_response_invalid",
+      retryable: false,
+    })
+  assert.equal(mcpPersonalPreconditionFault(new ConnectError("unavailable", Code.Unavailable)), null)
 })
 
 test("connector receipt classifiers consume only the pinned marker/code and publish one private recovery policy", async () => {
@@ -848,4 +858,12 @@ test("private server reads retain revoked header history alongside 32 current sl
   }
   assert.equal(result.server.headers.length, 33)
   assert.equal(result.server.headers.filter((row) => row.configured).length, 32)
+})
+
+// Scope contraction commits renewed credentials, then rejects the original Prepare CAS.
+// The owner's generic FailedPrecondition is valid; it is not a malformed success.
+test("private Prepare preserves a generic owner CAS precondition without inventing a typed reason", () => {
+  const error = new ConnectError("not a classification input", Code.FailedPrecondition)
+  const fault = mcpPersonalPreconditionFault(error) ?? mcpPersonalFault(error, false, true)
+  assert.deepEqual(fault, { status: 412, code: "mcp_personal_precondition_failed", retryable: false })
 })

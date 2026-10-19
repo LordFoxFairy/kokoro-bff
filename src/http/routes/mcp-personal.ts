@@ -334,7 +334,7 @@ export async function mcpPersonalRoute(
           }
         : (connectorCommandFault(error, "mcp", mutation) ??
           (serverOperation || authorization
-            ? (mcpPersonalPreconditionFault(error, serverOperation) ?? mcpPersonalFault(error, false, mutation))
+            ? (mcpPersonalPreconditionFault(error) ?? mcpPersonalFault(error, false, mutation))
             : mcpPersonalFault(error, input.cursor !== undefined, mutation)))
       fail(fault.status, fault.code, fault.retryable)
     }

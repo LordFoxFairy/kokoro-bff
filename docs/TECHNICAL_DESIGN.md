@@ -1,3 +1,7 @@
+## 2026-10-19 MCP generic 前置失败消费纠正
+
+Platform 当前合同允许无 detail 的 FailedPrecondition，含续期 scope 收缩后原 Prepare CAS 失配；BFF按既有 generic412 `mcp_personal_precondition_failed` 返回，不将合法前置失败误报502，也不伪造 `not_prepared` reason。本段取代下方旧“URL server必须带typed detail”的消费者误设。只有非空detail声明typed profile，仍严格核唯一已知消息/有效reason，未知、重复、畸形或冲突detail保持502；receipt marker分类仍先行。不改成功解码、权限、owner CAS/事务/回执、重试行为、机器字段/profile或数据模型；App现有412已配对，无新增兼容分支。
+
 ## 2026-10-19 MCP availability 严格消费者修复（隔离候选）
 
 沿用户已确认的独立实时可用性/Platform使用前续期方案，修已在main复现的owner字段13被旧descriptor拒绝；不重做协调器。唯一当前Platform bundle配对实际已合入4a4e4c4/HTTP6.2，使用owner Git原始artifact/摘要与原两生成链；旧当前vendor退休，不接受双版或忽略unknown。Connector/Server的availability为必需五态，与durable status/enabled独立；零值、缺失、未知、字符串冒充enum仍拒绝。原browser/v1入口、身份、租户、幂等回执、总预算/取消及错误恢复不变；不改Product Public19/165或独立command-error/历史profile。
