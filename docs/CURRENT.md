@@ -1,3 +1,11 @@
+## 2026-10-19 已合 owner 发布物的固定配对（集成收尾）
+
+IAM internal/SDK 0.14.0 固定到 7cbe988d8f3868f293a15120135e1885de8516ff；Billing 4.0.0-experimental.2 固定到 3f5e0dacc25c1e24d87cbe0c59337d3b909466de 的唯一 `/v1` artifact。原 allowlist 不扩张，IAM 生成输出全部原字节、Billing 仅三 GET URL 随 owner 正规生成；Public19/SQL/历史双父逆证及独立浏览器 relay policy 均不变。未纳入正常工作树的 availability WIP。
+
+728 输入停写冻结后，Node22.22.2 官方 format:check、lint、typecheck、contract:check、test:architecture、test、build 均 0；默认 1489 PASS/3 原资源 SKIP。单独将同一 built BFF 窄 client 在私有 owner Node24 测试宿主中连接已合 IAM/Billing 源码的真实 PostgreSQL/Redis/HTTP：两 suite 2 PASS/0 SKIP，覆盖新 Product grant/session admission、Session 列表、Profile 原值 CAS 和 stale409、当前 Session 撤销409、invalid401，以及 Catalog 精确大整数、账户/流水、错主体404、错服务凭据503。Billing 35 表读取前后全部事实核等；测试数据库 catalog94→94精确恢复，自有 iam:test prefix0→0。仅隔离 fixture 写入，不对正常环境充值/扣费或调用模型/工具，不改配置/进程/Schema。
+
+工程冻结与日志仅保留 Root ignored `var/dev/merge-inventory-20261019/bff-owner-pairing`；这证明 consumer 配对切片，不追认为正常运行/页面/全产品已激活。现有混合工作树 687 输入逐字保留。CI 按用户要求不等待，App/Admin 和 Root 组合仍须独立收尾。
+
 ## 2026-10-19 既有分支集成：唯一 Public19.0.0（候选）
 
 本次只合并本地 d8634f0 与 main 16e5c711 已批准能力，不新增功能。唯一当前 /v1 契约165操作：保本地 Skills取得来源、项目精确选择/消息默认冻结、知识、完整日历与Library筛选、五项MCP包管理；承接main八项账号会话/姓名、共享/归档操作与Team完整platform/skill权限。旧名称关联PATCH及recurrence_anchor_at请求字段保持退休，不建alias或runtime fallback。两父原文/有序inventory通过本次明确增量的精确逆证保留，既有历史hash与断言不重签；全部后端入口、owner准入/取消/事务/幂等和历史回执保持。

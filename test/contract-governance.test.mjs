@@ -157,9 +157,9 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
-test("the IAM consumer pins the complete 0.13.0 owner artifact and generates only approved admission, human qualification, Skill, Team and invitation operations", async () => {
-  const commit = "c64faa7992301f31495e163d04049c48a23d0225"
-  const digest = "c22c55ef2b963a89ca3e03016138c2da74f5f005edf1b6ee8c5572daaf466262"
+test("the IAM consumer pins the complete 0.14.0 owner artifact and generates only approved admission, human qualification, Skill, Team and invitation operations", async () => {
+  const commit = "7cbe988d8f3868f293a15120135e1885de8516ff"
+  const digest = "ab9c644e73bb3e89f11204035c1a2f78a828d493ff5029ba3ff85056bc01d9c5"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -172,7 +172,7 @@ test("the IAM consumer pins the complete 0.13.0 owner artifact and generates onl
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.13.0")
+  assert.equal(owner.info.version, "0.14.0")
   const admissionSchema = owner.paths["/internal/v1/session-authorizations/verify"].post.responses["200"].content["application/json"].schema.properties.data
   assert.ok(admissionSchema.required.includes("platform_admin"))
   assert.deepEqual(admissionSchema.properties.platform_admin, { type: "boolean" })
@@ -181,7 +181,7 @@ test("the IAM consumer pins the complete 0.13.0 owner artifact and generates onl
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.13.0",
+    contract_version: "0.14.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })

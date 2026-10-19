@@ -23,7 +23,7 @@ Connect owner 固定 Platform `9be81465d487be2499a68a76664c14b73c16024b`，包�
 
 ## SET49 current integration
 
-Public16.0.0/146保留已批准main删除与设置归档增量，完整inverse回原15.4/150。Billing唯一正式pin cd92c728d8f658f54b254d5cbfd28156ca426dc1，v2 experimental.5 SHA256 b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af；三GET含catalog，缺账户只认专用404，未知路由404不可投影空账户。下方两分支既往发行记录保留为历史，不是当前pin。
+Public16.0.0/146保留已批准main删除与设置归档增量，完整inverse回原15.4/150。Billing唯一正式pin 3f5e0dacc25c1e24d87cbe0c59337d3b909466de，v2 experimental.5 SHA256 9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6；三GET含catalog，缺账户只认专用404，未知路由404不可投影空账户。下方两分支既往发行记录保留为历史，不是当前pin。
 
 ## SET-15 Billing Catalog 单 pin 配对（2026-10-13）
 

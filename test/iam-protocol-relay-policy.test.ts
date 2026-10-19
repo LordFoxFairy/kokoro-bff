@@ -68,12 +68,13 @@ test("published browser-private policy is a deterministic read-only projection o
   })
 })
 
-test("vendored IAM 0.13.0 contract and generated-client manifest pin the execution owner bytes", async () => {
-  const ownerCommit = "c64faa7992301f31495e163d04049c48a23d0225"
-  const expectedDigest = "c22c55ef2b963a89ca3e03016138c2da74f5f005edf1b6ee8c5572daaf466262"
+test("vendored IAM 0.14.0 contract and generated-client manifest pin the execution owner bytes", async () => {
+  const ownerCommit = "7cbe988d8f3868f293a15120135e1885de8516ff"
+  const expectedDigest = "ab9c644e73bb3e89f11204035c1a2f78a828d493ff5029ba3ff85056bc01d9c5"
   const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
   assert.notEqual(vendor, null)
   assert.equal(createHash("sha256").update(vendor!).digest("hex"), expectedDigest)
+  await assert.rejects(readFile(new URL("../contract/vendor/kokoro-iam/c64faa7992301f31495e163d04049c48a23d0225/iam.internal.v1.json", import.meta.url)))
   const oldVendor = await readFile(
     new URL("../contract/vendor/kokoro-iam/4d981441d154c83b63987f284e3a82a559595870/iam.internal.v1.json", import.meta.url),
   ).catch(() => null)
@@ -87,14 +88,14 @@ test("vendored IAM 0.13.0 contract and generated-client manifest pin the executi
   ).catch(() => null)
   assert.equal(retiredAdmissionVendor, null, "retired 0.7 admission vendor path must be removed")
   const contract = JSON.parse(vendor!.toString("utf8")) as { info?: { version?: string } }
-  assert.equal(contract.info?.version, "0.13.0")
+  assert.equal(contract.info?.version, "0.14.0")
   const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8")) as {
     owner?: { repository_commit?: string; contract_version?: string; contract_sha256?: string }
   }
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: ownerCommit,
-    contract_version: "0.13.0",
+    contract_version: "0.14.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: expectedDigest,
   })
@@ -240,7 +241,7 @@ test("relay URL configuration rejects partial settings and callback authority al
 
 test("R357 IAM 0.12 preserves all original fifteen consumer operations and their complete shared schemas", async () => {
   const vendor = JSON.parse(
-    await readFile(new URL("../contract/vendor/kokoro-iam/c64faa7992301f31495e163d04049c48a23d0225/iam.internal.v1.json", import.meta.url), "utf8"),
+    await readFile(new URL("../contract/vendor/kokoro-iam/7cbe988d8f3868f293a15120135e1885de8516ff/iam.internal.v1.json", import.meta.url), "utf8"),
   )
   const originalOperations = [
     "POST /internal/v1/session-authorizations/verify",

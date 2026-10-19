@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 3.0.0-experimental.5
+  version: 4.0.0-experimental.2
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -72,7 +72,7 @@ paths:
             text/plain; version=0.0.4:
               schema:
                 type: string
-  /v2/commerce/catalog:
+  /v1/commerce/catalog:
     get:
       operationId: getCatalog
       x-kokoro-owner: kokoro-billing
@@ -87,7 +87,11 @@ paths:
           serviceCaller: []
           internalSecret: []
           serviceBearer: []
-      description: Authenticated IAM user or complete web-bff machine credentials; tenant uses the canonical u1 identity header. Machine subject is optional but must be a unique valid u1 subject if present. Partial machine identity never falls back to user authentication.
+      description:
+        Authenticated IAM user or complete web-bff machine credentials;
+        tenant uses the canonical u1 identity header. Machine subject is
+        optional but must be a unique valid u1 subject if present. Partial
+        machine identity never falls back to user authentication.
       x-kokoro-identity-transport: catalog-identity-u1
       x-kokoro-auth-selection:
         machine_markers:
@@ -190,7 +194,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/billing/me/credit-account:
+  /v1/billing/me/credit-account:
     get:
       operationId: getMyCreditAccount
       x-kokoro-owner: kokoro-billing
@@ -320,7 +324,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/billing/me/credit-ledger:
+  /v1/billing/me/credit-ledger:
     get:
       operationId: getMyCreditLedger
       x-kokoro-owner: kokoro-billing
@@ -452,7 +456,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/billing/me/subscriptions:
+  /v1/billing/me/subscriptions:
     get:
       operationId: getMySubscriptions
       x-kokoro-owner: kokoro-billing
@@ -549,7 +553,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/billing/admissions:
+  /v1/internal/billing/admissions:
     post:
       operationId: createAdmission
       x-kokoro-owner: kokoro-billing
@@ -683,8 +687,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-      description: Creates and commits the admission resource and any authorized hold. A durable command-receipt replay returns the original creation representation; business status remains queryable.
-  /v2/internal/billing/admissions/{admission_id}:
+      description:
+        Creates and commits the admission resource and any authorized hold.
+        A durable command-receipt replay returns the original creation
+        representation; business status remains queryable.
+  /v1/internal/billing/admissions/{admission_id}:
     get:
       operationId: getAdmission
       x-kokoro-owner: kokoro-billing
@@ -785,7 +792,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/billing/admissions/{admission_id}/capture:
+  /v1/internal/billing/admissions/{admission_id}/capture:
     post:
       operationId: captureAdmission
       x-kokoro-owner: kokoro-billing
@@ -917,7 +924,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/billing/admissions/{admission_id}/release:
+  /v1/internal/billing/admissions/{admission_id}/release:
     post:
       operationId: releaseAdmission
       x-kokoro-owner: kokoro-billing
@@ -1049,7 +1056,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/billing/execution-events:
+  /v1/internal/billing/execution-events:
     post:
       operationId: acceptExecutionEvent
       x-kokoro-owner: kokoro-billing
@@ -1178,8 +1185,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-      description: Commits the execution inbox event and receipt only. Processing, execution outcome, and credit capture remain independently queryable; clients must not automatically retry an unknown result.
-  /v2/internal/billing/execution-events/{execution_event_id}:
+      description:
+        Commits the execution inbox event and receipt only. Processing,
+        execution outcome, and credit capture remain independently queryable;
+        clients must not automatically retry an unknown result.
+  /v1/internal/billing/execution-events/{execution_event_id}:
     get:
       operationId: getExecutionEvent
       x-kokoro-owner: kokoro-billing
@@ -1280,7 +1290,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/billing/checkouts:
+  /v1/billing/checkouts:
     post:
       operationId: createCheckout
       x-kokoro-owner: kokoro-billing
@@ -1413,8 +1423,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-      description: Creates the durable checkout snapshot. Provider session creation runs separately; 201 does not guarantee a ready checkout URL. Same-key replay returns the original creation representation and later status is read with GET.
-  /v2/billing/checkouts/{checkout_id}:
+      description:
+        Creates the durable checkout snapshot. Provider session creation
+        runs separately; 201 does not guarantee a ready checkout URL. Same-key
+        replay returns the original creation representation and later status is
+        read with GET.
+  /v1/billing/checkouts/{checkout_id}:
     get:
       operationId: getCheckout
       x-kokoro-owner: kokoro-billing
@@ -1519,7 +1533,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/payment/settlements:
+  /v1/internal/payment/settlements:
     post:
       operationId: createSettlement
       x-kokoro-owner: kokoro-billing
@@ -1648,8 +1662,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-      description: Records a verified payment fact. Credit fulfillment is a separate nullable result and is not guaranteed by 201.
-  /v2/internal/payment/settlements/{settlement_id}:
+      description:
+        Records a verified payment fact. Credit fulfillment is a separate
+        nullable result and is not guaranteed by 201.
+  /v1/internal/payment/settlements/{settlement_id}:
     get:
       operationId: getSettlement
       x-kokoro-owner: kokoro-billing
@@ -1750,7 +1766,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/payment/refunds:
+  /v1/internal/payment/refunds:
     post:
       operationId: createInternalRefund
       x-kokoro-owner: kokoro-billing
@@ -1879,8 +1895,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-      description: Records an existing provider refund fact; it does not initiate a provider refund or guarantee that the credit effect is applied.
-  /v2/internal/payment/refunds/{refund_id}:
+      description:
+        Records an existing provider refund fact; it does not initiate a
+        provider refund or guarantee that the credit effect is applied.
+  /v1/internal/payment/refunds/{refund_id}:
     get:
       operationId: getRefund
       x-kokoro-owner: kokoro-billing
@@ -1986,7 +2004,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/admin/billing/refunds:
+  /v1/admin/billing/refunds:
     post:
       operationId: createAdminRefund
       x-kokoro-owner: kokoro-billing
@@ -2117,8 +2135,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-      description: Records an existing provider refund with trusted operator attribution; it does not initiate a provider refund.
-  /v2/internal/credit-holds/expire:
+      description: Records an existing provider refund with trusted operator
+        attribution; it does not initiate a provider refund.
+  /v1/internal/credit-holds/expire:
     post:
       operationId: expireCreditHolds
       x-kokoro-owner: kokoro-billing
@@ -2245,7 +2264,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/webhooks/payment/stripe:
+  /v1/webhooks/payment/stripe:
     post:
       operationId: acceptStripeWebhook
       x-kokoro-owner: kokoro-billing
@@ -2315,7 +2334,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/webhooks/payment/alipay:
+  /v1/webhooks/payment/alipay:
     post:
       operationId: acceptAlipayWebhook
       x-kokoro-owner: kokoro-billing
@@ -2389,7 +2408,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/webhooks/payment/wechat:
+  /v1/webhooks/payment/wechat:
     post:
       operationId: acceptWechatWebhook
       x-kokoro-owner: kokoro-billing
@@ -2488,7 +2507,7 @@ components:
         type: string
         minLength: 5
         maxLength: 1022
-        pattern: '^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])'
+        pattern: ^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])
     PersonalSubjectId:
       name: x-kokoro-subject
       in: header
@@ -2497,7 +2516,7 @@ components:
         type: string
         minLength: 5
         maxLength: 1363
-        pattern: '^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])'
+        pattern: ^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])
     TenantId:
       name: x-kokoro-tenant-id
       in: header
@@ -2711,18 +2730,12 @@ components:
               additionalProperties: false
               required:
                 - postgres
-                - redis
               properties:
                 postgres:
                   type: string
                   enum:
                     - ok
                     - unavailable
-                redis:
-                  type: string
-                  enum:
-                    - ok
-                    - degraded
     Page:
       type: object
       additionalProperties: false
@@ -2954,29 +2967,64 @@ components:
         - execution_bound_ref
         - execution_bound_digest
       properties:
-        run_id: { type: string, minLength: 1, maxLength: 255 }
-        request_ref: { type: string, minLength: 1, maxLength: 255 }
-        call_id: { type: string, format: uuid }
-        attempt_id: { type: string, format: uuid }
-        attempt_ordinal: { $ref: "#/components/schemas/PositiveDecimal" }
-        feature_key: { type: string, minLength: 1, maxLength: 128 }
+        run_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        request_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        call_id:
+          type: string
+          format: uuid
+        attempt_id:
+          type: string
+          format: uuid
+        attempt_ordinal:
+          $ref: "#/components/schemas/PositiveDecimal"
+        feature_key:
+          type: string
+          minLength: 1
+          maxLength: 128
         billing_subject:
           type: object
           additionalProperties: false
-          required: [kind, ref]
+          required:
+            - kind
+            - ref
           properties:
             kind:
               type: string
-              enum: [user, project, organization, service]
-            ref: { type: string, minLength: 1, maxLength: 255 }
-        planned_binding_ref: { type: string, minLength: 1, maxLength: 255 }
-        planned_binding_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
-        usage_profile_version: { type: string, const: 1.0.0 }
+              enum:
+                - user
+                - project
+                - organization
+                - service
+            ref:
+              type: string
+              minLength: 1
+              maxLength: 255
+        planned_binding_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        planned_binding_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        usage_profile_version:
+          type: string
+          const: 2.0.0
         usage_profile_digest:
           type: string
-          const: eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0
-        execution_bound_ref: { type: string, minLength: 1, maxLength: 255 }
-        execution_bound_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
+          const: 552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504
+        execution_bound_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        execution_bound_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
     AdmissionCaptureRequest:
       type: object
       additionalProperties: false
@@ -2990,14 +3038,31 @@ components:
         - evidence_revision
         - evidence_digest
       properties:
-        run_id: { type: string, minLength: 1, maxLength: 255 }
-        call_id: { type: string, format: uuid }
-        attempt_id: { type: string, format: uuid }
-        evidence_schema_version: { type: string, const: 1.0.0 }
-        evidence_ref: { type: string, minLength: 1, maxLength: 255 }
-        evidence_event_id: { type: string, format: uuid }
-        evidence_revision: { $ref: "#/components/schemas/PositiveDecimal" }
-        evidence_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
+        run_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        call_id:
+          type: string
+          format: uuid
+        attempt_id:
+          type: string
+          format: uuid
+        evidence_schema_version:
+          type: string
+          const: 2.0.0
+        evidence_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        evidence_event_id:
+          type: string
+          format: uuid
+        evidence_revision:
+          $ref: "#/components/schemas/PositiveDecimal"
+        evidence_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
     AdmissionReleaseRequest:
       type: object
       additionalProperties: false
@@ -3013,29 +3078,55 @@ components:
         - evidence_digest
         - reason
       properties:
-        run_id: { type: string, minLength: 1, maxLength: 255 }
-        call_id: { type: string, format: uuid }
-        attempt_id: { type: string, format: uuid }
+        run_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        call_id:
+          type: string
+          format: uuid
+        attempt_id:
+          type: string
+          format: uuid
         release_basis:
           type: string
-          enum: [not_dispatched, settled_remainder]
-        evidence_schema_version: { type: string, const: 1.0.0 }
-        evidence_ref: { type: string, minLength: 1, maxLength: 255 }
-        evidence_event_id: { type: string, format: uuid }
-        evidence_revision: { $ref: "#/components/schemas/PositiveDecimal" }
-        evidence_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
-        reason: { type: string, minLength: 1, maxLength: 255 }
+          enum:
+            - not_dispatched
+            - settled_remainder
+        evidence_schema_version:
+          type: string
+          const: 2.0.0
+        evidence_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        evidence_event_id:
+          type: string
+          format: uuid
+        evidence_revision:
+          $ref: "#/components/schemas/PositiveDecimal"
+        evidence_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 255
     Admission:
       type: object
       additionalProperties: false
       if:
-        required: [dispatch_status]
+        required:
+          - dispatch_status
         properties:
-          dispatch_status: { const: started }
+          dispatch_status:
+            const: started
       then:
-        required: [authorization_status]
+        required:
+          - authorization_status
         properties:
-          authorization_status: { const: authorized }
+          authorization_status:
+            const: authorized
       required:
         - admission_id
         - producer
@@ -3069,65 +3160,126 @@ components:
         - created_at
         - updated_at
       properties:
-        admission_id: { $ref: "#/components/schemas/Uuid" }
-        producer: { type: string, minLength: 1, maxLength: 128 }
-        run_id: { type: string, minLength: 1, maxLength: 255 }
-        request_ref: { type: string, minLength: 1, maxLength: 255 }
-        call_id: { type: string, format: uuid }
-        attempt_id: { type: string, format: uuid }
-        attempt_ordinal: { $ref: "#/components/schemas/PositiveDecimal" }
-        feature_key: { type: string, minLength: 1, maxLength: 128 }
+        admission_id:
+          $ref: "#/components/schemas/Uuid"
+        producer:
+          type: string
+          minLength: 1
+          maxLength: 128
+        run_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        request_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        call_id:
+          type: string
+          format: uuid
+        attempt_id:
+          type: string
+          format: uuid
+        attempt_ordinal:
+          $ref: "#/components/schemas/PositiveDecimal"
+        feature_key:
+          type: string
+          minLength: 1
+          maxLength: 128
         authorization_status:
           type: string
-          enum: [authorized, denied, expired, unknown]
+          enum:
+            - authorized
+            - denied
+            - expired
+            - unknown
         dispatch_status:
           type: string
-          enum: [awaiting, not_dispatched, started, unknown]
+          enum:
+            - awaiting
+            - not_dispatched
+            - started
+            - unknown
         evidence_status:
           type: string
-          enum: [awaiting, sealed_known, sealed_unknown, invalid]
+          enum:
+            - awaiting
+            - sealed_known
+            - sealed_unknown
+            - invalid
         charge_status:
           type: string
           enum:
-            [
-              pending_evidence,
-              pending_review,
-              partially_captured,
-              captured,
-              released,
-              unknown,
-              rejected,
-            ]
+            - pending_evidence
+            - pending_review
+            - partially_captured
+            - captured
+            - released
+            - unknown
+            - rejected
         authorized_micros:
-          { $ref: "#/components/schemas/NonNegativeCreditMicros" }
-        snapshot_id: { $ref: "#/components/schemas/Uuid" }
-        snapshot_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
-        rate_revision_id: { $ref: "#/components/schemas/Uuid" }
-        policy_revision_id: { $ref: "#/components/schemas/Uuid" }
-        normalization_version: { type: string, minLength: 1, maxLength: 32 }
-        normalization_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
-        rounding_version: { type: string, minLength: 1, maxLength: 32 }
-        currency_code: { $ref: "#/components/schemas/CurrencyCode" }
-        valid_until: { $ref: "#/components/schemas/UtcInstant" }
-        planned_binding_ref: { type: string, minLength: 1, maxLength: 255 }
-        planned_binding_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
-        usage_profile_version: { type: string, const: 1.0.0 }
+          $ref: "#/components/schemas/NonNegativeCreditMicros"
+        snapshot_id:
+          $ref: "#/components/schemas/Uuid"
+        snapshot_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        rate_revision_id:
+          $ref: "#/components/schemas/Uuid"
+        policy_revision_id:
+          $ref: "#/components/schemas/Uuid"
+        normalization_version:
+          type: string
+          minLength: 1
+          maxLength: 32
+        normalization_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        rounding_version:
+          type: string
+          minLength: 1
+          maxLength: 32
+        currency_code:
+          $ref: "#/components/schemas/CurrencyCode"
+        valid_until:
+          $ref: "#/components/schemas/UtcInstant"
+        planned_binding_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        planned_binding_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        usage_profile_version:
+          type: string
+          const: 2.0.0
         usage_profile_digest:
           type: string
-          const: eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0
-        execution_bound_ref: { type: string, minLength: 1, maxLength: 255 }
-        execution_bound_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
+          const: 552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504
+        execution_bound_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        execution_bound_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
         hold_id:
-          type: [string, "null"]
+          type:
+            - string
+            - "null"
           format: uuid
-        created_at: { $ref: "#/components/schemas/UtcInstant" }
-        updated_at: { $ref: "#/components/schemas/UtcInstant" }
+        created_at:
+          $ref: "#/components/schemas/UtcInstant"
+        updated_at:
+          $ref: "#/components/schemas/UtcInstant"
     AdmissionResponse:
       type: object
       additionalProperties: false
-      required: [data]
+      required:
+        - data
       properties:
-        data: { $ref: "#/components/schemas/Admission" }
+        data:
+          $ref: "#/components/schemas/Admission"
     ExecutionEventRequest:
       type: object
       additionalProperties: false
@@ -3145,18 +3297,45 @@ components:
         - evidence_revision
         - evidence_digest
       properties:
-        event_id: { type: string, minLength: 1, maxLength: 255 }
-        run_id: { type: string, minLength: 1, maxLength: 255 }
-        request_ref: { type: string, minLength: 1, maxLength: 255 }
-        call_id: { type: string, format: uuid }
-        attempt_id: { type: string, format: uuid }
-        event_type: { type: string, enum: [model_usage_evidence.sealed] }
-        occurred_at: { $ref: "#/components/schemas/UtcInstant" }
-        evidence_schema_version: { type: string, const: 1.0.0 }
-        evidence_ref: { type: string, minLength: 1, maxLength: 255 }
-        evidence_event_id: { type: string, format: uuid }
-        evidence_revision: { $ref: "#/components/schemas/PositiveDecimal" }
-        evidence_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
+        event_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        run_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        request_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        call_id:
+          type: string
+          format: uuid
+        attempt_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+          enum:
+            - model_usage_evidence.sealed
+        occurred_at:
+          $ref: "#/components/schemas/UtcInstant"
+        evidence_schema_version:
+          type: string
+          const: 2.0.0
+        evidence_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        evidence_event_id:
+          type: string
+          format: uuid
+        evidence_revision:
+          $ref: "#/components/schemas/PositiveDecimal"
+        evidence_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
     ExecutionEvent:
       type: object
       additionalProperties: false
@@ -3181,52 +3360,93 @@ components:
         - processed_at
         - created_at
       properties:
-        execution_event_id: { $ref: "#/components/schemas/Uuid" }
-        event_id: { type: string, minLength: 1, maxLength: 255 }
-        producer: { type: string, minLength: 1, maxLength: 128 }
-        run_id: { type: string, minLength: 1, maxLength: 255 }
-        request_ref: { type: string, minLength: 1, maxLength: 255 }
-        call_id: { type: string, format: uuid }
-        attempt_id: { type: string, format: uuid }
-        evidence_schema_version: { type: string, const: 1.0.0 }
-        evidence_ref: { type: string, minLength: 1, maxLength: 255 }
-        evidence_event_id: { type: string, format: uuid }
-        evidence_revision: { $ref: "#/components/schemas/PositiveDecimal" }
-        evidence_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
+        execution_event_id:
+          $ref: "#/components/schemas/Uuid"
+        event_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        producer:
+          type: string
+          minLength: 1
+          maxLength: 128
+        run_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        request_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        call_id:
+          type: string
+          format: uuid
+        attempt_id:
+          type: string
+          format: uuid
+        evidence_schema_version:
+          type: string
+          const: 2.0.0
+        evidence_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        evidence_event_id:
+          type: string
+          format: uuid
+        evidence_revision:
+          $ref: "#/components/schemas/PositiveDecimal"
+        evidence_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
         status:
           type: string
-          enum: [received, processing, processed, failed, unknown]
+          enum:
+            - received
+            - processing
+            - processed
+            - failed
+            - unknown
         charge_status:
           type: string
           enum:
-            [
-              pending_evidence,
-              pending_review,
-              partially_captured,
-              captured,
-              released,
-              unknown,
-              rejected,
-            ]
-        attempts: { type: integer, minimum: 0 }
+            - pending_evidence
+            - pending_review
+            - partially_captured
+            - captured
+            - released
+            - unknown
+            - rejected
+        attempts:
+          type: integer
+          minimum: 0
         dead_lettered_at:
-          type: [string, "null"]
+          type:
+            - string
+            - "null"
           format: date-time
           pattern: Z$
         last_error_code:
-          type: [string, "null"]
+          type:
+            - string
+            - "null"
           maxLength: 128
         processed_at:
-          type: [string, "null"]
+          type:
+            - string
+            - "null"
           format: date-time
           pattern: Z$
-        created_at: { $ref: "#/components/schemas/UtcInstant" }
+        created_at:
+          $ref: "#/components/schemas/UtcInstant"
     ExecutionEventResponse:
       type: object
       additionalProperties: false
-      required: [data]
+      required:
+        - data
       properties:
-        data: { $ref: "#/components/schemas/ExecutionEvent" }
+        data:
+          $ref: "#/components/schemas/ExecutionEvent"
     CheckoutCreateRequest:
       type: object
       additionalProperties: false

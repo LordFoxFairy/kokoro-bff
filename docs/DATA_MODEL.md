@@ -1,3 +1,9 @@
+## 2026-10-19 已合入 owner 发布物配对（隔离候选）
+
+复用现IAM/Billing窄SDK，固定已合入main的IAM7cbe988/0.14.0与Billing3f5e0da/4.0.0-experimental.2。按owner Git object逐字分发OpenAPI后走唯一正式生成器，退休旧c64/cd92当前vendor，不增加多版本接受、接口或新客户端。IAM只有未消费E2表示变化，本仓已批准窄operation集合/生成响应应保持；独立浏览器私有relay policy0.7仍按其原owner事实，不借此改OAuth准入。Billing仅将同一Catalog/本人Credit三GET沿正式SDK从退役/v2改/v1，完整身份/decimal/closed response/超时取消与错误保障不变。
+
+Public19/165机器字节、BFF schema/持久回执/权限/配置不改；正常687输入mixed与availability WIP不混入候选，正常服务不重启，不发模型、实际工具或收费请求。只配对已交付既有能力，后继App/Admin固定同一已合Public契约再集成，不扩展功能。验收保既有行为/contract负控，补真实owner只读HTTP配对，完整本仓门和独立审查后集中PR。
+
 ## 2026-10-19 既有分支集成：唯一 Public19.0.0（候选）
 
 本次只合并本地 d8634f0 与 main 16e5c711 已批准能力，不新增功能。唯一当前 /v1 契约165操作：保本地 Skills取得来源、项目精确选择/消息默认冻结、知识、完整日历与Library筛选、五项MCP包管理；承接main八项账号会话/姓名、共享/归档操作与Team完整platform/skill权限。旧名称关联PATCH及recurrence_anchor_at请求字段保持退休，不建alias或runtime fallback。两父原文/有序inventory通过本次明确增量的精确逆证保留，既有历史hash与断言不重签；全部后端入口、owner准入/取消/事务/幂等和历史回执保持。
