@@ -55,9 +55,11 @@ export function connectorCommandFault(error: unknown, surface: "mcp" | "custom_a
   return connectorPublicFault(policy[reason])
 }
 
-export function mcpPersonalPreconditionFault(error: unknown, requireDetail: boolean): { status: number; code: string; retryable: boolean } | null {
+export function mcpPersonalPreconditionFault(error: unknown): { status: number; code: string; retryable: boolean } | null {
   if (!(error instanceof ConnectError) || error.code !== Code.FailedPrecondition) return null
-  if (!requireDetail && error.details.length === 0) return null
+  // Generic CAS/state preconditions are valid owner failures; only nonempty details
+  // claim the typed profile and must pass its complete closed validation.
+  if (error.details.length === 0) return null
   try {
     const details = error.findDetails(PersonalMcpErrorDetailSchema)
     const detail = details[0]
