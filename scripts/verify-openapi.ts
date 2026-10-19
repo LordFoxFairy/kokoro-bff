@@ -1,8 +1,19 @@
+import {
+  inspectClosureIntegrationContract,
+  restoreClosureLocalContract,
+  restoreClosureMainContract,
+  closureLocalBaseline,
+  closureMainBaseline,
+} from "./verify-closure-integration-contract.mjs"
 import { inspectMcpPackageAdminContract } from "./verify-mcp-package-admin-contract.mjs"
 import { inspectLibraryFilterContract } from "./verify-library-filter-contract.mjs"
 import { inspectScheduledPeriodContract } from "./verify-scheduled-period-contract.mjs"
 import { inspectPersonalKnowledgeContract } from "./verify-personal-knowledge-contract.mjs"
 import { inspectSkillProductContract, inspectCurrentSkillsSpecificationContract } from "./verify-skill-product-contract.mjs"
+import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "./archived-tasks-public-contract.mjs"
+import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "./shared-tasks-public-contract.mjs"
+import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "./account-profile-public-contract.mjs"
+import { restorePublic15AccountSessionContract, accountSessionParentBaseline } from "./account-session-public-contract.mjs"
 import { inspectSkillExamplePromptsContract, stripSkillExamplePromptsSource } from "./verify-skill-example-prompts-contract.mjs"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -3119,7 +3130,44 @@ export function restorePublic132SharedRevisionContract(source: string): string {
   return parent
 }
 
+export function restorePublic15TeamPermissionsContract(source: string): string {
+  if (!/^  version: 15\.0\.0$/mu.test(source)) throw new Error("SET13 breaking version drift")
+  const expected =
+    "    TeamRole:\n      type: object\n      required: [role_id, name, kind, permissions]\n      additionalProperties: false\n      properties:\n        role_id: { type: [string, 'null'], minLength: 1 }\n        name: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z][a-z0-9_-]*$' }\n        kind: { type: string, enum: [builtin, custom] }\n        permissions:\n          type: object\n          additionalProperties: false\n          properties:\n            organization: { type: array, minItems: 1, items: { type: string, enum: [update] } }\n            member: { type: array, minItems: 1, items: { type: string, enum: [create, read, update, delete] } }\n            invitation: { type: array, minItems: 1, items: { type: string, enum: [create, read, cancel] } }\n            ac: { type: array, minItems: 1, items: { type: string, enum: [create, read, update] } }\n            tenant: { type: array, minItems: 1, items: { type: string, enum: [read] } }\n            audit: { type: array, minItems: 1, items: { type: string, enum: [read] } }\n            platform: { type: array, minItems: 1, items: { type: string, enum: [execute] } }\n            skill: { type: array, minItems: 1, items: { type: string, enum: [create_draft, create_version, begin_upload, complete_upload, abort_upload, validate_draft, publish, withdraw, set_status, install, set_installation_enabled, remove_installation, update_draft, discard_draft, set_publication_audience] } }\n"
+  const previous =
+    "    TeamRole:\n      type: object\n      required: [role_id, name, kind, permissions]\n      additionalProperties: false\n      properties:\n        role_id: { type: [string, 'null'], minLength: 1 }\n        name: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z][a-z0-9_-]*$' }\n        kind: { type: string, enum: [builtin, custom] }\n        permissions:\n          type: object\n          additionalProperties: false\n          properties:\n            organization: { type: array, minItems: 1, items: { type: string, enum: [update] } }\n            member: { type: array, minItems: 1, items: { type: string, enum: [create, read, update, delete] } }\n            invitation: { type: array, minItems: 1, items: { type: string, enum: [create, read, cancel] } }\n            ac: { type: array, minItems: 1, items: { type: string, enum: [create, read, update] } }\n            tenant: { type: array, minItems: 1, items: { type: string, enum: [read] } }\n            audit: { type: array, minItems: 1, items: { type: string, enum: [read] } }\n"
+  const actual = source.match(/^    TeamRole:\n[\s\S]*?(?=^    CurrentUserIdentity:)/mu)?.[0]
+  if (actual !== expected) throw new Error("SET13 exact TeamRole closed permission schema drift")
+  const parent = source.replace(expected, () => previous).replace("  version: 15.0.0", "  version: 14.7.0")
+  if (createHash("sha256").update(parent).digest("hex") !== "598407a3dfc17d62eb4fe703837b836ba85f05b7102a018dac160351ad807c19")
+    throw new Error("SET13 complete Public14.7 parent inverse drift")
+  return parent
+}
+
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
+  const currentSource = source,
+    currentBaseline = baseline
+  const integrationErrors = inspectClosureIntegrationContract(currentSource, currentBaseline)
+  if (integrationErrors.length > 0) return integrationErrors
+  source = restoreClosureLocalContract(currentSource)
+  baseline = closureLocalBaseline(currentBaseline)
+  try {
+    let settingsSource = restoreClosureMainContract(currentSource)
+    let settingsBaseline = closureMainBaseline(currentBaseline)
+    settingsSource = restorePublic153ArchivedTasksContract(settingsSource)
+    settingsBaseline = archivedTasksParentBaseline(settingsBaseline)
+    settingsSource = restorePublic152SharedTasksContract(settingsSource)
+    settingsBaseline = sharedTasksParentBaseline(settingsBaseline)
+    settingsSource = restorePublic151AccountProfileContract(settingsSource)
+    settingsBaseline = accountProfileParentBaseline(settingsBaseline)
+    settingsSource = restorePublic15AccountSessionContract(settingsSource)
+    settingsBaseline = accountSessionParentBaseline(settingsBaseline)
+    settingsSource = restorePublic15TeamPermissionsContract(settingsSource)
+    const settingsErrors = [...inspectOpenApiGovernance(settingsSource), ...compareOperationBaseline(settingsSource, settingsBaseline)]
+    if (settingsErrors.length > 0) return settingsErrors
+  } catch (error) {
+    return [error instanceof Error ? error.message : "settings integration parent proof failed"]
+  }
   const errors = [
     ...inspectOpenApiGovernance(source),
     ...compareOperationBaseline(source, baseline),

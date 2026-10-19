@@ -1,3 +1,4 @@
+import { restoreClosureLocalContract } from "./verify-closure-integration-contract.mjs"
 import { createHash } from "node:crypto"
 // Exact release inverse; not a runtime compatibility decoder or second schema.
 const blocks = [
@@ -24,6 +25,7 @@ const blocks = [
 ]
 const digest = (source) => createHash("sha256").update(source).digest("hex")
 export function restorePublic18McpPackageContract(source) {
+  source = restoreClosureLocalContract(source)
   if (!/^  version: 18\.1\.0$/mu.test(source)) return source
   for (const block of blocks) {
     const start = source.indexOf(block.start),
@@ -37,6 +39,7 @@ export function restorePublic18McpPackageContract(source) {
 }
 export function inspectMcpPackageAdminContract(source) {
   try {
+    source = restoreClosureLocalContract(source)
     if (!/^  version: 18\.1\.0$/mu.test(source)) throw Error("MCP package current version drift")
     restorePublic18McpPackageContract(source)
     return []

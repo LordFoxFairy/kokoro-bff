@@ -15,7 +15,7 @@ test("R353 Skill Share accepts opaque IAM identities and the formal source_ref b
 const url = process.env.KOKORO_TEST_POSTGRES_URL
 const integration = url ? test : test.skip
 integration("R353 skill links are tenant/creator/revision bound and do not enter anonymous conversation reads", async () => {
-  const pool = new Pool({ connectionString: url })
+  const pool = new Pool({ options: "-c search_path=kokoro_bff -c timezone=UTC", connectionString: url })
   const tenantId = `tenant_${randomUUID()}`,
     creatorSubjectId = `user_${randomUUID()}`,
     sourceRef = `skill:${randomUUID()}`
@@ -35,7 +35,7 @@ integration("R353 skill links are tenant/creator/revision bound and do not enter
 })
 
 integration("R353 lock wait crossing expiry rejects the request and leaves no active row", async () => {
-  const pool = new Pool({ connectionString: url, max: 3 })
+  const pool = new Pool({ options: "-c search_path=kokoro_bff -c timezone=UTC", connectionString: url, max: 3 })
   const scope = { tenantId: `tenant_${randomUUID()}`, creatorSubjectId: `user_${randomUUID()}` },
     sourceRef = "skill:expiry"
   const blocker = await pool.connect()
@@ -65,7 +65,7 @@ integration("R353 lock wait crossing expiry rejects the request and leaves no ac
 })
 
 integration("R353 expiry remains valid at the INSERT statement after an expired active-row lock wait", async () => {
-  const pool = new Pool({ connectionString: url, max: 3 })
+  const pool = new Pool({ options: "-c search_path=kokoro_bff -c timezone=UTC", connectionString: url, max: 3 })
   const scope = { tenantId: `tenant_${randomUUID()}`, creatorSubjectId: `user_${randomUUID()}` },
     sourceRef = "skill:insert_clock",
     oldShareId = `shr_${randomUUID().replaceAll("-", "")}`

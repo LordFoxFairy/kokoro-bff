@@ -1,3 +1,8 @@
+import { inspectClosureIntegrationContract } from "./verify-closure-integration-contract.mjs"
+import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "./archived-tasks-public-contract.mjs"
+import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "./shared-tasks-public-contract.mjs"
+import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "./account-profile-public-contract.mjs"
+import { restorePublic15AccountSessionContract, accountSessionParentBaseline } from "./account-session-public-contract.mjs"
 import { readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -63,6 +68,12 @@ export function parseOpenApiOperations(source) {
 
 function expectedIdempotency(operation) {
   if (
+    new Set(["DELETE /v1/account/sessions/{session_id} revokeAccountSession", "PATCH /v1/account/profile updateAccountProfile"]).has(
+      `${operation.method} ${operation.path} ${operation.fields.get("operationId")}`,
+    )
+  )
+    return "none"
+  if (
     new Set([
       "PUT /v1/preferences/knowledge/{knowledge_id} replaceSelfKnowledge",
       "DELETE /v1/preferences/knowledge/{knowledge_id} deleteSelfKnowledge",
@@ -97,6 +108,34 @@ function expectedIdempotency(operation) {
 }
 
 export function inspectOpenApiGovernance(source) {
+  if (/^  version: (?:15\.4|16\.0)\.0$/mu.test(source)) {
+    try {
+      source = restorePublic153ArchivedTasksContract(source)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.3\.0$/mu.test(source)) {
+    try {
+      source = restorePublic152SharedTasksContract(source)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.2\.0$/mu.test(source)) {
+    try {
+      source = restorePublic151AccountProfileContract(source)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.1\.0$/mu.test(source)) {
+    try {
+      source = restorePublic15AccountSessionContract(source)
+    } catch (error) {
+      return [error.message]
+    }
+  }
   const errors = []
   const operations = parseOpenApiOperations(source)
   if (operations.length === 0) return ["OpenAPI paths must declare at least one HTTP operation"]
@@ -141,7 +180,12 @@ export function inspectOpenApiGovernance(source) {
       errors.push(`${label} must declare x-kokoro-idempotency=${expected}`)
     }
     const permission = operation.fields.get("x-kokoro-permission")
-    if (permission !== undefined && !/^(?:anonymous|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/u.test(permission)) {
+    const formalIamPermission = new Map([
+      ["GET /v1/account/sessions listAccountSessions", "iam:account-session.read"],
+      ["DELETE /v1/account/sessions/{session_id} revokeAccountSession", "iam:account-session.revoke"],
+      ["PATCH /v1/account/profile updateAccountProfile", "iam:account-profile.write"],
+    ]).get(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)
+    if (permission !== undefined && permission !== formalIamPermission && !/^(?:anonymous|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/u.test(permission)) {
       errors.push(`${label} has invalid x-kokoro-permission=${permission}`)
     }
   }
@@ -150,6 +194,38 @@ export function inspectOpenApiGovernance(source) {
 }
 
 export function compareOperationBaseline(source, baseline) {
+  if (/^  version: (?:15\.4|16\.0)\.0$/mu.test(source)) {
+    try {
+      source = restorePublic153ArchivedTasksContract(source)
+      baseline = archivedTasksParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.3\.0$/mu.test(source)) {
+    try {
+      source = restorePublic152SharedTasksContract(source)
+      baseline = sharedTasksParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.2\.0$/mu.test(source)) {
+    try {
+      source = restorePublic151AccountProfileContract(source)
+      baseline = accountProfileParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.1\.0$/mu.test(source)) {
+    try {
+      source = restorePublic15AccountSessionContract(source)
+      baseline = accountSessionParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
+  }
   const current = new Map(
     parseOpenApiOperations(source).map((operation) => [`${operation.method} ${operation.path}`, operation.fields.get("operationId") ?? ""]),
   )
@@ -201,6 +277,7 @@ async function main() {
       operation.fields.get("operationId") === "getManagedPersonalSkillPackage" || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
   )
   const errors = [
+    ...inspectClosureIntegrationContract(openapi, parsedBaseline.operations),
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),
     ...(parsedBaseline.operations.length === currentOperations.length ? [] : ["public operation inventory must contain one entry for every current operation"]),

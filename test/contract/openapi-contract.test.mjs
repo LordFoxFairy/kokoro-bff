@@ -1,4 +1,10 @@
+import { restoreClosureLocalContract, restoreClosureMainContract } from "../../scripts/verify-closure-integration-contract.mjs"
 import { restorePublic17LibraryFilterContract, inspectLibraryFilterContract } from "../../scripts/verify-library-filter-contract.mjs"
+
+import { restorePublic153ArchivedTasksContract } from "../../scripts/archived-tasks-public-contract.mjs"
+import { restorePublic152SharedTasksContract } from "../../scripts/shared-tasks-public-contract.mjs"
+import { restorePublic151AccountProfileContract } from "../../scripts/account-profile-public-contract.mjs"
+import { restorePublic15AccountSessionContract } from "../../scripts/account-session-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -24,7 +30,7 @@ const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", impo
 
 test("Public17 publishes explicit calendar selections and preserves the complete Public16.2 parent", async () => {
   const { load } = await import("js-yaml")
-  const source = restorePublic17LibraryFilterContract(await readFile(currentOpenapiUrl, "utf8"))
+  const source = restorePublic17LibraryFilterContract(restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")))
   const document = load(source)
   assert.equal(document.info.version, "17.0.0")
   assert.deepEqual(document.components.schemas.ScheduledTask.properties.frequency.enum, ["daily", "weekly", "monthly", "once"])
@@ -72,7 +78,7 @@ async function readContract() {
 }
 
 test("current Skills responses admit only the owner-declared current and legacy canonical identities", async () => {
-  const openapi = await readFile(currentOpenapiUrl, "utf8")
+  const openapi = restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8"))
   assert.equal([...openapi.matchAll(/pattern: \^\(\?:skill-md-v1\|zip-v2\):sha256:\[a-f0-9\]\{64\}\$/gu)].length, 2)
   assert.equal([...openapi.matchAll(/pattern: \^zip-v2:sha256:\[a-f0-9\]\{64\}\$/gu)].length, 0)
 })
@@ -1158,7 +1164,7 @@ async function r71ScheduledCreateSchema() {
   const { createRequire } = await import("node:module")
   // Reuse the installed YAML loader already used by this file's public4 assertions.
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
-  const openapi = await readFile(currentOpenapiUrl, "utf8")
+  const openapi = restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8"))
   const schema = load(openapi).components.schemas.CreateScheduledTaskRequest
   assert.ok(schema !== undefined, "the canonical ScheduledTask creation schema must exist")
   return schema
@@ -1353,7 +1359,7 @@ test("R75 creation schema requires exactly the five production-required properti
 test("Public16.2 historical current-read and immutable ACK inverse remains exact", async () => {
   const { load } = await import("js-yaml")
   const { restorePublic162ScheduledPeriodContract } = await import("../../scripts/verify-scheduled-period-contract.mjs")
-  const source = restorePublic162ScheduledPeriodContract(await readFile(currentOpenapiUrl, "utf8"))
+  const source = restorePublic162ScheduledPeriodContract(restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")))
   const document = load(source)
   assert.equal(Object.hasOwn(document.components.schemas.ScheduledTask.properties, "recurrence_anchor_at"), false)
   const task = document.components.schemas.ScheduledTaskDetails
@@ -2684,7 +2690,7 @@ test("Public11 ordinary lifecycle uses metadata-only CreateVersion and required 
 
 test("Public13.1 exposes skill_forbidden only on the actual Skill action 403 families", async () => {
   const { load } = await import("js-yaml")
-  const document = load(await readFile(currentOpenapiUrl, "utf8"))
+  const document = load(restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")))
   const schemas = document.components.schemas,
     responses = document.components.responses
   const baseNames = [
@@ -2733,7 +2739,7 @@ for (const [label, path] of [
 ]) {
   test(`GitHub path current ${label} matches the existing 256-character parser`, async () => {
     const { load } = await import("js-yaml")
-    const document = load(await readFile(currentOpenapiUrl, "utf8"))
+    const document = load(restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")))
     const constraint = path.reduce((value, key) => value[key], document.components.schemas)
     assert.equal(constraint.maxLength, 256)
   })
@@ -2741,7 +2747,7 @@ for (const [label, path] of [
 
 test("Public18 publishes bounded FINAL-metadata search and preserves the complete Public17 parent", async () => {
   const { load } = await import("js-yaml")
-  const source = await readFile(currentOpenapiUrl, "utf8"),
+  const source = restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")),
     document = load(source)
   assert.equal(document.info.version, "18.1.0")
   const parameters = document.paths["/v1/library"].get.parameters
@@ -2765,7 +2771,7 @@ test("Public18 publishes bounded FINAL-metadata search and preserves the complet
 
 test("Public18.1 exposes exactly five admin-only MCP package operations and preserves the full Public18 parent", async () => {
   const { load } = await import("js-yaml")
-  const source = await readFile(currentOpenapiUrl, "utf8"),
+  const source = restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")),
     document = load(source)
   assert.equal(document.info.version, "18.1.0")
   const expected = [
@@ -2805,4 +2811,21 @@ test("Public18.1 exposes exactly five admin-only MCP package operations and pres
     assert.notEqual(source.replace(before, after), source)
     assert.throws(() => restorePublic18McpPackageContract(source.replace(before, after)), /MCP package.*drift/u)
   }
+})
+
+test("SET13 exact inverse preserves the entire committed public14.7 artifact", async () => {
+  const { restorePublic15TeamPermissionsContract } = await import("../../scripts/verify-openapi.ts")
+  const source = restoreClosureMainContract(await readFile(currentOpenapiUrl, "utf8"))
+  assert.equal(
+    createHash("sha256")
+      .update(
+        restorePublic15TeamPermissionsContract(
+          restorePublic15AccountSessionContract(
+            restorePublic151AccountProfileContract(restorePublic152SharedTasksContract(restorePublic153ArchivedTasksContract(source))),
+          ),
+        ),
+      )
+      .digest("hex"),
+    "598407a3dfc17d62eb4fe703837b836ba85f05b7102a018dac160351ad807c19",
+  )
 })

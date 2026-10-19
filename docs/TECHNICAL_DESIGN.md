@@ -1,3 +1,9 @@
+## 2026-10-19 既有分支集成：唯一 Public19.0.0（候选）
+
+本次只合并本地 d8634f0 与 main 16e5c711 已批准能力，不新增功能。唯一当前 /v1 契约165操作：保本地 Skills取得来源、项目精确选择/消息默认冻结、知识、完整日历与Library筛选、五项MCP包管理；承接main八项账号会话/姓名、共享/归档操作与Team完整platform/skill权限。旧名称关联PATCH及recurrence_anchor_at请求字段保持退休，不建alias或runtime fallback。两父原文/有序inventory通过本次明确增量的精确逆证保留，既有历史hash与断言不重签；全部后端入口、owner准入/取消/事务/幂等和历史回执保持。
+
+Schema只在原BFF canonical叠加main既有归档列/索引；项目/日历/知识结构与旧表删除保持。正常库不自动演进，未重启服务、启用模型/实际工具/扣费。停写后的728输入完整格式/lint/types/契约845项/架构/默认1489 PASS与3原SKIP/fresh build已通过；13文件真实PostgreSQL＋Redis 346 PASS/0 SKIP，fresh canonical安装与自有测试库回收已验证，独立审查无遗留确定P0–P2。首次资源7个失败已定位并修正既有fixture的owner search_path、HTTP7显式project_ref和ObjectStore VersionId ACK；原503、未知提交、重启与撤权恢复断言保持，未以放宽断言消除失败。新availability消费者WIP和正常mixed均未夹入；代码交付不代表正常Schema/运行服务或完整页面已配对。
+
 ## Agent HTTP7 项目上下文配对（2026-10-18，既定模型内实施）
 
 BFF pin Agent7104f3d的原始HTTP7/provenance，由现唯一生成器及三operation allowlist生成；新增usage读取不装配、不调用。现唯一durable dispatch v2已在Conversation/Project锁内把canonical scope冻结到launch.trace.project_ref，Scheduled receipt也冻结其任务scope。本片在Agent窄adapter统一将这份BFF自己持有的已存scope投影为HTTP7 required nullable project_ref；无Project时显式null，绝不读当前Project/Message、外部header或远端trace来重算。Agent只读显式字段，不从trace恢复授权。
@@ -138,6 +144,139 @@ BFF 当前 browser session admission 与每次 fresh install/manage/admin human 
 
 验收在现 installation input/HTTP/contract/Connect 文件补独有风险：重复键与未知身份零调用，fresh install action denial/replay denial，same key/pins wire 与 digest 固定，target ACK 负控，disabled 保持、typed错误、取消/超时与原意图重放。真实 listener+正式 generated Connect loopback 不称真实 PG/IAM 组合；后继 App 与正常当前账号 A→B/刷新/未知恢复才是产品验收。复用原分支/PR，本轮不推远端或切正常服务。
 
+
+## SET49：主线与设置归档合同集成
+
+合并主线已批准的MCP public四写删除及既有设置/归档能力，以16.0.0/146发行（breaking删除，不冒minor）。integration-public-contract.mjs逐字节验证完整当前合同及有序清单，精确恢复原15.4全文/150后委托全部原inverse和oracle；main贡献保留，不修改Skills/MCP业务。Billing唯一pin使用正式experimental.5发行，保三读与严格专用404；当前验证进行中，正常服务不变。
+
+## SET-47 Conversation 归档/恢复 D0（2026-10-15；设计候选，runtime 未实施）
+
+传输边界补充：exact encodeURIComponent wire不变，BFF原生raw HTTP仍可读取历史ID `.`/`..`；WHATWG URL（含fetch）会规范化dot path segments，百分号编码点也不能解决。Web后继须对此两ID在fetch前拒绝并明确禁用归档/恢复说明，不做双重解码/fallback/新API；不能宣所有历史ID浏览器皆可操作。普通conv与Unicode ID不受此限制。
+
+当前阶段更新：四操作实现候选已完成，正常outer gate与正规150清单已接线，原15.3全文/146及全部历史inverse继续；下方“设计阶段未接runtime/门”的描述保留为D0历史。源码纯门证据与未验PG/正常组合见CURRENT，未发行不得消费者固定工作树artifact。旧正常run与DB未改。
+
+GET `/v1/sessions/{session_id}/archive` 为同一归档路径上的正式 chat.read/idem none 本人状态读取，成功同 `{data:{session_id,archived_at}}`，未归档明确返回NULL，foreign/deleted/失效父同404。Web active任务列表合成必须正式读state：confirmed archived不合成；404新draft按原行为；未知失败不能当unarchived。由此新增四operations、三paths，总150，旧Chat响应字段不变。
+
+路径 session_id 接受任意合法非空 UTF8 历史 Conversation ID（包括Unicode/大小写），按 exact encodeURIComponent 后的单segment可逆canonical百分号表示处理，不能抄move的conv_UUID限制；拒非法编码而不trim/归一化ID。分页同毫秒Unicode/BMP/astral与大小写按C UTF8字节序必须实测。后继多primitive query/command沿TS§6.7用具名Readonly对象，不复制旧长位置参数。
+
+运行裁决：保留旧正常run，不重启/ALTER/清事实。后继正式BFF/Web pin由Root用formal launcher现--web-port开启独立新run，复用现PG/Redis服务器但使用自有fixtureDB/namespaces；canonical fresh install即可。不建立在线升级或migration链，本片没有运行资源操作。
+
+Owner 是现 BFF Chat Conversation，调用仍为 Browser → Web 同源 adapter → BFF → 本仓 PG。当前是既有非 Nest HTTP bootstrap/service/port/Postgres 入口，尚未迁移 Nest；本片不建设第二框架、不声称完成框架迁移。当前 Data 归档占位由后继 Web 消费替换，不拿 deleted 冒归档。
+
+| 放置决定 | 本片结论 |
+| --- | --- |
+| 采用 | 现 ChatService/ChatRepository 窄接线；后继普通 `src/http/archived-tasks-input.ts`、`src/http/routes/archived-tasks.ts`、`src/infrastructure/postgres/archived-tasks.ts` 分别拥有输入、HTTP 生命周期、归档查询/事务；现 bootstrap 仅正规 dispatch |
+| 淘汰 | 新 archive owner/module/runner 或以 AG-UI/删除状态承载整理事实；没有新进程、缓存、跨 owner SQL 或模型依赖 |
+| 当前设计切片 | 仅三设计、唯一 canonical OpenAPI/schema、独立具名 outer inverse 与合同负控；不改 runtime/check-contract 入口/旧 inventory，不冒称路由已注册 |
+| 后继验证 | 先源码行为 RED→GREEN，再 Root 自有 PG 事实/竞争/索引计划、消费者正规生成、Web UI/E2E/CUA；未运行不得记通过 |
+
+归档是 `archived_at` 独立整理状态，active/deleted 不扩展。普通本人任务列表（all/direct/project）只取 unarchived；直接读取、rename、move、分享、消息/Run admission、运行和通知继续，均不隐式恢复。归档不撤分享、不暂停/取消 Run、不释放资源、不删消息或 ledger；Project 删除仍遍历并删除全部子 Conversation。Web 应明确归档不停止任务，恢复只恢复列表可见性。
+
+写入使用同一 archive-state scope（tenant、subject、Idempotency-Key），fingerprint 含 action 与 session_id；archive/restore 复用 key 是冲突而非两个独立 scope。当前 active owner 与合法父先验，再读 receipt。相同 key/fingerprint 重放原 receipt、零事实写，允许历史 archived_at；消费者成功及未知结果均先重读，不自动重试写。不同 key 的相反命令按行锁提交次序生效，无 expected-state CAS 承诺。fresh 同状态请求仍可保存 receipt，但不改 archived_at/updated_at。delete 先胜返回404；receipt 不可复活 tombstone。
+
+沿现 move 的 Project（canonical ID 排序）→Conversation 锁序：先解析父，锁 Project，再锁 Conversation，重读 project_ref；若 move 已改变父，rollback 并在同一剩余预算内有限重试（最多4次），不得反向加锁。父引用 NULL 才是无父，其他值含空串必须唯一解析同 tenant/owner/未删除 Project 的 ID 或 slug；歧义属于损坏失败，不修复。archive/delete/share 在 Conversation 锁上串行；Project delete 在相同父锁上串行。receipt scope 竞争必须同事务唯一插入，失败事务回滚后读 winner；不借通用中间件把 auth/父校验绕过。
+
+单入口绝对预算 min(config.upstreamTimeoutMs,10000ms) 覆盖 metadata、现正规 admission、请求体、pool lease、事务和响应准备；父取消/断连、迟到 connect/read 都不得继续写，精确自有 client 超时销毁、迟到 release，不停 pool。COMMIT 后失联是未知，不保证撤销已提交事实；相同 key 支持用户显式重试并重读。列表/响应上限1MiB，输入空 JSON 的读取上限4096 bytes；无新 env/key/provider。拒绝重复/未知 query、重复 header、非法 UTF8/JSON、额外字段，Content-Encoding 只缺省或单 identity；合法 chunked 不误拒。
+
+独立 `scripts/archived-tasks-public-contract.mjs` 精确剥三 paths（四 operations）/本片 schemas/版本，恢复完整15.3 SHA，再委托原 SET21 inverse；150 有序 operations 同样恢复146及原历史门。本阶段不接正常门入口或改既有146清单：其完整门暂时不宣称通过。后继发行必须先补正常 gate/正规150清单，再正式固定 artifact 供 Web，不能消费未发行工作树。
+
+## SET-21 实现与验证状态（2026-10-15）
+
+已实现既定普通文件/原Chat委托及安全本人分享GET，终态冻结独审与Root83专项/build通过；Root正规HTTP和自有PG事实链、精确lease超时后的pool恢复及EXPLAIN通过，详见CURRENT。canonical Share时间为TIMESTAMPTZ(3)，新wire/cursor保持UTC毫秒；SQL同时间ID C字节排序与wire一致。没有schema/依赖/Secret/旧Chat实现改变。下面源码准入与D0叙述保留设计历史，正式消费者仍须固定当前commit及public15.3全文摘要，正常浏览器待验。
+
+## SET-21 本人任务分享列表（2026-10-15；Root真实RED后具名源码准入）
+
+Root预读补充保留规则：ChatSession.title正式只string，canonical SQL btrim只普通空格；新列表不得用JS trim或完整字符串200上限拒合法旧值。保原title，不截断或归一化，响应总界另约束。当前PG en_US.utf8的默认文本排序不等于JS UTF16顺序；本新query keyset和ORDER BY的session ID统一显式COLLATE "C"（UTF8字节升序），wire页校验同字节比较。普通旧Chat API/schema保持，不新DDL。
+
+当前实现阶段由本仓唯一writer billing_scheduler_audit按CURRENT具名表实施；Root已复现1PASS/4断言FAIL。Web SET20源码已接收，Root继续正常运行集成；本仓实现不访问测试资源。下方原D0阶段叙述保留，不作为当前尚未授源码的判断。
+
+正式前置a88e710d2201342200017f44c2bc34325937b5d0/public15.2.0/145已有本人Conversation分享创建/撤销与真实Share，缺本人有效分享列表。IAM c64/其他owner固定，不新数据库、模块、进程、配置、依赖或持久化副本。当前Web团队仍为唯一实现面；此刻只设计/独审，不授第二owner源码。
+
+| 放置项 | 决定 |
+| --- | --- |
+| Owner / 分工 | BFF独占Conversation/Share/Project事实与public API；billing_scheduler_audit后继唯一源码writer，storage_platform_audit只读独审，Root设计/docs/INDEX/Git/真实资源与发行。Web等待正式不可变发行后消费。 |
+| 当前事实 | 现ChatRepository/service/PostgresChatRepository承担分享。Share kind=conversation、created/expires/revoked，capability/url不能进入本列表。Conversation active/deleted，任何非NULL project_ref（含空串）须存在同tenant/本人未删除Project的ID或slug。无文件分享/归档/授权应用能力，不纳本片。 |
+| 位置比较 | A扩大/v1/sessions及通用cursor或AG-UI ledger：淘汰，混淆排序/生命周期或新增持久化。B沿现目录新增普通http/shared-tasks-input.ts（query/cursor）、http/routes/shared-tasks.ts（预算/准入/投影）；现Chat service/port接具名read，采用。普通infrastructure/postgres/shared-tasks.ts只承担这一个有界查询/leased client/row映射，现PostgresChatRepository委托；不把HTTP codec/授权/配置放repository，无新目录。 |
+| 输入 / cursor | GET /v1/account/shared-tasks，limit缺省20、1..100，cursor缺省首屏，存在非空≤2048。重复/未知参数、坏percent/UTF8、body framing、Content-Encoding或Idempotency-Key拒绝。sht1_ canonical base64url闭集JSON含kind、tenantId、subjectId、limit、sharedAt/sessionId；精确UTC毫秒。参照现Artifact模式，没有HMAC/key配置，不引签名secret。cursor可编辑、不是凭据；SQL每次重绑可信本人。fatal UTF8/BOM/重复decoded key/未知字段/身份或limit不符拒绝。 |
+| 请求生命周期 | server具名原始GET path在generic admission/mutation前分派；route入口单绝对min(config.upstreamTimeoutMs,10000)预算含metadata、原authorizeUserRequest、cursor、pool/SQL、编码与最后active核。parent abort/response close退休；迟到准入零DB、迟到结果零输出。沿原Product browser-service+Bearer+fixed tenant，不另建认证，不自动重试。 |
+| 数据I/O | Query port带可信tenant/subject、limit/position与signal/deadline，复用原pool。沿本仓bounded leased-client模式：迟到connect release；pending SQL取消/超时仅销毁精确leased client，不pool.end/停共享资源。只读事务内设置剩余statement/lock预算，query/COMMIT/cleanup同deadline，未结束事务销毁连接，不向其他query插入取消/rollback。 |
+| 查询 / 表示 | 一个同owner SELECT：Share kind conversation、未revoked、expires null或>statement_timestamp()；连接同tenant本人active Conversation，Project父资源EXISTS。只选sessionId/title/Share createdAt/expiresAt，不SELECT capability/url或查Message/Agent/IAM。created_at DESC、conversation_id ASC，严格keyset且limit+1。200只data.items/next_cursor；item四安全字段，不猜任务完成/分享者。 |
+| 有界 / 一致性 | 总JSON响应≤1MiB；非法row、超界或有下一页但cursor编码超界时503，不截断标题/伪造next=null。原Chat合法ID/title保真。每页只是其SQL语句时刻的有效事实，没有跨请求快照；新增/撤销/过期可改变后续页，消费者须重读。 |
+| 发行 / 保护 | 无旧路径删除或fallback；additive15.3.0/146。新scripts/shared-tasks-public-contract.mjs先核新增面，精确剥唯一path/components、还原version，完整恢复15.2原字节SHA与145顺序/数组摘要，再委托SET19→SET18旧门。所有旧operation、Skills连接器、owner vendor/generated、依赖锁及canonical schema字节保护，不刷新旧oracle。 |
+| 验证 | 先现入口缺operation的真实HTTP/机器断言RED，再input/cursor/HTTP/contract纯门、原Chat/分享/架构及normal gates。Root独审与自有PG/Redis：正式HTTP message→share→list→revoke→list/public404、同毫秒分页/撤销/到期/foreign/父失效、EXPLAIN ANALYZE BUFFERS。idle worker/受控身份仅证明真实BFF持久事实，不冒正常模型/browser。 |
+
+当前无shared_at排序覆盖索引，Root实际EXPLAIN后再判断是否要另授canonical索引；D0无DDL。正常Chat-off尚无正规新任务事实，正常空列表可验，正向分享需已有本人真实任务或合法执行链，不seed业务行填正常应用。该具体运行边界不阻当前团队修补，不称设置全部完成。
+
+## SET-19 本人姓名 public adapter（2026-10-15；源码及真实owner验证通过）
+
+当前实现按下表窄边界落地；public15.2.0/145全文SHA256 3214e32d273fbc514db1c1f2307f7855b623f1f613fb1da710cc51d23c41f453。V2独审与Root真实HTTP/数据库验证已通过，具体门禁债及后继Web/browser边界见CURRENT顶部；以下D0记录保留设计来由，不再代表“尚无源码”。
+
+IAM姓名owner已正式提交并推送c64faa7992301f31495e163d04049c48a23d0225，internal0.13.0正规artifact全文SHA256 c22c55ef2b963a89ca3e03016138c2da74f5f005edf1b6ee8c5572daaf466262。本仓基线53996400e4100ed5940b104f0dce139d44fec383，public15.1.0/144 operations SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d；Root已保存642tracked基线。storage_platform_audit绑定该基线与三设计只读独审，无确定P1/P2；Root准入下表窄源码集，尚非实现或运行验收。Skills/连接器业务排除。
+
+| 放置项 | 当前裁决 |
+| --- | --- |
+| Owner / writer | IAM唯一User.name/资格/Audit owner；BFF唯一public投影。Root三设计/CURRENT/INDEX/Git/资源，billing_scheduler_audit后继唯一源码writer，storage_platform_audit只读独审。 |
+| 当前 / 目标 | 当前account-sessions普通route在通用admission后分派且另起5s，不能承接姓名的一体预算。新增现目录account-profile普通route/input及iam-account-profile client/types，唯一PATCH本人姓名。 |
+| 比较 / 粒度 | A深改通用admission计时/各return及meta分支：淘汰，会扩大旧接口变化；B在server具名PATCH原始canonical路径提前分派到独立profile route：采用，route调用原authorizeUserRequest与composition.sessionAdmission，独占本请求从进入route开始的预算，不建立第二认证实现。外层catch仅本精确PATCH安全plain错误兜底。无新顶层/模块/进程/框架或配置。 |
+| 依赖 | Browser→Web同源→BFF现browser-service+Product admission→同一admitted Bearer→正常generated IAM updateAccountProfile。本人subject绑定context.identity.userId；不接受body/header自报tenant/subject，不使用machine/issuerCookie。 |
+| 生命周期 | route入口立即performance绝对deadline=min(config.upstreamTimeoutMs,10000)及单AbortController，覆盖metadata/admission/body/owner headers+body/最后active检查。所有等待race同budget，即使fetch/admission/reader不合作也退役迟到工作；后继每步assertActive，预算耗尽绝无新owner写。parent aborted/response close主动abort，不写关闭response，finally移除timer/listener/reader。 |
+| 输入 / 传输 | 原raw path/method具名匹配，query含空问号、Idempotency-Key、重复Content-Type/Content-Encoding或非JSON拒绝；Content-Encoding仅缺省/identity，合法单一chunked传输可读，实际body≤65536bytes。冲突Content-Length/Transfer-Encoding等Node parser直接拒绝的请求不冒本route JSON响应。入站本片flat codec以fatal UTF8/有效JSON/精确两string字段/decoded键唯一证明拒坏UTF8与重复keys，并保expected_name合法旧单码元；新name仍wellformed/控制/trim规则，均不规范化。全局strictParseRawJson及旧API原字节不改，owner新ACK仍复用该strict parser；普通requestBodyJson/单独JSON.parse不能证明本片原文边界。 |
+| owner消费 | 唯一immutable IAM单pin正常generator，原18operations保留并加1。headers+正文总min(config上限,1MiB)、strict raw JSON、content-type/no-store/同requestID/零redirect-setCookie、generated strip前全形状闭集与subject/name binding；错误精确status/code tuple，不透传敏感owner message。 |
+| 数据 / 失败 | BFF无DB/Redis/receipt/cache/姓名副本；generic PATCH Idempotency-Key/businessStore管道不得进入。零自动write retry；timeout/取消/ACK丢失可能已提交，消费者须userinfo重读，不以取消认定rollback。IAM承诺提交点资格/姓名原值条件，已准入结果不反向保证后续没有新改名/撤销。 |
+| 删除 / 发行 | 删除旧IAM284bfd8唯一vendor pin，不保fallback/alias/双schema；public additive15.2.0/145operations。新外层inverse精准剥profile path及仅新增components、版本还原完整15.1全文SHA与旧清单，再委托原历史门。其他API/Skills/连接器语义原字节。 |
+| 验证 | 新profile input/client/HTTP/contract具名RED→GREEN，正常IAM生成check/历史inverse/type/lint/build/check与旧account/Team保留；Root独审/哈希/必要复验及真实BFF→IAM普通保存/CAS/错误/撤权后再发行。Web正常pin/freshscope16/UI保存刷新是后继。 |
+
+metadata/input先核，正常admission随后、有界body读取在准入成功后；所有步骤同一个deadline。HTTP route自身catch精确plain错误，server外层catch仅exact raw PATCH /v1/account/profile提供同shape最后兜底，不修改旧global failure()、旧admission或其他服务选择。准入结果迟到只被退役，不可启动body/owner。最后active检查不伪装为第二次在线IAM准入；owner已同tx复核Session/资格，Web后继仍需同opaque Product session/generation/access寿命的最后身份栅栏。
+
+## SET-18 本人登录 Session 公开投影（D0 独审通过，2026-10-14；owner 已发行，源码准入）
+
+IAM正式错误缓存修补已发行284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9，internal0.12.0 artifact仍为SHA256 f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b。本仓V2业务已冻审并真实BFF→IAM通过，public15.1.0候选SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d、canonical/inventory144；正式单pin更新及两新增消费元数据/格式回归修补已完成并接收，源码任务仍沿Root卡。本仓待Root正式发行，尚未正常激活；Skills/连接器业务排除，Root保留docs/Git/资源与最终验收。
+
+| 项 | 决定 |
+| --- | --- |
+| Owner / writer | IAM 唯一拥有 Session、关联凭据、撤销与 Audit；BFF 唯一发布 public projection。Root 三设计/Git/资源与验收，后继 billing_scheduler_audit 唯一源码 writer；精确源码权限沿Root SET18-BFF任务卡。 |
+| 当前事实 | 基线571173253ecd247b82c42b5fb8313bce7f3e29e5 clean；public15.0.0旧canonical142/旧inventory141、全文SHA256 5f6b1178cb878718090ba65d6b0d563185078624af0d3d46a01e568af87264a4；IAM消费0.11.0/7192254，现bootstrap/server在正规admission后分派team，无account/sessions路由。 |
+| 位置比较 / 粒度 | A把Session塞入Team/client或聊天sessions：淘汰，账户会话跨tenant且非Conversation。B采用现目录普通account-sessions route/input、iam-account-sessions client及其窄types：采用，无新顶层/一级module、数据库或进程。文件分别拥有HTTP、原始请求校验、owner I/O、内部结果类型，不复制wire DTO。 |
+| 当前 / 目标框架 | 当前仍是单一既有Node HTTP运行时，Nest原生整体迁移由Root统一后继，不把依赖/新功能冒迁移完成。本片只挂现唯一composition/dispatch，不建第二框架/服务/HTTP入口；原技术方案的统一后继边界保持。 |
+| 依赖 / 资格 | Browser→Web同源→BFF既有在线IAM Product admission→同一Bearer的IAM具名account-sessions operation；不自报user/sid/tenant/client、不换machine/admin、不访问owner数据库/Redis，也不relayvendor cookie。scope不替当前membership/部署资格。 |
+| 生命周期 | 准入沿现独立预算；新route起单5s总预算覆盖原始body、owner headers/body，min(config timeout,5s)，headers+body总min(config上限,1MiB)；取消主动退役挂起fetch/reader和迟到结果，移除timer/listener，不写已close响应。零自动重试、零乐观成功。 |
+| 响应 / 保证 | 固定generated strict schema并核owner JSON/no-store/同request-id；只输出安全session_id、真实UTC created/expires，不输出token/UA/IP/城市/last-active。current独立、other排除current且ID去重/数量限limit；不凭BFF时钟推断用户在线。承诺撤销提交后新在线Product请求拒绝，在途已准入请求不追溯回滚。 |
+| 数据 / 删除 | 无BFF持久事实/receipt/cache；DELETE由IAM事务与过期tombstone承接。unknown写结果提示重新读取、不得自动重试或宣成功；ownercleanup后404。删除旧IAM单pin，正规generator换正式新pin，保留其余消费operation，不手改generated。 |
+| 门禁 / 顺序 | owner发行→本仓contract RED/机器/独立逆回15.0全文→生成/client/route负控→Root独审+具名pure/check+真实IAM两登录系统验收→本仓发布→Web固定生成→正式浏览器。旧门已失败项保留，contract成功不等于浏览器完成。 |
+
+API/DATA两面同本方案；TENANT_DISABLED固定403 session_forbidden，CONFLICT才映射409 account_session_conflict，与现普通admission一致。owner正式artifact和新scope闭环是源码准入前置，不做旧0.11 fallback。
+
+
+Root源码复核纠正统计：旧canonical142/旧inventory141漏一个已存在的browser-private操作；本片正规完整inventory144，严格逆恢复旧141清单与完整15.0 API原字节。此清单登记纠偏没有Skills业务/API/权限语义变化，旧Conversation与format失败不冒通过。
+
+## SET-15 正式 Billing Catalog 消费（2026-10-13，候选已实施，真实组合待验）
+
+| 项 | 裁决 |
+| --- | --- |
+| Owner / writer | Billing唯一拥有商品与版本事实；BFF只投影现public套餐列表。Root设计/Git/运行，后继runtime_audit唯一实施writer。 |
+| 当前事实 | 基线BFF22a476ea的plans走旧v1 generic proxy，混用secret/Bearer，mapper期待旧offers。现候选已固定Billing ba98badab9445ae676a8f48faa55912d42ce5d2e的exp4原字节，正常generated getCatalog替换旧路径并保本人两读；源码审查与具名验证已通过，Root真实组合及浏览器仍待验。 |
+| 目标 / 放置比较 | 新普通文件src/infrastructure/clients/owner/billing-catalog.ts拥有具名GET、身份、完整分页与映射；淘汰generic proxy旧目录路径及把personal-read扩为万能client。现owner.ts仅plans接线及checkout不可用响应，无新module/pool/依赖。 |
+| 生命周期 / 依赖 | Browser→Web同源→BFF当前IAM admission→正规固定Billing generated getCatalog。可信u1 tenant、web-bff、独立serviceToken与internalSecret，不转浏览器身份header。一个请求总deadline与取消覆盖全部页和正文；总响应header+body字节上限复用现upstreamMaxResponseBytes，最多20页/2000项，任一超限明确失败，无部分成功。 |
+| 数据 / 删除 | 无SQL、Redis、cache、receipt或商品seed。新owner commit/version/digest原字节vendor正规生成并删除旧pin；public契约字段及operation保持。移除只被旧plans/checkout使用且已替代的mapper，不保留v1目录fallback。 |
+| 验证 | 真实行为RED→GREEN；source/dist真实HTTP身份/路径、两页完整、空终页、尾页失败、循环/重复ID/超预算、慢正文/取消、strict未知字段/大整数、checkout零owner读写；正规双生成check、contract/lint/type/test/build。 |
+
+消费者仅依赖已提交Billing ba98badab9445ae676a8f48faa55912d42ce5d2e的exp4，artifact SHA256为8a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a。Catalog client严格owner envelope/item/page，offer_revision_id→id、offer_key→key、currency_code→currency，十进制字符串原样，不合成key或默认价格。非终页空items、重复/历史cursor、重复revision或offer_key以及超过页/项/字节/总时间预算均失败；请求结果只在合法终页后一次返回。
+
+Root明确checkout目前owner未实现正式操作：保持现public入站身份/权限/幂等及request验证，但承认未支持，在业务分支返回现契约允许503 billing_unavailable，零owner读写；删除旧v1目录/checkout路径而非顺手接通支付。后继正式支付独立设计与provider sandbox验收后再开放，目录200不表示可买。此片不修改public canonical、Skills/连接器、SQL、lock或其他owner。
+
+## SET-13 Team 角色完整权限投影 D0（2026-10-13，实施前）
+
+| 项 | 当前裁决 |
+| --- | --- |
+| Owner / writer | IAM拥有Role与权限；BFF拥有公开Team投影。Root完成设计与Git，后继runtime_audit单一实施writer。 |
+| 当前事实 | BFF基线95fbd894、public14.7.0；现IAM固定SDK已验证platform/skill，iam-team原样投影，而public TeamRole闭集遗漏两域，Web77ebea4严格拒绝，团队页失败。 |
+| 目标职责 | 精确表示既有IAM合法角色目录，使Web能加载并作完整权限超集提示；不新增权限或授权行为。 |
+| 目录比较 | 扩现TeamRole机器schema、verify-openapi及现Team测试；淘汰新Team模块/权限registry、Skills client修改及六域裁剪（会误判权限超集）。 |
+| 粒度 / 依赖 | 现文件局部扩展，不建目录/进程。Browser→Web同源→BFF→固定IAM；当前tenant/user Bearer、5秒/1MiB、取消/no-store与在线准入保持。 |
+| 数据 / 删除 | 无SQL/Redis/事务/receipt/缓存；正规替换Web旧固定artifact，无双schema、fallback、未知域透传。 |
+| 验证 | 真实内置角色HTTP fixture、闭集负控、完整14.7逆摘要与全部历史门；lint/typecheck/contract/test/build；固定Web再生成及真实登录读取。 |
+
+Root本次实施裁决：这是strict response集合改变，发布public15.0.0 breaking候选，不能称可选minor。此次仅在Root自有开发隔离组合维持既有/v1，并要求BFF不可变候选→Web唯一pin/generated/strict schema→Root精确组合验收串行完成；尚未授权切main、共享日常站点、生产或未知消费者。Admin源码当前不可访问，不能声称Admin已适配；后继日常/公开激活前必须逐一核其固定consumer。此局部开发配对裁决不借历史beta例外，也不改变以后稳定公开breaking的/v2政策；新旧响应不并行服务。原14.7机器字节和全部非Team语义由最外层精确inverse保护。
 ## CV-SVC MCP内部直服务凭据切换（D1，2026-10-13；BFF 源码候选已实现，待配对验收）
 
 本切片只把 BFF→Platform 的 `mcp_personal`、`mcp_admin` workload认证从IAM机器OAuth/token/introspection切换到Platform现本地服务凭据，与已直认证projection保持相同安全I/O规则。BFF用户session、个人权限/catalog管理权限及前后fresh校验不删除；第三方MCP OAuth/PKCE、tenant_execution/proof、Run撤权不在本片。Platform surface白名单/caller/tenant仍是唯一机器准入。

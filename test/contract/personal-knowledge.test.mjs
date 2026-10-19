@@ -1,9 +1,10 @@
+import { restoreClosureLocalContract } from "../../scripts/verify-closure-integration-contract.mjs"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { test } from "node:test"
 import { inspectPersonalKnowledgeContract, restorePublic16KnowledgeContract } from "../../scripts/verify-personal-knowledge-contract.mjs"
-const read = () => readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+const read = async () => restoreClosureLocalContract(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
 test("knowledge additive public contract preserves the complete fixed Public16 parent", async () => {
   const source = await read()
   assert.deepEqual(inspectPersonalKnowledgeContract(source), [])

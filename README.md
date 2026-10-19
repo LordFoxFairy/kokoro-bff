@@ -1,3 +1,7 @@
+## 2026-10-19 当前 Public19 集成交付
+
+当前唯一契约为 Public19.0.0 / 165 operations。保留本地Skills、项目选择冻结、知识、调度日历、Library与MCP包管理，并合入main账号会话/姓名、共享/归档及完整Team权限；不恢复旧名称关联或旧anchor字段。双父精确证明在 `scripts/verify-closure-integration-contract.mjs`；真实验证和正常配对边界见 `docs/CURRENT.md`。以下日期段是历史切片，不替代当前机器契约。
+
 ### 2026-10-18 MCP 管理HTTP接线（未正常加载）
 
 Public18.1 新增受管包 Begin/Complete/Abort/Status/Publish 五操作；沿现 mcpProviderAdmin 配置与正式 SDK、当前人类平台管理员及 mcp_catalog.manage 准入。只有元数据与短时 PUT 引用经 BFF，字节仍直接传 Storage；无新表、配置、自动重试或模型/工具执行。Admin 上传/发布恢复页面待后继，完整验证与未验边界见 docs/CURRENT.md。

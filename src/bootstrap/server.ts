@@ -3,6 +3,10 @@ import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
 import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
+
+import { archivedTasksRoute } from "../http/routes/archived-tasks.js"
+import { sharedTasksRoute } from "../http/routes/shared-tasks.js"
+import { accountProfileRoute } from "../http/routes/account-profile.js"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
 import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
 import { customApiOperation, customApiRoute } from "../http/routes/custom-api.js"
@@ -71,6 +75,7 @@ import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamK
 import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { runtimeManifest } from "../http/routes/runtime-manifest.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
+import { accountSessionsRoute } from "../http/routes/account-sessions.js"
 import { liveTeamRead, liveTeamWrite } from "../http/routes/team.js"
 import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
 import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
@@ -101,6 +106,21 @@ async function handle(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
+  if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
+    await accountProfileRoute(request, response, config, composition.sessionAdmission, id)
+    return
+  }
+  if (
+    (request.method === "GET" && (request.url === "/v1/account/archived-tasks" || request.url?.startsWith("/v1/account/archived-tasks?"))) ||
+    ((request.method === "GET" || request.method === "POST") && /^\/v1\/sessions\/[^/]+\/(?:archive|restore)(?:\?|$)/u.test(request.url ?? ""))
+  ) {
+    await archivedTasksRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.services.chat, id)
+    return
+  }
+  if (request.method === "GET" && (request.url === "/v1/account/shared-tasks" || request.url?.startsWith("/v1/account/shared-tasks?"))) {
+    await sharedTasksRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.services.chat, id)
+    return
+  }
   const rawPathname = new URL(request.url || "/", "http://bff.local").pathname
   const isRawSkillPackageInspection =
     request.method === "GET" && (/^\/v1\/self\/skills\/[^/]+\/package$/u.test(rawPathname) || /^\/v1\/skill-installations\/[^/]+\/package$/u.test(rawPathname))
@@ -788,6 +808,15 @@ async function handle(
     return
   }
 
+  if (
+    businessPath[0] === "account" &&
+    businessPath[1] === "sessions" &&
+    ((request.method === "GET" && businessPath.length === 2) || (request.method === "DELETE" && businessPath.length === 3))
+  ) {
+    await accountSessionsRoute(request, response, config, context, admission.bearerToken, businessPath)
+    return
+  }
+
   if (businessPath[0] === "team") {
     if (request.method === "GET") await liveTeamRead(request, response, config, context, admission.bearerToken, businessPath)
     else await liveTeamWrite(request, response, config, context, admission.bearerToken, businessPath)
@@ -1084,8 +1113,27 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   const composition = createBffComposition(config, options)
   const server = createServer((request, response) => {
     void handle(request, response, config, composition).catch(() => {
-      if (!response.headersSent) send(response, 500, failure("internal_error", "The BFF encountered an internal error", requestId(request)))
-      else response.destroy()
+      if (!response.headersSent) {
+        if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
+          response.setHeader("x-request-id", requestId(request))
+          send(response, 500, { error: { code: "internal_error", message: "The BFF encountered an internal error", retryable: false } })
+        } else if (
+          (request.method === "GET" && (request.url === "/v1/account/archived-tasks" || request.url?.startsWith("/v1/account/archived-tasks?"))) ||
+          ((request.method === "GET" || request.method === "POST") && /^\/v1\/sessions\/[^/]+\/(?:archive|restore)(?:\?|$)/u.test(request.url ?? ""))
+        ) {
+          response.setHeader("cache-control", "no-store")
+          send(response, 503, {
+            error: {
+              code: request.url?.startsWith("/v1/account/") ? "archived_tasks_unavailable" : "archive_state_unavailable",
+              message: "Archive unavailable",
+              retryable: true,
+            },
+          })
+        } else if (request.method === "GET" && (request.url === "/v1/account/shared-tasks" || request.url?.startsWith("/v1/account/shared-tasks?"))) {
+          response.setHeader("x-request-id", requestId(request))
+          send(response, 503, { error: { code: "shared_tasks_unavailable", message: "shared_tasks_unavailable", retryable: true } })
+        } else send(response, 500, failure("internal_error", "The BFF encountered an internal error", requestId(request)))
+      } else response.destroy()
     })
   })
   let shutdownPromise: Promise<void> | null = null

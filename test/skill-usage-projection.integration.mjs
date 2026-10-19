@@ -8,7 +8,7 @@ const url = process.env.KOKORO_TEST_POSTGRES_URL
 const integration = url ? test : test.skip
 
 integration("R353 closes ready-first, terminal-first, duplicate and conflict in one durable transaction", async () => {
-  const pool = new Pool({ connectionString: url })
+  const pool = new Pool({ options: "-c search_path=kokoro_bff -c timezone=UTC", connectionString: url })
   const tenantId = `tenant_${randomUUID()}`
   const source = (runId, sequence, fact) => ({
     tenantId,
@@ -41,8 +41,8 @@ integration("R353 closes ready-first, terminal-first, duplicate and conflict in 
       /SKILL_USAGE_TERMINAL_CONFLICT/u,
     )
     assert.equal(
-      (await client.query("SELECT count(*)::int AS count FROM bff_skill_usage_run_terminal WHERE tenant_id=$1 AND run_id='ready_wrong_session'", [tenantId])).rows[0]
-        .count,
+      (await client.query("SELECT count(*)::int AS count FROM bff_skill_usage_run_terminal WHERE tenant_id=$1 AND run_id='ready_wrong_session'", [tenantId]))
+        .rows[0].count,
       0,
     )
     assert.equal(

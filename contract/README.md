@@ -1,3 +1,9 @@
+## 2026-10-19 既有分支集成：唯一 Public19.0.0（候选）
+
+本次只合并本地 d8634f0 与 main 16e5c711 已批准能力，不新增功能。唯一当前 /v1 契约165操作：保本地 Skills取得来源、项目精确选择/消息默认冻结、知识、完整日历与Library筛选、五项MCP包管理；承接main八项账号会话/姓名、共享/归档操作与Team完整platform/skill权限。旧名称关联PATCH及recurrence_anchor_at请求字段保持退休，不建alias或runtime fallback。两父原文/有序inventory通过本次明确增量的精确逆证保留，既有历史hash与断言不重签；全部后端入口、owner准入/取消/事务/幂等和历史回执保持。
+
+Schema只在原BFF canonical叠加main既有归档列/索引；项目/日历/知识结构与旧表删除保持。正常库不自动演进，未重启服务、启用模型/实际工具/扣费。停写后的728输入完整格式/lint/types/契约845项/架构/默认1489 PASS与3原SKIP/fresh build已通过；13文件真实PostgreSQL＋Redis 346 PASS/0 SKIP，fresh canonical安装与自有测试库回收已验证，独立审查无遗留确定P0–P2。首次资源7个失败已定位并修正既有fixture的owner search_path、HTTP7显式project_ref和ObjectStore VersionId ACK；原503、未知提交、重启与撤权恢复断言保持，未以放宽断言消除失败。新availability消费者WIP和正常mixed均未夹入；代码交付不代表正常Schema/运行服务或完整页面已配对。
+
 ## 2026-10-18 当前候选 Public16.2
 
 GET列表/详情的 ScheduledTaskDetails 公开已存 required recurrence_anchor_at，与 nullable next_run_at 独立；152 operations 不变。写操作的原 ScheduledTask/ACK完整保持，历史终态不改写；不是运行时兼容分支。唯一机器源和mapper同步，新增读表示/绑定完整逆回Public16.1。候选未正常激活，Web固定producer/星期编辑和其他周期尚待后继。
@@ -14,6 +20,18 @@ GET列表/详情的 ScheduledTaskDetails 公开已存 required recurrence_anchor
 
 Connect owner 固定 Platform `9be81465d487be2499a68a76664c14b73c16024b`，包含 `auth/bff-service-auth-v1.json` 1.0.0 与精确 provenance/digest。该 breaking auth profile 完整覆盖六种 BFF 用途，替代剩余 catalog/skills_admin 机器 OAuth。HTTP projection 的独立6.0 pin、公开14.8/139、Proto与 generated 均不变；下文 projection-only 摘要属于先前切片，并不保留其它 BFF 用途 OAuth 的稳态例外。人类 IAM action、外部 OAuth、执行/Billing 授权不变；正常配置切换/组合验收另记 CURRENT。
 
+
+## SET49 current integration
+
+Public16.0.0/146保留已批准main删除与设置归档增量，完整inverse回原15.4/150。Billing唯一正式pin cd92c728d8f658f54b254d5cbfd28156ca426dc1，v2 experimental.5 SHA256 b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af；三GET含catalog，缺账户只认专用404，未知路由404不可投影空账户。下方两分支既往发行记录保留为历史，不是当前pin。
+
+## SET-15 Billing Catalog 单 pin 配对（2026-10-13）
+
+已固定Billing ba98badab9445ae676a8f48faa55912d42ce5d2e的3.0.0-experimental.4，artifact SHA256为8a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a，原字节替换contract/vendor/kokoro-billing单pin，正常generator增加唯一getCatalog并保原本人两读；旧vendor已删除。新required offer_key是owner strict breaking，只限本次自有隔离开发配对，不激活main/日常/生产或声称未知consumer已更新。public15.0.0 canonical无字段/operation变更，plans错误只用现503 ErrorEnvelope。checkout保入站校验后503不可用零owner I/O，不引用旧v1目录/checkout。机器当前owner与generator已一致，源码候选已实施；完成仍需Root精确组合及真实浏览器。
+
+## SET-13 Team 完整权限开发配对裁决（2026-10-13）
+
+public15.0.0候选纠正TeamRole.permissions漏platform/skill；strict14.7消费者会拒绝新字段，因此明确breaking而非minor。Root仅批准本次自有开发隔离组合在既有/v1串行配对：owner契约/测试→不可变BFF SHA/digest→Web单pin正规生成与strict校验→Root真实浏览器。当前不切main、日常站点或生产；Admin消费者不可访问，后继激活前仍须核验。此独立开发裁决不沿用历史beta豁免，未来稳定breaking/v2政策保留，不提供双响应或fallback。新最外层精确两域/版本inverse必须恢复完整14.7字节，再跑全部原历史门。
 ## App API 修复当前切片（2026-10-13）
 
 - HTTP 业务路径统一 `/v1`，artifact SemVer 不等于路由版本。Billing 唯一消费源为 owner commit `1ceeae550f05857d1e7fa0da1e83af23a552f0ca` 的 `contract/openapi/v1/openapi.yaml`（SHA-256 `35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8`）；现生成器只消费本人 Credit 两读，不回退旧 v2。

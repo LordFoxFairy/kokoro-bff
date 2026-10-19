@@ -1,5 +1,6 @@
+import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "./ports/chat-repository.js"
 import type { ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../contracts/index.js"
-import type { ChatRepository, ConversationCollectionFilter } from "./ports/chat-repository.js"
+import type { ChatRepository, ConversationCollectionFilter, SharedTasksPosition, SharedTasksRead } from "./ports/chat-repository.js"
 import { createHash } from "node:crypto"
 import { mutationScope } from "./idempotency.js"
 import type { RequestContext } from "../domain/request-context.js"
@@ -8,8 +9,29 @@ import { chatMessage, conversationSummary } from "./chat/mappers.js"
 export class ChatApplicationService {
   private readonly repository: ChatRepository
 
+  public listOwnedArchivedTasks(query: ArchivedTasksQuery) {
+    return this.repository.listOwnedArchivedTasks(query)
+  }
+  public readArchiveState(query: ArchiveStateQuery) {
+    return this.repository.readArchiveState(query)
+  }
+  public changeArchiveState(command: ArchiveStateCommand) {
+    return this.repository.changeArchiveState(command)
+  }
+
   public constructor(repository: ChatRepository) {
     this.repository = repository
+  }
+
+  public listOwnedSharedTasks(
+    tenantId: string,
+    subjectId: string,
+    limit: number,
+    position: SharedTasksPosition | null,
+    signal: AbortSignal,
+    deadlineAt: number,
+  ): Promise<SharedTasksRead> {
+    return this.repository.listOwnedSharedTasks(tenantId, subjectId, limit, position, signal, deadlineAt)
   }
 
   public async listConversations(

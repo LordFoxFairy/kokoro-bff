@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 3.0.0-experimental.3
+  version: 3.0.0-experimental.5
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -72,7 +72,7 @@ paths:
             text/plain; version=0.0.4:
               schema:
                 type: string
-  /v1/commerce/catalog:
+  /v2/commerce/catalog:
     get:
       operationId: getCatalog
       x-kokoro-owner: kokoro-billing
@@ -87,8 +87,25 @@ paths:
           serviceCaller: []
           internalSecret: []
           serviceBearer: []
+      description: Authenticated IAM user or complete web-bff machine credentials; tenant uses the canonical u1 identity header. Machine subject is optional but must be a unique valid u1 subject if present. Partial machine identity never falls back to user authentication.
+      x-kokoro-identity-transport: catalog-identity-u1
+      x-kokoro-auth-selection:
+        machine_markers:
+          - x-kokoro-service
+          - x-kokoro-internal-secret
+          - x-kokoro-subject
+        service_bearer_selects_machine: true
+        machine_partial_response: 403
+        machine_to_user_fallback: false
       parameters:
-        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/PersonalTenantId"
+        - $ref: "#/components/parameters/PersonalSubjectId"
+        - name: x-kokoro-service
+          in: header
+          required: false
+          schema:
+            type: string
+            const: web-bff
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
       responses:
@@ -173,7 +190,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/billing/me/credit-account:
+  /v2/billing/me/credit-account:
     get:
       operationId: getMyCreditAccount
       x-kokoro-owner: kokoro-billing
@@ -303,7 +320,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/billing/me/credit-ledger:
+  /v2/billing/me/credit-ledger:
     get:
       operationId: getMyCreditLedger
       x-kokoro-owner: kokoro-billing
@@ -435,7 +452,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/billing/me/subscriptions:
+  /v2/billing/me/subscriptions:
     get:
       operationId: getMySubscriptions
       x-kokoro-owner: kokoro-billing
@@ -532,7 +549,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/internal/billing/admissions:
+  /v2/internal/billing/admissions:
     post:
       operationId: createAdmission
       x-kokoro-owner: kokoro-billing
@@ -667,7 +684,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Creates and commits the admission resource and any authorized hold. A durable command-receipt replay returns the original creation representation; business status remains queryable.
-  /v1/internal/billing/admissions/{admission_id}:
+  /v2/internal/billing/admissions/{admission_id}:
     get:
       operationId: getAdmission
       x-kokoro-owner: kokoro-billing
@@ -768,7 +785,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/internal/billing/admissions/{admission_id}/capture:
+  /v2/internal/billing/admissions/{admission_id}/capture:
     post:
       operationId: captureAdmission
       x-kokoro-owner: kokoro-billing
@@ -900,7 +917,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/internal/billing/admissions/{admission_id}/release:
+  /v2/internal/billing/admissions/{admission_id}/release:
     post:
       operationId: releaseAdmission
       x-kokoro-owner: kokoro-billing
@@ -1032,7 +1049,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/internal/billing/execution-events:
+  /v2/internal/billing/execution-events:
     post:
       operationId: acceptExecutionEvent
       x-kokoro-owner: kokoro-billing
@@ -1162,7 +1179,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Commits the execution inbox event and receipt only. Processing, execution outcome, and credit capture remain independently queryable; clients must not automatically retry an unknown result.
-  /v1/internal/billing/execution-events/{execution_event_id}:
+  /v2/internal/billing/execution-events/{execution_event_id}:
     get:
       operationId: getExecutionEvent
       x-kokoro-owner: kokoro-billing
@@ -1263,7 +1280,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/billing/checkouts:
+  /v2/billing/checkouts:
     post:
       operationId: createCheckout
       x-kokoro-owner: kokoro-billing
@@ -1397,7 +1414,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Creates the durable checkout snapshot. Provider session creation runs separately; 201 does not guarantee a ready checkout URL. Same-key replay returns the original creation representation and later status is read with GET.
-  /v1/billing/checkouts/{checkout_id}:
+  /v2/billing/checkouts/{checkout_id}:
     get:
       operationId: getCheckout
       x-kokoro-owner: kokoro-billing
@@ -1502,7 +1519,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/internal/payment/settlements:
+  /v2/internal/payment/settlements:
     post:
       operationId: createSettlement
       x-kokoro-owner: kokoro-billing
@@ -1632,7 +1649,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Records a verified payment fact. Credit fulfillment is a separate nullable result and is not guaranteed by 201.
-  /v1/internal/payment/settlements/{settlement_id}:
+  /v2/internal/payment/settlements/{settlement_id}:
     get:
       operationId: getSettlement
       x-kokoro-owner: kokoro-billing
@@ -1733,7 +1750,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/internal/payment/refunds:
+  /v2/internal/payment/refunds:
     post:
       operationId: createInternalRefund
       x-kokoro-owner: kokoro-billing
@@ -1863,7 +1880,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Records an existing provider refund fact; it does not initiate a provider refund or guarantee that the credit effect is applied.
-  /v1/internal/payment/refunds/{refund_id}:
+  /v2/internal/payment/refunds/{refund_id}:
     get:
       operationId: getRefund
       x-kokoro-owner: kokoro-billing
@@ -1969,7 +1986,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/admin/billing/refunds:
+  /v2/admin/billing/refunds:
     post:
       operationId: createAdminRefund
       x-kokoro-owner: kokoro-billing
@@ -2101,7 +2118,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Records an existing provider refund with trusted operator attribution; it does not initiate a provider refund.
-  /v1/internal/credit-holds/expire:
+  /v2/internal/credit-holds/expire:
     post:
       operationId: expireCreditHolds
       x-kokoro-owner: kokoro-billing
@@ -2228,7 +2245,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/webhooks/payment/stripe:
+  /v2/webhooks/payment/stripe:
     post:
       operationId: acceptStripeWebhook
       x-kokoro-owner: kokoro-billing
@@ -2298,7 +2315,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/webhooks/payment/alipay:
+  /v2/webhooks/payment/alipay:
     post:
       operationId: acceptAlipayWebhook
       x-kokoro-owner: kokoro-billing
@@ -2372,7 +2389,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/webhooks/payment/wechat:
+  /v2/webhooks/payment/wechat:
     post:
       operationId: acceptWechatWebhook
       x-kokoro-owner: kokoro-billing
@@ -2694,12 +2711,18 @@ components:
               additionalProperties: false
               required:
                 - postgres
+                - redis
               properties:
                 postgres:
                   type: string
                   enum:
                     - ok
                     - unavailable
+                redis:
+                  type: string
+                  enum:
+                    - ok
+                    - degraded
     Page:
       type: object
       additionalProperties: false
@@ -2714,6 +2737,7 @@ components:
       type: object
       additionalProperties: false
       required:
+        - offer_key
         - offer_revision_id
         - name
         - amount_minor
@@ -2721,6 +2745,10 @@ components:
         - credit_micros
         - billing_interval
       properties:
+        offer_key:
+          type: string
+          minLength: 1
+          maxLength: 255
         offer_revision_id:
           $ref: "#/components/schemas/Uuid"
         name:

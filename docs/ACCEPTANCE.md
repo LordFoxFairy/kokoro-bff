@@ -1,3 +1,16 @@
+## SET-19 本人姓名保存（2026-10-15）
+
+| 场景 | 当前证据 |
+| --- | --- |
+| 普通成员保存后读取一致、no-op不更新updatedAt | Root真实BFF HTTP→正式IAM→PostgreSQL与正式userinfo通过 |
+| 旧值冲突、不同sid同原值并发只一个成功 | 真实HTTP分别409与200/409，数据库仅winner值 |
+| 非法输入、超限、缺scope、machine/operator | 真实400/413/403且无姓名副作用；具名108项含严格raw/预算/ACK负控通过 |
+| 撤销其他登录后仍尝试改名 | 真实撤销200，旧会话PATCH401且数据库不变 |
+| 历史expected_name单码元保真、新姓名合法限制 | 两项真实RED修复后GREEN，独立V2审查通过 |
+| 完整门禁、实际Web/browser闭环 | 默认三旧失败、check两旧失败、format七旧警告保留；Web保存→刷新→重登待Root后继，不计完成 |
+
+测试只使用本任务自有临时库与Redis前缀，完整资源集合恢复；当前精确契约和发行边界见CURRENT顶部。
+
 ## R357-H1 人类 MCP 准入源码切片（2026-10-09）
 
 当前 IAM 消费唯一固定55befe5092f96d617088549df3166e1d381e6b1c / 0.11.0（artifact SHA47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3），正规生成新增 checkAuthorization，原15 consumer operations及完整共用schemas保全。现MCP read/manage每次在可信session后检查mcp_personal/current_membership；tenant/subject/request-id/no-store/closed响应不匹配拒503，false403、失效401、rate429，复用现session_forbidden/session_rate_limited public错误码。

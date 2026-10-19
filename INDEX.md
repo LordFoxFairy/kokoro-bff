@@ -1,3 +1,7 @@
+## 2026-10-19 集成证明入口
+
+唯一当前 Public19/165：`contract/openapi/v1/openapi.yaml`。`scripts/verify-closure-integration-contract.mjs` 与 `test/contract/closure-integration.test.mjs` 验证两个批准父全文/有序操作、当前wire与仅新增归档Schema；历史proof不是运行时兼容层。现有业务组件与owner不扩展。
+
 ### 2026-10-18 MCP 管理HTTP入口
 
 `src/http/mcp-package-admin-input.ts` 负责严格wire→SDK输入与受界正文；`src/http/routes/mcp-package-admin.ts` 负责五HTTP操作、当前管理员准入和公开错误/结果。现 `bootstrap/server.ts` 共用20秒请求预算、`runtime.ts` 沿原配置装配/关闭 SDK，`auth/browser-service-credential.policy.ts` 只给 Admin 浏览服务精确新增五入口。唯一公开契约18.1及 `scripts/verify-mcp-package-admin-contract.mjs` 保留完整Public18历史逆证；`test/mcp-package-admin-http.test.ts` 覆盖端到端route行为而非源码/CSS字符串。
@@ -28,6 +32,16 @@ Public15.0.0/139 operations 与 Platform e172838 的 RPC/HTTP6.1.0 使用唯一�
 ### 2026-10-16 Skill Share 活动版本资格
 
 `src/http/routes/skill-share.ts` 复用 `SkillSpecificationSource.revisionSummary` 的精确 active/valid 元数据资格、strict schema 与 source_ref/UID 绑定；POST 持久化前/返回前及 Resolve 重新检查。本人可预览已撤回/草稿包不代表可生成分享，原包检查仍保留。DELETE 只沿原 creator/tenant，不因撤回阻断；没有新协议或 SQL。`test/skill-share-http.test.mjs` 原用例承接拒绝零创建、已有链接重核、迟到取消与提交后撤回，不假称跨 owner 原子回滚。
+
+## SET47 Conversation归档实现候选
+
+`src/http/archived-tasks-input.ts`、`routes/archived-tasks.ts`、`src/infrastructure/postgres/archived-tasks.ts`与`archive-sql-lease.ts`沿既有Chat/HTTP入口实现本人归档列表/状态/命令；唯一事实为Conversation.archived_at，当前canonical15.4/150。`scripts/archived-tasks-public-contract.mjs`完整逆恢复15.3后委托原门。纯门/真实PG待验及发行状态以`docs/CURRENT.md`为准，不将归档当删除、取消Run或撤分享。
+
+## 本人姓名与登录设备
+
+姓名 PATCH：`src/http/account-profile-input.ts` 负责原始输入；`src/http/routes/account-profile.ts` 负责正常准入与单总预算；`src/infrastructure/clients/iam-account-profile.ts` 负责固定IAM generated请求与绑定ACK，`.types.ts`承载结果类型。唯一public事实源是 `contract/openapi/v1/openapi.yaml` 15.2.0；`scripts/account-profile-public-contract.mjs` 精确恢复完整15.1后委托旧治理。BFF不持久化姓名。
+
+登录设备仍由 `src/http/routes/account-sessions.ts` 与 `src/infrastructure/clients/iam-account-sessions.ts` 消费IAM本人会话；当前验证与尚未闭环的Web/browser项见 `docs/CURRENT.md`。
 
 <!-- T-K03.13-BFF-MCP-PERSONAL-CRUD -->
 本人 MCP：`src/http/mcp-personal-command-input.ts` 解析四命令，`src/infrastructure/clients/platform/mcp-personal-command-binding.ts` 冻结正式 owner JCS/key/CAS；现 `mcp-personal` route/client 承接六读取与四命令，Provider 目录不代表连接授权。
@@ -152,6 +166,14 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
   `src/http/routes/library-artifact-list.ts` 保存有界候选窗口/完整 query cursor，稀疏页可继续而不误报穷尽。
   canonical 发布及前版逆变门为 `scripts/verify-library-filter-contract.mjs`；语义/边界见 `docs/api/v1/library.md`。
   当前正常环境仍 Public17；未完成消费者固定/配对前不重载候选或宣称页面搜索已完成。
+
+- System / Model / Billing / Capability：当前由 `src/http/routes/owner.ts` 投影；Billing 套餐目录经 `src/infrastructure/clients/owner/billing-catalog.ts` 消费固定 owner generated client，完整分页后投影，checkout 未开放。
+- Library：IAM admission 后由 `src/http/routes/library-file-list.ts`、`src/http/library-file-list-input.ts` 与
+  `src/infrastructure/clients/storage/personal-file-list.ts` 消费 Storage personal Connect 列表；`kind=file` 必填，
+  只投影 CLEAN ASSET。个人上传由 `src/http/routes/personal-file-upload.ts`、
+  `src/application/personal-file-upload.ts` 与 `src/infrastructure/clients/storage/personal-file-upload.ts`
+  调 Storage personal Create/Complete/GetAsset；当前已真链验可见 CLEAN 上传，跨进程未知结果恢复仍待放行。
+  Agent Artifact 与个人下载仍待独立切片。
 - Chat facts：`src/http/routes/chat.ts` 读取/写入 BFF PostgreSQL；已发布 `src/infrastructure/postgres/chat-repository.ts` 维护 tenant、锁和 cursor。在已发布的 R155 Move 职责拆分中，该 Repository 只委派 Move；`conversation-move.ts` 持单一 Move 事务/赢家 receipt 重放，`conversation-move-lease.ts` 持有界 PoolClient 生命周期，既有 `chat-repository-mappers.ts` 做纯 receipt Row 校验；本仓 SQL、public `7.1.0`、port 与行为不变。`chat-turn-service.ts` 与 `agent-dispatch-outbox-repository.ts` 原子提交 Message/Agent command；
 - Agent Chat：`src/http/routes/agent.ts` 只承接 durable AG-UI 读取和 run control；Agent launch 由后台 outbox dispatcher 投递；`src/application/agui/` 投影；
   `src/application/agui/projector.ts` 独立消费 Agent source；`agui-projection-repository.ts` 在公开发送前持久化并分配 cursor，

@@ -1,3 +1,9 @@
+## 2026-10-19 既有分支集成：唯一 Public19.0.0（候选）
+
+本次只合并本地 d8634f0 与 main 16e5c711 已批准能力，不新增功能。唯一当前 /v1 契约165操作：保本地 Skills取得来源、项目精确选择/消息默认冻结、知识、完整日历与Library筛选、五项MCP包管理；承接main八项账号会话/姓名、共享/归档操作与Team完整platform/skill权限。旧名称关联PATCH及recurrence_anchor_at请求字段保持退休，不建alias或runtime fallback。两父原文/有序inventory通过本次明确增量的精确逆证保留，既有历史hash与断言不重签；全部后端入口、owner准入/取消/事务/幂等和历史回执保持。
+
+Schema只在原BFF canonical叠加main既有归档列/索引；项目/日历/知识结构与旧表删除保持。正常库不自动演进，未重启服务、启用模型/实际工具/扣费。停写后的728输入完整格式/lint/types/契约845项/架构/默认1489 PASS与3原SKIP/fresh build已通过；13文件真实PostgreSQL＋Redis 346 PASS/0 SKIP，fresh canonical安装与自有测试库回收已验证，独立审查无遗留确定P0–P2。首次资源7个失败已定位并修正既有fixture的owner search_path、HTTP7显式project_ref和ObjectStore VersionId ACK；原503、未知提交、重启与撤权恢复断言保持，未以放宽断言消除失败。新availability消费者WIP和正常mixed均未夹入；代码交付不代表正常Schema/运行服务或完整页面已配对。
+
 ## Agent HTTP7 窄消费者（2026-10-18，正常尚未配对）
 
 只升级内部固定Agent artifact到7104f3d/7.0.0，public18.1及157 operations原字节保持。SDK仍只生成Run POST、events GET、control POST，不开放新增usage-evidence读、更不触发模型/收费。Launch网络必含project_ref:string|null，从BFF原durable scope投影，直聊显式null；不会信任浏览器trace或重新读取移动后的项目。当前strict生成源/provenance与本地manifest由同一正式命令校验。
@@ -120,6 +126,123 @@ Create 与 Resolve 使用和既有 Shared Summary 相同的精确 revision activ
 
 owner 唯一 Proto 的 Update 请求只含 request_id/command/installation_id/expected_source_ref/source_ref，使用原 `product-personal-installation/1.0.0`。本仓固定 owner `11cb7604a5385047fd872cedc8a55273eae59043` 的 Proto/descriptor/update profile/provenance digest 并正规生成，不导入 sibling 源码；HTTP projection 的独立 pin 不因本 RPC 加法移动。本地 client/route 与机器已接线；正常服务未切换，本节不代表 API 已正常激活；旧 Install/Enable/Remove 各自语义不变。
 
+
+## SET49：主线与设置归档合同集成
+
+合并主线已批准的MCP public四写删除及既有设置/归档能力，以16.0.0/146发行（breaking删除，不冒minor）。integration-public-contract.mjs逐字节验证完整当前合同及有序清单，精确恢复原15.4全文/150后委托全部原inverse和oracle；main贡献保留，不修改Skills/MCP业务。Billing唯一pin使用正式experimental.5发行，保三读与严格专用404；当前验证进行中，正常服务不变。
+
+## SET-47 本人归档任务 Public15.4 D0（2026-10-15；未实现/未发行）
+
+传输边界补充：exact encodeURIComponent wire不变，BFF原生raw HTTP仍可读取历史ID `.`/`..`；WHATWG URL（含fetch）会规范化dot path segments，百分号编码点也不能解决。Web后继须对此两ID在fetch前拒绝并明确禁用归档/恢复说明，不做双重解码/fallback/新API；不能宣所有历史ID浏览器皆可操作。普通conv与Unicode ID不受此限制。
+
+当前阶段更新：四操作实现候选已完成，正常outer gate与正规150清单已接线，原15.3全文/146及全部历史inverse继续；下方“设计阶段未接runtime/门”的描述保留为D0历史。源码纯门证据与未验PG/正常组合见CURRENT，未发行不得消费者固定工作树artifact。旧正常run与DB未改。
+
+GET `/v1/sessions/{session_id}/archive` 为同一归档路径上的正式 chat.read/idem none 本人状态读取，成功同 `{data:{session_id,archived_at}}`，未归档明确返回NULL，foreign/deleted/失效父同404。Web active任务列表合成必须正式读state：confirmed archived不合成；404新draft按原行为；未知失败不能当unarchived。由此新增四operations、三paths，总150，旧Chat响应字段不变。
+
+路径 session_id 接受任意合法非空 UTF8 历史 Conversation ID（包括Unicode/大小写），按 exact encodeURIComponent 后的单segment可逆canonical百分号表示处理，不能抄move的conv_UUID限制；拒非法编码而不trim/归一化ID。分页同毫秒Unicode/BMP/astral与大小写按C UTF8字节序必须实测。后继多primitive query/command沿TS§6.7用具名Readonly对象，不复制旧长位置参数。
+
+运行裁决：保留旧正常run，不重启/ALTER/清事实。后继正式BFF/Web pin由Root用formal launcher现--web-port开启独立新run，复用现PG/Redis服务器但使用自有fixtureDB/namespaces；canonical fresh install即可。不建立在线升级或migration链，本片没有运行资源操作。
+
+唯一 canonical `contract/openapi/v1/openapi.yaml` additive15.4.0/150，旧15.3.0/146完整字节逆恢复 SHA256 `694251d4f4c1bcc9a79ae4fd2d4c050c87a0a8af39bea0a9f0bed3a4dcae5ad5`；原有序146数组 JSON SHA256 `e88eca53ec77f6b05cba05188b1a72445e5c7fad07657930a1d317d5f0cc2658`。不改旧 operation/schema/permission/oracle；独立 outer gate 成功后委托 SET21 门。现正常门入口及清单未升级，runtime 尚未注册，Web 不得提前消费。
+
+| 正式候选 endpoint | 准入 | 请求/成功 |
+| --- | --- | --- |
+| GET `/v1/account/archived-tasks` | 本人 chat.read | 仅 limit（默认20、1..100）、cursor（1..2048）；`{data:{items:[{session_id,title,archived_at,project_ref}],next_cursor}}` |
+| GET `/v1/sessions/{session_id}/archive` | 本人 chat.read | 无query/body；`{data:{session_id,archived_at}}`，NULL为确知未归档；unknown不可冒NULL |
+| POST `/v1/sessions/{session_id}/archive` | 本人 chat.write | strict 空 JSON `{}`、恰一 Idempotency-Key；`{data:{session_id,archived_at}}` |
+| POST `/v1/sessions/{session_id}/restore` | 本人 chat.write | 同上；fresh restore archived_at=null，历史 receipt 可返回历史值，必须随后 read |
+
+成功与 error 均 closed JSON，无 meta；request ID 仅 x-request-id header、Cache-Control:no-store，429 带正整数 Retry-After。错误 `{error:{code,message,retryable}}`：400 输入；401 session_authentication_required/session_invalid；403 service_auth_failed/session_forbidden/product_tenant_forbidden；状态读及写404 session_not_found（foreign、deleted、无合法父均同404）；写409 archive_state_conflict；写413 body超过4096 bytes；写415 MIME/encoding；429 session_rate_limited；500 internal_error；503 product_tenant_not_configured/iam_admission_unavailable/具名 unavailable。具体 code/status/布尔闭集以 canonical schemas 为准；只有429/503 retryable=true，仍不意味着客户端自动重试写。所有状态响应≤1MiB、无 capability/cookie/location、无正文身份自报。
+
+列表只输出四字段，title 原值不 trim/截断，不猜 max200；project_ref 保留原值或 NULL。归档时间为UTC固定毫秒，cursor 严格闭集绑定可信 tenant/subject/limit/archived_at/session_id，非签名且不授权；每 SQL 重验身份及 active Conversation/有效 Project。顺序 archived_at DESC、同刻 session_id COLLATE C ASC（UTF8字节比较），limit+1产生 next_cursor，无跨页快照。归档/恢复/删除/父变化会影响后页，不承诺整个遍历稳定快照。
+
+Idempotency-Key 为恰一个1..128可见ASCII值，不 trim、不逗号合并（排空白/逗号）。两个命令共享 archive-state scope：tenant+subject+key；fingerprint含action/id。相同 key/fingerprint 返回原200 receipt且不再次写；不同 action/id返回409。必须先验当前 owner/status与父，再重放；delete胜出后404。fresh 相同状态不更新时间；fresh相反状态按行锁顺序生效，无 expected-state CAS。归档期间 directread/rename/move/share/Run继续，不撤销公开链接，不用取消副作用模拟归档；Web 禁止宣称“停止任务”。
+
+HTTP 生命周期与超时见 TECHNICAL_DESIGN；空 JSON body拒重复/未知键、坏UTF8/JSON、非对象及query。JSON MIME/identity encoding、合法chunked、父取消、未知COMMIT均需后继真实负控。这里是设计契约，不是运行验证。
+
+## SET-21 已验证的 public15.3（2026-10-15）
+
+canonical新增GET /v1/account/shared-tasks / listOwnedSharedTasks，public15.3.0/146全文SHA256 694251d4f4c1bcc9a79ae4fd2d4c050c87a0a8af39bea0a9f0bed3a4dcae5ad5。独审/Root纯门与真实HTTP/数据库验证通过；完整15.2/145逆恢复、原操作字段和旧oracle保持。响应只有安全四字段，UTC毫秒符合canonical TIMESTAMPTZ(3)，同刻ID明确C/UTF8字节序。下文既定闭集/预算/权限/错误语义已实现；正常Web页面待正式发行后消费，不能把纯门/PG样本当浏览器验收。
+
+## SET-21 本人任务分享列表（2026-10-15；Root真实RED后具名源码准入）
+
+title保正规旧Chat字符串，不增加trim/全长200猜测或截断；shared_at降序的同毫秒session_id按UTF8字节升序（SQL COLLATE "C"），keyset比较同一规则，不依服务器locale或JS UTF16顺序。此新增排序说明须进机器合同和负控，原145面保持。
+
+Root真实缺operation/版本/响应断言RED已复现。现按CURRENT表授canonical机器和具名实现；发行仍需冻结独审、Root复验及真实owner事实验证，拟15.3不得提前称为正式可消费。
+
+目标新增一个GET /v1/account/shared-tasks / listOwnedSharedTasks，owner=kokoro-bff、visibility=public、stability=beta、idempotency=none、permission=chat.read。身份唯一原browser-service+Product Bearer在线准入和配置tenant；只列当前本人拥有可见的有效Conversation分享。发行前保持当前15.2/145，拟additive15.3/146先过完整逆恢复。
+
+query只limit（缺省20、canonical十进制1..100）、cursor（缺省首屏，存在非空≤2048）；拒重复/未知参数、坏percent/UTF8、非GET/body framing、Content-Encoding/Idempotency-Key。sht1_ canonical base64url(JSON)，closed kind=shared_tasks、tenantId、subjectId、limit、sharedAt/sessionId anchor；fatal UTF8、BOM、重复decoded key、错误日期/身份/limit拒绝。cursor可编辑而非不可伪造身份，SQL每次重新过滤本人。UTC毫秒、shared_at DESC/session_id ASC keyset，不承诺跨页快照。
+
+200 closed {data:{items:[{session_id,title,shared_at,expires_at}],next_cursor:string|null}}；最多limit条，同页session唯一且顺序合法，next存在必须有实际末条和后续候选，空页next=null。session_id/title沿现Chat合法原字符串，shared_at为Share.created_at，expires_at为真实nullable UTC时间；不公开share_id/url/capability，不推导完成状态。x-request-id只header、no-store/JSON，总响应≤1MiB，无新meta.request_id。原分享创建/撤销data.share_id+meta合同不改。
+
+新endpoint closed错误{error:{code,message,retryable}}，无meta/details/SQL信息。status/code：400 shared_tasks_input_invalid；401 session_authentication_required/session_invalid；403 service_auth_failed/session_forbidden/product_tenant_forbidden；429 session_rate_limited；503 product_tenant_not_configured/iam_admission_unavailable/shared_tasks_unavailable。429/503 retryable=true，其余false；429 Retry-After可缺省，存在沿现admission/send为canonical1..86400，其他状态无该头。未公开错误归503 shared_tasks_unavailable，不透任意code/message，不修改通用send/admission；本精确GET的外层catch同closed503。
+
+route入口单10s上限含准入/输入/DB/输出，停止/逾时无新查询或输出，零自动retry。invalid/anonymous零repository I/O；cursor跨身份/tenant/limit不得进SQL，missing live store503而非假空。唯一machine为canonical OpenAPI及正规inventory；Root三设计已独审无确定P1/P2；当前Web接收后另授机器/源实现。下方历史面字节保持。
+
+## SET-19 本人姓名 public PATCH（2026-10-15；已实现并通过真实owner验证）
+
+当前canonical public15.2.0/145全文SHA256 3214e32d273fbc514db1c1f2307f7855b623f1f613fb1da710cc51d23c41f453；正式IAM消费、独审、Root真实保存/CAS/权限/撤销验收见CURRENT顶部。Web消费与实际页面闭环仍未验收。
+
+正式消费IAMc64faa7992301f31495e163d04049c48a23d0225/internal0.13.0，artifact SHA256 c22c55ef2b963a89ca3e03016138c2da74f5f005edf1b6ee8c5572daaf466262。唯一新增PATCH /v1/account/profile / updateAccountProfile：owner kokoro-bff、visibility public、stability stable、idempotency none、permission iam:account-profile.write。public additive15.2.0/145operations，现15.1全文SHA5972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d为不可修改的inverse起点。
+
+严格无query/application-json实际body≤64KiB，恰{name,expected_name}两required string；未知/重复key/坏UTF8/非JSON/Idempotency-Key/重复Content-Type拒绝。name1..100 UTF16 code units、合法Unicode、无C0/C1、无ECMAScript trim边界空白，不修剪归一化；expected_name为userinfo原名含空字符串及原空白，最长16384 UTF16，不规范化。只转发本人admitted Bearer，subject来自正常Product admission，tenant/client/target不从body取。
+
+Content-Encoding仅缺省或唯一identity；允许合法单一chunked并按真实字节有界读取。Node HTTP parser在进入route前拒绝的冲突framing不保证应用层plain JSON，不能以该边界冒本片已响应。
+
+expected_name正式仅UTF16长度限制，含escaped lone surrogate也须逐字保留；入站采用本片flat JSON codec而非会拒该原值的全局strict parser。fatal UTF8/JSON语法/duplicate decoded键/closed两string规则保持，新name仍必须wellformed；原全局parser与其他API不放宽。owner新ACK仅含新wellformed name与真实subject，仍沿原strict原文检查。
+
+200严格{data:{subject,name}}，subject与admitted subject相同且name与新提交原文相同；所有本片响应no-store、x-request-id仅header，JSON无meta/request_id/credentials/email/role。错误严格{error:{code,message,retryable}}、不含details/meta/raw owner正文。normal admission原401/403/429/503代码保留但采用本片plain envelope。
+
+| IAM status / code | BFF status / code |
+| --- | --- |
+| 400 INVALID_ARGUMENT | 400 account_profile_input_invalid |
+| 401 UNAUTHENTICATED | 401 session_invalid |
+| 403 PERMISSION_DENIED | 403 account_profile_forbidden |
+| 404 TENANT_NOT_FOUND、409 TENANT_DISABLED | 403 session_forbidden（资格失效，不是姓名冲突） |
+| 409 CONFLICT | 409 account_profile_conflict，不泄露新姓名；需userinfo重读 |
+| 413 PAYLOAD_TOO_LARGE | 413 account_profile_request_too_large |
+| 429 RATE_LIMITED | 429 account_profile_rate_limited，仅合法Retry-After1..86400 |
+| 500 INTERNAL、503 DEPENDENCY_UNAVAILABLE、缺配置/预算/网络 | 503 account_profile_unavailable |
+| owner未知tuple/不合法header/raw schema/错subject/name | 502 account_profile_response_invalid |
+
+本地body校验400/413；本片unexpected内部错误最后兜底500 internal_error。retryable只429/503为true，写仍不自动retry。normal admission诸码按既有authenticate/service/tenant语义原样，JSON剥仅本片metadata。绝对总时间min(config.upstreamTimeoutMs,10s)，headers+正文总min(config上限,1MiB)；迟到promise/abort/已close响应不得冒成功。request期限不是数据库rollback保证，unknown后正规userinfo读当前name，再由用户明确决定新PATCH。
+
+正常IAM生成保18已有operation，仅新增1；不改生成器全局strip策略，以具名raw pre-strip+strictParseRawJson封闭新响应。public新独立outer inverse恢复完整15.1 artifact及144清单后运行旧治理，不重算旧摘要/删旧negative oracle。源码/机器实现已冻审且Root真实owner验证通过；Web浏览器闭环仍未完成。
+
+## SET-18 本人 Session public 边界（D0 独审通过，2026-10-14；尚未发行）
+
+IAM正式错误缓存修补已发行284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9，internal0.12.0 artifact仍为SHA256 f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b。本仓V2业务已冻审并真实BFF→IAM通过，public15.1.0候选SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d、canonical/inventory144；正式单pin更新及两新增消费元数据/格式回归修补已完成并接收，源码任务仍沿Root卡。本仓待Root正式发行，尚未正常激活；Skills/连接器业务排除，Root保留docs/Git/资源与最终验收。
+
+canonical事实源仍为contract/openapi/v1/openapi.yaml，当前候选public15.1.0 SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d；其父public15.0.0全文SHA2565f6b1178cb878718090ba65d6b0d563185078624af0d3d46a01e568af87264a4。候选只追加两operation/安全closed component，public15.1.0同/v1/144 operations；不改原142项字段、权限、错误、metadata或历史摘要。先新最外层门精确剥两路径/components/版本还原完整15.0原字节，再执行原历史门。
+
+| 操作 / operationId | 目标请求与响应 |
+| --- | --- |
+| GET /v1/account/sessions / listAccountSessions | 本人iam:account-session.read；limit1..100默认25、cursor省略或非空≤2048、拒重复/未知query和body；200 {data:{current_session:{session_id,created_at,expires_at},sessions:[同形]},meta:{request_id,next_cursor}} |
+| DELETE /v1/account/sessions/{session_id} / revokeAccountSession | 本人iam:account-session.revoke；非空sid≤255与owner正式约束一致、无query/body/Idempotency-Key；200 {data:{session_id,revoked:true},meta:{request_id}}只从owner已提交ACK投影 |
+
+metadata均owner=kokoro-bff/visibility=public/stability=stable，permission分别上表scope，idempotency=none；DELETE为具名owner状态收敛，不使用BFF通用receipt或请求key。仅正常Product user_delegated本人，tenant来自admission，跨tenant会话列表仍由owner判本人；机器/operator不得替代。参数/字段以正式0.12 schema发行核验后冻结，设计不是可调用contract。
+
+request-id/no-store使用BFF现安全输出。owner错误只按固定generated错误schema和status/code一致关系映射：400 account_session_input_invalid；401 session_invalid；403 account_session_forbidden；404 account_session_not_found；409 CONFLICT→account_session_conflict，TENANT_DISABLED→403 session_forbidden（与session-admission.client.ts对owner409的普通准入映射一致；不作为撤销冲突）；413 account_session_request_too_large；429 account_session_rate_limited仅合法Retry-After1..86400；500/503/缺配置/timeout/网络→503 account_sessions_unavailable；畸形/错绑定/未知状态或错误tuple→502 account_session_response_invalid。常规外层service/admission错误保持，不把上游敏感message透传。
+
+未知DELETE结果不是失败回滚或成功：无自动retry，Web必须重新list核目标是否仍active；取消也不等于rollback。current撤销409、foreign/不存在同404、保留expired本人重复200、清理后404由IAM唯一裁决。本仓不变更scope/resource或注册图、不用旧refresh增加scope；正式scope演进与新authorize由Root资源阶段完成。
+
+唯一owner consumer生成使用正式0.12.0 source commit/version/SHA256；保持原16具名operation并追加2项，不读取未提交源码/手改generated/保旧pin双轨。Web随后仅消费正式public15.1.0固定artifact；Skills/连接器操作与其contract原字节保持。
+
+
+Root源码复核纠正统计：旧canonical142/旧inventory141漏一个已存在的browser-private操作；本片正规完整inventory144，严格逆恢复旧141清单与完整15.0 API原字节。此清单登记纠偏没有Skills业务/API/权限语义变化，旧Conversation与format失败不冒通过。
+
+## SET-15 Catalog 固定消费者与未开放 checkout（2026-10-13，候选已实施）
+
+保持现public15.0.0 listBillingPlans、BillingPlan七字段及所有operation不变；已固定Billing ba98badab9445ae676a8f48faa55912d42ce5d2e的exp4与SHA2568a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a（required offer_key为owner strict breaking），以原字节vendor与正常generator替换exp3单pin。新增唯一generated getCatalog，并保原两本人读。严格消费GET /v2/commerce/catalog的data.items/page与闭集item；完整有界分页后一次投影，合法终页items=[]才是空目录，失败不转空/不截尾。金额/积分保持decimal string；真实运行组合与浏览器验收仍待Root。
+
+plans失败统一现public允许503 billing_unavailable，不新增未声明502、不转owner错误正文/身份或任意status。认证来源为当前IAM admission，可信tenant编码与独立Billing service/internal/Bearer因素；任何缺失/错配/取消/畸形owner响应关闭失败。checkout继续现入站校验后明确503 billing_unavailable且无owner I/O，移除旧v1双读/写路径；不修改公开成功shape或借目录修复开放支付。重定向、未知字段、非终页空items、循环cursor/重复revision或key、预算耗尽都不得返回部分成功。
+
+## SET-13 TeamRole 权限闭集纠正（2026-10-13，机器待实施）
+
+唯一可编辑事实源仍为contract/openapi/v1/openapi.yaml。目标public15.0.0在TeamRole.permissions增加可选platform（仅execute）与skill（IAM当前15动作），每数组仍非空，未知域/动作拒绝；既有六域、Role字段、所有operation路径/metadata、错误与分页保持。动作来自当前固定IAM机器契约，不建第二权限事实源，字段查看不授予执行或Skills能力。
+
+这是strict consumer的breaking，不作为minor；本次Root仅批准自有开发隔离BFF/Web在/v1配对切换，先完成owner和历史逆门，再发布不可变SHA/digest并由Web正常生成，最后Root实际登录；禁止原14.7消费者与新响应混跑、alias或fallback。尚未批准main/日常/生产激活，无法核验的Admin consumer须在后继激活前补齐；未来稳定breaking仍按contract README/v2政策。本片最外层验证新两域精确闭集后仅撤销这两字段与version，必须恢复完整public14.7摘要，再运行原14.6及全部历史门，不改旧fixture/摘要。
 ## CV-SVC MCP workload认证profile（D1，2026-10-13；BFF 源码候选已实现，待配对验收）
 
 现 `/browser/v1/mcp/*` 与 `/v1/admin/mcp/providers*` 的HTTP方法/body/成功错误/CAS/幂等不变，Platform `ProductMcpPersonalService`、`McpProviderAdminService` Proto和固定generated输入不变。只切这两internal-owner caller认证：HTTP/Connect Bearer内容是opaque本地service credential，caller=kokoro-bff、surface严格mcp_personal或mcp_admin、tenant绑定；不再取得IAM机器OAuth token，不包含第三方用户OAuth变化。

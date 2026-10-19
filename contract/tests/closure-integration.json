@@ -1,0 +1,1823 @@
+{
+  "current_sha256": "955412b680bf7a2529c4c35f553ff272d7361769ea95bb441ba820b552ffc564",
+  "current_inventory_sha256": "463376c78cf549fc35ded0d27ec4fe322edda42109867818a740300b81f15452",
+  "parents": {
+    "local": {
+      "commit": "d8634f04416886af57578cf8a7f3ae60d89ff444",
+      "version": "18.1.0",
+      "source_sha256": "f1c60a24f3e78cbd4742703ff53bf3214191de00d287438da0ad4cf12561c30b",
+      "inventory_sha256": "b1b7bff4c37b26b194649e5d1b62ed3f801a2446980f8da2b698f80ef98c89bd",
+      "inventory": [
+        {
+          "method": "GET",
+          "path": "/v1/preferences/knowledge",
+          "operation_id": "listSelfKnowledge"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/preferences/knowledge/{knowledge_id}",
+          "operation_id": "getSelfKnowledge"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/preferences/knowledge/{knowledge_id}",
+          "operation_id": "replaceSelfKnowledge"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/preferences/knowledge/{knowledge_id}",
+          "operation_id": "deleteSelfKnowledge"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/preferences/knowledge-usage",
+          "operation_id": "getSelfKnowledgeUsage"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/preferences/knowledge-usage",
+          "operation_id": "replaceSelfKnowledgeUsage"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/preferences/personalization",
+          "operation_id": "getSelfPersonalization"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/preferences/personalization",
+          "operation_id": "replaceSelfPersonalization"
+        },
+        {
+          "method": "GET",
+          "path": "/healthz",
+          "operation_id": "healthz"
+        },
+        {
+          "method": "GET",
+          "path": "/readyz",
+          "operation_id": "readyz"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/system/runtime-manifest",
+          "operation_id": "getRuntimeManifest"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/me",
+          "operation_id": "getCurrentUser"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/team/members",
+          "operation_id": "listTeamMembers"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/team/invitations",
+          "operation_id": "listTeamInvitations"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/team/invitations",
+          "operation_id": "createTeamInvitation"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/team/roles",
+          "operation_id": "listTeamRoles"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/team/invitations/{invitation_id}/resend",
+          "operation_id": "resendTeamInvitation"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/team/invitations/{invitation_id}",
+          "operation_id": "cancelTeamInvitation"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/team/members/me",
+          "operation_id": "leaveTeam"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/team/members/{member_id}/roles",
+          "operation_id": "replaceTeamMemberRoles"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/team/members/{member_id}",
+          "operation_id": "removeTeamMember"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/sessions",
+          "operation_id": "listSessions"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/identity/members",
+          "operation_id": "listAdminIdentityMembers"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/identity/invitations",
+          "operation_id": "listAdminIdentityInvitations"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/identity/roles",
+          "operation_id": "listAdminIdentityRoles"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/model-routing",
+          "operation_id": "listAdminModelRouting"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/model-labels",
+          "operation_id": "listAdminModelLabels"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/model-revisions",
+          "operation_id": "listAdminModelRevisions"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/admin/model-routing/{label_id}",
+          "operation_id": "replaceAdminModelRouting"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/models",
+          "operation_id": "listModels"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/sessions/{id}",
+          "operation_id": "getSessionSnapshot"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/sessions/{id}",
+          "operation_id": "deleteSession"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/sessions/{id}/runs/{runId}/process",
+          "operation_id": "getRunProcess"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/sessions/{id}/messages",
+          "operation_id": "listSessionMessages"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/sessions/{id}/messages",
+          "operation_id": "createMessage"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/sessions/{id}/events",
+          "operation_id": "streamSessionEvents"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/sessions/{id}/runs/{runId}/control",
+          "operation_id": "controlRun"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/sessions/{id}/move",
+          "operation_id": "moveSession"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/sessions/{id}/title",
+          "operation_id": "renameSession"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/sessions/{id}/share",
+          "operation_id": "createShare"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/sessions/{id}/share",
+          "operation_id": "revokeShare"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/shared/{shareId}",
+          "operation_id": "getSharedSessionSnapshot"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects",
+          "operation_id": "listProjects"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/projects",
+          "operation_id": "createProject"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/projects/{projectId}/name",
+          "operation_id": "renameProject"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}",
+          "operation_id": "getProject"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/projects/{projectId}",
+          "operation_id": "updateProjectInstruction"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/projects/{projectId}",
+          "operation_id": "deleteProject"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}/deletion",
+          "operation_id": "getProjectDeletion"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/projects",
+          "operation_id": "listMoriProjects"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/projects",
+          "operation_id": "createMoriProject"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/projects/{projectRef}",
+          "operation_id": "getMoriProject"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/projects/{projectRef}/song_plans",
+          "operation_id": "createMoriSongPlan"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/projects/{projectRef}/generations",
+          "operation_id": "createMoriGeneration"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/generations/{generationRef}",
+          "operation_id": "getMoriGeneration"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/generations/{generationRef}/events",
+          "operation_id": "streamMoriGenerationEvents"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/generations/{generationRef}/cancel",
+          "operation_id": "cancelMoriGeneration"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/projects/{projectRef}/candidates",
+          "operation_id": "listMoriCandidates"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/candidates/{candidateRef}/promote",
+          "operation_id": "promoteMoriCandidate"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/versions/{versionRef}/remix",
+          "operation_id": "remixMoriVersion"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/library",
+          "operation_id": "listMoriLibrary"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/versions/{versionRef}/exports",
+          "operation_id": "createMoriExport"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/exports/{exportRef}",
+          "operation_id": "getMoriExport"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}/tasks",
+          "operation_id": "listProjectTasks"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}/instruction-revisions",
+          "operation_id": "listProjectInstructionRevisions"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}/resources",
+          "operation_id": "listProjectResources"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/projects/{projectId}/resources",
+          "operation_id": "uploadProjectResources"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}/skill-selection",
+          "operation_id": "getProjectSkillSelection"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/projects/{projectId}/skill-selection",
+          "operation_id": "replaceProjectSkillSelection"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/projects/{projectId}/scheduled-tasks",
+          "operation_id": "createProjectScheduledTask"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/self/skills",
+          "operation_id": "listManagedPersonalSkills"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/self/skills/{skill_id}",
+          "operation_id": "getManagedPersonalSkill"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/self/skills/{skill_id}/package",
+          "operation_id": "getManagedPersonalSkillPackage"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/drafts",
+          "operation_id": "createSkillDraft"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skills/{skill_id}/package-upload",
+          "operation_id": "getSkillPackageUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/package-upload",
+          "operation_id": "beginSkillPackageUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/package-upload/complete",
+          "operation_id": "completeSkillPackageUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/validate",
+          "operation_id": "validateSkillDraft"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/publish",
+          "operation_id": "publishSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/projects/{projectId}/skill-installations",
+          "operation_id": "installProjectSkill"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}/skill-installations",
+          "operation_id": "listProjectSkillInstallations"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}/skill-installations/{installation_id}",
+          "operation_id": "getProjectSkillInstallation"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/projects/{projectId}/skill-installations/{installation_id}",
+          "operation_id": "removeProjectSkillInstallation"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/enabled",
+          "operation_id": "setProjectSkillInstallationEnabled"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/update",
+          "operation_id": "updateProjectSkillInstallation"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skill-installations",
+          "operation_id": "installPersonalSkill"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill-installations",
+          "operation_id": "listPersonalSkillInstallations"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill-installations/{installation_id}",
+          "operation_id": "getPersonalSkillInstallation"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/skill-installations/{installation_id}",
+          "operation_id": "removePersonalSkillInstallation"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill-installations/{installation_id}/package",
+          "operation_id": "getPersonalSkillInstallationPackage"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/skill-installations/{installation_id}/enabled",
+          "operation_id": "setPersonalSkillInstallationEnabled"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skill-installations/{installation_id}/update",
+          "operation_id": "updatePersonalSkillInstallation"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/github/preview",
+          "operation_id": "previewGithubSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/github/import",
+          "operation_id": "importGithubSkill"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/connector.list",
+          "operation_id": "listConnectors"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mcp/connections",
+          "operation_id": "listSelfMcpConnections"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mcp/servers",
+          "operation_id": "listMcpServers"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/scheduled-tasks",
+          "operation_id": "listScheduledTasks"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/scheduled-tasks",
+          "operation_id": "createScheduledTask"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/scheduled-tasks/{id}",
+          "operation_id": "getScheduledTask"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/scheduled-tasks/{id}",
+          "operation_id": "updateScheduledTask"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/scheduled-tasks/{id}",
+          "operation_id": "deleteScheduledTask"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/scheduled-tasks/{id}/retry",
+          "operation_id": "retryScheduledTask"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/agents/connections/setup",
+          "operation_id": "getAgentConnectionSetup"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/library",
+          "operation_id": "listLibrary"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/library/files",
+          "operation_id": "uploadLibraryFile"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/library/files/{asset_id}/content",
+          "operation_id": "downloadLibraryFile"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/library/artifacts/{conversation_id}/{artifact_id}",
+          "operation_id": "getLibraryArtifact"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/library/artifacts/{conversation_id}/{artifact_id}/content",
+          "operation_id": "downloadLibraryArtifact"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/billing/plans",
+          "operation_id": "listBillingPlans"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/billing/summary",
+          "operation_id": "getBillingSummary"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/billing/ledger",
+          "operation_id": "getBillingLedger"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/billing/checkout",
+          "operation_id": "createBillingCheckout"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/self/skills/{skill_id}/versions",
+          "operation_id": "createPersonalSkillVersion"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/self/skills/{skill_id}/withdraw",
+          "operation_id": "withdrawPersonalSkill"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/skills/{skill_id}/draft",
+          "operation_id": "updateSkillDraft"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/discard",
+          "operation_id": "discardSkillDraft"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/audience",
+          "operation_id": "setSkillPublicationAudience"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skills/{skill_id}/cover-upload",
+          "operation_id": "getSkillCoverUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/cover-upload",
+          "operation_id": "beginSkillCoverUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/cover-upload/complete",
+          "operation_id": "completeSkillCoverUpload"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skills/{skill_id}/cover",
+          "operation_id": "getSkillCover"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skills/{skill_id}/package",
+          "operation_id": "getSkillPackageDirectory"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/mcp/packages/{package_id}/uploads",
+          "operation_id": "beginAdminMcpPackageUpload"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}",
+          "operation_id": "getAdminMcpPackageUploadStatus"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/complete",
+          "operation_id": "completeAdminMcpPackageUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/abort",
+          "operation_id": "abortAdminMcpPackageUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/mcp/packages/{package_id}/publish",
+          "operation_id": "publishAdminMcpPackage"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/mcp/providers",
+          "operation_id": "listAdminMcpProviders"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/mcp/providers",
+          "operation_id": "createAdminMcpProvider"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/mcp/providers/{provider_key}",
+          "operation_id": "getAdminMcpProvider"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/admin/mcp/providers/{provider_key}",
+          "operation_id": "updateAdminMcpProvider"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/admin/mcp/providers/{provider_key}",
+          "operation_id": "removeAdminMcpProvider"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/admin/mcp/providers/{provider_key}/enabled",
+          "operation_id": "setAdminMcpProviderEnabled"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/skills",
+          "operation_id": "listAdminSkills"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills",
+          "operation_id": "createAdminSkillDraft"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/skills/{skill_id}",
+          "operation_id": "getAdminSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/versions",
+          "operation_id": "createAdminSkillVersion"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/publish",
+          "operation_id": "publishOfficialSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/withdraw",
+          "operation_id": "withdrawAdminSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/quarantine",
+          "operation_id": "quarantineSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/restore",
+          "operation_id": "restoreSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/audience",
+          "operation_id": "setAdminSkillPublicationAudience"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/discard",
+          "operation_id": "discardAdminSkillDraft"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skill-shares",
+          "operation_id": "createSkillShare"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill-shares/{share_id}/skill",
+          "operation_id": "getSharedSkillRevision"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill-shares/{share_id}",
+          "operation_id": "resolveSkillShare"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/skill-shares/{share_id}",
+          "operation_id": "revokeSkillShare"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/usage",
+          "operation_id": "getSkillUsage"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/ai-import",
+          "operation_id": "createAiSkillDraft"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill.list",
+          "operation_id": "listSkills"
+        },
+        {
+          "method": "POST",
+          "path": "/skill.v1.SkillOptionalService/ListSkills",
+          "operation_id": "websiteListSkills"
+        },
+        {
+          "method": "POST",
+          "path": "/skill.v1.SkillOptionalService/SetSkillInstallationEnabled",
+          "operation_id": "websiteSetSkillInstallationEnabled"
+        },
+        {
+          "method": "POST",
+          "path": "/skill.v1.SkillOptionalService/ListHubSkills",
+          "operation_id": "websiteListHubSkills"
+        },
+        {
+          "method": "POST",
+          "path": "/skill.v1.SkillOptionalService/GetSkill",
+          "operation_id": "websiteGetSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/skill.v1.SkillService/DownloadSkill",
+          "operation_id": "websiteDownloadSkill"
+        },
+        {
+          "method": "GET",
+          "path": "/skill-downloads/{handle}",
+          "operation_id": "downloadSkillBytes"
+        }
+      ],
+      "inverse_changes": [
+        {
+          "at": 3,
+          "count": 1,
+          "current_sha256": "f2cc2c3a4c20998e7fb1d533da3ab264845b6e5524e4c9705fef88c089e46697",
+          "previous": "  version: 18.1.0\n"
+        },
+        {
+          "at": 51,
+          "count": 1361,
+          "current_sha256": "63702fd5e4738e833f042e935110a740dc4f26f59e60f020b0f0be80bdb5abc6",
+          "previous": ""
+        },
+        {
+          "at": 13885,
+          "count": 957,
+          "current_sha256": "62864b7042f78bb6dda0b46e5370777c4c70ce24954d6880f3a4c7c73111a6c6",
+          "previous": ""
+        },
+        {
+          "at": 17929,
+          "count": 2,
+          "current_sha256": "16ea1865e3b0bd174a1fc747643eebd4f7474ac38a10214bc21c77d41daac39f",
+          "previous": ""
+        }
+      ]
+    },
+    "main": {
+      "commit": "16e5c71192ad6cd71f861abad51f85947860856f",
+      "version": "16.0.0",
+      "source_sha256": "b4e91483e425fdcc9547eac8bcda554273cbee0863ccb0ddfb185fae18e4e267",
+      "inventory_sha256": "039f5dcf79a848bbdc580abedb5946ef09a4eb097e4ed9373ec7fa4090cd514e",
+      "inventory": [
+        {
+          "method": "GET",
+          "path": "/v1/account/archived-tasks",
+          "operation_id": "listOwnedArchivedTasks"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/sessions/{session_id}/archive",
+          "operation_id": "getSessionArchiveState"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/sessions/{session_id}/archive",
+          "operation_id": "archiveSession"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/sessions/{session_id}/restore",
+          "operation_id": "restoreSession"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/account/shared-tasks",
+          "operation_id": "listOwnedSharedTasks"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/preferences/personalization",
+          "operation_id": "getSelfPersonalization"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/preferences/personalization",
+          "operation_id": "replaceSelfPersonalization"
+        },
+        {
+          "method": "GET",
+          "path": "/healthz",
+          "operation_id": "healthz"
+        },
+        {
+          "method": "GET",
+          "path": "/readyz",
+          "operation_id": "readyz"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/system/runtime-manifest",
+          "operation_id": "getRuntimeManifest"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/me",
+          "operation_id": "getCurrentUser"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/team/members",
+          "operation_id": "listTeamMembers"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/team/invitations",
+          "operation_id": "listTeamInvitations"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/team/invitations",
+          "operation_id": "createTeamInvitation"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/team/roles",
+          "operation_id": "listTeamRoles"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/team/invitations/{invitation_id}/resend",
+          "operation_id": "resendTeamInvitation"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/team/invitations/{invitation_id}",
+          "operation_id": "cancelTeamInvitation"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/team/members/me",
+          "operation_id": "leaveTeam"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/team/members/{member_id}/roles",
+          "operation_id": "replaceTeamMemberRoles"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/team/members/{member_id}",
+          "operation_id": "removeTeamMember"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/sessions",
+          "operation_id": "listSessions"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/identity/members",
+          "operation_id": "listAdminIdentityMembers"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/identity/invitations",
+          "operation_id": "listAdminIdentityInvitations"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/identity/roles",
+          "operation_id": "listAdminIdentityRoles"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/model-routing",
+          "operation_id": "listAdminModelRouting"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/model-labels",
+          "operation_id": "listAdminModelLabels"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/model-revisions",
+          "operation_id": "listAdminModelRevisions"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/admin/model-routing/{label_id}",
+          "operation_id": "replaceAdminModelRouting"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/models",
+          "operation_id": "listModels"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/sessions/{id}",
+          "operation_id": "getSessionSnapshot"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/sessions/{id}",
+          "operation_id": "deleteSession"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/sessions/{id}/runs/{runId}/process",
+          "operation_id": "getRunProcess"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/sessions/{id}/messages",
+          "operation_id": "listSessionMessages"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/sessions/{id}/messages",
+          "operation_id": "createMessage"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/sessions/{id}/events",
+          "operation_id": "streamSessionEvents"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/sessions/{id}/runs/{runId}/control",
+          "operation_id": "controlRun"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/sessions/{id}/move",
+          "operation_id": "moveSession"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/sessions/{id}/title",
+          "operation_id": "renameSession"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/sessions/{id}/share",
+          "operation_id": "createShare"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/sessions/{id}/share",
+          "operation_id": "revokeShare"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/shared/{shareId}",
+          "operation_id": "getSharedSessionSnapshot"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects",
+          "operation_id": "listProjects"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/projects",
+          "operation_id": "createProject"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/projects/{projectId}/name",
+          "operation_id": "renameProject"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}",
+          "operation_id": "getProject"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/projects/{projectId}",
+          "operation_id": "updateProjectInstruction"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/projects/{projectId}",
+          "operation_id": "deleteProject"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}/deletion",
+          "operation_id": "getProjectDeletion"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/projects",
+          "operation_id": "listMoriProjects"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/projects",
+          "operation_id": "createMoriProject"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/projects/{projectRef}",
+          "operation_id": "getMoriProject"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/projects/{projectRef}/song_plans",
+          "operation_id": "createMoriSongPlan"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/projects/{projectRef}/generations",
+          "operation_id": "createMoriGeneration"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/generations/{generationRef}",
+          "operation_id": "getMoriGeneration"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/generations/{generationRef}/events",
+          "operation_id": "streamMoriGenerationEvents"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/generations/{generationRef}/cancel",
+          "operation_id": "cancelMoriGeneration"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/projects/{projectRef}/candidates",
+          "operation_id": "listMoriCandidates"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/candidates/{candidateRef}/promote",
+          "operation_id": "promoteMoriCandidate"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/versions/{versionRef}/remix",
+          "operation_id": "remixMoriVersion"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/library",
+          "operation_id": "listMoriLibrary"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/mori/versions/{versionRef}/exports",
+          "operation_id": "createMoriExport"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mori/exports/{exportRef}",
+          "operation_id": "getMoriExport"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}/tasks",
+          "operation_id": "listProjectTasks"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}/instruction-revisions",
+          "operation_id": "listProjectInstructionRevisions"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/projects/{projectId}/resources",
+          "operation_id": "listProjectResources"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/projects/{projectId}/resources",
+          "operation_id": "uploadProjectResources"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/projects/{projectId}/skills/{skill}",
+          "operation_id": "updateProjectSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/projects/{projectId}/scheduled-tasks",
+          "operation_id": "createProjectScheduledTask"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/self/skills",
+          "operation_id": "listManagedPersonalSkills"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/self/skills/{skill_id}",
+          "operation_id": "getManagedPersonalSkill"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/self/skills/{skill_id}/package",
+          "operation_id": "getManagedPersonalSkillPackage"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/drafts",
+          "operation_id": "createSkillDraft"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skills/{skill_id}/package-upload",
+          "operation_id": "getSkillPackageUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/package-upload",
+          "operation_id": "beginSkillPackageUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/package-upload/complete",
+          "operation_id": "completeSkillPackageUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/validate",
+          "operation_id": "validateSkillDraft"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/publish",
+          "operation_id": "publishSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skill-installations",
+          "operation_id": "installPersonalSkill"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill-installations",
+          "operation_id": "listPersonalSkillInstallations"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill-installations/{installation_id}",
+          "operation_id": "getPersonalSkillInstallation"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/skill-installations/{installation_id}",
+          "operation_id": "removePersonalSkillInstallation"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill-installations/{installation_id}/package",
+          "operation_id": "getPersonalSkillInstallationPackage"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/skill-installations/{installation_id}/enabled",
+          "operation_id": "setPersonalSkillInstallationEnabled"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/github/preview",
+          "operation_id": "previewGithubSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/github/import",
+          "operation_id": "importGithubSkill"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/connector.list",
+          "operation_id": "listConnectors"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mcp/connections",
+          "operation_id": "listSelfMcpConnections"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/mcp/servers",
+          "operation_id": "listMcpServers"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/scheduled-tasks",
+          "operation_id": "listScheduledTasks"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/scheduled-tasks",
+          "operation_id": "createScheduledTask"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/scheduled-tasks/{id}",
+          "operation_id": "getScheduledTask"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/scheduled-tasks/{id}",
+          "operation_id": "updateScheduledTask"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/scheduled-tasks/{id}",
+          "operation_id": "deleteScheduledTask"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/scheduled-tasks/{id}/retry",
+          "operation_id": "retryScheduledTask"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/agents/connections/setup",
+          "operation_id": "getAgentConnectionSetup"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/library",
+          "operation_id": "listLibrary"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/library/files",
+          "operation_id": "uploadLibraryFile"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/library/files/{asset_id}/content",
+          "operation_id": "downloadLibraryFile"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/library/artifacts/{conversation_id}/{artifact_id}",
+          "operation_id": "getLibraryArtifact"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/library/artifacts/{conversation_id}/{artifact_id}/content",
+          "operation_id": "downloadLibraryArtifact"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/billing/plans",
+          "operation_id": "listBillingPlans"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/billing/summary",
+          "operation_id": "getBillingSummary"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/billing/ledger",
+          "operation_id": "getBillingLedger"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/billing/checkout",
+          "operation_id": "createBillingCheckout"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/self/skills/{skill_id}/versions",
+          "operation_id": "createPersonalSkillVersion"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/self/skills/{skill_id}/withdraw",
+          "operation_id": "withdrawPersonalSkill"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/skills/{skill_id}/draft",
+          "operation_id": "updateSkillDraft"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/discard",
+          "operation_id": "discardSkillDraft"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/audience",
+          "operation_id": "setSkillPublicationAudience"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skills/{skill_id}/cover-upload",
+          "operation_id": "getSkillCoverUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/cover-upload",
+          "operation_id": "beginSkillCoverUpload"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/{skill_id}/cover-upload/complete",
+          "operation_id": "completeSkillCoverUpload"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skills/{skill_id}/cover",
+          "operation_id": "getSkillCover"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skills/{skill_id}/package",
+          "operation_id": "getSkillPackageDirectory"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/mcp/providers",
+          "operation_id": "listAdminMcpProviders"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/mcp/providers",
+          "operation_id": "createAdminMcpProvider"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/mcp/providers/{provider_key}",
+          "operation_id": "getAdminMcpProvider"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/admin/mcp/providers/{provider_key}",
+          "operation_id": "updateAdminMcpProvider"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/admin/mcp/providers/{provider_key}",
+          "operation_id": "removeAdminMcpProvider"
+        },
+        {
+          "method": "PUT",
+          "path": "/v1/admin/mcp/providers/{provider_key}/enabled",
+          "operation_id": "setAdminMcpProviderEnabled"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/skills",
+          "operation_id": "listAdminSkills"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills",
+          "operation_id": "createAdminSkillDraft"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/admin/skills/{skill_id}",
+          "operation_id": "getAdminSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/versions",
+          "operation_id": "createAdminSkillVersion"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/publish",
+          "operation_id": "publishOfficialSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/withdraw",
+          "operation_id": "withdrawAdminSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/quarantine",
+          "operation_id": "quarantineSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/restore",
+          "operation_id": "restoreSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/audience",
+          "operation_id": "setAdminSkillPublicationAudience"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/admin/skills/{skill_id}/discard",
+          "operation_id": "discardAdminSkillDraft"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skill-shares",
+          "operation_id": "createSkillShare"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill-shares/{share_id}/skill",
+          "operation_id": "getSharedSkillRevision"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill-shares/{share_id}",
+          "operation_id": "resolveSkillShare"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/skill-shares/{share_id}",
+          "operation_id": "revokeSkillShare"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/usage",
+          "operation_id": "getSkillUsage"
+        },
+        {
+          "method": "POST",
+          "path": "/v1/skills/ai-import",
+          "operation_id": "createAiSkillDraft"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/skill.list",
+          "operation_id": "listSkills"
+        },
+        {
+          "method": "POST",
+          "path": "/skill.v1.SkillOptionalService/ListSkills",
+          "operation_id": "websiteListSkills"
+        },
+        {
+          "method": "POST",
+          "path": "/skill.v1.SkillOptionalService/SetSkillInstallationEnabled",
+          "operation_id": "websiteSetSkillInstallationEnabled"
+        },
+        {
+          "method": "POST",
+          "path": "/skill.v1.SkillOptionalService/ListHubSkills",
+          "operation_id": "websiteListHubSkills"
+        },
+        {
+          "method": "POST",
+          "path": "/skill.v1.SkillOptionalService/GetSkill",
+          "operation_id": "websiteGetSkill"
+        },
+        {
+          "method": "POST",
+          "path": "/skill.v1.SkillService/DownloadSkill",
+          "operation_id": "websiteDownloadSkill"
+        },
+        {
+          "method": "GET",
+          "path": "/skill-downloads/{handle}",
+          "operation_id": "downloadSkillBytes"
+        },
+        {
+          "method": "GET",
+          "path": "/v1/account/sessions",
+          "operation_id": "listAccountSessions"
+        },
+        {
+          "method": "DELETE",
+          "path": "/v1/account/sessions/{session_id}",
+          "operation_id": "revokeAccountSession"
+        },
+        {
+          "method": "PATCH",
+          "path": "/v1/account/profile",
+          "operation_id": "updateAccountProfile"
+        }
+      ],
+      "inverse_changes": [
+        {
+          "at": 3,
+          "count": 1,
+          "current_sha256": "f2cc2c3a4c20998e7fb1d533da3ab264845b6e5524e4c9705fef88c089e46697",
+          "previous": "  version: 16.0.0\n"
+        },
+        {
+          "at": 869,
+          "count": 1539,
+          "current_sha256": "6358c86a42b43c5421a7345770cf81e17a1e8b5600613621d1514bb2330fa41c",
+          "previous": ""
+        },
+        {
+          "at": 3400,
+          "count": 1,
+          "current_sha256": "cf5c4e8e68a2196a0c3a8de88e7d19a603660962f1c79c51a5ebcbd4ddbaf0ea",
+          "previous": ""
+        },
+        {
+          "at": 3444,
+          "count": 1,
+          "current_sha256": "cf5c4e8e68a2196a0c3a8de88e7d19a603660962f1c79c51a5ebcbd4ddbaf0ea",
+          "previous": ""
+        },
+        {
+          "at": 4664,
+          "count": 1,
+          "current_sha256": "88a8d8ca271f4c03ad431f4dfbcf65315585b2088304b95a12078eed2e2a6b91",
+          "previous": "  /v1/projects/{projectId}/skills/{skill}:\n"
+        },
+        {
+          "at": 4667,
+          "count": 1,
+          "current_sha256": "4133189389a3b713dbd3e31a10f3010ac89f1d0be1731466284db66a87640577",
+          "previous": "      - $ref: '#/components/parameters/SkillName'\n    patch:\n"
+        },
+        {
+          "at": 4669,
+          "count": 74,
+          "current_sha256": "acfe998711a6c067bf9eaa01f2f5b3a58b3a306df325156235de16daaf89b8c2",
+          "previous": "      operationId: updateProjectSkill\n"
+        },
+        {
+          "at": 4748,
+          "count": 1,
+          "current_sha256": "ff60100328411bed49090fbbf36c01a1e56bdf12c4c14063e61a0efcd34acefb",
+          "previous": "      summary: Update project skill state\n"
+        },
+        {
+          "at": 4755,
+          "count": 1,
+          "current_sha256": "f94ca6c7cb955eed555f15a06d02eeb603cd886017812f7dea291cebc90cc806",
+          "previous": "            schema:\n              $ref: '#/components/schemas/ProjectSkillRequest'\n"
+        },
+        {
+          "at": 4758,
+          "count": 4,
+          "current_sha256": "0412e6300c836a174744e7043b33b6e728ddcab2e26e53dcd59212b1ff756012",
+          "previous": "          description: Project skill state\n"
+        },
+        {
+          "at": 4764,
+          "count": 3,
+          "current_sha256": "97a6a3d82c5f4e290358a2d44cc332b016edb605ee150b7e5b7051f21837ac08",
+          "previous": "              schema:\n                $ref: '#/components/schemas/ProjectSkillResponse'\n        '400': { $ref: '#/components/responses/BadRequest' }\n        '403': { $ref: '#/components/responses/ServiceAuthFailed' }\n        '404': { $ref: '#/components/responses/NotFound' }\n        '409': { $ref: '#/components/responses/Conflict' }\n        '401': { $ref: '#/components/responses/ServiceAuthFailed' }\n        '429':\n          description: IAM session admission is rate limited\n          headers:\n            Retry-After:\n              description: Bounded delay in seconds before retrying admission\n              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }\n"
+        },
+        {
+          "at": 4769,
+          "count": 51,
+          "current_sha256": "197bea97043c6e09244e0db02b8eff79cecab25892a62e4115129472a1fa1ff3",
+          "previous": "              schema: { $ref: '#/components/schemas/ErrorEnvelope' }\n        '503': { $ref: '#/components/responses/ServiceUnavailable' }\n"
+        },
+        {
+          "at": 5229,
+          "count": 257,
+          "current_sha256": "35fe3d209566d9bca30a73e4d9371b72fb3f35bb8062703d57e0e42c6f612259",
+          "previous": ""
+        },
+        {
+          "at": 5712,
+          "count": 42,
+          "current_sha256": "f7a9d71aa97e487edd7945c411bde34382784cb0593530a9d5de998f2d83e1ff",
+          "previous": ""
+        },
+        {
+          "at": 6368,
+          "count": 1,
+          "current_sha256": "c12444b8f49a4b8b71ec946dba6089513e5086a97b3f8003833b40ae5935bd7d",
+          "previous": "                $ref: '#/components/schemas/ScheduledTaskResponse'\n"
+        },
+        {
+          "at": 6529,
+          "count": 1,
+          "current_sha256": "cec1f5eec1a865b91b65529b044aec4f79135ca22c5a8a8bc1673fbe83bb7f05",
+          "previous": "      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. Artifact pages revalidate Storage metadata and bind the opaque cursor to kind, tenant, subject and limit; a cursor never grants access.\n"
+        },
+        {
+          "at": 6541,
+          "count": 8,
+          "current_sha256": "5694a0c09e0b1d01bed2fde52b9d2d9e0ed23268765df06681d62d40a6bc6b56",
+          "previous": ""
+        },
+        {
+          "at": 6565,
+          "count": 1,
+          "current_sha256": "0574c994cfad87e3b34b828fdca457aa8ab7ddc2de817e60e6fa5b01ecb365b8",
+          "previous": "          description: Storage owner page did not match the pinned v2 contract\n"
+        },
+        {
+          "at": 8650,
+          "count": 148,
+          "current_sha256": "af4385631370eb8c2f19d703f7dbe2b431225174ed3f4f8c50d32d2d68a7d8c6",
+          "previous": ""
+        },
+        {
+          "at": 13446,
+          "count": 0,
+          "current_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "previous": "  /v1/account/sessions:\n    get:\n      tags:\n        - Account Sessions\n      operationId: listAccountSessions\n      x-kokoro-owner: kokoro-bff\n      x-kokoro-visibility: public\n      x-kokoro-stability: stable\n      x-kokoro-idempotency: none\n      x-kokoro-permission: iam:account-session.read\n      summary: Current Product user account sessions\n      responses:\n        '200':\n          description: Owner-confirmed safe account session projection\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionsResponse'\n        '400':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError400'\n        '401':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError401'\n        '403':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError403'\n        '404':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError404'\n        '409':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError409'\n        '413':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError413'\n        '429':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n            Retry-After:\n              schema:\n                type: string\n                pattern: ^[1-9][0-9]{0,4}$\n                description: Validated delta seconds from 1 through 86400.\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError429'\n        '502':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError502'\n        '503':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError503'\n      security:\n        - serviceHeader: []\n          internalSecret: []\n          userBearer: []\n      parameters:\n        - name: limit\n          in: query\n          required: false\n          schema:\n            type: integer\n            minimum: 1\n            maximum: 100\n            default: 25\n        - name: cursor\n          in: query\n          required: false\n          schema:\n            type: string\n            minLength: 1\n            maxLength: 2048\n  /v1/account/sessions/{session_id}:\n    delete:\n      tags:\n        - Account Sessions\n      operationId: revokeAccountSession\n      x-kokoro-owner: kokoro-bff\n      x-kokoro-visibility: public\n      x-kokoro-stability: stable\n      x-kokoro-idempotency: none\n      x-kokoro-permission: iam:account-session.revoke\n      summary: Current Product user account sessions\n      responses:\n        '200':\n          description: Owner-confirmed safe account session projection\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionRevokeResponse'\n        '400':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError400'\n        '401':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError401'\n        '403':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError403'\n        '404':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError404'\n        '409':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError409'\n        '413':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError413'\n        '429':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n            Retry-After:\n              schema:\n                type: string\n                pattern: ^[1-9][0-9]{0,4}$\n                description: Validated delta seconds from 1 through 86400.\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError429'\n        '502':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError502'\n        '503':\n          description: Sanitized account session failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountSessionError503'\n      security:\n        - serviceHeader: []\n          internalSecret: []\n          userBearer: []\n      parameters:\n        - name: session_id\n          in: path\n          required: true\n          schema:\n            type: string\n            minLength: 1\n            maxLength: 255\n  /v1/account/profile:\n    patch:\n      tags:\n        - Account Profile\n      operationId: updateAccountProfile\n      x-kokoro-owner: kokoro-bff\n      x-kokoro-visibility: public\n      x-kokoro-stability: stable\n      x-kokoro-idempotency: none\n      x-kokoro-permission: iam:account-profile.write\n      summary: Update current Product user display name\n      security:\n        - serviceHeader: []\n          internalSecret: []\n          userBearer: []\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '#/components/schemas/AccountProfileInput'\n      responses:\n        '200':\n          description: Owner-confirmed current subject and exact saved name\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountProfileResponse'\n        '400':\n          description: Sanitized account profile failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountProfileError400'\n        '401':\n          description: Sanitized account profile failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountProfileError401'\n        '403':\n          description: Sanitized account profile failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountProfileError403'\n        '409':\n          description: Sanitized account profile failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountProfileError409'\n        '413':\n          description: Sanitized account profile failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountProfileError413'\n        '429':\n          description: Sanitized account profile failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n            Retry-After:\n              schema:\n                type: string\n                pattern: ^[1-9][0-9]{0,4}$\n                description: Validated delta seconds from1 through86400.\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountProfileError429'\n        '500':\n          description: Sanitized account profile failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountProfileError500'\n        '502':\n          description: Sanitized account profile failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountProfileError502'\n        '503':\n          description: Sanitized account profile failure\n          headers:\n            x-request-id:\n              schema:\n                $ref: '#/components/schemas/RequestId'\n            Cache-Control:\n              schema:\n                type: string\n                enum:\n                  - no-store\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/AccountProfileError503'\n"
+        },
+        {
+          "at": 13461,
+          "count": 18,
+          "current_sha256": "59c9665313f7d6ca015cda7c183ce9d43515e6ce32a12e0f6a101132fed35b8a",
+          "previous": ""
+        },
+        {
+          "at": 13736,
+          "count": 0,
+          "current_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "previous": "    SkillName:\n      name: skill\n      in: path\n      required: true\n      schema:\n        type: string\n"
+        },
+        {
+          "at": 14842,
+          "count": 300,
+          "current_sha256": "bc3dc7ff8e7769ed374240d5d58873f2ca15679163577fd2dee35f94413b2d7f",
+          "previous": ""
+        },
+        {
+          "at": 15159,
+          "count": 3,
+          "current_sha256": "ed69ef714baf2696c9907af5ea75c3410d3931292fdeef339a7c0e0426e3dcb5",
+          "previous": ""
+        },
+        {
+          "at": 18188,
+          "count": 5,
+          "current_sha256": "03ae3cf31ba9bc203b350026678adaaa3a19e56b7b5c821e275b28e75f1114cc",
+          "previous": ""
+        },
+        {
+          "at": 18850,
+          "count": 1,
+          "current_sha256": "23621443a3b08ece6d3b6d465ec04fe9066dbe3422c046315fc6c47bf7b7084b",
+          "previous": "          description: Exact ordered Skill source references; omission means []. Compact UTF-8 JSON must not exceed 4096 bytes.\n"
+        },
+        {
+          "at": 19491,
+          "count": 1,
+          "current_sha256": "63bcc883ca5cdd742d26c06f4e4f62f39918d40b1426d488739fe600c054088e",
+          "previous": "    ProjectSkillRequest:\n"
+        },
+        {
+          "at": 19493,
+          "count": 1,
+          "current_sha256": "56e2aeccf4bec20900e6b86031c8a2fde024cee54ab3fe02a207e820367dfc6a",
+          "previous": "      required: [enabled]\n"
+        },
+        {
+          "at": 19496,
+          "count": 9,
+          "current_sha256": "e49fa6706349477d0a7aaad5a24da9e87acb319895d92235a1a2aeb72ce2fd8e",
+          "previous": "        enabled: { type: boolean }\n    ProjectSkillResponse:\n"
+        },
+        {
+          "at": 19506,
+          "count": 2,
+          "current_sha256": "6799a2fe1daea028598dc4ebc01b1c14caf3b9d4d3bfd3b4839a54fefb5efde3",
+          "previous": "      required: [data, meta]\n"
+        },
+        {
+          "at": 19511,
+          "count": 2,
+          "current_sha256": "34e21f71dbffaaa4fae2e61ecc89c1b896f1e5cf38d1d0bd21a3f3fb3e939261",
+          "previous": "          required: [skill]\n"
+        },
+        {
+          "at": 19514,
+          "count": 36,
+          "current_sha256": "81a5b46b2fc6d2ef25b95d85fefa758fe5385feb2f99b5cffee1491875f54849",
+          "previous": "            skill:\n              type: object\n              required: [project_id, name, enabled]\n              properties:\n                project_id: { type: string }\n                name: { type: string }\n                enabled: { type: boolean }\n        meta: { $ref: '#/components/schemas/RequestMeta' }\n"
+        },
+        {
+          "at": 19553,
+          "count": 2,
+          "current_sha256": "1ad2577b3409b49d49585bd938efe04c75faa895308c49373fdbcf2176ca7aae",
+          "previous": ""
+        },
+        {
+          "at": 19560,
+          "count": 6,
+          "current_sha256": "d9613932f9490d374e4b855137d622efaf2752afd73fb777cf362fed3bd243bc",
+          "previous": "        frequency:\n          type: string\n          enum: [daily, weekly]\n        time: { type: string }\n        timezone: { type: string }\n"
+        },
+        {
+          "at": 19567,
+          "count": 1,
+          "current_sha256": "091d2d2d6878a3cee49b4781536308c80d84b99b082932d752db23b69712b467",
+          "previous": ""
+        },
+        {
+          "at": 19571,
+          "count": 46,
+          "current_sha256": "c1606668a760e3c11ba5e7b1c392c41652bbcfed9190025ee1749dbbd72e629a",
+          "previous": "        status:\n          type: string\n          enum: [active, paused, failed]\n"
+        },
+        {
+          "at": 19637,
+          "count": 1,
+          "current_sha256": "16c204561b6e382701e18c6286e61e93e1dc2091d02489f68a5253da8eec8755",
+          "previous": "              items: { $ref: '#/components/schemas/ScheduledTask' }\n"
+        },
+        {
+          "at": 19651,
+          "count": 6,
+          "current_sha256": "d9613932f9490d374e4b855137d622efaf2752afd73fb777cf362fed3bd243bc",
+          "previous": "        frequency:\n          type: string\n          enum: [daily, weekly]\n        time: { type: string }\n        timezone: { type: string }\n        recurrence_anchor_at: { type: string, format: date-time }\n"
+        },
+        {
+          "at": 19659,
+          "count": 29,
+          "current_sha256": "98e5453e5efd5a6e0b793e5142d020c7d391b0b4597906413ad896db7921b981",
+          "previous": ""
+        },
+        {
+          "at": 19694,
+          "count": 6,
+          "current_sha256": "d9613932f9490d374e4b855137d622efaf2752afd73fb777cf362fed3bd243bc",
+          "previous": "        frequency:\n          type: string\n          enum: [daily, weekly]\n        time: { type: string }\n        timezone: { type: string }\n        recurrence_anchor_at: { type: string, format: date-time }\n"
+        },
+        {
+          "at": 19703,
+          "count": 41,
+          "current_sha256": "0f7817755aa3df486a7ccd830af114ab0b4510eee26017ba5b733824666cb4f5",
+          "previous": "        status:\n          type: string\n          enum: [active, paused, failed]\n"
+        },
+        {
+          "at": 20797,
+          "count": 35,
+          "current_sha256": "26edfdc00334d8655b5b4fab9eb0a68d4082ae3839b64268c5ed257f2a16320a",
+          "previous": ""
+        },
+        {
+          "at": 21577,
+          "count": 25,
+          "current_sha256": "a8b4cba88ca85546e92ae3cf62afcce43f3b8ad81fa0eeda0da20e0bc58d72a6",
+          "previous": ""
+        }
+      ]
+    }
+  }
+}

@@ -472,7 +472,12 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
     const deadline = Date.now() + 3000
     while (agentCalls.length === 0 && Date.now() < deadline) await delay(20)
     assert.equal(agentCalls.length, 1)
-    assert.deepEqual(agentCalls[0].launch, frozenLaunch)
+    assert.equal(Object.hasOwn(frozenLaunch, "project_ref"), false, "durable internal v2 payload remains unchanged")
+    assert.deepEqual(
+      agentCalls[0].launch,
+      { ...frozenLaunch, project_ref: null },
+      "HTTP7 explicitly projects a null project without rewriting the durable launch",
+    )
     assert.equal(agentCalls[0].launch.request_id, `transport-first-${suffix}`)
     assert.equal(agentCalls[0].requestId, `transport-first-${suffix}`)
     const replay = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {

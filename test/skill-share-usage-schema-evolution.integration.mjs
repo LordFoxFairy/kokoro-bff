@@ -59,7 +59,7 @@ test("R353 catalog preserves literal whitespace, parentheses and exact native de
 const url = process.env.KOKORO_TEST_POSTGRES_URL
 const integration = url ? test : test.skip
 integration("R353 expands fixed old catalog, preserves rows, replays current and rejects native drift", async () => {
-  const pool = new Pool({ connectionString: url })
+  const pool = new Pool({ options: "-c search_path=kokoro_bff -c timezone=UTC", connectionString: url })
   const client = await pool.connect()
   try {
     await client.query(`DROP TABLE bff_skill_usage_observation,bff_skill_usage_run_terminal,bff_skill_usage_coverage;
