@@ -1,3 +1,7 @@
+## 2026-10-20 既定项目执行事实收口（fresh schema，未激活）
+
+仅扩原 bff_agent_dispatch_outbox：execution_project_ref TEXT nullable（NULL 明确 direct），execution_context_retired_at TIMESTAMPTZ(3) nullable（首次跨 canonical scope Move 置位、不复活）。Chat 同事务写独立 canonical project；payload schema3 的必需 nullable project_ref 必须等独立列，reader/claim/delivery 交叉核验，refs 仍由 Message 原有序事实拥有。无新表、FK、ACL 或跨 owner SQL；不从旧 trace 回填 authority、不重写历史 Run/admission/receipt。canonical fresh schema 及隔离真实资源验证与正常既有数据处置分开，正常 DDL/配置/服务未授权执行。
+
 ## 2026-10-19 MCP availability 严格消费者修复（隔离候选）
 
 沿用户已确认的独立实时可用性/Platform使用前续期方案，修已在main复现的owner字段13被旧descriptor拒绝；不重做协调器。唯一当前Platform bundle配对实际已合入4a4e4c4/HTTP6.2，使用owner Git原始artifact/摘要与原两生成链；旧当前vendor退休，不接受双版或忽略unknown。Connector/Server的availability为必需五态，与durable status/enabled独立；零值、缺失、未知、字符串冒充enum仍拒绝。原browser/v1入口、身份、租户、幂等回执、总预算/取消及错误恢复不变；不改Product Public19/165或独立command-error/历史profile。

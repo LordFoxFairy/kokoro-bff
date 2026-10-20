@@ -1,3 +1,7 @@
+## 2026-10-20 既定项目执行 internal1 producer 收口（未激活）
+
+唯一 code-first 源 src/http/project-execution-binding.contract.ts 正规生成 contract/openapi/internal/v1/openapi.yaml／1.0.0；精确 POST /internal/v1/project-execution-bindings/verify，IAM 专用文件凭据、闭集输入与 no-store 成功/错误。成功仅返回匹配的 project_ref、原有序 selected_skill_source_refs 与 selection_digest；未知、错身份、资源不可见、已退役和期限失败均闭锁，不转成 Web admission 或执行许可。保留 Public19/165 operations、HTTP7 与全部现有错误/权限边界。IAM 已固定 d623f76/internal1；本次只补既定 producer，不新增 public 字段、fallback 或收费执行入口。
+
 ## 2026-10-19 MCP generic 前置失败消费纠正
 
 Platform 当前合同允许无 detail 的 FailedPrecondition，含续期 scope 收缩后原 Prepare CAS 失配；BFF按既有 generic412 `mcp_personal_precondition_failed` 返回，不将合法前置失败误报502，也不伪造 `not_prepared` reason。本段取代下方旧“URL server必须带typed detail”的消费者误设。只有非空detail声明typed profile，仍严格核唯一已知消息/有效reason，未知、重复、畸形或冲突detail保持502；receipt marker分类仍先行。不改成功解码、权限、owner CAS/事务/回执、重试行为、机器字段/profile或数据模型；App现有412已配对，无新增兼容分支。

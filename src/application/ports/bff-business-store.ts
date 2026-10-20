@@ -28,6 +28,7 @@ export interface ArtifactLibraryRepository {
 
 /** Runtime port consumed by BFF routes; PostgreSQL is one infrastructure implementation. */
 export interface BffBusinessStore extends IdempotencyRepository {
+  readonly projectExecutionBindings?: import("./project-execution-binding-reader.js").ProjectExecutionBindingReader
   readonly artifactLibrary?: ArtifactLibraryRepository
   readonly services: BffApplicationServices
   readonly agUi: AgUiProjectionService

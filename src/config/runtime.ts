@@ -76,6 +76,7 @@ export type BffConfig = {
   }>
   storage?: Readonly<{ baseUrl: string; secret: string; objectOrigin: string }>
   storageObjectOrigin?: string | null
+  projectExecutionCredentialFile?: string | null
   sharedSecret: string | null
   adminWebSharedSecret?: string | null
   upstreamSecret: string | null
@@ -404,6 +405,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
         }
       : {}),
     storageObjectOrigin: storageOrigin,
+    projectExecutionCredentialFile: env.KOKORO_BFF_PROJECT_EXECUTION_CREDENTIAL_FILE?.trim() || null,
     sharedSecret,
     adminWebSharedSecret,
     upstreamSecret,

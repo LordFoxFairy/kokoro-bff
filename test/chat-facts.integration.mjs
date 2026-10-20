@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { createServer } from "node:http"
 import { performance } from "node:perf_hooks"
@@ -1961,7 +1961,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
       tenant,
       selectedId,
     ])
-    assert.equal(persistedSelection.rows[0].payload.schema_version, 2)
+    assert.equal(persistedSelection.rows[0].payload.schema_version, 3)
     assert.deepEqual(persistedSelection.rows[0].payload.launch.selected_skill_source_refs, selectedBody.selected_skill_source_refs)
     const explicitEmptyReplay = await send("first-turn", titleSource, conversationId, { selected_skill_source_refs: [] })
     assert.equal(explicitEmptyReplay.status, 409)
@@ -1985,7 +1985,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
         identityAssertionRef: "bff:rollback",
         content: "Rollback this first turn",
         payload: {
-          schema_version: 2,
+          schema_version: 3,
           launch: {
             request_id: "rollback-request",
             run_id: rollbackRunId,
@@ -1993,6 +1993,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
             feature_key: "chat",
             message_id: receipt.user_message_id,
             content: "Rollback this first turn",
+            project_ref: null,
             selected_skill_source_refs: [],
             trace: { source: "kokoro-bff" },
           },
@@ -3773,8 +3774,95 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
       requestId: `r146_run_${suffix}`,
       idempotencyKey: `r146-run-${suffix}`,
       content: "An admitted run keeps its original context after Move",
+      selectedSkillSourceRefs: ["skill:exact-b", "skill:exact-a"],
     })
     assert.ok(admittedRun)
+    const bindingRow = async () =>
+      (
+        await pool.query(
+          "SELECT execution_project_ref,execution_context_retired_at::text AS retired_at FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2",
+          [tenant, admittedRun.run_id],
+        )
+      ).rows[0]
+    assert.deepEqual(await bindingRow(), { execution_project_ref: projectA, retired_at: null }, "canonical project is a durable binding, not caller trace")
+    const assertion = (
+      await pool.query("SELECT identity_assertion_ref FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, admittedRun.run_id])
+    ).rows[0].identity_assertion_ref
+    const bindingInput = {
+      tenantId: tenant,
+      subjectId: subject,
+      actorId: subject,
+      runId: admittedRun.run_id,
+      sessionId: conversationId,
+      identityAssertionRef: assertion,
+      projectId: projectA,
+      selectionDigest: createHash("sha256")
+        .update(JSON.stringify(["skill:exact-b", "skill:exact-a"]))
+        .digest("hex"),
+    }
+    const liveBinding = await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput)
+    assert.deepEqual(liveBinding, {
+      projectId: projectA,
+      selectedSkillSourceRefs: ["skill:exact-b", "skill:exact-a"],
+      selectionDigest: bindingInput.selectionDigest,
+    })
+    for (const field of ["tenantId", "subjectId", "actorId", "runId", "sessionId", "identityAssertionRef", "projectId", "selectionDigest"]) {
+      assert.equal(
+        await store.projectExecutionBindings.readProjectExecutionBinding({
+          ...bindingInput,
+          [field]: field === "selectionDigest" ? "0".repeat(64) : "wrong-binding",
+        }),
+        null,
+        field,
+      )
+    }
+    const corruptionAllowed = {}
+    await pool.query("UPDATE bff_project SET slug=$3 WHERE tenant_id=$1 AND project_id=$2", [tenant, projectB, projectA])
+    corruptionAllowed.ambiguousProject = (await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput)) !== null
+    await pool.query("UPDATE bff_project SET slug=$3 WHERE tenant_id=$1 AND project_id=$2", [tenant, projectB, `target-${suffix}`])
+    const originalPayload = (await pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, admittedRun.run_id]))
+      .rows[0].payload
+    for (const field of ["request_id", "message_id"]) {
+      await pool.query(
+        "UPDATE bff_agent_dispatch_outbox SET payload=jsonb_set(payload,ARRAY['launch',$3::text],$4::jsonb,false) WHERE tenant_id=$1 AND run_id=$2",
+        [tenant, admittedRun.run_id, field, JSON.stringify("wrong-lineage")],
+      )
+      corruptionAllowed[field] = (await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput)) !== null
+      await pool.query("UPDATE bff_agent_dispatch_outbox SET payload=$3::jsonb WHERE tenant_id=$1 AND run_id=$2", [
+        tenant,
+        admittedRun.run_id,
+        JSON.stringify(originalPayload),
+      ])
+    }
+    assert.deepEqual(
+      corruptionAllowed,
+      { ambiguousProject: false, request_id: false, message_id: false },
+      "ambiguous scope and corrupt dispatch lineage never grant a binding",
+    )
+    await pool.query("UPDATE bff_project SET deleted_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND project_id=$2", [tenant, projectA])
+    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), null, "deleted project is not current authority")
+    await pool.query("UPDATE bff_project SET deleted_at=NULL WHERE tenant_id=$1 AND project_id=$2", [tenant, projectA])
+    await pool.query("UPDATE bff_conversation SET status='deleted',deleted_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND conversation_id=$2", [
+      tenant,
+      conversationId,
+    ])
+    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), null, "deleted conversation is not current authority")
+    await pool.query("UPDATE bff_conversation SET status='active',deleted_at=NULL WHERE tenant_id=$1 AND conversation_id=$2", [tenant, conversationId])
+    await pool.query("UPDATE bff_message SET selected_skill_source_refs=$3::jsonb WHERE tenant_id=$1 AND message_id=$2", [
+      tenant,
+      admittedRun.user_message_id,
+      JSON.stringify(["skill:tampered"]),
+    ])
+    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), null, "Message and dispatch must agree on exact ordered refs")
+    await pool.query("UPDATE bff_message SET selected_skill_source_refs=$3::jsonb WHERE tenant_id=$1 AND message_id=$2", [
+      tenant,
+      admittedRun.user_message_id,
+      JSON.stringify(["skill:exact-b", "skill:exact-a"]),
+    ])
+    assert.deepEqual(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), liveBinding)
+    const aborted = new AbortController()
+    aborted.abort()
+    await assert.rejects(store.projectExecutionBindings.readProjectExecutionBinding({ ...bindingInput, signal: aborted.signal }), { name: "AbortError" })
     await pool.query("INSERT INTO bff_share (share_id,tenant_id,conversation_id,url) VALUES ($1,$2,$3,$4)", [
       `share_${suffix}`,
       tenant,
@@ -3803,7 +3891,11 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
           `SELECT row_to_json(fact)::text AS value FROM ${table} AS fact WHERE tenant_id=$1 AND ${table === "bff_agui_stream" ? "session_id" : "conversation_id"}=$2 ORDER BY value`,
           [tenant, conversationId],
         )
-        rows[table] = result.rows.map((row) => row.value)
+        rows[table] = result.rows.map((row) => {
+          const fact = JSON.parse(row.value)
+          if (table === "bff_agent_dispatch_outbox") delete fact.execution_context_retired_at
+          return JSON.stringify(fact)
+        })
       }
       return rows
     }
@@ -3842,6 +3934,10 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     assert.equal(movedOut.response.headers.get("cache-control"), "no-store")
     assert.match(movedOut.response.headers.get("x-request-id") ?? "", /^[\x20-\x7E]{1,128}$/u)
     assert.equal(await projectRef(conversationId), null)
+    const retired = await bindingRow()
+    assert.equal(retired.execution_project_ref, projectA, "Move preserves the original exact scope")
+    assert.ok(retired.retired_at, "Move permanently retires old execution authority")
+    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), null, "retired binding is no longer an allow")
     assert.deepEqual(await preservedRows(), beforeMoveFacts, "Move must not alter an admitted Run, Message, Share, AG-UI, Artifact or cancel outbox")
 
     const replay = await sendMove(conversationId, "r146-move-out", null)
@@ -3871,9 +3967,35 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     assert.deepEqual(noOp.body, movedInto.body)
     assert.equal((await pool.query("SELECT updated_at::text AS value FROM bff_conversation WHERE conversation_id=$1", [directId])).rows[0].value, timestamp)
 
+    const slugRun = await store.services.chatTurns.submit({
+      tenantId: tenant,
+      conversationId: slugId,
+      projectRef: projectA,
+      subjectId: subject,
+      actorId: subject,
+      requestId: `slug-binding-${suffix}`,
+      idempotencyKey: `slug-binding-${suffix}`,
+      content: "Same canonical scope stays authorized",
+      selectedSkillSourceRefs: [],
+    })
+    assert.ok(slugRun)
+    const slugAssertion = (
+      await pool.query("SELECT identity_assertion_ref FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, slugRun.run_id])
+    ).rows[0].identity_assertion_ref
+    const slugBinding = {
+      ...bindingInput,
+      runId: slugRun.run_id,
+      sessionId: slugId,
+      identityAssertionRef: slugAssertion,
+      selectionDigest: createHash("sha256").update("[]").digest("hex"),
+    }
+    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(slugBinding))
     const convergedSlug = await sendMove(slugId, "r146-move-slug", projectA)
     assert.equal(convergedSlug.response.status, 200, JSON.stringify(convergedSlug.body))
     assert.equal(await projectRef(slugId), projectA, "a touched legacy slug converges to canonical Project ID")
+    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(slugBinding), "slug normalization is not a scope change")
+    assert.equal((await sendMove(slugId, "r146-same-canonical", projectA)).response.status, 200)
+    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(slugBinding), "same-project no-op does not retire the binding")
     for (const [id, target] of [
       [foreignId, projectA],
       [conversationId, `project_${randomUUID()}`],
@@ -3899,6 +4021,97 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     assert.ok(winner)
     assert.equal(await projectRef(raceDifferentId), winner.body.data.project_ref)
     assert.deepEqual(await preservedRows(), beforeMoveFacts, "concurrent Move must leave historical facts unchanged")
+    assert.deepEqual(await bindingRow(), retired, "Move replay and later unrelated Moves do not rewrite the original retirement")
+    const directRun = await store.services.chatTurns.submit({
+      tenantId: tenant,
+      conversationId,
+      subjectId: subject,
+      actorId: subject,
+      requestId: `new-direct-${suffix}`,
+      idempotencyKey: `new-direct-${suffix}`,
+      content: "Fresh direct binding",
+      selectedSkillSourceRefs: [],
+    })
+    assert.ok(directRun)
+    const directAssertion = (
+      await pool.query("SELECT identity_assertion_ref FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, directRun.run_id])
+    ).rows[0].identity_assertion_ref
+    const directBinding = {
+      ...bindingInput,
+      runId: directRun.run_id,
+      identityAssertionRef: directAssertion,
+      projectId: null,
+      selectionDigest: createHash("sha256").update("[]").digest("hex"),
+    }
+    assert.deepEqual(await store.projectExecutionBindings.readProjectExecutionBinding(directBinding), {
+      projectId: null,
+      selectedSkillSourceRefs: [],
+      selectionDigest: directBinding.selectionDigest,
+    })
+    assert.equal((await sendMove(conversationId, "r146-move-out", null)).response.status, 200)
+    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(directBinding), "old Move receipt replay must not retire a later Run")
+    const movedBack = await sendMove(conversationId, "r146-move-back", projectA)
+    assert.equal(movedBack.response.status, 200)
+    assert.deepEqual(await bindingRow(), retired, "P→direct→P never revives the old execution binding")
+    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), null, "ABA does not revive the old authorization")
+    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(directBinding), null, "moving into Project retires the preceding direct Run")
+    const freshProjectRun = await store.services.chatTurns.submit({
+      tenantId: tenant,
+      conversationId,
+      projectRef: projectA,
+      subjectId: subject,
+      actorId: subject,
+      requestId: `new-project-${suffix}`,
+      idempotencyKey: `new-project-${suffix}`,
+      content: "Fresh project binding",
+      selectedSkillSourceRefs: [],
+    })
+    assert.ok(freshProjectRun)
+    const freshAssertion = (
+      await pool.query("SELECT identity_assertion_ref FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, freshProjectRun.run_id])
+    ).rows[0].identity_assertion_ref
+    const freshBinding = { ...directBinding, runId: freshProjectRun.run_id, identityAssertionRef: freshAssertion, projectId: projectA }
+    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(freshBinding))
+    assert.equal((await sendMove(conversationId, "r146-move-out", null)).response.status, 200)
+    assert.equal(await projectRef(conversationId), projectA, "old receipt replay never moves the Conversation again")
+    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(freshBinding), "old receipt replay never revokes a later Project Run")
+    const heldClients = await Promise.all(Array.from({ length: 10 }, () => store.database.pool.connect()))
+    try {
+      const read = store.projectExecutionBindings.readProjectExecutionBinding({ ...freshBinding, signal: AbortSignal.timeout(25) })
+      const state = await Promise.race([
+        read.then(
+          () => "resolved",
+          () => "aborted",
+        ),
+        new Promise((resolve) => setTimeout(() => resolve("still_waiting"), 150)),
+      ])
+      assert.equal(state, "aborted", "a cancelled binding read must leave the pool wait within the request budget")
+      await read.catch(() => undefined)
+    } finally {
+      for (const client of heldClients) client.release()
+    }
+
+    for (const mode of ["cancel", "socket_failure", "timeout"]) {
+      const blocker = await pool.connect()
+      try {
+        await blocker.query("BEGIN")
+        await blocker.query("LOCK TABLE bff_agent_dispatch_outbox IN ACCESS EXCLUSIVE MODE")
+        const blockerPid = (await blocker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
+        const cancel = new AbortController()
+        const pendingRead = store.projectExecutionBindings.readProjectExecutionBinding({ ...freshBinding, signal: cancel.signal }).then(
+          () => "resolved",
+          () => "rejected",
+        )
+        const [backend] = await blockedPgQueries(pool, blockerPid, /FROM bff_agent_dispatch_outbox/u)
+        if (mode === "cancel") cancel.abort()
+        else if (mode === "socket_failure") await pool.query("SELECT pg_terminate_backend($1)", [backend.pid])
+        assert.equal(await pendingRead, "rejected", "inflight cancellation/socket failure must reject without terminating BFF")
+      } finally {
+        await blocker.query("ROLLBACK")
+        blocker.release()
+      }
+      assert.equal((await store.database.pool.query("SELECT 1 AS ready")).rows[0].ready, 1, "the owner pool survives the discarded backend")
+    }
   } finally {
     if (bff !== null) await close(bff)
     if (store !== null) await store.close().catch(() => undefined)
@@ -4520,6 +4733,31 @@ integrationTest(
       )
       store = new PostgresBffRepositories(postgresUrl, redisUrl)
       await store.ready()
+      const originalRun = await store.services.chatTurns.submit({
+        tenantId: tenant,
+        conversationId,
+        subjectId: subject,
+        actorId: subject,
+        requestId: `fault-run-${suffix}`,
+        idempotencyKey: `fault-run-${suffix}`,
+        content: "Retirement rollback",
+        selectedSkillSourceRefs: [],
+      })
+      assert.ok(originalRun)
+      const originalDispatch = (
+        await pool.query("SELECT identity_assertion_ref FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, originalRun.run_id])
+      ).rows[0]
+      const originalBinding = {
+        tenantId: tenant,
+        subjectId: subject,
+        actorId: subject,
+        sessionId: conversationId,
+        runId: originalRun.run_id,
+        identityAssertionRef: originalDispatch.identity_assertion_ref,
+        projectId: null,
+        selectionDigest: createHash("sha256").update("[]").digest("hex"),
+      }
+      assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(originalBinding))
       const ownerPool = store.database.pool
       const originalConnect = ownerPool.connect
       const patchedClients = new Map()
@@ -4583,6 +4821,15 @@ integrationTest(
         "PG must roll back the final receipt too",
       )
 
+      // Restore the scoped connect observer before Pool.query uses its callback overload.
+      restoreFaultObserver()
+      assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(originalBinding), "receipt failure must roll back execution retirement too")
+      assert.equal(
+        (await pool.query("SELECT execution_context_retired_at FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, originalRun.run_id]))
+          .rows[0].execution_context_retired_at,
+        null,
+      )
+
       await pool.query(`DROP TRIGGER ${fixtureName} ON bff_idempotency_receipt`)
       await pool.query(`DROP FUNCTION ${fixtureName}()`)
       restoreFaultObserver()
@@ -4595,6 +4842,11 @@ integrationTest(
         projectId,
       )
       assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt WHERE scope=$1", [scope])).rows[0].count, 1)
+      assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(originalBinding), null, "successful retry retires the original binding")
+      assert.ok(
+        (await pool.query("SELECT execution_context_retired_at FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, originalRun.run_id]))
+          .rows[0].execution_context_retired_at,
+      )
     } finally {
       restoreFaultObserver()
       if (bff !== null) await close(bff)
@@ -4602,6 +4854,9 @@ integrationTest(
       await pool.query(`DROP TRIGGER IF EXISTS ${fixtureName} ON bff_idempotency_receipt`).catch(() => undefined)
       await pool.query(`DROP FUNCTION IF EXISTS ${fixtureName}()`).catch(() => undefined)
       await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
+      for (const table of ["bff_agent_dispatch_outbox", "bff_agui_stream", "bff_message"]) {
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]).catch(() => undefined)
+      }
       await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
       await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
       await pool.end()
@@ -4689,10 +4944,10 @@ integrationTest(
           "bff_agent_cancellation_outbox",
         ]) {
           const idColumn = table === "bff_agui_stream" || table === "bff_agui_event" ? "session_id" : "conversation_id"
-          const rows = await pool.query(`SELECT row_to_json(fact)::text AS value FROM ${table} AS fact WHERE tenant_id=$1 AND ${idColumn}=$2 ORDER BY value`, [
-            tenant,
-            conversationId,
-          ])
+          const rows = await pool.query(
+            `SELECT ${table === "bff_agent_dispatch_outbox" ? "(to_jsonb(fact)-'execution_context_retired_at')" : "row_to_json(fact)"}::text AS value FROM ${table} AS fact WHERE tenant_id=$1 AND ${idColumn}=$2 ORDER BY value`,
+            [tenant, conversationId],
+          )
           facts[table] = rows.rows.map((row) => row.value)
         }
         return facts
@@ -4725,13 +4980,14 @@ integrationTest(
       assert.equal(admittedBeforeMove.response.status, 202, JSON.stringify(admittedBeforeMove.body))
       await blockedPgQueries(pool, targetBlockerPid, /FROM bff_project[\s\S]*FOR UPDATE/u)
       const admittedRun = admittedBeforeMove.body.data.run_id
-      const launchBeforeMove = await pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND run_id=$3", [
-        tenant,
-        messageFirstId,
-        admittedRun,
-      ])
+      const launchBeforeMove = await pool.query(
+        "SELECT payload,execution_project_ref,execution_context_retired_at FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND run_id=$3",
+        [tenant, messageFirstId, admittedRun],
+      )
       assert.equal(launchBeforeMove.rowCount, 1)
       assert.equal(launchBeforeMove.rows[0].payload.launch.trace.project_ref, sourceProject)
+      assert.equal(launchBeforeMove.rows[0].execution_project_ref, sourceProject)
+      assert.equal(launchBeforeMove.rows[0].execution_context_retired_at, null)
       const beforeMoveFacts = await historicalFacts(messageFirstId)
       assert.equal(beforeMoveFacts.bff_message.length, 2)
       assert.ok(beforeMoveFacts.bff_agui_event.length > 0, "the admitted Run must have a durable AG-UI event before Move")
@@ -4743,6 +4999,11 @@ integrationTest(
       assert.equal(movedAfterMessage.response.status, 200, JSON.stringify(movedAfterMessage.body))
       assert.deepEqual(movedAfterMessage.body, { data: { session_id: messageFirstId, project_ref: targetProject } })
       assert.deepEqual(await historicalFacts(messageFirstId), beforeMoveFacts, "Move must not rewrite an admitted Run, Message, AG-UI, Share or Artifact")
+      assert.ok(
+        (await pool.query("SELECT execution_context_retired_at FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, admittedRun])).rows[0]
+          .execution_context_retired_at,
+        "only the explicit retirement fact changes after Move",
+      )
 
       // Move owns source Project FOR UPDATE while target is blocked; the stale
       // Message waits on that source lock and cannot commit into the old Project.
@@ -4775,13 +5036,14 @@ integrationTest(
       )
       const nextAdmission = await sendMessage(moveFirstId, `r149-next-admission-${suffix}`, targetProject)
       assert.equal(nextAdmission.response.status, 202, JSON.stringify(nextAdmission.body))
-      const nextLaunch = await pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND run_id=$3", [
-        tenant,
-        moveFirstId,
-        nextAdmission.body.data.run_id,
-      ])
+      const nextLaunch = await pool.query(
+        "SELECT payload,execution_project_ref,execution_context_retired_at FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND run_id=$3",
+        [tenant, moveFirstId, nextAdmission.body.data.run_id],
+      )
       assert.equal(nextLaunch.rowCount, 1)
       assert.equal(nextLaunch.rows[0].payload.launch.trace.project_ref, targetProject, "next admission must bind the post-Move canonical Project")
+      assert.equal(nextLaunch.rows[0].execution_project_ref, targetProject, "the next trusted binding comes from the locked canonical Project, not trace")
+      assert.equal(nextLaunch.rows[0].execution_context_retired_at, null)
     } finally {
       if (conversationBlocker !== null) {
         await conversationBlocker.query("ROLLBACK").catch(() => undefined)
@@ -4862,10 +5124,10 @@ integrationTest("R149 identical concurrent Move keys read one real PostgreSQL wi
     for (const table of ["bff_message", "bff_agent_dispatch_outbox", "bff_agui_stream", "bff_agui_event", "bff_share", "bff_agent_cancellation_outbox"]) {
       const idColumn = table === "bff_agui_stream" || table === "bff_agui_event" ? "session_id" : "conversation_id"
       historical[table] = (
-        await pool.query(`SELECT row_to_json(fact)::text AS value FROM ${table} AS fact WHERE tenant_id=$1 AND ${idColumn}=$2 ORDER BY value`, [
-          tenant,
-          conversationId,
-        ])
+        await pool.query(
+          `SELECT ${table === "bff_agent_dispatch_outbox" ? "(to_jsonb(fact)-'execution_context_retired_at')" : "row_to_json(fact)"}::text AS value FROM ${table} AS fact WHERE tenant_id=$1 AND ${idColumn}=$2 ORDER BY value`,
+          [tenant, conversationId],
+        )
       ).rows.map((row) => row.value)
     }
     assert.equal(historical.bff_message.length, 2)
@@ -4920,13 +5182,21 @@ integrationTest("R149 identical concurrent Move keys read one real PostgreSQL wi
     assert.equal(receipts.rowCount, 1, "both responses must resolve through one durable final receipt")
     assert.equal(receipts.rows[0].status, 200)
     assert.deepEqual(receipts.rows[0].response_body, results[0].body)
+    const retirement = (
+      await pool.query("SELECT execution_project_ref,execution_context_retired_at FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [
+        tenant,
+        existingRun.run_id,
+      ])
+    ).rows[0]
+    assert.equal(retirement.execution_project_ref, null, "the original direct Run is not rebound to the new Project")
+    assert.ok(retirement.execution_context_retired_at, "the concurrent Move winner retires the original binding")
     for (const [table, before] of Object.entries(historical)) {
       const idColumn = table === "bff_agui_stream" || table === "bff_agui_event" ? "session_id" : "conversation_id"
       const after = (
-        await pool.query(`SELECT row_to_json(fact)::text AS value FROM ${table} AS fact WHERE tenant_id=$1 AND ${idColumn}=$2 ORDER BY value`, [
-          tenant,
-          conversationId,
-        ])
+        await pool.query(
+          `SELECT ${table === "bff_agent_dispatch_outbox" ? "(to_jsonb(fact)-'execution_context_retired_at')" : "row_to_json(fact)"}::text AS value FROM ${table} AS fact WHERE tenant_id=$1 AND ${idColumn}=$2 ORDER BY value`,
+          [tenant, conversationId],
+        )
       ).rows.map((row) => row.value)
       assert.deepEqual(after, before, `same-key Move must not rewrite ${table}`)
     }

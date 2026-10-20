@@ -1,3 +1,15 @@
+## 2026-10-20 保留项目执行绑定 producer 定向集成（源码已验，正常执行未激活）
+
+基线 dfc3d59，定向承接既有 d623f76/16da6f0 的 internal1、canonical project/outbox schema3、Move 永久退役及原真实 chat-facts 回归；保留当前 Public19/165、Agent7104f3d/HTTP7 和全部其他 owner pins。Scheduler 的 saved launch/helper/delivery 原字节保持；Chat 不再从 trace 推导执行 authority，独立列与 schema3 的 canonical project 必须一致。internal1 正规生成 SHA256 7d6962602d34576ae227ad19a2da3d3647d01f8741abdc3ff3080e7539eebea4，与 IAM 已固定原发行物相同。
+
+主方复验前仅候选：缺 producer 的原 HTTP 断言 RED 后接线；闭集输入的 duplicate key 原200实际 RED 后复用已有 strict raw JSON parser拒绝，不改机器形状。HTTP8KiB/3秒及PG2秒边界、原scope/tenant/lineage/CAS/事务/未知回执保障保持。定向默认/合同/架构/配置/schema 131项为129 PASS/2原资源SKIP；最终8KiB边界追加曾复现8193字节误503，具名保留bounded iterator超限的输入错误后，两项internal HTTP完整重跑2 PASS，8192接受/8193拒绝且零越界read。format/lint/typecheck/build/internal generator与diff检查已过，源码自审未发现新增确定P0–P2。完整owner门、fresh隔离PG/Redis chat-facts、最终独审与发布由主会话续验；本段不是正常模型/工具/费用或全产品通过。
+
+System4固定消费未夹入本片：旧Public19管理员revision表示仍要求transport/gateway_model_name，System4已退休；按主方裁决保留现System3 consumer，不伪造alias或暗改公开合同。该跨owner公开升级及正常Schema处置继续独立未完成。正常配置、服务、数据库、账号权限和积分未改，模型/实际工具/扣费/CI未启；本候选未add/commit/push。
+
+最终主会话冻结复验：format/lint/typecheck/build、完整contract 848 PASS及architecture36 PASS；默认1496 PASS/3原资源SKIP；随机独占新PG库＋kokoro_bff schema与既有Redis的全部chat-facts33 PASS/0SKIP，测试库已删除，无正常SQL或工具/模型请求。独立只读审查无确定P0/P1/P2，输入冻结无漂移。首contract仅旧整份SQL oracle未承接两列，保留原历史全文/摘要断言并精确验证新增列位置/唯一性及四负控后通过；首资源fixture漏schema URL被正式运行时拒绝，修正隔离fixture后重跑33项，不放宽owner边界。两次失败日志留存。
+
+交付以最新main定向实现承接原producer逻辑，再仅合并旧16da6f0提交历史（tree保持），使IAM所pin的d623f76正式来源可达；旧HTTP6由现HTTP7取代，不恢复旧vendor、公开合同或System消费。正常旧outbox schema2与数据库两字段、IAM机器配置尚未切换；正常执行保持停用，不能以源码PR宣称已激活整链。
+
 ## 2026-10-19 MCP availability 消费者候选
 
 修既有跨仓版本不配对，不新增功能模块。Platform固定已合入4a4e4c4/HTTP6.2，原HTTP/Connect生成链产物固定摘要；Connector/Server按owner五态独立投影当前可用性，不由status/enabled猜测，不兼容旧缺字段或跳过unknown。Public19/165、SQL、权限与独立错误profile保持。

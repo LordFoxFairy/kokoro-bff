@@ -1,3 +1,9 @@
+## 2026-10-20 既定项目执行绑定 producer 收口（未激活）
+
+定向承接已批准 d623f76/16da6f0；保留当前 Agent7104f3d/HTTP7、Product Public19 与其他 owner 固定消费者，不回退旧分支发布物。BFF 同进程增加 IAM 专用 internal1 只读验口；身份来自每次读取的受限凭据文件，固定 caller/surface/tenant，不回调 IAM、不复用 Web 凭据或缓存 allow。输入绑定 tenant/actor/subject/Run/session/assertion、nullable canonical project 与有序 exact refs 摘要；body 8KiB、HTTP3秒、PG2秒，迟到 checkout/在途取消清理精确连接。
+
+Chat 原事务锁内把 canonical project 保存到原 outbox 独立列，payload schema3 显式 project_ref 与该列交叉核对；trace 仅观测。Move 沿原 Project→Conversation→outbox 锁序仅在 canonical 跨 scope 时永久退役旧执行上下文，P→Q→P 不复活，slug/no-op 不退役。reader 单 statement 重验当前父资源、本人、冻结 lineage 与 Message 有序 refs，不从 trace 回填资格。原 queue/lease/fence/FIFO/unknown、事务和历史回执保障保持；读取不是执行 permit，也不是 ADR-035 即时撤权 barrier。旧 payload1/2 不兼容派发，正常库/配置/服务及模型、工具、扣费均不切换；历史数据处置继续独立授权。
+
 ## 2026-10-19 MCP generic 前置失败消费纠正
 
 Platform 当前合同允许无 detail 的 FailedPrecondition，含续期 scope 收缩后原 Prepare CAS 失配；BFF按既有 generic412 `mcp_personal_precondition_failed` 返回，不将合法前置失败误报502，也不伪造 `not_prepared` reason。本段取代下方旧“URL server必须带typed detail”的消费者误设。只有非空detail声明typed profile，仍严格核唯一已知消息/有效reason，未知、重复、畸形或冲突detail保持502；receipt marker分类仍先行。不改成功解码、权限、owner CAS/事务/回执、重试行为、机器字段/profile或数据模型；App现有412已配对，无新增兼容分支。

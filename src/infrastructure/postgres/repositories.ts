@@ -25,6 +25,7 @@ import { PostgresAgUiProjectionRepository } from "./agui-projection-repository.j
 import { PostgresAgUiConsumerRepository } from "./agui-consumer-repository.js"
 import type { AgUiProjectionConsumerRepository } from "../../application/agui/ports/agui-projection-repository.js"
 import type { AgentDispatchOutboxRepository } from "../../application/ports/agent-dispatch-outbox-repository.js"
+import type { ProjectExecutionBindingReader } from "../../application/ports/project-execution-binding-reader.js"
 import type { AgentCancellationOutboxRepository } from "../../application/ports/agent-cancellation-outbox-repository.js"
 import { Sha256StableIdGenerator } from "../identifiers/scheduled-task-outbox-id.js"
 import { PostgresSchedulerDispatchReceiptRepository } from "./scheduler-dispatch-receipt-repository.js"
@@ -52,6 +53,7 @@ export class PostgresBffRepositories {
   public readonly agUiConsumers: AgUiProjectionConsumerRepository
   public readonly scheduledTaskOutbox: ScheduledTaskOutboxRepository
   public readonly agentDispatchOutbox: AgentDispatchOutboxRepository
+  public readonly projectExecutionBindings: ProjectExecutionBindingReader
   public readonly agentCancellationOutbox: AgentCancellationOutboxRepository
   public readonly schedulerDispatchReceipts: SchedulerDispatchReceiptRepository
   public readonly scheduledAgentDispatch: ScheduledAgentDispatchRepository
@@ -71,6 +73,7 @@ export class PostgresBffRepositories {
     this.scheduled = scheduled
     this.scheduledTaskOutbox = scheduled
     this.agentDispatchOutbox = agentDispatchOutbox
+    this.projectExecutionBindings = agentDispatchOutbox
     this.agentCancellationOutbox = agentCancellationOutbox
     this.schedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(this.database.pool)
     this.scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository(this.database)
