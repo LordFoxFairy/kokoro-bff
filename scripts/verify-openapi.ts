@@ -1,3 +1,4 @@
+import { inspectSystemModelConnectionContract } from "./system-model-connection-public-contract.mjs"
 import {
   inspectClosureIntegrationContract,
   restoreClosureLocalContract,
@@ -3147,7 +3148,10 @@ export function restorePublic15TeamPermissionsContract(source: string): string {
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   const currentSource = source,
     currentBaseline = baseline
-  const integrationErrors = inspectClosureIntegrationContract(currentSource, currentBaseline)
+  const integrationErrors = [
+    ...inspectSystemModelConnectionContract(currentSource, currentBaseline),
+    ...inspectClosureIntegrationContract(currentSource, currentBaseline),
+  ]
   if (integrationErrors.length > 0) return integrationErrors
   source = restoreClosureLocalContract(currentSource)
   baseline = closureLocalBaseline(currentBaseline)

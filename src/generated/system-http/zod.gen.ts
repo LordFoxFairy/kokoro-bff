@@ -49,7 +49,7 @@ export const zSchema48Df62A23917Bc3f = z
   })
   .strict()
 
-export const zSchemaBae99A4B7279F69b = z
+export const zSchema92E217074Ca00Ddb = z
   .object({
     data: z
       .object({
@@ -78,11 +78,26 @@ export const zSchemaBae99A4B7279F69b = z
                 .array(z.enum(["text", "image", "audio", "video"]))
                 .min(1)
                 .max(4),
-              transport: z.literal("litellm"),
-              gateway_model_name: z.string().min(1).max(255),
+              request_model: z.string().min(1).max(255),
               context_window: z.int().gte(1).lte(2147483647).nullable(),
               max_output_tokens: z.int().gte(1).lte(2147483647).nullable(),
               priority: z.int().gte(0).lte(100000),
+              connection: z
+                .object({
+                  protocol: z.literal("openai_chat_completions"),
+                  connection_type: z.enum(["direct", "litellm"]),
+                  base_url: z
+                    .string()
+                    .min(1)
+                    .max(2048)
+                    .regex(/^https?:\/\/[^\s\\?#]+$/),
+                  secret_handle_ref: z
+                    .string()
+                    .min(1)
+                    .max(255)
+                    .regex(/^[A-Za-z0-9][A-Za-z0-9._:\/-]*$/),
+                })
+                .strict(),
               id: z
                 .uuid()
                 .regex(
@@ -280,7 +295,7 @@ export const zListModelRevisionQuery = z
 /**
  * Success
  */
-export const zListModelRevisionResponse = zSchemaBae99A4B7279F69b
+export const zListModelRevisionResponse = zSchema92E217074Ca00Ddb
 
 export const zListRoutingPolicyHeaders = z
   .object({

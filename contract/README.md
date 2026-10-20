@@ -1,3 +1,9 @@
+## 2026-10-20 唯一 Public20.0.0 / System4 管理配对候选
+
+公开仍 `/v1`、165 operations；只将 `AdminModelRevision` 的旧 `transport`/`gateway_model_name` 替换为必需 `request_model` 和 closed `connection`。固定 System `dafbc66c9ab5e55b556dbd1dd71c79cef354f69c` /4.0.0，artifact SHA256 `c7cda9d09db266cd26dc1b80dfe9bb95c3c9f6a91bdbd6c5d7de4f85295d1dc6`，原始 provenance SHA256 `37e338939ebecc4a61cf7aff4d14c2e28b5bc34381e66324a2009988e793d2d0`；manifest 同时绑定两者，正规生成仍只含现四操作。旧当前 vendor 退休，无多版本 union/fallback。
+
+`system-model-connection-public-contract.mjs` 精确逆回完整 Public19 再运行原两父与历史校验；原历史 proof/hash 不变，该脚本不进入运行时。没有新增 operation、数据表、依赖、provider/revision 写面或执行许可；App/Admin 必须固定新 public artifact。下方均为历史切片，不代表当前正常运行版本。
+
 ## 2026-10-20 项目执行绑定 internal1 收口
 
 `src/http/project-execution-binding.contract.ts` 是 internal1 唯一 code-first 源，`pnpm contract:generate:project-execution` 生成只读 `contract/openapi/internal/v1/openapi.yaml`，check 已登记正式契约门。IAM 已固定 d623f76 的 1.0.0 原字节；本次承接同一 producer，Public19、HTTP7 及其他当前 owner pins 保持，不改 System3 消费者或正常运行资源。

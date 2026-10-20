@@ -1,3 +1,4 @@
+import { restorePublic19SystemModelConnectionContract } from "./system-model-connection-public-contract.mjs"
 // Exact proof of the two approved merge parents; never used by runtime decoders.
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
@@ -5,6 +6,7 @@ const proof = JSON.parse(readFileSync(new URL("../contract/tests/closure-integra
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const current = (source) => /^  version: 19\.0\.0$/mu.test(source)
 function restore(source, name) {
+  source = restorePublic19SystemModelConnectionContract(source)
   if (!current(source)) return source
   if (digest(source) !== proof.current_sha256) throw Error("Public19 complete integration source drift")
   const parent = proof.parents[name],
@@ -29,6 +31,7 @@ export const closureLocalBaseline = (baseline) => restoreBaseline(baseline, "loc
 export const closureMainBaseline = (baseline) => restoreBaseline(baseline, "main")
 export function inspectClosureIntegrationContract(source, baseline) {
   try {
+    source = restorePublic19SystemModelConnectionContract(source)
     if (!current(source)) throw Error("current public artifact must be Public19.0.0")
     restoreClosureLocalContract(source)
     restoreClosureMainContract(source)

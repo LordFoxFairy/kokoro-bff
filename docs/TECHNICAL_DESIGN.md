@@ -1,3 +1,11 @@
+## 2026-10-20 System4 模型管理配对设计门（隔离候选）
+
+沿已批准的 System4 immutable connection 模型，现有 `src/http/routes/model-routing-admin.ts` 和 owner 窄 client 不增加边界：仅消费 `listModelLabel`、`listModelRevision`、`listRoutingPolicy`、`putRoutingPolicy`。固定 owner Draft `dafbc66c9ab5e55b556dbd1dd71c79cef354f69c` 的 4.0.0 OpenAPI/provenance，并沿现生成器更新；Agent 当前固定消费者和其他 owner 不变。
+
+Public20.0.0 仍为 `/v1`、165 operations；唯一 breaking 表示是管理员 revision 删除 `transport`/`gateway_model_name`，必需 `request_model` 与 closed `connection`（`protocol=openai_chat_completions`、`connection_type=direct|litellm`、`base_url`、`secret_handle_ref`）。快照由 System 拥有，BFF 只严格验证并投影，不推导连接、读取密钥或执行模型。没有旧字段 union、alias、fallback、新 provider/revision 写操作或新表。
+
+保留当前 IAM platformAdmin/tenant 准入、四操作错误、分页、写入 key/CAS、总预算/取消和未知结果语义。验收使用固定 owner artifact、生成漂移、真实 BFF HTTP 与受控 owner wire 的正负例及完整相关工程门；正常旧修订盘点/数据处置、资源切换、App/Admin固定消费者由 Root 统筹。正常数据库与进程不在本写区；模型、实际工具、扣费继续暂停。下方历史版本说明按当时状态读取。
+
 ## 2026-10-20 既定项目执行绑定 producer 收口（未激活）
 
 定向承接已批准 d623f76/16da6f0；保留当前 Agent7104f3d/HTTP7、Product Public19 与其他 owner 固定消费者，不回退旧分支发布物。BFF 同进程增加 IAM 专用 internal1 只读验口；身份来自每次读取的受限凭据文件，固定 caller/surface/tenant，不回调 IAM、不复用 Web 凭据或缓存 allow。输入绑定 tenant/actor/subject/Run/session/assertion、nullable canonical project 与有序 exact refs 摘要；body 8KiB、HTTP3秒、PG2秒，迟到 checkout/在途取消清理精确连接。

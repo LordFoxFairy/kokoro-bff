@@ -8,9 +8,9 @@
   ],
   "info": {
     "title": "Kokoro System internal owner",
-    "version": "3.0.0",
-    "x-kokoro-release-classification": "execution-bound-breaking",
-    "description": "Generated from runtime Zod schemas for implemented System internal-owner routes; 3.0.0 adds required model execution capability bounds."
+    "version": "4.0.0",
+    "x-kokoro-release-classification": "model-connection-breaking",
+    "description": "Generated from runtime Zod schemas for implemented System internal-owner routes; 4.0.0 binds model revisions to immutable direct or optional LiteLLM connections."
   },
   "paths": {
     "/v1/system/sites": {
@@ -8916,7 +8916,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_8c4b0417f29ea4f6"
+                  "$ref": "#/components/schemas/schema_718c194a16b98db8"
                 }
               }
             }
@@ -9044,7 +9044,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_aa4df1351fa2e040"
+                  "$ref": "#/components/schemas/schema_c9f085ca41391022"
                 }
               }
             }
@@ -9070,7 +9070,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/schema_01457c921c0ed764"
+                "$ref": "#/components/schemas/schema_342d9217d577ff21"
               }
             }
           }
@@ -9186,7 +9186,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_aa4df1351fa2e040"
+                  "$ref": "#/components/schemas/schema_c9f085ca41391022"
                 }
               }
             }
@@ -9332,7 +9332,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_aa4df1351fa2e040"
+                  "$ref": "#/components/schemas/schema_c9f085ca41391022"
                 }
               }
             }
@@ -9361,7 +9361,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/schema_b81034ed151c3395"
+                "$ref": "#/components/schemas/schema_4c197d28bad9768d"
               }
             }
           }
@@ -9494,7 +9494,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_aa4df1351fa2e040"
+                  "$ref": "#/components/schemas/schema_c9f085ca41391022"
                 }
               }
             }
@@ -9648,7 +9648,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_aa4df1351fa2e040"
+                  "$ref": "#/components/schemas/schema_c9f085ca41391022"
                 }
               }
             }
@@ -10843,7 +10843,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_bae99a4b7279f69b"
+                  "$ref": "#/components/schemas/schema_92e217074ca00ddb"
                 }
               }
             }
@@ -10971,7 +10971,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_5c6199a875eda8c2"
+                  "$ref": "#/components/schemas/schema_143b120ae64db717"
                 }
               }
             }
@@ -10997,7 +10997,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/schema_fa79766349ca0639"
+                "$ref": "#/components/schemas/schema_dc21886cd26a5ca8"
               }
             }
           }
@@ -11113,7 +11113,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_5c6199a875eda8c2"
+                  "$ref": "#/components/schemas/schema_143b120ae64db717"
                 }
               }
             }
@@ -11259,7 +11259,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_5c6199a875eda8c2"
+                  "$ref": "#/components/schemas/schema_143b120ae64db717"
                 }
               }
             }
@@ -11288,7 +11288,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/schema_5cb107caffcc4a56"
+                "$ref": "#/components/schemas/schema_2cb291ac8cd4567c"
               }
             }
           }
@@ -11423,7 +11423,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_5c6199a875eda8c2"
+                  "$ref": "#/components/schemas/schema_143b120ae64db717"
                 }
               }
             }
@@ -11577,7 +11577,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_5c6199a875eda8c2"
+                  "$ref": "#/components/schemas/schema_143b120ae64db717"
                 }
               }
             }
@@ -12316,7 +12316,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/schema_00b9b5a3e10401fb"
+                  "$ref": "#/components/schemas/schema_d5369d0003c7bbca"
                 }
               }
             }
@@ -17788,7 +17788,7 @@
         ],
         "additionalProperties": false
       },
-      "schema_8c4b0417f29ea4f6": {
+      "schema_718c194a16b98db8": {
         "type": "object",
         "properties": {
           "data": {
@@ -17799,6 +17799,29 @@
                 "items": {
                   "type": "object",
                   "properties": {
+                    "protocol": {
+                      "type": "string",
+                      "const": "openai_chat_completions"
+                    },
+                    "connection_type": {
+                      "type": "string",
+                      "enum": [
+                        "direct",
+                        "litellm"
+                      ]
+                    },
+                    "base_url": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048,
+                      "pattern": "^https?:\\/\\/[^\\s\\\\?#]+$"
+                    },
+                    "secret_handle_ref": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+                    },
                     "provider": {
                       "type": "string",
                       "minLength": 1,
@@ -17813,15 +17836,6 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 160
-                    },
-                    "secret_handle_ref": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 255
-                    },
-                    "transport": {
-                      "type": "string",
-                      "const": "litellm"
                     },
                     "priority": {
                       "type": "integer",
@@ -17861,11 +17875,13 @@
                     }
                   },
                   "required": [
+                    "protocol",
+                    "connection_type",
+                    "base_url",
+                    "secret_handle_ref",
                     "provider",
                     "provider_key",
                     "display_name",
-                    "secret_handle_ref",
-                    "transport",
                     "priority",
                     "id",
                     "version",
@@ -17895,12 +17911,35 @@
         ],
         "additionalProperties": false
       },
-      "schema_aa4df1351fa2e040": {
+      "schema_c9f085ca41391022": {
         "type": "object",
         "properties": {
           "data": {
             "type": "object",
             "properties": {
+              "protocol": {
+                "type": "string",
+                "const": "openai_chat_completions"
+              },
+              "connection_type": {
+                "type": "string",
+                "enum": [
+                  "direct",
+                  "litellm"
+                ]
+              },
+              "base_url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^https?:\\/\\/[^\\s\\\\?#]+$"
+              },
+              "secret_handle_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+              },
               "provider": {
                 "type": "string",
                 "minLength": 1,
@@ -17915,15 +17954,6 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 160
-              },
-              "secret_handle_ref": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 255
-              },
-              "transport": {
-                "type": "string",
-                "const": "litellm"
               },
               "priority": {
                 "type": "integer",
@@ -17963,11 +17993,13 @@
               }
             },
             "required": [
+              "protocol",
+              "connection_type",
+              "base_url",
+              "secret_handle_ref",
               "provider",
               "provider_key",
               "display_name",
-              "secret_handle_ref",
-              "transport",
               "priority",
               "id",
               "version",
@@ -17983,9 +18015,33 @@
         ],
         "additionalProperties": false
       },
-      "schema_01457c921c0ed764": {
+      "schema_342d9217d577ff21": {
         "type": "object",
         "properties": {
+          "protocol": {
+            "type": "string",
+            "const": "openai_chat_completions"
+          },
+          "connection_type": {
+            "default": "direct",
+            "type": "string",
+            "enum": [
+              "direct",
+              "litellm"
+            ]
+          },
+          "base_url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^https?:\\/\\/[^\\s\\\\?#]+$"
+          },
+          "secret_handle_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+          },
           "provider": {
             "type": "string",
             "minLength": 1,
@@ -18001,15 +18057,6 @@
             "minLength": 1,
             "maxLength": 160
           },
-          "secret_handle_ref": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 255
-          },
-          "transport": {
-            "type": "string",
-            "const": "litellm"
-          },
           "priority": {
             "type": "integer",
             "minimum": 0,
@@ -18017,27 +18064,23 @@
           }
         },
         "required": [
+          "protocol",
+          "base_url",
+          "secret_handle_ref",
           "provider",
           "provider_key",
           "display_name",
-          "secret_handle_ref",
-          "transport",
           "priority"
         ],
         "additionalProperties": false
       },
-      "schema_b81034ed151c3395": {
+      "schema_4c197d28bad9768d": {
         "type": "object",
         "properties": {
           "display_name": {
             "type": "string",
             "minLength": 1,
             "maxLength": 160
-          },
-          "secret_handle_ref": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 255
           },
           "priority": {
             "type": "integer",
@@ -18370,7 +18413,7 @@
         ],
         "additionalProperties": false
       },
-      "schema_bae99a4b7279f69b": {
+      "schema_92e217074ca00ddb": {
         "type": "object",
         "properties": {
           "data": {
@@ -18439,11 +18482,7 @@
                         ]
                       }
                     },
-                    "transport": {
-                      "type": "string",
-                      "const": "litellm"
-                    },
-                    "gateway_model_name": {
+                    "request_model": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 255
@@ -18476,6 +18515,41 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 100000
+                    },
+                    "connection": {
+                      "type": "object",
+                      "properties": {
+                        "protocol": {
+                          "type": "string",
+                          "const": "openai_chat_completions"
+                        },
+                        "connection_type": {
+                          "type": "string",
+                          "enum": [
+                            "direct",
+                            "litellm"
+                          ]
+                        },
+                        "base_url": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2048,
+                          "pattern": "^https?:\\/\\/[^\\s\\\\?#]+$"
+                        },
+                        "secret_handle_ref": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255,
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+                        }
+                      },
+                      "required": [
+                        "protocol",
+                        "connection_type",
+                        "base_url",
+                        "secret_handle_ref"
+                      ],
+                      "additionalProperties": false
                     },
                     "id": {
                       "type": "string",
@@ -18534,11 +18608,11 @@
                     "feature_key",
                     "input_modalities",
                     "output_modalities",
-                    "transport",
-                    "gateway_model_name",
+                    "request_model",
                     "context_window",
                     "max_output_tokens",
                     "priority",
+                    "connection",
                     "id",
                     "version",
                     "digest",
@@ -18569,7 +18643,7 @@
         ],
         "additionalProperties": false
       },
-      "schema_5c6199a875eda8c2": {
+      "schema_143b120ae64db717": {
         "type": "object",
         "properties": {
           "data": {
@@ -18633,11 +18707,7 @@
                   ]
                 }
               },
-              "transport": {
-                "type": "string",
-                "const": "litellm"
-              },
-              "gateway_model_name": {
+              "request_model": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 255
@@ -18670,6 +18740,41 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 100000
+              },
+              "connection": {
+                "type": "object",
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "const": "openai_chat_completions"
+                  },
+                  "connection_type": {
+                    "type": "string",
+                    "enum": [
+                      "direct",
+                      "litellm"
+                    ]
+                  },
+                  "base_url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "pattern": "^https?:\\/\\/[^\\s\\\\?#]+$"
+                  },
+                  "secret_handle_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+                  }
+                },
+                "required": [
+                  "protocol",
+                  "connection_type",
+                  "base_url",
+                  "secret_handle_ref"
+                ],
+                "additionalProperties": false
               },
               "id": {
                 "type": "string",
@@ -18728,11 +18833,11 @@
               "feature_key",
               "input_modalities",
               "output_modalities",
-              "transport",
-              "gateway_model_name",
+              "request_model",
               "context_window",
               "max_output_tokens",
               "priority",
+              "connection",
               "id",
               "version",
               "digest",
@@ -18749,7 +18854,7 @@
         ],
         "additionalProperties": false
       },
-      "schema_fa79766349ca0639": {
+      "schema_dc21886cd26a5ca8": {
         "type": "object",
         "properties": {
           "model_id": {
@@ -18810,11 +18915,7 @@
               ]
             }
           },
-          "transport": {
-            "type": "string",
-            "const": "litellm"
-          },
-          "gateway_model_name": {
+          "request_model": {
             "type": "string",
             "minLength": 1,
             "maxLength": 255
@@ -18858,15 +18959,14 @@
           "feature_key",
           "input_modalities",
           "output_modalities",
-          "transport",
-          "gateway_model_name",
+          "request_model",
           "context_window",
           "max_output_tokens",
           "priority"
         ],
         "additionalProperties": false
       },
-      "schema_5cb107caffcc4a56": {
+      "schema_2cb291ac8cd4567c": {
         "type": "object",
         "properties": {
           "provider_id": {
@@ -18917,11 +19017,7 @@
               ]
             }
           },
-          "transport": {
-            "type": "string",
-            "const": "litellm"
-          },
-          "gateway_model_name": {
+          "request_model": {
             "type": "string",
             "minLength": 1,
             "maxLength": 255
@@ -19239,7 +19335,7 @@
         ],
         "additionalProperties": false
       },
-      "schema_00b9b5a3e10401fb": {
+      "schema_d5369d0003c7bbca": {
         "type": "object",
         "properties": {
           "data": {
@@ -19290,12 +19386,45 @@
               "provider_model_name": {
                 "type": "string"
               },
-              "transport": {
+              "request_model": {
                 "type": "string",
-                "const": "litellm"
+                "minLength": 1,
+                "maxLength": 255
               },
-              "gateway_model_name": {
-                "type": "string"
+              "connection": {
+                "type": "object",
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "const": "openai_chat_completions"
+                  },
+                  "connection_type": {
+                    "type": "string",
+                    "enum": [
+                      "direct",
+                      "litellm"
+                    ]
+                  },
+                  "base_url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "pattern": "^https?:\\/\\/[^\\s\\\\?#]+$"
+                  },
+                  "secret_handle_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+                  }
+                },
+                "required": [
+                  "protocol",
+                  "connection_type",
+                  "base_url",
+                  "secret_handle_ref"
+                ],
+                "additionalProperties": false
               },
               "label_key": {
                 "type": "string"
@@ -19315,8 +19444,8 @@
               "tenant_generation",
               "provider_id",
               "provider_model_name",
-              "transport",
-              "gateway_model_name",
+              "request_model",
+              "connection",
               "label_key",
               "feature_key"
             ],

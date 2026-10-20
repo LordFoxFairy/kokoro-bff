@@ -21,7 +21,7 @@ export type Schema48Df62A23917Bc3f = {
   }
 }
 
-export type SchemaBae99A4B7279F69b = {
+export type Schema92E217074Ca00Ddb = {
   data: {
     items: Array<{
       model_id: string
@@ -32,11 +32,16 @@ export type SchemaBae99A4B7279F69b = {
       feature_key: string
       input_modalities: Array<"text" | "image" | "audio" | "video">
       output_modalities: Array<"text" | "image" | "audio" | "video">
-      transport: "litellm"
-      gateway_model_name: string
+      request_model: string
       context_window: number | null
       max_output_tokens: number | null
       priority: number
+      connection: {
+        protocol: "openai_chat_completions"
+        connection_type: "direct" | "litellm"
+        base_url: string
+        secret_handle_ref: string
+      }
       id: string
       version: string
       digest: string
@@ -230,7 +235,7 @@ export type ListModelRevisionResponses = {
   /**
    * Success
    */
-  200: SchemaBae99A4B7279F69b
+  200: Schema92E217074Ca00Ddb
 }
 
 export type ListModelRevisionResponse = ListModelRevisionResponses[keyof ListModelRevisionResponses]

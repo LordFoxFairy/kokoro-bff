@@ -122,8 +122,13 @@ const revision = {
   feature_key: "chat",
   input_modalities: ["text"],
   output_modalities: ["text"],
-  transport: "litellm",
-  gateway_model_name: "fixture/model",
+  request_model: "fixture/model",
+  connection: {
+    protocol: "openai_chat_completions",
+    connection_type: "direct",
+    base_url: "https://models.fixture.invalid/v1",
+    secret_handle_ref: "secret://fixture/model",
+  },
   context_window: 8192,
   max_output_tokens: 1024,
   priority: 10,
@@ -581,4 +586,43 @@ test("named admin reads accept formal System success responses without an owner 
     "/v1/system/model-catalog/labels?limit=50",
     "/v1/system/model-catalog/revisions?limit=50",
   ])
+})
+
+test("System4 direct and LiteLLM snapshots pass through unchanged while legacy and malformed revisions fail closed", async () => {
+  let row: Record<string, unknown> = revision
+  const owner = await ownerFixture(() => ({ status: 200, body: { data: { items: [row], next_cursor: null } } }))
+  const bff = await bffFixture(owner.origin)
+  for (const connectionType of ["direct", "litellm"]) {
+    row = { ...revision, connection: { ...revision.connection, connection_type: connectionType } }
+    const response = await fetch(`${bff.origin}/v1/admin/model-revisions`, { headers: browserHeaders() })
+    assert.equal(response.status, 200)
+    assert.deepEqual(((await response.json()) as { data: unknown }).data, [row])
+  }
+  const { request_model: _requestModel, connection: _connection, ...legacyBase } = revision
+  const { protocol: _protocol, ...missingProtocol } = revision.connection
+  const { secret_handle_ref: _secret, ...missingSecret } = revision.connection
+  for (const invalid of [
+    { ...legacyBase, transport: "litellm", gateway_model_name: "legacy/fixture" },
+    { ...revision, transport: "litellm", gateway_model_name: "legacy/fixture" },
+    { ...legacyBase, connection: revision.connection },
+    { ...legacyBase, request_model: revision.request_model },
+    { ...revision, request_model: "" },
+    { ...revision, request_model: "x".repeat(256) },
+    { ...revision, connection: { ...revision.connection, protocol: "openai_responses" } },
+    { ...revision, connection: { ...revision.connection, connection_type: "proxy" } },
+    { ...revision, connection: missingProtocol },
+    { ...revision, connection: missingSecret },
+    { ...revision, connection: { ...revision.connection, base_url: "ftp://models.fixture.invalid" } },
+    { ...revision, connection: { ...revision.connection, base_url: "https://models.fixture.invalid?token=private" } },
+    { ...revision, connection: { ...revision.connection, secret_handle_ref: "bad secret value" } },
+    { ...revision, connection: { ...revision.connection, api_key: "private-owner-material" } },
+    { ...revision, unexpected: "private-owner-material" },
+  ]) {
+    row = invalid
+    const response = await fetch(`${bff.origin}/v1/admin/model-revisions`, { headers: browserHeaders() })
+    assert.equal(response.status, 502)
+    const body = await response.text()
+    assert.equal(JSON.parse(body).error.code, "admin_model_routing_response_invalid")
+    assert.doesNotMatch(body, /legacy\/fixture|private-owner-material|private|models\.fixture/u)
+  }
 })

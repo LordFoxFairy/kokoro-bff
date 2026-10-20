@@ -1,9 +1,0 @@
-{
-  "owner": "kokoro-system",
-  "repository_path": "apps/kokoro-system",
-  "source_commit": "955bd587f46a771e43a4330d202d90a7d2d67262",
-  "contract_version": "3.0.0",
-  "contract_path": "contract/openapi/system.openapi.json",
-  "sha256": "94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059",
-  "operations": ["listModelLabel", "listModelRevision", "listRoutingPolicy", "putRoutingPolicy"]
-}

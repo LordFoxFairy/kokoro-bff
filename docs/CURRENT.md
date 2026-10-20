@@ -1,3 +1,11 @@
+## 2026-10-20 System4 管理配对完成工程验收（隔离候选，未正常激活）
+
+本候选唯一 Public20.0.0 /165 operations，只替换管理员 revision 的旧 `transport`/`gateway_model_name` 为 System4 必需 `request_model`＋closed `connection`；现四操作闭集、标签/路由/PUT、身份/tenant、分页、CAS/key、错误/取消/预算保持。三面文档门先收敛；固定 System Draft `dafbc66c9ab5e55b556dbd1dd71c79cef354f69c` /4.0.0 原始 artifact `c7cda9d09db266cd26dc1b80dfe9bb95c3c9f6a91bdbd6c5d7de4f85295d1dc6` 和 provenance `37e338939ebecc4a61cf7aff4d14c2e28b5bc34381e66324a2009988e793d2d0`，正规生成16文件，退休System3当前vendor。无新写操作、mapper、兼容union/fallback；原严格窄client直接消费新生成schema。
+
+先保留旧生成物红测12PASS/5FAIL，证明新快照被旧System3消费拒绝；正规生成后增独有HTTP正负例及Public20精确逆证，最终focused四套90PASS/0SKIP。首次完整contract848PASS/1FAIL及default1496PASS/1FAIL/3原资源SKIP仅暴露现行Skills版本断言19未升20；只改该期望，原字段/历史proof/负控不变。最终代码停写后 Node22.22.2/pnpm11.25.0 七门 format:check、lint、typecheck、contract:check、test:architecture、test、build 均 exit0：contract849PASS/0SKIP、architecture36PASS、default1497PASS/0FAIL/3原资源SKIP；System生成双次byte-identical漂移门随contract通过。只读独审无确定P0–P2，原Public19与两父全文/有序inventory保持。
+
+canonical SQL、lockfile、其他owner pins、操作inventory与原双父proof无diff。三个SKIP仍是原schema/catalog资源用例；本批未运行真实PostgreSQL/Redis、System业务owner HTTP、App/Admin整链或正常激活，不把受控owner wire称真实整链。Root后继负责固定App/Admin、System旧行盘点/处置与受管资源配对；本writer未改正常资源、未提交/推送或合并，模型、实际工具与扣费继续暂停。基线 `5dc86e4c77ea7fa85ca0495e4c430d2a50c67c65`；完整失败/最终门收据与受影响文件冻结清单由Root ignored `var/dev/system-management-20261020/bff-*` 保存。
+
 ## 2026-10-20 保留项目执行绑定 producer 定向集成（源码已验，正常执行未激活）
 
 基线 dfc3d59，定向承接既有 d623f76/16da6f0 的 internal1、canonical project/outbox schema3、Move 永久退役及原真实 chat-facts 回归；保留当前 Public19/165、Agent7104f3d/HTTP7 和全部其他 owner pins。Scheduler 的 saved launch/helper/delivery 原字节保持；Chat 不再从 trace 推导执行 authority，独立列与 schema3 的 canonical project 必须一致。internal1 正规生成 SHA256 7d6962602d34576ae227ad19a2da3d3647d01f8741abdc3ff3080e7539eebea4，与 IAM 已固定原发行物相同。

@@ -1,3 +1,7 @@
+## 2026-10-20 System4 管理配对当前入口
+
+Public20/165 的唯一wire增量在 `AdminModelRevision`；原 `src/infrastructure/clients/owner/system-model-routing.ts` 严格消费正规 `src/generated/system-http`，仍现四操作，无额外mapper。固定System4 owner artifact/provenance见 `contract/dependencies/system-http.json`；`scripts/system-model-connection-public-contract.mjs` 只做完整Public19逆证，原历史proof不变且不进入runtime。正负例留原 `test/model-routing-admin.test.ts` 与 `test/system-http-contract.test.mjs`；验收及正常未激活边界见 `docs/CURRENT.md`。下列切片按历史读取。
+
 ## MCP 当前可用性消费
 
 原 `mcp-personal-response.ts` 负责严格enum→五态及Connector投影；原 `mcp-personal-server-response.ts` 复用同一投影并保完整安全header描述。原两个Platform生成器固定同一个已合4a4e4c4 /HTTP6.2发布物，测试仍在原MCP suites内承接，无新模块/持久事实。

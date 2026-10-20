@@ -1,3 +1,7 @@
+## 2026-10-20 System4 管理消费者候选
+
+当前源码唯一公开契约 Public20.0.0 /165 operations：管理员修订只读表示使用 System4 的 `request_model` 与 closed `connection`，旧 transport/gateway 字段退休。仍只消费标签、修订、路由列表和路由 PUT 四操作；固定来源/生成见 `contract/dependencies/system-http.json`。其他 owner pins、canonical SQL 与执行暂停保持。实际门禁与未激活边界见 `docs/CURRENT.md`，下方旧版本段按历史读取。
+
 ## 2026-10-19 MCP availability 消费者候选
 
 修既有跨仓版本不配对，不新增功能模块。Platform固定已合入4a4e4c4/HTTP6.2，原HTTP/Connect生成链产物固定摘要；Connector/Server按owner五态独立投影当前可用性，不由status/enabled猜测，不兼容旧缺字段或跳过unknown。Public19/165、SQL、权限与独立错误profile保持。

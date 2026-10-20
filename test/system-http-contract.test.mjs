@@ -2,20 +2,35 @@ import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
+import { load } from "js-yaml"
+import { inspectSystemModelConnectionContract, restorePublic19SystemModelConnectionContract } from "../scripts/system-model-connection-public-contract.mjs"
 
 const root = new URL("../", import.meta.url)
-const commit = "955bd587f46a771e43a4330d202d90a7d2d67262"
-const digest = "94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059"
+const commit = "dafbc66c9ab5e55b556dbd1dd71c79cef354f69c"
+const digest = "c7cda9d09db266cd26dc1b80dfe9bb95c3c9f6a91bdbd6c5d7de4f85295d1dc6"
 
-test("System HTTP 3.0 model-routing client pins reviewed owner bytes and four operations", async () => {
+test("System HTTP 4.0 model-routing client pins reviewed owner bytes and four operations", async () => {
   const manifest = JSON.parse(await readFile(new URL("contract/dependencies/system-http.json", root), "utf8"))
   const source = await readFile(new URL(`contract/vendor/kokoro-system/${commit}/system.openapi.json`, root))
   const api = JSON.parse(source)
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-system")
   assert.equal(manifest.owner.repository_commit, commit)
-  assert.equal(manifest.owner.contract_version, "3.0.0")
+  assert.equal(manifest.owner.contract_version, "4.0.0")
   assert.equal(manifest.owner.contract_sha256, digest)
+  assert.equal(manifest.owner.provenance_path, "contract/provenance.json")
+  const provenance = await readFile(new URL(`contract/vendor/kokoro-system/${commit}/provenance.json`, root))
+  assert.equal(manifest.owner.provenance_sha256, "37e338939ebecc4a61cf7aff4d14c2e28b5bc34381e66324a2009988e793d2d0")
+  assert.equal(createHash("sha256").update(provenance).digest("hex"), manifest.owner.provenance_sha256)
+  const published = JSON.parse(provenance)
+  assert.equal(published.openapi.sha256, digest)
+  assert.equal(published.releaseClassification.contractVersion, "4.0.0")
+  assert.deepEqual(Object.keys(await import("../dist/generated/system-http/sdk.gen.js")).sort(), [
+    "listModelLabel",
+    "listModelRevision",
+    "listRoutingPolicy",
+    "putRoutingPolicy",
+  ])
   assert.equal(createHash("sha256").update(source).digest("hex"), digest)
   assert.deepEqual(
     [
@@ -46,4 +61,37 @@ test("System generated validators reject unknown owner fields at every reviewed 
   assert.equal(zPutRoutingPolicyResponse.safeParse({ data: routing }).success, true)
   assert.equal(zPutRoutingPolicyResponse.safeParse({ data: { ...routing, extra: "secret" } }).success, false)
   assert.equal(zPutRoutingPolicyResponse.safeParse({ data: routing, extra: "secret" }).success, false)
+})
+
+test("Public20 changes only the System4 revision connection representation over the complete Public19 contract", async () => {
+  const source = await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8")
+  const baseline = JSON.parse(await readFile(new URL("contract/tests/v1-operations.json", root), "utf8")).operations
+  const api = JSON.parse(await readFile(new URL(`contract/vendor/kokoro-system/${commit}/system.openapi.json`, root), "utf8"))
+  const publicApi = load(source)
+  assert.equal(publicApi.info.version, "20.0.0")
+  assert.equal(baseline.length, 165)
+  const row = publicApi.components.schemas.AdminModelRevision
+  const ref = api.paths["/v1/system/model-catalog/revisions"].get.responses["200"].content["application/json"].schema.$ref.split("/").at(-1)
+  const ownerRow = api.components.schemas[ref].properties.data.properties.items.items
+  assert.deepEqual(row.properties.connection, ownerRow.properties.connection)
+  assert.deepEqual(row.properties.request_model, ownerRow.properties.request_model)
+  assert.deepEqual([...row.required].sort(), [...ownerRow.required].sort())
+  assert.equal(row.properties.transport, undefined)
+  assert.equal(row.properties.gateway_model_name, undefined)
+  assert.deepEqual(inspectSystemModelConnectionContract(source, baseline), [])
+  const parent = restorePublic19SystemModelConnectionContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "955412b680bf7a2529c4c35f553ff272d7361769ea95bb441ba820b552ffc564")
+  for (const changed of [
+    source.replace("  version: 20.0.0", "  version: 19.0.0"),
+    source.replace("enum: [direct, litellm]", "enum: [litellm]"),
+    source.replace("        - request_model\n", "        - gateway_model_name\n"),
+    source.replace("const: openai_chat_completions", "const: unknown_protocol"),
+    source.replace("additionalProperties: false", "additionalProperties: true"),
+    source + "\n",
+  ]) {
+    assert.notEqual(changed, source)
+    assert.ok(inspectSystemModelConnectionContract(changed, baseline).length > 0)
+  }
+  for (const changed of [baseline.slice(1), [...baseline].reverse(), [...baseline, baseline[0]]])
+    assert.ok(inspectSystemModelConnectionContract(source, changed).length > 0)
 })

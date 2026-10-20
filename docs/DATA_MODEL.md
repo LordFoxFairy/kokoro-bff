@@ -1,3 +1,9 @@
+## 2026-10-20 System4 管理配对：本 owner 数据模型不变
+
+模型标签、immutable revision/connection 快照、路由策略和相关幂等/CAS事实仍只由 System 拥有。BFF Public20 仅将原管理员 revision 读表示换为 `request_model` 与 System4 的 closed `connection`，不落库、不缓存或推导连接、不解析密钥引用。`database/schema.sql`、BFF 回执与全部现有持久事实保持字节不变；本任务没有安装、迁移或正常数据写入。
+
+旧 System 修订若非空须由 owner/Root 先盘点并批准处置，不猜 base URL、secret 引用或重算旧 digest；BFF 无历史数据修复责任。正常资源/消费者配对与实际模型执行独立验收，后者仍暂停。
+
 ## 2026-10-20 既定项目执行事实收口（fresh schema，未激活）
 
 仅扩原 bff_agent_dispatch_outbox：execution_project_ref TEXT nullable（NULL 明确 direct），execution_context_retired_at TIMESTAMPTZ(3) nullable（首次跨 canonical scope Move 置位、不复活）。Chat 同事务写独立 canonical project；payload schema3 的必需 nullable project_ref 必须等独立列，reader/claim/delivery 交叉核验，refs 仍由 Message 原有序事实拥有。无新表、FK、ACL 或跨 owner SQL；不从旧 trace 回填 authority、不重写历史 Run/admission/receipt。canonical fresh schema 及隔离真实资源验证与正常既有数据处置分开，正常 DDL/配置/服务未授权执行。

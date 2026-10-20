@@ -1,3 +1,9 @@
+## 2026-10-20 Public20.0.0 / System4 配对门（隔离候选）
+
+唯一公开事实源 `contract/openapi/v1/openapi.yaml` 升至 20.0.0，165 operations 和四个管理员模型操作不增减。`AdminModelRevision` 必需 `request_model`（1..255）及 closed `connection`：固定协议 `openai_chat_completions`、类型 `direct|litellm`、受界 HTTP(S) `base_url`（1..2048）与 `secret_handle_ref`（1..255，仅引用）。旧 `transport`/`gateway_model_name` 不再接受或返回；不以 union/fallback 兼容 System3。标签、路由列表与 PUT key/CAS/错误形状保持。
+
+System owner 4.0.0 固定 commit `dafbc66c9ab5e55b556dbd1dd71c79cef354f69c`、artifact/provenance digest，由现窄生成链记录；公开 major 的精确逆证恢复完整 Public19 再执行原历史检查，不是运行时兼容器。App/Admin 必须固定同一 Public20 产物后再切换。没有 provider/revision 管理写 API、secret 值、执行许可或正常激活承诺。
+
 ## 2026-10-20 既定项目执行 internal1 producer 收口（未激活）
 
 唯一 code-first 源 src/http/project-execution-binding.contract.ts 正规生成 contract/openapi/internal/v1/openapi.yaml／1.0.0；精确 POST /internal/v1/project-execution-bindings/verify，IAM 专用文件凭据、闭集输入与 no-store 成功/错误。成功仅返回匹配的 project_ref、原有序 selected_skill_source_refs 与 selection_digest；未知、错身份、资源不可见、已退役和期限失败均闭锁，不转成 Web admission 或执行许可。保留 Public19/165 operations、HTTP7 与全部现有错误/权限边界。IAM 已固定 d623f76/internal1；本次只补既定 producer，不新增 public 字段、fallback 或收费执行入口。

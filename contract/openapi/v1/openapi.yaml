@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 19.0.0
+  version: 20.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -20166,8 +20166,8 @@ components:
         - feature_key
         - input_modalities
         - output_modalities
-        - transport
-        - gateway_model_name
+        - request_model
+        - connection
         - context_window
         - max_output_tokens
         - priority
@@ -20225,13 +20225,31 @@ components:
               - image
               - audio
               - video
-        transport:
-          type: string
-          const: litellm
-        gateway_model_name:
+        request_model:
           type: string
           minLength: 1
           maxLength: 255
+        connection:
+          type: object
+          additionalProperties: false
+          required: [protocol, connection_type, base_url, secret_handle_ref]
+          properties:
+            protocol:
+              type: string
+              const: openai_chat_completions
+            connection_type:
+              type: string
+              enum: [direct, litellm]
+            base_url:
+              type: string
+              minLength: 1
+              maxLength: 2048
+              pattern: '^https?:\/\/[^\s\\?#]+$'
+            secret_handle_ref:
+              type: string
+              minLength: 1
+              maxLength: 255
+              pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]*$'
         context_window:
           type:
             - integer
