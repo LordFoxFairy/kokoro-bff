@@ -92,6 +92,10 @@ BFF 继续拥有 ScheduledTask 规则；Scheduler 继续拥有 occurrence/next_d
 
 Public16.2 只增加当前读表示和两处 GET schema绑定，完整逆回16.1保护其他surface。消费者固定producer后分别解码读表示/写ACK，再接星期编辑器；正常激活、monthly/once和持续next投影仍待完成。本片不启用正常任务、模型或扣费。
 
+## 本地知识与缺失释放队列表定向新增（2026-10-18）
+
+依 [ADR-004](ADR/ADR-004-local-personal-knowledge-addition.md) 及用户补表确认，仅从 canonical 提取知识两表/列表索引和缺失 release outbox/claim 索引，合计五DDL；采用私有一次具名操作，不新增产品CLI、迁移框架或历史链。先owner一致备份、隔离恢复与fresh三表catalog对照，再同owner锁/同事务新增。全部旧BFF表catalog/数据摘要不变才接Web验收，部分或漂移拒绝；保留旧deletion字段及两旧辅助表、执行前核无旧命令，不做项目旧模型迁移。原fresh installer不变，正常执行前后不启模型/Agent/扣费。
+
 ## 本人知识 CRUD 与使用偏好（2026-10-18，实施门）
 
 沿既定本人产品偏好 owner：BFF 唯一保存本人知识；不借 Agent tenant memory，不新增服务/网关/模型/向量/队列。Manus 已观察名称500、使用时机500、内容2000及上限100；本片按相同上限实现。当前参考账号开关关闭不证明默认；Kokoro明确默认false，保存开关不宣称Agent已消费。

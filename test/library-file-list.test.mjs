@@ -23,6 +23,7 @@ test("Library requires explicit file or artifact kind and bounded single-valued 
     type: "documents",
   })
   assert.equal(libraryFileListInput(new URLSearchParams({ kind: "artifact", q: "😀".repeat(200) })).query.length, 400)
+  assert.equal(libraryFileListInput(new URLSearchParams({ kind: "artifact", q: "İ".repeat(200) })).query, "i\u0307".repeat(200))
   const { libraryArtifactType } = await import("../dist/application/library-artifact-filter.js")
   for (const [mime, title, type] of [
     ["application/vnd.presentation", "x", "slides"],
