@@ -56,6 +56,10 @@ canonical以weekdays SMALLINT[]、month_days SMALLINT[]、local_date DATE和run_
 
 本片复用 bff_scheduled_task.recurrence_anchor_at 非空 UTC instant 和现有 repository 内部 Date，当前读取 mapper 返回相同值；写回执保持原 JSON 快照，不改 canonical schema、既有行/回执、next_run_at 投影或 Scheduler 存储。响应字段增加不构成正常数据库演进授权。
 
+## 正常本地知识与空释放队列新增（2026-10-18）
+
+依ADR-004及用户补表确认，只新增知识/usage两表、列表索引，以及缺失的bff_project_scope_release_outbox和claim索引；全部字段/约束来自canonical。旧deletion表字段和两旧辅助表保持，不复制或改写旧命令；执行前核旧辅助表零行，发现数据则停止。本次为三表都缺失的五条CREATE，先备份/隔离恢复演练、同事务新增及旧catalog/数据复核，再重载验收。无新migration ledger、自动down、跨owner SQL或角色/资金变化；未验前不称正常库已安装或项目删除链完成。
+
 ## 本人知识（2026-10-18，canonical fresh候选）
 
 BFF同owner schema新增bff_personal_knowledge（tenant_id/owner_id/knowledge_id复合PK，三正文、正安全revision、UTC created/updated/deleted_at）与bff_personal_knowledge_usage（本人scope PK、enabled、正安全revision/updated_at）。不加FK、跨owner JOIN或模型记忆表。列表仅deleted_at IS NULL，scope索引按created_at DESC/knowledge_id ASC；最大100由同scope advisory xact lock下count+insert保证，数据库约束正文上限与active非空白。

@@ -46,6 +46,10 @@ Schema只在原BFF canonical叠加main既有归档列/索引；项目/日历/知
 
 工程门在独占候选运行，不覆盖正常dist；其他mixed知识文档/ADR、资料库Unicode断言保持不纳入本片提交。原始材料只在Root ignored var/dev/bff-mcp-package-20261018。后继仍须公开五操作/当前人类管理员准入、同源Admin页面、Runtime stdio不可变材料与Agent受控整链及产品手册；完整goal仍OPEN。正常服务/库/账号/权限/积分/任务开关、模型/实际工具/扣费/CI/远端及Root index/gitlink未动。
 
+## 2026-10-18 Public18 正常加载与资料库页面配对
+
+用户授权后仅重载BFF加载已提交8a0a800/Public18，原进程退出、新进程ready200，沿既有配置且Agent disabled。正常App正式q/type查询200，刷新保登录；当前Artifact关系零行，因此正常只验证权威空结果，不冒真实Storage非空读取。BFF/Scheduler所有事实摘要前后相同，两任务paused、occurrence/dispatch零；未改库、账号、权限、积分或任务开关。完整细节见Root现计划和ignored var/dev/library-normal18-20261018；App默认回归曾有Next进程失联，另做进程证据对照，不因后端已加载称整个目标或合并完成。模型、实际工具、扣费、CI和远端仍暂停。
+
 ## 2026-10-18 Public18 Artifact 服务端筛选候选（未加载正常环境）
 
 沿 a577625 同需求分支，新增 artifact-only q/type：在既有 BFF 授权关系候选窗口内，通过 Storage 固定 v3 FINAL 读取后的 title/filename/MIME 匹配，不用未验证 source claims、不新建 metadata 副本/索引/worker。原 min(500,limit*5)/30秒预算保持，游标记录最后扫描而非最后命中位置；空items+next可继续，只有next=null是穷尽，不宣称索引/相关性搜索。file严格拒绝新参数。单一art2将规范化查询、type、kind、tenant、subject、limit和keyset一并绑定；Public18明确退休旧Artifact游标，无旧版本fallback或路径alias。
@@ -121,6 +125,14 @@ R280 已定位为测试观察竞态，而非改写 Project 生产取消流程：
 固定SDK→独占fresh PG/源码Scheduler真实HTTP通过：current读取、tenant404隔离、错误服务凭据401、暂停once跨due后原ACK精确重放；1定义/1receipt/0occurrence/0dispatch。自有进程退出0且临时库已删除，不冒实际MCP/模型执行。独审P2关闭；完整BFF资源integration未运行，此前组合缺口不变。
 
 本片Public16.2/SQL/任务模型/outbox3不变，未在30s lease链盲加GET，未改正常库/重载正常服务或启任务。多星期/月内多日期/一次性本地日期、持续next投影、App配对与Agent定时MCP管理/可信执行仍待后继；模型、工具执行、扣费、CI及远端PR继续暂停。
+
+## 2026-10-18 正常知识与释放队列表已激活
+
+依ADR-004与本地操作授权，先独立备份BFF schema并实际恢复演练，再一次事务新增三张缺表和两个canonical显式索引。正常目标catalog匹配fresh，原29张表catalog与数据摘要在DDL后不变；旧deletion模型/辅助表保持，未把空释放队列称项目删除链已闭合。演练库已清理，备份0600私有保留，不运行非空fresh installer或通用迁移链。
+
+正常源码重载至1dbfd826，App配对Public16.2；Scheduler按另行授权的现有配置重载，两个已登记任务与BFF任务均仍暂停，无待派发/occurrence，BFF Agent执行关闭。正常用户知识页面实际新增201、精确读200、编辑200、确认后删除204及读404；使用偏好保存/刷新验证后恢复false。只读复核QA三正文已清空、有效样本0、空释放队列0；没有模型/实际工具请求、扣费或账号权限更改。
+
+源码1dbfd826原完整门证据不变，本片新增的是运行/数据/浏览器证据，不以readiness代替业务通过。记忆导入、Agent消费、周期余项及其他模块仍未闭合；重载后另见System/models/billing summary读取503，未计为通过。远端PR/CI继续暂停，Root未更新gitlink。
 
 ## 2026-10-18 自动化权威锚点当前读取（本地候选，未正常激活）
 
