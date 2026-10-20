@@ -1,0 +1,68 @@
+import { readFile, writeFile, mkdir } from "node:fs/promises"
+import { dirname } from "node:path"
+import { fileURLToPath } from "node:url"
+import { createHash } from "node:crypto"
+import { dump } from "js-yaml"
+import { z } from "zod"
+import {
+  projectExecutionBindingRequest,
+  projectExecutionBindingResponse,
+  projectExecutionBindingError,
+} from "../src/http/project-execution-binding.contract.ts"
+const json = (schema) => z.toJSONSchema(schema, { target: "draft-2020-12" })
+const content = (schema) => ({ "application/json": { schema } })
+const response = (description, schema) => ({ description, headers: { "x-request-id": { schema: { type: "string" } } }, content: content(schema) })
+const doc = {
+  openapi: "3.1.0",
+  info: { title: "Kokoro BFF internal project execution binding", version: "1.0.0" },
+  paths: {
+    "/internal/v1/project-execution-bindings/verify": {
+      post: {
+        operationId: "verifyProjectExecutionBinding",
+        summary: "Read current BFF-owned execution intent; not an execution permit",
+        "x-kokoro-owner": "kokoro-bff",
+        "x-kokoro-visibility": "internal",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only-no-receipt",
+        "x-kokoro-permission": "iam.project_execution_binding",
+        security: [{ IamBindingReaderBearer: [] }],
+        requestBody: { required: true, content: content({ $ref: "#/components/schemas/ProjectExecutionBindingRequest" }) },
+        responses: Object.fromEntries(
+          [
+            [200, "Current exact binding"],
+            [400, "Invalid closed request"],
+            [403, "Dedicated service or tenant denied"],
+            [404, "Binding is not current or not visible"],
+            [503, "Dependency, credential or deadline unavailable"],
+          ].map(([code, description]) => [
+            code,
+            response(description, {
+              $ref: code === 200 ? "#/components/schemas/ProjectExecutionBindingResponse" : "#/components/schemas/ProjectExecutionBindingError",
+            }),
+          ]),
+        ),
+      },
+    },
+  },
+  components: {
+    securitySchemes: {
+      IamBindingReaderBearer: {
+        type: "http",
+        scheme: "bearer",
+        description: "Fresh receiver-owned secret file: fixed kokoro-iam/project_execution_binding/tenant; never a Web or user token",
+      },
+    },
+    schemas: {
+      ProjectExecutionBindingRequest: json(projectExecutionBindingRequest),
+      ProjectExecutionBindingResponse: json(projectExecutionBindingResponse),
+      ProjectExecutionBindingError: json(projectExecutionBindingError),
+    },
+  },
+}
+const output = fileURLToPath(new URL("../contract/openapi/internal/v1/openapi.yaml", import.meta.url))
+const body = "# Generated from src/http/project-execution-binding.contract.ts; do not edit.\n" + dump(doc, { lineWidth: 140, noRefs: true })
+if (process.argv.includes("--write")) {
+  await mkdir(dirname(output), { recursive: true })
+  await writeFile(output, body)
+} else if ((await readFile(output, "utf8")) !== body) throw Error("BFF project execution contract drift")
+console.log(`BFF internal1.0.0 ${createHash("sha256").update(body).digest("hex")}`)

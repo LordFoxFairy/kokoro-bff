@@ -345,6 +345,7 @@ test("the repository exposes executable contract, schema, and strictness gates",
     packageJson.scripts["contract:check"].split(" && ").sort(),
     [
       "pnpm contract:check:connector-command-errors",
+      "pnpm contract:check:project-execution",
       "pnpm contract:check:agent",
       "pnpm contract:check:billing",
       "pnpm contract:check:platform-http",

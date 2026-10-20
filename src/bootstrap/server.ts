@@ -1,6 +1,7 @@
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
+import { projectExecutionBindingRoute } from "../http/routes/project-execution-binding.js"
 import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 
@@ -119,6 +120,15 @@ async function handle(
   }
   if (request.method === "GET" && (request.url === "/v1/account/shared-tasks" || request.url?.startsWith("/v1/account/shared-tasks?"))) {
     await sharedTasksRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.services.chat, id)
+    return
+  }
+  if ((request.url ?? "").split("?", 1)[0] === "/internal/v1/project-execution-bindings/verify") {
+    await projectExecutionBindingRoute(
+      request,
+      response,
+      config.projectExecutionCredentialFile ?? null,
+      composition.businessStore?.projectExecutionBindings ?? null,
+    )
     return
   }
   const rawPathname = new URL(request.url || "/", "http://bff.local").pathname

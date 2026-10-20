@@ -1,3 +1,7 @@
+## 2026-10-20 项目执行绑定 internal1 收口
+
+`src/http/project-execution-binding.contract.ts` 是 internal1 唯一 code-first 源，`pnpm contract:generate:project-execution` 生成只读 `contract/openapi/internal/v1/openapi.yaml`，check 已登记正式契约门。IAM 已固定 d623f76 的 1.0.0 原字节；本次承接同一 producer，Public19、HTTP7 及其他当前 owner pins 保持，不改 System3 消费者或正常运行资源。
+
 ## 2026-10-19 既有分支集成：唯一 Public19.0.0（候选）
 
 本次只合并本地 d8634f0 与 main 16e5c711 已批准能力，不新增功能。唯一当前 /v1 契约165操作：保本地 Skills取得来源、项目精确选择/消息默认冻结、知识、完整日历与Library筛选、五项MCP包管理；承接main八项账号会话/姓名、共享/归档操作与Team完整platform/skill权限。旧名称关联PATCH及recurrence_anchor_at请求字段保持退休，不建alias或runtime fallback。两父原文/有序inventory通过本次明确增量的精确逆证保留，既有历史hash与断言不重签；全部后端入口、owner准入/取消/事务/幂等和历史回执保持。

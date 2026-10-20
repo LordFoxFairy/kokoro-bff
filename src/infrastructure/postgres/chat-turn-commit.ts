@@ -398,8 +398,8 @@ export async function commitChatTurn(
       const outbox = await query(
         `INSERT INTO bff_agent_dispatch_outbox
           (outbox_id,tenant_id,conversation_id,conversation_dispatch_seq,subject_id,actor_id,request_id,idempotency_key,request_digest,
-           run_id,user_message_id,assistant_message_id,identity_assertion_ref,payload,status,attempt_count,available_at,fence)
-         VALUES ($1,$2,$3,$4::bigint,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,'pending',0,CURRENT_TIMESTAMP(3),0)`,
+           run_id,user_message_id,assistant_message_id,identity_assertion_ref,payload,execution_project_ref,status,attempt_count,available_at,fence)
+         VALUES ($1,$2,$3,$4::bigint,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,'pending',0,CURRENT_TIMESTAMP(3),0)`,
         [
           command.outboxId,
           command.tenantId,
@@ -415,6 +415,7 @@ export async function commitChatTurn(
           command.assistantMessageId,
           command.identityAssertionRef,
           JSON.stringify(payload),
+          scope.canonicalProjectId,
         ],
       )
       if (outbox.rowCount !== 1) throw new Error("AGENT_DISPATCH_INSERT_FAILED")

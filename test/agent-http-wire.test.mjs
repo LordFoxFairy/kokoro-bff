@@ -373,9 +373,12 @@ describe("Agent HTTP7 frozen BFF project projection", () => {
       ]) {
         for (const project of [undefined, "project_frozen_original"]) {
           const launch = saved(source, project)
-          const payload = delivery === chat ? { schema_version: 2, launch } : launch
+          if (delivery === chat) launch.project_ref = project ?? null
+          const payload = delivery === chat ? { schema_version: 3, launch } : launch
           const before = JSON.stringify(payload)
-          assert.deepEqual(await delivery.deliver(command(payload), 2000), { outcome: "admitted" })
+          assert.deepEqual(await delivery.deliver({ ...command(payload), ...(delivery === chat ? { executionProjectRef: project ?? null } : {}) }, 2000), {
+            outcome: "admitted",
+          })
           const wire = received.at(-1)
           assert.equal(wire.body.project_ref, project ?? null)
           assert.equal(wire.key, "same-command")
@@ -404,7 +407,26 @@ describe("Agent HTTP7 frozen BFF project projection", () => {
           assert.deepEqual(await delivery.deliver(command(payload), 2000), { outcome: "not_admitted", errorCode: "agent_launch_invalid" })
         }
       }
+      const canonical = { ...saved("kokoro-bff", "observational-project"), project_ref: "project_canonical" }
+      for (const payload of [
+        { schema_version: 2, launch: canonical },
+        { schema_version: 3, launch: { ...canonical, project_ref: "different-canonical" } },
+        { schema_version: 3, launch: { ...canonical, project_ref: null } },
+        { schema_version: 3, launch: { ...canonical, project_ref: undefined } },
+      ])
+        assert.deepEqual(await chat.deliver({ ...command(payload), executionProjectRef: "project_canonical" }, 2000), {
+          outcome: "not_admitted",
+          errorCode: "agent_launch_invalid",
+        })
       assert.equal(received.length, 0)
+    })
+  })
+  it("uses only the durable canonical Chat scope, never an observation trace", async () => {
+    await peer(async (received, chat) => {
+      const payload = { schema_version: 3, launch: { ...saved("kokoro-bff", "observation_not_authority"), project_ref: "project_canonical" } }
+      assert.deepEqual(await chat.deliver({ ...command(payload), executionProjectRef: "project_canonical" }, 2000), { outcome: "admitted" })
+      assert.equal(received[0].body.project_ref, "project_canonical")
+      assert.equal(received[0].body.trace.project_ref, "observation_not_authority")
     })
   })
 })
