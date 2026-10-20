@@ -4,6 +4,108 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
+export type SchemaBa3507Ae328Db686 = {
+  data: {
+    items: Array<{
+      global_feature_key: string
+      product_id: string
+      display_name: string
+      result_contract: {
+        schema_version: 1
+        outcome_kind: "message" | "artifact" | "structured"
+        media_types: Array<string>
+        required_fields: Array<string>
+      }
+      id: string
+      version: string
+      created_at: string
+      retired_at: string | null
+    }>
+    next_cursor: string | null
+  }
+}
+
+export type SchemaEd7558B2071C00E9 = {
+  data: {
+    items: Array<{
+      model_key: string
+      display_name: string
+      id: string
+      version: string
+      created_at: string
+      updated_at: string
+      deleted_at: string | null
+    }>
+    next_cursor: string | null
+  }
+}
+
+export type SchemaEd69C8D357Ecc734 = {
+  data: {
+    model_key: string
+    display_name: string
+    id: string
+    version: string
+    created_at: string
+    updated_at: string
+    deleted_at: string | null
+  }
+}
+
+export type Schema424841Afb7389D7f = {
+  model_key: string
+  display_name: string
+}
+
+export type Schema718C194A16B98Db8 = {
+  data: {
+    items: Array<{
+      protocol: "openai_chat_completions"
+      connection_type: "direct" | "litellm"
+      base_url: string
+      secret_handle_ref: string
+      provider: string
+      provider_key: string
+      display_name: string
+      priority: number
+      id: string
+      version: string
+      created_at: string
+      updated_at: string
+      deleted_at: string | null
+    }>
+    next_cursor: string | null
+  }
+}
+
+export type SchemaC9F085Ca41391022 = {
+  data: {
+    protocol: "openai_chat_completions"
+    connection_type: "direct" | "litellm"
+    base_url: string
+    secret_handle_ref: string
+    provider: string
+    provider_key: string
+    display_name: string
+    priority: number
+    id: string
+    version: string
+    created_at: string
+    updated_at: string
+    deleted_at: string | null
+  }
+}
+
+export type SchemaC6886F00771523Fc = {
+  protocol: "openai_chat_completions"
+  connection_type?: "direct" | "litellm"
+  base_url: string
+  provider: string
+  provider_key: string
+  display_name: string
+  priority: number
+}
+
 export type SchemaFae624Eabf7E35F4 = {
   data: {
     items: Array<{
@@ -19,6 +121,32 @@ export type SchemaFae624Eabf7E35F4 = {
     }>
     next_cursor: string | null
   }
+}
+
+export type Schema2F56A90Eba2Ac4Da = {
+  data: {
+    label_key: string
+    display_name: string | null
+    feature_key: string
+    default_revision_id: string | null
+    id: string
+    version: string
+    created_at: string
+    updated_at: string
+    deleted_at: string | null
+  }
+}
+
+export type SchemaF1C13Ea562A8F359 = {
+  label_key: string
+  display_name?: string | null
+  feature_key: string
+  default_revision_id: string | null
+}
+
+export type Schema669423387748Cc79 = {
+  display_name?: string | null
+  default_revision_id?: string | null
 }
 
 export type Schema85Af568018D2C865 = {
@@ -51,6 +179,49 @@ export type Schema85Af568018D2C865 = {
     }>
     next_cursor: string | null
   }
+}
+
+export type SchemaEdc460D150C8281c = {
+  data: {
+    model_id: string
+    provider_id: string
+    revision: number
+    provider_model_name: string
+    display_name: string
+    input_modalities: Array<"text" | "image" | "audio" | "video">
+    output_modalities: Array<"text" | "image" | "audio" | "video">
+    request_model: string
+    context_window: number | null
+    max_output_tokens: number | null
+    priority: number
+    connection: {
+      protocol: "openai_chat_completions"
+      connection_type: "direct" | "litellm"
+      base_url: string
+      secret_handle_ref: string
+    }
+    id: string
+    version: string
+    digest: string
+    published_at: string | null
+    retired_at: string | null
+    created_at: string
+    updated_at: string
+  }
+}
+
+export type Schema74A01A81A2A27C05 = {
+  model_id: string
+  provider_id: string
+  revision: number
+  provider_model_name: string
+  display_name: string
+  input_modalities: Array<"text" | "image" | "audio" | "video">
+  output_modalities: Array<"text" | "image" | "audio" | "video">
+  request_model: string
+  context_window: number | null
+  max_output_tokens: number | null
+  priority: number
 }
 
 export type SchemaC20E470A1Fcfd743 = {
@@ -112,10 +283,405 @@ export type SchemaA98F91Be72Cce9D2 = {
   }
 }
 
+export type Schema37A3E49C0A766261 = {
+  data: {
+    provider_id: string
+    credential_status: "stored" | "erased"
+    deleted_at: string | null
+  }
+}
+
+export type SchemaC6886F00771523FcWritable = {
+  protocol: "openai_chat_completions"
+  connection_type?: "direct" | "litellm"
+  base_url: string
+  provider: string
+  provider_key: string
+  display_name: string
+  priority: number
+  api_key: string
+}
+
+export type ListFeatureData = {
+  body?: never
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
+    "x-kokoro-tenant-id": string
+    "x-kokoro-actor-id"?: string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+  }
+  path?: never
+  query?: {
+    cursor?: string
+    limit?: string
+  }
+  url: "/v1/system/features"
+}
+
+export type ListFeatureErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type ListFeatureError = ListFeatureErrors[keyof ListFeatureErrors]
+
+export type ListFeatureResponses = {
+  /**
+   * Success
+   */
+  200: SchemaBa3507Ae328Db686
+}
+
+export type ListFeatureResponse = ListFeatureResponses[keyof ListFeatureResponses]
+
+export type ListModelDefinitionData = {
+  body?: never
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
+    "x-kokoro-tenant-id": string
+    "x-kokoro-actor-id"?: string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+  }
+  path?: never
+  query?: {
+    cursor?: string
+    limit?: string
+  }
+  url: "/v1/system/model-catalog/definitions"
+}
+
+export type ListModelDefinitionErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type ListModelDefinitionError = ListModelDefinitionErrors[keyof ListModelDefinitionErrors]
+
+export type ListModelDefinitionResponses = {
+  /**
+   * Success
+   */
+  200: SchemaEd7558B2071C00E9
+}
+
+export type ListModelDefinitionResponse = ListModelDefinitionResponses[keyof ListModelDefinitionResponses]
+
+export type CreateModelDefinitionData = {
+  body: Schema424841Afb7389D7f
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
+    "x-kokoro-tenant-id"?: string
+    "x-kokoro-actor-id": string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+    "Idempotency-Key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/system/model-catalog/definitions"
+}
+
+export type CreateModelDefinitionErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  409: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type CreateModelDefinitionError = CreateModelDefinitionErrors[keyof CreateModelDefinitionErrors]
+
+export type CreateModelDefinitionResponses = {
+  /**
+   * Success
+   */
+  201: SchemaEd69C8D357Ecc734
+}
+
+export type CreateModelDefinitionResponse = CreateModelDefinitionResponses[keyof CreateModelDefinitionResponses]
+
+export type ListModelProviderData = {
+  body?: never
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
+    "x-kokoro-tenant-id": string
+    "x-kokoro-actor-id"?: string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+  }
+  path?: never
+  query?: {
+    cursor?: string
+    limit?: string
+  }
+  url: "/v1/system/model-catalog/providers"
+}
+
+export type ListModelProviderErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type ListModelProviderError = ListModelProviderErrors[keyof ListModelProviderErrors]
+
+export type ListModelProviderResponses = {
+  /**
+   * Success
+   */
+  200: Schema718C194A16B98Db8
+}
+
+export type ListModelProviderResponse = ListModelProviderResponses[keyof ListModelProviderResponses]
+
+export type CreateModelProviderData = {
+  body: SchemaC6886F00771523FcWritable
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
+    "x-kokoro-tenant-id": string
+    "x-kokoro-actor-id": string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+    "Idempotency-Key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/system/model-catalog/providers"
+}
+
+export type CreateModelProviderErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  409: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type CreateModelProviderError = CreateModelProviderErrors[keyof CreateModelProviderErrors]
+
+export type CreateModelProviderResponses = {
+  /**
+   * Success
+   */
+  201: SchemaC9F085Ca41391022
+}
+
+export type CreateModelProviderResponse = CreateModelProviderResponses[keyof CreateModelProviderResponses]
+
 export type ListModelLabelData = {
   body?: never
   headers: {
-    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin"
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
     "x-kokoro-tenant-id": string
     "x-kokoro-actor-id"?: string
     "x-kokoro-iam-permissions": string
@@ -184,10 +750,183 @@ export type ListModelLabelResponses = {
 
 export type ListModelLabelResponse = ListModelLabelResponses[keyof ListModelLabelResponses]
 
+export type CreateModelLabelData = {
+  body: SchemaF1C13Ea562A8F359
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
+    "x-kokoro-tenant-id"?: string
+    "x-kokoro-actor-id": string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+    "Idempotency-Key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/system/model-catalog/labels"
+}
+
+export type CreateModelLabelErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  409: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type CreateModelLabelError = CreateModelLabelErrors[keyof CreateModelLabelErrors]
+
+export type CreateModelLabelResponses = {
+  /**
+   * Success
+   */
+  201: Schema2F56A90Eba2Ac4Da
+}
+
+export type CreateModelLabelResponse = CreateModelLabelResponses[keyof CreateModelLabelResponses]
+
+export type UpdateModelLabelData = {
+  body: Schema669423387748Cc79
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
+    "x-kokoro-tenant-id"?: string
+    "x-kokoro-actor-id": string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+    "Idempotency-Key": string
+    "If-Match": string
+  }
+  path: {
+    label_id: string
+  }
+  query?: never
+  url: "/v1/system/model-catalog/labels/{label_id}"
+}
+
+export type UpdateModelLabelErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  409: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  428: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type UpdateModelLabelError = UpdateModelLabelErrors[keyof UpdateModelLabelErrors]
+
+export type UpdateModelLabelResponses = {
+  /**
+   * Success
+   */
+  200: Schema2F56A90Eba2Ac4Da
+}
+
+export type UpdateModelLabelResponse = UpdateModelLabelResponses[keyof UpdateModelLabelResponses]
+
 export type ListModelRevisionData = {
   body?: never
   headers: {
-    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin"
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
     "x-kokoro-tenant-id": string
     "x-kokoro-actor-id"?: string
     "x-kokoro-iam-permissions": string
@@ -256,10 +995,183 @@ export type ListModelRevisionResponses = {
 
 export type ListModelRevisionResponse = ListModelRevisionResponses[keyof ListModelRevisionResponses]
 
+export type CreateModelRevisionData = {
+  body: Schema74A01A81A2A27C05
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
+    "x-kokoro-tenant-id"?: string
+    "x-kokoro-actor-id": string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+    "Idempotency-Key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/system/model-catalog/revisions"
+}
+
+export type CreateModelRevisionErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  409: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type CreateModelRevisionError = CreateModelRevisionErrors[keyof CreateModelRevisionErrors]
+
+export type CreateModelRevisionResponses = {
+  /**
+   * Success
+   */
+  201: SchemaEdc460D150C8281c
+}
+
+export type CreateModelRevisionResponse = CreateModelRevisionResponses[keyof CreateModelRevisionResponses]
+
+export type PublishModelRevisionData = {
+  body?: never
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
+    "x-kokoro-tenant-id"?: string
+    "x-kokoro-actor-id": string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+    "Idempotency-Key": string
+    "If-Match": string
+  }
+  path: {
+    revision_id: string
+  }
+  query?: never
+  url: "/v1/system/model-catalog/revisions/{revision_id}/publish"
+}
+
+export type PublishModelRevisionErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  409: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  428: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type PublishModelRevisionError = PublishModelRevisionErrors[keyof PublishModelRevisionErrors]
+
+export type PublishModelRevisionResponses = {
+  /**
+   * Success
+   */
+  200: SchemaEdc460D150C8281c
+}
+
+export type PublishModelRevisionResponse = PublishModelRevisionResponses[keyof PublishModelRevisionResponses]
+
 export type ListRoutingPolicyData = {
   body?: never
   headers: {
-    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin"
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
     "x-kokoro-tenant-id": string
     "x-kokoro-actor-id"?: string
     "x-kokoro-iam-permissions": string
@@ -331,7 +1243,7 @@ export type ListRoutingPolicyResponse = ListRoutingPolicyResponses[keyof ListRou
 export type PutRoutingPolicyData = {
   body: SchemaDd65Bb967Aa97A2c
   headers: {
-    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin"
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
     "x-kokoro-tenant-id": string
     "x-kokoro-actor-id": string
     "x-kokoro-iam-permissions": string
@@ -494,3 +1406,74 @@ export type GetModelCatalogResponses = {
 }
 
 export type GetModelCatalogResponse = GetModelCatalogResponses[keyof GetModelCatalogResponses]
+
+export type GetModelProviderCreationData = {
+  body?: never
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
+    "x-kokoro-tenant-id": string
+    "x-kokoro-actor-id": string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+  }
+  path?: never
+  query: {
+    idempotency_key: string
+  }
+  url: "/v1/system/model-catalog/provider-creations"
+}
+
+export type GetModelProviderCreationErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type GetModelProviderCreationError = GetModelProviderCreationErrors[keyof GetModelProviderCreationErrors]
+
+export type GetModelProviderCreationResponses = {
+  /**
+   * Success
+   */
+  200: Schema37A3E49C0A766261
+}
+
+export type GetModelProviderCreationResponse = GetModelProviderCreationResponses[keyof GetModelProviderCreationResponses]

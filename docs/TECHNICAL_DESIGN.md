@@ -1,3 +1,9 @@
+## MC-02 配置旅程实施门（2026-10-20，用户已批准）
+
+沿System6现模块：BFF只投影10个具名配置操作及原4管理操作。新增provider/definition/feature列表、provider只写Key创建/原主体脱敏查回、definition/revision创建/发布、label创建/别名与默认修订PATCH。原owner client共享同一有界HTTP机制；新配置client/route按实际变化职责分离，不做任意proxy。独立可选KOKORO_BFF_MODEL_MANAGEMENT_SERVICE_TOKEN仅用于model-management，未配置503，不借upstreamSecret或system-admin；普通catalog/原routing职责不变。用户仍经IAM当次platformAdmin准入，tenant/actor只来自上下文。
+
+原provider Key仅穿过内存请求到System；日志/错误/响应不回显，不在BFF落receipt。未知由owner原幂等key脱敏查询，404仍未确认。发布空正文+原CAS/key，label缺失/null保真；总预算、取消、无跳转/重试及原routing绑定继续。Public21.1 additive至175，新量做test-only完整inverse恢复21与原165inventory后走原证明，不保runtime旧wire。SQL/lockfile/其他owner pins不改；不扩自动化/连接器、删除/恢复、health、草稿修改或Agent密钥接口。正常模型/工具/扣费暂停，完成整片验收后集中PR。
+
 ## 2026-10-20 MC-02A System5 共享模型消费者设计门（隔离候选）
 
 复用 Root 当前 MC-02A：System owner 维护共享 provider/revision 与各业务 label/routing/tenant 覆盖；BFF 不复制模型配置、不取得 Key 或执行模型。固定正式 `b7fe78e25e3c569ae0e1cb9b42cddab02074ca07` /5.0.0 的 OpenAPI/provenance，沿同窄生成器保四管理操作并新增既有 catalog GET 的 `getModelCatalog`；不新增公开路径或模型转发。

@@ -1,3 +1,7 @@
+## MC-02 数据边界（2026-10-20）
+
+BFF无DDL/新表/密钥持久化，不读System SQL。System6独占密文/永久创建身份/收据/版本与发布；BFF只带当次IAM准入tenant/actor和原command key/CAS，经窄机器身份调用。敏感创建查回仅provider_id/credential_status/deleted_at，不保存Key或裸摘要。原BFF个人/项目/自动化/连接器数据均不变。
+
 ## 2026-10-20 MC-02A：消费共享配置，不新增本 owner 数据
 
 System5拥有共享provider/revision和各业务label/routing/tenant选择事实；BFF只消费该有效catalog及四管理操作。业务 name 保留稳定label key，model_id/revision_id/provider_id 为owner精确引用，不按别名/上游ID或默认修订重建事实。nullable alias与无feature共享revision只是public读表示变化，无BFF持久事实/回执/Schema变更。

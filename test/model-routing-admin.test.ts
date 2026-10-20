@@ -626,3 +626,275 @@ test("System5 direct and LiteLLM snapshots pass through unchanged while legacy a
     assert.doesNotMatch(body, /legacy\/fixture|private-owner-material|private|models\.fixture/u)
   }
 })
+
+test("administrator creates a write-only model connection and recovers its identity with a separate machine credential", async () => {
+  const provider = {
+    id: revisionId,
+    provider: "fixture",
+    provider_key: "connection-one",
+    display_name: "Shared connection",
+    protocol: "openai_chat_completions",
+    connection_type: "direct",
+    base_url: "https://models.fixture.invalid/v1",
+    secret_handle_ref: "model-key:fixture",
+    priority: 0,
+    version: "1",
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+  }
+  const input = {
+    provider: "fixture",
+    provider_key: "connection-one",
+    display_name: "Shared connection",
+    protocol: "openai_chat_completions",
+    connection_type: "direct",
+    base_url: "https://models.fixture.invalid/v1",
+    priority: 0,
+    api_key: "fixture-key-not-real",
+  }
+  const calls: string[] = []
+  const owner = await listen(
+    createServer(async (request, response) => {
+      assert.equal(request.headers["x-kokoro-service"], "model-management")
+      assert.equal(request.headers["authorization"], "Bearer model-management-fixture-token")
+      assert.equal(request.headers["x-kokoro-tenant-id"], tenantId)
+      assert.equal(request.headers["x-kokoro-actor-id"], actorId)
+      assert.equal(request.headers["x-kokoro-iam-permissions"], "system:write")
+      calls.push(`${request.method} ${request.url}`)
+      response.setHeader("content-type", "application/json")
+      response.setHeader("cache-control", "no-store")
+      response.setHeader("x-request-id", "owner-fixture")
+      if (request.method === "POST") {
+        const chunks: Buffer[] = []
+        for await (const chunk of request) chunks.push(Buffer.from(chunk))
+        assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), input)
+        assert.equal(request.headers["idempotency-key"], "model-create-one")
+        response.writeHead(201)
+        response.end(JSON.stringify({ data: provider }))
+      } else response.end(JSON.stringify({ data: { provider_id: revisionId, credential_status: "stored", deleted_at: null } }))
+    }),
+  )
+  const verified = admission(true)
+  const bff = await listen(
+    createBffServer(
+      { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
+      { businessStore: null, readiness: async () => undefined, sessionAdmission: verified },
+    ),
+  )
+  const created = await fetch(`${bff}/v1/admin/model-providers`, {
+    method: "POST",
+    headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "model-create-one" }),
+    body: JSON.stringify(input),
+  })
+  assert.equal(created.status, 201)
+  const text = await created.text()
+  assert.equal(text.includes(input.api_key), false)
+  assert.deepEqual(JSON.parse(text).data, provider)
+  const recovered = await fetch(`${bff}/v1/admin/model-provider-creations?idempotency_key=model-create-one`, { headers: browserHeaders() })
+  assert.equal(recovered.status, 200)
+  assert.equal(recovered.headers.get("cache-control"), "no-store")
+  assert.deepEqual((await recovered.json()).data, { provider_id: revisionId, credential_status: "stored", deleted_at: null })
+  assert.equal(calls.length, 2)
+})
+
+test("model configuration rejects missing credentials, non-admins and invalid sensitive bodies before owner I/O", async () => {
+  let ownerCalls = 0
+  const owner = await listen(
+    createServer((_request, response) => {
+      ownerCalls++
+      response.writeHead(500)
+      response.end()
+    }),
+  )
+  for (const [allowed, token, expected] of [
+    [false, "model-management-fixture-token", 403],
+    [true, null, 503],
+  ] as const) {
+    const bff = await listen(
+      createBffServer(
+        { ...config(owner), systemModelManagementToken: token },
+        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(allowed) },
+      ),
+    )
+    const response = await fetch(`${bff}/v1/admin/model-providers?limit=50`, { headers: browserHeaders() })
+    assert.equal(response.status, expected)
+  }
+  const bff = await listen(
+    createBffServer(
+      { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
+      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+    ),
+  )
+  for (const [path, method, body, extra, status] of [
+    ["model-providers", "POST", { api_key: "fixture-secret-key", tenant_id: "forged" }, {}, 400],
+    [`model-revisions/${revisionId}/publish`, "POST", undefined, {}, 428],
+    [`model-labels/${labelId}`, "PATCH", { display_name: null }, {}, 428],
+    ["model-provider-creations?idempotency_key=a&idempotency_key=b", "GET", undefined, {}, 400],
+    ["model-provider-creations?idempotency_key=a&tenant_id=forged", "GET", undefined, {}, 400],
+    ["model-providers", "POST", {}, { "if-match": '"1"' }, 400],
+  ] as const) {
+    const response = await fetch(`${bff}/v1/admin/${path}`, {
+      method,
+      headers: browserHeaders({
+        ...(method === "GET" ? {} : { "idempotency-key": "sensitive-command" }),
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+        ...extra,
+      }),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+    assert.equal(response.status, status)
+    assert.equal((await response.text()).includes("fixture-secret-key"), false)
+  }
+  assert.equal(ownerCalls, 0)
+})
+
+test("sensitive creation lookup preserves unconfirmed status and never retries writes or leaks owner messages", async () => {
+  const methods: string[] = []
+  const owner = await listen(
+    createServer((request, response) => {
+      methods.push(request.method ?? "")
+      response.setHeader("content-type", "application/json")
+      response.setHeader("x-request-id", "lookup-fixture")
+      response.setHeader("cache-control", "no-store")
+      response.writeHead(request.method === "GET" ? 404 : 503)
+      response.end(
+        JSON.stringify({
+          error: { code: request.method === "GET" ? "NOT_FOUND" : "SYSTEM_UNAVAILABLE", message: "fixture-private-key", retryable: request.method !== "GET" },
+        }),
+      )
+    }),
+  )
+  const bff = await listen(
+    createBffServer(
+      { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
+      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+    ),
+  )
+  const input = {
+    provider: "fixture",
+    provider_key: "unknown-key",
+    display_name: "Fixture",
+    protocol: "openai_chat_completions",
+    base_url: "https://model.fixture.invalid/v1",
+    priority: 0,
+    api_key: "fixture-private-key",
+  }
+  const first = await fetch(`${bff}/v1/admin/model-providers`, {
+    method: "POST",
+    headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "original-sensitive-command" }),
+    body: JSON.stringify(input),
+  })
+  assert.equal(first.status, 503)
+  assert.equal((await first.text()).includes(input.api_key), false)
+  const lookup = await fetch(`${bff}/v1/admin/model-provider-creations?idempotency_key=original-sensitive-command`, { headers: browserHeaders() })
+  assert.equal(lookup.status, 404)
+  assert.equal((await lookup.text()).includes(input.api_key), false)
+  assert.deepEqual(methods, ["POST", "GET"])
+})
+
+test("configuration acknowledgements bind owner defaults without changing original command bytes", async () => {
+  const cases = [
+    {
+      path: "model-providers",
+      input: {
+        provider: "fixture",
+        provider_key: "connection-default",
+        display_name: "Default connection",
+        protocol: "openai_chat_completions",
+        base_url: "https://models.fixture.invalid/v1",
+        priority: 0,
+        api_key: "fixture-key",
+      },
+      reply: {
+        id: revisionId,
+        provider: "fixture",
+        provider_key: "connection-default",
+        display_name: "Default connection",
+        protocol: "openai_chat_completions",
+        connection_type: "litellm",
+        base_url: "https://models.fixture.invalid/v1",
+        secret_handle_ref: "model-key:fixture",
+        priority: 0,
+        version: "1",
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      },
+    },
+    {
+      path: "model-labels",
+      input: { label_key: label.label_key, feature_key: label.feature_key, default_revision_id: label.default_revision_id },
+      reply: { ...label, display_name: "unexpected alias" },
+    },
+  ]
+  for (const entry of cases) {
+    let calls = 0
+    const owner = await listen(
+      createServer(async (request, response) => {
+        calls++
+        const chunks: Buffer[] = []
+        for await (const chunk of request) chunks.push(Buffer.from(chunk))
+        assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), entry.input)
+        response.setHeader("content-type", "application/json")
+        response.setHeader("x-request-id", "default-fixture")
+        response.setHeader("cache-control", "no-store")
+        response.writeHead(201)
+        response.end(JSON.stringify({ data: entry.reply }))
+      }),
+    )
+    const bff = await listen(
+      createBffServer(
+        { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
+        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+      ),
+    )
+    const result = await fetch(`${bff}/v1/admin/${entry.path}`, {
+      method: "POST",
+      headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "default-protected-command" }),
+      body: JSON.stringify(entry.input),
+    })
+    assert.equal(result.status, 502)
+    assert.equal(calls, 1)
+  }
+})
+
+test("a response parsed after the absolute model configuration deadline is never acknowledged", async () => {
+  const { systemModelConfiguration } = await import("../dist/infrastructure/clients/owner/system-model-configuration.js")
+  const originalFetch = globalThis.fetch,
+    originalParse = JSON.parse,
+    originalNow = Date.now
+  const started = originalNow(),
+    deadlineAt = started + 10_000
+  let clock = started
+  try {
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ data: { items: [], next_cursor: null } }), {
+        status: 200,
+        headers: { "content-type": "application/json", "x-request-id": "deadline-fixture" },
+      })
+    Date.now = () => clock
+    JSON.parse = ((...args: Parameters<typeof JSON.parse>) => {
+      const value = originalParse(...args)
+      clock = deadlineAt + 1
+      return value
+    }) as typeof JSON.parse
+    const result = await systemModelConfiguration({
+      baseUrl: "https://fixture.invalid",
+      secret: "model-management-fixture-token",
+      tenantId,
+      actorId,
+      requestId: "deadline-fixture",
+      signal: new AbortController().signal,
+      deadlineAt,
+      maxResponseBytes: 1024 * 1024,
+      operation: "providers",
+      query: new URLSearchParams(),
+    })
+    assert.deepEqual(result, { ok: false, status: 503, code: "admin_model_routing_unavailable" })
+  } finally {
+    globalThis.fetch = originalFetch
+    JSON.parse = originalParse
+    Date.now = originalNow
+  }
+})

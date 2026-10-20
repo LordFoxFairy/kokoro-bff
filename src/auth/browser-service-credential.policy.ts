@@ -23,6 +23,15 @@ function adminBusinessRoute(method: string, target: string): boolean {
   }
   if (method === "GET" && /^\/v1\/admin\/mcp\/packages\/[^/]+\/uploads\/[^/]+$/u.test(path)) return true
   if (method === "POST" && /^\/v1\/admin\/mcp\/packages\/[^/]+\/(uploads|publish|uploads\/[^/]+\/(complete|abort))$/u.test(path)) return true
+  if (
+    method === "GET" &&
+    ["/v1/admin/model-providers", "/v1/admin/model-definitions", "/v1/admin/model-features", "/v1/admin/model-provider-creations"].includes(path)
+  )
+    return true
+  if (method === "POST" && ["/v1/admin/model-providers", "/v1/admin/model-definitions", "/v1/admin/model-revisions", "/v1/admin/model-labels"].includes(path))
+    return true
+  if (method === "POST" && /^\/v1\/admin\/model-revisions\/[0-9a-f-]{36}\/publish$/iu.test(path)) return true
+  if (method === "PATCH" && /^\/v1\/admin\/model-labels\/[0-9a-f-]{36}$/iu.test(path)) return true
   if (method === "GET" && path === "/v1/me") return true
   if (
     method === "GET" &&

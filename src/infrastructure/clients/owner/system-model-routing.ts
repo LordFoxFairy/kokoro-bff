@@ -78,7 +78,7 @@ async function boundedJson(response: Response, limit: number): Promise<Uint8Arra
   return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
 }
 
-function ownerError(raw: unknown, status: number, operation: "read" | "write"): SystemModelRoutingResult {
+export function ownerError(raw: unknown, status: number, operation: "read" | "write"): SystemModelRoutingResult {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).length !== 1) return invalidResponse()
   const error = (raw as { error?: unknown }).error
   if (error === null || typeof error !== "object" || Array.isArray(error) || !isDeepStrictEqual(Object.keys(error).sort(), ["code", "message", "retryable"]))
@@ -103,7 +103,11 @@ function ownerError(raw: unknown, status: number, operation: "read" | "write"): 
   return invalidResponse()
 }
 
-async function dispatch(input: SystemModelRoutingInput, url: URL, init: RequestInit): Promise<{ response: Response; raw: unknown } | SystemModelRoutingResult> {
+export async function dispatch(
+  input: SystemModelRoutingInput,
+  url: URL,
+  init: RequestInit,
+): Promise<{ response: Response; raw: unknown } | SystemModelRoutingResult> {
   if (input.baseUrl === null || input.secret === null || input.signal.aborted) return unavailable()
   const abort = new AbortController()
   const onAbort = (): void => abort.abort()

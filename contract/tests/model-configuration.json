@@ -1,0 +1,50 @@
+{
+  "current_sha256": "4db8bab6159a2f36061f8b292fba9074ea2614adab2a1489bf9d1b3b066b6fe3",
+  "parent_sha256": "a902a20ad95e46c01bfc8f5a80260c14565cfe557137759d5ecd42bc1a60f7c2",
+  "operations": [
+    "listAdminModelProviders",
+    "createAdminModelProvider",
+    "getAdminModelProviderCreation",
+    "listAdminModelDefinitions",
+    "createAdminModelDefinition",
+    "listAdminModelFeatures",
+    "publishAdminModelRevision",
+    "updateAdminModelLabel",
+    "createAdminModelRevision",
+    "createAdminModelLabel"
+  ],
+  "inverse": [
+    {
+      "at": 3,
+      "count": 1,
+      "current_sha256": "888214c3bf925c9c0ce758f49ea69005b54b0b883f781bdd897bf7a075e58f4c",
+      "previous": "  version: 21.0.0\n"
+    },
+    {
+      "at": 3084,
+      "count": 67,
+      "current_sha256": "a2583919bfcf5ca7522d25fc2047cd06eac573d88be45e1c9c157c3a24002875",
+      "previous": ""
+    },
+    {
+      "at": 3180,
+      "count": 67,
+      "current_sha256": "23beb5ea7010dafb60c870e5d1922eabbbb13c30697b1e982c97897c6fd23f86",
+      "previous": ""
+    },
+    {
+      "at": 13580,
+      "count": 541,
+      "current_sha256": "3234c77ed399d51adbb681cc8b7574b168dd31522d3a0672b3c4d15bf851ac93",
+      "previous": ""
+    },
+    {
+      "at": 14560,
+      "count": 396,
+      "current_sha256": "6e94b0b422fb59cb4a176f9d2d3bbebd922ec4304d6f080acc6e7338d0722222",
+      "previous": ""
+    }
+  ],
+  "current_inventory_sha256": "387a209ef237d0844347ba5f12dd341e4a33c29dcfb7c309d947724e8c38d1e1",
+  "parent_inventory_sha256": "463376c78cf549fc35ded0d27ec4fe322edda42109867818a740300b81f15452"
+}

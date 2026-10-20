@@ -8,9 +8,9 @@
   ],
   "info": {
     "title": "Kokoro System internal owner",
-    "version": "5.0.0",
-    "x-kokoro-release-classification": "business-model-composition-breaking",
-    "description": "Generated from runtime Zod schemas for implemented System internal-owner routes; 5.0.0 shares immutable model revisions across business-specific choices and exposes effective catalog identities."
+    "version": "6.0.0",
+    "x-kokoro-release-classification": "protected-model-credentials-breaking",
+    "description": "Generated from runtime Zod schemas for implemented System internal-owner routes; 6.0.0 adds write-only encrypted model credentials, Agent-only exact current-route retrieval and narrowly scoped model management."
   },
   "paths": {
     "/v1/system/sites": {
@@ -4315,7 +4315,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -4595,7 +4596,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -7953,7 +7955,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -8090,7 +8093,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -8233,7 +8237,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -8360,7 +8365,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -8522,7 +8528,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -8676,7 +8683,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -8830,7 +8838,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -8967,14 +8976,15 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
           {
             "name": "x-kokoro-tenant-id",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -9070,7 +9080,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/schema_342d9217d577ff21"
+                "$ref": "#/components/schemas/schema_c6886f00771523fc"
               }
             }
           }
@@ -9110,7 +9120,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -9237,7 +9248,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -9399,7 +9411,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -9553,7 +9566,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -9707,7 +9721,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -9844,7 +9859,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -9987,7 +10003,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -10114,7 +10131,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -10276,7 +10294,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -10430,7 +10449,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -10757,7 +10777,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -10894,7 +10915,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -11037,7 +11059,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -11164,7 +11187,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -11328,7 +11352,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -11482,7 +11507,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -11636,7 +11662,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -11775,7 +11802,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -11946,7 +11974,8 @@
               "enum": [
                 "web-bff",
                 "kokoro-agent",
-                "system-admin"
+                "system-admin",
+                "model-management"
               ]
             }
           },
@@ -12340,6 +12369,279 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/schema_be87f43005ae8d24"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/model-catalog/provider-creations": {
+      "get": {
+        "operationId": "getModelProviderCreation",
+        "tags": [
+          "model-catalog"
+        ],
+        "summary": "getModelProviderCreation",
+        "x-kokoro-owner": "kokoro-system",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "inherent",
+        "x-kokoro-permission": "system:write",
+        "x-kokoro-scope": "global",
+        "description": "global scope; global requires authenticated system-admin",
+        "x-kokoro-precondition": "none",
+        "security": [
+          {
+            "serviceBearer": []
+          },
+          {
+            "serviceSecret": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "x-kokoro-service",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "web-bff",
+                "kokoro-agent",
+                "system-admin",
+                "model-management"
+              ]
+            }
+          },
+          {
+            "name": "x-kokoro-tenant-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "x-kokoro-iam-permissions",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-trace-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "idempotency_key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/schema_37a3e49c0a766261"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OwnerError"
+          },
+          "403": {
+            "$ref": "#/components/responses/OwnerError"
+          },
+          "404": {
+            "$ref": "#/components/responses/OwnerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/OwnerError"
+          }
+        }
+      }
+    },
+    "/v1/system/model-catalog/credentials/read": {
+      "post": {
+        "operationId": "readModelCredential",
+        "tags": [
+          "model-catalog"
+        ],
+        "summary": "readModelCredential",
+        "x-kokoro-owner": "kokoro-system",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "inherent",
+        "x-kokoro-permission": "service-context",
+        "x-kokoro-scope": "tenant",
+        "description": "tenant scope; global requires authenticated system-admin",
+        "x-kokoro-precondition": "none",
+        "security": [
+          {
+            "serviceBearer": []
+          },
+          {
+            "serviceSecret": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "x-kokoro-service",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kokoro-agent"
+              ]
+            }
+          },
+          {
+            "name": "x-kokoro-tenant-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "x-kokoro-iam-permissions",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-trace-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/schema_26712d5adc3fea2e"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OwnerError"
+          },
+          "403": {
+            "$ref": "#/components/responses/OwnerError"
+          },
+          "404": {
+            "$ref": "#/components/responses/OwnerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/OwnerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/schema_5ec7057fbec33ea4"
               }
             }
           }
@@ -18015,7 +18317,7 @@
         ],
         "additionalProperties": false
       },
-      "schema_342d9217d577ff21": {
+      "schema_c6886f00771523fc": {
         "type": "object",
         "properties": {
           "protocol": {
@@ -18036,12 +18338,6 @@
             "maxLength": 2048,
             "pattern": "^https?:\\/\\/[^\\s\\\\?#]+$"
           },
-          "secret_handle_ref": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 255,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
-          },
           "provider": {
             "type": "string",
             "minLength": 1,
@@ -18061,16 +18357,23 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 100000
+          },
+          "api_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "pattern": "^[\\x21-\\x7e]+$",
+            "writeOnly": true
           }
         },
         "required": [
           "protocol",
           "base_url",
-          "secret_handle_ref",
           "provider",
           "provider_key",
           "display_name",
-          "priority"
+          "priority",
+          "api_key"
         ],
         "additionalProperties": false
       },
@@ -19495,6 +19798,145 @@
         },
         "required": [
           "feature_key"
+        ],
+        "additionalProperties": false
+      },
+      "schema_37a3e49c0a766261": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "provider_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "credential_status": {
+                "type": "string",
+                "enum": [
+                  "stored",
+                  "erased"
+                ]
+              },
+              "deleted_at": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider_id",
+              "credential_status",
+              "deleted_at"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "schema_26712d5adc3fea2e": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "feature_key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "label_key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "provider_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "revision_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "secret_handle_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "api_key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "^[\\x21-\\x7e]+$"
+              }
+            },
+            "required": [
+              "feature_key",
+              "label_key",
+              "provider_id",
+              "revision_id",
+              "digest",
+              "secret_handle_ref",
+              "api_key"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "schema_5ec7057fbec33ea4": {
+        "type": "object",
+        "properties": {
+          "label_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "feature_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "provider_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "feature_key",
+          "provider_id",
+          "revision_id",
+          "digest"
         ],
         "additionalProperties": false
       },

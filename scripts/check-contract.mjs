@@ -1,3 +1,8 @@
+import {
+  inspectModelConfigurationContract,
+  restorePublic21ModelConfigurationContract,
+  modelConfigurationParentBaseline,
+} from "./model-configuration-public-contract.mjs"
 import { inspectSharedModelCatalogContract, restorePublic20SharedModelCatalogContract } from "./shared-model-catalog-public-contract.mjs"
 import { inspectSystemModelConnectionContract } from "./system-model-connection-public-contract.mjs"
 import { inspectClosureIntegrationContract } from "./verify-closure-integration-contract.mjs"
@@ -279,8 +284,12 @@ async function main() {
       operation.fields.get("operationId") === "getManagedPersonalSkillPackage" || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
   )
   const errors = [
-    ...inspectSharedModelCatalogContract(openapi, parsedBaseline.operations),
-    ...inspectSystemModelConnectionContract(restorePublic20SharedModelCatalogContract(openapi), parsedBaseline.operations),
+    ...inspectModelConfigurationContract(openapi, parsedBaseline.operations),
+    ...inspectSharedModelCatalogContract(restorePublic21ModelConfigurationContract(openapi), modelConfigurationParentBaseline(parsedBaseline.operations)),
+    ...inspectSystemModelConnectionContract(
+      restorePublic20SharedModelCatalogContract(restorePublic21ModelConfigurationContract(openapi)),
+      modelConfigurationParentBaseline(parsedBaseline.operations),
+    ),
     ...inspectClosureIntegrationContract(openapi, parsedBaseline.operations),
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),

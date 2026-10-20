@@ -1,3 +1,7 @@
+## MC-02 当前公开配置增量（2026-10-20，design-first）
+
+Public21.1仍/v1，新增10具名admin operation至175：GET model-providers/model-definitions/model-features、POST model-providers/model-definitions/model-revisions/model-labels、GET model-provider-creations?idempotency_key、POST model-revisions/{revision_id}/publish、PATCH model-labels/{label_id}。新列表保limit/cursor分页；创建201，其他200。body/error/meta闭集，Key输入writeOnly、输出不得含Key。query主体只取可信context，lookup404表示未确认。新命令原Idempotency-Key；publish和PATCH必须强If-Match，create不收CAS；不暴露owner credentials/read。原四路由接口/CAS/错误不变，消费者须固定新source/hash。
+
 ## 2026-10-20 Public21 / System5 MC-02A 配对门
 
 canonical Public21.0.0 保165操作。AdminModelLabel.display_name 改 required nullable（alias 未设由owner保持 null），AdminModelRevision 删除 feature_key；只读管理不增加创建/PATCH入口。业务 `/v1/models` 的 closed ModelCandidate 必需 provider/name/is_default/display_name/model_id/revision_id/provider_id/feature_key/request_model；name=稳定label key（1..128），provider=owner显式值（1..128），display_name=owner有效别名或原模型名（1..255），feature_key 1..128，request_model 1..255，三ID为UUID。closed data 必需 models 与 nullable next_cursor，不暴露连接 URL、secret_handle_ref 或 Key。

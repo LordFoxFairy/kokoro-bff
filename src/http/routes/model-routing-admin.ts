@@ -17,13 +17,13 @@ const READ_KIND = new Map<string, SystemModelRoutingReadKind>([
   ["model-revisions", "revisions"],
 ])
 
-function rawHeaderCount(request: IncomingMessage, name: string): number {
+export function rawHeaderCount(request: IncomingMessage, name: string): number {
   let count = 0
   for (let index = 0; index < request.rawHeaders.length; index += 2) if (request.rawHeaders[index]?.toLowerCase() === name) count++
   return count
 }
 
-async function readBodyBeforeDeadline(request: IncomingMessage, signal: AbortSignal): Promise<Buffer> {
+export async function readBodyBeforeDeadline(request: IncomingMessage, signal: AbortSignal): Promise<Buffer> {
   if (signal.aborted) throw new Error("deadline exceeded")
   return new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = []
@@ -64,7 +64,7 @@ async function readBodyBeforeDeadline(request: IncomingMessage, signal: AbortSig
   })
 }
 
-function page(request: IncomingMessage): { limit: number; cursor: string | null } | null {
+export function page(request: IncomingMessage): { limit: number; cursor: string | null } | null {
   const query = queryOf(request)
   if ([...query.keys()].some((key) => key !== "limit" && key !== "cursor")) return null
   if (query.getAll("limit").length > 1 || query.getAll("cursor").length > 1) return null
@@ -76,7 +76,7 @@ function page(request: IncomingMessage): { limit: number; cursor: string | null 
   return { limit, cursor }
 }
 
-function errorMessage(status: number): string {
+export function errorMessage(status: number): string {
   if (status === 400) return "Admin model routing request is invalid"
   if (status === 403) return "Admin model routing access is forbidden"
   if (status === 404) return "Admin model routing resource was not found"

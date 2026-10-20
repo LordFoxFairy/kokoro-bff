@@ -1,3 +1,11 @@
+## 2026-10-20 MC-02 配置管理接线（本地候选）
+
+Public21.1.0 新增10个具名模型配置操作，当前175操作，artifact SHA256 `4db8bab6159a2f36061f8b292fba9074ea2614adab2a1489bf9d1b3b066b6fe3`。固定 System6 `550d65498822d8d2e629199482de4f6990b62708`，artifact `10ff7ee82ca7405dcab473f3fd80e620aa6c4e0bc92e64111797144ce0fa4061`、provenance `ed2e312bc5bc3022111797771190e57133818af83c0bb7ad2024a615a4e033c5`。独立 model-management token，仅代理 provider/definition/feature 目录、只写Key创建和原主体脱敏查回、模型修订创建/CAS发布、业务label创建/修改；不代理运行密钥或新增删除/健康操作。IAM当前管理员、受信tenant/actor、原key/CAS、取消与绝对预算保持；无回退token或自动重试。
+
+停写后格式、lint、类型、contract850 PASS、architecture36 PASS、默认1503 PASS/3原资源SKIP、build全通过；44条既有OpenAPI警告保留。新公开增量精确逆回原Public21，再委托未改历史证明；原165操作保持。独审Approved，修复缺省direct/null别名ACK绑定和解析跨绝对截止后误成功两项P2，均实际RED→GREEN。
+
+Root真实隔离IAM→BFF→System6/PG配置创建、原key查回、发布、业务组合、别名编辑清空、catalog、CAS/重放/冲突/非法session通过；自有数据库94→94、IAM测试key0→0。最终交付提交后再固定提交重跑该链。正常环境、Admin/App页面、整批PR尚未完成，不将组件结果称为完整产品验收。模型、真实工具与扣费暂停，自动化/连接器不改。
+
 ## 2026-10-20 MC-02A System5 消费者工程验收（隔离候选，正常未切）
 
 本候选唯一 Public21.0.0 /165 operations：AdminModelLabel.display_name required nullable，AdminModelRevision无feature；业务 `/models` 保稳定label name，并用owner显式provider与精确model/revision/provider ID、feature/request_model、有效display_name和required nullable next_cursor闭合投影。正式固定System `b7fe78e25e3c569ae0e1cb9b42cddab02074ca07` /5.0.0，artifact `a83b37269e9e4fa7fb5310a1836975e20ab9eaee965a66c83e35bb1ca1b9e5df`、provenance `97b20e57f66010ba456fac59fe1dd62d90c17325c82d3da80be455ea9d3cf747`；同唯一生成器新增getModelCatalog第5窄操作，16文件／26 strict对象，旧当前vendor退休。

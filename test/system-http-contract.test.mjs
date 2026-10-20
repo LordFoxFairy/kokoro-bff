@@ -1,3 +1,8 @@
+import {
+  inspectModelConfigurationContract,
+  restorePublic21ModelConfigurationContract,
+  modelConfigurationParentBaseline,
+} from "../scripts/model-configuration-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -7,32 +12,45 @@ import { inspectSharedModelCatalogContract, restorePublic20SharedModelCatalogCon
 import { inspectSystemModelConnectionContract, restorePublic19SystemModelConnectionContract } from "../scripts/system-model-connection-public-contract.mjs"
 
 const root = new URL("../", import.meta.url)
-const commit = "b7fe78e25e3c569ae0e1cb9b42cddab02074ca07"
-const digest = "a83b37269e9e4fa7fb5310a1836975e20ab9eaee965a66c83e35bb1ca1b9e5df"
+const commit = "550d65498822d8d2e629199482de4f6990b62708"
+const digest = "10ff7ee82ca7405dcab473f3fd80e620aa6c4e0bc92e64111797144ce0fa4061"
 
-test("System HTTP 5.0 model-routing client pins reviewed owner bytes and five operations", async () => {
+test("System HTTP6 model configuration client pins reviewed owner bytes and fifteen operations", async () => {
   const manifest = JSON.parse(await readFile(new URL("contract/dependencies/system-http.json", root), "utf8"))
   const source = await readFile(new URL(`contract/vendor/kokoro-system/${commit}/system.openapi.json`, root))
   const api = JSON.parse(source)
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-system")
   assert.equal(manifest.owner.repository_commit, commit)
-  assert.equal(manifest.owner.contract_version, "5.0.0")
+  assert.equal(manifest.owner.contract_version, "6.0.0")
   assert.equal(manifest.owner.contract_sha256, digest)
   assert.equal(manifest.owner.provenance_path, "contract/provenance.json")
   const provenance = await readFile(new URL(`contract/vendor/kokoro-system/${commit}/provenance.json`, root))
-  assert.equal(manifest.owner.provenance_sha256, "97b20e57f66010ba456fac59fe1dd62d90c17325c82d3da80be455ea9d3cf747")
+  assert.equal(manifest.owner.provenance_sha256, "ed2e312bc5bc3022111797771190e57133818af83c0bb7ad2024a615a4e033c5")
   assert.equal(createHash("sha256").update(provenance).digest("hex"), manifest.owner.provenance_sha256)
   const published = JSON.parse(provenance)
   assert.equal(published.openapi.sha256, digest)
-  assert.equal(published.releaseClassification.contractVersion, "5.0.0")
-  assert.deepEqual(Object.keys(await import("../dist/generated/system-http/sdk.gen.js")).sort(), [
-    "getModelCatalog",
-    "listModelLabel",
-    "listModelRevision",
-    "listRoutingPolicy",
-    "putRoutingPolicy",
-  ])
+  assert.equal(published.releaseClassification.contractVersion, "6.0.0")
+  assert.deepEqual(
+    Object.keys(await import("../dist/generated/system-http/sdk.gen.js")).sort(),
+    [
+      "createModelDefinition",
+      "createModelLabel",
+      "createModelProvider",
+      "createModelRevision",
+      "getModelProviderCreation",
+      "getModelCatalog",
+      "listFeature",
+      "listModelDefinition",
+      "listModelProvider",
+      "listModelLabel",
+      "listModelRevision",
+      "listRoutingPolicy",
+      "publishModelRevision",
+      "putRoutingPolicy",
+      "updateModelLabel",
+    ].sort(),
+  )
   assert.equal(createHash("sha256").update(source).digest("hex"), digest)
   assert.deepEqual(
     [
@@ -67,8 +85,8 @@ test("System generated validators reject unknown owner fields at every reviewed 
 })
 
 test("Public21 consumes shared System5 models and restores the complete unchanged Public20 and Public19 proofs", async () => {
-  const source = await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8")
-  const baseline = JSON.parse(await readFile(new URL("contract/tests/v1-operations.json", root), "utf8")).operations
+  const source = restorePublic21ModelConfigurationContract(await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8"))
+  const baseline = modelConfigurationParentBaseline(JSON.parse(await readFile(new URL("contract/tests/v1-operations.json", root), "utf8")).operations)
   const api = JSON.parse(await readFile(new URL(`contract/vendor/kokoro-system/${commit}/system.openapi.json`, root), "utf8"))
   const publicApi = load(source)
   assert.equal(publicApi.info.version, "21.0.0")
@@ -111,4 +129,21 @@ test("Public21 consumes shared System5 models and restores the complete unchange
   }
   for (const changed of [baseline.slice(1), [...baseline].reverse(), [...baseline, baseline[0]]])
     assert.ok(inspectSharedModelCatalogContract(source, changed).length > 0)
+})
+
+test("configuration additive contract protects all prior bytes and never publishes credential reads", async () => {
+  const source = await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8")
+  const baseline = JSON.parse(await readFile(new URL("contract/tests/v1-operations.json", root), "utf8")).operations
+  assert.deepEqual(inspectModelConfigurationContract(source, baseline), [])
+  assert.equal(baseline.length, 175)
+  const api = load(source)
+  assert.equal(api.components.schemas.AdminModelProviderInput.properties.api_key.writeOnly, true)
+  assert.equal(api.components.schemas.AdminModelProvider.properties.api_key, undefined)
+  assert.equal(
+    baseline.some((v) => v.path.includes("credentials/read")),
+    false,
+  )
+  assert.equal(inspectModelConfigurationContract(source + "\n", baseline).length > 0, true)
+  assert.ok(inspectModelConfigurationContract(source, [...baseline].reverse()).length > 0) // ordered parent oracle below still detects reordering
+  assert.throws(() => modelConfigurationParentBaseline([...baseline].reverse()), /inventory drift/u)
 })

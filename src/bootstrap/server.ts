@@ -78,6 +78,7 @@ import { runtimeManifest } from "../http/routes/runtime-manifest.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
 import { accountSessionsRoute } from "../http/routes/account-sessions.js"
 import { liveTeamRead, liveTeamWrite } from "../http/routes/team.js"
+import { liveModelConfigurationAdmin } from "../http/routes/model-configuration-admin.js"
 import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
 import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
@@ -834,6 +835,7 @@ async function handle(
   }
 
   if (composition.routeHandler === undefined && businessPath[0] === "admin") {
+    if (await liveModelConfigurationAdmin(request, response, config, context, businessPath)) return
     await liveModelRoutingAdmin(request, response, config, context, businessPath)
     return
   }

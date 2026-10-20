@@ -2,6 +2,251 @@
 
 import * as z from "zod"
 
+export const zSchemaBa3507Ae328Db686 = z
+  .object({
+    data: z
+      .object({
+        items: z.array(
+          z
+            .object({
+              global_feature_key: z.string().regex(/^[a-z][a-z0-9_.-]{0,127}$/),
+              product_id: z
+                .uuid()
+                .regex(
+                  /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+                ),
+              display_name: z.string().min(1).max(160),
+              result_contract: z
+                .object({
+                  schema_version: z.literal(1),
+                  outcome_kind: z.enum(["message", "artifact", "structured"]),
+                  media_types: z.array(z.string().min(1).max(128)).max(32),
+                  required_fields: z.array(z.string().min(1).max(128)).max(64),
+                })
+                .strict(),
+              id: z
+                .uuid()
+                .regex(
+                  /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+                ),
+              version: z.string().regex(/^[1-9][0-9]*$/),
+              created_at: z.iso
+                .datetime()
+                .regex(
+                  /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+                ),
+              retired_at: z.iso
+                .datetime()
+                .regex(
+                  /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+                )
+                .nullable(),
+            })
+            .strict(),
+        ),
+        next_cursor: z.string().nullable(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const zSchemaEd7558B2071C00E9 = z
+  .object({
+    data: z
+      .object({
+        items: z.array(
+          z
+            .object({
+              model_key: z.string().min(1).max(128),
+              display_name: z.string().min(1).max(160),
+              id: z
+                .uuid()
+                .regex(
+                  /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+                ),
+              version: z.string().regex(/^[1-9][0-9]*$/),
+              created_at: z.iso
+                .datetime()
+                .regex(
+                  /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+                ),
+              updated_at: z.iso
+                .datetime()
+                .regex(
+                  /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+                ),
+              deleted_at: z.iso
+                .datetime()
+                .regex(
+                  /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+                )
+                .nullable(),
+            })
+            .strict(),
+        ),
+        next_cursor: z.string().nullable(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const zSchemaEd69C8D357Ecc734 = z
+  .object({
+    data: z
+      .object({
+        model_key: z.string().min(1).max(128),
+        display_name: z.string().min(1).max(160),
+        id: z
+          .uuid()
+          .regex(
+            /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+          ),
+        version: z.string().regex(/^[1-9][0-9]*$/),
+        created_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          ),
+        updated_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          ),
+        deleted_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          )
+          .nullable(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const zSchema424841Afb7389D7f = z
+  .object({
+    model_key: z.string().min(1).max(128),
+    display_name: z.string().min(1).max(160),
+  })
+  .strict()
+
+export const zSchema718C194A16B98Db8 = z
+  .object({
+    data: z
+      .object({
+        items: z.array(
+          z
+            .object({
+              protocol: z.literal("openai_chat_completions"),
+              connection_type: z.enum(["direct", "litellm"]),
+              base_url: z
+                .string()
+                .min(1)
+                .max(2048)
+                .regex(/^https?:\/\/[^\s\\?#]+$/),
+              secret_handle_ref: z
+                .string()
+                .min(1)
+                .max(255)
+                .regex(/^[A-Za-z0-9][A-Za-z0-9._:\/-]*$/),
+              provider: z.string().min(1).max(128),
+              provider_key: z.string().min(1).max(128),
+              display_name: z.string().min(1).max(160),
+              priority: z.int().gte(0).lte(100000),
+              id: z
+                .uuid()
+                .regex(
+                  /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+                ),
+              version: z.string().regex(/^[1-9][0-9]*$/),
+              created_at: z.iso
+                .datetime()
+                .regex(
+                  /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+                ),
+              updated_at: z.iso
+                .datetime()
+                .regex(
+                  /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+                ),
+              deleted_at: z.iso
+                .datetime()
+                .regex(
+                  /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+                )
+                .nullable(),
+            })
+            .strict(),
+        ),
+        next_cursor: z.string().nullable(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const zSchemaC9F085Ca41391022 = z
+  .object({
+    data: z
+      .object({
+        protocol: z.literal("openai_chat_completions"),
+        connection_type: z.enum(["direct", "litellm"]),
+        base_url: z
+          .string()
+          .min(1)
+          .max(2048)
+          .regex(/^https?:\/\/[^\s\\?#]+$/),
+        secret_handle_ref: z
+          .string()
+          .min(1)
+          .max(255)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:\/-]*$/),
+        provider: z.string().min(1).max(128),
+        provider_key: z.string().min(1).max(128),
+        display_name: z.string().min(1).max(160),
+        priority: z.int().gte(0).lte(100000),
+        id: z
+          .uuid()
+          .regex(
+            /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+          ),
+        version: z.string().regex(/^[1-9][0-9]*$/),
+        created_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          ),
+        updated_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          ),
+        deleted_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          )
+          .nullable(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const zSchemaC6886F00771523Fc = z
+  .object({
+    protocol: z.literal("openai_chat_completions"),
+    connection_type: z.enum(["direct", "litellm"]).optional().default("direct"),
+    base_url: z
+      .string()
+      .min(1)
+      .max(2048)
+      .regex(/^https?:\/\/[^\s\\?#]+$/),
+    provider: z.string().min(1).max(128),
+    provider_key: z.string().min(1).max(128),
+    display_name: z.string().min(1).max(160),
+    priority: z.int().gte(0).lte(100000),
+  })
+  .strict()
+
 export const zSchemaFae624Eabf7E35F4 = z
   .object({
     data: z
@@ -46,6 +291,72 @@ export const zSchemaFae624Eabf7E35F4 = z
         next_cursor: z.string().nullable(),
       })
       .strict(),
+  })
+  .strict()
+
+export const zSchema2F56A90Eba2Ac4Da = z
+  .object({
+    data: z
+      .object({
+        label_key: z.string().min(1).max(128),
+        display_name: z.string().min(1).max(160).nullable(),
+        feature_key: z.string().min(1).max(128),
+        default_revision_id: z
+          .uuid()
+          .regex(
+            /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+          )
+          .nullable(),
+        id: z
+          .uuid()
+          .regex(
+            /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+          ),
+        version: z.string().regex(/^[1-9][0-9]*$/),
+        created_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          ),
+        updated_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          ),
+        deleted_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          )
+          .nullable(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const zSchemaF1C13Ea562A8F359 = z
+  .object({
+    label_key: z.string().min(1).max(128),
+    display_name: z.string().min(1).max(160).nullish().default(null),
+    feature_key: z.string().min(1).max(128),
+    default_revision_id: z
+      .uuid()
+      .regex(
+        /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+      )
+      .nullable(),
+  })
+  .strict()
+
+export const zSchema669423387748Cc79 = z
+  .object({
+    display_name: z.string().min(1).max(160).nullish(),
+    default_revision_id: z
+      .uuid()
+      .regex(
+        /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+      )
+      .nullish(),
   })
   .strict()
 
@@ -132,6 +443,115 @@ export const zSchema85Af568018D2C865 = z
         next_cursor: z.string().nullable(),
       })
       .strict(),
+  })
+  .strict()
+
+export const zSchemaEdc460D150C8281c = z
+  .object({
+    data: z
+      .object({
+        model_id: z
+          .uuid()
+          .regex(
+            /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+          ),
+        provider_id: z
+          .uuid()
+          .regex(
+            /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+          ),
+        revision: z.int().gt(0).lte(9007199254740991),
+        provider_model_name: z.string().min(1).max(255),
+        display_name: z.string().min(1).max(160),
+        input_modalities: z
+          .array(z.enum(["text", "image", "audio", "video"]))
+          .min(1)
+          .max(4),
+        output_modalities: z
+          .array(z.enum(["text", "image", "audio", "video"]))
+          .min(1)
+          .max(4),
+        request_model: z.string().min(1).max(255),
+        context_window: z.int().gte(1).lte(2147483647).nullable(),
+        max_output_tokens: z.int().gte(1).lte(2147483647).nullable(),
+        priority: z.int().gte(0).lte(100000),
+        connection: z
+          .object({
+            protocol: z.literal("openai_chat_completions"),
+            connection_type: z.enum(["direct", "litellm"]),
+            base_url: z
+              .string()
+              .min(1)
+              .max(2048)
+              .regex(/^https?:\/\/[^\s\\?#]+$/),
+            secret_handle_ref: z
+              .string()
+              .min(1)
+              .max(255)
+              .regex(/^[A-Za-z0-9][A-Za-z0-9._:\/-]*$/),
+          })
+          .strict(),
+        id: z
+          .uuid()
+          .regex(
+            /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+          ),
+        version: z.string().regex(/^[1-9][0-9]*$/),
+        digest: z.string().regex(/^[a-f0-9]{64}$/),
+        published_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          )
+          .nullable(),
+        retired_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          )
+          .nullable(),
+        created_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          ),
+        updated_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          ),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const zSchema74A01A81A2A27C05 = z
+  .object({
+    model_id: z
+      .uuid()
+      .regex(
+        /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+      ),
+    provider_id: z
+      .uuid()
+      .regex(
+        /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+      ),
+    revision: z.int().gt(0).lte(9007199254740991),
+    provider_model_name: z.string().min(1).max(255),
+    display_name: z.string().min(1).max(160),
+    input_modalities: z
+      .array(z.enum(["text", "image", "audio", "video"]))
+      .min(1)
+      .max(4),
+    output_modalities: z
+      .array(z.enum(["text", "image", "audio", "video"]))
+      .min(1)
+      .max(4),
+    request_model: z.string().min(1).max(255),
+    context_window: z.int().gte(1).lte(2147483647).nullable(),
+    max_output_tokens: z.int().gte(1).lte(2147483647).nullable(),
+    priority: z.int().gte(0).lte(100000),
   })
   .strict()
 
@@ -275,9 +695,182 @@ export const zSchemaA98F91Be72Cce9D2 = z
   })
   .strict()
 
+export const zSchema37A3E49C0A766261 = z
+  .object({
+    data: z
+      .object({
+        provider_id: z
+          .uuid()
+          .regex(
+            /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+          ),
+        credential_status: z.enum(["stored", "erased"]),
+        deleted_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$/,
+          )
+          .nullable(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const zSchemaC6886F00771523FcWritable = z
+  .object({
+    protocol: z.literal("openai_chat_completions"),
+    connection_type: z.enum(["direct", "litellm"]).optional().default("direct"),
+    base_url: z
+      .string()
+      .min(1)
+      .max(2048)
+      .regex(/^https?:\/\/[^\s\\?#]+$/),
+    provider: z.string().min(1).max(128),
+    provider_key: z.string().min(1).max(128),
+    display_name: z.string().min(1).max(160),
+    priority: z.int().gte(0).lte(100000),
+    api_key: z
+      .string()
+      .min(1)
+      .max(4096)
+      .regex(/^[\x21-\x7e]+$/),
+  })
+  .strict()
+
+export const zListFeatureHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160),
+    "x-kokoro-actor-id": z.string().min(1).max(160).optional(),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+  })
+  .strict()
+
+export const zListFeatureQuery = z
+  .object({
+    cursor: z.string().min(1).max(2048).optional(),
+    limit: z
+      .string()
+      .regex(/^(?:[1-9]|[1-9][0-9]|100)$/)
+      .optional(),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zListFeatureResponse = zSchemaBa3507Ae328Db686
+
+export const zListModelDefinitionHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160),
+    "x-kokoro-actor-id": z.string().min(1).max(160).optional(),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+  })
+  .strict()
+
+export const zListModelDefinitionQuery = z
+  .object({
+    cursor: z.string().min(1).max(2048).optional(),
+    limit: z
+      .string()
+      .regex(/^(?:[1-9]|[1-9][0-9]|100)$/)
+      .optional(),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zListModelDefinitionResponse = zSchemaEd7558B2071C00E9
+
+export const zCreateModelDefinitionBody = zSchema424841Afb7389D7f
+
+export const zCreateModelDefinitionHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160).optional(),
+    "x-kokoro-actor-id": z.string().min(1).max(160),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+    "Idempotency-Key": z.string().min(1).max(128),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zCreateModelDefinitionResponse = zSchemaEd69C8D357Ecc734
+
+export const zListModelProviderHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160),
+    "x-kokoro-actor-id": z.string().min(1).max(160).optional(),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+  })
+  .strict()
+
+export const zListModelProviderQuery = z
+  .object({
+    cursor: z.string().min(1).max(2048).optional(),
+    limit: z
+      .string()
+      .regex(/^(?:[1-9]|[1-9][0-9]|100)$/)
+      .optional(),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zListModelProviderResponse = zSchema718C194A16B98Db8
+
+export const zCreateModelProviderBody = zSchemaC6886F00771523FcWritable
+
+export const zCreateModelProviderHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160),
+    "x-kokoro-actor-id": z.string().min(1).max(160),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+    "Idempotency-Key": z.string().min(1).max(128),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zCreateModelProviderResponse = zSchemaC9F085Ca41391022
+
 export const zListModelLabelHeaders = z
   .object({
-    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin"]),
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
     "x-kokoro-tenant-id": z.string().min(1).max(160),
     "x-kokoro-actor-id": z.string().min(1).max(160).optional(),
     "x-kokoro-iam-permissions": z.string().max(160),
@@ -304,9 +897,60 @@ export const zListModelLabelQuery = z
  */
 export const zListModelLabelResponse = zSchemaFae624Eabf7E35F4
 
+export const zCreateModelLabelBody = zSchemaF1C13Ea562A8F359
+
+export const zCreateModelLabelHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160).optional(),
+    "x-kokoro-actor-id": z.string().min(1).max(160),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+    "Idempotency-Key": z.string().min(1).max(128),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zCreateModelLabelResponse = zSchema2F56A90Eba2Ac4Da
+
+export const zUpdateModelLabelBody = zSchema669423387748Cc79
+
+export const zUpdateModelLabelHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160).optional(),
+    "x-kokoro-actor-id": z.string().min(1).max(160),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+    "Idempotency-Key": z.string().min(1).max(128),
+    "If-Match": z.string().regex(/^"[1-9][0-9]*"$/),
+  })
+  .strict()
+
+export const zUpdateModelLabelPath = z
+  .object({
+    label_id: z.uuid(),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zUpdateModelLabelResponse = zSchema2F56A90Eba2Ac4Da
+
 export const zListModelRevisionHeaders = z
   .object({
-    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin"]),
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
     "x-kokoro-tenant-id": z.string().min(1).max(160),
     "x-kokoro-actor-id": z.string().min(1).max(160).optional(),
     "x-kokoro-iam-permissions": z.string().max(160),
@@ -333,9 +977,58 @@ export const zListModelRevisionQuery = z
  */
 export const zListModelRevisionResponse = zSchema85Af568018D2C865
 
+export const zCreateModelRevisionBody = zSchema74A01A81A2A27C05
+
+export const zCreateModelRevisionHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160).optional(),
+    "x-kokoro-actor-id": z.string().min(1).max(160),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+    "Idempotency-Key": z.string().min(1).max(128),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zCreateModelRevisionResponse = zSchemaEdc460D150C8281c
+
+export const zPublishModelRevisionHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160).optional(),
+    "x-kokoro-actor-id": z.string().min(1).max(160),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+    "Idempotency-Key": z.string().min(1).max(128),
+    "If-Match": z.string().regex(/^"[1-9][0-9]*"$/),
+  })
+  .strict()
+
+export const zPublishModelRevisionPath = z
+  .object({
+    revision_id: z.uuid(),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zPublishModelRevisionResponse = zSchemaEdc460D150C8281c
+
 export const zListRoutingPolicyHeaders = z
   .object({
-    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin"]),
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
     "x-kokoro-tenant-id": z.string().min(1).max(160),
     "x-kokoro-actor-id": z.string().min(1).max(160).optional(),
     "x-kokoro-iam-permissions": z.string().max(160),
@@ -366,7 +1059,7 @@ export const zPutRoutingPolicyBody = zSchemaDd65Bb967Aa97A2c
 
 export const zPutRoutingPolicyHeaders = z
   .object({
-    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin"]),
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
     "x-kokoro-tenant-id": z.string().min(1).max(160),
     "x-kokoro-actor-id": z.string().min(1).max(160),
     "x-kokoro-iam-permissions": z.string().max(160),
@@ -424,3 +1117,28 @@ export const zGetModelCatalogQuery = z
  * Success
  */
 export const zGetModelCatalogResponse = zSchemaA98F91Be72Cce9D2
+
+export const zGetModelProviderCreationHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160),
+    "x-kokoro-actor-id": z.string().min(1).max(160),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+  })
+  .strict()
+
+export const zGetModelProviderCreationQuery = z
+  .object({
+    idempotency_key: z.string().min(1).max(128),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zGetModelProviderCreationResponse = zSchema37A3E49C0A766261

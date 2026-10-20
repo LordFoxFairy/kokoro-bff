@@ -172,9 +172,19 @@
       "operation_id": "listAdminModelRouting"
     },
     {
+      "method": "POST",
+      "path": "/v1/admin/model-labels",
+      "operation_id": "createAdminModelLabel"
+    },
+    {
       "method": "GET",
       "path": "/v1/admin/model-labels",
       "operation_id": "listAdminModelLabels"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/model-revisions",
+      "operation_id": "createAdminModelRevision"
     },
     {
       "method": "GET",
@@ -825,6 +835,46 @@
       "method": "GET",
       "path": "/skill-downloads/{handle}",
       "operation_id": "downloadSkillBytes"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-providers",
+      "operation_id": "listAdminModelProviders"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/model-providers",
+      "operation_id": "createAdminModelProvider"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-provider-creations",
+      "operation_id": "getAdminModelProviderCreation"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-definitions",
+      "operation_id": "listAdminModelDefinitions"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/model-definitions",
+      "operation_id": "createAdminModelDefinition"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-features",
+      "operation_id": "listAdminModelFeatures"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/model-revisions/{revision_id}/publish",
+      "operation_id": "publishAdminModelRevision"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/admin/model-labels/{label_id}",
+      "operation_id": "updateAdminModelLabel"
     }
   ]
 }

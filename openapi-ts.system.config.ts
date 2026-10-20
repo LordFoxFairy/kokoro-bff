@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 import { defineConfig } from "@hey-api/openapi-ts"
 
 const repositoryRoot = dirname(fileURLToPath(import.meta.url))
-const ownerCommit = "b7fe78e25e3c569ae0e1cb9b42cddab02074ca07"
+const ownerCommit = "550d65498822d8d2e629199482de4f6990b62708"
 
 export default defineConfig({
   input: resolve(repositoryRoot, `contract/vendor/kokoro-system/${ownerCommit}/system.openapi.json`),
@@ -23,6 +23,16 @@ export default defineConfig({
           "GET /v1/system/model-catalog/revisions",
           "GET /v1/system/model-catalog/routing-policies",
           "PUT /v1/system/model-catalog/routing-policies/{label_id}",
+          "GET /v1/system/model-catalog/providers",
+          "GET /v1/system/model-catalog/definitions",
+          "GET /v1/system/features",
+          "POST /v1/system/model-catalog/providers",
+          "GET /v1/system/model-catalog/provider-creations",
+          "POST /v1/system/model-catalog/definitions",
+          "POST /v1/system/model-catalog/revisions",
+          "POST /v1/system/model-catalog/revisions/{revision_id}/publish",
+          "POST /v1/system/model-catalog/labels",
+          "PATCH /v1/system/model-catalog/labels/{label_id}",
         ],
       },
       orphans: false,
