@@ -1,3 +1,9 @@
+## 2026-10-20 MC-02A：消费共享配置，不新增本 owner 数据
+
+System5拥有共享provider/revision和各业务label/routing/tenant选择事实；BFF只消费该有效catalog及四管理操作。业务 name 保留稳定label key，model_id/revision_id/provider_id 为owner精确引用，不按别名/上游ID或默认修订重建事实。nullable alias与无feature共享revision只是public读表示变化，无BFF持久事实/回执/Schema变更。
+
+canonical SQL、lockfile和全部其他owner pins保持；本片无数据库读写、迁移或正常资源操作。秘密保存/领取候选、实际模型/工具/扣费均未放行，正常数据处置及消费者切换由Root统一验收。
+
 ## 2026-10-20 System4 管理配对：本 owner 数据模型不变
 
 模型标签、immutable revision/connection 快照、路由策略和相关幂等/CAS事实仍只由 System 拥有。BFF Public20 仅将原管理员 revision 读表示换为 `request_model` 与 System4 的 closed `connection`，不落库、不缓存或推导连接、不解析密钥引用。`database/schema.sql`、BFF 回执与全部现有持久事实保持字节不变；本任务没有安装、迁移或正常数据写入。

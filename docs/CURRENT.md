@@ -1,3 +1,13 @@
+## 2026-10-20 MC-02A System5 消费者工程验收（隔离候选，正常未切）
+
+本候选唯一 Public21.0.0 /165 operations：AdminModelLabel.display_name required nullable，AdminModelRevision无feature；业务 `/models` 保稳定label name，并用owner显式provider与精确model/revision/provider ID、feature/request_model、有效display_name和required nullable next_cursor闭合投影。正式固定System `b7fe78e25e3c569ae0e1cb9b42cddab02074ca07` /5.0.0，artifact `a83b37269e9e4fa7fb5310a1836975e20ab9eaee965a66c83e35bb1ca1b9e5df`、provenance `97b20e57f66010ba456fac59fe1dd62d90c17325c82d3da80be455ea9d3cf747`；同唯一生成器新增getModelCatalog第5窄操作，16文件／26 strict对象，旧当前vendor退休。
+
+三D0先行；真实BFF HTTP RED已复现key=chat/fast被旧projection猜成provider=chat且丢失精确引用。现client边界用固定generated严格解析并投影ownerprovider，不改label key、不猜别名/默认修订；删除application旧猜测函数，无第二兼容实现。原四管理操作、受信tenant/权限、CAS/key、HTTP预算与错误保持。升级原成功/失败夹具，保缺default、错误类型、缺cursor、裸envelope/meta及原安全断言，补旧catalog/默认修订伪值、精确ID/名称界、unknown连接内容拒绝与alias/default有效名；伪造浏览器tenant/权限不转发。
+
+最终focused四套48PASS/0SKIP；首次新test-only逆证因空/重复片段定位失败的2项保留日志，改为精确行区间/SHA及完整父hash后通过，Public21 wire未改、旧20→19 oracle字节未动。新21→20全文逆回完整原Public20再委托原19/双父证明；正规baseline更新后有序165 inventory无diff。代码停写后 Node22.22.2/pnpm11.25.0完整七门 format:check/lint/typecheck/contract:check/test:architecture/test/build 均exit0：contract849PASS/0SKIP、architecture36PASS、default1498PASS/0FAIL/3原资源SKIP；System双次byte-identical生成漂移随contract通过。主会话独审/复验及精确提交随后进行，不把本writer自验冒为已审合并。
+
+基线 `15e4a7423ceed83dbb09d02e24e802ac78d9ed9e`，本writer未切分支/暂存/提交/push或修改正常配置/进程/数据。SQL、lockfile、其他owner pins、operation inventory与旧20/19/双父oracle保持；本片未运行真实PG/Redis、真实System业务owner HTTP、App/Admin整链或正常激活。Key保存/领取仍独立候选，模型、工具、扣费继续暂停。Root ignored `var/dev/system-management-20261020/bff-mc02a-*` 保存RED、首逆证失败、最终门及受影响文件冻结收据；消费者固定与正常切换由Root统筹。下方为历史切片。
+
 ## 2026-10-20 System4 管理配对完成工程验收（隔离候选，未正常激活）
 
 本候选唯一 Public20.0.0 /165 operations，只替换管理员 revision 的旧 `transport`/`gateway_model_name` 为 System4 必需 `request_model`＋closed `connection`；现四操作闭集、标签/路由/PUT、身份/tenant、分页、CAS/key、错误/取消/预算保持。三面文档门先收敛；固定 System Draft `dafbc66c9ab5e55b556dbd1dd71c79cef354f69c` /4.0.0 原始 artifact `c7cda9d09db266cd26dc1b80dfe9bb95c3c9f6a91bdbd6c5d7de4f85295d1dc6` 和 provenance `37e338939ebecc4a61cf7aff4d14c2e28b5bc34381e66324a2009988e793d2d0`，正规生成16文件，退休System3当前vendor。无新写操作、mapper、兼容union/fallback；原严格窄client直接消费新生成schema。

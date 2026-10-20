@@ -3,6 +3,9 @@
 import { client } from "./client.gen.js"
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from "./client/index.js"
 import type {
+  GetModelCatalogData,
+  GetModelCatalogErrors,
+  GetModelCatalogResponses,
   ListModelLabelData,
   ListModelLabelErrors,
   ListModelLabelResponses,
@@ -16,7 +19,13 @@ import type {
   PutRoutingPolicyErrors,
   PutRoutingPolicyResponses,
 } from "./types.gen.js"
-import { zListModelLabelResponse, zListModelRevisionResponse, zListRoutingPolicyResponse, zPutRoutingPolicyResponse } from "./zod.gen.js"
+import {
+  zGetModelCatalogResponse,
+  zListModelLabelResponse,
+  zListModelRevisionResponse,
+  zListRoutingPolicyResponse,
+  zPutRoutingPolicyResponse,
+} from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
   TData,
@@ -110,4 +119,22 @@ export const putRoutingPolicy = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  })
+
+/**
+ * getModelCatalog
+ *
+ * tenant scope; global requires authenticated system-admin
+ */
+export const getModelCatalog = <ThrowOnError extends boolean = false>(
+  options: Options<GetModelCatalogData, ThrowOnError>,
+): RequestResult<GetModelCatalogResponses, GetModelCatalogErrors, ThrowOnError> =>
+  (options.client ?? client).get<GetModelCatalogResponses, GetModelCatalogErrors, ThrowOnError>({
+    responseValidator: async (data) => await zGetModelCatalogResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/catalog",
+    ...options,
   })

@@ -2,7 +2,7 @@
 
 import * as z from "zod"
 
-export const zSchema48Df62A23917Bc3f = z
+export const zSchemaFae624Eabf7E35F4 = z
   .object({
     data: z
       .object({
@@ -10,7 +10,7 @@ export const zSchema48Df62A23917Bc3f = z
           z
             .object({
               label_key: z.string().min(1).max(128),
-              display_name: z.string().min(1).max(160),
+              display_name: z.string().min(1).max(160).nullable(),
               feature_key: z.string().min(1).max(128),
               default_revision_id: z
                 .uuid()
@@ -49,7 +49,7 @@ export const zSchema48Df62A23917Bc3f = z
   })
   .strict()
 
-export const zSchema92E217074Ca00Ddb = z
+export const zSchema85Af568018D2C865 = z
   .object({
     data: z
       .object({
@@ -69,7 +69,6 @@ export const zSchema92E217074Ca00Ddb = z
               revision: z.int().gt(0).lte(9007199254740991),
               provider_model_name: z.string().min(1).max(255),
               display_name: z.string().min(1).max(160),
-              feature_key: z.string().min(1).max(128),
               input_modalities: z
                 .array(z.enum(["text", "image", "audio", "video"]))
                 .min(1)
@@ -239,6 +238,43 @@ export const zSchemaDd65Bb967Aa97A2c = z
   })
   .strict()
 
+export const zSchemaA98F91Be72Cce9D2 = z
+  .object({
+    data: z
+      .object({
+        items: z.array(
+          z
+            .object({
+              key: z.string(),
+              display_name: z.string(),
+              is_default: z.boolean(),
+              feature_key: z.string(),
+              model_id: z
+                .uuid()
+                .regex(
+                  /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+                ),
+              revision_id: z
+                .uuid()
+                .regex(
+                  /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+                ),
+              provider_id: z
+                .uuid()
+                .regex(
+                  /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+                ),
+              provider: z.string().min(1).max(128),
+              request_model: z.string().min(1).max(255),
+            })
+            .strict(),
+        ),
+        next_cursor: z.string().nullable(),
+      })
+      .strict(),
+  })
+  .strict()
+
 export const zListModelLabelHeaders = z
   .object({
     "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin"]),
@@ -266,7 +302,7 @@ export const zListModelLabelQuery = z
 /**
  * Success
  */
-export const zListModelLabelResponse = zSchema48Df62A23917Bc3f
+export const zListModelLabelResponse = zSchemaFae624Eabf7E35F4
 
 export const zListModelRevisionHeaders = z
   .object({
@@ -295,7 +331,7 @@ export const zListModelRevisionQuery = z
 /**
  * Success
  */
-export const zListModelRevisionResponse = zSchema92E217074Ca00Ddb
+export const zListModelRevisionResponse = zSchema85Af568018D2C865
 
 export const zListRoutingPolicyHeaders = z
   .object({
@@ -358,3 +394,33 @@ export const zPutRoutingPolicyPath = z
  * Success
  */
 export const zPutRoutingPolicyResponse = zSchemaF5Cb0F13Cfad348e
+
+export const zGetModelCatalogHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160),
+    "x-kokoro-actor-id": z.string().min(1).max(160).optional(),
+    "x-kokoro-iam-permissions": z.string().max(160).optional(),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+  })
+  .strict()
+
+export const zGetModelCatalogQuery = z
+  .object({
+    feature_key: z.string().min(1).max(128).optional(),
+    cursor: z.string().min(1).max(2048).optional(),
+    limit: z
+      .string()
+      .regex(/^(?:[1-9]|[1-9][0-9]|100)$/)
+      .optional(),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zGetModelCatalogResponse = zSchemaA98F91Be72Cce9D2

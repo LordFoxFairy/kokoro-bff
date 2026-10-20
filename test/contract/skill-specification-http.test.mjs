@@ -508,7 +508,7 @@ test("R357 active public contract declares original skill.list and distinct obse
   const { readFile } = await import("node:fs/promises")
   const { load } = await import("js-yaml")
   const document = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
-  assert.equal(document.info.version, "20.0.0")
+  assert.equal(document.info.version, "21.0.0")
   assert.equal(document.paths["/v1/skill.list"].get.operationId, "listSkills")
   for (const path of [website + "ListSkills", website + "ListHubSkills", website + "GetSkill", "/skill.v1.SkillService/DownloadSkill"]) {
     assert.equal(document.paths[path].post["x-kokoro-visibility"], "browser-private")

@@ -1,3 +1,9 @@
+## 2026-10-20 MC-02A 当前 Public21.0.0 / System5 配对候选
+
+Public21保持165操作；AdminModelLabel.display_name nullable、AdminModelRevision去feature，ModelCandidate以稳定label name、显式provider及精确model/revision/provider ID、feature/request_model、有效display_name闭合投影；data显式models与required nullable next_cursor。新增getModelCatalog是既有public/models的第5个窄owner消费操作，不是新公开API。
+
+固定正式System `b7fe78e25e3c569ae0e1cb9b42cddab02074ca07` /5.0.0，artifact SHA256 `a83b37269e9e4fa7fb5310a1836975e20ab9eaee965a66c83e35bb1ca1b9e5df`，provenance `97b20e57f66010ba456fac59fe1dd62d90c17325c82d3da80be455ea9d3cf747`；同一正式生成器26个strict对象／16文件，旧当前vendor退休。新shared-model-catalog-public-contract精确逆回Public20，再委托原未改20→19与双父proof；有序inventory不变，无runtime union/fallback。正常激活、Key候选与模型执行独立，下面为历史切片。
+
 ## 2026-10-20 唯一 Public20.0.0 / System4 管理配对候选
 
 公开仍 `/v1`、165 operations；只将 `AdminModelRevision` 的旧 `transport`/`gateway_model_name` 替换为必需 `request_model` 和 closed `connection`。固定 System `dafbc66c9ab5e55b556dbd1dd71c79cef354f69c` /4.0.0，artifact SHA256 `c7cda9d09db266cd26dc1b80dfe9bb95c3c9f6a91bdbd6c5d7de4f85295d1dc6`，原始 provenance SHA256 `37e338939ebecc4a61cf7aff4d14c2e28b5bc34381e66324a2009988e793d2d0`；manifest 同时绑定两者，正规生成仍只含现四操作。旧当前 vendor 退休，无多版本 union/fallback。

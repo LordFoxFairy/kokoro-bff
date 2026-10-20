@@ -1,12 +1,13 @@
-# Models API v1
+# Models API v1 — Public21 / System5
 
-System 的 `model-catalog` 模块是模型目录与路由配置的唯一 owner。BFF 只把 Web-facing
-`GET /v1/models` 投影到 System 的 `GET /v1/system/model-catalog/catalog`，不保存模型目录，
-也不接受浏览器提交 tenant、权限或 model policy。
+System `model-catalog` 是共享模型配置、业务 label/routing 与租户有效选择的唯一 owner。BFF 只将既有
+`GET /v1/models` 投影到 `GET /v1/system/model-catalog/catalog`；不保存目录、不接受浏览器自报 tenant/权限，
+不转发模型调用或取得 Key。
 
 ## GET `/v1/models`
 
-可选查询参数 `feature_key`、`limit`（1–100）和不透明 `cursor` 原名转发；BFF 不创建 camelCase alias。
+可选 `feature_key`、`limit`（1–100）和不透明 `cursor` 原名转发。System 只返回当前受信租户显式策略及其有效
+覆盖／默认修订；未绑定、未发布、退休或无有效 provider 的项不出现，不从 default_revision_id 猜可执行项。
 
 ### Response `200`
 
@@ -15,25 +16,36 @@ System 的 `model-catalog` 模块是模型目录与路由配置的唯一 owner�
   "data": {
     "models": [
       {
-        "provider": "kokoro",
-        "name": "claude-sonnet",
+        "provider": "real-provider",
+        "name": "chat/fast",
         "is_default": true,
-        "display_name": "Claude Sonnet"
+        "display_name": "Fast chat",
+        "model_id": "11111111-1111-4111-8111-111111111111",
+        "revision_id": "22222222-2222-4222-8222-222222222222",
+        "provider_id": "33333333-3333-4333-8333-333333333333",
+        "feature_key": "chat",
+        "request_model": "vendor/model-fast"
       }
     ],
-    "next_cursor": "CURSOR"
+    "next_cursor": null
   },
   "meta": { "request_id": "REQUEST_ID" }
 }
 ```
 
+全部字段必需，success/data/item 都是 closed object；next_cursor 必需且为 string/null。`name` 是稳定业务 label key，
+不是展示别名或上游模型ID；`provider` 直接使用 owner 的明确值，不从 slash、name 或 display_name 推断。
+`display_name` 是 owner 提供的有效别名，未设别名时为原 request_model，最长255；精确ID与 feature/request_model
+保持 owner 原值。不包含 base_url、secret_handle_ref 或 Key。
+
 ## Live adapter
 
-`KOKORO_SYSTEM_BASE_URL` 缺失时返回 `503 upstream_not_configured`。BFF 从可信 sealed session 注入
-`x-kokoro-tenant-id`、`x-kokoro-subject`，并发送 `x-kokoro-service`、`x-kokoro-request-id` 和标准
-`Forwarded`；不透传浏览器权限，也不伪造 `system:read`。
+`KOKORO_SYSTEM_BASE_URL` 缺失返回 `503 upstream_not_configured`。BFF 从当前已准入会话注入
+`x-kokoro-tenant-id`、`x-kokoro-subject` 与 actor；只用服务身份访问 owner，不转发用户 Bearer或浏览器权限，
+也不伪造 `system:read`。保留既有有界 HTTP timeout/响应大小预算。
 
-System owner 响应必须为且仅为 `{ "data": ... }`，不接受裸 body 或旧 `meta`。每个 item 的 `key`、`display_name` 和布尔型
-`is_default` 都是必需字段；缺失或类型错误 fail closed 为 `502 upstream_response_invalid`。BFF 保留
-必填的 string/null `next_cursor`，并把 owner 的真实 `is_default` 投影到公开响应。System 错误 envelope
-必须包含 string `code`、string `message` 与 boolean `retryable`。BFF 的公开成功/错误 envelope 仍由本仓 v1 契约定义。
+System5 成功必须且仅为 `{ "data": ... }`；第5个窄操作 `getModelCatalog` 的固定 generated schema 严格解析字段、
+UUID、类型及额外字段，投影补公开名称界。旧catalog、缺字段和未知字段闭锁为 `502 upstream_response_invalid`，
+错误不附带原模型连接内容。原严格 System 错误 envelope 与本仓公开错误规则保持。
+
+共享配置配对不代表正常激活或模型许可；模型、工具及扣费仍暂停，Key 保存/领取为独立候选范围。

@@ -43,37 +43,6 @@ export function stringField(value: Record<string, unknown>, ...names: string[]):
   return null
 }
 
-export function modelCatalogData(body: unknown): { models: Array<{
-  provider: string
-  name: string
-  is_default: boolean
-  display_name?: string
-}>; next_cursor?: string | null } | null {
-  const data = dataOf(body)
-  if (data === null || !Array.isArray(data.items)) return null
-  const items = data.items
-  const models = []
-  for (const item of items) {
-    if (!isRecord(item)) return null
-    const key = stringField(item, "key")
-    if (key === null) return null
-    const displayName = stringField(item, "display_name")
-    if (displayName === null) return null
-    if (typeof item.is_default !== "boolean") return null
-    const provider = key.includes("/") ? (key.split("/", 1)[0] ?? "kokoro") : "kokoro"
-    const name = key
-    models.push({
-      provider,
-      name,
-      is_default: item.is_default,
-      ...(displayName === null ? {} : { display_name: displayName }),
-    })
-  }
-  const nextCursor = data.next_cursor
-  if (nextCursor !== null && typeof nextCursor !== "string") return null
-  return { models, next_cursor: nextCursor }
-}
-
 export function agentSessionListData(body: unknown): { sessions: ChatSessionSummary[]; next_cursor: string | null } | null {
   const data = dataOf(body)
   if (data === null || !Array.isArray(data.sessions)) return null

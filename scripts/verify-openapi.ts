@@ -1,3 +1,4 @@
+import { inspectSharedModelCatalogContract, restorePublic20SharedModelCatalogContract } from "./shared-model-catalog-public-contract.mjs"
 import { inspectSystemModelConnectionContract } from "./system-model-connection-public-contract.mjs"
 import {
   inspectClosureIntegrationContract,
@@ -3149,7 +3150,8 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
   const currentSource = source,
     currentBaseline = baseline
   const integrationErrors = [
-    ...inspectSystemModelConnectionContract(currentSource, currentBaseline),
+    ...inspectSharedModelCatalogContract(currentSource, currentBaseline),
+    ...inspectSystemModelConnectionContract(restorePublic20SharedModelCatalogContract(currentSource), currentBaseline),
     ...inspectClosureIntegrationContract(currentSource, currentBaseline),
   ]
   if (integrationErrors.length > 0) return integrationErrors

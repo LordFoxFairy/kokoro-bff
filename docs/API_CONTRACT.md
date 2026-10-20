@@ -1,3 +1,9 @@
+## 2026-10-20 Public21 / System5 MC-02A 配对门
+
+canonical Public21.0.0 保165操作。AdminModelLabel.display_name 改 required nullable（alias 未设由owner保持 null），AdminModelRevision 删除 feature_key；只读管理不增加创建/PATCH入口。业务 `/v1/models` 的 closed ModelCandidate 必需 provider/name/is_default/display_name/model_id/revision_id/provider_id/feature_key/request_model；name=稳定label key（1..128），provider=owner显式值（1..128），display_name=owner有效别名或原模型名（1..255），feature_key 1..128，request_model 1..255，三ID为UUID。closed data 必需 models 与 nullable next_cursor，不暴露连接 URL、secret_handle_ref 或 Key。
+
+唯一System5固定 artifact/provenance由现生成链分发，新增第5个窄消费操作 getModelCatalog 只服务既有 public `/models`。不从slash/display_name推provider，不兼容旧catalog/revision或缺字段。新 test-only Public21→20 精确逆证再委托原20→19及双父证明，旧oracle不改；App/Admin由Root固定同一Public21后续配对。正常激活与执行许可独立，本片不涉及Key保存/领取。
+
 ## 2026-10-20 Public20.0.0 / System4 配对门（隔离候选）
 
 唯一公开事实源 `contract/openapi/v1/openapi.yaml` 升至 20.0.0，165 operations 和四个管理员模型操作不增减。`AdminModelRevision` 必需 `request_model`（1..255）及 closed `connection`：固定协议 `openai_chat_completions`、类型 `direct|litellm`、受界 HTTP(S) `base_url`（1..2048）与 `secret_handle_ref`（1..255，仅引用）。旧 `transport`/`gateway_model_name` 不再接受或返回；不以 union/fallback 兼容 System3。标签、路由列表与 PUT key/CAS/错误形状保持。

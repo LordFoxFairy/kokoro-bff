@@ -1,3 +1,11 @@
+## 2026-10-20 MC-02A System5 共享模型消费者设计门（隔离候选）
+
+复用 Root 当前 MC-02A：System owner 维护共享 provider/revision 与各业务 label/routing/tenant 覆盖；BFF 不复制模型配置、不取得 Key 或执行模型。固定正式 `b7fe78e25e3c569ae0e1cb9b42cddab02074ca07` /5.0.0 的 OpenAPI/provenance，沿同窄生成器保四管理操作并新增既有 catalog GET 的 `getModelCatalog`；不新增公开路径或模型转发。
+
+Public21.0.0 仍 `/v1`、165 operations。管理员 label 别名可 null，revision 删除 feature_key；业务 ModelCandidate.name 始终是稳定 label key，不是展示别名或上游模型名。catalog 只投影 owner 明确返回的 provider、model_id/revision_id/provider_id、feature_key/request_model、有效 display_name 和 is_default；data 固定 models 与 required nullable next_cursor。generated 严格解码在 owner client 边界终止，删除 application 原 slash 猜 provider 的实现；不从名称猜配置或默认修订，不扫描未绑定项，不接收旧/额外字段。
+
+公开 key/feature/provider 上界128，显示名按有效 alias 或 request_model 上界255；owner catalog 输出未声明的 key/display/feature界由本投影按已发布 label/request_model 事实检查。保现 `/models` owner HTTP、受信 tenant 与请求预算、四管理操作权限/CAS/错误。SQL、lockfile、其他owner pins不变；Key 保存/领取仍独立未批准候选，模型/工具/扣费继续暂停。先复现 chat/fast 被猜为 provider=chat，再验证严格新wire与完整相关门；真实资源与正常切换由Root统一。
+
 ## 2026-10-20 System4 模型管理配对设计门（隔离候选）
 
 沿已批准的 System4 immutable connection 模型，现有 `src/http/routes/model-routing-admin.ts` 和 owner 窄 client 不增加边界：仅消费 `listModelLabel`、`listModelRevision`、`listRoutingPolicy`、`putRoutingPolicy`。固定 owner Draft `dafbc66c9ab5e55b556dbd1dd71c79cef354f69c` 的 4.0.0 OpenAPI/provenance，并沿现生成器更新；Agent 当前固定消费者和其他 owner 不变。

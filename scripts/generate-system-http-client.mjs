@@ -11,11 +11,11 @@ const output = path.join(root, "src/generated/system-http")
 const manifestPath = path.join(root, "contract/dependencies/system-http.json")
 const configPath = path.join(root, "openapi-ts.system.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "dafbc66c9ab5e55b556dbd1dd71c79cef354f69c"
+const ownerCommit = "b7fe78e25e3c569ae0e1cb9b42cddab02074ca07"
 const vendorPath = path.join(root, `contract/vendor/kokoro-system/${ownerCommit}/system.openapi.json`)
-const ownerDigest = "c7cda9d09db266cd26dc1b80dfe9bb95c3c9f6a91bdbd6c5d7de4f85295d1dc6"
+const ownerDigest = "a83b37269e9e4fa7fb5310a1836975e20ab9eaee965a66c83e35bb1ca1b9e5df"
 const provenancePath = path.join(root, `contract/vendor/kokoro-system/${ownerCommit}/provenance.json`)
-const provenanceDigest = "37e338939ebecc4a61cf7aff4d14c2e28b5bc34381e66324a2009988e793d2d0"
+const provenanceDigest = "97b20e57f66010ba456fac59fe1dd62d90c17325c82d3da80be455ea9d3cf747"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -146,7 +146,7 @@ async function closeGeneratedObjects(directory) {
   const file = path.join(directory, "zod.gen.ts")
   let source = await readFile(file, "utf8")
   const starts = [...source.matchAll(/z\.object\(/gu)].map((match) => match.index)
-  assert.equal(starts.length, 21, "System generated z.object count drifted")
+  assert.equal(starts.length, 26, "System generated z.object count drifted")
   for (const start of starts.reverse()) {
     let depth = 0
     let closed = false
@@ -220,8 +220,8 @@ async function manifestFor(directory) {
   assert.equal(sha256(provenance), provenanceDigest, "vendored System provenance digest drifted")
   const ownerProvenance = JSON.parse(provenance.toString("utf8"))
   assert.equal(ownerProvenance.openapi.sha256, ownerDigest, "System provenance must bind the exact artifact")
-  assert.equal(ownerProvenance.releaseClassification.contractVersion, "4.0.0")
-  assert.equal(JSON.parse(vendor.toString("utf8")).info.version, "4.0.0")
+  assert.equal(ownerProvenance.releaseClassification.contractVersion, "5.0.0")
+  assert.equal(JSON.parse(vendor.toString("utf8")).info.version, "5.0.0")
   assert.equal(nodeVersion, "22.22.2\n", ".node-version must pin Node 22.22.2")
   assert.equal(packageJson.packageManager, "pnpm@11.25.0")
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
@@ -234,7 +234,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-system",
       repository_commit: ownerCommit,
-      contract_version: "4.0.0",
+      contract_version: "5.0.0",
       contract_path: "contract/openapi/system.openapi.json",
       contract_sha256: ownerDigest,
       provenance_path: "contract/provenance.json",

@@ -11,6 +11,18 @@ import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const servers: Server[] = []
 
+const modelCatalogItem = {
+  key: "chat/fast",
+  display_name: "Fast chat",
+  is_default: true,
+  feature_key: "chat",
+  model_id: "11111111-1111-4111-8111-111111111111",
+  revision_id: "22222222-2222-4222-8222-222222222222",
+  provider_id: "33333333-3333-4333-8333-333333333333",
+  provider: "real-provider",
+  request_model: "vendor/model-fast",
+}
+
 async function listen(server: Server): Promise<string> {
   servers.push(server)
   await new Promise<void>((resolve, reject) => {
@@ -760,7 +772,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(
         JSON.stringify({
           data: {
-            items: [{ key: "claude-sonnet", display_name: "Claude Sonnet", is_default: true }],
+            items: [modelCatalogItem],
             next_cursor: "model-cursor-next",
           },
         }),
@@ -777,11 +789,19 @@ describe("kokoro-bff v1 mock contract", () => {
     )
 
     const response = await fetch(`${base}/v1/models?feature_key=chat&limit=20&cursor=cursor-1`, {
-      headers: { ...authHeaders(), "x-kokoro-request-id": "model-owner-request" },
+      headers: {
+        ...authHeaders(),
+        "x-kokoro-request-id": "model-owner-request",
+        "x-kokoro-tenant-id": "tenant-attacker",
+        "x-kokoro-iam-permissions": "system:write",
+      },
     })
     assert.equal(response.status, 200)
     assert.deepEqual(await response.json(), {
-      data: { models: [{ provider: "kokoro", name: "claude-sonnet", is_default: true, display_name: "Claude Sonnet" }], next_cursor: "model-cursor-next" },
+      data: {
+        models: [{ name: modelCatalogItem.key, ...Object.fromEntries(Object.entries(modelCatalogItem).filter(([key]) => key !== "key")) }],
+        next_cursor: "model-cursor-next",
+      },
       meta: { request_id: "model-owner-request" },
     })
     assert.deepEqual(received, {
@@ -794,13 +814,26 @@ describe("kokoro-bff v1 mock contract", () => {
     })
   })
 
-  it("rejects model catalog items with a missing or non-boolean default marker", async () => {
+  it("rejects incomplete, legacy, extra and invalid owner catalog fields without leaking configuration", async () => {
+    const { is_default: _default, ...withoutDefault } = modelCatalogItem
+    const { request_model: _requestModel, ...withoutRequestModel } = modelCatalogItem
+    const data = (item: unknown) => ({ data: { items: [item], next_cursor: null } })
     for (const ownerBody of [
-      { data: { items: [{ key: "model-a", display_name: "Model A" }], next_cursor: null } },
-      { data: { items: [{ key: "model-a", display_name: "Model A", is_default: "true" }], next_cursor: null } },
-      { data: { items: [{ key: "model-a", display_name: "Model A", is_default: false }] } },
-      { items: [{ key: "model-a", display_name: "Model A", is_default: false }], next_cursor: null },
-      { data: { items: [{ key: "model-a", display_name: "Model A", is_default: false }], next_cursor: null }, meta: { request_id: "legacy" } },
+      data(withoutDefault),
+      data({ ...modelCatalogItem, is_default: "true" }),
+      { data: { items: [modelCatalogItem] } },
+      { items: [modelCatalogItem], next_cursor: null },
+      { ...data(modelCatalogItem), meta: { request_id: "legacy" } },
+      data({ key: "model-a", display_name: "Model A", is_default: true }),
+      data(withoutRequestModel),
+      data({ ...modelCatalogItem, default_revision_id: modelCatalogItem.revision_id }),
+      data({ ...modelCatalogItem, provider_id: "not-a-uuid" }),
+      data({ ...modelCatalogItem, provider: "" }),
+      data({ ...modelCatalogItem, key: "x".repeat(129) }),
+      data({ ...modelCatalogItem, feature_key: "" }),
+      data({ ...modelCatalogItem, display_name: "x".repeat(256) }),
+      data({ ...modelCatalogItem, connection: { base_url: "https://private.invalid", secret_handle_ref: "private-secret" } }),
+      { data: { items: [modelCatalogItem], next_cursor: null, extra: "private-secret" } },
     ]) {
       const upstream = createServer((_request, response) => {
         response.setHeader("content-type", "application/json")
@@ -810,10 +843,35 @@ describe("kokoro-bff v1 mock contract", () => {
       const base = await listen(liveServer(config({ upstreams: { ...config().upstreams, system: upstreamBase } })))
       const response = await fetch(`${base}/v1/models?feature_key=chat`, { headers: { ...authHeaders(), "x-kokoro-request-id": "invalid-model-owner" } })
       assert.equal(response.status, 502)
-      const responseBody = (await response.json()) as { error: { code: string }; meta: { request_id: string } }
+      const text = await response.text()
+      const responseBody = JSON.parse(text) as { error: { code: string }; meta: { request_id: string } }
       assert.equal(responseBody.error.code, "upstream_response_invalid")
       assert.equal(responseBody.meta.request_id, "invalid-model-owner")
       assert.equal("data" in responseBody, false)
+      assert.doesNotMatch(text, /private-secret|private\.invalid/u)
+    }
+  })
+
+  it("keeps stable catalog identities when display aliases change or fall back to the request model", async () => {
+    let item = modelCatalogItem
+    const upstream = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { items: [item], next_cursor: null } }))
+    })
+    const upstreamBase = await listen(upstream)
+    const base = await listen(liveServer(config({ upstreams: { ...config().upstreams, system: upstreamBase } })))
+    for (const displayName of ["Optional alias", "m".repeat(255)]) {
+      item = { ...modelCatalogItem, display_name: displayName, request_model: "m".repeat(255) }
+      const response = await fetch(`${base}/v1/models?feature_key=chat`, { headers: authHeaders() })
+      assert.equal(response.status, 200)
+      const body = (await response.json()) as { data: { models: Array<Record<string, unknown>>; next_cursor: null } }
+      assert.equal(body.data.next_cursor, null)
+      assert.deepEqual(body.data.models, [
+        {
+          name: modelCatalogItem.key,
+          ...Object.fromEntries(Object.entries(item).filter(([key]) => key !== "key")),
+        },
+      ])
     }
   })
 

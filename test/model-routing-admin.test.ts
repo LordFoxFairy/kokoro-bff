@@ -104,7 +104,7 @@ const routing = {
 const label = {
   id: labelId,
   label_key: "chat.default",
-  display_name: "Chat default",
+  display_name: null,
   feature_key: "chat",
   default_revision_id: revisionId,
   version: "1",
@@ -119,7 +119,6 @@ const revision = {
   revision: 1,
   provider_model_name: "fixture-model",
   display_name: "Fixture model",
-  feature_key: "chat",
   input_modalities: ["text"],
   output_modalities: ["text"],
   request_model: "fixture/model",
@@ -588,7 +587,7 @@ test("named admin reads accept formal System success responses without an owner 
   ])
 })
 
-test("System4 direct and LiteLLM snapshots pass through unchanged while legacy and malformed revisions fail closed", async () => {
+test("System5 direct and LiteLLM snapshots pass through unchanged while legacy and malformed revisions fail closed", async () => {
   let row: Record<string, unknown> = revision
   const owner = await ownerFixture(() => ({ status: 200, body: { data: { items: [row], next_cursor: null } } }))
   const bff = await bffFixture(owner.origin)
@@ -606,6 +605,7 @@ test("System4 direct and LiteLLM snapshots pass through unchanged while legacy a
     { ...revision, transport: "litellm", gateway_model_name: "legacy/fixture" },
     { ...legacyBase, connection: revision.connection },
     { ...legacyBase, request_model: revision.request_model },
+    { ...revision, feature_key: "chat" },
     { ...revision, request_model: "" },
     { ...revision, request_model: "x".repeat(256) },
     { ...revision, connection: { ...revision.connection, protocol: "openai_responses" } },

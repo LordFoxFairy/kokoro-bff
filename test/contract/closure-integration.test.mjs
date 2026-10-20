@@ -1,3 +1,4 @@
+import { restorePublic20SharedModelCatalogContract } from "../../scripts/shared-model-catalog-public-contract.mjs"
 import { restorePublic19SystemModelConnectionContract } from "../../scripts/system-model-connection-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
@@ -12,7 +13,9 @@ import {
   closureLocalBaseline,
   closureMainBaseline,
 } from "../../scripts/verify-closure-integration-contract.mjs"
-const source = restorePublic19SystemModelConnectionContract(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+const source = restorePublic19SystemModelConnectionContract(
+  restorePublic20SharedModelCatalogContract(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+)
 const baseline = JSON.parse(await readFile(new URL("../../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 

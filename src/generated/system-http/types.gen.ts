@@ -4,11 +4,11 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
-export type Schema48Df62A23917Bc3f = {
+export type SchemaFae624Eabf7E35F4 = {
   data: {
     items: Array<{
       label_key: string
-      display_name: string
+      display_name: string | null
       feature_key: string
       default_revision_id: string | null
       id: string
@@ -21,7 +21,7 @@ export type Schema48Df62A23917Bc3f = {
   }
 }
 
-export type Schema92E217074Ca00Ddb = {
+export type Schema85Af568018D2C865 = {
   data: {
     items: Array<{
       model_id: string
@@ -29,7 +29,6 @@ export type Schema92E217074Ca00Ddb = {
       revision: number
       provider_model_name: string
       display_name: string
-      feature_key: string
       input_modalities: Array<"text" | "image" | "audio" | "video">
       output_modalities: Array<"text" | "image" | "audio" | "video">
       request_model: string
@@ -94,6 +93,23 @@ export type SchemaDd65Bb967Aa97A2c = {
   visible: boolean
   is_default: boolean
   priority: number
+}
+
+export type SchemaA98F91Be72Cce9D2 = {
+  data: {
+    items: Array<{
+      key: string
+      display_name: string
+      is_default: boolean
+      feature_key: string
+      model_id: string
+      revision_id: string
+      provider_id: string
+      provider: string
+      request_model: string
+    }>
+    next_cursor: string | null
+  }
 }
 
 export type ListModelLabelData = {
@@ -163,7 +179,7 @@ export type ListModelLabelResponses = {
   /**
    * Success
    */
-  200: Schema48Df62A23917Bc3f
+  200: SchemaFae624Eabf7E35F4
 }
 
 export type ListModelLabelResponse = ListModelLabelResponses[keyof ListModelLabelResponses]
@@ -235,7 +251,7 @@ export type ListModelRevisionResponses = {
   /**
    * Success
    */
-  200: Schema92E217074Ca00Ddb
+  200: Schema85Af568018D2C865
 }
 
 export type ListModelRevisionResponse = ListModelRevisionResponses[keyof ListModelRevisionResponses]
@@ -405,3 +421,76 @@ export type PutRoutingPolicyResponses = {
 }
 
 export type PutRoutingPolicyResponse = PutRoutingPolicyResponses[keyof PutRoutingPolicyResponses]
+
+export type GetModelCatalogData = {
+  body?: never
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin"
+    "x-kokoro-tenant-id": string
+    "x-kokoro-actor-id"?: string
+    "x-kokoro-iam-permissions"?: string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+  }
+  path?: never
+  query?: {
+    feature_key?: string
+    cursor?: string
+    limit?: string
+  }
+  url: "/v1/system/model-catalog/catalog"
+}
+
+export type GetModelCatalogErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type GetModelCatalogError = GetModelCatalogErrors[keyof GetModelCatalogErrors]
+
+export type GetModelCatalogResponses = {
+  /**
+   * Success
+   */
+  200: SchemaA98F91Be72Cce9D2
+}
+
+export type GetModelCatalogResponse = GetModelCatalogResponses[keyof GetModelCatalogResponses]

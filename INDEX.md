@@ -1,3 +1,7 @@
+## 2026-10-20 MC-02A System5 当前入口
+
+`src/infrastructure/clients/owner/system-model-catalog.ts` 严格消费固定 generated `getModelCatalog`，投影owner显式provider/精确身份，替代原application slash猜测。原四管理操作继续由 `system-model-routing.ts` 消费，revision无feature/label别名nullable。canonical Public21/165及 `scripts/shared-model-catalog-public-contract.mjs` 精确逆回20后委托原20/19证明；旧oracle不改、脚本不进入runtime。相关回归仍在 bff/model-routing-admin/system-http-contract 原suite，当前验证与正常未激活边界见 `docs/CURRENT.md`。
+
 ## 2026-10-20 System4 管理配对当前入口
 
 Public20/165 的唯一wire增量在 `AdminModelRevision`；原 `src/infrastructure/clients/owner/system-model-routing.ts` 严格消费正规 `src/generated/system-http`，仍现四操作，无额外mapper。固定System4 owner artifact/provenance见 `contract/dependencies/system-http.json`；`scripts/system-model-connection-public-contract.mjs` 只做完整Public19逆证，原历史proof不变且不进入runtime。正负例留原 `test/model-routing-admin.test.ts` 与 `test/system-http-contract.test.mjs`；验收及正常未激活边界见 `docs/CURRENT.md`。下列切片按历史读取。
