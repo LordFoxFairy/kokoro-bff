@@ -1,3 +1,7 @@
+## 2026-10-21 Public21.1.1 集成
+
+保留MC-02当前模型契约，配入已合Skills项目／个人并集；只有version和指定GET描述改变。现model-configuration-public-contract承接严格patch逆证，既有model-configuration.json及175inventory不改，其他owner发行物不变。没有runtime旧版兼容，当前外部消费者须固定相同commit/digest后才重载。
+
 ## 2026-10-20 MC-02 配置管理接线（本地候选）
 
 Public21.1.0 新增10个具名模型配置操作，当前175操作，artifact SHA256 `4db8bab6159a2f36061f8b292fba9074ea2614adab2a1489bf9d1b3b066b6fe3`。固定 System6 `550d65498822d8d2e629199482de4f6990b62708`，artifact `10ff7ee82ca7405dcab473f3fd80e620aa6c4e0bc92e64111797144ce0fa4061`、provenance `ed2e312bc5bc3022111797771190e57133818af83c0bb7ad2024a615a4e033c5`。独立 model-management token，仅代理 provider/definition/feature 目录、只写Key创建和原主体脱敏查回、模型修订创建/CAS发布、业务label创建/修改；不代理运行密钥或新增删除/健康操作。IAM当前管理员、受信tenant/actor、原key/CAS、取消与绝对预算保持；无回退token或自动重试。

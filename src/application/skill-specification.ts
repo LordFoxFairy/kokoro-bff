@@ -91,6 +91,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
   private async installations(context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number, projectRef?: string) {
     const items: import("./skill-specification.types.js").SkillInstallationFact[] = [],
       seen = new Set<string>(),
+      series = new Set<string>(),
       cursors = new Set<string>()
     let cursor: string | undefined
     do {
@@ -107,8 +108,9 @@ export class SkillSpecificationService implements SkillSpecificationSource {
       )
       this.active(signal, deadlineAt)
       for (const item of result.items) {
-        if (!item.installed || seen.has(item.installation_id)) throw new Error("skill_response_invalid")
+        if (!item.installed || seen.has(item.installation_id) || series.has(item.series_id)) throw new Error("skill_response_invalid")
         seen.add(item.installation_id)
+        series.add(item.series_id)
         items.push(item)
       }
       if (items.length > 1000) throw new ConnectError("Skill list capacity exceeded", Code.ResourceExhausted)
@@ -230,7 +232,15 @@ export class SkillSpecificationService implements SkillSpecificationSource {
         if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(project.id)) throw new Error("skill_response_invalid")
         projectRef = project.id
       }
-      const installed = await this.installations(context, signal, deadlineAt, projectRef)
+      let installed = await this.installations(context, signal, deadlineAt)
+      if (projectRef !== undefined) {
+        const projectInstalled = await this.installations(context, signal, deadlineAt, projectRef)
+        const bySeries = new Map(installed.map((item) => [item.series_id, item]))
+        // Project installation wins as a whole exact record, even when older or disabled.
+        for (const item of projectInstalled) bySeries.set(item.series_id, item)
+        if (bySeries.size > 1000) throw new ConnectError("Skill list capacity exceeded", Code.ResourceExhausted)
+        installed = [...bySeries.values()]
+      }
       const profiles = await this.creatorProfiles(
         installed.map((item) => item.product),
         context,

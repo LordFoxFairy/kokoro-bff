@@ -1,3 +1,7 @@
+## 2026-10-21 Public21.1.1 配对目标
+
+本次从21.1.0补入已合Public19.0.1的skill.list并集描述，方法、查询、返回、权限、错误、175有序operations及全部模型字段保持。GET当前项目安装完整精确表示覆盖同series个人安装，停用／旧版本仍保留，列表不授执行权；共享预算、1000项上限及返回前重核项目不变。当前原文由既有配置检查核描述位置／篡改／降版，再逆回既有冻结父全文；机器源唯一，消费者等待正式提交后固定生成。
+
 ## MC-02 当前公开配置增量（2026-10-20，design-first）
 
 Public21.1仍/v1，新增10具名admin operation至175：GET model-providers/model-definitions/model-features、POST model-providers/model-definitions/model-revisions/model-labels、GET model-provider-creations?idempotency_key、POST model-revisions/{revision_id}/publish、PATCH model-labels/{label_id}。新列表保limit/cursor分页；创建201，其他200。body/error/meta闭集，Key输入writeOnly、输出不得含Key。query主体只取可信context，lookup404表示未确认。新命令原Idempotency-Key；publish和PATCH必须强If-Match，create不收CAS；不暴露owner credentials/read。原四路由接口/CAS/错误不变，消费者须固定新source/hash。

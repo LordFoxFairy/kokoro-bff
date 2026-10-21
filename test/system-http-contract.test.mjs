@@ -135,6 +135,20 @@ test("configuration additive contract protects all prior bytes and never publish
   const source = await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8")
   const baseline = JSON.parse(await readFile(new URL("contract/tests/v1-operations.json", root), "utf8")).operations
   assert.deepEqual(inspectModelConfigurationContract(source, baseline), [])
+  assert.equal(load(source).info.version, "21.1.1")
+  const projectUnion = source.match(/ Personal and project installations form a union[^\n]+/u)?.[0]
+  assert.ok(projectUnion)
+  for (const changed of [
+    source.replace(projectUnion, ""),
+    source
+      .replace(projectUnion, "")
+      .replace("Current IAM-admitted Product identity projections.", `Current IAM-admitted Product identity projections.${projectUnion}`),
+    source.replace("Personal and project installations form a union", "Project installations only"),
+    source.replace("version: 21.1.1", "version: 21.1.0"),
+  ]) {
+    assert.notEqual(changed, source)
+    assert.ok(inspectModelConfigurationContract(changed, baseline).length > 0)
+  }
   assert.equal(baseline.length, 175)
   const api = load(source)
   assert.equal(api.components.schemas.AdminModelProviderInput.properties.api_key.writeOnly, true)

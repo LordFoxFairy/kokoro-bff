@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 21.1.0
+  version: 21.1.1
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -12403,7 +12403,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: capability.skill.read
       summary: listSkills
-      description: Fresh current human and fixed Product tenant admission. Source facts are qualified by the owner; no anonymous access, latest fallback or write side effect.
+      description: Fresh current human and fixed Product tenant admission. Source facts are qualified by the owner; no anonymous access, latest fallback or write side effect. Personal and project installations form a union when project_id is present; the complete exact project installation takes precedence for the same series, including disabled installations. Personal-only items remain; no latest substitution, automatic upgrade or execution authorization. Both scopes share the request deadline, the result remains limited to 1000 items, and current project access is rechecked before disclosure.
       responses:
         "200":
           description: Specification representation; no legacy data/meta wrapper.

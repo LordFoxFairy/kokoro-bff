@@ -1,3 +1,7 @@
+## 2026-10-21 已批准 Skills 并集与 MC-02 正常配对
+
+复用已合PR15的个人／项目并集及MC-02既有模型设计；在独立集成区从f3da7d5承接333b708，不切回旧Public19或覆盖正常运行候选。唯一Public21.1.1仍175操作，wire只改版本与skill.list GET描述，行为逐字承接主线已批准实现。现test-only配置证明先精确核该追加位于指定GET且唯一，再逆回原21.1.0 SHA并沿原模型／双父证明；原proof/inventory不变，不建新proof模块或runtime兼容路径。App/Admin随后固定同一提交与摘要；正常重载须消费者配对及验收完成后进行。无新Schema、SQL、身份、依赖、模型／工具／积分执行或同事连接器改动。
+
 ## MC-02 配置旅程实施门（2026-10-20，用户已批准）
 
 沿System6现模块：BFF只投影10个具名配置操作及原4管理操作。新增provider/definition/feature列表、provider只写Key创建/原主体脱敏查回、definition/revision创建/发布、label创建/别名与默认修订PATCH。原owner client共享同一有界HTTP机制；新配置client/route按实际变化职责分离，不做任意proxy。独立可选KOKORO_BFF_MODEL_MANAGEMENT_SERVICE_TOKEN仅用于model-management，未配置503，不借upstreamSecret或system-admin；普通catalog/原routing职责不变。用户仍经IAM当次platformAdmin准入，tenant/actor只来自上下文。
