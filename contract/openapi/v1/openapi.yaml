@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 19.0.0
+  version: 19.1.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -4545,6 +4545,71 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/projects/{projectId}/resources/{asset_id}/content:
+    get:
+      tags: [Projects]
+      operationId: downloadProjectResource
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.resource.read
+      summary: Download one current owner's CLEAN project ASSET resource
+      description: Admit the current Product subject and resolve the active Project by ID or slug using tenant_id, owner_id and deleted_at IS NULL. Only the canonical project ID is sent to Storage in trusted project scope. Recheck that same Project immediately before sending fully verified bytes. No query, request body, alias, presigned URL or partial success is supported. One absolute 20000 ms budget starts before IAM admission and includes Project reads, both Storage RPCs, object fetch, actual EOF and cancellation cleanup; no stage resets it. Network work never holds a Project database lock. Revalidation is not atomic cross-service revocation; an already issued Storage reference may remain valid for at most 300 seconds.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: asset_id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+      responses:
+        '200':
+          description: Complete ASSET and CLEAN bytes after matching asset ID, SHA-256, size and MIME across Storage reads; actual EOF, exact length and SHA-256 are verified before any success is sent. Maximum 1048576 bytes.
+          headers:
+            x-request-id:
+              schema: { type: string }
+            Content-Type:
+              schema: { type: string }
+            Content-Length:
+              schema: { type: integer, minimum: 0, maximum: 1048576 }
+            Content-Disposition:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            Referrer-Policy:
+              schema: { type: string, const: no-referrer }
+            X-Content-Type-Options:
+              schema: { type: string, const: nosniff }
+          content:
+            '*/*':
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404':
+          description: Current subject does not own an active Project, or the exact project-scoped ASSET is missing or not CLEAN. No resource from another scope is exposed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Storage metadata, reference or object bytes violate the pinned contract, origin, size, actual EOF or SHA-256 requirements
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: IAM, Project store, Storage dependency or absolute request budget is unavailable. Storage service credential or policy rejection is a dependency failure and never a user login 401.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/projects/{projectId}/resources:
     parameters:
       - $ref: '#/components/parameters/ProjectId'

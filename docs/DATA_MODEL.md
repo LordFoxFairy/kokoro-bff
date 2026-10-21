@@ -722,7 +722,7 @@ Project授权读取的**目标生命周期已裁决，实现待验**：当前无
 
 后继数据验证：BFF原catalog/facts不变；真实Storage同key重放/异义/并发/引用/最后引用/新代/旧cleanup不伤新代由owner证明；BFF真实授权取消/超时无泄漏及只调用本scope；Root用户确认→DELETE→权威列表/硬刷新独立验收。正常删除数据、授资格、DDL、进程切换均非本D0授权；原suffix与untracked var保护。
 
-Root最终补充裁决：现 `src/infrastructure/postgres/client.ts` 唯一Pool仅增加 `connectionTimeoutMillis: 1000`，有限约束底层connect与pending队列，堵住仅race/late-release仍可能无界等待；不改全局query_timeout/statement_timeout、max、credentials，不创建新Pool。此为D0目标并非源码已支持。保留五新普通文件和三现port/service/repository接缝；真实完整旧回归及pool饱和、SQL锁、取消、late acquire/连接故障门必须验证无泄漏及取消后零Storage IO。
+Root后续裁决（I3全量真实集成发现共享Pool回归）：撤销此前新增全局 `connectionTimeoutMillis:1000` 的决定，保留唯一共享Pool原有等待语义及所有既有业务期限。pg-pool公开connect无per-call取消；具名Project读取以required signal和绝对deadline终止本次调用，迟到取得的exact client仅正常release一次且零SQL，活动SQL取消只销毁自有lease。其他持有者永不归还时，不保证底层pending物理退队时刻，不冒称已取消connect；实际连接归还后的晚lease/池恢复须真实验证。不改全局query_timeout/statement_timeout、max、credentials，不创建第二Pool；取消后零Storage IO及原完整回归门保持。
 
 <!-- R261-BFF-FILE-DELETE-DATA-END -->
 
@@ -2300,3 +2300,18 @@ IAM remains the authoritative owner of tenant membership, invitations and roles.
 ## Connector command 恢复错误消费（2026-10-16，无数据变化）
 
 只消费已发布错误metadata并输出browser-private安全分类；canonical database/schema.sql、所有业务/receipt/AG-UI状态、Redis与权限不改。不存在BFF直读Platform DB、receipt副本或恢复写入；请求原文、secret、owner内部message/details不会进入生成profile、HTTP反馈或日志。所有未知结果继续原owner保障，错误分类不授权重建资源。
+
+
+## 2026-10-20 项目资源下载读取边界（I3 源码候选，真实 PG 待验）
+
+Public19.1.0/166 未发布候选只增加项目单 ASSET 下载 GET，不新增/修改表、列、索引、权限表、缓存、下载实体或本地 receipt。Project 权威仍是本仓 bff_project，Storage 权威仍是固定 v3 Asset/reference/object；没有 Project member 表，不能把 Team role、上传者或相同 digest 当资格。
+
+现已实现已裁决的 `findActiveResourceProjectId(scope,idOrSlug,signal:AbortSignal,deadlineAt:number):Promise<string|null>`。在现目录 `project-resource-access.ts` 拥有 exact checkout/短读取事务/连接退休，port→ProjectService→repository 只委托具名读取；唯一 SQL 谓词为 tenant_id、owner_id、deleted_at IS NULL 和 ID/slug，输出 canonical project ID/null。首次解析以后，发送前按该 canonical ID 再读当前资格；不缓存结果，不持数据库锁跨 Storage RPC 或对象下载，也不宣称跨 owner 原子撤权。
+
+signal 和 monotonic deadlineAt required，无默认/重置；它来自 IAM 前同一 20000 ms 入口预算。两次短事务各自设置不超过剩余时间的 statement_timeout、lock_timeout、client_connection_check_interval，结束即释放。唯一共享 Pool 保留原等待语义；caller 取消/期限与底层 pending 分开，公开 connect 不支持单次取消，不保证持有者永不归还时的物理退队；晚 acquire 必须正常 release 一次且零 SQL，活动 SQL 取消只 destroy 精确 leased client，不误关其他请求连接、不猜测 rollback。同步取消/耗尽后禁止新 Storage IO。上述生命周期只落在新的具名读取；旧 pool.query/findProject 未改，不能据此宣称所有旧查询都有相同边界。新读取真实 PG 门尚未执行。
+
+GetDownloadReference 使用 Storage 已有 command receipt，公共 GET 无新幂等 key；receipt 写属于 Storage，不复制到 BFF，也不能说整个下载零持久写。现 Storage project release 与有界旧引用失效语义保留，不演进 Storage schema。first-stage canonical 和测试前置没有执行数据库、正常资源、IAM 权限或服务激活动作。后继需真实隔离 PG 证明 pool 饱和、held SQL、late checkout、连接故障、取消和精确回收；受控 HTTP/Connect 不是资源集成通过。
+
+第二阶段仅实现现 bff_project 的上述本人 active 读取，无 DDL/数据演进/新 owner 权限。撤回本片新增的共享 Pool 全局 1000ms，旧调用者原等待/预算不变；新读取事务局部 statement/lock/client_connection_check 参数受同一剩余 deadline 限制。正常 COMMIT 后释放，失败或取消 destroy exact lease，不对可能仍运行 SQL 猜测 ROLLBACK；迟到 checkout 只有一次 release。单测替身证明边界接线，不等于真实 backend/队列资源已回收。
+
+真实 PG integration 已编写，须 Root 单独提供自有 temporary DB URL 与精确数据库名确认变量，验证 scope、已删项目、十 lease 饱和时 caller 有界/等待仍 pending、自有 lease 归还后 exact late acquire 一次 release 零 SQL 与池恢复、持表锁时取消 backend、其它 lease 不受影响、连接故障及恢复。仅该自有测试库可持锁/写独有 fixture/清理确切行；本阶段未运行，未访问正常数据库或 Redis。

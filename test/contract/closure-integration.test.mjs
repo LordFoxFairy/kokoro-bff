@@ -5,6 +5,11 @@ import test from "node:test"
 import { load } from "js-yaml"
 import { inspectOpenApiGovernance, operationBaseline } from "../../scripts/check-contract.mjs"
 import {
+  restoreProjectResourceDownloadParent,
+  projectResourceDownloadParentBaseline,
+  inspectProjectResourceDownloadContract,
+} from "../../scripts/project-resource-download-public-contract.mjs"
+import {
   inspectClosureIntegrationContract,
   restoreClosureLocalContract,
   restoreClosureMainContract,
@@ -15,13 +20,23 @@ const source = await readFile(new URL("../../contract/openapi/v1/openapi.yaml", 
 const baseline = JSON.parse(await readFile(new URL("../../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 
-test("Public19 keeps both approved capabilities without reviving retired request shapes", () => {
+test("Public19.1 adds only project resource download and keeps the complete Public19 capabilities", () => {
   const document = load(source),
     schemas = document.components.schemas
-  assert.equal(document.info.version, "19.0.0")
-  assert.equal(operationBaseline(source).length, 165)
+  assert.equal(document.info.version, "19.1.0")
+  assert.equal(operationBaseline(source).length, 166)
   assert.deepEqual(operationBaseline(source), baseline)
   assert.deepEqual(inspectOpenApiGovernance(source), [])
+  assert.deepEqual(inspectProjectResourceDownloadContract(source, baseline), [])
+  const parent = restoreProjectResourceDownloadParent(source)
+  assert.equal(digest(parent), "955412b680bf7a2529c4c35f553ff272d7361769ea95bb441ba820b552ffc564")
+  assert.equal(load(parent).info.version, "19.0.0")
+  assert.equal(operationBaseline(parent).length, 165)
+  assert.deepEqual(operationBaseline(parent), projectResourceDownloadParentBaseline(baseline))
+  assert.ok(
+    inspectClosureIntegrationContract(parent, projectResourceDownloadParentBaseline(baseline)).length > 0,
+    "the historical parent is not the current candidate",
+  )
   for (const [path, method, id] of [
     ["/v1/account/sessions", "get", "listAccountSessions"],
     ["/v1/account/sessions/{session_id}", "delete", "revokeAccountSession"],
@@ -75,6 +90,53 @@ test("integration proof rejects permissions, aliases, extra blocks and unrelated
     assert.throws(() => restoreClosureMainContract(changed))
   }
   for (const changed of [baseline.slice(1), [...baseline, baseline[0]], [...baseline].reverse()])
+    assert.ok(inspectClosureIntegrationContract(source, changed).length > 0)
+})
+
+test("Public19.1 download proof rejects new shape drift while retaining the original exact165 inverse", () => {
+  const path = "/v1/projects/{projectId}/resources/{asset_id}/content"
+  const start = source.indexOf(`  ${path}:\n`)
+  const end = source.indexOf("  /v1/projects/{projectId}/resources:\n", start)
+  assert.ok(start > 0 && end > start)
+  const block = source.slice(start, end)
+  for (const [before, after] of [
+    ["downloadProjectResource", "downloadWrongResource"],
+    ["x-kokoro-permission: project.resource.read", "x-kokoro-permission: project.resource.create"],
+    ["x-kokoro-idempotency: none", "x-kokoro-idempotency: required"],
+    ["x-kokoro-owner: kokoro-bff", "x-kokoro-owner: kokoro-storage"],
+    ["minLength: 1, maxLength: 191", "minLength: 0, maxLength: 4096"],
+    ["maximum: 1048576", "maximum: 1048577"],
+    ["format: binary", "format: byte"],
+    ["const: no-store", "const: public"],
+    ["const: no-referrer", "const: origin"],
+    ["const: nosniff", "const: sniff"],
+    ["20000 ms", "40000 ms"],
+    ["before IAM admission", "after IAM admission"],
+    ["Recheck that same Project", "Reuse the initial Project"],
+    ["actual EOF", "declared length"],
+    ["never a user login 401", "a user login 401"],
+    ["      parameters:\n", "      requestBody: { required: true }\n      parameters:\n"],
+    ["      responses:\n", "      responses:\n        '206': { description: partial }\n"],
+    ["    get:\n", "    post:\n"],
+    [`  ${path}:\n`, "  /v1/self/projects/{projectId}/resources/{asset_id}/content:\n"],
+  ]) {
+    const altered = block.replace(before, after)
+    assert.notEqual(altered, block, before)
+    const changed = source.slice(0, start) + altered + source.slice(end)
+    assert.ok(inspectProjectResourceDownloadContract(changed, baseline).length > 0, before)
+    assert.ok(inspectClosureIntegrationContract(changed, baseline).length > 0, before)
+    assert.throws(() => restoreClosureLocalContract(changed), undefined, before)
+    assert.throws(() => restoreClosureMainContract(changed), undefined, before)
+  }
+  const entry = baseline.find((item) => item.operation_id === "downloadProjectResource")
+  assert.ok(entry)
+  for (const changed of [
+    baseline.filter((item) => item !== entry),
+    [...baseline, entry],
+    baseline.map((item) => (item === entry ? { ...item, method: "POST" } : item)),
+    baseline.map((item) => (item === entry ? { ...item, path: "/v1/self/projects/{projectId}/resources/{asset_id}/content" } : item)),
+    [...baseline].reverse(),
+  ])
     assert.ok(inspectClosureIntegrationContract(source, changed).length > 0)
 })
 

@@ -267,6 +267,29 @@ session admission explicit. User-protected operations publish 401/403/429/503; L
 - Updating the compatibility inventory to hide a removal or rename is prohibited. A versioned replacement must land
   before the old operation is retired.
 
+## Public19.1 project resource download candidate
+
+The current source is the unpublished additive 19.1.0 candidate with 166 operations. It adds only
+`GET /v1/projects/{projectId}/resources/{asset_id}/content` (`downloadProjectResource`,
+`project.resource.read`). The existing 165 operations, including personal and Artifact downloads, keep their wire
+behavior. Runtime implementation and owner validation are complete; normal Web integration and immutable owner publication remain pending. See `docs/CURRENT.md` for the complete gate results and the distinction between controlled unit tests and resource validation.
+
+`scripts/project-resource-download-public-contract.mjs` checks the new binary operation and removes exactly that
+path plus the version change to recover the complete original Public19 artifact SHA-256
+`955412b680bf7a2529c4c35f553ff272d7361769ea95bb441ba820b552ffc564`. The ordered 165-operation inventory and
+`contract/tests/closure-integration.json` remain historical proof inputs, not hashes to re-sign. The regular
+`node scripts/check-contract.mjs --write-baseline` generator adds the sole new operation to the current inventory.
+The original parent inverses and all negative governance checks continue to run against the recovered Public19.
+
+The new operation uses current IAM admission and this BFF's active Project owner predicate. It does not add a Team
+member ACL or a Storage permission/schema. Only trusted canonical project scope reaches Storage v3. All bytes are
+bounded to 1 MiB and verified before success; the single 20-second entry deadline covers admission through real EOF,
+final Project revalidation and cancellation cleanup. Storage references stay internal; GetDownloadReference may write
+its existing command receipt and a previously issued reference has its existing bounded expiry window.
+
+Consumers must wait for the owner implementation and immutable publication before repinning. Editing a consumer's
+vendor or generated client is not publication. There is no new Storage SDK generation in this candidate.
+
 ## Provenance
 
 The source artifact is `contract/openapi/v1/openapi.yaml` in this repository. Release provenance is the immutable Git

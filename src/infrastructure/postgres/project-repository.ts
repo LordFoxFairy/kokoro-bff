@@ -1,4 +1,5 @@
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
+import { findActiveResourceProjectId } from "./project-resource-access.js"
 import { renameProject, replaceProjectSkillSelection } from "./project-rename.js"
 import { deleteProjectAggregate, readProjectDeletion } from "./project-delete.js"
 import { randomUUID } from "node:crypto"
@@ -84,6 +85,10 @@ function revisionFromRow(row: RevisionRow): ProjectInstructionRevision {
 
 export class PostgresProjectRepository implements ProjectRepository {
   public constructor(private readonly database: PostgresBffDatabase) {}
+
+  public findActiveResourceProjectId(scope: ProjectOwnerScope, idOrSlug: string, signal: AbortSignal, deadlineAt: number): Promise<string | null> {
+    return findActiveResourceProjectId(this.database, scope, idOrSlug, signal, deadlineAt)
+  }
 
   public renameProject(command: RenameProjectCommand): Promise<RenameProjectResult> {
     return renameProject(this.database, command)

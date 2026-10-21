@@ -26,6 +26,9 @@ export class ProjectService {
   public find(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null> {
     return this.repository.findProject(scope, idOrSlug)
   }
+  public findActiveResourceProjectId(scope: ProjectOwnerScope, idOrSlug: string, signal: AbortSignal, deadlineAt: number): Promise<string | null> {
+    return this.repository.findActiveResourceProjectId(scope, idOrSlug, signal, deadlineAt)
+  }
   public create(scope: ProjectOwnerScope, name: string, description: string): Promise<Project> {
     return this.repository.createProject(scope, name, description)
   }

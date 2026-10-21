@@ -28,6 +28,7 @@ import { projectRenameRoute } from "../http/routes/project-rename.js"
 import { projectDeleteRoute } from "../http/routes/project-delete.js"
 import { projectDeletionStatusRoute } from "../http/routes/project-deletion-status.js"
 import { projectResourceListRoute } from "../http/routes/project-resource-list.js"
+import { isProjectResourceDownloadCandidate, projectResourceDownloadRoute } from "../http/routes/project-resource-download.js"
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
 import { personalFileUploadRoute } from "../http/routes/personal-file-upload.js"
 import { personalFileDownloadRoute } from "../http/routes/personal-file-download.js"
@@ -106,6 +107,10 @@ async function handle(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
+  if (isProjectResourceDownloadCandidate(request)) {
+    await projectResourceDownloadRoute(request, response, config, composition.sessionAdmission, composition.businessStore, id)
+    return
+  }
   if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
     await accountProfileRoute(request, response, config, composition.sessionAdmission, id)
     return

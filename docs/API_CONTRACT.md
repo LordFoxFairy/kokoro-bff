@@ -1072,7 +1072,7 @@ Storage ErrorDetail/Connect/status/header一致性必须固定验证：InvalidAr
 
 机器先按8.4/101目标新增两个closed操作及完整前置错误，原99wire不动；具名预算接缝设计已由Root裁决；只有Storage新commit正式发布、Root另准源范围后才进入source阶段，实际期限/取消门仍须通过。字段细节只在本仓唯一OpenAPI形成机器事实，不建立副本/alias/通用删除协议。
 
-Root最终补充裁决：现 `src/infrastructure/postgres/client.ts` 唯一Pool仅增加 `connectionTimeoutMillis: 1000`，有限约束底层connect与pending队列，堵住仅race/late-release仍可能无界等待；不改全局query_timeout/statement_timeout、max、credentials，不创建新Pool。此为D0目标并非源码已支持。保留五新普通文件和三现port/service/repository接缝；真实完整旧回归及pool饱和、SQL锁、取消、late acquire/连接故障门必须验证无泄漏及取消后零Storage IO。
+Root后续裁决（I3全量真实集成发现共享Pool回归）：撤销此前新增全局 `connectionTimeoutMillis:1000` 的决定，保留唯一共享Pool原有等待语义及所有既有业务期限。pg-pool公开connect无per-call取消；具名Project读取以required signal和绝对deadline终止本次调用，迟到取得的exact client仅正常release一次且零SQL，活动SQL取消只销毁自有lease。其他持有者永不归还时，不保证底层pending物理退队时刻，不冒称已取消connect；实际连接归还后的晚lease/池恢复须真实验证。不改全局query_timeout/statement_timeout、max、credentials，不创建第二Pool；取消后零Storage IO及原完整回归门保持。
 
 <!-- R261-BFF-FILE-DELETE-API-END -->
 
@@ -3015,3 +3015,20 @@ Audit、全局用户目录、用户生命周期、session revoke、角色 grant 
 只有Platform固定receipt metadata/code组合才能映射本仓恢复错误，RPC的unknown/expired/conflict/ownership-lost不表示未提交。无marker按原领域处理，畸形/未知/重复/错code/混合detail及read上的marker统一response_invalid/502。MCP三项既有PersonalMcpErrorDetail原因独立可辨，不能按message猜。具体HTTP code/status/retryable/recovery以本仓生成profile为准；成功/CAS/key/no-store/x-request-id/human准入不变。所有恢复指引都不授自动执行、新command或新key许可，未消费App前不声称UX闭环。
 
 本片核实 needs_client/auth_method_unsupported 来自原生 OAuth 服务，故共享 typed 前置条件分类也承接 Begin/Reconnect/Complete/CreateConnection，而不限 Prepare。URL server 分支仍要求已有 typed detail；原生 OAuth 无 detail 的合法 CAS 前置失败保持 generic412，未知/混合 detail 则502。原生 OAuth 不添加 Idempotency-Key；只移动错误职责至窄 connector-command-fault 模块，删除旧 server-response 中的错误 export，不留 alias。
+
+
+## 2026-10-20 项目单资源下载（I3 Public19.1 未发布候选）
+
+唯一机器事实仍在 `contract/openapi/v1/openapi.yaml`，本轮候选为 19.1.0/166，只增加 GET `/v1/projects/{projectId}/resources/{asset_id}/content`，operationId `downloadProjectResource`，owner kokoro-bff/public/beta/idempotency none/permission project.resource.read。原 165 operation 和个人/Artifact 下载的 wire 不变。源码候选已实现；正常接入和不可变发行尚未完成，消费者不得编辑 vendor/generated 冒作发布。
+
+现服务 envelope、唯一 Bearer 和 IAM 当前 Product tenant/subject 先准入。Project 使用现 ID/slug 解析，但仅 `tenant_id + owner_id + deleted_at IS NULL` 当前本人 active 谓词有权；不存在成员 ACL。原始/解码 alias 不作第二入口，无 query/body/Transfer-Encoding，asset selector 1..191 ASCII 单段。Storage 只能见可信 canonical project ID 与当前 subject/tenant，不采纳 browser scope/subject header。
+
+只有完整校验的 ASSET/CLEAN 二进制才 200：两 RPC asset/SHA/size/MIME 一致、对象引用 origin/method/expiry/headers 合规、不跟重定向、不转发凭据/cookie、最多 1048576 bytes、真实 EOF/精确长度/SHA 匹配，发送前重验同 canonical Project 当前 owner。成功含 Content-Type/Length、安全 attachment Content-Disposition、Cache-Control:no-store、Referrer-Policy:no-referrer、X-Content-Type-Options:nosniff 和 x-request-id，不输出 Storage URL 或部分 200。
+
+400 为非法请求；IAM 原 401/403/429/503 保持，429 只接受原受界 Retry-After。404 为不可见/失效 Project 或 exact project ASSET 缺失/不 CLEAN；502 为坏 owner metadata/reference/bytes；503 为 PG/Storage/总预算不可用，Storage 服务 credential/policy 错误不映射用户 401。错误统一原 ErrorEnvelope，不包含 SQL、签名 URL、secret 或其他 scope 元数据。个人内部 client 泛化不改变其原有错误隐藏行为。
+
+唯一绝对 20000 ms 从 IAM 前开始，覆盖 IAM、两次 Project SQL 读取、双 RPC、fetch、真实 EOF、final recheck 与有限取消清理，每步不重置。required signal/deadline 的 `findActiveResourceProjectId` 沿既有 Project port/service/repository 和新普通 project-resource-access 实现，exact client/late acquire 收尾；非合作依赖须 race/吸收晚结果，过期后无新 IO/200。无网络跨 DB 锁，最后重验并非跨 owner 原子撤权；已签引用保留 Storage 原最多约 300 秒窗口。
+
+治理脚本从新增 path/版本精确恢复 Public19 原全文 SHA955412b680bf7a2529c4c35f553ff272d7361769ea95bb441ba820b552ffc564，并保原 165 顺序、closure-integration.json 与两个父历史证明；inventory 只用既有正规 generator。本阶段合法当前 HTTP503/upstream_not_configured/期望200是入口 RED，后继分支不能据此称覆盖；personal 非合作 fetch/read/cancel 为有限观察 RED，完整旧前缀/Artifact 断言不动。
+
+第二阶段实现上述唯一新增 GET，raw/decoded/absolute-form 候选 alias 被同一严格入口拒绝，不进入通用 fallback；不扩公开路径或修改旧 owner 契约。HTTP 受控对端已覆盖当前 IAM、canonical/slug、两次本人 active 检查、私有头、ASSET/CLEAN、origin/元数据/真实 EOF/长度/SHA、取消和真实 20 秒入口期限。该证据不包含正常服务激活或浏览器下载；真实 PG lease 与全门由 Root 后继独立执行。机器版本和 166 inventory/历史逆证保持第一阶段冻结不变，仍是未发行候选。

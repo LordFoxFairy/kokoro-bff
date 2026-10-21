@@ -1,3 +1,15 @@
+## 2026-10-21 项目资源下载：实现及 owner 验证通过，Web 整链待接入
+
+当前源码为 Public19.1.0/166 候选，仅新增项目资源下载 GET；原 Public19 的165个操作继续通过完整逆证验证。项目入口已实现当前 IAM 准入、两次本人 active Project 检查、canonical scope、ASSET/CLEAN、单一20秒截止点、1MiB上限、完整 EOF/长度/SHA 与私有附件响应。个人下载复用普通 ASSET 实现并保留原 wire 与错误隐藏；Artifact 实现保持。
+
+固定 Node22.22.2 的 build、format:check、lint、typecheck 均 exit0；完整 contract 为875PASS/0FAIL/0SKIP，完整 default 为1530PASS/0FAIL/3SKIP。原14文件串行 PostgreSQL/Redis 集成清单最终为371PASS/0FAIL/0SKIP（115.636秒），其中含24项受控 DatabaseError unit，不能把371项全部称为真实数据库测试。两测试命令只移除已单独完成的 build 前缀，原完整文件清单不变。最终生产与测试源码绑定冻结 b7e553590727786cb4165719fe1a58d8c82d7a011162aad5e9a239683710667f；后续仅更新文档。
+
+历史失败保留：v1为341PASS/6FAIL，v2为346PASS/1FAIL，v3为346PASS/1FAIL，均0SKIP。五项共享 Pool 旧回归通过撤销本片新增的全局1000ms连接期限修正，不改变其他调用者的等待语义；旧5ms租约准备改为可验证的未过期租约和精确过期夹具，原回收/fence/sticky断言保留。v3暴露的R285 SQL取消分类已在私有 query 修正：仅真实 DatabaseError 57014归受界取消并销毁准确checkout，COMMIT仍保留UNKNOWN及原cause，其他错误不吞。新增unit真实RED为11PASS/13FAIL，修后24PASS/0FAIL；原R285和旧租约用例也在最终完整清单通过。原始失败日志与收据保留在仓库外验收记录中。
+
+具名 Project 读取的 caller 绝对预算、晚 checkout一次归还及零SQL已验证；公开 Pool.connect不支持单次取消，因此不保证不合作持有者下的pending物理退队时刻。项目发送前重验不是跨服务原子撤权，Storage签名引用仍有其原有失效窗口。受控HTTP/Connect与unit证据不代替真实Storage和浏览器完整下载。
+
+最终源码已完成独立只读审查，未发现确定P1/P2；审查与上述工程/资源验证是不同证据。正常BFF进程尚未切入本候选，Web尚未实现项目文件下载按钮/传输；完整首页目标仍未完成。消费者须先固定已审owner commit与artifact digest再接入，不能以本地候选文件或手改generated代替不可变来源。
+
 ## 2026-10-19 已合 owner 发布物的固定配对（集成收尾）
 
 IAM internal/SDK 0.14.0 固定到 7cbe988d8f3868f293a15120135e1885de8516ff；Billing 4.0.0-experimental.2 固定到 3f5e0dacc25c1e24d87cbe0c59337d3b909466de 的唯一 `/v1` artifact。原 allowlist 不扩张，IAM 生成输出全部原字节、Billing 仅三 GET URL 随 owner 正规生成；Public19/SQL/历史双父逆证及独立浏览器 relay policy 均不变。未纳入正常工作树的 availability WIP。

@@ -1,10 +1,17 @@
 // Exact proof of the two approved merge parents; never used by runtime decoders.
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
+import {
+  isProjectResourceDownloadContract,
+  restoreProjectResourceDownloadParent,
+  projectResourceDownloadParentBaseline,
+  inspectProjectResourceDownloadContract,
+} from "./project-resource-download-public-contract.mjs"
 const proof = JSON.parse(readFileSync(new URL("../contract/tests/closure-integration.json", import.meta.url), "utf8"))
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const current = (source) => /^  version: 19\.0\.0$/mu.test(source)
 function restore(source, name) {
+  source = restoreProjectResourceDownloadParent(source)
   if (!current(source)) return source
   if (digest(source) !== proof.current_sha256) throw Error("Public19 complete integration source drift")
   const parent = proof.parents[name],
@@ -18,6 +25,7 @@ function restore(source, name) {
   return result
 }
 function restoreBaseline(baseline, name) {
+  baseline = projectResourceDownloadParentBaseline(baseline)
   if (digest(JSON.stringify(baseline)) !== proof.current_inventory_sha256) throw Error("Public19 exact165 ordered inventory drift")
   const parent = proof.parents[name]
   if (digest(JSON.stringify(parent.inventory)) !== parent.inventory_sha256) throw Error("Public19 frozen parent inventory drift")
@@ -29,7 +37,9 @@ export const closureLocalBaseline = (baseline) => restoreBaseline(baseline, "loc
 export const closureMainBaseline = (baseline) => restoreBaseline(baseline, "main")
 export function inspectClosureIntegrationContract(source, baseline) {
   try {
-    if (!current(source)) throw Error("current public artifact must be Public19.0.0")
+    if (!isProjectResourceDownloadContract(source)) throw Error("current public artifact must be Public19.1.0")
+    const errors = inspectProjectResourceDownloadContract(source, baseline)
+    if (errors.length > 0) throw Error(errors.join("; "))
     restoreClosureLocalContract(source)
     restoreClosureMainContract(source)
     closureLocalBaseline(baseline)

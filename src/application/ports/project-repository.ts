@@ -44,6 +44,7 @@ export interface ProjectRepository {
   renameProject(command: RenameProjectCommand): Promise<RenameProjectResult>
   listProjects(scope: ProjectOwnerScope): Promise<Project[]>
   findProject(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null>
+  findActiveResourceProjectId(scope: ProjectOwnerScope, idOrSlug: string, signal: AbortSignal, deadlineAt: number): Promise<string | null>
   createProject(scope: ProjectOwnerScope, name: string, description: string): Promise<Project>
   updateProjectInstruction(scope: ProjectOwnerScope, idOrSlug: string, instruction: string): Promise<Project | null>
   instructionRevisions(scope: ProjectOwnerScope, idOrSlug: string): Promise<ProjectInstructionRevision[] | null>

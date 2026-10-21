@@ -1,6 +1,16 @@
 ## 2026-10-19 集成证明入口
 
-唯一当前 Public19/165：`contract/openapi/v1/openapi.yaml`。`scripts/verify-closure-integration-contract.mjs` 与 `test/contract/closure-integration.test.mjs` 验证两个批准父全文/有序操作、当前wire与仅新增归档Schema；历史proof不是运行时兼容层。现有业务组件与owner不扩展。
+唯一当前机器契约为 Public19.1/166 未发布候选：`contract/openapi/v1/openapi.yaml`；只新增项目资源下载。`scripts/project-resource-download-public-contract.mjs` 验证新增面并完整逆恢复原 Public19/165，再由 `scripts/verify-closure-integration-contract.mjs` 与 `test/contract/closure-integration.test.mjs` 验证两个批准父全文/有序操作。历史 proof 不重签，也不是运行时兼容层。项目下载已形成源码候选，但未正常激活或发行，详见 `docs/CURRENT.md`。
+
+### 2026-10-20 项目资源下载契约、受界实现与行为验证
+
+- `src/http/routes/project-resource-download.ts`：新 canonical GET 的入口/当前 IAM、strict selector/原始与解码 alias、两次本人 active Project 与私有二进制响应。只按固定结构分别解码 selector，接受 Web 标准组件编码，拒绝 encoded slash/traversal/双编码与结构 alias；`bootstrap/server.ts` 仅为此入口新增 IAM 前分流。
+- `src/application/asset-download-budget.ts`：普通 ASSET 单一绝对期限和取消/late settle fence。`http/file-download-disposition.ts`：两个普通 ASSET route 的安全 attachment 文件名。
+- `src/infrastructure/postgres/project-resource-access.ts`：required signal/deadline 下的现本人 active Project canonical ID 读取、短只读事务与 exact client 收尾；port/service/repository 仅接线，旧 findProject 不改。共享 Pool 原等待语义保持；caller 绝对期限与底层 pending 分开，late checkout 一次正常 release/零 SQL，不冒称公开 connect 支持单次取消。
+- `src/infrastructure/clients/storage/asset-download.ts`、`asset-download-transfer.ts`、`asset-download.types.ts`、`asset-download.error.ts`：可信 personal/project 普通 ASSET 共享读取、元数据/签名引用、真实 EOF/1MiB/长度/SHA。旧两个 personal 实现已 Trash 退休，无兼容 alias；个人 route 迁移但原 wire/PermissionDenied 隐藏语义保持，Artifact 未改。
+- `test/project-resource-download.test.mjs`：真实 source HTTP/Connect 受控对端；`asset-download-budget.test.mjs`、`project-resource-access.test.mjs`：非合作等待/晚结果/精确 lease unit；个人原用例保留，追加有限取消与错误映射。`project-resource-access.integration.mjs` 已随原14文件串行清单在独占 PostgreSQL/Redis 夹具通过；完整清单371PASS/0FAIL/0SKIP包含24项受控unit，正常资源下载与Web整链仍待接入。
+
+原第一阶段合法200/实际503与个人三非合作 RED 证据完整保留；第二阶段当前结果、未执行门和不可变发行限制见 CURRENT，不把受控对端或源码存在称为正常产品下载已可用。
 
 ### 2026-10-18 MCP 管理HTTP入口
 

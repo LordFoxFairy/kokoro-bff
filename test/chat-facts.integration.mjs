@@ -2494,11 +2494,59 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
     const first = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_a",
       limit: 1,
-      leaseDurationMs: 5,
+      leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(first.length, 1)
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    assert.ok(first[0].leaseRemainingMs > 0 && first[0].leaseRemainingMs <= 5000)
+    assert.equal(first[0].tenantId, tenant)
+    assert.equal(first[0].conversationId, conversationId)
+    assert.equal(first[0].subjectId, "chat_user")
+    assert.equal(first[0].leaseOwner, "worker_a")
+    const leaseState = () =>
+      pool.query(
+        `SELECT tenant_id, conversation_id, outbox_id, subject_id, run_id, status, attempt_count,
+                lease_owner, lease_token, fence, admission_unknown_seen, lease_until::text AS lease_until,
+                updated_at::text AS updated_at, lease_until <= clock_timestamp() AS expired
+           FROM bff_agent_dispatch_outbox
+          WHERE tenant_id=$1 AND conversation_id=$2 AND outbox_id=$3`,
+        [tenant, conversationId, first[0].outboxId],
+      )
+    const beforeExpiry = await leaseState()
+    assert.equal(beforeExpiry.rowCount, 1)
+    assert.deepEqual(beforeExpiry.rows, [
+      {
+        tenant_id: tenant,
+        conversation_id: conversationId,
+        outbox_id: first[0].outboxId,
+        subject_id: "chat_user",
+        run_id: first[0].runId,
+        status: "leased",
+        attempt_count: 1,
+        lease_owner: first[0].leaseOwner,
+        lease_token: first[0].leaseToken,
+        fence: String(first[0].fence),
+        admission_unknown_seen: false,
+        lease_until: beforeExpiry.rows[0].lease_until,
+        updated_at: beforeExpiry.rows[0].updated_at,
+        expired: false,
+      },
+    ])
+    assert.deepEqual(await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_b", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }), [])
+    assert.deepEqual((await leaseState()).rows, beforeExpiry.rows, "an unexpired lease cannot be reclaimed or change its fence, token, attempt or sticky state")
+    const expired = await pool.query(
+      `UPDATE bff_agent_dispatch_outbox
+          SET lease_until=clock_timestamp()-INTERVAL '1 second'
+        WHERE tenant_id=$1 AND conversation_id=$2 AND outbox_id=$3 AND subject_id=$4
+          AND lease_owner=$5 AND lease_token=$6 AND fence=$7 AND status='leased'
+          AND lease_until>clock_timestamp()
+      RETURNING tenant_id, conversation_id, outbox_id, subject_id, run_id, status, attempt_count,
+                lease_owner, lease_token, fence, admission_unknown_seen, lease_until::text AS lease_until,
+                updated_at::text AS updated_at, lease_until <= clock_timestamp() AS expired`,
+      [tenant, conversationId, first[0].outboxId, first[0].subjectId, first[0].leaseOwner, first[0].leaseToken, first[0].fence],
+    )
+    assert.equal(expired.rowCount, 1, "only this exact still-current fixture lease is made expired")
+    assert.deepEqual(expired.rows, [{ ...beforeExpiry.rows[0], lease_until: expired.rows[0].lease_until, expired: true }])
     const second = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_b",
       limit: 1,

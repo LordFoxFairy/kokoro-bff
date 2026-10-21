@@ -5304,3 +5304,186 @@ integrationTest("current scheduled HTTP reads authoritative next, rechecks admis
     }
   }
 })
+
+async function i3R285SqlCancellationFixture({
+  failAt = "project",
+  code = "57014",
+  message = "canceling statement due to statement timeout",
+  kind = "database",
+  rollbackFailure = false,
+} = {}) {
+  const [{ EventEmitter }, { DatabaseError }, { tsImport }] = await Promise.all([import("node:events"), import("pg"), import("tsx/esm/api")])
+  const { PostgresProjectScopeReleaseOutboxRepository } = await tsImport(
+    "../src/infrastructure/postgres/project-scope-release-outbox-repository.ts",
+    import.meta.url,
+  )
+  const original = kind === "database" ? new DatabaseError(message, 0, "error") : kind === "object" ? { message } : new Error(message)
+  original.code = code
+  const rollbackError = new Error("independent rollback failure")
+  const controller = new AbortController()
+  const calls = [],
+    releases = [],
+    failures = []
+  const startedAt = performance.now()
+  const client = Object.assign(new EventEmitter(), {
+    async query(text, values) {
+      const stage =
+        text === "BEGIN"
+          ? "begin"
+          : text === "COMMIT"
+            ? "commit"
+            : text === "ROLLBACK"
+              ? "rollback"
+              : text.includes("set_config('lock_timeout'")
+                ? "settings"
+                : text.startsWith("WITH credential_recovery")
+                  ? "claim"
+                  : text.startsWith("SELECT release_command_count")
+                    ? "project"
+                    : text.trimStart().startsWith("SELECT count(o.command_id)")
+                      ? "aggregate"
+                      : text.trimStart().startsWith("UPDATE bff_project_scope_release_outbox")
+                        ? "command"
+                        : "projection"
+      calls.push({ stage, text, values })
+      if (stage === failAt) {
+        failures.push({ stage, elapsedMs: performance.now() - startedAt, aborted: controller.signal.aborted })
+        throw original
+      }
+      if (stage === "rollback" && rollbackFailure) throw rollbackError
+      if (stage === "project") return { rows: [{ release_command_count: 1 }], rowCount: 1 }
+      if (stage === "aggregate")
+        return {
+          rows: [{ total: 1, released: 1, blocked: 0, conversations: 0, matched_conversations: 0, expected_conversations: 0, projects: 1, trusted: true }],
+          rowCount: 1,
+        }
+      return { rows: [], rowCount: 1 }
+    },
+    release(destroy) {
+      releases.push({ client, destroy: destroy === true })
+    },
+  })
+  const database = { pool: { connect: async () => client } }
+  const repository = new PostgresProjectScopeReleaseOutboxRepository(database)
+  const lease = { commandId: "release_i3_r285", tenantId: "tenant_i3_r285", projectId: "project_i3_r285", leaseOwner: "worker_i3_r285", fence: 1 }
+  const invoke = {
+    claim: () =>
+      repository.claimProjectScopeReleases(
+        { workerId: lease.leaseOwner, limit: 1, leaseDurationMs: 1000, includeOneCredentialRecovery: false },
+        controller.signal,
+        10000,
+      ),
+    released: () => repository.markProjectScopeReleased(lease, controller.signal, 10000),
+    retryable: () => repository.markProjectScopeRetryable(lease, 1000, "storage_release_unknown", controller.signal, 10000),
+    blocked: () => repository.markProjectScopeBlocked(lease, "storage_terminal", controller.signal, 10000),
+  }
+  return { client, calls, releases, failures, original, rollbackError, controller, database, invoke }
+}
+
+function i3R285AssertRetired(f, stage) {
+  assert.deepEqual(
+    f.failures.map((failure) => failure.stage),
+    [stage],
+  )
+  assert.equal(f.failures[0].aborted, false, "the server cancellation must arrive before caller abort")
+  assert.ok(f.failures[0].elapsedMs < 5000, "the server cancellation must arrive while the ten-second JS budget remains")
+  assert.equal(f.calls.at(-1).stage, stage, "cancellation must start no rollback, commit or later SQL")
+  assert.equal(f.releases.length, 1)
+  assert.equal(f.releases[0].client, f.client)
+  assert.equal(f.releases[0].destroy, true)
+  assert.equal(f.client.listenerCount("error"), 0)
+  assert.equal(f.controller.signal.aborted, false)
+}
+
+for (const method of ["claim", "released", "retryable", "blocked"])
+  test(`I3 R285 SQL cancellation before the JS timer retires the exact ${method} checkout`, async () => {
+    const stage = method === "claim" ? "claim" : "project"
+    const f = await i3R285SqlCancellationFixture({ failAt: stage })
+    assert.deepEqual(await f.invoke[method](), method === "claim" ? [] : false)
+    const settings = f.calls.find((call) => call.stage === "settings")
+    assert.ok(Number.parseInt(settings.values[1]) > 0)
+    assert.ok(Number.parseInt(settings.values[1]) <= 10000)
+    i3R285AssertRetired(f, stage)
+  })
+
+test("I3 R285 genuine query cancellation is independent of English text and SQL stage", async (t) => {
+  for (const stage of ["begin", "settings", "command", "aggregate", "projection"])
+    await t.test(stage, async () => {
+      const f = await i3R285SqlCancellationFixture({ failAt: stage, message: "取消来源未由 SQLSTATE 区分" })
+      assert.equal(await f.invoke.released(), false)
+      i3R285AssertRetired(f, stage)
+    })
+})
+
+test("I3 R285 other SQL errors and same-code impostors preserve their original failure", async (t) => {
+  for (const descriptor of [{ code: "42601" }, { code: "42501" }, { code: "08006" }, { kind: "error" }, { kind: "object" }])
+    await t.test(`${descriptor.kind ?? "database"}:${descriptor.code ?? "57014"}`, async () => {
+      const f = await i3R285SqlCancellationFixture(descriptor)
+      await assert.rejects(f.invoke.released(), (error) => error === f.original)
+      assert.deepEqual(
+        f.calls.slice(-2).map((call) => call.stage),
+        ["project", "rollback"],
+      )
+      assert.equal(f.releases.length, 1)
+      assert.equal(f.releases[0].client, f.client)
+      assert.equal(f.releases[0].destroy, false)
+      assert.equal(f.client.listenerCount("error"), 0)
+    })
+})
+
+test("I3 R285 a query error remains primary if its rollback also fails", async () => {
+  const f = await i3R285SqlCancellationFixture({ code: "42601", rollbackFailure: true })
+  await assert.rejects(f.invoke.released(), (error) => error === f.original && error !== f.rollbackError)
+  assert.deepEqual(
+    f.calls.slice(-2).map((call) => call.stage),
+    ["project", "rollback"],
+  )
+  assert.equal(f.releases.length, 1)
+  assert.equal(f.releases[0].client, f.client)
+  assert.equal(f.releases[0].destroy, true)
+  assert.equal(f.client.listenerCount("error"), 0)
+})
+
+test("I3 R285 lock timeout retains its known rollback and normal release semantics", async () => {
+  const f = await i3R285SqlCancellationFixture({ code: "55P03" })
+  assert.equal(await f.invoke.released(), false)
+  assert.deepEqual(
+    f.calls.slice(-2).map((call) => call.stage),
+    ["project", "rollback"],
+  )
+  assert.equal(f.releases.length, 1)
+  assert.equal(f.releases[0].client, f.client)
+  assert.equal(f.releases[0].destroy, false)
+  assert.equal(f.client.listenerCount("error"), 0)
+})
+
+test("I3 R285 COMMIT cancellation remains unknown with the original cause and no guessed rollback", async (t) => {
+  for (const method of ["claim", "released"])
+    for (const code of ["57014", "42601"])
+      await t.test(`${method}:${code}`, async () => {
+        const f = await i3R285SqlCancellationFixture({ failAt: "commit", code })
+        await assert.rejects(f.invoke[method](), (error) => {
+          assert.equal(error.message, "PROJECT_SCOPE_RELEASE_COMMIT_UNKNOWN")
+          if (code === "57014") {
+            assert.equal(error.cause.message, "PROJECT_SCOPE_RELEASE_CANCELLED")
+            assert.equal(error.cause.cause, f.original)
+          } else assert.equal(error.cause, f.original)
+          return true
+        })
+        i3R285AssertRetired(f, "commit")
+      })
+})
+
+test("I3 R285 checkout failure with the cancellation code is outside the private SQL classifier", async () => {
+  const f = await i3R285SqlCancellationFixture()
+  let connects = 0
+  f.database.pool.connect = async () => {
+    connects++
+    throw f.original
+  }
+  await assert.rejects(f.invoke.released(), (error) => error === f.original)
+  assert.equal(connects, 1)
+  assert.deepEqual(f.calls, [])
+  assert.deepEqual(f.releases, [])
+  assert.equal(f.client.listenerCount("error"), 0)
+})

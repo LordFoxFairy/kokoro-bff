@@ -1279,15 +1279,15 @@ public key原样且唯一。command ID用版本化域分隔、tenant、subject�
 
 Root已裁决：只新增上述具名方法与 `project-resource-access.ts`，不改全局query/statement或旧findProject，不复制权限事实。required signal+绝对deadline从handler贯穿，helper每步按剩余预算执行；借现rename的exact checkout、late acquisition释放、abort/timeout精确 `release(true)` / destroyClient语义，并在本次读取事务内设置有限 `statement_timeout`、`lock_timeout`、`client_connection_check_interval`，正常结束回滚/提交并释放，所有监听和timer清理。不是照搬4.5秒常量/写事务/receipt，也不是对裸pool.query做race；取消后即使取得连接/返回行，也先退役或释放且零Storage IO。事务只读取现本人active Project，无新事实或锁定后跨owner事务承诺。
 
-连接等待的实现及验证仍是上线条件：pending checkout超时/取消须立即终止本次业务等待，并对每个迟到取得的确切client释放；已取得或执行中client超时/取消须精确销毁而不回池留SQL。不得把取消业务等待当底层connect已终止、或把late-release当已经证明池无残留。真实PG必须覆盖pool saturation、held SQL取消、迟到获取、连接故障，确认请求有界、无后续Storage IO、资源最终回收；这些尚未运行，不以本D0声称成立。如现pg接口不足以在仅固定Pool连接期限的约束下兑现这些门，先向Root报告具体机制阻塞，不擅增第二pool或平台。
+连接等待的实现及验证仍是上线条件：pending checkout超时/取消须立即终止本次业务等待，并对每个迟到取得的确切client释放；已取得或执行中client超时/取消须精确销毁而不回池留SQL。不得把取消业务等待当底层connect已终止、或把late-release当已经证明池无残留。真实PG必须覆盖pool saturation、held SQL取消、迟到获取、连接故障，确认请求有界、无后续Storage IO、资源最终回收；这些尚未运行，不以本D0声称成立。公开Pool不能按单次调用取消checkout；本次调用有界不代表底层等待已清除，永不归还的持有者或永挂建连不具备物理清除保证，须向Root报告，不擅增第二pool或平台。
 
 ### 后继精确集与门
 
-除原四新普通source，新增已裁决的第五普通文件 `src/infrastructure/postgres/project-resource-access.ts`；现bootstrap及上述Project port/service/repository三处为目标必改，旧findProject不改；现Pool仅下述连接期限目标。这是D0目标集，不构成源码准写。机器候选为现 `contract/openapi/v1/openapi.yaml`、`contract/dependencies/storage-connect.json`、`buf.storage.json`、`scripts/generate-storage-connect-client.mjs`必要pin、正规vendor/`src/generated/storage-connect`和contract README；固定版本与exact变更再列，不改依赖版本或历史artifact。测试新增现目录 `test/file-delete.test.mjs`；真实组合建议 `test/file-delete.integration.mjs`另准；现storage-connect-contract、contract/openapi-contract、contract-governance及必要check脚本准确更新。现personal-file-upload.integration只有BFF PG是真、Storage为Connect double，不冒owner真组合。INDEX/docsINDEX/CURRENT待实际实现证据再更。
+除原四新普通source，新增已裁决的第五普通文件 `src/infrastructure/postgres/project-resource-access.ts`；现bootstrap及上述Project port/service/repository三处为目标必改，旧findProject不改；现Pool保留原等待语义，具名读取自行执行caller绝对预算与late checkout回收。这是D0目标集，不构成源码准写。机器候选为现 `contract/openapi/v1/openapi.yaml`、`contract/dependencies/storage-connect.json`、`buf.storage.json`、`scripts/generate-storage-connect-client.mjs`必要pin、正规vendor/`src/generated/storage-connect`和contract README；固定版本与exact变更再列，不改依赖版本或历史artifact。测试新增现目录 `test/file-delete.test.mjs`；真实组合建议 `test/file-delete.integration.mjs`另准；现storage-connect-contract、contract/openapi-contract、contract-governance及必要check脚本准确更新。现personal-file-upload.integration只有BFF PG是真、Storage为Connect double，不冒owner真组合。INDEX/docsINDEX/CURRENT待实际实现证据再更。
 
-Root门包括普通current Session、本人/他人/跨tenant/已删项目、同键回放/异asset409/异键404、引用409、非法query/body/key、错误tuple、超时/取消/迟到、pool等待/数据库锁与连接黑洞无遗留、真实确认→一次DELETE→权威列表刷新/下载拒→hardreload。未知结果保持intent，撤准入或切人退役私有UI。永久删除必须用户action-time确认；本设计不执行删文件、seed或授资格。
+Root门包括普通current Session、本人/他人/跨tenant/已删项目、同键回放/异asset409/异键404、引用409、非法query/body/key、错误tuple、超时/取消/迟到、pool等待/数据库锁的caller有界与晚lease回收，连接黑洞的物理清除限制须明确、真实确认→一次DELETE→权威列表刷新/下载拒→hardreload。未知结果保持intent，撤准入或切人退役私有UI。永久删除必须用户action-time确认；本设计不执行删文件、seed或授资格。
 
-Root最终补充裁决：现 `src/infrastructure/postgres/client.ts` 唯一Pool仅增加 `connectionTimeoutMillis: 1000`，有限约束底层connect与pending队列，堵住仅race/late-release仍可能无界等待；不改全局query_timeout/statement_timeout、max、credentials，不创建新Pool。此为D0目标并非源码已支持。保留五新普通文件和三现port/service/repository接缝；真实完整旧回归及pool饱和、SQL锁、取消、late acquire/连接故障门必须验证无泄漏及取消后零Storage IO。
+Root后续裁决（I3全量真实集成发现共享Pool回归）：撤销此前新增全局 `connectionTimeoutMillis:1000` 的决定，保留唯一共享Pool原有等待语义及所有既有业务期限。pg-pool公开connect无per-call取消；具名Project读取以required signal和绝对deadline终止本次调用，迟到取得的exact client仅正常release一次且零SQL，活动SQL取消只销毁自有lease。其他持有者永不归还时，不保证底层pending物理退队时刻，不冒称已取消connect；实际连接归还后的晚lease/池恢复须真实验证。不改全局query_timeout/statement_timeout、max、credentials，不创建第二Pool；取消后零Storage IO及原完整回归门保持。
 
 <!-- R261-BFF-FILE-DELETE-TECH-END -->
 
@@ -3923,3 +3923,47 @@ The public read surface preserves the IAM owner’s closed filters, ordering, op
 本仓browser-private错误恢复policy为唯一可编辑事实，按现local-import policy模式生成只读contract/connector-command-errors-v1.json，消费者以后固定BFF commit/digest；不把它塞入public OpenAPI、不复制owner错误class或产生第二API。状态/body/header/身份/CAS/key及取消预算保持；existing conflict/in-progress错误码保留，新增unknown/expired/ownership-lost及三种MCP原因。所有恢复均无自动重放/新key许可，App只在正式消费后提示。先行为RED、pin/生成与code-first publication、两route真实HTTP错误及零额外调用，再全本仓门禁；正常服务仅成对验收时另加载，本片不重启。
 
 本片核实 needs_client/auth_method_unsupported 来自原生 OAuth 服务，故共享 typed 前置条件分类也承接 Begin/Reconnect/Complete/CreateConnection，而不限 Prepare。URL server 分支仍要求已有 typed detail；原生 OAuth 无 detail 的合法 CAS 前置失败保持 generic412，未知/混合 detail 则502。原生 OAuth 不添加 Idempotency-Key；只移动错误职责至窄 connector-command-fault 模块，删除旧 server-response 中的错误 export，不留 alias。
+
+
+## 2026-10-20 项目资源下载：Public19.1 契约与受界实现候选
+
+### 当前事实与目标
+
+第一阶段基线无项目单资源下载入口，旧普通下载器写死 personal scope。第二阶段已在现 checkout 实现项目下载与普通 ASSET 共享 client/transfer；正常已加载进程仍是旧版，Web 尚未消费新增入口。唯一 canonical OpenAPI 本轮形成未发布 Public19.1.0/166 候选，只增加 `GET /v1/projects/{projectId}/resources/{asset_id}/content`、`downloadProjectResource`、`project.resource.read`。原 Public19 的 165 operation、个人/Artifact 下载、Storage v3 pin、数据库 canonical schema 与正常已加载进程不变。第一阶段完成契约与行为 RED 后，Root 现已按同一设计授权并实现下述精确生产范围；这不表示正常资源或发行验收通过。
+
+Project 资格严格复用本仓 `tenant_id + owner_id + deleted_at IS NULL`，不是 Team member、上传者或同 digest 权限。路径可用现 Project ID/slug，首次读取只回 canonical ID；Storage metadata 只携带当前 IAM subject/tenant 和该 canonical project scope。下载的 GetAsset/GetDownloadReference 仍消费已固定 Storage v3 的普通 ASSET/CLEAN 契约，不新增 Storage 字段、permission、schema 或 provider 能力。
+
+### §8 具名放置与退休
+
+| 项 | 选择与职责 |
+| --- | --- |
+| owner/现入口 | 仍在 BFF 现 Project/resource HTTP 与 `infrastructure/clients/storage`，不新建一级模块。比较另开 Library 编排或复制下载器后，选现项目 route 授权＋单一普通 ASSET client/transfer。Artifact 大文件/spool 生命周期独立，保持原实现。 |
+| HTTP/装配 | 现普通 `src/http/routes/project-resource-download.ts`，`src/bootstrap/server.ts` 在 IAM 前识别唯一入口并创建绝对截止点，route 消费同一次当前准入。非法 raw/decoded alias 不落入弱通用处理；不触碰 Skills/MCP 路由。 |
+| Project 读取 | 复用既有已裁决职责：新普通 `src/infrastructure/postgres/project-resource-access.ts`；现 project port/service/repository 接 `findActiveResourceProjectId(scope,idOrSlug,signal:AbortSignal,deadlineAt:number):Promise<string|null>`，required 无默认，仅回 canonical ID/null。旧 findProject 不变，不另造下载授权 helper。 |
+| PG 生命周期 | 保留既有共享 Pool 的等待语义；资源授权读取以单一绝对预算终止 caller，late checkout 只正常释放一次且零 SQL。短事务内 statement/lock/client-connection-check 上限受剩余预算约束，结束即释放；活动 SQL 取消/超时销毁 exact client。公开 Pool 无 per-call 取消，不保证永不归还时 pending 的物理清除。无新 Pool、全局 query/statement 改动或跨网络锁。 |
+| 可信 ASSET client | 旧 `storage/personal-file-download.ts` 与 `personal-file-download-transfer.ts` 已按 Trash 规则退休，分别由 `asset-download.ts`、`asset-download-transfer.ts`，承接闭集 personal/project scope；共享结果/scope 类型与错误分别在 `asset-download.types.ts`、`asset-download.error.ts`，不 re-export 兼容旧名。 |
+| 预算/文件名 | 现 `src/application/asset-download-budget.ts` 只执行本 ASSET 下载能力的 signal＋absolute deadline，依赖标准时钟/Promise，不依赖 HTTP/PG/Storage；`src/http/file-download-disposition.ts` 只供两个普通 ASSET route 生成安全 attachment 文件名。无通用平台。 |
+| 旧调用迁移 | personal route 改 import 和显式 personal scope；原个人 wire/status 映射保持。原测试中旧 client/transfer 的三个 import 已同次迁移，不留 alias。Artifact route/tests 不改。旧路径按 Trash 规则退休。 |
+| 契约/生成 | 本仓唯一 OpenAPI 只加一 GET，现 `check-contract --write-baseline` 生成唯一 inventory；新 feature 治理脚本先完整逆恢复原 Public19 SHA，再走原 closure proof，不改历史 proof。无 Storage/consumer SDK 或 vendor 手工生成。 |
+| 数据与 API | 无 DDL、缓存、receipt 副本或持久下载记录。公共 GET 无 Idempotency-Key；Storage GetDownloadReference 内部仍可能写其既有 command receipt，不能称跨 owner 零写。错误保持当前 ErrorEnvelope。 |
+| 验证与发布 | 第一阶段受控 HTTP/Connect 行为 RED；后继 unit/真实 PG finite lease/完整 owner gates/正常资源 UI 下载逐层验证。package 的 test/contract:test/test:integration 显式清单按本阶段授权仅追加具名测试；第一阶段仍保留原独立 RED 证据。实现通过后不可变发行，Web 才 repin，不因本地契约变动假称已发布。 |
+
+### 受界状态与失败恢复
+
+入口总预算固定 20000 ms，从 IAM 之前建立 monotonic deadlineAt。IAM、两次 Project 读取、GetAsset、GetDownloadReference、fetch、每次 reader.read/实际 EOF、取消清理使用同一截止点；任何一步不重置。每个 await 除传 signal 还显式 race，吸收 late resolve/reject；过期/取消后零新 owner IO、零 200。有限等待结束不冒称外部依赖已合作取消：exact PG lease、body reader 和 late object response 各自收尾；非合作 cancel 不得无限阻塞 HTTP 完成。
+
+首次项目读取完成并结束事务后才访问 Storage。GetAsset 必须同 asset_id、ASSET、CLEAN；签名引用再核同 asset_id/SHA/size/MIME/CLEAN。引用必须现 object origin、GET、无 userinfo/hash、无额外 required headers、有效且最多现 300 秒；对象请求不携带用户/服务凭据或 cookie，不跟重定向。字节上限 1048576，精确 length、真正 EOF 和 SHA 全通过后再按原 canonical project ID 读取一次当前 owner 资格；deadline、signal、response 可写均最后检查，才一次发送二进制 200。不得部分成功、暴露引用或把坏对象当 404/空数据。
+
+404 仅当前 Project 不可见或该 exact scope 的 ASSET 不存在/不 CLEAN；400 为非法 selector/query/body；当前 IAM 维持 401/403/429/503；坏 owner/reference/bytes 为 502；存储 credential/policy 拒绝、PG/Storage 不可用及总预算为 503，不能让用户因 owner credential 重新登录。内部错误分类共享但 route 映射独立，个人原 PermissionDenied 隐藏语义保持，不借重构改变旧公开行为。消息/响应不暴露 SQL、secret、签名 URL、跨主体元数据。
+
+当前读取重验不是跨服务原子撤权；无锁跨网络，最后检查与发送之间仍有有限窗口。已签引用由 Storage 现失效上限约束，不新增撤销协议或伪称立即物理回收。正常下载、fixture 数据操作、原服务重载、Git 发布不属于第一阶段。
+
+第一阶段测试直接装配当前源码，不依赖陈旧 dist。合法 HTTP 下载期望 200 而当前实际 503/upstream_not_configured 是入口行为 RED（未处理项目子路径进入现无上游 fallback，并非404）；身份/重验/完整性和总时限分支未到达时不称已验证。原 personal 测试全文保留，只追加可释放的非合作 fetch/read/cancel 替身和有限观察断言；不是 import/collection/编译失败或套件超时。真实 PG saturation/held SQL/late acquire/连接故障与精确释放是后继门，不以受控对端代替。
+
+### 第二阶段实现与待验门（2026-10-21）
+
+新入口在通用 decoder/IAM 分流之前识别 raw、decoded 和 HTTP absolute-form 候选，非 canonical alias 一律在此 400，不落旧 fallback；没有改通用 pathOf、Skills/MCP 准入。一个 monotonic 20000ms deadline 从 IAM 前贯穿 Project 两读、双 RPC、对象 fetch/真实 EOF 和取消等待；每步显式 fence，过期/断开不启动后继 IO。route finally abort 所有下游信号再移除监听/timer；期限耗尽优先 503，不能被清理时的旧 502 覆盖。late checkout 释放一次，活动 SQL 错误/取消销毁精确 client，正常只读 COMMIT 后释放，无跨网络 DB 事务。
+
+共享 `AssetDownloadClient` 只接可信闭集 personal/project scope：personal ID 必须等于 subject，project ID 必须 canonical；个人 PermissionDenied 仍隐藏为原 library_file_not_found 404，project 的服务认证/策略拒绝为 503。metadata/reference/bytes 的旧完整性边界不放宽，Artifact 源码和原测试段全文保持。无旧 source alias；退休原件及 SHA 见本阶段回收证据。
+
+真实 PG 用例在 `test/project-resource-access.integration.mjs`，只消费 Root 提供且已安装 canonical schema 的自有 temporary database；须同时显式给 KOKORO_TEST_POSTGRES_URL 与 KOKORO_TEST_PROJECT_RESOURCE_DATABASE（精确数据库名），不创建/删除数据库或 schema。测试才会写独有 tenant/project 并清理这些确切行、短暂锁该隔离库表、观测精确 backend 与池恢复；本阶段仅编写，不执行。没有连接正常 G/PG/Redis、重载服务或实际下载既有资源；原子跨 owner 撤权仍非本设计承诺。
