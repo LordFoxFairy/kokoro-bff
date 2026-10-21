@@ -1,3 +1,7 @@
+## 2026-10-21 发布确认快照接线（源码候选，未正常激活）
+
+无 BFF Schema、表、Redis、outbox 或 receipt 变更。确认快照只属于现请求及浏览器冻结意图，真实 publication 和事务 CAS／回执仍由 Platform 唯一写入。BFF 不读 owner SQL、不从 draft CAS或最大revision推导系列publication，也不把缺失／404当从未发布。
+
 ## 2026-10-21 历史读取无本仓新数据
 
 Platform现Skill/SkillSeriesPublication独占系列、精确包、历史及current事实；BFF不读owner SQL，不保存历史副本、最大revision、cursor缓存或第二套publication。该GET只投影一次受信请求的有界读取，将owner可选next_cursor映射为public required nullable字段；不持久化、改变安装或冻结执行引用。数据库Schema、调度、连接器、模型路由和计费事实均不变。

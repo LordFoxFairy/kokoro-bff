@@ -1,3 +1,12 @@
+## 2026-10-21 发布确认快照（源码候选，未正常激活）
+
+BFF Public22.0.0 /176 operations 固定 Platform `3fc971edbd99e0c0fe7d8a30a3ebf872f57f5b3c` Native artifact；HTTP历史读取继续固定原 `efe1ed1` /6.3 原字节。个人／官方发布必须显式携带确认的 expected_publication（null或current_version_id/state_version），窄映射oneof并进入原摘要／key绑定；不在提交或未知结果恢复时重读／改写期待值。普通audience编辑、SQL、其他owner pin和运行开关不变。两路发布的snapshot冲突412不可重试，普通in-progress仍409可重试。旧缺字段请求拒绝，不增加服务、表或兼容入口。
+
+
+停写后完整七门均exit0：format:check、lint、typecheck、contract:check（862PASS／0SKIP）、test:architecture（36PASS）、test（1514PASS／3既有资源SKIP）、build；719份非文档输入前后无漂移。两条初始输入／HTTP RED和独审后Admin快照冲突409→412的真实HTTP RED均保留，修复后Admin16项通过；原失效编辑脚本未写入且旧测试PASS，不计RED。正式SDK双次生成一致，新vendor21文件由独审逐字节核对owner Git原件，原HTTP artifact／历史proof未改。独审无确定阻断。本片没有BFF真实PG/Redis或正常UI验收，不把owner隔离PG或本片fixture HTTP当完整产品链。相关四仓重新非递归fetch，远端main仍为候选祖先；未push／PR／merge或加载正常服务。
+
+App确认页与Admin消费者尚未配对；Admin既有详情缺完整nullable publication读取（withdrawn current不能用原GetCurrentSkill的404猜null），下一步沿原详情补齐，不另建读取框架。正常环境仍旧合同，本候选未切换，完整Skills恢复／删除／公开身份矩阵／后台及MCP目标未完成；模型、工具执行和扣费暂停。
+
 ## 2026-10-21 本人技能历史读取（候选，正常尚未加载）
 
 沿用已配对模型／Skills 并集基线 `192396d`，新增 Public21.2.0 /176 operations 的 `GET /v1/self/skills/{skill_id}/versions`，固定 Platform6.3.0 `efe1ed1a3f81e87df1edded53e6e796d20edea55`。只读当前主体拥有系列的精确发布历史，current 来自正式 publication 指针；不取最新替代、不改变安装、不执行工具。仅接收 limit/cursor，同一入口预算覆盖身份核验与 owner 读取；末页 next_cursor 规范为 null。严格原始 JSON／嵌套闭集拒绝重复键和未知字段，历史读取不额外富化发布者。

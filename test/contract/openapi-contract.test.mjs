@@ -2829,3 +2829,31 @@ test("SET13 exact inverse preserves the entire committed public14.7 artifact", a
     "598407a3dfc17d62eb4fe703837b836ba85f05b7102a018dac160351ad807c19",
   )
 })
+
+test("current publication contract requires an explicit confirmation only for publish and preserves its full parent", async () => {
+  const { load } = await import("js-yaml")
+  const { restoreSkillPublicationContract } = await import("../../scripts/skill-publication-public-contract.mjs")
+  const source = await readFile(currentOpenapiUrl, "utf8"),
+    document = load(source)
+  assert.equal(document.info.version, "22.0.0")
+  for (const name of ["SkillPublishRequest", "SkillOfficialPublishRequest"]) {
+    const schema = document.components.schemas[name]
+    assert.ok(schema.required.includes("expected_publication"))
+    assert.equal(schema.properties.expected_publication.$ref, "#/components/schemas/SkillPublicationPrecondition")
+    assert.equal(schema.additionalProperties, false)
+  }
+  assert.equal(document.components.schemas.SkillAudienceRequest.properties.expected_publication, undefined)
+  assert.equal(
+    document.paths["/v1/skills/{skill_id}/publish"].post.requestBody.content["application/json"].schema.$ref,
+    "#/components/schemas/SkillPublishRequest",
+  )
+  const parent = restoreSkillPublicationContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "2c56fd63faa5ed7759133046dfda147bf1d360ddfb32f7570e55df38e487f786")
+  for (const altered of [
+    source.replace("required: [current_version_id, state_version]", "required: [current_version_id]"),
+    source.replace("Current IAM-admitted Product identity projections.", "changed identity"),
+  ]) {
+    assert.notEqual(altered, source)
+    assert.throws(() => restoreSkillPublicationContract(altered), /publication.*drift/u)
+  }
+})

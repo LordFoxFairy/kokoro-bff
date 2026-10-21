@@ -1,9 +1,11 @@
+import { restoreSkillPublicationContract } from "./skill-publication-public-contract.mjs"
 // Build/test-only additive proof; no runtime compatibility branch.
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 const proof = JSON.parse(readFileSync(new URL("../contract/tests/personal-skill-history.json", import.meta.url), "utf8"))
 const hash = (value) => createHash("sha256").update(value).digest("hex")
 export function restorePersonalSkillHistoryContract(source) {
+  source = restoreSkillPublicationContract(source)
   if (!/^  version: 21\.2\.0$/mu.test(source)) return source
   if (hash(source) !== proof.current_sha256) throw Error("Personal Skill history current contract drift")
   const lines = source.split(/(?<=\n)/u)
@@ -28,6 +30,7 @@ export function personalSkillHistoryParentBaseline(baseline) {
 }
 export function inspectPersonalSkillHistoryContract(source, baseline) {
   try {
+    source = restoreSkillPublicationContract(source)
     if (!/^  version: 21\.2\.0$/mu.test(source) || baseline.length !== 176) throw Error("Personal Skill history current publication differs")
     restorePersonalSkillHistoryContract(source)
     personalSkillHistoryParentBaseline(baseline)

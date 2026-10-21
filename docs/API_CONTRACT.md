@@ -1,3 +1,7 @@
+## 2026-10-21 发布确认快照接线（源码候选，未正常激活）
+
+目标 Public22.0.0 /176 operations，沿现 /v1 路径。PublishSkill 使用独立 SkillPublishRequest，PublishOfficialSkill 同样追加 required expected_publication；SkillAudienceRequest 保持原形。明确 null 或 closed current_version_id/state_version，正十进制版本至9223372036854775806。Native expected_publication 映射 absent:true 或 current typed SkillId/version，两命令摘要包含此值。旧缺字段输入拒绝，不兼容；稳定错误412、key与成功输出保持。当前 owner HTTP6.3历史读取独立pin保持，不新增操作。
+
 ## 2026-10-21 Public21.2.0 个人系列历史
 
 唯一public机器源仍为 contract/openapi/v1/openapi.yaml，新增GET /v1/self/skills/{skill_id}/versions（listPersonalSkillVersions），共176有序operations；同路径原POST创建draft保持原样。权限 product.skill.read_managed_personal，查询仅limit(1–100)/cursor；新操作无body和幂等键，不接客户端主体或过滤字段。

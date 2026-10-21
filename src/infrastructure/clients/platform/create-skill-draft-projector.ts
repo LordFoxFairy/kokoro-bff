@@ -3,6 +3,7 @@ import {
   skillCategoryKeysSchema,
   skillCreationProvenanceSchema,
   skillDecimalSchema,
+  skillPublicationPreconditionSchema,
   skillAudienceSchema,
   skillIamRefSchema,
   skillSourceVersionSchema,
@@ -205,6 +206,21 @@ export function projectSkillProductCommand(
       command.clear_cover = request.clear_cover
     }
     if (method === "PublishOfficialSkill") command.publisher = skillIamRefSchema.parse(request.publisher)
+  }
+  if (method === "PublishSkill" || method === "PublishOfficialSkill") {
+    const expected = record(request.expected_publication, "publication expectation required")
+    if (Object.hasOwn(expected, "absent")) {
+      exact(expected, ["absent"], "publication expectation oneof")
+      if (expected.absent !== true) fail("publication absence must be explicit")
+      command.expected_publication = null
+    } else {
+      exact(expected, ["current"], "publication expectation oneof")
+      const current = record(expected.current)
+      exact(current, ["current_version_id", "state_version"], "publication snapshot fields")
+      const version = record(current.current_version_id)
+      exact(version, ["value"], "publication version wrapper")
+      command.expected_publication = skillPublicationPreconditionSchema.parse({ current_version_id: version.value, state_version: current.state_version })
+    }
   }
   if (request.creation_provenance !== undefined) {
     const parsed = skillCreationProvenanceSchema.parse(request.creation_provenance)

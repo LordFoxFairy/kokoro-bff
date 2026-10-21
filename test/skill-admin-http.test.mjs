@@ -356,3 +356,58 @@ test("machine credentials never replace the current session and fresh Skills adm
       }
     })
 })
+
+test("Admin publish preserves explicit absent/current publication as native expectation and rejects missing before owner", async () => {
+  const calls = []
+  const skill = create(wire.SkillProductRecordSchema, {
+    skillId: { value: "s" },
+    sourceRef: { value: "skill:s" },
+    seriesId: { value: "series" },
+    revision: 1n,
+    status: 2,
+    packagePhase: wire.SkillPackagePhase.NONE,
+    skillUpdatedAt: { seconds: 1n, nanos: 0 },
+    metadata: { displayName: "Name", summary: "", categoryKeys: { keys: [] } },
+    product: { publicationAudience: "owner", stateVersion: 1n },
+  })
+  const server = createBffServer(correctionConfig, {
+    businessStore: null,
+    sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: true }) },
+    skillAuthorization: { check: async () => ({ ok: true }) },
+    skillAdminClient: {
+      command: async (operation, context, members) => {
+        calls.push({ operation, context, members })
+        if (members.expected_publication.current?.state_version === "2")
+          throw new ConnectError("stale snapshot", Code.Aborted, { "x-kokoro-error-code": "publish_snapshot_conflict" })
+        if (members.expected_publication.current?.state_version === "3") throw new ConnectError("busy", Code.Aborted)
+        return { skill, eventId: "event", replayed: false }
+      },
+    },
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const body = { audience: "owner", expected_state_version: "5", publisher: { kind: "user", id: "publisher" } }
+    const send = (value) =>
+      fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills/s/publish`, { method: "POST", headers: correctionHeaders, body: JSON.stringify(value) })
+    assert.equal((await send(body)).status, 400)
+    assert.equal(calls.length, 0)
+    assert.equal((await send({ ...body, expected_publication: null })).status, 200)
+    assert.equal((await send({ ...body, expected_publication: { current_version_id: "previous", state_version: "9007199254740993" } })).status, 200)
+    assert.equal(calls.length, 2)
+    assert.equal(calls[0].operation, "publishOfficialSkill")
+    assert.deepEqual(calls[0].members.expected_publication, { absent: true })
+    assert.deepEqual(calls[1].members.expected_publication, { current: { current_version_id: { value: "previous" }, state_version: "9007199254740993" } })
+    assert.equal(calls[0].context.commandId, calls[1].context.commandId)
+    const stale = await send({ ...body, expected_publication: { current_version_id: "previous", state_version: "2" } })
+    assert.equal(stale.status, 412)
+    assert.equal((await stale.json()).error.retryable, false)
+    const busy = await send({ ...body, expected_publication: { current_version_id: "previous", state_version: "3" } })
+    assert.equal(busy.status, 409)
+    assert.equal((await busy.json()).error.retryable, true)
+    assert.equal(calls.length, 4)
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})

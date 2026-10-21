@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 21.2.0
+  version: 22.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -5328,7 +5328,7 @@ paths:
       x-kokoro-permission: product.skill.publish
       summary: Publish the current validated ZIP package of a user-owned draft Skill
       description: >-
-        Public10 corrective preactivation command on the existing /v1 route. Requires a closed JSON audience and expected_state_version, both frozen into the same trusted owner command digest and wire. BFF fixes PERSONAL visibility and re-admits the current IAM subject and tenant on every replay. Platform alone validates the exact draft, CAS and current package/optional cover, then atomically publishes and returns its durable event receipt. Unknown ACK recovery replays the same body/key/CAS; no empty-body fallback or BFF receipt/outbox is added.
+        Public10 corrective preactivation command on the existing /v1 route. Requires a closed JSON audience, expected_state_version and explicit expected_publication, all frozen into the same trusted owner command digest and wire. BFF fixes PERSONAL visibility and re-admits the current IAM subject and tenant on every replay. Platform alone validates the exact draft, CAS and current package/optional cover, then atomically publishes and returns its durable event receipt. Unknown ACK recovery replays the same body/key/CAS; no empty-body fallback or BFF receipt/outbox is added. The publication expectation is the user-confirmed series pointer and state version, or explicit null for a never-published series; BFF never re-reads or rebases it on submission. Stale snapshots fail 412 without automatic replay.
       parameters:
         - $ref: '#/components/parameters/SkillPackageUploadSkillId'
         - $ref: '#/components/parameters/SkillPublishIdempotencyKey'
@@ -5337,7 +5337,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SkillAudienceRequest'
+              $ref: '#/components/schemas/SkillPublishRequest'
       responses:
         '200':
           description: Skill is active or the same healthy publication is durably replayed
@@ -17559,7 +17559,10 @@ components:
         - expected_state_version
         - audience
         - publisher
+        - expected_publication
       properties:
+        expected_publication:
+          $ref: "#/components/schemas/SkillPublicationPrecondition"
         expected_state_version:
           type: string
           pattern: ^[1-9][0-9]*$
@@ -17602,6 +17605,43 @@ components:
         - expected_state_version
         - audience
       properties:
+        expected_state_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          maxLength: 19
+          description: Canonical positive decimal; runtime bounds to signed 64-bit maximum 9223372036854775807.
+        audience:
+          type: string
+          enum:
+            - owner
+            - tenant
+            - catalog
+    SkillPublicationPrecondition:
+      description: Explicit user-confirmed series publication. Null means no publication exists, not an unavailable read. Freeze this value with the command body and key; do not replace it during submission or recovery.
+      oneOf:
+        - type: 'null'
+        - type: object
+          additionalProperties: false
+          required: [current_version_id, state_version]
+          properties:
+            current_version_id:
+              type: string
+              pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$
+            state_version:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              maxLength: 19
+              description: Canonical positive decimal through 9223372036854775806; the owner must increment this version atomically.
+    SkillPublishRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_state_version
+        - audience
+        - expected_publication
+      properties:
+        expected_publication:
+          $ref: "#/components/schemas/SkillPublicationPrecondition"
         expected_state_version:
           type: string
           pattern: ^[1-9][0-9]*$

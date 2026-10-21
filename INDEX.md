@@ -1,3 +1,7 @@
+## 发布确认快照入口（2026-10-21）
+
+沿现publish-skill、skill-admin路由和skill-product-input/schema、CatalogConnectClient：用户确认的publication为空或精确pointer/version，变更进入create-skill-draft-projector原摘要。Platform固定artifact和八向量见当前vendor与platform-connect manifest；原合同历史门在personal-skill-history-public-contract接入窄发布delta。两路冲突沿既有412，无提交重读／新存储。正常配对未完成，状态见docs/CURRENT.md。
+
 ## 2026-10-20 MC-02A System5 当前入口
 
 `src/infrastructure/clients/owner/system-model-catalog.ts` 严格消费固定 generated `getModelCatalog`，投影owner显式provider/精确身份，替代原application slash猜测。原四管理操作继续由 `system-model-routing.ts` 消费，revision无feature/label别名nullable。canonical Public21/165及 `scripts/shared-model-catalog-public-contract.mjs` 精确逆回20后委托原20/19证明；旧oracle不改、脚本不进入runtime。相关回归仍在 bff/model-routing-admin/system-http-contract 原suite，当前验证与正常未激活边界见 `docs/CURRENT.md`。

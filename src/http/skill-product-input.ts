@@ -5,6 +5,7 @@ import {
   skillIdSchema,
   skillSourceRefSchema,
   skillDecimalSchema,
+  skillPublicationPreconditionSchema,
   skillMetadataInputSchema,
   skillAudienceSchema,
   skillIamRefSchema,
@@ -37,7 +38,10 @@ export const skillProductInputs = {
   audience: z.object({ ...cas, audience: skillAudienceSchema }).strict(),
   adminDraft: z.object({ metadata: skillMetadataInputSchema }).strict(),
   adminVersion: z.object({ ...cas, metadata: skillMetadataInputSchema }).strict(),
-  officialPublish: z.object({ ...cas, audience: skillAudienceSchema, publisher: skillIamRefSchema }).strict(),
+  publish: z.object({ ...cas, audience: skillAudienceSchema, expected_publication: skillPublicationPreconditionSchema }).strict(),
+  officialPublish: z
+    .object({ ...cas, audience: skillAudienceSchema, publisher: skillIamRefSchema, expected_publication: skillPublicationPreconditionSchema })
+    .strict(),
   beginCover: z
     .object({
       ...cas,

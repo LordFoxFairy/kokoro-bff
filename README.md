@@ -1,3 +1,7 @@
+## 2026-10-21 Skills 发布确认快照候选
+
+当前源码 Public22.0.0/176，个人与官方发布沿既有路由显式绑定确认的系列publication，旧缺字段请求拒绝；非发布audience编辑不变。原生owner固定3fc971e、HTTP历史仍efe1ed1/6.3；无新服务、表或运行兼容层。App/Admin尚未配对、正常服务未切换，不能据此称恢复旅程闭环；实际验证及下一步见 `docs/CURRENT.md`。下面日期段保留各阶段事实。
+
 ## 2026-10-20 MC-02A System5 / Public21 消费者候选
 
 当前源码唯一 Public21.0.0 /165 operations：业务模型保持稳定label name、owner显式provider与精确三ID/feature/request_model，显示名为有效alias或原模型名；管理员label别名nullable、共享revision无feature。System5固定来源/五操作窄生成见 `contract/dependencies/system-http.json`；SQL/其他pins不变。正常配对及完整门收据见 `docs/CURRENT.md`，Key保存/领取未在本片实施，模型/工具/扣费仍暂停。下方旧版本按历史读取。

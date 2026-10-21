@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kokoro Platform Business HTTP API",
-    "version": "6.2.0",
+    "version": "6.3.0",
     "description": "Platform read-only projections. A Platform-local fixed-tenant service bearer authenticates BFF; authenticated BFF then supplies its Product Session subject."
   },
   "servers": [
@@ -583,6 +583,63 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/SelfSkill"
+          },
+          "400": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "401": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "403": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "404": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "500": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "503": {
+            "$ref": "#/components/responses/SelfSkillError"
+          }
+        }
+      }
+    },
+    "/v1/self/skills/{skill_id}/versions": {
+      "get": {
+        "operationId": "listSelfSkillVersions",
+        "summary": "Read the authenticated subject complete personal series version history.",
+        "description": "Uses an owned exact revision anchor and rejects mixed-owner series. Published history is ordered by revision descending. Current is the formal publication pointer, not the largest revision; history does not grant execution.",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "x-kokoro-total-budget-ms": 10000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillId"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SelfSkillHistory"
           },
           "400": {
             "$ref": "#/components/responses/SelfSkillError"
@@ -1646,6 +1703,114 @@
             "maximum": 2147483647
           }
         }
+      },
+      "PersonalSkillHistoryVersion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "skill_id",
+          "revision",
+          "name",
+          "summary",
+          "status",
+          "archive_size",
+          "file_count",
+          "created_at",
+          "is_current"
+        ],
+        "properties": {
+          "skill_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 65535
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "disabled", "withdrawn", "quarantined"]
+          },
+          "archive_size": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "file_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "is_current": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PersonalSkillHistory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["series_id", "publication", "versions"],
+        "properties": {
+          "series_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191
+          },
+          "publication": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "current_version_id",
+                  "state_version",
+                  "withdrawn_at"
+                ],
+                "properties": {
+                  "current_version_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 191
+                  },
+                  "state_version": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]*$"
+                  },
+                  "withdrawn_at": {
+                    "type": ["string", "null"],
+                    "format": "date-time"
+                  }
+                }
+              }
+            ]
+          },
+          "versions": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/PersonalSkillHistoryVersion"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        }
       }
     },
     "responses": {
@@ -1958,6 +2123,40 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "SelfSkillHistory": {
+        "description": "A private series history page; current identity is independent from availability.",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["data"],
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/PersonalSkillHistory"
+                }
+              }
             }
           }
         }

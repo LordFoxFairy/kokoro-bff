@@ -1,3 +1,7 @@
+## 2026-10-21 发布确认快照接线（源码候选，未正常激活）
+
+复用两条现有发布路由与 Native Connect client，固定 Platform 3fc971edbd99e0c0fe7d8a30a3ebf872f57f5b3c。个人／官方发布均要求用户确认的 expected_publication：null 表示系列从未发布，否则精确 current_version_id/state_version；与新 draft 的 expected_state_version 分开。公开对象只在窄 client 边界映射 Proto oneof，进入原 JCS／幂等绑定；无提交期 current 读取、自动 rebase 或新 receipt。冲突返回现412；未知结果保持原 body/key。普通 audience 操作不受影响。App 复用个人 history 快照；Admin 缺完整 nullable publication 查询，后继由既有详情承接，不把404猜成null。正常环境待全部消费者配对后再切换。
+
 ## 2026-10-21 个人系列历史消费者
 
 复用现 managed-personal-skills 路由及 PlatformProjectionHttpClient 的有界请求／凭据／响应校验，不新增服务、数据库或任意代理。固定消费 Platform efe1ed1 的 HTTP6.3，公开当前 Public21.2.0 在原 POST /v1/self/skills/{skill_id}/versions 旁新增只读 GET；保留现模型配置、项目并集及所有原操作。

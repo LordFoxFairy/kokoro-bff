@@ -364,6 +364,18 @@ message ValidateSkillDraftResponse {
   optional uint32 file_count = 9;
 }
 
+message SkillPublicationVersion {
+  kokoro.platform.v1.SkillId current_version_id = 1;
+  optional uint64 state_version = 2;
+}
+
+message SkillPublicationPrecondition {
+  oneof expectation {
+    bool absent = 1;
+    kokoro.platform.v1.SkillPublicationVersion current = 2;
+  }
+}
+
 message PublishSkillRequest {
   string request_id = 1;
   kokoro.common.v1.CommandIdentity command = 2;
@@ -372,6 +384,7 @@ message PublishSkillRequest {
   kokoro.platform.v1.ProductCatalogContext product_context = 5;
   optional string audience = 6;
   optional uint64 expected_state_version = 7;
+  kokoro.platform.v1.SkillPublicationPrecondition expected_publication = 8;
 }
 
 message PublishSkillResponse {
@@ -1589,6 +1602,7 @@ message PublishOfficialSkillRequest {
   optional uint64 expected_state_version = 5;
   string audience = 6;
   kokoro.platform.v1.SkillIamRef publisher = 7;
+  kokoro.platform.v1.SkillPublicationPrecondition expected_publication = 8;
 }
 
 message PublishOfficialSkillResponse {

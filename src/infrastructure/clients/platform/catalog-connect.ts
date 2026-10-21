@@ -5,6 +5,8 @@ import { createConnectTransport } from "@connectrpc/connect-node"
 import { SkillCatalogService } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { projectSkillProductCommand } from "./create-skill-draft-projector.js"
 
+import { skillPublicationPreconditionWire, type SkillPublicationPrecondition } from "./skill-product-schema.js"
+
 type Context = { requestId: string; commandId: string; digest: string; tenant: string; user: string; expectedStateVersion?: string }
 type Metadata = { displayName: string; summary: string; tags: string[]; examplePrompts?: string[]; categoryKeys?: string[] }
 function metadata(input: Metadata): Record<string, JsonValue> {
@@ -155,11 +157,27 @@ export class CatalogConnectClient {
     return this.#call("validateSkillDraft", input, { skill_id: { value: input.skillId }, attempt_id: input.attemptId }, signal, deadlineAt)
   }
   publish(
-    input: Context & { skillId: string; audience: "owner" | "tenant" | "catalog"; expectedStateVersion: string },
+    input: Context & {
+      skillId: string
+      audience: "owner" | "tenant" | "catalog"
+      expectedStateVersion: string
+      expectedPublication: SkillPublicationPrecondition
+    },
     signal?: AbortSignal,
     deadlineAt?: number,
   ) {
-    return this.#call("publishSkill", input, { skill_id: { value: input.skillId }, visibility: 1, audience: input.audience }, signal, deadlineAt)
+    return this.#call(
+      "publishSkill",
+      input,
+      {
+        skill_id: { value: input.skillId },
+        visibility: 1,
+        audience: input.audience,
+        expected_publication: skillPublicationPreconditionWire(input.expectedPublication),
+      },
+      signal,
+      deadlineAt,
+    )
   }
   createPersonalVersion(
     input: Omit<Context, "expectedStateVersion"> & Metadata & { baseSkillId: string; expectedStateVersion?: never },

@@ -81,3 +81,64 @@ test("GitHub path inputs preserve the existing 256-character selector boundary b
     assert.throws(() => parseSkillProductInput("githubImport", Buffer.from(JSON.stringify({ owner: "owner", repository: "repo", commit, path }))))
   }
 })
+
+test("publication expectation is required and closed for personal and official publish, without changing audience edits", async () => {
+  const { parseSkillProductInput } = await import("../src/http/skill-product-input.js")
+  const base = { audience: "owner", expected_state_version: "5" }
+  const current = { current_version_id: "old-version", state_version: "9007199254740993" }
+  for (const operation of ["publish", "officialPublish"] as const) {
+    const extra = operation === "officialPublish" ? { publisher: { kind: "user", id: "publisher" } } : {}
+    for (const expected_publication of [null, current]) {
+      const body = { ...base, ...extra, expected_publication }
+      assert.deepEqual(parseSkillProductInput(operation, Buffer.from(JSON.stringify(body))), body)
+    }
+    assert.throws(() => parseSkillProductInput(operation, Buffer.from(JSON.stringify({ ...base, ...extra }))))
+    for (const expected_publication of [
+      false,
+      {},
+      { ...current, unknown: true },
+      { ...current, current_version_id: "bad id" },
+      ...["0", "01", "9223372036854775807", 1].map((state_version) => ({ ...current, state_version })),
+    ]) {
+      assert.throws(() => parseSkillProductInput(operation, Buffer.from(JSON.stringify({ ...base, ...extra, expected_publication }))))
+    }
+    const duplicate = JSON.stringify({ ...base, ...extra, expected_publication: current }).replace(
+      '"current_version_id":"old-version"',
+      '"current_version_id":"old-version","current_version_id":"other"',
+    )
+    assert.throws(() => parseSkillProductInput(operation, Buffer.from(duplicate)))
+  }
+  assert.deepEqual(parseSkillProductInput("audience", Buffer.from(JSON.stringify(base))), base)
+  assert.throws(() => parseSkillProductInput("audience", Buffer.from(JSON.stringify({ ...base, expected_publication: null }))))
+})
+
+test("both publication command digests match the fixed owner vectors and reject missing expectations", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const vectors = JSON.parse(
+    await readFile(
+      new URL(
+        "../contract/vendor/kokoro-platform/3fc971edbd99e0c0fe7d8a30a3ebf872f57f5b3c/execution-operations/skill-publication-precondition-v1.vectors.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ).vectors
+  assert.equal(vectors.length, 8)
+  for (const vector of vectors) {
+    const actual = projector.projectSkillProductCommand(JSON.stringify(vector.request), true)
+    assert.deepEqual(actual.projection, vector.canonical, vector.id)
+    assert.equal(actual.sha256, vector.sha256, vector.id)
+    const missing = structuredClone(vector.request)
+    delete missing.request.expected_publication
+    assert.throws(() => projector.projectSkillProductCommand(JSON.stringify(missing), true), /publication expectation required/u)
+    for (const expected_publication of [
+      { absent: false },
+      { absent: true, current: {} },
+      { current: { current_version_id: { value: "old" }, state_version: "9223372036854775807" } },
+    ]) {
+      assert.throws(() =>
+        projector.projectSkillProductCommand(JSON.stringify({ ...vector.request, request: { ...vector.request.request, expected_publication } }), true),
+      )
+    }
+  }
+})

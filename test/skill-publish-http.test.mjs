@@ -56,7 +56,7 @@ async function withServer(client, run, admission = { verify: async () => ({ ok: 
     await new Promise((resolve) => server.close(resolve))
   }
 }
-const publishBody = JSON.stringify({ audience: "owner", expected_state_version: "5" })
+const publishBody = JSON.stringify({ audience: "owner", expected_state_version: "5", expected_publication: null })
 const post = (base, body = publishBody, other = {}, path = "/v1/skills/skill-1/publish") =>
   fetch(base + path, { method: "POST", headers: { ...headers, "content-type": "application/json", ...other }, ...(body === undefined ? {} : { body }) })
 
@@ -115,6 +115,7 @@ test("Publish generated Connect descriptor has fixed visibility and active resul
       ["product_context", 5],
       ["audience", 6],
       ["expected_state_version", 7],
+      ["expected_publication", 8],
     ],
   )
   assert.deepEqual(
@@ -135,6 +136,7 @@ test("Publish generated Connect descriptor has fixed visibility and active resul
     visibility: SkillScopeKind.PERSONAL,
     audience: "owner",
     expectedStateVersion: 5n,
+    expectedPublication: { expectation: { case: "absent", value: true } },
     productContext: { subjectId: "user", ownerScope: { kind: "user", id: "user" } },
   })
   assert.deepEqual(fromBinary(PublishSkillRequestSchema, toBinary(PublishSkillRequestSchema, message)), message)
@@ -152,7 +154,7 @@ test("real generated Publish Connect client sends fixed PERSONAL and catalog cre
       fq_method: "kokoro.platform.v1.SkillCatalogService/PublishSkill",
       tenant_ref: "tenant",
       request: {
-        ...{ skill_id: { value: "skill-1" }, visibility: 1, audience: "owner", expected_state_version: "5" },
+        ...{ skill_id: { value: "skill-1" }, visibility: 1, audience: "owner", expected_state_version: "5", expected_publication: { absent: true } },
         product_context: { subject_id: "user", owner_scope: { kind: "user", id: "user" } },
       },
     }),
@@ -177,6 +179,7 @@ test("real generated Publish Connect client sends fixed PERSONAL and catalog cre
             assert.equal(context.requestHeader.get("x-kokoro-request-id"), "request-1")
             assert.equal(request.audience, "owner")
             assert.equal(request.expectedStateVersion, 5n)
+            assert.deepEqual(request.expectedPublication?.expectation, { case: "absent", value: true })
             assert.equal(request.productContext?.subjectId, "user")
             assert.equal(request.productContext?.ownerScope?.kind, "user")
             assert.equal(request.productContext?.ownerScope?.id, "user")
@@ -199,6 +202,7 @@ test("real generated Publish Connect client sends fixed PERSONAL and catalog cre
       skillId: "skill-1",
       audience: "owner",
       expectedStateVersion: "5",
+      expectedPublication: null,
     })
     assert.equal(response.sourceRef?.value, "skill:skill-1")
     assert.equal(calls, 1)
@@ -413,8 +417,8 @@ test("Publish owner receipt preserves same event for same-key replay and rejects
         data: { state_version: "1", source_ref: "skill:skill-1", revision: "1", status: "active", event_id: firstEvent, replayed: true },
       })
       for (const changed of [
-        { audience: "tenant", expected_state_version: "5" },
-        { audience: "owner", expected_state_version: "6" },
+        { audience: "tenant", expected_state_version: "5", expected_publication: null },
+        { audience: "owner", expected_state_version: "6", expected_publication: null },
       ]) {
         const conflict = await post(base, JSON.stringify(changed))
         assert.equal(conflict.status, 409)
@@ -531,6 +535,37 @@ test("Publish client disconnect aborts in-flight owner stage", async () => {
       await reached
       req.destroy()
       await aborted
+    },
+  )
+})
+
+test("Publish binds the confirmed publication unchanged to digest and returns terminal conflict without rebasing", async () => {
+  const calls = []
+  await withServer(
+    {
+      publish: async (command) => {
+        calls.push(command)
+        if (calls.length === 3) throw new ConnectError("stale", Code.Aborted, { "x-kokoro-error-code": "publish_snapshot_conflict" })
+        return result()
+      },
+    },
+    async (base) => {
+      const send = (expected_publication) => post(base, JSON.stringify({ audience: "owner", expected_state_version: "5", expected_publication }))
+      assert.equal((await send(null)).status, 200)
+      const current = { current_version_id: "old-version", state_version: "9007199254740993" }
+      assert.equal((await send(current)).status, 200)
+      const conflict = await send(current)
+      assert.equal(conflict.status, 412)
+      assert.equal((await conflict.json()).error.retryable, false)
+      assert.deepEqual(calls[1].expectedPublication, current)
+      assert.equal(calls[0].expectedPublication, null)
+      assert.notEqual(calls[0].digest, calls[1].digest)
+      assert.equal(calls[1].digest, calls[2].digest)
+      assert.equal(calls[0].commandId, calls[1].commandId)
+      assert.equal(calls.length, 3)
+      const missing = await post(base, JSON.stringify({ audience: "owner", expected_state_version: "5" }))
+      assert.equal(missing.status, 400)
+      assert.equal(calls.length, 3)
     },
   )
 })

@@ -1,3 +1,7 @@
+## 2026-10-21 发布确认快照（候选）
+
+当前canonical Public22.0.0/176，两发布请求增加必填expected_publication；发布前确认的空／精确指针版本进入Platform原生oneof与命令摘要，缺字段拒绝。仅窄新增SkillPublishRequest与确认对象，audience编辑及成功表示不变。Native owner固定3fc971e，由现generate-platform-connect-client正式双次生成；原独立HTTP6.3 pin不改。当前byte逆证只限定本次发布delta后委托原历史门，不作为runtime旧版路径；Admin/App配对和正常页面验收尚待。
+
 ## 2026-10-21 Public21.1.1 集成
 
 保留MC-02当前模型契约，配入已合Skills项目／个人并集；只有version和指定GET描述改变。现model-configuration-public-contract承接严格patch逆证，既有model-configuration.json及175inventory不改，其他owner发行物不变。没有runtime旧版兼容，当前外部消费者须固定相同commit/digest后才重载。

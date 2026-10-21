@@ -1,3 +1,4 @@
+import { skillPublicationPreconditionWire } from "../../infrastructure/clients/platform/skill-product-schema.js"
 import { parseSkillProductInput } from "../skill-product-input.js"
 import type { z } from "zod"
 import type { skillProductInputs } from "../skill-product-input.js"
@@ -97,10 +98,10 @@ export async function publishSkillRoute(
     send(response, 400, failure(key === undefined ? "idempotency_key_required" : "invalid_idempotency_key", "A single valid Idempotency-Key is required"))
     return
   }
-  let input: z.infer<typeof skillProductInputs.audience>
+  let input: z.infer<typeof skillProductInputs.publish>
   try {
     if (request.headers["content-type"]?.split(";", 1)[0] !== "application/json") throw new Error("invalid_skill_request")
-    input = parseSkillProductInput("audience", await readBody(request, 65_536))
+    input = parseSkillProductInput("publish", await readBody(request, 65_536))
   } catch (error) {
     const oversized = error instanceof Error && ["request_body_too_large", "request body too large"].includes(error.message)
     send(response, oversized ? 413 : 400, failure(oversized ? "request_body_too_large" : "invalid_skill_request", "Skill Publish request is invalid"))
@@ -115,6 +116,7 @@ export async function publishSkillRoute(
       product_context: { subject_id: context.identity.userId, owner_scope: { kind: "user", id: context.identity.userId } },
       visibility: 1,
       audience: input.audience,
+      expected_publication: skillPublicationPreconditionWire(input.expected_publication),
       expected_state_version: input.expected_state_version,
     },
   })
@@ -135,6 +137,7 @@ export async function publishSkillRoute(
         user: context.identity.userId,
         skillId,
         audience: input.audience,
+        expectedPublication: input.expected_publication,
         expectedStateVersion: input.expected_state_version,
       },
       signal,
