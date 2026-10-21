@@ -1771,6 +1771,7 @@ message GetAdminSkillRequest {
 
 message GetAdminSkillResponse {
   kokoro.platform.v1.SkillProductRecord skill = 1;
+  kokoro.platform.v1.SkillPublicationPrecondition publication = 2;
 }
 
 message InspectSkillPackageRequest {

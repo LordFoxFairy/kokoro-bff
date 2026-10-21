@@ -1,3 +1,7 @@
+## 2026-10-21 Admin 详情确认快照（目标，未正常激活）
+
+同一未发布 Public22.0.0 /176 候选：GET /v1/admin/skills/{skill_id} 唯一使用的 SkillProductRecordResponse 新增 required meta（closed），仅含 required publication，复用既有 SkillPublicationPrecondition。data及全部其它操作/Schema不变；记录精确版本与publication当前指针是不同事实。显式absent:true映为null，current保留ID与canonical decimal至9223372036854775806；缺失、false absent、空oneof、错类型/越界和未知wire均为502 skill_response_invalid。权限、no-store/request-id、错误与超时维持原表；不新增fallback或API路径。
+
 ## 2026-10-21 发布确认快照接线（源码候选，未正常激活）
 
 目标 Public22.0.0 /176 operations，沿现 /v1 路径。PublishSkill 使用独立 SkillPublishRequest，PublishOfficialSkill 同样追加 required expected_publication；SkillAudienceRequest 保持原形。明确 null 或 closed current_version_id/state_version，正十进制版本至9223372036854775806。Native expected_publication 映射 absent:true 或 current typed SkillId/version，两命令摘要包含此值。旧缺字段输入拒绝，不兼容；稳定错误412、key与成功输出保持。当前 owner HTTP6.3历史读取独立pin保持，不新增操作。

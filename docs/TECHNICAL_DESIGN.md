@@ -1,3 +1,7 @@
+## 2026-10-21 Admin 详情确认快照（目标，未正常激活）
+
+固定 Platform e95aba22d6ffc59a2c5979db39418b9a67f2822f 的 Native artifact，沿原 getAdminSkill 详情和窄响应 mapper 接 publication oneof。既有 data 精确 SkillRecord 不变，快照作为 required meta.publication 返回 null 或精确 current_version_id/state_version；无新HTTP操作/服务/表。响应、嵌套未知Proto字段、缺失或非法oneof拒绝502，不以404/缺失猜null，不查current或MAX替代。原人类管理员／租户准入、专用机器凭据、总预算／取消与IAM发布者富化保持；确认快照在App/Admin冻结，提交不重读。Public22尚未发布，本片在同一未发布需求候选内收拢Admin详情；旧正常21.2不激活未配对消费者，原21.2完整父和8摘要向量保持。
+
 ## 2026-10-21 发布确认快照接线（源码候选，未正常激活）
 
 复用两条现有发布路由与 Native Connect client，固定 Platform 3fc971edbd99e0c0fe7d8a30a3ebf872f57f5b3c。个人／官方发布均要求用户确认的 expected_publication：null 表示系列从未发布，否则精确 current_version_id/state_version；与新 draft 的 expected_state_version 分开。公开对象只在窄 client 边界映射 Proto oneof，进入原 JCS／幂等绑定；无提交期 current 读取、自动 rebase 或新 receipt。冲突返回现412；未知结果保持原 body/key。普通 audience 操作不受影响。App 复用个人 history 快照；Admin 缺完整 nullable publication 查询，后继由既有详情承接，不把404猜成null。正常环境待全部消费者配对后再切换。

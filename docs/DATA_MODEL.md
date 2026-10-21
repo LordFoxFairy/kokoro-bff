@@ -1,3 +1,7 @@
+## 2026-10-21 Admin 详情确认快照（目标，未正常激活）
+
+不改BFF canonical schema、SQL、Redis或receipt/outbox，不读取owner数据库。Admin快照只来自固定owner既有GetAdminSkill同租户确认读取，不缓存、不从列表／selected Skill state_version推导，不把不可用current等同无publication。meta随当次详情返回；浏览器后续沿既有冻结意图保存，真正CAS与提交事实仍唯一在Platform。
+
 ## 2026-10-21 发布确认快照接线（源码候选，未正常激活）
 
 无 BFF Schema、表、Redis、outbox 或 receipt 变更。确认快照只属于现请求及浏览器冻结意图，真实 publication 和事务 CAS／回执仍由 Platform 唯一写入。BFF 不读 owner SQL、不从 draft CAS或最大revision推导系列publication，也不把缺失／404当从未发布。

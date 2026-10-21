@@ -1,3 +1,9 @@
+## 2026-10-21 Admin 详情快照接线（源码候选，未正常激活）
+
+同一未发布Public22/176候选固定owner `e95aba22d6ffc59a2c5979db39418b9a67f2822f` Native artifact；现GET Admin详情保原data，新增required closed meta.publication，显式null或精确指针／版本。不从selected record、列表/current/最大revision推导，不把缺字段／404当空；缺失、坏oneof、越界或未知wire拒绝502。写摘要及原8向量、独立HTTP6.3 pin/字节和SQL保持；无新API、服务、表或自动重读。原IAM人类管理员与租户准入、专用机器身份、请求预算／取消保持，富化后再次检查signal。
+
+10个HTTP子例最初全部RED（缺meta或坏值误200），修复后连同既有用例及契约共119项通过；其中另有真实BFF listener→正规Native Connect binary client→owner protocol peer→BFF projection，明确保留9007199254740993和不同于selected版本的指针／专用机器身份。该peer不是实际owner数据库／IAM整链，未激活正常服务或UI。正式固定SDK双次生成通过；停写后完整七门均exit0：format:check、lint、typecheck、contract:check（874PASS／0SKIP）、test:architecture（36PASS）、test（1526PASS／3既有资源SKIP）、build，719份非文档输入前后无漂移。独立只读审查无确定阻断；提交前非递归fetch确认origin/main仍为本候选祖先。App/Admin确认及恢复旅程、删除、公开身份矩阵、后台和MCP完整目标保留，模型／工具／扣费暂停，未push/PR/merge。
+
 ## 2026-10-21 发布确认快照（源码候选，未正常激活）
 
 BFF Public22.0.0 /176 operations 固定 Platform `3fc971edbd99e0c0fe7d8a30a3ebf872f57f5b3c` Native artifact；HTTP历史读取继续固定原 `efe1ed1` /6.3 原字节。个人／官方发布必须显式携带确认的 expected_publication（null或current_version_id/state_version），窄映射oneof并进入原摘要／key绑定；不在提交或未知结果恢复时重读／改写期待值。普通audience编辑、SQL、其他owner pin和运行开关不变。两路发布的snapshot冲突412不可重试，普通in-progress仍409可重试。旧缺字段请求拒绝，不增加服务、表或兼容入口。

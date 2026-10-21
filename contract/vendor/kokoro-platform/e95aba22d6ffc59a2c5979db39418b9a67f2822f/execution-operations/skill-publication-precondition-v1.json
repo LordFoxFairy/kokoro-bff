@@ -1,6 +1,6 @@
 {
   "profile": "skill-publication-precondition-v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "owner": "Platform/Skills",
   "status": "candidate",
   "parent_commit": "c6e4a79b9ea7a00907b147e7ae21c80b7f786de2",
@@ -19,14 +19,20 @@
     }
   },
   "current": {
-    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "41e13c4a7561e6a9f90db0fa41046fac268814bc2c20e49b45d09d9d79f3e3c0",
-    "contract/descriptor/platform-v1.binpb": "e8f7cbe54857f561b0563a79cfb85c794e369241832a54382c76b5d810140fff",
-    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "8c18a33e9bbc67173f20760d9040af405fd0ceb4ed58edc06529b12a856b5d09",
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "6a428a7f6e69102bafa19e3deaf460b1f85341e736caf569e3b8e9afb82166d0",
+    "contract/descriptor/platform-v1.binpb": "3e695f87dee76712d7ef34685dc79f3e9e55c404f8eaa213f907e5bd8864445b",
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "dd041ec89f368f70e145b9c6fe83c4b464154080db1a2a06a1b23eda7b50edf2",
     "contract/execution-operations/skill-publication-precondition-v1.vectors.json": "f995955cf5fb79ba5067b34fd7b46011692bf584aade7b956fb4b423e3b9a055"
   },
   "request_fields": {
     "PublishSkillRequest": 8,
     "PublishOfficialSkillRequest": 8
+  },
+  "response_fields": {
+    "GetAdminSkillResponse": {
+      "publication": 2,
+      "semantics": "explicit absent or actual pointer/version, including unavailable current"
+    }
   },
   "receipt_kind": "skill_publish_v2",
   "http_version_unchanged": "6.3.0",

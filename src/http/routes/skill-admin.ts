@@ -5,7 +5,12 @@ import { z } from "zod"
 import { ConnectError, Code } from "@connectrpc/connect"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { SkillAdminConnectClient, SkillAdminCommand } from "../../infrastructure/clients/platform/skill-admin-connect.js"
-import { projectSkillProductAck, projectSkillProductRecord, assertSkillWireKnown } from "../../infrastructure/clients/platform/skill-product-response.js"
+import {
+  projectSkillProductAck,
+  projectSkillProductRecord,
+  projectSkillPublicationExpectation,
+  assertSkillWireKnown,
+} from "../../infrastructure/clients/platform/skill-product-response.js"
 import { skillIdSchema, parseSkillProductInput } from "../skill-product-input.js"
 import { skillCategoryKeysSchema, skillPublicationPreconditionWire } from "../../infrastructure/clients/platform/skill-product-schema.js"
 import { runSkillRoute, assertSkillReadRequest, skillCommandId, skillMetadataWire } from "./skill-drafts.js"
@@ -82,7 +87,11 @@ export async function skillAdminRoute(
           const skillId = skillIdSchema.parse(path[2])
           const result = await client.get({ ...common, skillId }, signal, deadlineAt)
           signal.throwIfAborted()
-          send(response, 200, { data: await enrich(projectSkillProductRecord(result.skill, skillId)) })
+          assertSkillWireKnown(result)
+          const publication = projectSkillPublicationExpectation(result.publication)
+          const data = await enrich(projectSkillProductRecord(result.skill, skillId))
+          signal.throwIfAborted()
+          send(response, 200, { data, meta: { publication } })
         }
         return
       }

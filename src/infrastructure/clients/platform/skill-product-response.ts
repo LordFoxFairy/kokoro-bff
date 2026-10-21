@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util"
-import { skillDecimalSchema, skillCreationProvenanceSchema, skillCategoryKeysSchema } from "./skill-product-schema.js"
+import { skillPublicationPreconditionSchema, skillDecimalSchema, skillCreationProvenanceSchema, skillCategoryKeysSchema } from "./skill-product-schema.js"
 import { toJson, type Message } from "@bufbuild/protobuf"
 import { timestampDate } from "@bufbuild/protobuf/wkt"
 import type { Timestamp } from "@bufbuild/protobuf/wkt"
@@ -12,6 +12,7 @@ import {
   type SkillProductFacts,
   type SkillProductRecord,
   type SkillCover,
+  type SkillPublicationPrecondition as SkillPublicationWire,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { zSkillProductFacts, zSkillCover } from "../../../generated/platform-http/zod.gen.js"
 import { parseSkillExamplePrompts } from "./skill-example-prompts.js"
@@ -41,6 +42,21 @@ export function assertSkillWireKnown(value: unknown): void {
       if (Array.isArray(member)) member.forEach(assertSkillWireKnown)
       else assertSkillWireKnown(member)
     }
+}
+export function projectSkillPublicationExpectation(value: SkillPublicationWire | undefined) {
+  assertSkillWireKnown(value)
+  const expectation = value?.expectation
+  if (expectation?.case === "absent") {
+    if (expectation.value !== true) throw new Error("skill_response_invalid")
+    return null
+  }
+  if (expectation?.case !== "current" || typeof expectation.value?.stateVersion !== "bigint") throw new Error("skill_response_invalid")
+  const parsed = skillPublicationPreconditionSchema.safeParse({
+    current_version_id: expectation.value.currentVersionId?.value,
+    state_version: expectation.value.stateVersion.toString(),
+  })
+  if (!parsed.success) throw new Error("skill_response_invalid")
+  return parsed.data
 }
 export function skillTimestamp(value: Timestamp | undefined): string {
   if (value === undefined || value.seconds < -62135596800n || value.seconds > 253402300799n || value.nanos < 0 || value.nanos > 999999999)

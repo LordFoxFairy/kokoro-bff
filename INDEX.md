@@ -1,5 +1,7 @@
 ## 发布确认快照入口（2026-10-21）
 
+Admin既有详情的meta.publication复用skill-product-response窄mapper，核整个Proto未知字段并拒绝缺值，不猜null；当前Native pin e95aba2，独立HTTP6.3不变。
+
 沿现publish-skill、skill-admin路由和skill-product-input/schema、CatalogConnectClient：用户确认的publication为空或精确pointer/version，变更进入create-skill-draft-projector原摘要。Platform固定artifact和八向量见当前vendor与platform-connect manifest；原合同历史门在personal-skill-history-public-contract接入窄发布delta。两路冲突沿既有412，无提交重读／新存储。正常配对未完成，状态见docs/CURRENT.md。
 
 ## 2026-10-20 MC-02A System5 当前入口

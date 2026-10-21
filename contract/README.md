@@ -1,5 +1,7 @@
 ## 2026-10-21 发布确认快照（候选）
 
+同一未发布Public22候选现补既有Admin详情required meta.publication，data不变、无新operation；固定owner e95aba2/确认profile1.1。原正常21.2、固定父原字节和独立HTTP6.3不改；消费者须按新commit/digest成对固定后再切换，不作旧缺字段兼容。
+
 当前canonical Public22.0.0/176，两发布请求增加必填expected_publication；发布前确认的空／精确指针版本进入Platform原生oneof与命令摘要，缺字段拒绝。仅窄新增SkillPublishRequest与确认对象，audience编辑及成功表示不变。Native owner固定3fc971e，由现generate-platform-connect-client正式双次生成；原独立HTTP6.3 pin不改。当前byte逆证只限定本次发布delta后委托原历史门，不作为runtime旧版路径；Admin/App配对和正常页面验收尚待。
 
 ## 2026-10-21 Public21.1.1 集成

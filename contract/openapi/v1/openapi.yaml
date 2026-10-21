@@ -9562,7 +9562,7 @@ paths:
       summary: getAdminSkill
       description: >-
         Closed Product9 boundary. Identity comes from fresh IAM admission; no caller-supplied tenant, actor or admin status. One bounded admission and I/O budget,
-        no fallback.
+        no fallback. The required meta.publication is the explicit owner-confirmed series pointer/version (including withdrawn or disabled current), or null only when no publication exists. It is independent of the selected exact version; missing or malformed owner snapshots fail closed rather than claiming first publication.
       parameters:
         - name: skill_id
           in: path
@@ -17326,9 +17326,17 @@ components:
       additionalProperties: false
       required:
         - data
+        - meta
       properties:
         data:
           $ref: "#/components/schemas/SkillProductRecord"
+        meta:
+          type: object
+          additionalProperties: false
+          required: [publication]
+          properties:
+            publication:
+              $ref: "#/components/schemas/SkillPublicationPrecondition"
     SkillProductAckResponse:
       type: object
       additionalProperties: false

@@ -2843,6 +2843,11 @@ test("current publication contract requires an explicit confirmation only for pu
     assert.equal(schema.additionalProperties, false)
   }
   assert.equal(document.components.schemas.SkillAudienceRequest.properties.expected_publication, undefined)
+  const adminDetail = document.components.schemas.SkillProductRecordResponse
+  assert.deepEqual(adminDetail.required, ["data", "meta"])
+  assert.deepEqual(adminDetail.properties.meta.required, ["publication"])
+  assert.equal(adminDetail.properties.meta.additionalProperties, false)
+  assert.equal(adminDetail.properties.meta.properties.publication.$ref, "#/components/schemas/SkillPublicationPrecondition")
   assert.equal(
     document.paths["/v1/skills/{skill_id}/publish"].post.requestBody.content["application/json"].schema.$ref,
     "#/components/schemas/SkillPublishRequest",
