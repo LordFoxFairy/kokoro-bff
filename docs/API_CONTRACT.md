@@ -1,3 +1,9 @@
+## 2026-10-21 skill.list 项目并集修复（Public19.0.1 候选）
+
+`GET /v1/skill.list` 无 `project_id` 时维持个人安装列表；提供时返回个人与已授权项目的并集。同一稳定 series ID 只返回一条，采用项目安装完整的精确来源表示（含名称、描述、归属/获取来源、作者及原版本时间），不按新旧/启用状态选取或逐字段合并。disabled 安装仍在列表，列表读取不改变执行资格。公开顺序保留个人安装原序，重叠项目项替换原位置，项目独有项按其 owner 顺序追加；并非最新修订排序或跨 owner 原子快照。
+
+请求字段、响应形状、状态码、权限及 165 操作保持。当前仅 Product 人类准入，不能冒称 API Key/Open App/trusted 三身份已闭环。两范围分页/同一总预算与取消、项数上限、出口项目资格复核照旧，任一路失败不返回部分结果。唯一机器源补 GET description 与 patch version；旧 Public19 全文和双父历史证明保持，不新增兼容入口。
+
 ## 2026-10-20 既定项目执行 internal1 producer 收口（未激活）
 
 唯一 code-first 源 src/http/project-execution-binding.contract.ts 正规生成 contract/openapi/internal/v1/openapi.yaml／1.0.0；精确 POST /internal/v1/project-execution-bindings/verify，IAM 专用文件凭据、闭集输入与 no-store 成功/错误。成功仅返回匹配的 project_ref、原有序 selected_skill_source_refs 与 selection_digest；未知、错身份、资源不可见、已退役和期限失败均闭锁，不转成 Web admission 或执行许可。保留 Public19/165 operations、HTTP7 与全部现有错误/权限边界。IAM 已固定 d623f76/internal1；本次只补既定 producer，不新增 public 字段、fallback 或收费执行入口。

@@ -1,3 +1,11 @@
+## 2026-10-21 项目技能并集修复（main 隔离验收完成，待 PR）
+
+按用户确认规则，`skill.list?project_id` 现合并个人与已授权项目安装；同 series 采用项目完整 exact 表示，停用/较旧项目项也不回退个人项。不取 current/latest、不升级安装、不授项目执行资格。沿既有分页/取消/绝对总预算及出口权限复核；单路与最终列表均限1000，同scope重复series拒绝，任一路失败不返回半份成功。无新模块、API、Schema、依赖或运行兼容分支。
+
+从 `origin/main@5dc86e4` 独立实现，未带入模型候选三笔提交。原67项基线通过；新增独有风险及原授权测试RED5→GREEN，最终相关75 PASS。Public19.0.1仅补该GET描述，165操作、wire、参数和owner pins不变；原Public19完整SHA、双父proof与inventory原字节保持。独审发现描述逆回可被移到其他块的漏洞，已绑定目标GET并补RED→GREEN负控，复核关闭。
+
+Node22：format/lint/types、完整contract852 PASS、architecture36 PASS及build通过；默认并发全量1499 PASS/1 FAIL/3原资源SKIP，唯一失败是原模型管理5ms预算测试在到owner前超时（503正确、预期ownerCalls=1实际0），本片未修改该测试/产品。相同完整文件清单以`node --import tsx --test --test-concurrency=1`固定并发再次验收1500 PASS/0 FAIL/3原资源SKIP，断言/超时/skip不变；最终format/lint再次通过，704份非文档输入冻结零漂移。保留首失败，不宣称修复模型时序问题。无数据库/Redis变更，未重载正常服务或进行模型/工具/积分操作；正常 owner 链与 App/Admin 完整旅程仍需后续配对，不以受控 HTTP/Connect 证据冒整产品闭环。App自身登录刷新JSON500另记，未夹入本BFF修复。
+
 ## 2026-10-20 保留项目执行绑定 producer 定向集成（源码已验，正常执行未激活）
 
 基线 dfc3d59，定向承接既有 d623f76/16da6f0 的 internal1、canonical project/outbox schema3、Move 永久退役及原真实 chat-facts 回归；保留当前 Public19/165、Agent7104f3d/HTTP7 和全部其他 owner pins。Scheduler 的 saved launch/helper/delivery 原字节保持；Chat 不再从 trace 推导执行 authority，独立列与 schema3 的 canonical project 必须一致。internal1 正规生成 SHA256 7d6962602d34576ae227ad19a2da3d3647d01f8741abdc3ff3080e7539eebea4，与 IAM 已固定原发行物相同。
