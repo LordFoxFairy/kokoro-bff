@@ -3,7 +3,7 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "e95aba22d6ffc59a2c5979db39418b9a67f2822f",
+    "repository_commit": "97b27b3056f3024fe1c0509072349e1b274efac4",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -109,14 +109,14 @@
     "configs": [
       {
         "path": "buf.platform.json",
-        "sha256": "5afb1ce634511f16bd71f3b5cff01c8c4e545c07fb90de01e543124e512c878f"
+        "sha256": "c57a6e67d5e2202dbfddc9987c2d6f5f92177961cca54d67249d1497a3c41b70"
       },
       {
         "path": "buf.platform.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "35b6829cb6b795ed56cd9ea4beadc4d5c02ecc885d02bce4ac4aaa04839535f2"
+    "script_sha256": "73e7a6083e805e054017776d46c6796db87a18310f06d4ff67fe8507d4449f43"
   },
   "generated": [
     {

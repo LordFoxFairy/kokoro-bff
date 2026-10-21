@@ -117,7 +117,7 @@ test("both publication command digests match the fixed owner vectors and reject 
   const vectors = JSON.parse(
     await readFile(
       new URL(
-        "../contract/vendor/kokoro-platform/e95aba22d6ffc59a2c5979db39418b9a67f2822f/execution-operations/skill-publication-precondition-v1.vectors.json",
+        "../contract/vendor/kokoro-platform/97b27b3056f3024fe1c0509072349e1b274efac4/execution-operations/skill-publication-precondition-v1.vectors.json",
         import.meta.url,
       ),
       "utf8",

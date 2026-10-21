@@ -1,3 +1,7 @@
+## 本人历史原包下载配对（2026-10-21，实施中）
+
+固定 Platform `97b27b3056f3024fe1c0509072349e1b274efac4` 实现提交，机器原件/Native descriptor/HTTP6.3 原字节保持。沿现 browser-private POST /browser/v1/skills/{version_id}/download，本人 managed 精确 GET 验证归属后，除原 active 外接受明确 product.source_kind=personal 的 disabled/withdrawn。未知来源、其他来源、草稿/隔离/废弃仍不合格；安装/分享 resolver 规则不改。资格/原包 hash/size 在句柄下载前后仍重新确认，同一 subject/tenant、预算与取消保持，无新 API、公开字段、Schema、缓存或服务。App 必须消费原 ZIP 而非重组预览文本，恢复另走新 UID/上传/扫描/校验/publication 确认；本片不切换正常环境。
+
 ## 2026-10-21 Admin 详情确认快照（目标，未正常激活）
 
 同一未发布 Public22.0.0 /176 候选：GET /v1/admin/skills/{skill_id} 唯一使用的 SkillProductRecordResponse 新增 required meta（closed），仅含 required publication，复用既有 SkillPublicationPrecondition。data及全部其它操作/Schema不变；记录精确版本与publication当前指针是不同事实。显式absent:true映为null，current保留ID与canonical decimal至9223372036854775806；缺失、false absent、空oneof、错类型/越界和未知wire均为502 skill_response_invalid。权限、no-store/request-id、错误与超时维持原表；不新增fallback或API路径。

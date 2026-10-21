@@ -1,3 +1,7 @@
+## 本人历史原包下载配对（2026-10-21，实施中）
+
+固定 Platform `97b27b3056f3024fe1c0509072349e1b274efac4` 实现提交，机器原件/Native descriptor/HTTP6.3 原字节保持。沿现 browser-private POST /browser/v1/skills/{version_id}/download，本人 managed 精确 GET 验证归属后，除原 active 外接受明确 product.source_kind=personal 的 disabled/withdrawn。未知来源、其他来源、草稿/隔离/废弃仍不合格；安装/分享 resolver 规则不改。资格/原包 hash/size 在句柄下载前后仍重新确认，同一 subject/tenant、预算与取消保持，无新 API、公开字段、Schema、缓存或服务。App 必须消费原 ZIP 而非重组预览文本，恢复另走新 UID/上传/扫描/校验/publication 确认；本片不切换正常环境。
+
 ## 2026-10-21 Admin 详情确认快照（目标，未正常激活）
 
 固定 Platform e95aba22d6ffc59a2c5979db39418b9a67f2822f 的 Native artifact，沿原 getAdminSkill 详情和窄响应 mapper 接 publication oneof。既有 data 精确 SkillRecord 不变，快照作为 required meta.publication 返回 null 或精确 current_version_id/state_version；无新HTTP操作/服务/表。响应、嵌套未知Proto字段、缺失或非法oneof拒绝502，不以404/缺失猜null，不查current或MAX替代。原人类管理员／租户准入、专用机器凭据、总预算／取消与IAM发布者富化保持；确认快照在App/Admin冻结，提交不重读。Public22尚未发布，本片在同一未发布需求候选内收拢Admin详情；旧正常21.2不激活未配对消费者，原21.2完整父和8摘要向量保持。

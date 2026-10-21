@@ -1,3 +1,11 @@
+## 2026-10-21 本人历史原包下载资格已配对（源码候选）
+
+沿现 exactManagedRecord，仅为已获本人 managed GET 的明确 personal disabled/withdrawn 放行精确原包；active、安装、分享和current规则不改，句柄前后重新准入/绑定/资格和原hash/size校验保持。Platform固定97b27b3056f3024fe1c0509072349e1b274efac4，21个vendor原件逐一核对该commit，旧目录退休；正规Native生成，HTTP6.3/Public22/176与原generated业务字节保持。没有新API、Schema、表、缓存或兼容分支。
+
+定向两行为RED后修复，8PASS（含发行句柄后隔离拒绝）；初次用Node strip-types未解析仓内.js→.ts仅为命令错误，改用本仓tsx。首次生成入口漏改buf路径被原门拒绝，补完整pin后再生成成功；没有修改原完整父图/摘要向量断言。停写完整七门exit0：contract877、architecture36、默认1529PASS/3既有资源SKIP、构建/类型/lint/格式；非文档冻结输入无漂移。只读独审无确定P0–P2。本片未另跑BFF真实PG/Redis或正常页面，不冒完整restore验收。
+
+App还需接现private下载入口、取原ZIP/确认及新UID完整发布，正常四端尚未加载本片；未push/PR/merge、不改正常数据/配置，不启模型/实际工具/扣费。完整删除、公开身份、后台与MCP目标仍active。
+
 ## 2026-10-21 Admin 详情快照接线（源码候选，未正常激活）
 
 同一未发布Public22/176候选固定owner `e95aba22d6ffc59a2c5979db39418b9a67f2822f` Native artifact；现GET Admin详情保原data，新增required closed meta.publication，显式null或精确指针／版本。不从selected record、列表/current/最大revision推导，不把缺字段／404当空；缺失、坏oneof、越界或未知wire拒绝502。写摘要及原8向量、独立HTTP6.3 pin/字节和SQL保持；无新API、服务、表或自动重读。原IAM人类管理员与租户准入、专用机器身份、请求预算／取消保持，富化后再次检查signal。
