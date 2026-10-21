@@ -3971,3 +3971,13 @@ The public read surface preserves the IAM owner’s closed filters, ordering, op
 本仓browser-private错误恢复policy为唯一可编辑事实，按现local-import policy模式生成只读contract/connector-command-errors-v1.json，消费者以后固定BFF commit/digest；不把它塞入public OpenAPI、不复制owner错误class或产生第二API。状态/body/header/身份/CAS/key及取消预算保持；existing conflict/in-progress错误码保留，新增unknown/expired/ownership-lost及三种MCP原因。所有恢复均无自动重放/新key许可，App只在正式消费后提示。先行为RED、pin/生成与code-first publication、两route真实HTTP错误及零额外调用，再全本仓门禁；正常服务仅成对验收时另加载，本片不重启。
 
 本片核实 needs_client/auth_method_unsupported 来自原生 OAuth 服务，故共享 typed 前置条件分类也承接 Begin/Reconnect/Complete/CreateConnection，而不限 Prepare。URL server 分支仍要求已有 typed detail；原生 OAuth 无 detail 的合法 CAS 前置失败保持 generic412，未知/混合 detail 则502。原生 OAuth 不添加 Idempotency-Key；只移动错误职责至窄 connector-command-fault 模块，删除旧 server-response 中的错误 export，不留 alias。
+
+## 已合主线阶段记录（与上述当前模型配对状态区分）
+
+## 2026-10-21 项目技能列表并集（已确认规则，实施中）
+
+沿现 `SkillSpecificationService.read("skill.list")` 聚合，不新增 owner、API、表或客户端。当前 Product 人类准入与可信租户保持；有 `project_id` 时先核当前项目，再分别完整读取个人及该 canonical 项目安装，按 `series_id` 合并。项目安装整条优先，即使停用或版本较旧；个人独有项保留，不拼字段、不取 latest/current、不自动升级。各范围内重复 series 是非法 owner 响应，不能套用跨范围优先级静默消解。
+
+沿各路既有分页循环保护和 1,000 条容量限制，合并后的公开结果也不得超过 1,000；超限或任一路失败不截断、不回半份成功。两路共用原 AbortSignal/绝对截止时间，合并后才解析真实作者，返回前再次核同 tenant/subject 下的项目资格。列表是展示，不授予项目执行权限，不改变消息冻结、项目默认或 Platform exact 安装校验。
+
+唯一 OpenAPI 只补现 GET 描述并以 Public19.0.1 发行修复；wire、165 operation inventory 和 owner pins 不变。现 closure 检查入口精确逆回原 Public19 全文再执行不变双父证明，无新增脚本层或运行兼容路径。修改限聚合、原回归、规范说明与此描述证明；无数据写入/正常服务重载。以多页并集、精确覆盖、空项目/失败、容量、重复和现有撤权/取消回归验收；真实正常 owner 链单独记录。

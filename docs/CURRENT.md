@@ -1,6 +1,8 @@
 ## 2026-10-21 Skills 正常配对（独立集成中）
 
-正常BFF仍运行f3da7d5/Public21.1.0模型候选，直接切到main Public19.0.1会丢失当前模型字段／表单，故保留正常候选并在独立topic承接已合333b708 Skills并集。目标Public21.1.1/175；Schema、模型字段和owner pins不变，App/Admin待正式提交后固定配对。已在该模型基线上复现5个真实Skills并集行为失败；额外1个测试失败是搬入主线全artifact版本断言尚未配对，单列不当业务失败。实现／完整验收及正常加载未完成，原业务进程和数据未动。
+正常BFF仍运行f3da7d5/Public21.1.0模型候选，直接切到main Public19.0.1会丢失当前模型字段／表单，故保留正常候选并在独立topic承接已合333b708 Skills并集。目标Public21.1.1/175；Schema、模型字段和owner pins不变，App/Admin待正式提交后固定配对。已在该模型基线上复现5个真实Skills并集行为失败；额外1个测试失败是搬入主线全artifact版本断言尚未配对，单列不当业务失败。当前局部实现及主线冲突集成已完成，正常加载与完整产品验收仍未完成，原业务进程和数据未动。
+
+停写基线本地完整七门均exit0：contract854 PASS、architecture36 PASS、完整test1507 PASS／3既有资源SKIP（预先固定test-concurrency=1），格式／lint／types／build均通过。711份非文档输入前后hash无漂移；79项定向及合并组合独立审查通过。原历史proof／inventory不改，主线19.0.1与模型21.1.1补丁按精确原件逆证；运行时不新增兼容入口。App/Admin精确消费者pin、正常页面回读和整批PR仍待收口，不以组件门替代。
 
 ## 2026-10-20 MC-02 配置管理接线（本地候选）
 
@@ -1987,3 +1989,13 @@ Skill record 对应值的 `UNSPECIFIED`、`INTENT` 及未知值 fail closed。Fi
 Platform Connect 固定 ac56a1f8e9491e3e8383bff833b0f9f771fae3b1 receipt error profile/provenance并正规生成，旧vendor删除；Public14.8/139、Proto与HTTP独立pin未变。窄错误mapper/私有恢复policy区分原receipt状态和MCP原生OAuth三项typed原因，拒绝未知/重复/错码/混合/read marker；不按message猜、不自动重放或新key。原server-response错误export删除并移至对应client错误边界，无alias。code-first profile正规发布为只读JSON，App尚未消费，正常服务无watch/未重启。
 
 原unknown被误报generic retryable及原生OAuth typed原因被丢失均实际HTTP RED后修复；真实两个HTTP hop使用production Connect client确认expired不被旧typed-detail guard误报502。HTTP/SDK是真实传输，owner/凭据/IAM仍为受控fixture，不冒真实receipt DB、正常用户或第三方授权。完整门禁、独审与最终commit由Root有效计划收口。
+
+## 已合主线阶段记录（与上述当前模型配对状态区分）
+
+## 2026-10-21 项目技能并集修复（main 隔离验收完成，待 PR）
+
+按用户确认规则，`skill.list?project_id` 现合并个人与已授权项目安装；同 series 采用项目完整 exact 表示，停用/较旧项目项也不回退个人项。不取 current/latest、不升级安装、不授项目执行资格。沿既有分页/取消/绝对总预算及出口权限复核；单路与最终列表均限1000，同scope重复series拒绝，任一路失败不返回半份成功。无新模块、API、Schema、依赖或运行兼容分支。
+
+从 `origin/main@5dc86e4` 独立实现，未带入模型候选三笔提交。原67项基线通过；新增独有风险及原授权测试RED5→GREEN，最终相关75 PASS。Public19.0.1仅补该GET描述，165操作、wire、参数和owner pins不变；原Public19完整SHA、双父proof与inventory原字节保持。独审发现描述逆回可被移到其他块的漏洞，已绑定目标GET并补RED→GREEN负控，复核关闭。
+
+Node22：format/lint/types、完整contract852 PASS、architecture36 PASS及build通过；默认并发全量1499 PASS/1 FAIL/3原资源SKIP，唯一失败是原模型管理5ms预算测试在到owner前超时（503正确、预期ownerCalls=1实际0），本片未修改该测试/产品。相同完整文件清单以`node --import tsx --test --test-concurrency=1`固定并发再次验收1500 PASS/0 FAIL/3原资源SKIP，断言/超时/skip不变；最终format/lint再次通过，704份非文档输入冻结零漂移。保留首失败，不宣称修复模型时序问题。无数据库/Redis变更，未重载正常服务或进行模型/工具/积分操作；正常 owner 链与 App/Admin 完整旅程仍需后续配对，不以受控 HTTP/Connect 证据冒整产品闭环。App自身登录刷新JSON500另记，未夹入本BFF修复。

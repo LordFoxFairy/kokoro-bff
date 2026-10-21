@@ -1,3 +1,5 @@
+// The current project-list patch is checked against raw Public21.1.1 in system-http-contract.test.mjs.
+// This suite retains its exact historical Public19.0.0 normalization and parent oracles.
 import { restorePublic21ModelConfigurationContract, modelConfigurationParentBaseline } from "../../scripts/model-configuration-public-contract.mjs"
 import { restorePublic20SharedModelCatalogContract } from "../../scripts/shared-model-catalog-public-contract.mjs"
 import { restorePublic19SystemModelConnectionContract } from "../../scripts/system-model-connection-public-contract.mjs"

@@ -357,3 +357,9 @@ requires coordinated IAM populated-schema evolution and strict BFF/Web consumer 
 ## Connector command browser-private error profile 1.0.0
 
 当前MCP/Custom API管理使用 `/browser/v1`，不新增public operation或改变Public14.8/139。`src/infrastructure/clients/platform/connector-command-fault.ts` 的code-first窄policy是唯一可编辑事实，正规生成只读 `connector-command-errors-v1.json`；`contract:check:connector-command-errors` 检测drift，恢复语义不授自动执行、新command或新key许可。Platform Connect唯一vendor固定当前receipt profile/provenance，旧vendor移除；Proto与独立HTTP pin原字节保持。App后继必须固定本BFF commit与该profile digest，当前尚未接UI或正常切换。
+
+## 已合主线阶段记录（与上述当前模型配对状态区分）
+
+## 2026-10-21 Public19.0.1 项目列表修复
+
+唯一机器源只增加 `GET /v1/skill.list` 的个人＋项目并集与项目 exact 整条优先说明。原 fields/parameters/security/165 operation inventory 不变；现 closure 检查先精确恢复 Public19 完整字节，再执行不变双父证明。没有运行时旧版接受或新兼容层；正常发布/验收状态见 `docs/CURRENT.md`。

@@ -3051,3 +3051,11 @@ Audit、全局用户目录、用户生命周期、session revoke、角色 grant 
 只有Platform固定receipt metadata/code组合才能映射本仓恢复错误，RPC的unknown/expired/conflict/ownership-lost不表示未提交。无marker按原领域处理，畸形/未知/重复/错code/混合detail及read上的marker统一response_invalid/502。MCP三项既有PersonalMcpErrorDetail原因独立可辨，不能按message猜。具体HTTP code/status/retryable/recovery以本仓生成profile为准；成功/CAS/key/no-store/x-request-id/human准入不变。所有恢复指引都不授自动执行、新command或新key许可，未消费App前不声称UX闭环。
 
 本片核实 needs_client/auth_method_unsupported 来自原生 OAuth 服务，故共享 typed 前置条件分类也承接 Begin/Reconnect/Complete/CreateConnection，而不限 Prepare。URL server 分支仍要求已有 typed detail；原生 OAuth 无 detail 的合法 CAS 前置失败保持 generic412，未知/混合 detail 则502。原生 OAuth 不添加 Idempotency-Key；只移动错误职责至窄 connector-command-fault 模块，删除旧 server-response 中的错误 export，不留 alias。
+
+## 已合主线阶段记录（与上述当前模型配对状态区分）
+
+## 2026-10-21 skill.list 项目并集修复（Public19.0.1 候选）
+
+`GET /v1/skill.list` 无 `project_id` 时维持个人安装列表；提供时返回个人与已授权项目的并集。同一稳定 series ID 只返回一条，采用项目安装完整的精确来源表示（含名称、描述、归属/获取来源、作者及原版本时间），不按新旧/启用状态选取或逐字段合并。disabled 安装仍在列表，列表读取不改变执行资格。公开顺序保留个人安装原序，重叠项目项替换原位置，项目独有项按其 owner 顺序追加；并非最新修订排序或跨 owner 原子快照。
+
+请求字段、响应形状、状态码、权限及 165 操作保持。当前仅 Product 人类准入，不能冒称 API Key/Open App/trusted 三身份已闭环。两范围分页/同一总预算与取消、项数上限、出口项目资格复核照旧，任一路失败不返回部分结果。唯一机器源补 GET description 与 patch version；旧 Public19 全文和双父历史证明保持，不新增兼容入口。
