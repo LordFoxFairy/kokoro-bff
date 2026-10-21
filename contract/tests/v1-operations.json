@@ -3,6 +3,11 @@
   "operations": [
     {
       "method": "GET",
+      "path": "/v1/scheduled-task-runs",
+      "operation_id": "listScheduledTaskRuns"
+    },
+    {
+      "method": "GET",
       "path": "/v1/account/archived-tasks",
       "operation_id": "listOwnedArchivedTasks"
     },

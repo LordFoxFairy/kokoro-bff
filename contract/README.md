@@ -1,3 +1,7 @@
+## Public19.2 运行metadata候选
+
+唯一OpenAPI只增listScheduledTaskRuns，19.1原字节/inventory通过contract/tests/scheduled-task-runs.json精确逆证保护。metadata-only，不声称运行摘要/输出或消费者已接入；尚未发行或提交。当前源码已实现有界owner读取；`scripts/scheduled-task-runs-public-contract.mjs`精确还原完整19.1后继续全部旧项目下载/closure/semantic门。新索引在自有fresh PG验证，不自动演进正常库；正常Web仍未消费。
+
 ## 2026-10-19 既有分支集成：唯一 Public19.0.0（候选）
 
 本次只合并本地 d8634f0 与 main 16e5c711 已批准能力，不新增功能。唯一当前 /v1 契约165操作：保本地 Skills取得来源、项目精确选择/消息默认冻结、知识、完整日历与Library筛选、五项MCP包管理；承接main八项账号会话/姓名、共享/归档操作与Team完整platform/skill权限。旧名称关联PATCH及recurrence_anchor_at请求字段保持退休，不建alias或runtime fallback。两父原文/有序inventory通过本次明确增量的精确逆证保留，既有历史hash与断言不重签；全部后端入口、owner准入/取消/事务/幂等和历史回执保持。

@@ -1,3 +1,7 @@
+## 2026-10-21 当前候选 Public19.2 / 167 operations
+
+新增本人运行metadata列表及可选task过滤，读取持久dispatch与严格终态事实，不触发执行。源码已实现两次当前资格快照、首次/最终IAM、单一5秒总预算与有界分页；摘要/输出、Web正式消费和正常激活仍待后继。机器事实源仍为原OpenAPI；`scripts/scheduled-task-runs-public-contract.mjs`先完整逆回19.1，再执行所有历史证明。准确门禁与资源边界见`docs/CURRENT.md`。以下日期段是历史快照。
+
 ## 2026-10-19 当前 Public19 集成交付
 
 当前唯一契约为 Public19.0.0 / 165 operations。保留本地Skills、项目选择冻结、知识、调度日历、Library与MCP包管理，并合入main账号会话/姓名、共享/归档及完整Team权限；不恢复旧名称关联或旧anchor字段。双父精确证明在 `scripts/verify-closure-integration-contract.mjs`；真实验证和正常配对边界见 `docs/CURRENT.md`。以下日期段是历史切片，不替代当前机器契约。

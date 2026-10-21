@@ -1,3 +1,5 @@
+import { isScheduledTaskRunsCandidate } from "../http/scheduled-task-runs-input.js"
+import { scheduledTaskRunsRoute } from "../http/routes/scheduled-task-runs.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
@@ -107,6 +109,10 @@ async function handle(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
+  if (isScheduledTaskRunsCandidate(request)) {
+    await scheduledTaskRunsRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.scheduledTaskRuns, id)
+    return
+  }
   if (isProjectResourceDownloadCandidate(request)) {
     await projectResourceDownloadRoute(request, response, config, composition.sessionAdmission, composition.businessStore, id)
     return

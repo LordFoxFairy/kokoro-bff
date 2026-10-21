@@ -1,3 +1,4 @@
+import { PostgresScheduledTaskRunsReader } from "./scheduled-task-runs.js"
 import { PostgresPersonalKnowledgeRepository } from "./personal-knowledge-repository.js"
 import { readSkillUsage } from "./skill-usage-projection.js"
 import { PostgresPersonalizationRepository } from "./personalization-repository.js"
@@ -43,6 +44,7 @@ export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/id
 export type { ScheduledTaskRecord } from "../../application/ports/scheduled-task-repository.js"
 
 export class PostgresBffRepositories {
+  public readonly scheduledTaskRuns: PostgresScheduledTaskRunsReader
   private readonly database: PostgresBffDatabase
   private readonly idempotency: IdempotencyRepository
   private readonly projects: ProjectRepository
@@ -61,6 +63,7 @@ export class PostgresBffRepositories {
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
+    this.scheduledTaskRuns = new PostgresScheduledTaskRunsReader(this.database.pool)
     this.idempotency = new PostgresIdempotencyRepository(this.database.pool)
     this.projects = new PostgresProjectRepository(this.database)
     const scheduled = new PostgresScheduledTaskRepository(this.database)

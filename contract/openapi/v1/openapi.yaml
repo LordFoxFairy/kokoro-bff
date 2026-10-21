@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 19.1.0
+  version: 19.2.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -49,6 +49,179 @@ tags:
   - name: Administration
     description: Platform-administrator projections backed by their owning services.
 paths:
+  /v1/scheduled-task-runs:
+    get:
+      tags:
+        - Scheduled
+      operationId: listScheduledTaskRuns
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: scheduled_task.read
+      summary: List current-owner scheduled task run metadata
+      description: >-
+        Live current-owner pages, task and same-owner undeleted Project eligibility before LIMIT. Optional task_id uses
+        the same projection; missing or unavailable task is privacy-preserving 404. Immutable scheduled_for is the
+        original nine-fraction UTC occurrence_order_key, ordered DESC then dispatch_id in PostgreSQL C UTF8 byte order
+        DESC. Cursor binds tenant, subject, task_id, limit and sort profile; it is not authority and provides no
+        cross-page snapshot. Late lower keys may enter following pages; new higher keys need refresh. A single
+        min(upstreamTimeoutMs,5000 ms) absolute budget starts before initial IAM admission and covers final IAM plus the
+        second bounded PG snapshot; changes fail the whole page, without refill or cross-service atomic revocation claims.
+        pending is dispatch queue state; admission_unknown may already be admitted; admitted is Launch ACK, not observed
+        run.started. run_id is preallocated. terminal_event_at is Agent event time, not a claimed execution duration.
+        Strict exact-run terminal identity, digest and time checks; duplicate/missing/bad terminal or source >65536 UTF8
+        bytes, payload_json >16384 bytes, metadata/output >1048576 bytes fail 503, never partial/truncated success. These
+        are BFF read budgets, not Agent contract limits. No summary/output or fabricated chat link. On errors consumers
+        retire previous query data. No request body, repeated/unknown query, identity selector or Idempotency-Key.
+      parameters:
+        - name: task_id
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+      responses:
+        '200':
+          description: Bounded current-owner run metadata
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsResponse'
+        '400':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError400'
+        '401':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError401'
+        '403':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError403'
+        '404':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError404'
+        '429':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+            Retry-After:
+              schema:
+                type: string
+                pattern: ^[1-9][0-9]{0,4}$
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError429'
+        '500':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError500'
+        '503':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError503'
   /v1/account/archived-tasks:
     get:
       tags:
@@ -19613,6 +19786,249 @@ components:
       format: date
       pattern: '^\d{4}-\d{2}-\d{2}$'
       description: Calendar date in the selected IANA timezone. Gaps are rejected and repeated times use the earlier instant.
+    ScheduledTaskRunItem:
+      type: object
+      additionalProperties: false
+      required:
+        - task_id
+        - title
+        - project_ref
+        - run_id
+        - scheduled_for
+        - state
+        - terminal_event_at
+      properties:
+        task_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        title:
+          type: string
+        project_ref:
+          type:
+            - string
+            - 'null'
+        run_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        scheduled_for:
+          type: string
+          format: date-time
+          pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$
+        state:
+          type: string
+          enum:
+            - pending
+            - admission_unknown
+            - admitted
+            - dispatch_failed
+            - completed
+            - cancelled
+            - failed
+        terminal_event_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$
+    ScheduledTaskRunsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - items
+            - next_cursor
+          properties:
+            items:
+              type: array
+              maxItems: 100
+              items:
+                $ref: '#/components/schemas/ScheduledTaskRunItem'
+            next_cursor:
+              type:
+                - string
+                - 'null'
+              minLength: 1
+              maxLength: 2048
+    ScheduledTaskRunsError400:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - scheduled_task_runs_input_invalid
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    ScheduledTaskRunsError401:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - session_authentication_required
+                - session_invalid
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    ScheduledTaskRunsError403:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - service_auth_failed
+                - session_forbidden
+                - product_tenant_forbidden
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    ScheduledTaskRunsError404:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - scheduled_task_not_found
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    ScheduledTaskRunsError429:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - session_rate_limited
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: true
+    ScheduledTaskRunsError500:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - internal_error
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    ScheduledTaskRunsError503:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - product_tenant_not_configured
+                - iam_admission_unavailable
+                - scheduled_task_runs_unavailable
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: true
     ScheduledTask:
       type: object
       required: [id, title, prompt, frequency, time, timezone, next_run_at, auto_approve, enabled, status]

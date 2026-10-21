@@ -1,3 +1,34 @@
+## 2026-10-21 I4 运行更新 metadata 读取（源码候选已实现，正常激活与独审待后继）
+
+BFF 拥有 ScheduledTask、dispatch 及已核验复制事件；Agent 仍是执行事件唯一生产方。先交付全局运行列表及可选 task_id 过滤，不虚构运行摘要、输出详情或会话链接。HTTP7 固定 artifact 的 payload_json 没有 run.completed / assistant.completed 机器 schema；摘要/输出及立即测试不在本切片完成范围。
+
+### 职责、放置与依赖
+
+沿现 ScheduledTask 能力新增读取，不改变写入/投递/终态消费状态机。比较扩展现 scheduled-task-read-service（其职责是 Scheduler 当前登记 next）和独立运行读取 service；采用后者，避免把当前规则与持久执行历史混为同一生命周期。沿当前 application、http/routes、infrastructure/postgres 放置普通文件，不创建顶层模块或空目录；不搬既有代码。
+
+- application/scheduled-task-runs.types.ts：内部查询、position、page、source snapshot 与 read port；类型按真实生命周期建模，不复制五层 DTO。
+- application/scheduled-task-runs-service.ts：单次页面读取、最终资格重核与状态投影编排；application/scheduled-task-run-projector.ts：不可信持久事件的纯解析与 metadata 投影，复用固定 Agent generated ChatEvent、parseAgentFailure 及原 scheduledSourceEventDigest。
+- http/scheduled-task-runs-input.ts：严格 query 与 scope-bound opaque cursor codec；http/routes/scheduled-task-runs.ts：入口 IAM、同一预算、closed response 与错误。bootstrap/server.ts 在通用 IAM 前分派本操作，避免重置预算。
+- infrastructure/postgres/scheduled-task-runs.ts：仅本 owner 四表查询，复用现 ArchiveSqlLease 的已有有界连接生命周期（不改变或复制归档业务、不因名字做无关重构）。通过 BffBusinessStore 可选窄 read port 注入，live repositories 绑定既有单 PG pool。
+
+没有 Redis、跨 owner SQL、第二 Run 实体、缓存或新的后台进程；不调用 Agent 执行、Scheduler 写、Storage 下载或支付。Skills/MCP 业务与所有旧写入回执保持。旧路径无被替代项。
+
+### 一页读取、状态与资源
+
+入口单一绝对 monotonic deadline 为 min(upstreamTimeoutMs,5000ms)，初次 IAM、PG、发送前 IAM 复验及第二次 PG 同预算；所有外部 promise 均受 deadline/AbortSignal 的 race 约束，拒绝非协作依赖拖住 HTTP。disconnect/timeout 后不发送成功，精确归还迟到 client、销毁在途自有 client，不关闭共享 pool。没有自动重试/补满循环。初次 IAM 保留既有闭合 401/403/429/503；最终 IAM 身份改变或拒绝按最终明确状态失败，依赖未知503。
+
+PG 第一/第二次读取均在短只读事务内、当前 READ COMMITTED 语句快照执行。IAM 不持 PG 锁；当前 task + owner parent 与本页内容在最终快照重新核对，任何变化整次503，不补写、不继续追页。未声称 IAM 与 PG 跨服务原子撤权；第二快照之后发生撤权须下一次请求重新检查。
+
+metadata 状态唯一投影：dispatch pending/leased/retryable 且 admission_unknown_seen=false -> pending；同组且 true -> admission_unknown；admitted -> admitted（仅已获准，不能等同观察到 run.started）；failed 且无 unknown 标记 -> dispatch_failed（投递失败，不叫模型执行失败）；terminal 恰一有效对应源事件 -> completed/cancelled/failed。其他组合、漏终态、多个终态或坏源整页503。run_id 是预分配身份，不单独证明 Run 已开始。terminal_event_at 只为 Agent 终态事件 created_at 的 UTC 毫秒表示，不叫真实结束时间或耗时。
+
+源事件先检查 DB octet_length(source_payload::text)<=65536，超限只传标志不把正文搬进应用；payload_json UTF8<=16384。它们是 BFF 读取预算而非 Agent 协议既有上限，不静默截断。元数据字符串与完整输出在 PG/HTTP 前各有总计1MiB预算；标题沿现 owner 原文，不新造标题长度约束或截断成功。解析完整 ChatEvent 外壳（chat_message_id 原生产可省略/nullable）、exact tenant/task/run + scheduled:<taskId> session、source ID/seq/type、digest、source_occurred_at 与 created_at 同一毫秒。run.failed 复用生成闭合 failure parser；run.completed 只严格读取对象 status=completed|cancelled，其他字段仍为 owner opaque，不伪造额外字段闭集；严格 JSON 拒重复键/坏UTF8。未知终态绝不默认 completed。
+
+实现沿已有 ArchiveSqlLease 接入同一个 PG pool，page snapshot 只在 PG 先限总字节后进入应用。projector 的严格 JSON 校验函数由 HTTP composition 显式注入，避免 application 反向导入 infrastructure。payload_json 先标准 JSON.parse 核原始 grammar，仅把字符串外已识别 number token mask 为0后调用原 strict parser校验重复键/Unicode；原始对象用于读取 status，原始 raw事件/字符串用于digest。opaque extra的小数、指数、大整数、-0或溢出数值一律不投影为公开metadata，原身份/sequence/created_at仍由generated safe integer校验。没有改变旧parser或生成物。
+
+### 验证与交付
+
+先新增行为/HTTP/contract/真实 owner PG 用例形成 RED，再最小实现；覆盖 scope、父资格、删除/暂停、9位排序、多页与filter、坏源/错digest/冲突/超限、首/末IAM、变更退休、deadline/取消/迟到资源。沿现公开Surface测HTTP，不靠源码字符串替代行为。原19.1完整字节与166 inventory精确逆证；原测试只允许将当前机器源正规归一到原19.1后继续原断言，不删除原边界。保I3归档，新增19.2不能冒原739冻结。集成仅自有 fresh schema/fixture，正常服务/schema不自动更新。后续独审/Root重跑通过后再谈可提交；当前无Git动作授权。
+
 ## 2026-10-19 已合入 owner 发布物配对（隔离候选）
 
 复用现IAM/Billing窄SDK，固定已合入main的IAM7cbe988/0.14.0与Billing3f5e0da/4.0.0-experimental.2。按owner Git object逐字分发OpenAPI后走唯一正式生成器，退休旧c64/cd92当前vendor，不增加多版本接受、接口或新客户端。IAM只有未消费E2表示变化，本仓已批准窄operation集合/生成响应应保持；独立浏览器私有relay policy0.7仍按其原owner事实，不借此改OAuth准入。Billing仅将同一Catalog/本人Credit三GET沿正式SDK从退役/v2改/v1，完整身份/decimal/closed response/超时取消与错误保障不变。

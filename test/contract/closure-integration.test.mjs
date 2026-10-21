@@ -1,3 +1,4 @@
+import { restoreScheduledRunsParent, scheduledRunsParentBaseline } from "../../scripts/scheduled-task-runs-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -16,8 +17,8 @@ import {
   closureLocalBaseline,
   closureMainBaseline,
 } from "../../scripts/verify-closure-integration-contract.mjs"
-const source = await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-const baseline = JSON.parse(await readFile(new URL("../../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+const source = restoreScheduledRunsParent(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+const baseline = scheduledRunsParentBaseline(JSON.parse(await readFile(new URL("../../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations)
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 
 test("Public19.1 adds only project resource download and keeps the complete Public19 capabilities", () => {
@@ -141,7 +142,11 @@ test("Public19.1 download proof rejects new shape drift while retaining the orig
 })
 
 test("merged canonical SQL adds exactly main archive facts to the intact local owner schema", async () => {
-  const schema = await readFile(new URL("../../database/schema.sql", import.meta.url), "utf8")
+  const currentSchema = await readFile(new URL("../../database/schema.sql", import.meta.url), "utf8")
+  const terminalIndex =
+    "-- Bounded exact-run terminal metadata reads.\nCREATE INDEX IF NOT EXISTS ix_bff_scheduled_source_terminal_run\n  ON bff_scheduled_agent_source_event (tenant_id,task_id,source_run_id,source_sequence)\n  WHERE event_type IN ('run.completed','run.failed');\n\n"
+  assert.equal(currentSchema.split(terminalIndex).length, 2, "the exact approved run metadata index must remain present once")
+  const schema = currentSchema.replace(terminalIndex, "")
   const parent = await readFile(new URL("../../contract/tests/closure-local.schema.sql.snapshot", import.meta.url), "utf8")
   const settings = await readFile(new URL("../../contract/tests/settings-main.schema.sql.snapshot", import.meta.url), "utf8")
   assert.equal(digest(parent), "c292decc4e962caaed14f7b92ab139cc74b4c5d5a431584f6b1c45975d48296d")

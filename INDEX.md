@@ -1,3 +1,12 @@
+## 2026-10-21 运行metadata读取入口
+
+当前机器契约为未发行 Public19.2/167 候选，新增面由 `scripts/scheduled-task-runs-public-contract.mjs` 精确逆回原19.1/166，再进入项目下载与双父原证明。
+
+- `src/application/scheduled-task-runs.types.ts` / `src/application/scheduled-task-run-projector.ts` / `src/application/scheduled-task-runs-service.ts`：窄read port、严格源事实投影及双快照编排。
+- `src/http/scheduled-task-runs-input.ts` / `src/http/routes/scheduled-task-runs.ts`：strict query/str1游标、entry总预算及两次IAM；server在通用准入前精确分派。
+- `src/infrastructure/postgres/scheduled-task-runs.ts`：当前资格在LIMIT前、L+1与最多两终态、PG字节守卫；复用原ArchiveSqlLease，不修改归档职责。
+- 六个具名行为/HTTP/真实PG测试与`test/contract/scheduled-task-runs.test.mjs`覆盖本片。正常服务/前端pin不在此交付切换，结果见CURRENT。
+
 ## 2026-10-19 集成证明入口
 
 唯一当前机器契约为 Public19.1/166 未发布候选：`contract/openapi/v1/openapi.yaml`；只新增项目资源下载。`scripts/project-resource-download-public-contract.mjs` 验证新增面并完整逆恢复原 Public19/165，再由 `scripts/verify-closure-integration-contract.mjs` 与 `test/contract/closure-integration.test.mjs` 验证两个批准父全文/有序操作。历史 proof 不重签，也不是运行时兼容层。项目下载已形成源码候选，但未正常激活或发行，详见 `docs/CURRENT.md`。

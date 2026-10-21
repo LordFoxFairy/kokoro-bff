@@ -460,6 +460,11 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_source_event (
   )
 );
 
+-- Bounded exact-run terminal metadata reads.
+CREATE INDEX IF NOT EXISTS ix_bff_scheduled_source_terminal_run
+  ON bff_scheduled_agent_source_event (tenant_id,task_id,source_run_id,source_sequence)
+  WHERE event_type IN ('run.completed','run.failed');
+
 -- A deleted conversation must compensate every launch that may already have
 -- crossed the Agent boundary. These run.cancel commands are committed in the
 -- deletion transaction and delivered independently from launch settlement.

@@ -1,3 +1,17 @@
+## 2026-10-21 I4 运行更新 metadata 读取（源码候选已实现，正常激活与独审待后继）
+
+BFF 拥有 ScheduledTask、dispatch 及已核验复制事件；Agent 仍是执行事件唯一生产方。先交付全局运行列表及可选 task_id 过滤，不虚构运行摘要、输出详情或会话链接。HTTP7 固定 artifact 的 payload_json 没有 run.completed / assistant.completed 机器 schema；摘要/输出及立即测试不在本切片完成范围。
+
+### 事实、资格、查询与索引
+
+不新增表、持久字段、外键、Run副本、查询缓存或数据迁移链。复用 bff_scheduled_task / bff_project / bff_scheduled_agent_dispatch / bff_scheduled_agent_source_event。task物理删除或Project软删后历史记录可能仍保留，但新查询不可见，不能据历史subject单独授权。父项目须当前同tenant/owner且deleted_at IS NULL；无项目任务正常。task当前暂停/failed/过期/once已过去仍可读有效历史，不借规则enabled/status抹掉执行记录。task不存在/owner变化/无效父在LIMIT之前过滤；exact task过滤先验证资格，不存在/不可见同404。
+
+页面按不可变occurrence_order_key COLLATE C DESC、dispatch_id COLLATE C DESC，原9位UTC文本不降精度。一个有界候选CTE先当前owner/父资格、taskfilter、keyset、limit+1，再lateral按exact tenant/task/run读取最多两条terminal事件以检测冲突；不把其他run终态投到本项。第二次同一完整查询与首次快照精确比较，任何变化失败，不做跨IAM长事务/范围锁或页面补满。query/connection耗尽同入口预算，最多两次页面快照。
+
+canonical只新增partial ix_bff_scheduled_source_terminal_run (tenant_id,task_id,source_run_id,source_sequence) WHERE event_type IN ('run.completed','run.failed')，对应已实际验证的exact terminal查询。不新增无计划支持的global dispatch索引。现单task dispatch order索引保留；全局实际服务大负载SLO仍待验，statement deadline提供失败上界而非性能保证。源payload在PG检查长度后才返回正文，metadata/raw totals及HTTP一律有界，超界整页503不截断。
+
+源事件、dispatch、task的生命周期/retention不变，本切片只读。canonical fresh schema先在自有fixture安装，正常应用库不自动DDL/演进；既有共享PG/Redis实例复用不重启/清空。索引回滚只移除此新增索引设计，历史事实不改；正式正常库激活另需具名操作与验证。
+
 ## 2026-10-19 已合入 owner 发布物配对（隔离候选）
 
 复用现IAM/Billing窄SDK，固定已合入main的IAM7cbe988/0.14.0与Billing3f5e0da/4.0.0-experimental.2。按owner Git object逐字分发OpenAPI后走唯一正式生成器，退休旧c64/cd92当前vendor，不增加多版本接受、接口或新客户端。IAM只有未消费E2表示变化，本仓已批准窄operation集合/生成响应应保持；独立浏览器私有relay policy0.7仍按其原owner事实，不借此改OAuth准入。Billing仅将同一Catalog/本人Credit三GET沿正式SDK从退役/v2改/v1，完整身份/decimal/closed response/超时取消与错误保障不变。

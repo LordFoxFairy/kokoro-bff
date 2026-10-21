@@ -1,3 +1,11 @@
+## 2026-10-21 I4 运行更新 metadata 读取（源码候选，正常服务与Web未切换）
+
+BFF 拥有 ScheduledTask、dispatch 及已核验复制事件；Agent 仍是执行事件唯一生产方。先交付全局运行列表及可选 task_id 过滤，不虚构运行摘要、输出详情或会话链接。HTTP7 固定 artifact 的 payload_json 没有 run.completed / assistant.completed 机器 schema；摘要/输出及立即测试不在本切片完成范围。
+
+当前Public19.2/167候选已实现metadata读取及exact terminal partial索引：当前owner/parent资格在LIMIT前，原9位顺序keyset、L+1与最多两终态，源identity/digest/time/generated校验与PG/HTTP字节界；两次IAM和完整页快照共享单一5秒绝对预算。ArchiveSqlLease原行为保持，晚checkout精确回收、在途自有lease退休。没有新增执行/审批能力、摘要或输出详情。
+
+本片先在真实HTTP观察到4FAIL/1PASS（未实现入口；旧通用IAM10秒），同例转绿。前轮具名新行为与架构99PASS，最终完整门再含合法Unicode maxLength边界；原调度/归档/项目与个人下载具名回归143PASS。自有fresh PG安装及六子项计7PASS/0SKIP，覆盖资格/纳秒分页、终态冲突/字节界、双快照变化、饱和late checkout零SQL、准确blocked backend退休与池恢复；未访问Redis或正常schema，精确回收自有夹具，原数据库OID保留。完整default/contract第一轮各有历史schema oracle遇获准新增index的一项FAIL，原日志保留；初始化精确剥唯一新增block后原全文assert保持。最终固定Node22.22.2直接tsc、format/lint/typecheck、11依赖contract check、公开lint/semantic/governance均通过；公开lint有44条warnings，不归称全部旧问题。完整default为1602PASS/0FAIL/3原SKIP（55.254秒），contract为947PASS/0FAIL/0SKIP（54.909秒）。两个完整命令仅去掉会永久删除dist的build前缀，已先直接tsc，原文件列表保留并追加本片用例；未重复执行原14文件真实PG/Redis完整套件。当前无Git动作，不宣称已可提交。旧I3验收只绑定已保留739输入快照，不能当作本片独审通过；正常服务/Schema与Web正式pin未切换。
+
 ## 2026-10-21 项目资源下载：实现及 owner 验证通过，Web 整链待接入
 
 当前源码为 Public19.1.0/166 候选，仅新增项目资源下载 GET；原 Public19 的165个操作继续通过完整逆证验证。项目入口已实现当前 IAM 准入、两次本人 active Project 检查、canonical scope、ASSET/CLEAN、单一20秒截止点、1MiB上限、完整 EOF/长度/SHA 与私有附件响应。个人下载复用普通 ASSET 实现并保留原 wire 与错误隐藏；Artifact 实现保持。

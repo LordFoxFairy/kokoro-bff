@@ -1,3 +1,17 @@
+## 2026-10-21 I4 运行更新 metadata 读取（源码候选已实现，正常激活与独审待后继）
+
+BFF 拥有 ScheduledTask、dispatch 及已核验复制事件；Agent 仍是执行事件唯一生产方。先交付全局运行列表及可选 task_id 过滤，不虚构运行摘要、输出详情或会话链接。HTTP7 固定 artifact 的 payload_json 没有 run.completed / assistant.completed 机器 schema；摘要/输出及立即测试不在本切片完成范围。
+
+### 唯一公开契约与消费者
+
+唯一机器事实源 contract/openapi/v1/openapi.yaml，候选19.2.0在19.1原166操作上只增 GET /v1/scheduled-task-runs；不改变既有 scheduled CRUD、retry 或下载。该GET无body/idempotency/身份selector，受信tenant/subject来自IAM；可选task_id精确过滤、limit默认20最大100、cursor最大2048，拒未知/重复query、非规范UTF8/数值和请求体。
+
+返回闭合 data={items,next_cursor}；item仅task_id、title（当前名）、project_ref（当前scope）、run_id、scheduled_for（不可变9位UTC计划时间）、state、terminal_event_at(nullable)。不能把计划时间当真实开始，不能把admitted写成已开始，不能编造summary/output或使用scheduled:<id>构造会话跳转。查询任务不可见与不存在统一404；全局仅已确认不合资格省略，依赖未知整次503。页错误时消费者清空/隐藏该query先前结果，scope/filter变化立即退休旧结果；成功空页不等于依赖故障。
+
+游标版本str1，绑定tenant、subject、task_id或null、limit、固定sort profile与9位原occurrence_order_key/dispatch_id；使用C UTF8字节序DESC二元keyset，不经过JS Date毫秒降精度。编码不授予权限，每页重验；limit+1决定是否有下页，no refill loop。live分页无跨页快照，晚到低于cursor可见于后页、新到高于cursor须刷新；终态更新不改变顺序。传输成功最多1MiB，no-store/x-request-id；稳定闭合错误按机器契约。任何局部坏行/终态冲突不成功部分响应。
+
+Web当前正式固定19.0不更新；owner须完成审查并明确获准本地提交，消费者才固定commit/digest正规生成。当前19.2只是本owner未发行候选，不使Web提前消费当前工作树，也不将缺摘要视为整个目标完成。
+
 ## 2026-10-19 已合入 owner 发布物配对（隔离候选）
 
 复用现IAM/Billing窄SDK，固定已合入main的IAM7cbe988/0.14.0与Billing3f5e0da/4.0.0-experimental.2。按owner Git object逐字分发OpenAPI后走唯一正式生成器，退休旧c64/cd92当前vendor，不增加多版本接受、接口或新客户端。IAM只有未消费E2表示变化，本仓已批准窄operation集合/生成响应应保持；独立浏览器私有relay policy0.7仍按其原owner事实，不借此改OAuth准入。Billing仅将同一Catalog/本人Credit三GET沿正式SDK从退役/v2改/v1，完整身份/decimal/closed response/超时取消与错误保障不变。

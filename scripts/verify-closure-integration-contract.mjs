@@ -1,3 +1,9 @@
+import {
+  restoreScheduledRunsParent,
+  scheduledRunsParentBaseline,
+  isScheduledRunsContract,
+  inspectScheduledRunsContract,
+} from "./scheduled-task-runs-public-contract.mjs"
 // Exact proof of the two approved merge parents; never used by runtime decoders.
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
@@ -37,6 +43,12 @@ export const closureLocalBaseline = (baseline) => restoreBaseline(baseline, "loc
 export const closureMainBaseline = (baseline) => restoreBaseline(baseline, "main")
 export function inspectClosureIntegrationContract(source, baseline) {
   try {
+    if (isScheduledRunsContract(source)) {
+      const errors = inspectScheduledRunsContract(source, baseline)
+      if (errors.length > 0) throw Error(errors.join("; "))
+    }
+    source = restoreScheduledRunsParent(source)
+    baseline = scheduledRunsParentBaseline(baseline)
     if (!isProjectResourceDownloadContract(source)) throw Error("current public artifact must be Public19.1.0")
     const errors = inspectProjectResourceDownloadContract(source, baseline)
     if (errors.length > 0) throw Error(errors.join("; "))
