@@ -1,3 +1,7 @@
+## 2026-10-21 历史读取无本仓新数据
+
+Platform现Skill/SkillSeriesPublication独占系列、精确包、历史及current事实；BFF不读owner SQL，不保存历史副本、最大revision、cursor缓存或第二套publication。该GET只投影一次受信请求的有界读取，将owner可选next_cursor映射为public required nullable字段；不持久化、改变安装或冻结执行引用。数据库Schema、调度、连接器、模型路由和计费事实均不变。
+
 ## MC-02 数据边界（2026-10-20）
 
 BFF无DDL/新表/密钥持久化，不读System SQL。System6独占密文/永久创建身份/收据/版本与发布；BFF只带当次IAM准入tenant/actor和原command key/CAS，经窄机器身份调用。敏感创建查回仅provider_id/credential_status/deleted_at，不保存Key或裸摘要。原BFF个人/项目/自动化/连接器数据均不变。

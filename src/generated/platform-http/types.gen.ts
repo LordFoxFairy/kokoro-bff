@@ -195,6 +195,29 @@ export type PersonalMcpProvider = {
   state_version: number
 }
 
+export type PersonalSkillHistoryVersion = {
+  skill_id: string
+  revision: string
+  name: string
+  summary: string
+  status: "active" | "disabled" | "withdrawn" | "quarantined"
+  archive_size: string
+  file_count: number
+  created_at: string
+  is_current: boolean
+}
+
+export type PersonalSkillHistory = {
+  series_id: string
+  publication: null | {
+    current_version_id: string
+    state_version: string
+    withdrawn_at: string | null
+  }
+  versions: Array<PersonalSkillHistoryVersion>
+  next_cursor?: string
+}
+
 export type RequestId = string
 
 /**
@@ -744,3 +767,69 @@ export type GetSelfManagedSkillResponses = {
 }
 
 export type GetSelfManagedSkillResponse = GetSelfManagedSkillResponses[keyof GetSelfManagedSkillResponses]
+
+export type ListSelfSkillVersionsData = {
+  body?: never
+  headers: {
+    "x-kokoro-request-id"?: string
+    /**
+     * Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces).
+     */
+    "x-kokoro-tenant-id"?: string
+    /**
+     * Product Session subject projected by the authenticated kokoro-bff workload after IAM admission; never a browser-supplied tenant identity.
+     */
+    "x-kokoro-subject": string
+  }
+  path: {
+    /**
+     * Canonical Platform Skill ID, not a source_ref or package asset ID.
+     */
+    skill_id: string
+  }
+  query?: {
+    limit?: number
+    cursor?: string
+  }
+  url: "/v1/self/skills/{skill_id}/versions"
+}
+
+export type ListSelfSkillVersionsErrors = {
+  /**
+   * Self Skill management error without cache reuse
+   */
+  400: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  401: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  403: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  404: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  500: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  503: ErrorEnvelope
+}
+
+export type ListSelfSkillVersionsError = ListSelfSkillVersionsErrors[keyof ListSelfSkillVersionsErrors]
+
+export type ListSelfSkillVersionsResponses = {
+  /**
+   * A private series history page; current identity is independent from availability.
+   */
+  200: {
+    data: PersonalSkillHistory
+  }
+}
+
+export type ListSelfSkillVersionsResponse = ListSelfSkillVersionsResponses[keyof ListSelfSkillVersionsResponses]

@@ -323,7 +323,8 @@ async function handle(
   const isManagedPersonalSkillRead =
     request.method === "GET" &&
     ((businessPath.length === 2 && businessPath[0] === "self" && businessPath[1] === "skills") ||
-      (businessPath.length === 3 && businessPath[0] === "self" && businessPath[1] === "skills"))
+      (businessPath.length === 3 && businessPath[0] === "self" && businessPath[1] === "skills") ||
+      (businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "versions"))
   if (isManagedPersonalSkillRead) {
     await managedPersonalSkillsRoute(request, response, config, composition.sessionAdmission, id, businessPath)
     return

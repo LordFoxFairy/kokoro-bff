@@ -1,3 +1,9 @@
+## 2026-10-21 本人技能历史读取（候选，正常尚未加载）
+
+沿用已配对模型／Skills 并集基线 `192396d`，新增 Public21.2.0 /176 operations 的 `GET /v1/self/skills/{skill_id}/versions`，固定 Platform6.3.0 `efe1ed1a3f81e87df1edded53e6e796d20edea55`。只读当前主体拥有系列的精确发布历史，current 来自正式 publication 指针；不取最新替代、不改变安装、不执行工具。仅接收 limit/cursor，同一入口预算覆盖身份核验与 owner 读取；末页 next_cursor 规范为 null。严格原始 JSON／嵌套闭集拒绝重复键和未知字段，历史读取不额外富化发布者。
+
+初始两条定向回归已复现缺路由／解码，真实 BFF listener 配 owner fixture 与窄 client 共46项通过；新增原始重复键复现后已修复。独立只读审查的旧165 inventory重复归一问题已修复，原完整父字节与历史证明保持；固定 SDK 两次生成逐字一致，semantic176通过。停写后完整七门 format:check/lint/typecheck/contract:check/test:architecture/test/build 均exit0：契约857PASS/0SKIP、架构36PASS、默认1509PASS/3既有资源SKIP；23份非文档输入前后无漂移。首次完整门的3处新增文件／固定版本断言未配对已更正并全门重跑，原失败日志保留；先前runner误把并发参数放NODE_OPTIONS导致的启动exit9不作代码失败或通过证据。固定 SDK 两次生成一致、独立只读审查及主会话复验通过。未执行BFF实际PG/Redis集成或正常App/Admin页面旅程；本批不改Schema，owner真实PG/HTTP23项为独立证据，不能相加称完整链通过。App 历史列表／精确版本预览与正常端到端尚未交付；模型、工具、扣费保持暂停。
+
 ## 2026-10-21 Skills 正常配对（独立集成中）
 
 正常BFF仍运行f3da7d5/Public21.1.0模型候选，直接切到main Public19.0.1会丢失当前模型字段／表单，故保留正常候选并在独立topic承接已合333b708 Skills并集。目标Public21.1.1/175；Schema、模型字段和owner pins不变，App/Admin待正式提交后固定配对。已在该模型基线上复现5个真实Skills并集行为失败；额外1个测试失败是搬入主线全artifact版本断言尚未配对，单列不当业务失败。当前局部实现及主线冲突集成已完成，正常加载与完整产品验收仍未完成，原业务进程和数据未动。

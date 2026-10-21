@@ -1,3 +1,11 @@
+## 2026-10-21 Public21.2.0 个人系列历史
+
+唯一public机器源仍为 contract/openapi/v1/openapi.yaml，新增GET /v1/self/skills/{skill_id}/versions（listPersonalSkillVersions），共176有序operations；同路径原POST创建draft保持原样。权限 product.skill.read_managed_personal，查询仅limit(1–100)/cursor；新操作无body和幂等键，不接客户端主体或过滤字段。
+
+200为闭集data/meta：data含series_id、publication(可null)、versions、required nullable next_cursor；版本项保精确skill_id、revision、name/summary、status、archive_size/file_count、UTC created_at、is_current。publication current/state_version与撤回时间分开表示，current不等于可执行或最大revision；历史不自动升级安装。错误复用原管理读取400/401/403/404/429/502/503及no-store/request-id，owner500不透传内部资料。
+
+Platform HTTP固定 efe1ed1/6.3完整原件与SHA，generated只通过既有生成器更新。现Public21.1.1的全部原文和175有序inventory由精确增量逆证保留；仅测试／构建校验该父图，不加runtime旧版分支。消费者待本批固定发行后接入，不宣称正常页面已加载。
+
 ## 2026-10-21 Public21.1.1 配对目标
 
 本次从21.1.0补入已合Public19.0.1的skill.list并集描述，方法、查询、返回、权限、错误、175有序operations及全部模型字段保持。GET当前项目安装完整精确表示覆盖同series个人安装，停用／旧版本仍保留，列表不授执行权；共享预算、1000项上限及返回前重核项目不变。当前原文由既有配置检查核描述位置／篡改／降版，再逆回既有冻结父全文；机器源唯一，消费者等待正式提交后固定生成。

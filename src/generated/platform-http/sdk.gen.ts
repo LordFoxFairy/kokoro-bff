@@ -18,6 +18,9 @@ import type {
   ListSelfMcpConnectionsData,
   ListSelfMcpConnectionsErrors,
   ListSelfMcpConnectionsResponses,
+  ListSelfSkillVersionsData,
+  ListSelfSkillVersionsErrors,
+  ListSelfSkillVersionsResponses,
   ListVisibleSkillCatalogData,
   ListVisibleSkillCatalogErrors,
   ListVisibleSkillCatalogResponses,
@@ -34,6 +37,7 @@ import {
   zListMcpServersResponse,
   zListSelfManagedSkillsResponse,
   zListSelfMcpConnectionsResponse,
+  zListSelfSkillVersionsResponse,
   zListVisibleSkillCatalogResponse,
   zListVisibleSkillPoolResponse,
   zListVisibleSkillsResponse,
@@ -152,5 +156,20 @@ export const getSelfManagedSkill = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) => await zGetSelfManagedSkillResponse.parseAsync(data),
     security: [{ scheme: "bearer", type: "http" }],
     url: "/v1/self/skills/{skill_id}",
+    ...options,
+  })
+
+/**
+ * Read the authenticated subject complete personal series version history.
+ *
+ * Uses an owned exact revision anchor and rejects mixed-owner series. Published history is ordered by revision descending. Current is the formal publication pointer, not the largest revision; history does not grant execution.
+ */
+export const listSelfSkillVersions = <ThrowOnError extends boolean = false>(
+  options: Options<ListSelfSkillVersionsData, ThrowOnError>,
+): RequestResult<ListSelfSkillVersionsResponses, ListSelfSkillVersionsErrors, ThrowOnError> =>
+  (options.client ?? client).get<ListSelfSkillVersionsResponses, ListSelfSkillVersionsErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListSelfSkillVersionsResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/v1/self/skills/{skill_id}/versions",
     ...options,
   })

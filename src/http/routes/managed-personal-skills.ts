@@ -6,7 +6,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { BffConfig } from "../../config/runtime.js"
-import { zGetSelfManagedSkillPath, zListSelfManagedSkillsQuery } from "../../generated/platform-http/zod.gen.js"
+import { zGetSelfManagedSkillPath, zListSelfManagedSkillsQuery, zListSelfSkillVersionsQuery } from "../../generated/platform-http/zod.gen.js"
 import type { ListSelfManagedSkillsData } from "../../generated/platform-http/types.gen.js"
 import { PlatformProjectionHttpClient, type ManagedPersonalSkillOperation } from "../../infrastructure/clients/platform/projection-http.js"
 import { queryOf } from "../request.js"
@@ -49,15 +49,16 @@ function fail(response: ServerResponse, requestId: string, status: number, code:
 function operationFor(path: string[]): ManagedPersonalSkillOperation | null {
   if (path.length === 2 && path[0] === "self" && path[1] === "skills") return "managedSkills"
   if (path.length === 3 && path[0] === "self" && path[1] === "skills") return "managedSkill"
+  if (path.length === 4 && path[0] === "self" && path[1] === "skills" && path[3] === "versions") return "managedSkillHistory"
   return null
 }
 
-function listQuery(request: IncomingMessage): ListSelfManagedSkillsData["query"] | null {
+function listQuery(request: IncomingMessage, history = false): ListSelfManagedSkillsData["query"] | null {
   const incoming = queryOf(request)
   const query: Record<string, unknown> = {}
   let textQuery: string | undefined
   for (const key of new Set(incoming.keys())) {
-    if (!listQueryKeys.has(key)) return null
+    if (!listQueryKeys.has(key) || (history && key !== "limit" && key !== "cursor")) return null
     const values = incoming.getAll(key)
     if (values.length !== 1 || values[0] === undefined || values[0].length === 0) return null
     if (key === "query") {
@@ -70,6 +71,15 @@ function listQuery(request: IncomingMessage): ListSelfManagedSkillsData["query"]
       if (!/^[1-9][0-9]*$/u.test(values[0])) return null
       query.limit = Number(values[0])
     } else query[key] = values[0]
+  }
+  if (history) {
+    const parsed = zListSelfSkillVersionsQuery.strict().safeParse(query)
+    return !parsed.success
+      ? null
+      : {
+          ...(parsed.data.limit === undefined ? {} : { limit: parsed.data.limit }),
+          ...(parsed.data.cursor === undefined ? {} : { cursor: parsed.data.cursor }),
+        }
   }
   const parsed = zListSelfManagedSkillsQuery.strict().safeParse(query)
   if (!parsed.success) return null
@@ -127,9 +137,14 @@ export async function managedPersonalSkillsRoute(
       fail(response, requestId, 400, "invalid_skill_request", "Managed Skill request is invalid")
       return
     }
-    const query = operation === "managedSkills" ? listQuery(request) : queryOf(request).size === 0 ? {} : null
-    const skillId = operation === "managedSkill" ? path[2] : undefined
-    if (query === null || (operation === "managedSkill" && !zGetSelfManagedSkillPath.strict().safeParse({ skill_id: skillId }).success)) {
+    const query =
+      operation === "managedSkills" || operation === "managedSkillHistory"
+        ? listQuery(request, operation === "managedSkillHistory")
+        : queryOf(request).size === 0
+          ? {}
+          : null
+    const skillId = operation !== "managedSkills" ? path[2] : undefined
+    if (query === null || (operation !== "managedSkills" && !zGetSelfManagedSkillPath.strict().safeParse({ skill_id: skillId }).success)) {
       fail(response, requestId, 400, "invalid_skill_request", "Managed Skill request is invalid")
       return
     }
@@ -185,13 +200,16 @@ export async function managedPersonalSkillsRoute(
       return
     }
     if (result.ok) {
-      const enriched = await new IamPublisherProfileClient(config.iamBaseUrl ?? "", 5000).enrich(
-        admission.context.identity.namespace,
-        admission.bearerToken,
-        requestId,
-        result.data,
-        deadline.signal,
-      )
+      const enriched =
+        operation === "managedSkillHistory"
+          ? result.data
+          : await new IamPublisherProfileClient(config.iamBaseUrl ?? "", 5000).enrich(
+              admission.context.identity.namespace,
+              admission.bearerToken,
+              requestId,
+              result.data,
+              deadline.signal,
+            )
       const payload = Buffer.from(JSON.stringify({ data: enriched, meta: { request_id: requestId } }))
       if (expired() || deadline.signal.aborted || request.aborted || response.destroyed || response.writableEnded) {
         if (timedOut && !response.destroyed && !response.writableEnded)

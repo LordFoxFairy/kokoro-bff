@@ -1,3 +1,8 @@
+import {
+  restorePersonalSkillHistoryContract,
+  personalSkillHistoryParentBaseline,
+  inspectPersonalSkillHistoryContract,
+} from "./personal-skill-history-public-contract.mjs"
 // Test/build-only exact additive proof. Never imported by runtime consumers.
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
@@ -16,6 +21,7 @@ function restoreProjectUnionPatch(source) {
   return restored
 }
 export function restorePublic21ModelConfigurationContract(source) {
+  source = restorePersonalSkillHistoryContract(source)
   source = restoreProjectUnionPatch(source)
   if (!/^  version: 21\.1\.0$/mu.test(source)) return source
   if (hash(source) !== proof.current_sha256) throw Error("Public21.1 exact configuration source drift")
@@ -29,6 +35,7 @@ export function restorePublic21ModelConfigurationContract(source) {
   return parent
 }
 export function modelConfigurationParentBaseline(baseline) {
+  if (baseline.length === 176) baseline = personalSkillHistoryParentBaseline(baseline)
   if (baseline.length === 165) {
     if (hash(JSON.stringify(baseline)) !== proof.parent_inventory_sha256) throw Error("Configuration parent inventory drift")
     return baseline
@@ -40,6 +47,10 @@ export function modelConfigurationParentBaseline(baseline) {
 }
 export function inspectModelConfigurationContract(source, baseline) {
   try {
+    const historyErrors = inspectPersonalSkillHistoryContract(source, baseline)
+    if (historyErrors.length > 0) return historyErrors
+    source = restorePersonalSkillHistoryContract(source)
+    baseline = personalSkillHistoryParentBaseline(baseline)
     if (!/^  version: 21\.1\.1$/mu.test(source)) throw Error("Configuration current version differs")
     restorePublic21ModelConfigurationContract(source)
     modelConfigurationParentBaseline(baseline)

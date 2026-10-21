@@ -1,3 +1,4 @@
+import { personalSkillHistoryResponse, validPersonalSkillHistoryPage } from "./personal-skill-history-response.js"
 import { strictParseRawJson } from "../../raw-json.js"
 import { skillCategoryKeysSchema } from "./skill-product-schema.js"
 import { projectSkillProductJson } from "./skill-product-response.js"
@@ -6,6 +7,7 @@ import { parseSkillExamplePrompts } from "./skill-example-prompts.js"
 import { createClient } from "../../../generated/platform-http/client/client.gen.js"
 import {
   getSelfManagedSkill,
+  listSelfSkillVersions,
   getPublishedPersonalSkill,
   listMcpServers,
   listSelfMcpConnections,
@@ -33,7 +35,7 @@ import { PlatformServiceCredentialSource } from "./platform-service-credential.j
 import type { ListSelfManagedSkillsData } from "../../../generated/platform-http/types.gen.js"
 
 export type ProjectionOperation = "skills" | "skill" | "pool" | "catalog" | "mcp" | "mcpConnections"
-export type ManagedPersonalSkillOperation = "managedSkills" | "managedSkill"
+export type ManagedPersonalSkillOperation = "managedSkills" | "managedSkill" | "managedSkillHistory"
 export type ManagedPersonalSkillResult =
   | { ok: true; status: 200; data: unknown }
   | {
@@ -243,6 +245,8 @@ export class PlatformProjectionHttpClient {
     const invalid = (): ManagedPersonalSkillResult => ({ ok: false, status: 502, code: "skill_response_invalid" })
     const dependency = (): ManagedPersonalSkillResult => ({ ok: false, status: 503, code: "skill_dependency_unavailable" })
     let invalidOwnerResponse = false
+    const responseSchema =
+      operation === "managedSkills" ? managedListResponse : operation === "managedSkillHistory" ? personalSkillHistoryResponse : managedDetailResponse
     const active = (): void => {
       signal.throwIfAborted()
       if (performance.now() >= deadlineAt) throw new Error("managed_personal_skill_deadline")
@@ -305,8 +309,9 @@ export class PlatformProjectionHttpClient {
         active()
         try {
           if (ownerResponse.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new Error("media")
-          const decoded: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
-          const schema = ownerResponse.status === 200 ? (operation === "managedSkills" ? managedListResponse : managedDetailResponse) : managedError
+          const decoded: unknown =
+            operation === "managedSkillHistory" ? strictParseRawJson(bytes) : JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
+          const schema = ownerResponse.status === 200 ? responseSchema : managedError
           if (!schema.safeParse(decoded).success) throw new Error("shape")
         } catch {
           invalidOwnerResponse = true
@@ -326,13 +331,22 @@ export class PlatformProjectionHttpClient {
               headers,
               ...(input.query === undefined ? {} : { query: input.query }),
             })
-          : await getSelfManagedSkill({
-              responseValidator: async (value) => managedDetailResponse.parseAsync(value),
-              client,
-              auth: token,
-              headers,
-              path: { skill_id: input.skillId ?? "" },
-            })
+          : operation === "managedSkillHistory"
+            ? await listSelfSkillVersions({
+                responseValidator: async (value) => personalSkillHistoryResponse.parseAsync(value),
+                client,
+                auth: token,
+                headers,
+                path: { skill_id: input.skillId ?? "" },
+                ...(input.query === undefined ? {} : { query: input.query }),
+              })
+            : await getSelfManagedSkill({
+                responseValidator: async (value) => managedDetailResponse.parseAsync(value),
+                client,
+                auth: token,
+                headers,
+                path: { skill_id: input.skillId ?? "" },
+              })
       active()
       const ownerResultResponse = result.response
       const status = ownerResultResponse?.status
@@ -340,6 +354,11 @@ export class PlatformProjectionHttpClient {
       if (ownerResultResponse.headers.get("x-kokoro-request-id") !== requestId || ownerResultResponse.headers.get("cache-control") !== "no-store")
         return invalid()
       if (status === 200 && result.data !== undefined) {
+        if (operation === "managedSkillHistory") {
+          const history = personalSkillHistoryResponse.safeParse(result.data)
+          if (!history.success || !validPersonalSkillHistoryPage(history.data.data, input.query?.limit)) return invalid()
+          return { ok: true, status: 200, data: { ...history.data.data, next_cursor: history.data.data.next_cursor ?? null } }
+        }
         const parsed = (operation === "managedSkills" ? managedListResponse : managedDetailResponse).safeParse(result.data)
         if (!parsed.success || !matchesManagedIdentity(result.data, input.skillId)) return invalid()
         if (operation === "managedSkills") {
@@ -352,7 +371,7 @@ export class PlatformProjectionHttpClient {
       if (!parsed.success) return invalid()
       const { code, retryable } = parsed.data.error
       if (status === 400 && code === "capability.invalid_request" && !retryable) return { ok: false, status: 400, code: "invalid_skill_request" }
-      if (status === 404 && operation === "managedSkill" && code === "capability.route_not_found" && !retryable)
+      if (status === 404 && operation !== "managedSkills" && code === "capability.route_not_found" && !retryable)
         return { ok: false, status: 404, code: "skill_not_found" }
       if (
         (status === 400 && code === "capability.subject_invalid" && !retryable) ||

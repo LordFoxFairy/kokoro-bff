@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 21.1.1
+  version: 21.2.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -7050,6 +7050,38 @@ paths:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/self/skills/{skill_id}/versions:
+    get:
+      tags: [Skills]
+      operationId: listPersonalSkillVersions
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.read_managed_personal
+      summary: Read exact published revisions in the current subject owned series
+      description: One bounded current owner snapshot. Current is the formal publication pointer, not the largest revision. History never changes installation pins or grants execution. Publication changes invalidate the continuation cursor.
+      parameters:
+        - name: skill_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+      responses:
+        '200': { $ref: '#/components/responses/PersonalSkillHistoryOk' }
+        '400': { $ref: '#/components/responses/ManagedPersonalSkillBadRequest' }
+        '401': { $ref: '#/components/responses/ManagedPersonalSkillUnauthorized' }
+        '403': { $ref: '#/components/responses/ManagedPersonalSkillForbidden' }
+        '404': { $ref: '#/components/responses/ManagedPersonalSkillNotFound' }
+        '429': { $ref: '#/components/responses/ManagedPersonalSkillRateLimited' }
+        '502': { $ref: '#/components/responses/ManagedPersonalSkillBadGateway' }
+        '503': { $ref: '#/components/responses/ManagedPersonalSkillUnavailable' }
     post:
       tags: [Skills]
       operationId: createPersonalSkillVersion
@@ -18643,6 +18675,50 @@ components:
       additionalProperties: false
       properties:
         error: { $ref: '#/components/schemas/SkillPublishErrorDetail' }
+    PersonalSkillHistoryVersion:
+      type: object
+      additionalProperties: false
+      required: [skill_id, revision, name, summary, status, archive_size, file_count, created_at, is_current]
+      properties:
+        skill_id: { type: string, minLength: 1, maxLength: 191 }
+        revision: { type: string, pattern: '^[1-9][0-9]*$' }
+        name: { type: string, maxLength: 255 }
+        summary: { type: string, maxLength: 65535 }
+        status: { type: string, enum: [active, disabled, withdrawn, quarantined] }
+        archive_size: { type: string, pattern: '^[1-9][0-9]*$' }
+        file_count: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time, pattern: 'Z$' }
+        is_current: { type: boolean }
+    PersonalSkillHistoryPublication:
+      type: object
+      additionalProperties: false
+      required: [current_version_id, state_version, withdrawn_at]
+      properties:
+        current_version_id: { type: string, minLength: 1, maxLength: 191 }
+        state_version: { type: string, pattern: '^[1-9][0-9]*$' }
+        withdrawn_at: { type: [string, 'null'], format: date-time, pattern: 'Z$' }
+    PersonalSkillHistoryPage:
+      type: object
+      additionalProperties: false
+      required: [series_id, publication, versions, next_cursor]
+      properties:
+        series_id: { type: string, minLength: 1, maxLength: 191 }
+        publication:
+          anyOf:
+            - { $ref: '#/components/schemas/PersonalSkillHistoryPublication' }
+            - { type: 'null' }
+        versions:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/PersonalSkillHistoryVersion' }
+        next_cursor: { type: [string, 'null'], minLength: 1, maxLength: 2048 }
+    PersonalSkillHistoryResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/PersonalSkillHistoryPage' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     ManagedPersonalSkillResource:
       type: object
       required:
@@ -24175,6 +24251,14 @@ components:
                     type: object
                     properties:
                       code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }
+    PersonalSkillHistoryOk:
+      description: A bounded private series history snapshot; reads never upgrade or execute.
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PersonalSkillHistoryResponse' }
     ManagedPersonalSkillListOk:
       description: Current subject management-visible Skill page
       headers:

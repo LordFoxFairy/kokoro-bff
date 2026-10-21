@@ -1,3 +1,11 @@
+## 2026-10-21 个人系列历史消费者
+
+复用现 managed-personal-skills 路由及 PlatformProjectionHttpClient 的有界请求／凭据／响应校验，不新增服务、数据库或任意代理。固定消费 Platform efe1ed1 的 HTTP6.3，公开当前 Public21.2.0 在原 POST /v1/self/skills/{skill_id}/versions 旁新增只读 GET；保留现模型配置、项目并集及所有原操作。
+
+历史只用当前IAM准入的固定Product tenant/user；不自报subject/owner/series，不把它当公开API Key/Open App身份矩阵。沿原10秒请求预算、取消和迟到结果隔离，只接limit/cursor及精确锚点。owner核整个系列管理权，BFF严格校验闭集wire、页大小/顺序/唯一ID/current标记与publication一致性；next_cursor缺省投影为required null，不改revision/size字符串或补最大版本。
+
+历史没有发布者展示字段，不额外调用IAM publisher profile；不修改现详情／列表的fresh资料富化。读不获取包、执行技能或改安装。精确预览后继复用既有managed package接口，不借catalog current。上游400/404/依赖和无效wire沿原管理读取错误表；body／幂等键／未知或重复query均拒绝。恢复和删除仍保持独立后继，不挂假写入口。
+
 ## 2026-10-21 已批准 Skills 并集与 MC-02 正常配对
 
 复用已合PR15的个人／项目并集及MC-02既有模型设计；在独立集成区从f3da7d5承接333b708，不切回旧Public19或覆盖正常运行候选。唯一Public21.1.1仍175操作，wire只改版本与skill.list GET描述，行为逐字承接主线已批准实现。现test-only配置证明先精确核该追加位于指定GET且唯一，再逆回原21.1.0 SHA并沿原模型／双父证明；原proof/inventory不变，不建新proof模块或runtime兼容路径。App/Admin随后固定同一提交与摘要；正常重载须消费者配对及验收完成后进行。无新Schema、SQL、身份、依赖、模型／工具／积分执行或同事连接器改动。
