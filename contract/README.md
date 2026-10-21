@@ -1,3 +1,7 @@
+## 2026-10-21 Public19.0.1 项目列表修复
+
+唯一机器源只增加 `GET /v1/skill.list` 的个人＋项目并集与项目 exact 整条优先说明。原 fields/parameters/security/165 operation inventory 不变；现 closure 检查先精确恢复 Public19 完整字节，再执行不变双父证明。没有运行时旧版接受或新兼容层；正常发布/验收状态见 `docs/CURRENT.md`。
+
 ## 2026-10-20 项目执行绑定 internal1 收口
 
 `src/http/project-execution-binding.contract.ts` 是 internal1 唯一 code-first 源，`pnpm contract:generate:project-execution` 生成只读 `contract/openapi/internal/v1/openapi.yaml`，check 已登记正式契约门。IAM 已固定 d623f76 的 1.0.0 原字节；本次承接同一 producer，Public19、HTTP7 及其他当前 owner pins 保持，不改 System3 消费者或正常运行资源。

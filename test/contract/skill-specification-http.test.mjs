@@ -508,7 +508,7 @@ test("R357 active public contract declares original skill.list and distinct obse
   const { readFile } = await import("node:fs/promises")
   const { load } = await import("js-yaml")
   const document = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
-  assert.equal(document.info.version, "19.0.0")
+  assert.equal(document.info.version, "19.0.1")
   assert.equal(document.paths["/v1/skill.list"].get.operationId, "listSkills")
   for (const path of [website + "ListSkills", website + "ListHubSkills", website + "GetSkill", "/skill.v1.SkillService/DownloadSkill"]) {
     assert.equal(document.paths[path].post["x-kokoro-visibility"], "browser-private")
@@ -1142,12 +1142,149 @@ test("R357 successor project list admits canonical current Project before owner 
     { scope: { tenantId: "tenant", subjectId: "human" }, id: "project-slug" },
     { scope: { tenantId: "tenant", subjectId: "human" }, id: "canonical-project" },
   ])
-  assert.equal(app.calls.find((c) => c.kind === "installed").input.projectRef, "canonical-project")
+  assert.deepEqual(
+    app.calls.filter((c) => c.kind === "installed").map((c) => c.input.projectRef),
+    [undefined, "canonical-project"],
+  )
   assert.equal(
     app.calls.some((c) => c.kind === "current"),
     false,
   )
 })
+test("project skill.list unions independently paged personal and project installs, with the whole exact project revision winning", async () => {
+  const app = await specificationServiceFixture()
+  app.deps.projects = { find: async () => ({ id: "canonical-project" }) }
+  const personal = structuredClone(app.installation)
+  personal.installationId.value = "personal-shared"
+  personal.sourceRef.value = "skill:personal-newer"
+  personal.revision = 9n
+  personal.acquisitionKind = 3
+  personal.displayName = "Personal newer"
+  personal.summary = "Personal description"
+  personal.skillCreatedAt.seconds = 1750000020n
+  personal.skillUpdatedAt.seconds = 1750000030n
+  personal.product.creatorRef.id = "personal-creator"
+  const personalOnly = structuredClone(personal)
+  personalOnly.installationId.value = "personal-only"
+  personalOnly.seriesId.value = "personal-only-series"
+  const projectOnly = structuredClone(app.installation)
+  projectOnly.installationId.value = "project-only"
+  projectOnly.seriesId.value = "project-only-series"
+  const reads = []
+  app.deps.installations.list = async (input) => {
+    reads.push(input)
+    return {
+      installations:
+        input.projectRef === undefined ? [input.cursor === undefined ? personal : personalOnly] : [input.cursor === undefined ? app.installation : projectOnly],
+      ...(input.cursor === undefined ? { page: { nextCursor: "same-scope-local-cursor" } } : {}),
+    }
+  }
+  const http = await fixture(app.service)
+  try {
+    const result = await http.request("/v1/skill.list?project_id=project-slug")
+    assert.equal(result.status, 200)
+    assert.equal(result.headers.get("cache-control"), "no-store")
+    assert.equal(result.body.ok, true)
+    assert.equal(result.body.request_id, "spec-request")
+    assert.deepEqual(
+      result.body.data.map((item) => item.id),
+      ["stable-series", "personal-only-series", "project-only-series"],
+    )
+    assert.deepEqual(result.body.data[0], {
+      id: "stable-series",
+      name: "Old exact",
+      description: "Old description",
+      owner_type: "project",
+      creator_info: { user_id: "actual-creator", name: "Real Creator" },
+      created_at: 1749999990,
+      updated_at: 1749999999,
+    })
+    assert.equal(result.body.data[1].name, "Personal newer")
+    assert.equal(result.body.data[1].owner_type, "hub")
+    assert.deepEqual(
+      reads.map((input) => [input.projectRef, input.cursor]),
+      [
+        [undefined, undefined],
+        [undefined, "same-scope-local-cursor"],
+        ["canonical-project", undefined],
+        ["canonical-project", "same-scope-local-cursor"],
+      ],
+    )
+    assert.ok(reads.every((input) => input.tenant === "tenant" && input.subject === "human" && input.installed === true && !Object.hasOwn(input, "enabled")))
+    assert.equal(app.installation.enabled, false)
+    assert.equal(personalOnly.enabled, false)
+    assert.equal(
+      app.calls.some((call) => call.kind === "current" || call.kind === "projection"),
+      false,
+    )
+  } finally {
+    await http.close()
+  }
+})
+
+test("an empty project keeps personal installs while either owner failure never returns a partial union", async () => {
+  for (const failedScope of [null, "personal", "project"]) {
+    const app = await specificationServiceFixture()
+    app.deps.projects = { find: async () => ({ id: "canonical-project" }) }
+    const reads = []
+    app.deps.installations.list = async (input) => {
+      const scope = input.projectRef === undefined ? "personal" : "project"
+      reads.push(scope)
+      if (scope === failedScope) throw new ConnectError("owner unavailable", Code.Unavailable)
+      return { installations: scope === "personal" ? [app.installation] : [] }
+    }
+    const read = () => app.service.read("skill.list", { project_id: "project" }, app.context, app.signal, app.deadline)
+    if (failedScope === null)
+      assert.deepEqual(
+        (await read()).map((item) => item.name),
+        ["Old exact"],
+      )
+    else await assert.rejects(read(), (error) => error instanceof ConnectError && error.code === Code.Unavailable)
+    assert.deepEqual(reads, failedScope === "personal" ? ["personal"] : ["personal", "project"])
+  }
+})
+
+test("project skill.list retains the 1000 unique-item limit after combining individually bounded scopes", async () => {
+  const app = await specificationServiceFixture()
+  app.deps.projects = { find: async () => ({ id: "canonical-project" }) }
+  app.deps.installations.list = async (input) => {
+    const scope = input.projectRef === undefined ? "personal" : "project"
+    const offset = Number(input.cursor ?? 0)
+    const count = scope === "personal" ? 501 : 500
+    return {
+      installations: Array.from({ length: Math.min(100, count - offset) }, (_, index) => ({
+        ...app.installation,
+        installationId: { value: `${scope}-installation-${offset + index}` },
+        seriesId: { value: `${scope}-series-${offset + index}` },
+      })),
+      ...(offset + 100 < count ? { page: { nextCursor: String(offset + 100) } } : {}),
+    }
+  }
+  await assert.rejects(
+    app.service.read("skill.list", { project_id: "project" }, app.context, app.signal, app.deadline),
+    (error) => error instanceof ConnectError && error.code === Code.ResourceExhausted,
+  )
+  assert.equal(
+    app.calls.some((call) => call.kind === "profiles"),
+    false,
+  )
+})
+
+test("same-scope duplicate series remain an invalid owner result rather than applying cross-scope precedence", async () => {
+  const app = await specificationServiceFixture()
+  app.deps.installations.list = async () => ({
+    installations: [
+      app.installation,
+      {
+        ...app.installation,
+        installationId: { value: "different-installation" },
+        sourceRef: { value: "skill:other-version" },
+      },
+    ],
+  })
+  await assert.rejects(app.service.read("skill.list", {}, app.context, app.signal, app.deadline), /skill_response_invalid/)
+})
+
 test("R357 successor project missing/deleted/revoked or changed canonical identity is closed without replacing exact installations", async () => {
   for (const result of [null, { id: "different-project" }]) {
     const app = await specificationServiceFixture()

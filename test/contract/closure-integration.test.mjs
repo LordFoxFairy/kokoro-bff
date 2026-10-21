@@ -18,7 +18,7 @@ const digest = (value) => createHash("sha256").update(value).digest("hex")
 test("Public19 keeps both approved capabilities without reviving retired request shapes", () => {
   const document = load(source),
     schemas = document.components.schemas
-  assert.equal(document.info.version, "19.0.0")
+  assert.equal(document.info.version, "19.0.1")
   assert.equal(operationBaseline(source).length, 165)
   assert.deepEqual(operationBaseline(source), baseline)
   assert.deepEqual(inspectOpenApiGovernance(source), [])
@@ -61,7 +61,14 @@ test("Public19 restores the complete exact two parents and their ordered invento
 })
 
 test("integration proof rejects permissions, aliases, extra blocks and unrelated byte drift", () => {
+  const projectUnion = source.match(/ Personal and project installations form a union[^\n]+/u)?.[0]
+  assert.ok(projectUnion)
   for (const changed of [
+    source
+      .replace(projectUnion, "")
+      .replace("Current IAM-admitted Product identity projections.", `Current IAM-admitted Product identity projections.${projectUnion}`),
+    source.replace("Personal and project installations form a union", "Project installations only"),
+    source.replace("version: 19.0.1", "version: 19.0.0"),
     source.replace("enum: [execute]", "enum: [read]"),
     source.replace("operationId: listAccountSessions", "operationId: listWrongSessions"),
     source.replace("Current IAM-admitted Product identity projections.", "unrelated drift"),
