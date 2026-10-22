@@ -1,3 +1,7 @@
+## 2026-10-21 Skills 公开身份矩阵与 App 绑定（已批准，实施中）
+
+GET /v1/skill.list 保持原 ok/request_id/data 及固定错误结构，仅使用 IAM VerifySkillListIdentity；普通 oauth_app 带 project_id 返回400，网站四 RPC 仍仅 Session。管理新增 GET/POST /v1/admin/open-apps/{app_id}/skill-bindings 与 DELETE /v1/admin/open-apps/{app_id}/skill-bindings/{series_id}；POST 仅 skill_id 与必填 expected_binding_version（0=首次或正 CAS），DELETE 仅正 CAS，写入必需 Idempotency-Key。app_id 只是选择器，可信 tenant/app/client 来自 fresh IAM VerifyOpenAppManagementAuthorization；不接 body 身份或 trusted。固定 Platform451d0fb。管理返回 exact binding_id/series_id/skill_id/revision/state_version/source_status/created_at/updated_at/removed_at 与 nullable metadata；元数据仅 name/summary/created_at/updated_at/product，不伪造安装。列表为 data.bindings + required nullable next_cursor；写回执为 data.binding/event_id/replayed，沿 meta.request_id。原 ok/request_id/data 公开 Skill 列表不变。Public22.1 未发行候选180操作；current增量完整逆回原22.0字节与原176有序inventory，旧父hash不变。
+
 ## 2026-10-21 Skills 删除与公开身份收口（实施中）
 
 新增 DELETE /v1/self/skills/{skill_id}：Idempotency-Key 必填，JSON 仅 expected_state_version 与 expected_publication（显式 null 或 current_version_id/state_version）。200 返回 series_id、skill_id、state_version、status=deleted、event_id、replayed；400 输入、404 不可见、409 原命令冲突/处理中、412 确认快照失效、429 受限、502 非法 owner 响应、503 依赖。禁止客户端传 tenant/subject。完整 canonical 与发行固定 owner 后同步。

@@ -1,7 +1,12 @@
 import { isDeepStrictEqual } from "node:util"
 import { createClient } from "../../generated/iam-http/client/client.gen.js"
-import { resolveTenantPublisherProfiles } from "../../generated/iam-http/sdk.gen.js"
-import { zResolveTenantPublisherProfilesBody, zResolveTenantPublisherProfilesResponse } from "../../generated/iam-http/zod.gen.js"
+import { resolveSkillListPublisherProfiles, resolveTenantPublisherProfiles } from "../../generated/iam-http/sdk.gen.js"
+import {
+  zResolveSkillListPublisherProfilesBody,
+  zResolveSkillListPublisherProfilesResponse,
+  zResolveTenantPublisherProfilesBody,
+  zResolveTenantPublisherProfilesResponse,
+} from "../../generated/iam-http/zod.gen.js"
 import { strictParseRawJson } from "../raw-json.js"
 
 /** One fresh bounded IAM batch per product page; no display-name inference or cache. */
@@ -10,10 +15,29 @@ export class IamPublisherProfileClient {
     private readonly baseUrl: string,
     private readonly timeoutMs: number,
   ) {}
+  async resolvePublic(
+    tenant: string,
+    token: string,
+    requestId: string,
+    refs: ReadonlyArray<{ kind: "user" | "organization"; id: string }>,
+    signal: AbortSignal,
+  ) {
+    return this.resolveProfiles(tenant, token, requestId, refs, signal, true)
+  }
   async resolve(tenant: string, token: string, requestId: string, refs: ReadonlyArray<{ kind: "user" | "organization"; id: string }>, signal: AbortSignal) {
+    return this.resolveProfiles(tenant, token, requestId, refs, signal, false)
+  }
+  private async resolveProfiles(
+    tenant: string,
+    token: string,
+    requestId: string,
+    refs: ReadonlyArray<{ kind: "user" | "organization"; id: string }>,
+    signal: AbortSignal,
+    publicList: boolean,
+  ) {
     const requested = [...new Map(refs.map((ref) => [JSON.stringify([ref.kind, ref.id]), ref])).values()]
     if (requested.length === 0) return new Map()
-    const body = zResolveTenantPublisherProfilesBody.strict().parse({ refs: requested })
+    const body = (publicList ? zResolveSkillListPublisherProfilesBody : zResolveTenantPublisherProfilesBody).strict().parse({ refs: requested })
     const client = createClient({
       baseUrl: this.baseUrl,
       fetch: async (input, init) => {
@@ -44,19 +68,15 @@ export class IamPublisherProfileClient {
           reader.releaseLock()
         }
         const raw = strictParseRawJson(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)))
-        const parsed = zResolveTenantPublisherProfilesResponse.strict().parse(raw)
+        const parsed = (publicList ? zResolveSkillListPublisherProfilesResponse : zResolveTenantPublisherProfilesResponse).strict().parse(raw)
         if (!isDeepStrictEqual(parsed, JSON.parse(JSON.stringify(raw)))) throw new Error("publisher_profile_response_invalid")
         return new Response(JSON.stringify(parsed), { status: 200, headers: response.headers })
       },
     })
-    const response = await resolveTenantPublisherProfiles({
-      client,
-      throwOnError: true,
-      path: { tenant_id: tenant },
-      body,
-      headers: { authorization: `Bearer ${token}`, "x-request-id": requestId },
-      signal,
-    })
+    const options = { client, throwOnError: true as const, body, headers: { authorization: `Bearer ${token}`, "x-request-id": requestId }, signal }
+    const response = publicList
+      ? await resolveSkillListPublisherProfiles(options)
+      : await resolveTenantPublisherProfiles({ ...options, path: { tenant_id: tenant } })
     if (!response.data) throw new Error("publisher_profile_unavailable")
     const result = new Map(response.data.data.items.map((item) => [JSON.stringify([item.kind, item.id]), item]))
     if (

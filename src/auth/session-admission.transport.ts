@@ -72,6 +72,14 @@ export class SessionAdmissionTransport {
     return this.send(input, target, null)
   }
 
+  public requestOpenAppManagement(input: SessionAdmissionTransportInput & Readonly<{ appId: string }>): Promise<SessionAdmissionTransportResponse> {
+    const target = new URL(
+      `/internal/v1/open-app-registrations/${encodeURIComponent(input.appId)}/management-authorizations/verify`,
+      `${this.baseUrl.replace(/\/+$/u, "")}/`,
+    )
+    return this.send(input, target, null)
+  }
+
   public requestSkillAuthorization(input: SkillAuthorizationInput): Promise<SessionAdmissionTransportResponse> {
     const target = new URL(`/internal/v1/tenants/${encodeURIComponent(input.tenantId)}/skill-authorizations/check`, `${this.baseUrl.replace(/\/+$/u, "")}/`)
     return this.send(input, target, JSON.stringify({ action: input.action }))

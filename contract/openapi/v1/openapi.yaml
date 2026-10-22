@@ -12462,6 +12462,126 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SkillProductErrorResponse"
+  /v1/admin/open-apps/{app_id}/skill-bindings:
+    get:
+      tags: [Skills]
+      operationId: listOpenAppSkillBindings
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.manage_app_binding
+      summary: listOpenAppSkillBindings
+      description: Current Product Session and fresh IAM Open App operator qualification for the exact tenant, App and managed OAuth client. Platform-admin status is not operator authority. Binding targets one exact Skill version; no latest resolution, installation or execution. Unknown writes retry only the original body and key; zero CAS means no prior binding, including no removed tombstone.
+      parameters:
+        - name: app_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: cursor
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 4096 }
+      responses:
+        '200':
+          description: Exact owner binding facts, current nullable metadata and original receipt for writes
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppSkillBindingListResponse' } } }
+        '400': { $ref: '#/components/responses/PersonalSkillLifecycleBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalSkillLifecycleUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalSkillLifecycleForbidden' }
+        '404': { $ref: '#/components/responses/PersonalSkillLifecycleNotFound' }
+        '409': { $ref: '#/components/responses/PersonalSkillLifecycleConflict' }
+        '412': { $ref: '#/components/responses/PersonalSkillLifecyclePreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalSkillLifecyclePayloadTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }
+    post:
+      tags: [Skills]
+      operationId: putOpenAppSkillBinding
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.manage_app_binding
+      summary: putOpenAppSkillBinding
+      description: Current Product Session and fresh IAM Open App operator qualification for the exact tenant, App and managed OAuth client. Platform-admin status is not operator authority. Binding targets one exact Skill version; no latest resolution, installation or execution. Unknown writes retry only the original body and key; zero CAS means no prior binding, including no removed tombstone.
+      parameters:
+        - name: app_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - $ref: '#/components/parameters/WithdrawPersonalSkillIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PutAppSkillBindingRequest' }
+      responses:
+        '200':
+          description: Exact owner binding facts, current nullable metadata and original receipt for writes
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppSkillBindingCommandResponse' } } }
+        '400': { $ref: '#/components/responses/PersonalSkillLifecycleBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalSkillLifecycleUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalSkillLifecycleForbidden' }
+        '404': { $ref: '#/components/responses/PersonalSkillLifecycleNotFound' }
+        '409': { $ref: '#/components/responses/PersonalSkillLifecycleConflict' }
+        '412': { $ref: '#/components/responses/PersonalSkillLifecyclePreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalSkillLifecyclePayloadTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }
+  /v1/admin/open-apps/{app_id}/skill-bindings/{series_id}:
+    delete:
+      tags: [Skills]
+      operationId: removeOpenAppSkillBinding
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.manage_app_binding
+      summary: removeOpenAppSkillBinding
+      description: Current Product Session and fresh IAM Open App operator qualification for the exact tenant, App and managed OAuth client. Platform-admin status is not operator authority. Binding targets one exact Skill version; no latest resolution, installation or execution. Unknown writes retry only the original body and key; zero CAS means no prior binding, including no removed tombstone.
+      parameters:
+        - name: app_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - name: series_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - $ref: '#/components/parameters/WithdrawPersonalSkillIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RemoveAppSkillBindingRequest' }
+      responses:
+        '200':
+          description: Exact owner binding facts, current nullable metadata and original receipt for writes
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppSkillBindingCommandResponse' } } }
+        '400': { $ref: '#/components/responses/PersonalSkillLifecycleBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalSkillLifecycleUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalSkillLifecycleForbidden' }
+        '404': { $ref: '#/components/responses/PersonalSkillLifecycleNotFound' }
+        '409': { $ref: '#/components/responses/PersonalSkillLifecycleConflict' }
+        '412': { $ref: '#/components/responses/PersonalSkillLifecyclePreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalSkillLifecyclePayloadTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }
   /v1/skill.list:
     get:
       tags:
@@ -12473,7 +12593,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: capability.skill.read
       summary: listSkills
-      description: Fresh current human and fixed Product tenant admission. Source facts are qualified by the owner; no anonymous access, latest fallback or write side effect. Personal and project installations form a union when project_id is present; the complete exact project installation takes precedence for the same series, including disabled installations. Personal-only items remain; no latest substitution, automatic upgrade or execution authorization. Both scopes share the request deadline, the result remains limited to 1000 items, and current project access is rechecked before disclosure.
+      description: Current IAM User API Key or registered OAuth Open App identity in the fixed Product tenant, inside the existing service envelope. Ordinary OAuth App reads only its own exact App bindings and rejects project_id with400. User API Key reads personal and authorized project installations; trusted App additionally includes its own bindings. Same-series precedence is the complete project row, then personal row, then App row, including disabled installations. No latest substitution, automatic upgrade, inferred trust or execution authorization. Removed or invalid bindings are omitted. All scopes share the request deadline and1000-item cap; project access and the same complete IAM principal are rechecked before disclosure. Public author profiles use the dedicated IAM Skill list endpoint; website RPCs retain Session admission.
       responses:
         "200":
           description: Specification representation; no legacy data/meta wrapper.
@@ -17396,6 +17516,78 @@ components:
               pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$
             replayed:
               type: boolean
+    PutAppSkillBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [skill_id, expected_binding_version]
+      properties:
+        skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        expected_binding_version: { type: string, pattern: '^(0|[1-9][0-9]*)$', maxLength: 19 }
+    RemoveAppSkillBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_binding_version]
+      properties:
+        expected_binding_version: { type: string, pattern: '^[1-9][0-9]*$', maxLength: 19 }
+    AppSkillBinding:
+      type: object
+      additionalProperties: false
+      required: [binding_id, series_id, skill_id, revision, state_version, source_status, created_at, updated_at, removed_at, metadata]
+      properties:
+        binding_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        revision: { type: string, pattern: '^[1-9][0-9]*$', maxLength: 20 }
+        state_version: { type: string, pattern: '^[1-9][0-9]*$', maxLength: 19 }
+        source_status: { type: string, enum: [draft, active, disabled, withdrawn, quarantined, discarded, deleted] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        removed_at:
+          oneOf:
+            - { type: 'null' }
+            - { type: string, format: date-time }
+        metadata:
+          oneOf:
+            - { type: 'null' }
+            - type: object
+              additionalProperties: false
+              required: [name, summary, created_at, updated_at, product]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 255 }
+                summary: { type: string, maxLength: 65535 }
+                created_at: { type: string, format: date-time }
+                updated_at: { type: string, format: date-time }
+                product: { $ref: '#/components/schemas/Public9SkillProductFacts' }
+    AppSkillBindingListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [bindings, next_cursor]
+          properties:
+            bindings: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/AppSkillBinding' } }
+            next_cursor:
+              oneOf:
+                - { type: 'null' }
+                - { type: string, minLength: 1, maxLength: 4096 }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AppSkillBindingCommandResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [binding, event_id, replayed]
+          properties:
+            binding: { $ref: '#/components/schemas/AppSkillBinding' }
+            event_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+            replayed: { type: boolean }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     SkillProductRecord:
       type: object
       additionalProperties: false

@@ -89,7 +89,18 @@ async function fixture(
   const server = createBffServer(config, {
     businessStore: null,
     sessionAdmission: { verify: admission },
-    skillSpecificationSource: source,
+    skillListAdmission: { verify: async () => ({ ok: true, principal: { kind: "user_api_key", tenant_id: "tenant", user_id: "human", key_id: "key" } }) },
+    skillSpecificationSource:
+      source === null
+        ? null
+        : {
+            ...source,
+            readPublicList:
+              source.readPublicList?.bind(source) ?? ((input, context, signal, deadline) => source.read("skill.list", input, context, signal, deadline)),
+            read: source.read?.bind(source),
+            prepareDownload: source.prepareDownload?.bind(source),
+            confirmDownload: source.confirmDownload?.bind(source),
+          },
     ...options,
   })
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
@@ -703,7 +714,7 @@ test("R357 adapter sees only freshly admitted human bearer in request context, n
   let token
   const app = await fixture({
     async read(_operation, _input, context) {
-      token = context.humanBearer
+      token = context.publicBearer
       return [publicSkill]
     },
   })
@@ -1111,10 +1122,13 @@ async function specificationServiceFixture() {
     installations: deps.installations,
     projection: deps.projection,
   })
+  deps.profiles.resolvePublic = deps.profiles.resolve
   const context = Object.freeze({
     requestId: "aggregate-request",
     identity: Object.freeze({ namespace: "tenant", userId: "human" }),
     humanBearer: "actual-human",
+    publicBearer: "actual-human",
+    principal: Object.freeze({ kind: "user_api_key", tenant_id: "tenant", user_id: "human", key_id: "key" }),
   })
   return {
     service: new SkillSpecificationService(deps),
@@ -1171,7 +1185,7 @@ test("S2 installation acquisition decides public classification without rewritin
       status: 200,
       data: { skills: [] },
     })
-    const data = await app.service.read("skill.list", {}, app.context, app.signal, app.deadline)
+    const data = await app.service.readPublicList({}, app.context, app.signal, app.deadline)
     assert.equal(data[0].owner_type, expected, `${acquisition}/${kind}/${source}`)
     const list = await app.service.read("ListSkills", {}, app.context, app.signal, app.deadline)
     assert.equal(list.userAddedSkills[0].ownerType, website)
@@ -1189,7 +1203,7 @@ test("S2 missing or unsupported owner acquisition fails closed rather than becom
   for (const acquisition of [0, 4, -1, undefined]) {
     const app = await specificationServiceFixture()
     app.installation.acquisitionKind = acquisition
-    await assert.rejects(app.service.read("skill.list", {}, app.context, app.signal, app.deadline), /skill_installation_response_invalid/)
+    await assert.rejects(app.service.readPublicList({}, app.context, app.signal, app.deadline), /skill_installation_response_invalid/)
     assert.equal(
       app.calls.some((call) => call.kind === "profiles" || call.kind === "current"),
       false,
@@ -1199,7 +1213,7 @@ test("S2 missing or unsupported owner acquisition fails closed rather than becom
 
 test("R357 formal aggregation lists stopped exact installations, resolves actual creator distinct from publisher and never substitutes current timestamps", async () => {
   const app = await specificationServiceFixture()
-  const data = await app.service.read("skill.list", {}, app.context, app.signal, app.deadline)
+  const data = await app.service.readPublicList({}, app.context, app.signal, app.deadline)
   assert.equal(data[0].id, "stable-series")
   assert.equal(data[0].name, "Old exact")
   assert.equal(data[0].updated_at, 1749999999)
@@ -1322,7 +1336,7 @@ test("R357 successor project list admits canonical current Project before owner 
       return { id: "canonical-project" }
     },
   }
-  const data = await app.service.read("skill.list", { project_id: "project-slug" }, app.context, app.signal, app.deadline)
+  const data = await app.service.readPublicList({ project_id: "project-slug" }, app.context, app.signal, app.deadline)
   assert.equal(data[0].created_at, 1749999990)
   assert.equal(data[0].owner_type, "project")
   assert.equal(data[0].name, "Old exact")
@@ -1424,7 +1438,7 @@ test("an empty project keeps personal installs while either owner failure never 
       if (scope === failedScope) throw new ConnectError("owner unavailable", Code.Unavailable)
       return { installations: scope === "personal" ? [app.installation] : [] }
     }
-    const read = () => app.service.read("skill.list", { project_id: "project" }, app.context, app.signal, app.deadline)
+    const read = () => app.service.readPublicList({ project_id: "project" }, app.context, app.signal, app.deadline)
     if (failedScope === null)
       assert.deepEqual(
         (await read()).map((item) => item.name),
@@ -1452,7 +1466,7 @@ test("project skill.list retains the 1000 unique-item limit after combining indi
     }
   }
   await assert.rejects(
-    app.service.read("skill.list", { project_id: "project" }, app.context, app.signal, app.deadline),
+    app.service.readPublicList({ project_id: "project" }, app.context, app.signal, app.deadline),
     (error) => error instanceof ConnectError && error.code === Code.ResourceExhausted,
   )
   assert.equal(
@@ -1473,7 +1487,7 @@ test("same-scope duplicate series remain an invalid owner result rather than app
       },
     ],
   })
-  await assert.rejects(app.service.read("skill.list", {}, app.context, app.signal, app.deadline), /skill_response_invalid/)
+  await assert.rejects(app.service.readPublicList({}, app.context, app.signal, app.deadline), /skill_response_invalid/)
 })
 
 test("R357 successor project missing/deleted/revoked or changed canonical identity is closed without replacing exact installations", async () => {
@@ -1487,7 +1501,7 @@ test("R357 successor project missing/deleted/revoked or changed canonical identi
       },
     }
     await assert.rejects(
-      app.service.read("skill.list", { project_id: "project-slug" }, app.context, app.signal, app.deadline),
+      app.service.readPublicList({ project_id: "project-slug" }, app.context, app.signal, app.deadline),
       (e) => e instanceof ConnectError && e.code === Code.NotFound,
     )
     assert.equal(
@@ -1502,7 +1516,7 @@ test("R357 successor project missing/deleted/revoked or changed canonical identi
     },
   }
   await assert.rejects(
-    app.service.read("skill.list", { project_id: "not-owned" }, app.context, app.signal, app.deadline),
+    app.service.readPublicList({ project_id: "not-owned" }, app.context, app.signal, app.deadline),
     (e) => e instanceof ConnectError && e.code === Code.NotFound,
   )
   assert.equal(app.calls.length, 0)
@@ -1645,7 +1659,7 @@ test("R357 successor exact-source missing/malformed facts close specification re
   ]) {
     const app = await specificationServiceFixture()
     Object.assign(app.installation, patch)
-    await assert.rejects(app.service.read("skill.list", {}, app.context, app.signal, app.deadline), /skill_installation_response_invalid/)
+    await assert.rejects(app.service.readPublicList({}, app.context, app.signal, app.deadline), /skill_installation_response_invalid/)
     assert.equal(
       app.calls.some((c) => c.kind === "current"),
       false,
@@ -1663,7 +1677,7 @@ test("R357 successor cancelled project authorization never issues an installatio
       return await new Promise((r) => (complete = r))
     },
   }
-  const result = app.service.read("skill.list", { project_id: "slug" }, app.context, controller.signal, app.deadline)
+  const result = app.service.readPublicList({ project_id: "slug" }, app.context, controller.signal, app.deadline)
   await pending
   controller.abort()
   complete({ id: "canonical-project" })
@@ -1679,7 +1693,7 @@ test("R357 successor project owner dependency failure stays stable503 without pr
     },
   }
   await assert.rejects(
-    app.service.read("skill.list", { project_id: "slug" }, app.context, app.signal, app.deadline),
+    app.service.readPublicList({ project_id: "slug" }, app.context, app.signal, app.deadline),
     (error) => error instanceof ConnectError && error.code === Code.Unavailable && !error.message.includes("private"),
   )
   assert.equal(app.calls.length, 0)
@@ -2157,11 +2171,162 @@ test("shared summary disconnect cancels exact metadata and prevents a late secon
 test("deleted series are not public availability even while their exact installation remains retained", async () => {
   const app = await specificationServiceFixture()
   app.installation.sourceStatus = 7
-  const result = await app.service.read("skill.list", {}, app.context, app.signal, app.deadline)
+  const result = await app.service.readPublicList({}, app.context, app.signal, app.deadline)
   assert.deepEqual(result, [])
   assert.equal(app.installation.installed, true)
   assert.equal(
     app.calls.some((call) => call.kind === "profiles" || call.kind === "current"),
     false,
   )
+})
+
+test("public source requires explicit IAM principal and never recovers it from website identity or bearer", async () => {
+  const app = await specificationServiceFixture()
+  const { principal: _principal, ...missing } = app.context
+  await assert.rejects(app.service.readPublicList({}, missing, app.signal, app.deadline), (error) => error.code === Code.Unauthenticated)
+  await assert.rejects(
+    app.service.readPublicList({}, { ...app.context, principal: { ...app.context.principal, user_id: "other" } }, app.signal, app.deadline),
+    (error) => error.code === Code.Unauthenticated,
+  )
+  assert.equal(app.calls.length, 0)
+})
+
+function appBinding(series, name = "App exact") {
+  return {
+    binding_id: `binding-${series}`,
+    series_id: series,
+    skill_id: `exact-${series}`,
+    revision: "1",
+    state_version: "1",
+    source_status: "active",
+    created_at: "2025-01-01T00:00:00.000Z",
+    updated_at: "2025-01-02T00:00:00.000Z",
+    removed_at: null,
+    metadata: {
+      name,
+      summary: "App description",
+      created_at: "2025-01-01T00:00:00.000Z",
+      updated_at: "2025-01-02T00:00:00.000Z",
+      product: { source_kind: "official", creator_ref: { kind: "user", id: "actual-creator" } },
+    },
+  }
+}
+function openAppContext(context, trusted) {
+  return { ...context, principal: { kind: "oauth_app", tenant_id: "tenant", user_id: "human", client_id: "managed-client", app_id: "registered-app", trusted } }
+}
+test("ordinary Open App reads only its own exact App binding pages, never personal installations or latest; removed/invalid stay hidden", async () => {
+  const app = await specificationServiceFixture()
+  const reads = []
+  app.deps.appBindings = {
+    async list(context, page) {
+      reads.push({ context, page })
+      return page.cursor === undefined
+        ? { items: [appBinding("stable-series"), { ...appBinding("removed"), removed_at: "2025-01-03T00:00:00.000Z" }], nextCursor: "binding-page" }
+        : { items: [{ ...appBinding("invalid"), metadata: null }, appBinding("other-series")] }
+    },
+  }
+  const result = await app.service.readPublicList({}, openAppContext(app.context, false), app.signal, app.deadline)
+  assert.deepEqual(
+    result.map((item) => [item.id, item.name, item.owner_type]),
+    [
+      ["stable-series", "App exact", "app"],
+      ["other-series", "App exact", "app"],
+    ],
+  )
+  assert.equal(result[0].creator_info.name, "Real Creator")
+  assert.deepEqual(
+    app.calls.map((c) => c.kind),
+    ["profiles"],
+  )
+  assert.equal(reads.length, 2)
+  assert.equal(reads[0].context.appId, "registered-app")
+  assert.equal(reads[0].context.subject, "human")
+  assert.equal(reads[1].page.cursor, "binding-page")
+  await assert.rejects(
+    app.service.readPublicList({ project_id: "project" }, openAppContext(app.context, false), app.signal, app.deadline),
+    (error) => error.code === Code.InvalidArgument,
+  )
+  assert.equal(reads.length, 2)
+})
+test("trusted App union prioritizes complete project over personal over App rows, without version or author mixing", async () => {
+  const app = await specificationServiceFixture()
+  app.deps.projects = { find: async () => ({ id: "canonical-project" }) }
+  app.deps.appBindings = { list: async () => ({ items: [appBinding("stable-series", "App newer"), appBinding("app-only")] }) }
+  const original = app.deps.owner.listInstallations.bind(app.deps.owner)
+  app.deps.owner.listInstallations = async (input, signal) => {
+    const result = await original(input, signal)
+    return {
+      items: result.items.map((item) => ({
+        ...item,
+        display_name: input.projectRef === undefined ? "Personal row" : "Project older disabled",
+        enabled: false,
+      })),
+    }
+  }
+  const personal = await app.service.readPublicList({}, openAppContext(app.context, true), app.signal, app.deadline)
+  assert.equal(personal.find((row) => row.id === "stable-series").name, "Personal row")
+  const project = await app.service.readPublicList({ project_id: "project" }, openAppContext(app.context, true), app.signal, app.deadline)
+  assert.equal(project.find((row) => row.id === "stable-series").name, "Project older disabled")
+  assert.equal(project.find((row) => row.id === "app-only").owner_type, "app")
+  assert.equal(project.length, 2)
+})
+
+test("Open App pagination rejects repeated cursors/duplicate binding identity and bounds the combined trusted union at1000", async () => {
+  for (const invalid of ["cursor", "identity", "capacity"]) {
+    const app = await specificationServiceFixture()
+    let page = 0
+    app.deps.appBindings = {
+      list: async () => {
+        if (invalid === "capacity") {
+          const start = page++ * 100
+          return { items: Array.from({ length: 100 }, (_, i) => appBinding(`app-${start + i}`)), ...(page < 10 ? { nextCursor: `page-${page}` } : {}) }
+        }
+        return {
+          items: [{ ...appBinding(`app-${page++}`), ...(invalid === "identity" ? { binding_id: "same-binding" } : {}) }],
+          nextCursor: invalid === "cursor" ? "same-cursor" : `page-${page}`,
+        }
+      },
+    }
+    await assert.rejects(
+      app.service.readPublicList({}, openAppContext(app.context, true), app.signal, app.deadline),
+      invalid === "capacity" ? (error) => error.code === Code.ResourceExhausted : /skill_response_invalid/,
+    )
+  }
+})
+
+test("public Open App maps an exact disabled binding's approved metadata, without failing or inventing installation authority", async () => {
+  const app = await specificationServiceFixture()
+  const { projectAppSkillBinding } = await import("../../src/infrastructure/clients/platform/app-skill-binding-response.ts")
+  const p = await import("../../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts")
+  const disabled = projectAppSkillBinding(
+    create(p.AppSkillBindingSchema, {
+      bindingId: "disabled-binding",
+      seriesId: { value: "disabled-series" },
+      skillId: { value: "disabled-version" },
+      revision: 1n,
+      stateVersion: 2n,
+      sourceStatus: p.SkillStatus.DISABLED,
+      createdAt: { seconds: 1n },
+      updatedAt: { seconds: 3n },
+      skill: {
+        skillId: { value: "disabled-version" },
+        seriesId: { value: "disabled-series" },
+        sourceRef: { value: "skill:disabled-version" },
+        revision: 1n,
+        status: p.SkillStatus.DISABLED,
+        metadata: { displayName: "Disabled exact", summary: "Retained approved metadata", examplePrompts: { prompts: [] }, categoryKeys: { keys: [] } },
+        createdAt: { seconds: 1n },
+        skillUpdatedAt: { seconds: 2n },
+        product: { publicationAudience: "catalog", stateVersion: 1n },
+        packagePhase: p.SkillPackagePhase.VALIDATED,
+      },
+    }),
+  )
+  app.deps.appBindings = { list: async () => ({ items: [disabled] }) }
+  const rows = await app.service.readPublicList({}, openAppContext(app.context, false), app.signal, app.deadline)
+  assert.deepEqual(
+    rows.map((row) => [row.id, row.name, row.owner_type]),
+    [["disabled-series", "Disabled exact", "app"]],
+  )
+  assert.equal(app.calls.filter((call) => call.kind === "installed").length, 0)
 })

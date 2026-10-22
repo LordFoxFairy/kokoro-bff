@@ -1,3 +1,4 @@
+import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
@@ -242,6 +243,7 @@ async function handle(
     await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency)
     return
   }
+  if (await appSkillBindingsRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillSpecificationEnabledRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillDownloadHandleRoute(request, response, config, composition, id, segments)) return

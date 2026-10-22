@@ -1,3 +1,7 @@
+## 2026-10-21 Skills 公开身份矩阵与 App 绑定（已批准源码候选）
+
+固定 IAM4db7012/0.15 与 Platform451d0fb Native 原件／AppBinding1.0 规范和向量，沿原正式生成链。公开 GET /v1/skill.list 独立消费 IAM 0.15 的不可推断 principal：user_api_key 或 oauth_app（显式 trusted）。网站四 RPC 继续原 Product Session，不接受公开 Key。public context 必含 principal；普通 App 拒绝 project_id，仅读自身精确绑定；Key 读本人与授权项目；trusted 以 project > personal > App 完整行合并。保持总预算、取消、1000 上限与前后项目核验，发送前再核同一完整 principal。公开作者资料显式使用 IAM 专属 publisher-profile 操作。App 绑定管理仅沿现 Product Session + fresh IAM operator exact tenant/app/client 准入，operator 不等于 platformAdmin；Platform 唯一拥有绑定/CAS/回执。
+
 ## 2026-10-21 Skills 删除与公开身份收口（实施中）
 
 个人系列删除由 Platform 唯一持有 deleted 终态。BFF 沿当前 Product 会话准入与 catalog 身份代理 DELETE /v1/self/skills/{skill_id}；显式 anchor CAS 与系列 publication 条件固定进原 body/key，不预读后重写，不把撤回/草稿丢弃冒删除。成功回执先于已删对象读取，未知结果只重试原命令。公开 skill.list 的 API Key/Open App 准入另由 IAM 正式身份事实支撑，网站会话入口不放宽。

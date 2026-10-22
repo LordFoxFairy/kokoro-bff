@@ -16,9 +16,9 @@ export function restoreSkillSeriesDeleteContract(source) {
   return parent
 }
 export function skillSeriesDeleteParentBaseline(baseline) {
-  if (baseline.length !== 177) return baseline
+  if (baseline.length !== 180) return baseline
   if (hash(JSON.stringify(baseline)) !== proof.current_inventory_sha256) throw Error("Skill series delete ordered inventory drift")
-  const parent = baseline.filter((operation) => operation.operation_id !== proof.operation_id)
+  const parent = baseline.filter((operation) => !(proof.operation_ids ?? [proof.operation_id]).includes(operation.operation_id))
   if (hash(JSON.stringify(parent)) !== proof.parent_inventory_sha256) throw Error("Skill series delete parent inventory drift")
   return parent
 }

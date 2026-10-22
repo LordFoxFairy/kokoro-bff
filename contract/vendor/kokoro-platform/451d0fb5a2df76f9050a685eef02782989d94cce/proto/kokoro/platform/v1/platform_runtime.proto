@@ -897,6 +897,8 @@ message AuthorizeMcpToolResponse {
 }
 
 service SkillCatalogService {
+  rpc PutAppSkillBinding(kokoro.platform.v1.PutAppSkillBindingRequest) returns (kokoro.platform.v1.PutAppSkillBindingResponse);
+  rpc RemoveAppSkillBinding(kokoro.platform.v1.RemoveAppSkillBindingRequest) returns (kokoro.platform.v1.RemoveAppSkillBindingResponse);
   rpc DeletePersonalSkillSeries(kokoro.platform.v1.DeletePersonalSkillSeriesRequest) returns (kokoro.platform.v1.DeletePersonalSkillSeriesResponse);
   rpc BeginLocalSkillImport(kokoro.platform.v1.BeginLocalSkillImportRequest) returns (kokoro.platform.v1.BeginLocalSkillImportResponse);
   rpc CompleteLocalSkillImport(kokoro.platform.v1.CompleteLocalSkillImportRequest) returns (kokoro.platform.v1.CompleteLocalSkillImportResponse);
@@ -1864,6 +1866,7 @@ message GetSkillRevisionResponse {
 }
 
 service ProductSkillReadService {
+  rpc ListAppSkillBindings(kokoro.platform.v1.ListAppSkillBindingsRequest) returns (kokoro.platform.v1.ListAppSkillBindingsResponse);
   rpc GetSkillRevision(kokoro.platform.v1.GetSkillRevisionRequest) returns (kokoro.platform.v1.GetSkillRevisionResponse);
   rpc GetCurrentSkill(kokoro.platform.v1.GetCurrentSkillRequest) returns (kokoro.platform.v1.GetCurrentSkillResponse);
   rpc InspectSkillPackage(kokoro.platform.v1.InspectSkillPackageRequest) returns (kokoro.platform.v1.InspectSkillPackageResponse);
@@ -2280,4 +2283,53 @@ message DeletePersonalSkillSeriesResponse {
   uint64 state_version = 3;
   string event_id = 4;
   bool replayed = 5;
+}
+
+message PutAppSkillBindingRequest {
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.SkillId skill_id = 3;
+  optional uint64 expected_binding_version = 4;
+}
+
+message RemoveAppSkillBindingRequest {
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.SkillSeriesId series_id = 3;
+  optional uint64 expected_binding_version = 4;
+}
+
+message ListAppSkillBindingsRequest {
+  string request_id = 1;
+  kokoro.platform.v1.ProductSkillInstallationPageRequest page = 2;
+}
+
+message AppSkillBinding {
+  string binding_id = 1;
+  kokoro.platform.v1.SkillSeriesId series_id = 2;
+  kokoro.platform.v1.SkillId skill_id = 3;
+  uint64 revision = 4;
+  uint64 state_version = 5;
+  kokoro.platform.v1.SkillStatus source_status = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  kokoro.platform.v1.SkillProductRecord skill = 9;
+  google.protobuf.Timestamp removed_at = 10;
+}
+
+message PutAppSkillBindingResponse {
+  kokoro.platform.v1.AppSkillBinding binding = 1;
+  string event_id = 2;
+  bool replayed = 3;
+}
+
+message RemoveAppSkillBindingResponse {
+  kokoro.platform.v1.AppSkillBinding binding = 1;
+  string event_id = 2;
+  bool replayed = 3;
+}
+
+message ListAppSkillBindingsResponse {
+  repeated kokoro.platform.v1.AppSkillBinding bindings = 1;
+  kokoro.common.v1.PageResult page = 2;
 }

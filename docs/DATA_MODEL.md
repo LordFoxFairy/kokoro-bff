@@ -1,3 +1,7 @@
+## 2026-10-21 Skills 公开身份矩阵与 App 绑定（已批准，实施中）
+
+无新增 BFF 表、Schema、缓存或授权事实。IAM 持有 UserApiKey/OpenApp/trusted，Platform 持有 AppSkillBinding exact skill_id/CAS；BFF 只投影当次可信 principal、绑定与资料，缺失身份不回退 Session、不以 skipConsent 推断 trusted、不伪造安装或 OwnerKind。公开列表只读，不增加执行权限；幂等与绑定版本回执由 owner 保存。
+
 ## 2026-10-21 Skills 删除与公开身份收口（实施中）
 
 本片不新增 BFF SQL 表或删除副本；系列终态、精确安装及资产保留均归 Platform。浏览器持有原删除命令恢复意图，不把列表缺项视作成功；BFF 只消费 owner 回执。IAM API Key/Open App 事实不进入 BFF 数据库。

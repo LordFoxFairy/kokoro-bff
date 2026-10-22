@@ -1,3 +1,11 @@
+## 2026-10-21 公开身份矩阵与 App 绑定（当前源码候选，未正常激活）
+
+Public22.1.0 /180 operations：公开 skill.list 使用 IAM 0.15 明确的用户 API Key／普通 App／可信 App 主体；四个网站读取继续使用 Product Session，保留原服务入口保护。普通 App 仅返回正式绑定，可信 App 精确并集按项目、个人、App 优先去重，读取前后复核权限与同一主体，扫描上限1000；不隐式升级版本。三个 App 绑定管理操作要求新鲜 IAM operator 资格及精确 app/tenant/client，不以平台管理员或请求 body 自报身份代替。
+
+固定 IAM `4db7012a85752071f5fd30b9a5a3b4977e9dd4f3` 和 Platform `451d0fb5a2df76f9050a685eef02782989d94cce`；Native 正规生成，摘要按正式 RFC8785 profile，写 ACK 必须精确 expected+1，移除记录不得携带元数据。Public22.1/180 SHA256 `f726cac620362524f92474ca9d647229280db308d16105820c718f9bc32db1ae`，构建期精确逆回原 Public22/176，原父 hash、历史 oracle 和业务网络协议保持，无新 BFF 表或运行时兼容入口。
+
+最终停写七门 format/lint/typecheck/contract/architecture/test/build exit0：contract909 PASS，architecture36 PASS，默认1563 PASS、0 FAIL、3项原资源 SKIP。独审发现的 disabled 元数据、ACK跳版本、tombstone 元数据三项 P2 已修复并定向86 PASS；主方独立公开 HTTP／Native client 20 PASS，84受影响路径零漂移。未以 fixture peer 冒称真实 IAM＋Platform 数据库整链；正常配对、App 精确 pin、页面验收和集中 PR merge 仍待完成，模型／工具执行／扣费保持暂停。
+
 ## 2026-10-21 个人系列删除消费者（当前源码候选）
 
 Public22.1.0 /177 operations 仅新增 `DELETE /v1/self/skills/{skill_id}`：当前 Product 会话与 IAM `delete_series` 准入、明确 anchor CAS 和 publication 空／精确确认、原 key/digest 重试；不先读取 source 后才重放，不把撤回或404当删除成功。Platform Native 固定 `883d7713556b8cee9d41b9c9d904931715033808`，安装管理保留 `source_status=deleted`，可用列表排除该来源且扫描总量上限仍为1000。旧 Public22 全文字节及有序 inventory 以独立构建期 inverse 复核，不引入运行兼容层。

@@ -46,6 +46,9 @@ function adminBusinessRoute(method: string, target: string): boolean {
     ].includes(path)
   )
     return true
+  if ((method === "GET" || method === "POST") && /^\/v1\/admin\/open-apps\/[A-Za-z0-9][A-Za-z0-9._:-]{0,190}\/skill-bindings$/u.test(path)) return true
+  if (method === "DELETE" && /^\/v1\/admin\/open-apps\/[A-Za-z0-9][A-Za-z0-9._:-]{0,190}\/skill-bindings\/[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(path))
+    return true
   if (method === "GET" && /^\/v1\/admin\/skills\/[^/]+$/u.test(path)) return true
   if (method === "GET" && /^\/v1\/admin\/mcp\/providers(?:\/[a-z0-9][a-z0-9._-]{0,63})?$/u.test(path)) return true
   if (method === "POST" && path === "/v1/admin/skills") return true
