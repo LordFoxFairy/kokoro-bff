@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "158579f8fdeb62ba5064365260942b62a195a4bb"
+const ownerCommit = "90929ef316470f2e9de9eda05d5510761637bd6e"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe"
+const ownerDigest = "a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -169,6 +169,8 @@ async function closeOwnerResponseSchemas(directory) {
     "CreditAccountResponse",
     "LedgerEntry",
     "CreditLedgerResponse",
+    "AdminCreditGrantRequest",
+    "AdminCreditGrantResponse",
   ]) {
     source = closeGeneratedObject(source, schemaName)
   }
@@ -178,12 +180,23 @@ async function closeOwnerResponseSchemas(directory) {
   source = closeObjectExpression(source, "  data: z.object(", "CatalogResponse.data", catalogResponseStart)
   const ledgerResponseStart = source.indexOf("export const zCreditLedgerResponse =")
   source = closeObjectExpression(source, "  data: z.object(", "CreditLedgerResponse.data", ledgerResponseStart)
+  source = closeObjectExpression(source, "  data: z.object(", "AdminCreditGrantResponse.data", source.indexOf("export const zAdminCreditGrantResponse ="))
+  const fundingStart = source.indexOf("export const zAdminCreditGrantRequest =")
+  const fundingEnd = source.indexOf("export const ", fundingStart + 1)
+  let funding = source.slice(fundingStart, fundingEnd)
+  funding = replaceExactInSource(funding, ".max(255)", ".refine((value) => [...value].length <= 255)", 1, "subject Unicode code-point bound")
+  funding = replaceExactInSource(funding, ".max(500)", ".refine((value) => [...value].length <= 500)", 1, "reason Unicode code-point bound")
+  source = source.slice(0, fundingStart) + funding + source.slice(fundingEnd)
   await writeFile(file, source)
 }
 
 async function run(command, args, options = {}) {
   await new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: root, stdio: "inherit", ...options })
+    const child = spawn(command, args, {
+      cwd: root,
+      stdio: "inherit",
+      ...options,
+    })
     child.once("error", reject)
     child.once("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${path.basename(command)} exited ${code}`))))
   })
@@ -214,7 +227,9 @@ export function assertGeneratedAllowlist(files, directories, label) {
 
 async function generate(directory) {
   const cli = path.join(root, "node_modules/@hey-api/openapi-ts/bin/run.js")
-  await run(process.execPath, [cli, "--silent", "-f", configPath], { env: { ...process.env, BILLING_HTTP_CLIENT_OUTPUT: directory } })
+  await run(process.execPath, [cli, "--silent", "-f", configPath], {
+    env: { ...process.env, BILLING_HTTP_CLIENT_OUTPUT: directory },
+  })
   const tree = await generatedTree(directory)
   assertGeneratedAllowlist(tree.files, tree.directories, "generated")
   await normalizeGeneratorCompatibility(directory)
@@ -222,7 +237,7 @@ async function generate(directory) {
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
-    ["getCatalog", "getMyCreditAccount", "getMyCreditLedger", "openMyCreditAccount"],
+    ["createAdminCreditGrant", "getCatalog", "getMyCreditAccount", "getMyCreditLedger", "openMyCreditAccount"],
     "Billing HTTP generated operation surface drifted",
   )
   const prettier = path.join(root, "node_modules/prettier/bin/prettier.cjs")
@@ -251,7 +266,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "4.0.0-experimental.3",
+      contract_version: "4.0.0-experimental.4",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },

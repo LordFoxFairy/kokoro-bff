@@ -82,6 +82,7 @@ export type BffConfig = {
   upstreamSecret: string | null
   systemModelManagementToken?: string | null
   billingServiceToken?: string | null
+  billingOperatorProxySecret?: string | null
   upstreamTimeoutMs: number
   upstreamMaxResponseBytes: number
   schedulerServiceToken: string | null
@@ -268,6 +269,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     }
     if (billingServiceToken === upstreamSecret) throw new Error("Billing service token must be independent from the Billing internal secret")
   }
+  const billingOperatorProxySecret = env.KOKORO_BILLING_OPERATOR_PROXY_SECRET?.trim() || null
+  if (
+    billingOperatorProxySecret !== null &&
+    (!/^[\x21-\x7e]{32,2048}$/u.test(billingOperatorProxySecret) ||
+      [upstreamSecret, billingServiceToken, sharedSecret, adminWebSharedSecret].includes(billingOperatorProxySecret))
+  )
+    throw new Error("Billing operator proxy credential must be independent and contain 32–2048 visible ASCII characters")
   const upstreamTimeoutMs = positiveInteger(env.KOKORO_UPSTREAM_TIMEOUT_MS, "KOKORO_UPSTREAM_TIMEOUT_MS", DEFAULT_UPSTREAM_TIMEOUT_MS)
   const agUi: AgUiConfig = {
     replayPageFrames: positiveInteger(env.KOKORO_AGUI_REPLAY_PAGE_FRAMES, "KOKORO_AGUI_REPLAY_PAGE_FRAMES", DEFAULT_AGUI_CONFIG.replayPageFrames),
@@ -418,6 +426,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     upstreamSecret,
     systemModelManagementToken,
     billingServiceToken,
+    billingOperatorProxySecret,
     upstreamTimeoutMs,
     upstreamMaxResponseBytes: positiveInteger(
       env.KOKORO_UPSTREAM_MAX_RESPONSE_BYTES,

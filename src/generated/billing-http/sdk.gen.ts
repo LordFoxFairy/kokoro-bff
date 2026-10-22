@@ -3,6 +3,9 @@
 import { client } from "./client.gen.js"
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from "./client/index.js"
 import type {
+  CreateAdminCreditGrantData,
+  CreateAdminCreditGrantErrors,
+  CreateAdminCreditGrantResponses,
   GetCatalogData,
   GetCatalogErrors,
   GetCatalogResponses,
@@ -16,7 +19,13 @@ import type {
   OpenMyCreditAccountErrors,
   OpenMyCreditAccountResponses,
 } from "./types.gen.js"
-import { zGetCatalogResponse, zGetMyCreditAccountResponse, zGetMyCreditLedgerResponse, zOpenMyCreditAccountResponse } from "./zod.gen.js"
+import {
+  zCreateAdminCreditGrantResponse,
+  zGetCatalogResponse,
+  zGetMyCreditAccountResponse,
+  zGetMyCreditLedgerResponse,
+  zOpenMyCreditAccountResponse,
+} from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
   TData,
@@ -151,4 +160,36 @@ export const getMyCreditLedger = <ThrowOnError extends boolean = false>(
     ],
     url: "/v1/billing/me/credit-ledger",
     ...options,
+  })
+
+/**
+ * Non-cash administrative credit issuance. The BFF verifies current platform administrator permission and recipient membership in the trusted tenant before invoking. No user bearer or caller supplied role fallback.
+ */
+export const createAdminCreditGrant = <ThrowOnError extends boolean = false>(
+  options: Options<CreateAdminCreditGrantData, ThrowOnError>,
+): RequestResult<CreateAdminCreditGrantResponses, CreateAdminCreditGrantErrors, ThrowOnError> =>
+  (options.client ?? client).post<CreateAdminCreditGrantResponses, CreateAdminCreditGrantErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCreateAdminCreditGrantResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+      { name: "x-kokoro-proxy-secret", type: "apiKey" },
+    ],
+    url: "/v1/admin/billing/credit-grants",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   })

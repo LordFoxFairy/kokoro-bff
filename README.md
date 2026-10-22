@@ -1,3 +1,7 @@
+## 当前实现入口（2026-10-22）
+
+当前公共契约 Public22.4.0／183 operations，新增管理员非现金充值；源码与真实验收边界见 [docs/CURRENT.md](docs/CURRENT.md)。下方日期段保留阶段历史，不代表当前版本或暂停要求。正常后台页面、Agent实际用量结算及整链交付尚未完成。
+
 ## 2026-10-21 个人系列删除候选
 
 当前机器契约 Public22.1.0 /177，新增个人系列 DELETE，保留 distinct withdraw；严格 CAS/publication、当前 IAM delete_series 和原 key 回执。Platform Native 固定883d771、IAM0.15固定4db7012。公开三身份矩阵及 App 页面尚待接线，正常环境未激活；边界与实际验证见 `docs/CURRENT.md`。下方版本段为阶段历史。

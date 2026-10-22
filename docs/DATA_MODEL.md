@@ -1,3 +1,7 @@
+## CREDIT-1：资金仍由Billing唯一写入（2026-10-22）
+
+BFF无DDL/余额表/资金receipt/权限缓存。Billing永久保存funding身份、幂等键/原payload digest、grant/journal/audit原子效果；IAM拥有当前tenant/member/admin。BFF仅按可信上下文校验并严格转送一次，不写其他owner数据库，也不把列表空/传输失败或超时推断成没有入账。表单恢复意图由后继Admin按原业务样式持有，刷新不主动发放。
+
 ## MODEL-1 上游模型候选（2026-10-22）
 
 无BFF Schema／数据迁移／receipt。System拥有已保存连接、密文与出站许可；本方仅投影瞬时候选ID，读取不推进任何目录／业务路由／计价事实，不落API Key或原供应商响应。选择候选后的定义／revision／发布／label仍归现System命令，实际扣积分仍归Billing。

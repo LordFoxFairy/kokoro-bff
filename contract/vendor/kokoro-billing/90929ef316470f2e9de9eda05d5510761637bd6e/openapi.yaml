@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 4.0.0-experimental.3
+  version: 4.0.0-experimental.4
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -2132,6 +2132,132 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /v1/admin/billing/credit-grants:
+    post:
+      operationId: createAdminCreditGrant
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: experimental
+      x-kokoro-idempotency: required
+      x-kokoro-permission: web-bff-billing-admin-proxy
+      x-kokoro-identity-transport: personal-identity-u1
+      description: Non-cash administrative credit issuance. The BFF verifies current
+        platform administrator permission and recipient membership in the trusted
+        tenant before invoking. No user bearer or caller supplied role fallback.
+      security:
+        - serviceCaller: []
+          internalSecret: []
+          serviceBearer: []
+          tenantContext: []
+          subjectContext: []
+          operatorProxySecret: []
+      parameters:
+        - $ref: "#/components/parameters/PersonalTenantId"
+        - name: x-kokoro-subject
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 5
+            maxLength: 1363
+            pattern: ^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])
+        - name: x-kokoro-service
+          in: header
+          required: true
+          schema:
+            type: string
+            const: web-bff
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreditGrantRequest"
+      responses:
+        "201":
+          description: Grant created or exact receipt replay
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCreditGrantResponse"
+        "400":
+          description: Invalid request
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.invalid_request
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Privileged service admission denied
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.forbidden
+              retryable: false
+            - code: billing.credit_account_disabled
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Command identity conflicts
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.idempotency_conflict
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal failure
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.internal_error
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Dependency unavailable
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.dependency_unavailable
+              retryable: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /v1/admin/billing/refunds:
     post:
       operationId: createAdminRefund
@@ -2763,6 +2889,61 @@ components:
       in: header
       name: Wechatpay-Signature
   schemas:
+    AdminCreditGrantRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - funding_id
+        - subject_id
+        - amount_credits
+        - reason
+        - effective_at
+      properties:
+        funding_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])
+        subject_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        amount_credits:
+          type: string
+          minLength: 1
+          maxLength: 13
+          pattern: ^[1-9][0-9]{0,12}$(?![\s\S])
+          description: Whole Credits, not micros. Maximum 9223372036854; server multiplies
+            by 1000000 using BigInt and rejects overflow.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        effective_at:
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+          description: UTC millisecond business intent frozen by the BFF at first
+            submission; never regenerated on retry.
+    AdminCreditGrantResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - account_id
+            - grant_id
+            - journal_id
+          properties:
+            account_id:
+              $ref: "#/components/schemas/Uuid"
+            grant_id:
+              $ref: "#/components/schemas/Uuid"
+            journal_id:
+              $ref: "#/components/schemas/Uuid"
     Uuid:
       type: string
       format: uuid

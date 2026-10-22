@@ -1,3 +1,13 @@
+## CREDIT-1：后台非现金积分发放接线（2026-10-22）
+
+主方唯一writer；沿Root唯一主链计划，复用已验Billing 90929ef/4.0.0-experimental.4。Browser→Admin同源adapter→BFF新POST /v1/admin/billing/credit-grants→Billing，新增Public22.4/183；同一closed五字段body和required Idempotency-Key，永久funding_id与key均不改写，BFF不采样/替换effective_at或创建第二份资金receipt。BFF只核当前Product Session/platformAdmin、固定受信tenant和收款user_id的当前IAM成员资格，再将受信operator/tenant编码u1，以独立billing service token/internal secret/operator proxy secret调用owner。不给浏览器owner密钥、角色/tenant参数或余额写旁路；仅非现金发放，不启动模型、工具或真钱支付。
+
+成员资格复用IAM既有严格ListTenantMembers消费，当前用户Bearer只去IAM、不去Billing；共享总deadline（最多10秒）覆盖入站准入、限16KiB正文、逐页资格核对、发送前重验同一管理员/tenant/subject和Billing完整回包。每页100，最多20页/重复cursor拒绝；未扫描完与依赖失败返回503而非错误认定非成员。到末页仍无目标统一403。管理员资格撤销或主体变化不派发；BFF无权跨服务原子锁住IAM，记录为当次发送前核验，不宣称永久授权。
+
+沿现窄Billing生成链，固定owner Git blob/摘要，正规生成五操作；原只读和初始化四操作wire保持，旧owner pin退休。新client用generated SDK/types/strict schema，完整response预算/UTF8/重复JSON键/no-store/request-id/status与错误精确匹配，无重试/redirect。超时、坏ACK或500均不证明未入账，客户端只能保存并显式恢复原body/双身份；只有严格201回执可表示确认。无新表/Module/服务。现model路由共享的header/有界正文mechanism抽到HTTP request-body单文件，原两model消费者保持默认预算/行为，不建万能客户端。
+
+写区：三设计/当前计划、canonical/baseline与单个完整父逆证、Billing固定vendor/原生成器/窄client、独立funding input与route、browser服务精确白名单、runtime独立proxy凭据、bootstrap窄派发、共享HTTP正文helper及相关测试/门。先真实HTTP RED→实现与负控→主方完整format/lint/types/contract/architecture/test/build与独审；然后停写commit供Admin固定消费。Manus后台发放API未观测，这是已批准后台维护差异，不冒私有等价；本BFF切片也不是正常后台/Agent计费验收。
+
 ## MODEL-1 上游模型发现消费（2026-10-22，实施门）
 
 沿已批准的共享provider→共享模型→业务组合语义，只在现model-configuration admin路由与窄System client加显式候选GET，不新增模块／服务／Schema或定时同步。Owner已提交System `845cf46b7b156c9bacf1065384830c12279e2b5b`／6.1，artifact `77792d3b31446a70adf25693bdea4bd9ebfd39f3b77c6816bc324591827ca758`，provenance `2ee7006f2b6c5a87be422a70975750764b40b738261793d8569ed0cb4fb41c57`；固定原件并沿原生成器增加单个精确operation，不导入owner源码。

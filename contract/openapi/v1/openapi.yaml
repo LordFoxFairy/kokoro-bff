@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 22.3.0
+  version: 22.4.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -2982,6 +2982,49 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/admin/billing/credit-grants:
+    post:
+      tags: [Administration]
+      operationId: createAdminCreditGrant
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.billing.credit_grant
+      summary: Issue non-cash whole Credits to a current-tenant member
+      description: >-
+        Current Product platform administrator and recipient membership are rechecked before dispatch.
+        No query parameters. Preserve the complete body, Idempotency-Key and permanent funding_id on
+        explicit recovery, including effective_at frozen at first submission. A timeout, transport failure
+        or invalid acknowledgement does not prove no funds were issued; never create a new command to retry.
+        This operation is not a cash payment or a manual usage charge. Tenant, actor, source and price are server-owned.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+            pattern: '^[\x21-\x2b\x2d-\x7e]{8,128}$(?![\s\S])'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminCreditGrantRequest' }
+      responses:
+        '201':
+          description: Exact owner issuance receipt, also returned for a valid replay
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCreditGrantResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/admin/identity/members:
     get:
@@ -19388,6 +19431,55 @@ components:
         meta:
           $ref: '#/components/schemas/RequestMeta'
 
+    AdminCreditGrantRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - funding_id
+        - subject_id
+        - amount_credits
+        - reason
+        - effective_at
+      properties:
+        funding_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])
+        subject_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        amount_credits:
+          type: string
+          minLength: 1
+          maxLength: 13
+          pattern: ^[1-9][0-9]{0,12}$(?![\s\S])
+          description: Whole Credits, not micros. Maximum 9223372036854; server multiplies
+            by 1000000 using BigInt and rejects overflow.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        effective_at:
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+          description: UTC millisecond business intent frozen by the BFF at first
+            submission; never regenerated on retry.
+    AdminCreditGrantResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [account_id, grant_id, journal_id]
+          additionalProperties: false
+          properties:
+            account_id: { type: string, format: uuid }
+            grant_id: { type: string, format: uuid }
+            journal_id: { type: string, format: uuid }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     RequestId:
       type: string
       minLength: 1

@@ -1,3 +1,4 @@
+import { liveAdminCreditGrant } from "../http/routes/billing-credit-grant-admin.js"
 import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
@@ -284,13 +285,14 @@ async function handle(
   }
 
   const businessPath = browserPrivateMcp ? segments.slice(2) : segments.slice(1)
-  const providerDiscoveryDeadline =
+  const adminOperationDeadline =
     !browserPrivateMcp &&
-    request.method === "GET" &&
-    businessPath.length === 4 &&
-    businessPath[0] === "admin" &&
-    businessPath[1] === "model-providers" &&
-    businessPath[3] === "upstream-models"
+    ((request.method === "GET" &&
+      businessPath.length === 4 &&
+      businessPath[0] === "admin" &&
+      businessPath[1] === "model-providers" &&
+      businessPath[3] === "upstream-models") ||
+      (request.method === "POST" && businessPath.join("/") === "admin/billing/credit-grants"))
       ? Date.now() + Math.min(config.upstreamTimeoutMs, 10_000)
       : undefined
   if (!browserPrivateMcp && businessPath[0] === "self" && businessPath[1] === "mcp") {
@@ -422,13 +424,13 @@ async function handle(
   const admissionAbort = new AbortController()
   const admissionTimer = setTimeout(
     () => admissionAbort.abort(new Error("skill_admission_deadline")),
-    providerDiscoveryDeadline === undefined
+    adminOperationDeadline === undefined
       ? hasMcpBudget
         ? mcpRequestRemaining(request)
         : hasSkillsBudget
           ? skillRequestRemaining(request)
           : 10_000
-      : Math.max(0, providerDiscoveryDeadline - Date.now()),
+      : Math.max(0, adminOperationDeadline - Date.now()),
   )
   const onRequestAborted = (): void => {
     admissionAbort.abort()
@@ -652,6 +654,11 @@ async function handle(
     return
   }
 
+  if (request.method === "POST" && businessPath.join("/") === "admin/billing/credit-grants") {
+    await liveAdminCreditGrant(request, response, config, context, admission.bearerToken, composition.sessionAdmission, adminOperationDeadline ?? Date.now())
+    return
+  }
+
   if (businessPath[0] === "admin" && businessPath[1] === "identity") {
     await liveAdminIdentityRead(request, response, config, context, admission.bearerToken, businessPath)
     return
@@ -866,7 +873,7 @@ async function handle(
   }
 
   if (composition.routeHandler === undefined && businessPath[0] === "admin") {
-    if (await liveModelConfigurationAdmin(request, response, config, context, businessPath, providerDiscoveryDeadline)) return
+    if (await liveModelConfigurationAdmin(request, response, config, context, businessPath, adminOperationDeadline)) return
     await liveModelRoutingAdmin(request, response, config, context, businessPath)
     return
   }

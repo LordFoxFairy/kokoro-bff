@@ -1,3 +1,13 @@
+## 2026-10-22 CREDIT-1 正式非现金充值接线（本地候选）
+
+当前 canonical 为 Public22.4.0／183 operations。新增管理员 `POST /v1/admin/billing/credit-grants`，固定 Billing `90929ef316470f2e9de9eda05d5510761637bd6e`／4.0.0-experimental.4；原22.3全文和182项顺序由构建期精确逆证保留。仅配置独立 operator proxy secret，未配置时本操作503，不影响原读取；无新表、余额写旁路、自动业务重试或真钱支付。
+
+当前平台管理员、人类操作者和租户由既有 Product/IAM 准入产生；从 IAM 当前成员读取收款 user_id，不信 body 身份。分页有限、结果不完整拒绝；派发前重新确认同一管理员／租户。读取 body、成员验证、重新准入及 owner ACK 共用原绝对预算，忽略取消的依赖也不会越期派发或回成功。整数积分字符串、冻结 funding_id／effective_at、原 key、严格原始 JSON 和正式回执共同承接幂等；未知结果保留原命令，不造余额成功。
+
+停写七门 format/lint/typecheck/contract/architecture/default/build 全部 exit0：contract911 PASS、architecture36 PASS、default1606 PASS／3原资源SKIP；随后仅 package.json 补新契约测试门注册及去重格式路径，相关格式和完整契约重跑912 PASS／0SKIP。最终753非文档输入逐一 SHA256 无漂移；独立审查发现的跨绝对预算派发／ACK P2 已先 RED 后修复，其余无确定P0–P2。OpenAPI 44项既有警告仍保留，未称零警告。
+
+实际编译 BFF→Billing Nest→独立 PG 的充值、同 key／新 key 原 funding 重放、冲突及普通用户拒绝共6项通过；数据库确认仅一次账户／grant／journal／audit／receipt效果，1000整积分，临时库库存94→94。916个编译文件与实测快照相同。IAM 成员 HTTP 与 session admission 为明确夹具，不称正常登录、后台页面或当前租户资金全旅程；未发送模型／工具请求或正常积分写入。后台表单及 Agent 授权／真实用量结算仍待，未push／PR／merge，Root不提前pin。以下日期段仅作历史证据，不覆盖本节当前版本或最新执行授权。
+
 ## 2026-10-21 公开身份矩阵与 App 绑定（当前源码候选，未正常激活）
 
 Public22.1.0 /180 operations：公开 skill.list 使用 IAM 0.15 明确的用户 API Key／普通 App／可信 App 主体；四个网站读取继续使用 Product Session，保留原服务入口保护。普通 App 仅返回正式绑定，可信 App 精确并集按项目、个人、App 优先去重，读取前后复核权限与同一主体，扫描上限1000；不隐式升级版本。三个 App 绑定管理操作要求新鲜 IAM operator 资格及精确 app/tenant/client，不以平台管理员或请求 body 自报身份代替。

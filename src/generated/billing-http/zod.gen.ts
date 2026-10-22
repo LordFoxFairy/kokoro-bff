@@ -2,7 +2,39 @@
 
 import * as z from "zod"
 
+export const zAdminCreditGrantRequest = z
+  .object({
+    funding_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/),
+    subject_id: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    amount_credits: z
+      .string()
+      .min(1)
+      .max(13)
+      .regex(/^[1-9][0-9]{0,12}$(?![\s\S])/),
+    reason: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 500),
+    effective_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+  })
+  .strict()
+
 export const zUuid = z.uuid()
+
+export const zAdminCreditGrantResponse = z
+  .object({
+    data: z
+      .object({
+        account_id: zUuid,
+        grant_id: zUuid,
+        journal_id: zUuid,
+      })
+      .strict(),
+  })
+  .strict()
 
 export const zUtcInstant = z.iso.datetime().regex(/Z$/)
 
@@ -110,6 +142,12 @@ export const zPersonalSubjectId = z
   .max(1363)
   .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/)
 
+export const zIdempotencyKey = z
+  .string()
+  .min(8)
+  .max(128)
+  .regex(/^[\x20-\x7E]+$/)
+
 export const zLimit = z.int().gte(1).lte(100).default(50)
 
 export const zCursor = z.string().min(1).max(2048)
@@ -204,3 +242,29 @@ export const zGetMyCreditLedgerQuery = z.object({
  * Success
  */
 export const zGetMyCreditLedgerResponse = zCreditLedgerResponse
+
+export const zCreateAdminCreditGrantBody = zAdminCreditGrantRequest
+
+export const zCreateAdminCreditGrantHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+  "idempotency-key": z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[\x20-\x7E]+$/),
+})
+
+/**
+ * Grant created or exact receipt replay
+ */
+export const zCreateAdminCreditGrantResponse = zAdminCreditGrantResponse

@@ -386,3 +386,33 @@ it("uses explicit direct Skills credential paths and rejects retired OAuth varia
     assert.throws(() => loadConfig({ ...runtimeEnv, [old]: "/fixture/retired.json" }), /retired.+credential/iu)
   }
 })
+
+describe("non-cash credit funding capability configuration", () => {
+  it("keeps reads usable without funding and only accepts an independent operator proxy secret", () => {
+    const env = {
+      ...runtimeEnv,
+      KOKORO_BILLING_BASE_URL: "https://billing.example.test",
+      KOKORO_BFF_SHARED_SECRET: "product-browser-secret-000000000001",
+      KOKORO_BFF_ADMIN_WEB_SHARED_SECRET: "admin-browser-secret-0000000000001",
+      KOKORO_INTERNAL_SECRET_BFF: "billing-internal-secret-0000000001",
+      KOKORO_BILLING_BFF_SERVICE_TOKEN: "billing-service-token-000000000001",
+    }
+    assert.equal(loadConfig(env).billingOperatorProxySecret, null)
+    assert.equal(
+      loadConfig({
+        ...env,
+        KOKORO_BILLING_OPERATOR_PROXY_SECRET: "billing-operator-proxy-secret-000001",
+      }).billingOperatorProxySecret,
+      "billing-operator-proxy-secret-000001",
+    )
+    for (const secret of [
+      "short",
+      "with whitespace".repeat(4),
+      env.KOKORO_BFF_SHARED_SECRET,
+      env.KOKORO_BFF_ADMIN_WEB_SHARED_SECRET,
+      env.KOKORO_INTERNAL_SECRET_BFF,
+      env.KOKORO_BILLING_BFF_SERVICE_TOKEN,
+    ])
+      assert.throws(() => loadConfig({ ...env, KOKORO_BILLING_OPERATOR_PROXY_SECRET: secret }), /Billing operator proxy credential/u)
+  })
+})

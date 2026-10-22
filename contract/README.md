@@ -1,3 +1,7 @@
+## CREDIT-1 非现金发放消费者（2026-10-22，源码候选）
+
+唯一当前Public22.4.0 /183操作；新增POST /v1/admin/billing/credit-grants，strict五字段与required key，先当前管理员/可信tenant成员资格、发送前同主体重验，再向Billing固定90929ef/4.0.0-experimental.4单次派发。owner原blob SHA256 a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2，正规生成五操作；原旧pin退休，无runtime兼容/第二账本。旧182操作全文与inventory完整逆恢复，仅作为构建保护，不替代新旅程验收。当前public源码摘要 f6b8f3bd250c144a2d648af94c9fd5fe068db33991a4289b849a077eef009f32。Admin页面和正常资金/Agent计费仍待，不以本契约发布代替整链。
+
 ## MODEL-1 Public22.3 / System6.1（本地候选）
 
 新增唯一平台管理员 GET `/v1/admin/model-providers/{provider_id}/upstream-models`，Public22.3.0 /182操作。标准data为provider_id与items[{id}]，不含Key/URL/handle；无query/body framing/Content-Type/命令headers，单总10秒含准入、no-store、无自动重试或配置写入。

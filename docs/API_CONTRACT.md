@@ -1,3 +1,9 @@
+## CREDIT-1：后台非现金积分命令（2026-10-22）
+
+Public22.4新增POST /v1/admin/billing/credit-grants，required Idempotency-Key、strict {funding_id,subject_id,amount_credits,reason,effective_at}。金额为正整数字符串（最多9223372036854），不是micros或货币；首次表单意图冻结v4UUID、key和UTC毫秒生效时间，刷新/未知重试不新建。201 data仅account_id/grant_id/journal_id，加原meta.request_id；不返回合成余额或支付成功。400非法请求，401/403当前身份/成员资格拒绝，409原命令参数漂移，429限流，502坏owner回包，503依赖/未知；提交后失败不证明零效果，只恢复原命令。BFF当前管理员与同tenant成员资格每次核实，body不承载tenant/operator/role/source/price。
+
+Billing固定90929ef及a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2；三服务凭据仅server配置，新增KOKORO_BILLING_OPERATOR_PROXY_SECRET可缺省（发放503，原读链不退化），填写时独立、32–2048可见字符。旧182操作全文及有序inventory完整逆证；无API alias、双读或schema改动。管理员成员读取仍复用当前分页接口，不新增身份事实。
+
 ## MODEL-1 提供方上游模型候选（2026-10-22，design-first）
 
 目标Public22.3新增单个 `GET /v1/admin/model-providers/{provider_id}/upstream-models`，operation `listAdminModelProviderUpstreamModels`。唯一字段源仍canonical public OpenAPI；标准data/meta envelope，data仅provider_id与items[{id}]，约束与System6.1固定consumer一致。不得把候选ID冒称已发布业务模型、上下文能力、价格或调用可用性。
