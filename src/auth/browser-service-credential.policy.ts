@@ -28,6 +28,11 @@ function adminBusinessRoute(method: string, target: string): boolean {
     ["/v1/admin/model-providers", "/v1/admin/model-definitions", "/v1/admin/model-features", "/v1/admin/model-provider-creations"].includes(path)
   )
     return true
+  if (
+    method === "GET" &&
+    /^\/v1\/admin\/model-providers\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/upstream-models$/iu.test(path)
+  )
+    return true
   if (method === "POST" && ["/v1/admin/model-providers", "/v1/admin/model-definitions", "/v1/admin/model-revisions", "/v1/admin/model-labels"].includes(path))
     return true
   if (method === "POST" && /^\/v1\/admin\/model-revisions\/[0-9a-f-]{36}\/publish$/iu.test(path)) return true

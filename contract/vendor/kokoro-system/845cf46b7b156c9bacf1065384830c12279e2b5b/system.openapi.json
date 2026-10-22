@@ -8,9 +8,9 @@
   ],
   "info": {
     "title": "Kokoro System internal owner",
-    "version": "6.0.0",
-    "x-kokoro-release-classification": "protected-model-credentials-breaking",
-    "description": "Generated from runtime Zod schemas for implemented System internal-owner routes; 6.0.0 adds write-only encrypted model credentials, Agent-only exact current-route retrieval and narrowly scoped model management."
+    "version": "6.1.0",
+    "x-kokoro-release-classification": "provider-model-discovery-additive",
+    "description": "Generated from runtime Zod schemas for implemented System internal-owner routes; 6.1.0 adds explicit management-only provider model discovery; existing encrypted credentials and Agent current-route retrieval are unchanged."
   },
   "paths": {
     "/v1/system/sites": {
@@ -12648,6 +12648,141 @@
         }
       }
     },
+    "/v1/system/model-catalog/providers/{provider_id}/upstream-models": {
+      "get": {
+        "operationId": "listModelProviderUpstreamModels",
+        "tags": [
+          "model-catalog"
+        ],
+        "summary": "listModelProviderUpstreamModels",
+        "x-kokoro-owner": "kokoro-system",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "inherent",
+        "x-kokoro-permission": "system:write",
+        "x-kokoro-scope": "global",
+        "description": "Management-only global write read; trusted actor and actor tenant required. No body, query, command headers, persistence or automatic retry. Candidate IDs are not published models or capability guarantees.",
+        "x-kokoro-precondition": "none",
+        "security": [
+          {
+            "serviceBearer": []
+          },
+          {
+            "serviceSecret": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "x-kokoro-service",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "model-management",
+                "system-admin"
+              ]
+            }
+          },
+          {
+            "name": "x-kokoro-tenant-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "x-kokoro-iam-permissions",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-trace-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/schema_b4edf4b24ea3ca77"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OwnerError"
+          },
+          "403": {
+            "$ref": "#/components/responses/OwnerError"
+          },
+          "404": {
+            "$ref": "#/components/responses/OwnerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/OwnerError"
+          }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "healthz",
@@ -19937,6 +20072,48 @@
           "provider_id",
           "revision_id",
           "digest"
+        ],
+        "additionalProperties": false
+      },
+      "schema_b4edf4b24ea3ca77": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "provider_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "items": {
+                "maxItems": 2000,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "provider_id",
+              "items"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data"
         ],
         "additionalProperties": false
       },

@@ -1,3 +1,11 @@
+## MODEL-1 提供方上游模型候选（2026-10-22，design-first）
+
+目标Public22.3新增单个 `GET /v1/admin/model-providers/{provider_id}/upstream-models`，operation `listAdminModelProviderUpstreamModels`。唯一字段源仍canonical public OpenAPI；标准data/meta envelope，data仅provider_id与items[{id}]，约束与System6.1固定consumer一致。不得把候选ID冒称已发布业务模型、上下文能力、价格或调用可用性。
+
+当前平台管理员本人Session；无query/body／Content-Length（包括0）／Transfer-Encoding／Content-Type／Idempotency-Key／If-Match／If-None-Match，受信actor与tenant仅上下文，成功no-store。错误沿现admin model configuration闭集400/401/403/404/429/502/503（以canonical声明为准），不透传供应商正文；读取不做隐式重试。缺独立model-management凭据仍503，禁止回退普通web-bff或system-admin。
+
+下游App仅增加精确同源桥、Admin显式刷新/选择复用原revision表单；必须固定本次正式public发布物后实施，不引入任意URL代理，不改变共享模型／业务组合或原CRUD权限。
+
 ## 2026-10-21 本人积分账户无感初始化
 
 新增 Public22.2 PUT `/v1/billing/credit-account`，严格必需空JSON对象、无query，仅当前Product Session主体。BFF公开标注billing.self.write，执行沿现Product Session自主体准入；owner边界沿已有web-bff delegated-self与u1可信tenant/subject传输消费Billing main158579f / experimental.3正式PUT；天然幂等，不新增BFF receipt、Schema或IAM action。返回现summary真实投影，disabled为403；不假零、不充值。GET summary/ledger仍只读；App仅专用缺账户404后发明确PUT，未知结果先GET核实。正式固定artifact及窄生成client；总预算、取消、响应上限与凭据隔离保持。

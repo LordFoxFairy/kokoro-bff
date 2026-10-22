@@ -13,25 +13,25 @@ import { inspectSharedModelCatalogContract, restorePublic20SharedModelCatalogCon
 import { inspectSystemModelConnectionContract, restorePublic19SystemModelConnectionContract } from "../scripts/system-model-connection-public-contract.mjs"
 
 const root = new URL("../", import.meta.url)
-const commit = "550d65498822d8d2e629199482de4f6990b62708"
-const digest = "10ff7ee82ca7405dcab473f3fd80e620aa6c4e0bc92e64111797144ce0fa4061"
+const commit = "845cf46b7b156c9bacf1065384830c12279e2b5b"
+const digest = "77792d3b31446a70adf25693bdea4bd9ebfd39f3b77c6816bc324591827ca758"
 
-test("System HTTP6 model configuration client pins reviewed owner bytes and fifteen operations", async () => {
+test("System HTTP6 model configuration client pins reviewed owner bytes and sixteen operations", async () => {
   const manifest = JSON.parse(await readFile(new URL("contract/dependencies/system-http.json", root), "utf8"))
   const source = await readFile(new URL(`contract/vendor/kokoro-system/${commit}/system.openapi.json`, root))
   const api = JSON.parse(source)
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-system")
   assert.equal(manifest.owner.repository_commit, commit)
-  assert.equal(manifest.owner.contract_version, "6.0.0")
+  assert.equal(manifest.owner.contract_version, "6.1.0")
   assert.equal(manifest.owner.contract_sha256, digest)
   assert.equal(manifest.owner.provenance_path, "contract/provenance.json")
   const provenance = await readFile(new URL(`contract/vendor/kokoro-system/${commit}/provenance.json`, root))
-  assert.equal(manifest.owner.provenance_sha256, "ed2e312bc5bc3022111797771190e57133818af83c0bb7ad2024a615a4e033c5")
+  assert.equal(manifest.owner.provenance_sha256, "2ee7006f2b6c5a87be422a70975750764b40b738261793d8569ed0cb4fb41c57")
   assert.equal(createHash("sha256").update(provenance).digest("hex"), manifest.owner.provenance_sha256)
   const published = JSON.parse(provenance)
   assert.equal(published.openapi.sha256, digest)
-  assert.equal(published.releaseClassification.contractVersion, "6.0.0")
+  assert.equal(published.releaseClassification.contractVersion, "6.1.0")
   assert.deepEqual(
     Object.keys(await import("../dist/generated/system-http/sdk.gen.js")).sort(),
     [
@@ -44,6 +44,7 @@ test("System HTTP6 model configuration client pins reviewed owner bytes and fift
       "listFeature",
       "listModelDefinition",
       "listModelProvider",
+      "listModelProviderUpstreamModels",
       "listModelLabel",
       "listModelRevision",
       "listRoutingPolicy",
@@ -171,4 +172,37 @@ test("configuration additive contract protects all prior bytes and never publish
   assert.equal(inspectModelConfigurationContract(source + "\n", baseline).length > 0, true)
   assert.ok(inspectModelConfigurationContract(source, [...baseline].reverse()).length > 0) // ordered parent oracle below still detects reordering
   assert.throws(() => modelConfigurationParentBaseline([...baseline].reverse()), /inventory drift/u)
+})
+
+test("provider discovery is a single additive closed read preserving every Public22.2 byte and ordered operation", async () => {
+  const { restoreProviderModelDiscoveryContract, providerModelDiscoveryParentBaseline } =
+    await import("../scripts/provider-model-discovery-public-contract.mjs")
+  const source = await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8")
+  const inventory = JSON.parse(await readFile(new URL("contract/tests/v1-operations.json", root), "utf8")).operations
+  const parent = restoreProviderModelDiscoveryContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "365d61aa5b3b4c01a178f077914e03b5fdbaeebc95fe740b9be46ca8fadc3205")
+  assert.equal(inventory.length, 182)
+  assert.equal(providerModelDiscoveryParentBaseline(inventory).length, 181)
+  const publicApi = load(source)
+  assert.equal(publicApi.info.version, "22.3.0")
+  const operation = publicApi.paths["/v1/admin/model-providers/{provider_id}/upstream-models"].get
+  assert.equal(operation.operationId, "listAdminModelProviderUpstreamModels")
+  assert.equal(operation.requestBody, undefined)
+  assert.deepEqual(
+    operation.parameters.map((parameter) => parameter.name),
+    ["provider_id"],
+  )
+  const schema = publicApi.components.schemas.AdminModelProviderUpstreamModelsResponse
+  assert.equal(schema.additionalProperties, false)
+  assert.equal(schema.properties.data.additionalProperties, false)
+  assert.deepEqual(schema.properties.data.required, ["provider_id", "items"])
+  assert.equal(schema.properties.data.properties.items.maxItems, 2000)
+  assert.equal(schema.properties.data.properties.items.items.additionalProperties, false)
+  assert.throws(() => restoreProviderModelDiscoveryContract(source.replace("maxItems: 2000", "maxItems: 2001")), /contract drift/u)
+  assert.throws(() => providerModelDiscoveryParentBaseline([...inventory].reverse()), /inventory drift/u)
+  const { zListModelProviderUpstreamModelsResponse } = await import("../dist/generated/system-http/zod.gen.js")
+  const valid = { data: { provider_id: "22222222-2222-4222-8222-222222222222", items: [{ id: "vendor/model" }] } }
+  assert.equal(zListModelProviderUpstreamModelsResponse.safeParse(valid).success, true)
+  assert.equal(zListModelProviderUpstreamModelsResponse.safeParse({ data: { ...valid.data, api_key: "secret" } }).success, false)
+  assert.equal(zListModelProviderUpstreamModelsResponse.safeParse({ data: { ...valid.data, items: [{ id: "model", api_key: "secret" }] } }).success, false)
 })

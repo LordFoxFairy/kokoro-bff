@@ -1,3 +1,13 @@
+## MODEL-1 上游模型发现消费（2026-10-22，实施门）
+
+沿已批准的共享provider→共享模型→业务组合语义，只在现model-configuration admin路由与窄System client加显式候选GET，不新增模块／服务／Schema或定时同步。Owner已提交System `845cf46b7b156c9bacf1065384830c12279e2b5b`／6.1，artifact `77792d3b31446a70adf25693bdea4bd9ebfd39f3b77c6816bc324591827ca758`，provenance `2ee7006f2b6c5a87be422a70975750764b40b738261793d8569ed0cb4fb41c57`；固定原件并沿原生成器增加单个精确operation，不导入owner源码。
+
+`GET /v1/admin/model-providers/{provider_id}/upstream-models`仅当前Product Session平台管理员，仍使用独立model-management机器身份；actor／tenant来自已准入上下文。无客户端URL／Key／主体现值／query／body framing／命令headers，无自动重试。System GET所需system:write不把BFF普通用户升级；不要因method GET误发system:read。已有列表分页分支不适用于本操作。
+
+System仅回provider_id与items[].id，BFF严解schema并核provider_id等于请求目标，加原meta.request_id；不回Key／URL／handle／原供应商错误，不修改目录／默认项／健康／价格或积分。单预算上限10秒、取消、1MiB边界与no-store复用现client；未知结果为明确读取错误，不伪造空数组。下游页面显式刷新候选，选择后仍走现创建／发布与业务绑定。
+
+Public22.3 additive目标182 operations；原22.2全部operation语义／生成物不增加运行兼容分支，现Agent／Billing／其他owner pin不改。测试覆盖真实HTTP管理/普通用户、可信身份透传、严格read、无重试与取消、错误脱敏和owner错provider绑定；完整本仓门在停写后执行。
+
 ## 2026-10-21 本人积分账户无感初始化
 
 新增 Public22.2 PUT `/v1/billing/credit-account`，严格必需空JSON对象、无query，仅当前Product Session主体。BFF公开标注billing.self.write，执行沿现Product Session自主体准入；owner边界沿已有web-bff delegated-self与u1可信tenant/subject传输消费Billing main158579f / experimental.3正式PUT；天然幂等，不新增BFF receipt、Schema或IAM action。返回现summary真实投影，disabled为403；不假零、不充值。GET summary/ledger仍只读；App仅专用缺账户404后发明确PUT，未知结果先GET核实。正式固定artifact及窄生成client；总预算、取消、响应上限与凭据隔离保持。

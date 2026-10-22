@@ -1,3 +1,9 @@
+## MODEL-1 Public22.3 / System6.1（本地候选）
+
+新增唯一平台管理员 GET `/v1/admin/model-providers/{provider_id}/upstream-models`，Public22.3.0 /182操作。标准data为provider_id与items[{id}]，不含Key/URL/handle；无query/body framing/Content-Type/命令headers，单总10秒含准入、no-store、无自动重试或配置写入。
+
+固定System `845cf46b7b156c9bacf1065384830c12279e2b5b` /6.1.0，artifact SHA256 `77792d3b31446a70adf25693bdea4bd9ebfd39f3b77c6816bc324591827ca758`，provenance SHA256 `2ee7006f2b6c5a87be422a70975750764b40b738261793d8569ed0cb4fb41c57`。沿原生成器15→16精确操作、74个strict对象，旧vendor退出。原Public22.2完整字节与181有序operation由新增构建期proof保护，再沿原历史oracle验证；不建立runtime旧wire兼容。Agent/Billing/其他owner pin不改，App/Admin正式接线与正常激活另验。
+
 ## 2026-10-21 发布确认快照（候选）
 
 同一未发布Public22候选现补既有Admin详情required meta.publication，data不变、无新operation；固定owner e95aba2/确认profile1.1。原正常21.2、固定父原字节和独立HTTP6.3不改；消费者须按新commit/digest成对固定后再切换，不作旧缺字段兼容。

@@ -171,7 +171,8 @@ test("Catalog generated response is fully closed and key comes only from the own
 test("personal account initialization is an additive inherent self command with the complete previous contract preserved", async () => {
   const { load } = await import("js-yaml")
   const { restoreBillingAccountContract } = await import("../scripts/billing-account-public-contract.mjs")
-  const source = await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8")
+  const { restoreProviderModelDiscoveryContract } = await import("../scripts/provider-model-discovery-public-contract.mjs")
+  const source = restoreProviderModelDiscoveryContract(await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8"))
   const doc = load(source)
   const operation = doc.paths["/v1/billing/credit-account"].put
   assert.equal(doc.info.version, "22.2.0")

@@ -905,6 +905,11 @@
       "method": "PATCH",
       "path": "/v1/admin/model-labels/{label_id}",
       "operation_id": "updateAdminModelLabel"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-providers/{provider_id}/upstream-models",
+      "operation_id": "listAdminModelProviderUpstreamModels"
     }
   ]
 }

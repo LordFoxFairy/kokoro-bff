@@ -291,6 +291,15 @@ export type Schema37A3E49C0A766261 = {
   }
 }
 
+export type SchemaB4Edf4B24Ea3Ca77 = {
+  data: {
+    provider_id: string
+    items: Array<{
+      id: string
+    }>
+  }
+}
+
 export type SchemaC6886F00771523FcWritable = {
   protocol: "openai_chat_completions"
   connection_type?: "direct" | "litellm"
@@ -1477,3 +1486,74 @@ export type GetModelProviderCreationResponses = {
 }
 
 export type GetModelProviderCreationResponse = GetModelProviderCreationResponses[keyof GetModelProviderCreationResponses]
+
+export type ListModelProviderUpstreamModelsData = {
+  body?: never
+  headers: {
+    "x-kokoro-service": "model-management" | "system-admin"
+    "x-kokoro-tenant-id": string
+    "x-kokoro-actor-id": string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+  }
+  path: {
+    provider_id: string
+  }
+  query?: never
+  url: "/v1/system/model-catalog/providers/{provider_id}/upstream-models"
+}
+
+export type ListModelProviderUpstreamModelsErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type ListModelProviderUpstreamModelsError = ListModelProviderUpstreamModelsErrors[keyof ListModelProviderUpstreamModelsErrors]
+
+export type ListModelProviderUpstreamModelsResponses = {
+  /**
+   * Success
+   */
+  200: SchemaB4Edf4B24Ea3Ca77
+}
+
+export type ListModelProviderUpstreamModelsResponse = ListModelProviderUpstreamModelsResponses[keyof ListModelProviderUpstreamModelsResponses]

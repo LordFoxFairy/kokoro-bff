@@ -2867,8 +2867,8 @@ test("current publication contract requires an explicit confirmation only for pu
 test("personal series delete is additive and preserves the complete published confirmation parent", async () => {
   const { load } = await import("js-yaml")
   const { restoreSkillSeriesDeleteContract, skillSeriesDeleteParentBaseline } = await import("../../scripts/skill-series-delete-public-contract.mjs")
-  const source = await readFile(currentOpenapiUrl, "utf8"),
-    document = load((await import("../../scripts/billing-account-public-contract.mjs")).restoreBillingAccountContract(source))
+  const source = (await import("../../scripts/billing-account-public-contract.mjs")).restoreBillingAccountContract(await readFile(currentOpenapiUrl, "utf8")),
+    document = load(source)
   assert.equal(document.info.version, "22.1.0")
   const operation = document.paths["/v1/self/skills/{skill_id}"].delete
   assert.equal(operation.operationId, "deletePersonalSkillSeries")

@@ -716,6 +716,29 @@ export const zSchema37A3E49C0A766261 = z
   })
   .strict()
 
+export const zSchemaB4Edf4B24Ea3Ca77 = z
+  .object({
+    data: z
+      .object({
+        provider_id: z
+          .uuid()
+          .regex(
+            /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+          ),
+        items: z
+          .array(
+            z
+              .object({
+                id: z.string().min(1).max(255),
+              })
+              .strict(),
+          )
+          .max(2000),
+      })
+      .strict(),
+  })
+  .strict()
+
 export const zSchemaC6886F00771523FcWritable = z
   .object({
     protocol: z.literal("openai_chat_completions"),
@@ -1142,3 +1165,28 @@ export const zGetModelProviderCreationQuery = z
  * Success
  */
 export const zGetModelProviderCreationResponse = zSchema37A3E49C0A766261
+
+export const zListModelProviderUpstreamModelsHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["model-management", "system-admin"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160),
+    "x-kokoro-actor-id": z.string().min(1).max(160),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+  })
+  .strict()
+
+export const zListModelProviderUpstreamModelsPath = z
+  .object({
+    provider_id: z.uuid(),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zListModelProviderUpstreamModelsResponse = zSchemaB4Edf4B24Ea3Ca77

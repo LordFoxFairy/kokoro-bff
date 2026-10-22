@@ -1,3 +1,7 @@
+## MODEL-1 上游候选读取（2026-10-22）
+
+现 `model-configuration-admin.ts` / `system-model-configuration.ts` 显式 provider upstream-models GET，固定 System6.1。只管理读取候选，无分页／正文／命令头；与准入共用10秒预算，严格回包绑定provider。`provider-model-discovery-public-contract.mjs` 仅构建期完整逆证Public22.2，无运行fallback。后继App/Admin须固定正式Public22.3后接线。
+
 ## 2026-10-21 本人积分账户初始化
 
 Public22.2新增天然幂等PUT `/v1/billing/credit-account`，沿个人owner client与Billing正式experimental.3，GET仍只读。生成来源见billing-http manifest，构建期完整父逆证见 `scripts/billing-account-public-contract.mjs`；主路径回归在 `test/billing-personal-read.test.mjs`，未接App或正常环境。

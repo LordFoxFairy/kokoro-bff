@@ -18,6 +18,7 @@ export async function liveModelConfigurationAdmin(
   config: BffConfig,
   context: AdmittedUserRequestContext,
   path: readonly string[],
+  sharedDeadline?: number,
 ): Promise<boolean> {
   const match = matchModelConfiguration(request.method ?? "", path)
   if (match === null) return false
@@ -28,7 +29,7 @@ export async function liveModelConfigurationAdmin(
     return true
   }
   const abort = new AbortController(),
-    deadlineAt = Date.now() + Math.min(config.upstreamTimeoutMs, 10_000)
+    deadlineAt = Math.min(sharedDeadline ?? Infinity, Date.now() + Math.min(config.upstreamTimeoutMs, 10_000))
   const timeout = setTimeout(() => abort.abort(), Math.max(0, deadlineAt - Date.now()))
   timeout.unref()
   const close = () => {
@@ -42,6 +43,16 @@ export async function liveModelConfigurationAdmin(
       query = new URLSearchParams()
     let body: Record<string, unknown> | undefined, key: string | undefined, ifMatch: string | undefined
     if (spec.method === "GET") {
+      if (
+        match.operation === "upstreamModels" &&
+        (queryOf(request).size !== 0 ||
+          ["content-length", "transfer-encoding", "content-type", "idempotency-key", "if-match", "if-none-match"].some(
+            (name) => rawHeaderCount(request, name) !== 0,
+          ))
+      ) {
+        fail(400, "invalid_admin_model_routing_request")
+        return true
+      }
       if (
         (request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0") ||
         request.headers["transfer-encoding"] !== undefined ||
@@ -58,7 +69,7 @@ export async function liveModelConfigurationAdmin(
           return true
         }
         query.set("idempotency_key", value)
-      } else {
+      } else if (match.operation !== "upstreamModels") {
         const selected = page(request)
         if (selected === null) {
           fail(400, "invalid_admin_model_routing_request")

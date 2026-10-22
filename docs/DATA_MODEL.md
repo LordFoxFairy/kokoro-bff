@@ -1,3 +1,7 @@
+## MODEL-1 上游模型候选（2026-10-22）
+
+无BFF Schema／数据迁移／receipt。System拥有已保存连接、密文与出站许可；本方仅投影瞬时候选ID，读取不推进任何目录／业务路由／计价事实，不落API Key或原供应商响应。选择候选后的定义／revision／发布／label仍归现System命令，实际扣积分仍归Billing。
+
 ## 2026-10-21 Skills 公开身份矩阵与 App 绑定（已批准，实施中）
 
 无新增 BFF 表、Schema、缓存或授权事实。IAM 持有 UserApiKey/OpenApp/trusted，Platform 持有 AppSkillBinding exact skill_id/CAS；BFF 只投影当次可信 principal、绑定与资料，缺失身份不回退 Session、不以 skipConsent 推断 trusted、不伪造安装或 OwnerKind。公开列表只读，不增加执行权限；幂等与绑定版本回执由 owner 保存。

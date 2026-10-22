@@ -33,6 +33,9 @@ import type {
   ListModelProviderData,
   ListModelProviderErrors,
   ListModelProviderResponses,
+  ListModelProviderUpstreamModelsData,
+  ListModelProviderUpstreamModelsErrors,
+  ListModelProviderUpstreamModelsResponses,
   ListModelRevisionData,
   ListModelRevisionErrors,
   ListModelRevisionResponses,
@@ -60,6 +63,7 @@ import {
   zListModelDefinitionResponse,
   zListModelLabelResponse,
   zListModelProviderResponse,
+  zListModelProviderUpstreamModelsResponse,
   zListModelRevisionResponse,
   zListRoutingPolicyResponse,
   zPublishModelRevisionResponse,
@@ -376,5 +380,23 @@ export const getModelProviderCreation = <ThrowOnError extends boolean = false>(
       { name: "x-kokoro-internal-secret", type: "apiKey" },
     ],
     url: "/v1/system/model-catalog/provider-creations",
+    ...options,
+  })
+
+/**
+ * listModelProviderUpstreamModels
+ *
+ * Management-only global write read; trusted actor and actor tenant required. No body, query, command headers, persistence or automatic retry. Candidate IDs are not published models or capability guarantees.
+ */
+export const listModelProviderUpstreamModels = <ThrowOnError extends boolean = false>(
+  options: Options<ListModelProviderUpstreamModelsData, ThrowOnError>,
+): RequestResult<ListModelProviderUpstreamModelsResponses, ListModelProviderUpstreamModelsErrors, ThrowOnError> =>
+  (options.client ?? client).get<ListModelProviderUpstreamModelsResponses, ListModelProviderUpstreamModelsErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListModelProviderUpstreamModelsResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/providers/{provider_id}/upstream-models",
     ...options,
   })

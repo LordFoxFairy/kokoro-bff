@@ -284,6 +284,15 @@ async function handle(
   }
 
   const businessPath = browserPrivateMcp ? segments.slice(2) : segments.slice(1)
+  const providerDiscoveryDeadline =
+    !browserPrivateMcp &&
+    request.method === "GET" &&
+    businessPath.length === 4 &&
+    businessPath[0] === "admin" &&
+    businessPath[1] === "model-providers" &&
+    businessPath[3] === "upstream-models"
+      ? Date.now() + Math.min(config.upstreamTimeoutMs, 10_000)
+      : undefined
   if (!browserPrivateMcp && businessPath[0] === "self" && businessPath[1] === "mcp") {
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
@@ -413,7 +422,13 @@ async function handle(
   const admissionAbort = new AbortController()
   const admissionTimer = setTimeout(
     () => admissionAbort.abort(new Error("skill_admission_deadline")),
-    hasMcpBudget ? mcpRequestRemaining(request) : hasSkillsBudget ? skillRequestRemaining(request) : 10_000,
+    providerDiscoveryDeadline === undefined
+      ? hasMcpBudget
+        ? mcpRequestRemaining(request)
+        : hasSkillsBudget
+          ? skillRequestRemaining(request)
+          : 10_000
+      : Math.max(0, providerDiscoveryDeadline - Date.now()),
   )
   const onRequestAborted = (): void => {
     admissionAbort.abort()
@@ -851,7 +866,7 @@ async function handle(
   }
 
   if (composition.routeHandler === undefined && businessPath[0] === "admin") {
-    if (await liveModelConfigurationAdmin(request, response, config, context, businessPath)) return
+    if (await liveModelConfigurationAdmin(request, response, config, context, businessPath, providerDiscoveryDeadline)) return
     await liveModelRoutingAdmin(request, response, config, context, businessPath)
     return
   }

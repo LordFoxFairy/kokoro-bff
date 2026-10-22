@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 22.2.0
+  version: 22.3.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -14337,6 +14337,45 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AdminModelLabelUpdate'
+  /v1/admin/model-providers/{provider_id}/upstream-models:
+    get:
+      tags: [Models]
+      operationId: listAdminModelProviderUpstreamModels
+      summary: Read upstream candidate model IDs for one saved provider
+      description: Explicit current-platform-administrator read. No query, body framing, Content-Type, CAS or idempotency headers. Uses only the saved owner connection; candidates are not published models, capabilities, prices or execution authorization. No automatic retry or configuration mutation.
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.model_configuration.read
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Candidate IDs from the exact saved provider; no credentials or upstream metadata.
+          headers:
+            x-request-id:
+              required: true
+              schema: { type: string, pattern: '^[A-Za-z0-9._:-]{1,128}$' }
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
+            Content-Length:
+              required: true
+              schema: { type: string, pattern: '^[0-9]+$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminModelProviderUpstreamModelsResponse' }
+        '400': { $ref: '#/components/responses/AdminModelRoutingBadRequest' }
+        '401': { $ref: '#/components/responses/AdminModelRoutingUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminModelRoutingForbidden' }
+        '404': { $ref: '#/components/responses/AdminModelRoutingNotFound' }
+        '429': { $ref: '#/components/responses/AdminModelRoutingRateLimited' }
+        '502': { $ref: '#/components/responses/AdminModelRoutingInvalidResponse' }
+        '503': { $ref: '#/components/responses/AdminModelRoutingUnavailable' }
 components:
   securitySchemes:
     serviceHeader:
@@ -15149,6 +15188,27 @@ components:
             pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
           - type: 'null'
       additionalProperties: false
+    AdminModelProviderUpstreamModelsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [provider_id, items]
+          properties:
+            provider_id: { type: string, format: uuid }
+            items:
+              type: array
+              maxItems: 2000
+              items:
+                type: object
+                additionalProperties: false
+                required: [id]
+                properties:
+                  id: { type: string, minLength: 1, maxLength: 255 }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     AdminModelProviderCreation:
       type: object
       properties:

@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util"
 import {
   zListModelProviderResponse,
+  zListModelProviderUpstreamModelsResponse,
   zListModelDefinitionResponse,
   zListFeatureResponse,
   zCreateModelProviderBody,
@@ -21,6 +22,13 @@ import { dispatch, ownerError, type SystemModelRoutingInput, type SystemModelRou
 // This closed capability table is not a general owner proxy. Credential reads,
 // health, deletion and other System modules are deliberately absent.
 export const modelConfigurationOperations = {
+  upstreamModels: {
+    method: "GET",
+    publicPath: "model-providers",
+    ownerPath: "model-catalog/providers",
+    permission: "system:write",
+    response: zListModelProviderUpstreamModelsResponse,
+  },
   providers: {
     method: "GET",
     publicPath: "model-providers",
@@ -96,12 +104,20 @@ export const modelConfigurationOperations = {
 export type ModelConfigurationOperation = keyof typeof modelConfigurationOperations
 export function matchModelConfiguration(method: string, path: readonly string[]): { operation: ModelConfigurationOperation; id?: string } | null {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
+  if (path.length === 4 && path[1] === "model-providers" && path[3] === "upstream-models" && method === "GET" && uuid.test(path[2] ?? ""))
+    return { operation: "upstreamModels", id: path[2]! }
   if (path.length === 4 && path[1] === "model-revisions" && path[3] === "publish" && method === "POST" && uuid.test(path[2] ?? ""))
     return { operation: "publishRevision", id: path[2]! }
   if (path.length === 3 && path[1] === "model-labels" && method === "PATCH" && uuid.test(path[2] ?? "")) return { operation: "updateLabel", id: path[2]! }
   if (path.length !== 2) return null
   for (const [operation, spec] of Object.entries(modelConfigurationOperations)) {
-    if (operation !== "publishRevision" && operation !== "updateLabel" && method === spec.method && path[1] === spec.publicPath)
+    if (
+      operation !== "upstreamModels" &&
+      operation !== "publishRevision" &&
+      operation !== "updateLabel" &&
+      method === spec.method &&
+      path[1] === spec.publicPath
+    )
       return { operation: operation as ModelConfigurationOperation }
   }
   return null
@@ -121,7 +137,10 @@ export async function systemModelConfiguration(input: ModelConfigurationInput): 
   if (expected !== null && !expected.success) return { ok: false, status: 400, code: "invalid_admin_model_routing_request" }
   const expectedBody = expected?.success ? expected.data : input.body
   if (input.baseUrl === null || input.secret === null) return { ok: false, status: 503, code: "admin_model_routing_unavailable" }
-  const suffix = input.id === undefined ? "" : `/${encodeURIComponent(input.id)}${input.operation === "publishRevision" ? "/publish" : ""}`
+  const suffix =
+    input.id === undefined
+      ? ""
+      : `/${encodeURIComponent(input.id)}${input.operation === "publishRevision" ? "/publish" : input.operation === "upstreamModels" ? "/upstream-models" : ""}`
   const url = new URL(`/v1/system/${spec.ownerPath}${suffix}`, input.baseUrl)
   url.search = input.query.toString()
   const result = await dispatch(input, url, {
@@ -142,6 +161,17 @@ export async function systemModelConfiguration(input: ModelConfigurationInput): 
   })
   if (!("response" in result)) return result
   const expectedStatus = spec.method === "POST" && input.operation !== "publishRevision" ? 201 : 200
+  if (input.operation === "upstreamModels") {
+    if (input.signal.aborted || Date.now() >= input.deadlineAt) return { ok: false, status: 503, code: "admin_model_routing_unavailable" }
+    if (
+      !result.response.headers
+        .get("cache-control")
+        ?.split(",")
+        .some((value) => value.trim().toLowerCase() === "no-store")
+    )
+      return { ok: false, status: 502, code: "admin_model_routing_response_invalid" }
+    if (result.response.status !== 200) return discoveryError(result.raw, result.response.status)
+  }
   if (result.response.status !== expectedStatus)
     return ownerError(result.raw, result.response.status, spec.method === "GET" && input.operation !== "providerCreation" ? "read" : "write")
   const parsed = spec.response.safeParse(result.raw)
@@ -154,9 +184,14 @@ export async function systemModelConfiguration(input: ModelConfigurationInput): 
       .some((value) => value.trim().toLowerCase() === "no-store")
   )
     return { ok: false, status: 502, code: "admin_model_routing_response_invalid" }
-  const data = parsed.data.data
   if (input.signal.aborted || Date.now() >= input.deadlineAt) return { ok: false, status: 503, code: "admin_model_routing_unavailable" }
-  if (spec.method === "GET" && input.operation !== "providerCreation" && "items" in data) return { ok: true, data: data.items, nextCursor: data.next_cursor }
+  const data = parsed.data.data
+  if (input.operation === "upstreamModels") {
+    if (!("provider_id" in data) || data.provider_id !== input.id) return { ok: false, status: 502, code: "admin_model_routing_response_invalid" }
+    return { ok: true, data }
+  }
+  if (spec.method === "GET" && input.operation !== "providerCreation" && "items" in data && "next_cursor" in data)
+    return { ok: true, data: data.items, nextCursor: data.next_cursor }
   // Never acknowledge a different resource/body, including a cross-provider draft.
   if (input.id !== undefined && (!("id" in data) || data.id !== input.id)) return { ok: false, status: 502, code: "admin_model_routing_response_invalid" }
   if (expectedBody !== undefined)
@@ -168,4 +203,31 @@ export async function systemModelConfiguration(input: ModelConfigurationInput): 
     return { ok: false, status: 502, code: "admin_model_routing_response_invalid" }
   if (input.signal.aborted || Date.now() >= input.deadlineAt) return { ok: false, status: 503, code: "admin_model_routing_unavailable" }
   return { ok: true, data }
+}
+
+function discoveryError(raw: unknown, status: number): SystemModelRoutingResult {
+  const invalid: SystemModelRoutingResult = { ok: false, status: 502, code: "admin_model_routing_response_invalid" }
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).length !== 1 || !("error" in raw)) return invalid
+  const error = raw.error
+  if (
+    error === null ||
+    typeof error !== "object" ||
+    Array.isArray(error) ||
+    !isDeepStrictEqual(Object.keys(error).sort(), ["code", "message", "retryable"]) ||
+    !("code" in error) ||
+    !("message" in error) ||
+    !("retryable" in error) ||
+    typeof error.message !== "string" ||
+    typeof error.retryable !== "boolean"
+  )
+    return invalid
+  if (status === 503 && ((error.code === "SYSTEM_UNAVAILABLE" && error.retryable) || error.code === "MODEL_UNAVAILABLE"))
+    return { ok: false, status: 503, code: "admin_model_routing_unavailable" }
+  if (status === 403 && error.code === "service_auth_failed" && error.retryable === false)
+    return { ok: false, status: 503, code: "admin_model_routing_unavailable" }
+  if (error.retryable !== false) return invalid
+  if (status === 400 && error.code === "INVALID_ARGUMENT") return { ok: false, status: 400, code: "invalid_admin_model_routing_request" }
+  if (status === 403 && (error.code === "FORBIDDEN" || error.code === "POLICY_DENIED")) return { ok: false, status: 403, code: "admin_model_routing_forbidden" }
+  if (status === 404 && error.code === "NOT_FOUND") return { ok: false, status: 404, code: "admin_model_routing_not_found" }
+  return invalid
 }
