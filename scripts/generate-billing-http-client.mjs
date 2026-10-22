@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { cp, mkdtemp, readFile, readdir, rename, mkdir, writeFile } from "node:fs/promises"
+import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "3f5e0dacc25c1e24d87cbe0c59337d3b909466de"
+const ownerCommit = "158579f8fdeb62ba5064365260942b62a195a4bb"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6"
+const ownerDigest = "f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -222,7 +222,7 @@ async function generate(directory) {
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
-    ["getCatalog", "getMyCreditAccount", "getMyCreditLedger"],
+    ["getCatalog", "getMyCreditAccount", "getMyCreditLedger", "openMyCreditAccount"],
     "Billing HTTP generated operation surface drifted",
   )
   const prettier = path.join(root, "node_modules/prettier/bin/prettier.cjs")
@@ -251,7 +251,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "4.0.0-experimental.2",
+      contract_version: "4.0.0-experimental.3",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },
@@ -272,6 +272,16 @@ async function manifestFor(directory) {
   }
 }
 
+async function trash(directory) {
+  const target = path.join(homedir(), ".Trash")
+  await mkdir(target, { recursive: true })
+  try {
+    await rename(directory, path.join(target, `${path.basename(directory)}-${Date.now()}-${process.pid}`))
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error
+  }
+}
+
 async function main() {
   const mode = process.argv[2]
   assert.ok(mode === "--write" || mode === "--check", "expected --write or --check")
@@ -285,7 +295,7 @@ async function main() {
     await generate(temporaryOutput)
     const expectedManifest = await manifestFor(temporaryOutput)
     if (mode === "--write") {
-      await rm(output, { recursive: true, force: true })
+      await trash(output)
       await cp(temporaryOutput, output, { recursive: true })
       await writeFile(manifestPath, `${JSON.stringify(expectedManifest, null, 2)}\n`)
       console.log(`WROTE Billing HTTP client (${generatedFiles.length} files)`)
@@ -309,7 +319,7 @@ async function main() {
     assert.deepEqual(JSON.parse(await readFile(manifestPath, "utf8")), expectedManifest, "Billing dependency manifest drifted")
     console.log(`PASS Billing HTTP client drift check (${generatedFiles.length} files, two byte-identical generations)`)
   } finally {
-    await rm(temporaryRoot, { recursive: true, force: true })
+    await trash(temporaryRoot)
   }
 }
 

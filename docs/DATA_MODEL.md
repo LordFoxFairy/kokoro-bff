@@ -1,3 +1,19 @@
+## I5 BFF 初始化切片验收（2026-10-21；尚未正常激活）
+
+Public19.3/168 固定 Billing158579f8 的正规v1四操作SDK。独立只读审查未发现确定P1/P2；原167操作与19.2全文、旧GET行为及历史断言均保留。格式/lint/types/direct build/架构均通过，原默认清单1697PASS/0FAIL/3资源SKIP，原contract:test完整清单1042PASS/0FAIL；聚合契约前置检查全部通过，Redocly保留44warnings。构建使用fresh dist移Trash后原tsc，测试包装仅把自有临时目录/当前PID套接字清理改为Trash，不改断言、时限或网络行为；原包装失败记录保留。
+
+真实 Node22 BFF→Node24 Billing src/main→自有fresh PostgreSQL 的9组场景全部通过，含并发重放、非零余额/generation/timestamps保持、disabled、已提交写丢ACK后只读恢复及最终撤权。原数据库catalog与仓库输入精确保持。IAM仍是受控admission，此验收不代表正常JWT、Web消费者或浏览器完成；完整资源integration未全部运行。无正常schema/账户/积分、支付/grant/Agent效果。本切片尚未提交或激活，消费者须固定后续已提交契约再接入。
+
+## 2026-10-21 I5 本人积分账户隐藏初始化（设计门；实现与激活待验）
+
+需求仍是首页与关联设置的真实功能；此片补本人积分页首次进入时的零余额初始化。正常 Manus 用量计费只展示余额、明细与升级，没有账户开户业务入口。旧显式开户草稿不构成本片产品要求；历史失败与原测试字节先保留，消费者阶段以更严格的隐藏初始化旅程覆盖其真实 owner 复读保障。Skills/MCP、支付、充值、grant、Agent 执行均不在修改面。
+
+### 数据权威与生命周期
+
+Billing独占 Credit account、ledger 与审计；复用已提交 owner PUT 的同 grant subject advisory lock/自然幂等：仅缺失时建 available=0、held=0、generation=1；原账户余额/held/generation/timestamps不变，首次一条审计与创建同事务，disabled拒绝。不创建 grant、journal、订单、积分赠送或现金事实。
+
+BFF仅传可信本人身份和空body并验证实际snapshot；没有账户缓存、本地opening receipt、余额副本、补偿、SQL、Redis key、表/列/索引或schema演进。未知提交用本人 GET 核实而非回滚/充值；撤权后不得显示ACK，但不能声称owner已执行事务被撤销。现 database/schema.sql 完整字节必须不变；Root真实验证仅使用自有 fresh Billing fixture，不在正常schema seed或reset。
+
 ## 2026-10-21 I4 运行更新 metadata 读取（源码候选已实现，正常激活与独审待后继）
 
 BFF 拥有 ScheduledTask、dispatch 及已核验复制事件；Agent 仍是执行事件唯一生产方。先交付全局运行列表及可选 task_id 过滤，不虚构运行摘要、输出详情或会话链接。HTTP7 固定 artifact 的 payload_json 没有 run.completed / assistant.completed 机器 schema；摘要/输出及立即测试不在本切片完成范围。

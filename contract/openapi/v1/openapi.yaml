@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 19.2.0
+  version: 19.3.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -7069,6 +7069,73 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/billing/credit-account:
+    put:
+      tags: [Billing]
+      operationId: initializeBillingCreditAccount
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: inherent
+      x-kokoro-permission: billing.credit_account.initialize
+      summary: Initialize the admitted subject's personal Credit account without changing any existing balance
+      description: Strict empty JSON with no query or Idempotency-Key. One natural-idempotent owner PUT; an unknown result permits one GET reconciliation and never an automatic PUT retry. A final current IAM admission is required. No funds, grant, payment or optimistic zero balance.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, maxProperties: 0 }
+      responses:
+        '200': { $ref: '#/components/responses/BillingSummarySuccess' }
+        '400':
+          description: Sanitized initialization failure
+          headers:
+            x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingCreditAccountError400' }
+        '401':
+          description: Sanitized initialization failure
+          headers:
+            x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingCreditAccountError401' }
+        '403':
+          description: Sanitized initialization failure
+          headers:
+            x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingCreditAccountError403' }
+        '429':
+          description: Sanitized initialization failure
+          headers:
+            x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+            Retry-After: { required: true, schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingCreditAccountError429' }
+        '502':
+          description: Sanitized initialization failure
+          headers:
+            x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingCreditAccountError502' }
+        '503':
+          description: Sanitized initialization failure
+          headers:
+            x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingCreditAccountError503' }
   /v1/billing/summary:
     get:
       tags: [Billing]
@@ -20858,6 +20925,90 @@ components:
         status: { type: string, enum: [active, disabled] }
         available_micros: { type: string, pattern: '^(?:0|[1-9][0-9]*)$' }
         held_micros: { type: string, pattern: '^(?:0|[1-9][0-9]*)$' }
+    BillingCreditAccountError400:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string, enum: [billing_credit_account_input_invalid] }
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean, const: false }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    BillingCreditAccountError401:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string, enum: [session_authentication_required, session_invalid] }
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean, const: false }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    BillingCreditAccountError403:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden, billing_account_disabled] }
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean, const: false }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    BillingCreditAccountError429:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string, enum: [session_rate_limited] }
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean, const: true }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    BillingCreditAccountError502:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string, enum: [upstream_response_invalid] }
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean, const: false }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    BillingCreditAccountError503:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, billing_unavailable] }
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean, const: true }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     BillingSummaryResponse:
       type: object
       required: [data, meta]

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 4.0.0-experimental.2
+  version: 4.0.0-experimental.3
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -195,6 +195,134 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
   /v1/billing/me/credit-account:
+    put:
+      operationId: openMyCreditAccount
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: experimental
+      x-kokoro-idempotency: inherent
+      x-kokoro-permission: web-bff-delegated-self
+      x-kokoro-identity-transport: personal-identity-u1
+      x-kokoro-auth-selection:
+        machine_markers:
+          - x-kokoro-service
+          - x-kokoro-internal-secret
+          - x-kokoro-subject
+        service_bearer_selects_machine: true
+        machine_partial_response: 403
+        machine_to_user_fallback: false
+      security:
+        - serviceCaller: []
+          internalSecret: []
+          serviceBearer: []
+          tenantContext: []
+          subjectContext: []
+      parameters:
+        - $ref: "#/components/parameters/PersonalTenantId"
+        - name: x-kokoro-subject
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 5
+            maxLength: 1363
+            pattern: ^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])
+        - name: x-kokoro-service
+          in: header
+          required: true
+          schema:
+            type: string
+            const: web-bff
+      responses:
+        "200":
+          description: Success
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditAccountResponse"
+        "400":
+          description: Request failed
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.invalid_request
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.unauthenticated
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.forbidden
+              retryable: false
+            - code: billing.credit_account_disabled
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal failure
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.internal_error
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Dependency unavailable
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.dependency_unavailable
+              retryable: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenCreditAccountRequest"
     get:
       operationId: getMyCreditAccount
       x-kokoro-owner: kokoro-billing
@@ -2826,6 +2954,10 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/CreditAccount"
+    OpenCreditAccountRequest:
+      type: object
+      properties: {}
+      additionalProperties: false
     LedgerEntry:
       type: object
       additionalProperties: false

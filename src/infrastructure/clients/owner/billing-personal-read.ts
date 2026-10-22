@@ -1,3 +1,4 @@
+import { billingPersonalIdentity } from "./billing-personal-identity.js"
 import { createClient } from "../../../generated/billing-http/client/client.gen.js"
 import { getMyCreditAccount, getMyCreditLedger } from "../../../generated/billing-http/sdk.gen.js"
 import type { CreditAccount, CreditLedgerResponse } from "../../../generated/billing-http/types.gen.js"
@@ -9,36 +10,12 @@ export type BillingPersonalReadResult<T> =
   | Readonly<{ ok: true; data: T }>
   | Readonly<{ ok: false; status: 404 | 502 | 503; code: "billing_account_not_found" | "upstream_response_invalid" | "billing_unavailable" }>
 
-type PersonalIdentity = Readonly<{ tenant: string; subject: string }>
-
 function unavailable<T>(): BillingPersonalReadResult<T> {
   return { ok: false, status: 503, code: "billing_unavailable" }
 }
 
 function invalidResponse<T>(): BillingPersonalReadResult<T> {
   return { ok: false, status: 502, code: "upstream_response_invalid" }
-}
-
-function u1(value: string, maxCodePoints: number): string | null {
-  if (value.length === 0 || value.includes("\u0000")) return null
-  let codePoints = 0
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const low = value.charCodeAt(index + 1)
-      if (!Number.isInteger(low) || low < 0xdc00 || low > 0xdfff) return null
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) return null
-    codePoints += 1
-    if (codePoints > maxCodePoints) return null
-  }
-  return `u1.${Buffer.from(value, "utf8").toString("base64url")}`
-}
-
-function identity(context: RequestContext): PersonalIdentity | null {
-  const tenant = u1(context.identity.namespace, 191)
-  const subject = u1(context.identity.userId, 255)
-  return tenant === null || subject === null ? null : { tenant, subject }
 }
 
 function responseHeaderBytes(headers: Headers): number {
@@ -97,7 +74,7 @@ async function request<T>(
   const baseUrl = config.upstreams.billing ?? null
   const serviceToken = config.billingServiceToken ?? null
   const internalSecret = config.upstreamSecret
-  const encoded = identity(context)
+  const encoded = billingPersonalIdentity(context)
   if (baseUrl === null || serviceToken === null || internalSecret === null || serviceToken === internalSecret || encoded === null || signal.aborted) {
     return unavailable()
   }

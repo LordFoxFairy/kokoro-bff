@@ -1,3 +1,9 @@
+## I5 Public19.3 / Billing v1 固定消费者
+
+当前候选 Public19.3.0 /168 只增加 `initializeBillingCreditAccount`，治理权限 `billing.credit_account.initialize` 不是新增 IAM scope。`scripts/billing-credit-account-public-contract.mjs` 从当前原文剥本片 block，完整恢复19.2 SHA ef56014105cc187bd86da74eb5ba6eef5f54aacb934e2f86e007c98719ff02f6，再走全部历史 proof；不重签旧摘要。
+
+唯一 Billing vendor：158579f8fdeb62ba5064365260942b62a195a4bb /4.0.0-experimental.3 /f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe，正式 v1 四操作经原生成器产生16文件。原生成器仅将输出与临时目录的永久删除改为 Trash rename，配置 clean=false；write/check 仍保留完整 allowlist、严格 schema 与双生成字节相等。旧 vendor 已入 Trash。没有 v2 fallback、第二 SDK 或手改产物。
+
 ## Public19.2 运行metadata候选
 
 唯一OpenAPI只增listScheduledTaskRuns，19.1原字节/inventory通过contract/tests/scheduled-task-runs.json精确逆证保护。metadata-only，不声称运行摘要/输出或消费者已接入；尚未发行或提交。当前源码已实现有界owner读取；`scripts/scheduled-task-runs-public-contract.mjs`精确还原完整19.1后继续全部旧项目下载/closure/semantic门。新索引在自有fresh PG验证，不自动演进正常库；正常Web仍未消费。

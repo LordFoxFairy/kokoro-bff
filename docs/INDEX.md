@@ -1,3 +1,7 @@
+## I5 本人积分账户初始化
+
+当前实现候选与验证边界见三设计顶部；受控 source HTTP、canonical/正规生成属于本片纯门，真实PG、正常服务与Web消费尚由主控后继验收。当前入口仍Node HTTP既定例外，未声称Nest迁移。
+
 ## SET47 当前归档候选入口
 
 本人归档的状态、权限、幂等、Project锁序、canonical fresh-install与未验运行边界见三设计SET47前缀；实现/实际纯门/Root后继真实PG验收见[CURRENT.md](./CURRENT.md)。唯一公开机器事实是public15.4候选，未发行不得提前消费者激活；以下记录是历史。

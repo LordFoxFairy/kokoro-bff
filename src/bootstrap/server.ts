@@ -1,3 +1,5 @@
+import { isBillingCreditAccountCandidate } from "../http/billing-credit-account-input.js"
+import { billingCreditAccountRoute } from "../http/routes/billing-credit-account.js"
 import { isScheduledTaskRunsCandidate } from "../http/scheduled-task-runs-input.js"
 import { scheduledTaskRunsRoute } from "../http/routes/scheduled-task-runs.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
@@ -109,6 +111,10 @@ async function handle(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
+  if (isBillingCreditAccountCandidate(request)) {
+    await billingCreditAccountRoute(request, response, config, composition.sessionAdmission, id)
+    return
+  }
   if (isScheduledTaskRunsCandidate(request)) {
     await scheduledTaskRunsRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.scheduledTaskRuns, id)
     return

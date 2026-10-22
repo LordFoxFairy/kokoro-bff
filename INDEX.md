@@ -1,3 +1,12 @@
+## I5 本人积分账户初始化
+
+- `src/http/billing-credit-account-input.ts`：严格目标、header、4096B 空 JSON 完整 EOF。
+- `src/http/routes/billing-credit-account.ts`：一个绝对预算、首末 IAM、可信本人和公开响应。
+- `src/infrastructure/clients/owner/billing-credit-account.ts`：唯一正规四操作 SDK 中的 PUT 与未知结果单次 GET，严格原始响应。
+- `src/infrastructure/clients/owner/billing-personal-identity.ts`：原 read 的 u1 算法唯一复用，读 transport 不变。
+- `scripts/billing-credit-account-public-contract.mjs`、`contract/tests/billing-credit-account.json`：Public19.3 完整逆回19.2原字节与167有序操作。
+- `test/billing-credit-account-{input,client,http,contract}.test.*`：受控HTTP与机器负控；真实owner/PG与正常激活由主控后验。
+
 ## 2026-10-21 运行metadata读取入口
 
 当前机器契约为未发行 Public19.2/167 候选，新增面由 `scripts/scheduled-task-runs-public-contract.mjs` 精确逆回原19.1/166，再进入项目下载与双父原证明。

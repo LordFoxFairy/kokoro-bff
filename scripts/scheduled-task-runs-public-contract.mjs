@@ -1,3 +1,9 @@
+import {
+  restoreBillingCreditAccountParent,
+  billingCreditAccountParentBaseline,
+  isBillingCreditAccountContract,
+  inspectBillingCreditAccountContract,
+} from "./billing-credit-account-public-contract.mjs"
 // Additive Public19.2 proof; the owner OpenAPI is the only editable API schema.
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
@@ -6,8 +12,9 @@ const digest = (value) => createHash("sha256").update(value).digest("hex")
 const fail = (label) => {
   throw Error(`Public19.2 scheduled task runs: ${label}`)
 }
-export const isScheduledRunsContract = (source) => /^  version: 19\.2\.0$/mu.test(source)
+export const isScheduledRunsContract = (source) => /^  version: 19\.2\.0$/mu.test(restoreBillingCreditAccountParent(source))
 export function restoreScheduledRunsParent(source) {
+  source = restoreBillingCreditAccountParent(source)
   if (!isScheduledRunsContract(source)) return source
   const pathStart = source.indexOf("  /v1/scheduled-task-runs:\n"),
     schemaStart = source.indexOf("    ScheduledTaskRunItem:\n")
@@ -25,6 +32,7 @@ export function restoreScheduledRunsParent(source) {
   return parent
 }
 export function scheduledRunsParentBaseline(baseline) {
+  baseline = billingCreditAccountParentBaseline(baseline)
   const candidates = baseline.filter((entry) => entry.path === "/v1/scheduled-task-runs" || entry.operation_id === "listScheduledTaskRuns")
   if (candidates.length === 0) return baseline
   if (
@@ -39,6 +47,12 @@ export function scheduledRunsParentBaseline(baseline) {
 }
 export function inspectScheduledRunsContract(source, baseline) {
   try {
+    if (isBillingCreditAccountContract(source)) {
+      const errors = inspectBillingCreditAccountContract(source, baseline)
+      if (errors.length > 0) throw Error(errors.join("; "))
+    }
+    source = restoreBillingCreditAccountParent(source)
+    baseline = billingCreditAccountParentBaseline(baseline)
     if (!isScheduledRunsContract(source)) fail("current artifact must be Public19.2.0")
     restoreScheduledRunsParent(source)
     if (scheduledRunsParentBaseline(baseline).length !== 166 || baseline.length !== 167) fail("complete current inventory")

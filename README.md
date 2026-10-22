@@ -1,3 +1,7 @@
+## I5 本人积分账户初始化（候选，未正常激活）
+
+Public19.3 新增 `PUT /v1/billing/credit-account`，仅当前受信本人、严格空 JSON、自然幂等。固定 Billing158579f8 正式 v1 四操作 SDK；一次 PUT，未知结果最多一次 GET 核实，成功前复验当前 IAM；总预算最多10秒。读取仍只读，返回实际账户，不 grant/充值/重置余额，不使用旧 v2。受控HTTP验收不替代 Root 后继真实 Billing/PG 与 Web 隐藏初始化验收。
+
 ## 2026-10-21 当前候选 Public19.2 / 167 operations
 
 新增本人运行metadata列表及可选task过滤，读取持久dispatch与严格终态事实，不触发执行。源码已实现两次当前资格快照、首次/最终IAM、单一5秒总预算与有界分页；摘要/输出、Web正式消费和正常激活仍待后继。机器事实源仍为原OpenAPI；`scripts/scheduled-task-runs-public-contract.mjs`先完整逆回19.1，再执行所有历史证明。准确门禁与资源边界见`docs/CURRENT.md`。以下日期段是历史快照。

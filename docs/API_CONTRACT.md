@@ -1,3 +1,23 @@
+## I5 BFF 初始化切片验收（2026-10-21；尚未正常激活）
+
+Public19.3/168 固定 Billing158579f8 的正规v1四操作SDK。独立只读审查未发现确定P1/P2；原167操作与19.2全文、旧GET行为及历史断言均保留。格式/lint/types/direct build/架构均通过，原默认清单1697PASS/0FAIL/3资源SKIP，原contract:test完整清单1042PASS/0FAIL；聚合契约前置检查全部通过，Redocly保留44warnings。构建使用fresh dist移Trash后原tsc，测试包装仅把自有临时目录/当前PID套接字清理改为Trash，不改断言、时限或网络行为；原包装失败记录保留。
+
+真实 Node22 BFF→Node24 Billing src/main→自有fresh PostgreSQL 的9组场景全部通过，含并发重放、非零余额/generation/timestamps保持、disabled、已提交写丢ACK后只读恢复及最终撤权。原数据库catalog与仓库输入精确保持。IAM仍是受控admission，此验收不代表正常JWT、Web消费者或浏览器完成；完整资源integration未全部运行。无正常schema/账户/积分、支付/grant/Agent效果。本切片尚未提交或激活，消费者须固定后续已提交契约再接入。
+
+## 2026-10-21 I5 本人积分账户隐藏初始化（设计门；实现与激活待验）
+
+需求仍是首页与关联设置的真实功能；此片补本人积分页首次进入时的零余额初始化。正常 Manus 用量计费只展示余额、明细与升级，没有账户开户业务入口。旧显式开户草稿不构成本片产品要求；历史失败与原测试字节先保留，消费者阶段以更严格的隐藏初始化旅程覆盖其真实 owner 复读保障。Skills/MCP、支付、充值、grant、Agent 执行均不在修改面。
+
+### 唯一 public 增量
+
+唯一机器事实源 contract/openapi/v1/openapi.yaml，目标 Public19.3.0 / 168 operations，只新增 PUT /v1/billing/credit-account（operationId initializeBillingCreditAccount）；已有 summary/ledger wire 与只读行为不变。x-kokoro-owner=kokoro-bff、visibility=public、stability=beta、idempotency=inherent、permission=billing.credit_account.initialize。该 permission 是治理标签，当前 IAM 没有新增逐操作 grant，不虚构权限注册；实际为当次合法 Product session admission + owner delegated-self 五因素。
+
+required application/json 闭合空对象 {}，可带 utf-8 charset；原始 URI 必须 exact path，无任何 query（含裸?）、fragment/encoded alias/trailing slash。拒未知/重复headers、idempotency-key、content-encoding、非法长度/大于4096B、重复 JSON key、数组/null/任何own key/坏UTF8，完整 EOF 后才准 owner I/O。非法输入400 billing_credit_account_input_invalid（不retry）。
+
+200复用既有 BillingSummaryResponse 与实际 active owner snapshot，不要求余额为0；已有账户可非零且不得重置。不新增余额事实或token字段。错误闭集：首/末IAM保持 session_authentication_required/session_invalid 401；service_auth_failed/session_forbidden/product_tenant_forbidden 403；session_rate_limited 429及原有严格Retry-After；product_tenant_not_configured/iam_admission_unavailable 503。owner正式disabled映射403 billing_account_disabled/retryable=false；owner协议坏为502 upstream_response_invalid/false；依赖/配置/未知结果/身份变化/总预算耗尽为503 billing_unavailable/true。所有响应 no-store、当前BFF x-request-id，长度由同一JSON发送确定；不得透传 owner cookie/location/内部身份/异常、把owner认证失败当用户401/403或把不存在当已初始化。
+
+内部只增加固定 owner PUT /v1/billing/me/credit-account（openMyCreditAccount），恢复复用同一SDK GET；source tuple 是 158579f8 / 4.0.0-experimental.3 / f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe。只单一pin，不保留旧v2或fallback。response/未知写/单一预算见TECHNICAL_DESIGN本节；complete inverse证明前167操作/所有Schema字节不变。Web同源隐藏调用是后继消费者切片，此刻不冒页面已接通。
+
 ## 2026-10-21 I4 运行更新 metadata 读取（源码候选已实现，正常激活与独审待后继）
 
 BFF 拥有 ScheduledTask、dispatch 及已核验复制事件；Agent 仍是执行事件唯一生产方。先交付全局运行列表及可选 task_id 过滤，不虚构运行摘要、输出详情或会话链接。HTTP7 固定 artifact 的 payload_json 没有 run.completed / assistant.completed 机器 schema；摘要/输出及立即测试不在本切片完成范围。

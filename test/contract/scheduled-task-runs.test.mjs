@@ -1,3 +1,4 @@
+import { restoreBillingCreditAccountParent, billingCreditAccountParentBaseline } from "../../scripts/billing-credit-account-public-contract.mjs"
 import assert from "node:assert/strict"
 import test from "node:test"
 import { readFile } from "node:fs/promises"
@@ -5,8 +6,10 @@ import { createHash } from "node:crypto"
 import { load } from "js-yaml"
 import { inspectScheduledRunsContract, restoreScheduledRunsParent, scheduledRunsParentBaseline } from "../../scripts/scheduled-task-runs-public-contract.mjs"
 import { inspectProjectResourceDownloadContract } from "../../scripts/project-resource-download-public-contract.mjs"
-const source = await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-const inventory = JSON.parse(await readFile(new URL("../../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+const source = restoreBillingCreditAccountParent(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+const inventory = billingCreditAccountParentBaseline(
+  JSON.parse(await readFile(new URL("../../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations,
+)
 const hash = (text) => createHash("sha256").update(text).digest("hex")
 test("Public19.2 exact additive metadata and complete19.1 reverse proof", () => {
   assert.deepEqual(inspectScheduledRunsContract(source, inventory), [])

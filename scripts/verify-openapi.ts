@@ -1,3 +1,4 @@
+import { inspectBillingCreditAccountContract } from "./billing-credit-account-public-contract.mjs"
 import {
   inspectClosureIntegrationContract,
   restoreClosureLocalContract,
@@ -3248,7 +3249,11 @@ async function main(): Promise<void> {
   }
   const baseline = Reflect.get(parsedBaseline, "operations") as BaselineOperation[]
   const agentControlSnapshot: unknown = JSON.parse(agentControlSnapshotDocument)
-  const errors = [...inspectBffOpenApi(source, baseline), ...inspectAgentControlSnapshot(agentControlSnapshot)]
+  const errors = [
+    ...inspectBillingCreditAccountContract(source, baseline),
+    ...inspectBffOpenApi(source, baseline),
+    ...inspectAgentControlSnapshot(agentControlSnapshot),
+  ]
   if (errors.length > 0) {
     console.error(errors.join("\n"))
     process.exitCode = 1

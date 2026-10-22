@@ -1,3 +1,43 @@
+## I5 BFF 初始化切片验收（2026-10-21；尚未正常激活）
+
+Public19.3/168 固定 Billing158579f8 的正规v1四操作SDK。独立只读审查未发现确定P1/P2；原167操作与19.2全文、旧GET行为及历史断言均保留。格式/lint/types/direct build/架构均通过，原默认清单1697PASS/0FAIL/3资源SKIP，原contract:test完整清单1042PASS/0FAIL；聚合契约前置检查全部通过，Redocly保留44warnings。构建使用fresh dist移Trash后原tsc，测试包装仅把自有临时目录/当前PID套接字清理改为Trash，不改断言、时限或网络行为；原包装失败记录保留。
+
+真实 Node22 BFF→Node24 Billing src/main→自有fresh PostgreSQL 的9组场景全部通过，含并发重放、非零余额/generation/timestamps保持、disabled、已提交写丢ACK后只读恢复及最终撤权。原数据库catalog与仓库输入精确保持。IAM仍是受控admission，此验收不代表正常JWT、Web消费者或浏览器完成；完整资源integration未全部运行。无正常schema/账户/积分、支付/grant/Agent效果。本切片尚未提交或激活，消费者须固定后续已提交契约再接入。
+
+## 2026-10-21 I5 本人积分账户隐藏初始化（设计门；实现与激活待验）
+
+需求仍是首页与关联设置的真实功能；此片补本人积分页首次进入时的零余额初始化。正常 Manus 用量计费只展示余额、明细与升级，没有账户开户业务入口。旧显式开户草稿不构成本片产品要求；历史失败与原测试字节先保留，消费者阶段以更严格的隐藏初始化旅程覆盖其真实 owner 复读保障。Skills/MCP、支付、充值、grant、Agent 执行均不在修改面。
+
+### 当前态、唯一 owner 与放置
+
+Billing main 已提交 158579f8fdeb62ba5064365260942b62a195a4bb，正规 v1 PUT openMyCreditAccount；唯一 pin 为 4.0.0-experimental.3 / f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe（25 operations/43 schemas）。BFF 当前 ef2ddca 只有三 GET 窄 SDK、summary/ledger 404 空态，Web 只有读取；不能使用旧 v2、未提交 owner 或再造账户表。Billing 三设计、canonical 与源实现已审，账户/审计写入只在 Billing。
+
+本仓保持现 Node HTTP composition 例外，不顺便迁框架。比较扩展 owner.ts 通用业务转发与独立窄初始化入口：采用后者，以便入口正文/IAM/owner/最终IAM共一个预算且不被通用 idempotency/十秒准入重新计时。Root 当前为设计与集成负责人，后继唯一 writer 由任务卡指定；其余仓冻结。
+
+| 放置 | 唯一职责 |
+| --- | --- |
+| http/billing-credit-account-input.ts | 仅本操作 exact target/headers/strict empty JSON 与 EOF/4096B 上限；不验证身份或 I/O owner |
+| http/routes/billing-credit-account.ts | 入站绝对预算、取消/首末 IAM、可信主体配对、一次调用及 no-store public response；bootstrap/server.ts 只加精确分派 |
+| infrastructure/clients/owner/billing-credit-account.ts | 正规 generated PUT、五因素、严格受界 response、未知写结果仅一次本人 GET 核实；不 grant/不改余额 |
+| infrastructure/clients/owner/billing-personal-identity.ts | 从现 billing-personal-read.ts 原算法提取 u1 身份/五因素纯投影，两客户端唯一复用，不能改变旧 read 行为 |
+| scripts/billing-credit-account-public-contract.mjs + contract/tests/billing-credit-account.json | 当前19.3新增面的精确校验与逆回完整19.2；保全部旧 proof/assertions |
+
+不新建顶层模块、运行进程、依赖、通用命令框架、第二 SDK 或兼容 pin。正式 vendor/配置/manifest/16 generated 输出只经现 generator；旧 vendor 移入 Trash，不永久删除。该 generator 原永久删除改为可恢复 rename，临时目录同样遵守 Trash；生成及检查仍有完全相同 allowlist 与两次逐字节确定性门。新普通文件按真实 transport/input/client 原职责分离，旧 read 仅复用原身份函数，不能借此重写旧 client。
+
+### 单一预算、身份与未知结果
+
+入口总预算 min(upstreamTimeoutMs,10000ms)，从正文开始、覆盖完整 EOF、初次 IAM、一次 owner PUT、必要时一次 owner GET 和最终 IAM。响应关闭/取消/预算超时立即退休；所有外部 promise 受 caller deadline race，非协作依赖不得拖住 HTTP 或晚发成功。每次 owner I/O 前再次核 signal/deadline；用户 Bearer 仅进 IAM，绝不下传 Billing。tenant/subject 取可信 IAM context，原 u1 编码不截断不规范化，五因素与独立服务凭据沿现配置；缺失/错配零 owner 命令。
+
+无自动 PUT 重试、循环、后台初始化或到账乐观值。写阶段最多使用剩余预算扣1500ms恢复/最终资格预留后的时间；不足则503且零PUT。仅网络/断流/超时或合法owner5xx的未知写结果，允许一次受界 GET 同一当前本人账户核实；明确拒绝/坏协议不伪装成功。核实200且 active 才可确认初始化，404或恢复未知统一503，不谎称事务回滚。成功响应前再次 IAM 核同 tenant/subject；撤权/改主体丢弃结果，不再写也不回滚 owner 已可能完成的自然幂等初始化。无法消除跨服务 IAM/owner 的最后时刻竞争，下一次读继续重验。
+
+返回实际 account snapshot，Web 后继不展示 PUT ACK 或本地零值，而另发本人 summary/ledger 两 GET 取当前展示事实；页面仅对 strict missing 404 发起一次隐藏初始化，scope/session变化清旧退休，未知结果只给显式刷新读取，不循环PUT。summary/ledger GET 自身保持只读且不创建账户。
+
+### 验证与交付
+
+先在真实 source HTTP 看到新 PUT 缺入口 RED，再最小实现。新增 input/HTTP/client/contract 风险案例，覆盖 strict 空body、重复/伪造身份/alias/MIME/query/超限/慢EOF、初末拒绝/变主体、丢 ACK→GET/无重复PUT、disabled、畸形响应/EOF/字节、取消/非合作/单一budget、旧账户非零/原读保持。契约新增一操作仍精确保原167有序清单及19.2全文 SHAef56014105cc187bd86da74eb5ba6eef5f54aacb934e2f86e007c98719ff02f6；当前 proof 先归一后运行原全部历史 oracle，绝不换旧摘要或删除安全断言。
+
+本仓完整格式/lint/types/contract/architecture/default/build，随后 Root 以已提交 Billing main 真入口和自有 fresh PG 做跨层核实，不能把受控HTTP叫真实PG。正常服务、schema、index、账号与资金不自动切换；消费者须 owner 本地提交后才固定。当前未获额外 Git 提交/推送/合并授权。
+
 ## 2026-10-21 I4 运行更新 metadata 读取（源码候选已实现，正常激活与独审待后继）
 
 BFF 拥有 ScheduledTask、dispatch 及已核验复制事件；Agent 仍是执行事件唯一生产方。先交付全局运行列表及可选 task_id 过滤，不虚构运行摘要、输出详情或会话链接。HTTP7 固定 artifact 的 payload_json 没有 run.completed / assistant.completed 机器 schema；摘要/输出及立即测试不在本切片完成范围。
