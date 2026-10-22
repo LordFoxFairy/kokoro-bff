@@ -482,3 +482,118 @@ test("personal Credit caller cancellation aborts the in-flight owner read", asyn
     { upstreamTimeoutMs: 1000 },
   )
 })
+
+test("personal Credit initialization uses the official inherent PUT without a receipt key", async () => {
+  const received = []
+  await withOwner(
+    (request, response) => {
+      received.push({ method: request.method, url: request.url, headers: request.headers })
+      json(response, 200, { data: account })
+    },
+    async (base) => {
+      const response = await fetch(`${base}/v1/billing/credit-account`, {
+        method: "PUT",
+        headers: { ...publicHeaders("billing-init"), "content-type": "application/json" },
+        body: "{}",
+      })
+      assert.equal(response.status, 200)
+      assert.deepEqual((await response.json()).data, account)
+    },
+  )
+  assert.equal(received.length, 1)
+  assert.equal(received[0].method, "PUT")
+  assert.equal(received[0].url, "/v1/billing/me/credit-account")
+  assert.equal(received[0].headers["x-kokoro-subject"], "u1.dXNlcl90ZXN0")
+  assert.equal(received[0].headers.authorization, "Bearer billing-service-token")
+})
+
+for (const [suffix, body, mime] of [
+  ["?x=1", "{}", "application/json"],
+  ["", '{"subject":"other"}', "application/json"],
+  ["", "", "application/json"],
+  ["", "{}", "text/plain"],
+]) {
+  test(`initialization rejects invalid input ${JSON.stringify([suffix, body, mime])}`, async () => {
+    let calls = 0
+    await withOwner(
+      (_request, response) => {
+        calls++
+        json(response, 200, { data: account })
+      },
+      async (base) => {
+        const response = await fetch(`${base}/v1/billing/credit-account${suffix}`, {
+          method: "PUT",
+          headers: { ...publicHeaders("invalid-init"), "content-type": mime },
+          body,
+        })
+        assert.equal(response.status, 400)
+      },
+    )
+    assert.equal(calls, 0)
+  })
+}
+
+for (const [ownerStatus, code, expectedStatus, expectedCode] of [
+  [403, "billing.credit_account_disabled", 403, "billing_account_disabled"],
+  [403, "billing.forbidden", 503, "billing_unavailable"],
+  [404, "billing.not_found", 502, "upstream_response_invalid"],
+  [404, "billing.credit_account_not_found", 502, "upstream_response_invalid"],
+  [503, "billing.unavailable", 503, "billing_unavailable"],
+]) {
+  test(`initialization preserves explicit failure ${code} without retries`, async () => {
+    let calls = 0
+    await withOwner(
+      (_request, response) => {
+        calls++
+        json(response, ownerStatus, { error: { code, message: "Owner failure", retryable: false } })
+      },
+      async (base) => {
+        const response = await fetch(`${base}/v1/billing/credit-account`, {
+          method: "PUT",
+          headers: { ...publicHeaders("failure-init"), "content-type": "application/json" },
+          body: "{}",
+        })
+        assert.equal(response.status, expectedStatus)
+        assert.equal((await response.json()).error.code, expectedCode)
+      },
+    )
+    assert.equal(calls, 1)
+  })
+}
+
+test("initialization does not call the owner for an unauthenticated principal", async () => {
+  let calls = 0
+  await withOwner(
+    (_request, response) => {
+      calls++
+      json(response, 200, { data: account })
+    },
+    async (base) => {
+      const headers = { ...publicHeaders("anonymous-init"), "content-type": "application/json", authorization: "Bearer unknown-session" }
+      const response = await fetch(`${base}/v1/billing/credit-account`, { method: "PUT", headers, body: "{}" })
+      assert.equal(response.status, 401)
+    },
+  )
+  assert.equal(calls, 0)
+})
+
+for (const path of ["/v1/billing/credit-account/", "/v1/billing/%63redit-account", "/v1//billing/credit-account"]) {
+  test(`normalized initialization still rejects empty text body: ${path}`, async () => {
+    let calls = 0
+    await withOwner(
+      (_request, response) => {
+        calls++
+        json(response, 200, { data: account })
+      },
+      async (base) => {
+        const response = await fetch(`${base}${path}`, {
+          method: "PUT",
+          headers: { ...publicHeaders("normalized-init"), "content-type": "text/plain" },
+          body: "",
+        })
+        assert.equal(response.status, 400)
+      },
+    )
+    assert.equal(calls, 0)
+  })
+}

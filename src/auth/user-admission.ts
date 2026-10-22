@@ -17,7 +17,7 @@ function authorizationValues(request: IncomingMessage): string[] {
   return values
 }
 
-function bearerToken(request: IncomingMessage): string | null {
+export function bearerToken(request: IncomingMessage): string | null {
   const values = authorizationValues(request)
   if (values.length !== 1) return null
   const match = /^Bearer ([^\s,]+)$/iu.exec(values[0]?.trim() ?? "")

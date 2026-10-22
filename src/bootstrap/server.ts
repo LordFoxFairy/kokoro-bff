@@ -1,3 +1,4 @@
+import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
@@ -78,6 +79,7 @@ import { runtimeManifest } from "../http/routes/runtime-manifest.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
 import { accountSessionsRoute } from "../http/routes/account-sessions.js"
 import { liveTeamRead, liveTeamWrite } from "../http/routes/team.js"
+import { liveModelConfigurationAdmin } from "../http/routes/model-configuration-admin.js"
 import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
 import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
@@ -91,6 +93,7 @@ import { skillInstallationRoute } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { managedPersonalSkillsRoute } from "../http/routes/managed-personal-skills.js"
 import { createPersonalSkillVersionRoute } from "../http/routes/create-personal-skill-version.js"
+import { deletePersonalSkillSeriesRoute } from "../http/routes/delete-personal-skill-series.js"
 import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-skill.js"
 import { skillPackageInspectionRoute } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
@@ -240,6 +243,7 @@ async function handle(
     await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency)
     return
   }
+  if (await appSkillBindingsRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillSpecificationEnabledRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillDownloadHandleRoute(request, response, config, composition, id, segments)) return
@@ -280,6 +284,15 @@ async function handle(
   }
 
   const businessPath = browserPrivateMcp ? segments.slice(2) : segments.slice(1)
+  const providerDiscoveryDeadline =
+    !browserPrivateMcp &&
+    request.method === "GET" &&
+    businessPath.length === 4 &&
+    businessPath[0] === "admin" &&
+    businessPath[1] === "model-providers" &&
+    businessPath[3] === "upstream-models"
+      ? Date.now() + Math.min(config.upstreamTimeoutMs, 10_000)
+      : undefined
   if (!browserPrivateMcp && businessPath[0] === "self" && businessPath[1] === "mcp") {
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
@@ -322,9 +335,22 @@ async function handle(
   const isManagedPersonalSkillRead =
     request.method === "GET" &&
     ((businessPath.length === 2 && businessPath[0] === "self" && businessPath[1] === "skills") ||
-      (businessPath.length === 3 && businessPath[0] === "self" && businessPath[1] === "skills"))
+      (businessPath.length === 3 && businessPath[0] === "self" && businessPath[1] === "skills") ||
+      (businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "versions"))
   if (isManagedPersonalSkillRead) {
     await managedPersonalSkillsRoute(request, response, config, composition.sessionAdmission, id, businessPath)
+    return
+  }
+  if (request.method === "DELETE" && businessPath.length === 3 && businessPath[0] === "self" && businessPath[1] === "skills") {
+    await deletePersonalSkillSeriesRoute(
+      request,
+      response,
+      config,
+      withSkillActionAdmission(composition.sessionAdmission, composition.skillAuthorization, "delete_series", config.tenantId),
+      id,
+      businessPath[2] ?? "",
+      composition.skillDraftClient,
+    )
     return
   }
   const isCreatePersonalSkillVersion =
@@ -396,7 +422,13 @@ async function handle(
   const admissionAbort = new AbortController()
   const admissionTimer = setTimeout(
     () => admissionAbort.abort(new Error("skill_admission_deadline")),
-    hasMcpBudget ? mcpRequestRemaining(request) : hasSkillsBudget ? skillRequestRemaining(request) : 10_000,
+    providerDiscoveryDeadline === undefined
+      ? hasMcpBudget
+        ? mcpRequestRemaining(request)
+        : hasSkillsBudget
+          ? skillRequestRemaining(request)
+          : 10_000
+      : Math.max(0, providerDiscoveryDeadline - Date.now()),
   )
   const onRequestAborted = (): void => {
     admissionAbort.abort()
@@ -834,6 +866,7 @@ async function handle(
   }
 
   if (composition.routeHandler === undefined && businessPath[0] === "admin") {
+    if (await liveModelConfigurationAdmin(request, response, config, context, businessPath, providerDiscoveryDeadline)) return
     await liveModelRoutingAdmin(request, response, config, context, businessPath)
     return
   }

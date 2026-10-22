@@ -73,6 +73,8 @@ export const zCreditAccountResponse = z
   })
   .strict()
 
+export const zOpenCreditAccountRequest = z.record(z.string(), z.never())
+
 export const zLedgerEntry = z
   .object({
     journal_id: zUuid,
@@ -156,6 +158,27 @@ export const zGetMyCreditAccountHeaders = z.object({
  * Success
  */
 export const zGetMyCreditAccountResponse = zCreditAccountResponse
+
+export const zOpenMyCreditAccountBody = zOpenCreditAccountRequest
+
+export const zOpenMyCreditAccountHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+})
+
+/**
+ * Success
+ */
+export const zOpenMyCreditAccountResponse = zCreditAccountResponse
 
 export const zGetMyCreditLedgerHeaders = z.object({
   "x-kokoro-tenant-id": z

@@ -1,8 +1,62 @@
-## 2026-10-21 skill.list 项目并集修复（Public19.0.1 候选）
+## MODEL-1 提供方上游模型候选（2026-10-22，design-first）
 
-`GET /v1/skill.list` 无 `project_id` 时维持个人安装列表；提供时返回个人与已授权项目的并集。同一稳定 series ID 只返回一条，采用项目安装完整的精确来源表示（含名称、描述、归属/获取来源、作者及原版本时间），不按新旧/启用状态选取或逐字段合并。disabled 安装仍在列表，列表读取不改变执行资格。公开顺序保留个人安装原序，重叠项目项替换原位置，项目独有项按其 owner 顺序追加；并非最新修订排序或跨 owner 原子快照。
+目标Public22.3新增单个 `GET /v1/admin/model-providers/{provider_id}/upstream-models`，operation `listAdminModelProviderUpstreamModels`。唯一字段源仍canonical public OpenAPI；标准data/meta envelope，data仅provider_id与items[{id}]，约束与System6.1固定consumer一致。不得把候选ID冒称已发布业务模型、上下文能力、价格或调用可用性。
 
-请求字段、响应形状、状态码、权限及 165 操作保持。当前仅 Product 人类准入，不能冒称 API Key/Open App/trusted 三身份已闭环。两范围分页/同一总预算与取消、项数上限、出口项目资格复核照旧，任一路失败不返回部分结果。唯一机器源补 GET description 与 patch version；旧 Public19 全文和双父历史证明保持，不新增兼容入口。
+当前平台管理员本人Session；无query/body／Content-Length（包括0）／Transfer-Encoding／Content-Type／Idempotency-Key／If-Match／If-None-Match，受信actor与tenant仅上下文，成功no-store。错误沿现admin model configuration闭集400/401/403/404/429/502/503（以canonical声明为准），不透传供应商正文；读取不做隐式重试。缺独立model-management凭据仍503，禁止回退普通web-bff或system-admin。
+
+下游App仅增加精确同源桥、Admin显式刷新/选择复用原revision表单；必须固定本次正式public发布物后实施，不引入任意URL代理，不改变共享模型／业务组合或原CRUD权限。
+
+## 2026-10-21 本人积分账户无感初始化
+
+新增 Public22.2 PUT `/v1/billing/credit-account`，严格必需空JSON对象、无query，仅当前Product Session主体。BFF公开标注billing.self.write，执行沿现Product Session自主体准入；owner边界沿已有web-bff delegated-self与u1可信tenant/subject传输消费Billing main158579f / experimental.3正式PUT；天然幂等，不新增BFF receipt、Schema或IAM action。返回现summary真实投影，disabled为403；不假零、不充值。GET summary/ledger仍只读；App仅专用缺账户404后发明确PUT，未知结果先GET核实。正式固定artifact及窄生成client；总预算、取消、响应上限与凭据隔离保持。
+
+## 2026-10-21 Skills 公开身份矩阵与 App 绑定（已批准，实施中）
+
+GET /v1/skill.list 保持原 ok/request_id/data 及固定错误结构，仅使用 IAM VerifySkillListIdentity；普通 oauth_app 带 project_id 返回400，网站四 RPC 仍仅 Session。管理新增 GET/POST /v1/admin/open-apps/{app_id}/skill-bindings 与 DELETE /v1/admin/open-apps/{app_id}/skill-bindings/{series_id}；POST 仅 skill_id 与必填 expected_binding_version（0=首次或正 CAS），DELETE 仅正 CAS，写入必需 Idempotency-Key。app_id 只是选择器，可信 tenant/app/client 来自 fresh IAM VerifyOpenAppManagementAuthorization；不接 body 身份或 trusted。固定 Platform451d0fb。管理返回 exact binding_id/series_id/skill_id/revision/state_version/source_status/created_at/updated_at/removed_at 与 nullable metadata；元数据仅 name/summary/created_at/updated_at/product，不伪造安装。列表为 data.bindings + required nullable next_cursor；写回执为 data.binding/event_id/replayed，沿 meta.request_id。原 ok/request_id/data 公开 Skill 列表不变。Public22.1 未发行候选180操作；current增量完整逆回原22.0字节与原176有序inventory，旧父hash不变。
+
+## 2026-10-21 Skills 删除与公开身份收口（实施中）
+
+新增 DELETE /v1/self/skills/{skill_id}：Idempotency-Key 必填，JSON 仅 expected_state_version 与 expected_publication（显式 null 或 current_version_id/state_version）。200 返回 series_id、skill_id、state_version、status=deleted、event_id、replayed；400 输入、404 不可见、409 原命令冲突/处理中、412 确认快照失效、429 受限、502 非法 owner 响应、503 依赖。禁止客户端传 tenant/subject。完整 canonical 与发行固定 owner 后同步。
+
+## 本人历史原包下载配对（2026-10-21，实施中）
+
+固定 Platform `97b27b3056f3024fe1c0509072349e1b274efac4` 实现提交，机器原件/Native descriptor/HTTP6.3 原字节保持。沿现 browser-private POST /browser/v1/skills/{version_id}/download，本人 managed 精确 GET 验证归属后，除原 active 外接受明确 product.source_kind=personal 的 disabled/withdrawn。未知来源、其他来源、草稿/隔离/废弃仍不合格；安装/分享 resolver 规则不改。资格/原包 hash/size 在句柄下载前后仍重新确认，同一 subject/tenant、预算与取消保持，无新 API、公开字段、Schema、缓存或服务。App 必须消费原 ZIP 而非重组预览文本，恢复另走新 UID/上传/扫描/校验/publication 确认；本片不切换正常环境。
+
+## 2026-10-21 Admin 详情确认快照（目标，未正常激活）
+
+同一未发布 Public22.0.0 /176 候选：GET /v1/admin/skills/{skill_id} 唯一使用的 SkillProductRecordResponse 新增 required meta（closed），仅含 required publication，复用既有 SkillPublicationPrecondition。data及全部其它操作/Schema不变；记录精确版本与publication当前指针是不同事实。显式absent:true映为null，current保留ID与canonical decimal至9223372036854775806；缺失、false absent、空oneof、错类型/越界和未知wire均为502 skill_response_invalid。权限、no-store/request-id、错误与超时维持原表；不新增fallback或API路径。
+
+## 2026-10-21 发布确认快照接线（源码候选，未正常激活）
+
+目标 Public22.0.0 /176 operations，沿现 /v1 路径。PublishSkill 使用独立 SkillPublishRequest，PublishOfficialSkill 同样追加 required expected_publication；SkillAudienceRequest 保持原形。明确 null 或 closed current_version_id/state_version，正十进制版本至9223372036854775806。Native expected_publication 映射 absent:true 或 current typed SkillId/version，两命令摘要包含此值。旧缺字段输入拒绝，不兼容；稳定错误412、key与成功输出保持。当前 owner HTTP6.3历史读取独立pin保持，不新增操作。
+
+## 2026-10-21 Public21.2.0 个人系列历史
+
+唯一public机器源仍为 contract/openapi/v1/openapi.yaml，新增GET /v1/self/skills/{skill_id}/versions（listPersonalSkillVersions），共176有序operations；同路径原POST创建draft保持原样。权限 product.skill.read_managed_personal，查询仅limit(1–100)/cursor；新操作无body和幂等键，不接客户端主体或过滤字段。
+
+200为闭集data/meta：data含series_id、publication(可null)、versions、required nullable next_cursor；版本项保精确skill_id、revision、name/summary、status、archive_size/file_count、UTC created_at、is_current。publication current/state_version与撤回时间分开表示，current不等于可执行或最大revision；历史不自动升级安装。错误复用原管理读取400/401/403/404/429/502/503及no-store/request-id，owner500不透传内部资料。
+
+Platform HTTP固定 efe1ed1/6.3完整原件与SHA，generated只通过既有生成器更新。现Public21.1.1的全部原文和175有序inventory由精确增量逆证保留；仅测试／构建校验该父图，不加runtime旧版分支。消费者待本批固定发行后接入，不宣称正常页面已加载。
+
+## 2026-10-21 Public21.1.1 配对目标
+
+本次从21.1.0补入已合Public19.0.1的skill.list并集描述，方法、查询、返回、权限、错误、175有序operations及全部模型字段保持。GET当前项目安装完整精确表示覆盖同series个人安装，停用／旧版本仍保留，列表不授执行权；共享预算、1000项上限及返回前重核项目不变。当前原文由既有配置检查核描述位置／篡改／降版，再逆回既有冻结父全文；机器源唯一，消费者等待正式提交后固定生成。
+
+## MC-02 当前公开配置增量（2026-10-20，design-first）
+
+Public21.1仍/v1，新增10具名admin operation至175：GET model-providers/model-definitions/model-features、POST model-providers/model-definitions/model-revisions/model-labels、GET model-provider-creations?idempotency_key、POST model-revisions/{revision_id}/publish、PATCH model-labels/{label_id}。新列表保limit/cursor分页；创建201，其他200。body/error/meta闭集，Key输入writeOnly、输出不得含Key。query主体只取可信context，lookup404表示未确认。新命令原Idempotency-Key；publish和PATCH必须强If-Match，create不收CAS；不暴露owner credentials/read。原四路由接口/CAS/错误不变，消费者须固定新source/hash。
+
+## 2026-10-20 Public21 / System5 MC-02A 配对门
+
+canonical Public21.0.0 保165操作。AdminModelLabel.display_name 改 required nullable（alias 未设由owner保持 null），AdminModelRevision 删除 feature_key；只读管理不增加创建/PATCH入口。业务 `/v1/models` 的 closed ModelCandidate 必需 provider/name/is_default/display_name/model_id/revision_id/provider_id/feature_key/request_model；name=稳定label key（1..128），provider=owner显式值（1..128），display_name=owner有效别名或原模型名（1..255），feature_key 1..128，request_model 1..255，三ID为UUID。closed data 必需 models 与 nullable next_cursor，不暴露连接 URL、secret_handle_ref 或 Key。
+
+唯一System5固定 artifact/provenance由现生成链分发，新增第5个窄消费操作 getModelCatalog 只服务既有 public `/models`。不从slash/display_name推provider，不兼容旧catalog/revision或缺字段。新 test-only Public21→20 精确逆证再委托原20→19及双父证明，旧oracle不改；App/Admin由Root固定同一Public21后续配对。正常激活与执行许可独立，本片不涉及Key保存/领取。
+
+## 2026-10-20 Public20.0.0 / System4 配对门（隔离候选）
+
+唯一公开事实源 `contract/openapi/v1/openapi.yaml` 升至 20.0.0，165 operations 和四个管理员模型操作不增减。`AdminModelRevision` 必需 `request_model`（1..255）及 closed `connection`：固定协议 `openai_chat_completions`、类型 `direct|litellm`、受界 HTTP(S) `base_url`（1..2048）与 `secret_handle_ref`（1..255，仅引用）。旧 `transport`/`gateway_model_name` 不再接受或返回；不以 union/fallback 兼容 System3。标签、路由列表与 PUT key/CAS/错误形状保持。
+
+System owner 4.0.0 固定 commit `dafbc66c9ab5e55b556dbd1dd71c79cef354f69c`、artifact/provenance digest，由现窄生成链记录；公开 major 的精确逆证恢复完整 Public19 再执行原历史检查，不是运行时兼容器。App/Admin 必须固定同一 Public20 产物后再切换。没有 provider/revision 管理写 API、secret 值、执行许可或正常激活承诺。
 
 ## 2026-10-20 既定项目执行 internal1 producer 收口（未激活）
 
@@ -3037,3 +3091,11 @@ Audit、全局用户目录、用户生命周期、session revoke、角色 grant 
 只有Platform固定receipt metadata/code组合才能映射本仓恢复错误，RPC的unknown/expired/conflict/ownership-lost不表示未提交。无marker按原领域处理，畸形/未知/重复/错code/混合detail及read上的marker统一response_invalid/502。MCP三项既有PersonalMcpErrorDetail原因独立可辨，不能按message猜。具体HTTP code/status/retryable/recovery以本仓生成profile为准；成功/CAS/key/no-store/x-request-id/human准入不变。所有恢复指引都不授自动执行、新command或新key许可，未消费App前不声称UX闭环。
 
 本片核实 needs_client/auth_method_unsupported 来自原生 OAuth 服务，故共享 typed 前置条件分类也承接 Begin/Reconnect/Complete/CreateConnection，而不限 Prepare。URL server 分支仍要求已有 typed detail；原生 OAuth 无 detail 的合法 CAS 前置失败保持 generic412，未知/混合 detail 则502。原生 OAuth 不添加 Idempotency-Key；只移动错误职责至窄 connector-command-fault 模块，删除旧 server-response 中的错误 export，不留 alias。
+
+## 已合主线阶段记录（与上述当前模型配对状态区分）
+
+## 2026-10-21 skill.list 项目并集修复（Public19.0.1 候选）
+
+`GET /v1/skill.list` 无 `project_id` 时维持个人安装列表；提供时返回个人与已授权项目的并集。同一稳定 series ID 只返回一条，采用项目安装完整的精确来源表示（含名称、描述、归属/获取来源、作者及原版本时间），不按新旧/启用状态选取或逐字段合并。disabled 安装仍在列表，列表读取不改变执行资格。公开顺序保留个人安装原序，重叠项目项替换原位置，项目独有项按其 owner 顺序追加；并非最新修订排序或跨 owner 原子快照。
+
+请求字段、响应形状、状态码、权限及 165 操作保持。当前仅 Product 人类准入，不能冒称 API Key/Open App/trusted 三身份已闭环。两范围分页/同一总预算与取消、项数上限、出口项目资格复核照旧，任一路失败不返回部分结果。唯一机器源补 GET description 与 patch version；旧 Public19 全文和双父历史证明保持，不新增兼容入口。

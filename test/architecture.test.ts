@@ -235,6 +235,7 @@ test("Platform projection generated types stay behind one facade and old Capabil
   assert.deepEqual(generatedImporters, [
     "src/http/routes/managed-personal-skills.ts",
     "src/http/routes/platform-projection.ts",
+    "src/infrastructure/clients/platform/personal-skill-history-response.ts",
     "src/infrastructure/clients/platform/projection-http.ts",
     "src/infrastructure/clients/platform/skill-product-response.ts",
     "src/infrastructure/clients/platform/skill-specification-facade.ts",
@@ -763,9 +764,9 @@ test("BFF consumes the pinned Platform HTTP projection without owning its data",
     owner: { repository_commit: string; contract_version: string; contract_sha256: string }
   }
   assert.equal(manifest.status, "generated")
-  assert.equal(manifest.owner.repository_commit, "4a4e4c4ddfd3b51c0dca9f886daaeb6290a67257")
-  assert.equal(manifest.owner.contract_version, "6.2.0")
-  assert.equal(manifest.owner.contract_sha256, "0cbae3cc2874314a7af2722f76e8dbf4a307ce49d7f25aceb596782a87faae40")
+  assert.equal(manifest.owner.repository_commit, "efe1ed1a3f81e87df1edded53e6e796d20edea55")
+  assert.equal(manifest.owner.contract_version, "6.3.0")
+  assert.equal(manifest.owner.contract_sha256, "3a187ad6e98b1824cf8d8e50c80218e77c7f14f4eb2a5cfcfe8d4be97c677a08")
   assert.match(generatorConfig, /src\/generated\/platform-http/u)
   assert.match(generatorScript, /two byte-identical generations/u)
   assert.doesNotMatch(schema, /CREATE TABLE[^;]*capability/iu)

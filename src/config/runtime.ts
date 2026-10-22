@@ -80,6 +80,7 @@ export type BffConfig = {
   sharedSecret: string | null
   adminWebSharedSecret?: string | null
   upstreamSecret: string | null
+  systemModelManagementToken?: string | null
   billingServiceToken?: string | null
   upstreamTimeoutMs: number
   upstreamMaxResponseBytes: number
@@ -253,6 +254,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     throw new Error("Admin Web BFF secret must be different from the User Web BFF secret")
   }
   const upstreamSecret = env.KOKORO_INTERNAL_SECRET_BFF?.trim() || null
+  const systemModelManagementToken = env.KOKORO_BFF_MODEL_MANAGEMENT_SERVICE_TOKEN?.trim() || null
+  if (
+    systemModelManagementToken !== null &&
+    (!/^[\x21-\x7e]{16,2041}$/u.test(systemModelManagementToken) || [upstreamSecret, sharedSecret, adminWebSharedSecret].includes(systemModelManagementToken))
+  )
+    throw new Error("Model management service credential must be independent")
   const billingServiceToken = env.KOKORO_BILLING_BFF_SERVICE_TOKEN?.trim() || null
   if (upstreams.billing !== null) {
     if (upstreamSecret === null) throw new Error("Billing internal secret is required when the Billing upstream is configured")
@@ -409,6 +416,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     sharedSecret,
     adminWebSharedSecret,
     upstreamSecret,
+    systemModelManagementToken,
     billingServiceToken,
     upstreamTimeoutMs,
     upstreamMaxResponseBytes: positiveInteger(

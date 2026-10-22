@@ -48,6 +48,9 @@ import type {
   ResendTenantInvitationData,
   ResendTenantInvitationErrors,
   ResendTenantInvitationResponses,
+  ResolveSkillListPublisherProfilesData,
+  ResolveSkillListPublisherProfilesErrors,
+  ResolveSkillListPublisherProfilesResponses,
   ResolveTenantPublisherProfilesData,
   ResolveTenantPublisherProfilesErrors,
   ResolveTenantPublisherProfilesResponses,
@@ -57,9 +60,15 @@ import type {
   UpdateAccountProfileData,
   UpdateAccountProfileErrors,
   UpdateAccountProfileResponses,
+  VerifyOpenAppManagementAuthorizationData,
+  VerifyOpenAppManagementAuthorizationErrors,
+  VerifyOpenAppManagementAuthorizationResponses,
   VerifySessionAuthorizationData,
   VerifySessionAuthorizationErrors,
   VerifySessionAuthorizationResponses,
+  VerifySkillListIdentityData,
+  VerifySkillListIdentityErrors,
+  VerifySkillListIdentityResponses,
 } from "./types.gen.js"
 import {
   zAcceptTenantInvitationResponse,
@@ -77,10 +86,13 @@ import {
   zRemoveTenantMemberResponse,
   zReplaceTenantMemberRolesResponse,
   zResendTenantInvitationResponse,
+  zResolveSkillListPublisherProfilesResponse,
   zResolveTenantPublisherProfilesResponse,
   zRevokeAccountSessionResponse,
   zUpdateAccountProfileResponse,
+  zVerifyOpenAppManagementAuthorizationResponse,
   zVerifySessionAuthorizationResponse,
+  zVerifySkillListIdentityResponse,
 } from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
@@ -101,12 +113,70 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
   meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta
 }
 
+export const verifySkillListIdentity = <ThrowOnError extends boolean = false>(
+  options?: Options<VerifySkillListIdentityData, ThrowOnError>,
+): RequestResult<VerifySkillListIdentityResponses, VerifySkillListIdentityErrors, ThrowOnError> =>
+  (options?.client ?? client).post<VerifySkillListIdentityResponses, VerifySkillListIdentityErrors, ThrowOnError>({
+    responseValidator: async (data) => await zVerifySkillListIdentityResponse.parseAsync(data),
+    security: [
+      {
+        key: "skillListBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/internal/v1/skill-list-identities/verify",
+    ...options,
+  })
+
+export const resolveSkillListPublisherProfiles = <ThrowOnError extends boolean = false>(
+  options: Options<ResolveSkillListPublisherProfilesData, ThrowOnError>,
+): RequestResult<ResolveSkillListPublisherProfilesResponses, ResolveSkillListPublisherProfilesErrors, ThrowOnError> =>
+  (options.client ?? client).post<ResolveSkillListPublisherProfilesResponses, ResolveSkillListPublisherProfilesErrors, ThrowOnError>({
+    responseValidator: async (data) => await zResolveSkillListPublisherProfilesResponse.parseAsync(data),
+    security: [
+      {
+        key: "skillListBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/internal/v1/skill-list-identities/publisher-profiles/resolve",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+export const verifyOpenAppManagementAuthorization = <ThrowOnError extends boolean = false>(
+  options: Options<VerifyOpenAppManagementAuthorizationData, ThrowOnError>,
+): RequestResult<VerifyOpenAppManagementAuthorizationResponses, VerifyOpenAppManagementAuthorizationErrors, ThrowOnError> =>
+  (options.client ?? client).post<VerifyOpenAppManagementAuthorizationResponses, VerifyOpenAppManagementAuthorizationErrors, ThrowOnError>({
+    responseValidator: async (data) => await zVerifyOpenAppManagementAuthorizationResponse.parseAsync(data),
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/internal/v1/open-app-registrations/{app_id}/management-authorizations/verify",
+    ...options,
+  })
+
 export const updateAccountProfile = <ThrowOnError extends boolean = false>(
   options: Options<UpdateAccountProfileData, ThrowOnError>,
 ): RequestResult<UpdateAccountProfileResponses, UpdateAccountProfileErrors, ThrowOnError> =>
   (options.client ?? client).patch<UpdateAccountProfileResponses, UpdateAccountProfileErrors, ThrowOnError>({
     responseValidator: async (data) => await zUpdateAccountProfileResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/account/profile",
     ...options,
     headers: {
@@ -120,7 +190,13 @@ export const listAccountSessions = <ThrowOnError extends boolean = false>(
 ): RequestResult<ListAccountSessionsResponses, ListAccountSessionsErrors, ThrowOnError> =>
   (options?.client ?? client).get<ListAccountSessionsResponses, ListAccountSessionsErrors, ThrowOnError>({
     responseValidator: async (data) => await zListAccountSessionsResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/account/sessions",
     ...options,
   })
@@ -130,7 +206,13 @@ export const revokeAccountSession = <ThrowOnError extends boolean = false>(
 ): RequestResult<RevokeAccountSessionResponses, RevokeAccountSessionErrors, ThrowOnError> =>
   (options.client ?? client).delete<RevokeAccountSessionResponses, RevokeAccountSessionErrors, ThrowOnError>({
     responseValidator: async (data) => await zRevokeAccountSessionResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/account/sessions/{session_id}",
     ...options,
   })
@@ -167,7 +249,13 @@ export const listTenantMembers = <ThrowOnError extends boolean = false>(
 ): RequestResult<ListTenantMembersResponses, ListTenantMembersErrors, ThrowOnError> =>
   (options.client ?? client).get<ListTenantMembersResponses, ListTenantMembersErrors, ThrowOnError>({
     responseValidator: async (data) => await zListTenantMembersResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/tenants/{tenant_id}/members",
     ...options,
   })
@@ -177,7 +265,13 @@ export const leaveTenant = <ThrowOnError extends boolean = false>(
 ): RequestResult<LeaveTenantResponses, LeaveTenantErrors, ThrowOnError> =>
   (options.client ?? client).delete<LeaveTenantResponses, LeaveTenantErrors, ThrowOnError>({
     responseValidator: async (data) => await zLeaveTenantResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/tenants/{tenant_id}/members/me",
     ...options,
   })
@@ -187,7 +281,13 @@ export const removeTenantMember = <ThrowOnError extends boolean = false>(
 ): RequestResult<RemoveTenantMemberResponses, RemoveTenantMemberErrors, ThrowOnError> =>
   (options.client ?? client).delete<RemoveTenantMemberResponses, RemoveTenantMemberErrors, ThrowOnError>({
     responseValidator: async (data) => await zRemoveTenantMemberResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/tenants/{tenant_id}/members/{member_id}",
     ...options,
   })
@@ -197,7 +297,13 @@ export const replaceTenantMemberRoles = <ThrowOnError extends boolean = false>(
 ): RequestResult<ReplaceTenantMemberRolesResponses, ReplaceTenantMemberRolesErrors, ThrowOnError> =>
   (options.client ?? client).put<ReplaceTenantMemberRolesResponses, ReplaceTenantMemberRolesErrors, ThrowOnError>({
     responseValidator: async (data) => await zReplaceTenantMemberRolesResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/tenants/{tenant_id}/members/{member_id}/roles",
     ...options,
     headers: {
@@ -211,7 +317,13 @@ export const listTenantRoles = <ThrowOnError extends boolean = false>(
 ): RequestResult<ListTenantRolesResponses, ListTenantRolesErrors, ThrowOnError> =>
   (options.client ?? client).get<ListTenantRolesResponses, ListTenantRolesErrors, ThrowOnError>({
     responseValidator: async (data) => await zListTenantRolesResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/tenants/{tenant_id}/roles",
     ...options,
   })
@@ -221,7 +333,13 @@ export const listTenantInvitations = <ThrowOnError extends boolean = false>(
 ): RequestResult<ListTenantInvitationsResponses, ListTenantInvitationsErrors, ThrowOnError> =>
   (options.client ?? client).get<ListTenantInvitationsResponses, ListTenantInvitationsErrors, ThrowOnError>({
     responseValidator: async (data) => await zListTenantInvitationsResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/tenants/{tenant_id}/invitations",
     ...options,
   })
@@ -231,7 +349,13 @@ export const createTenantInvitation = <ThrowOnError extends boolean = false>(
 ): RequestResult<CreateTenantInvitationResponses, CreateTenantInvitationErrors, ThrowOnError> =>
   (options.client ?? client).post<CreateTenantInvitationResponses, CreateTenantInvitationErrors, ThrowOnError>({
     responseValidator: async (data) => await zCreateTenantInvitationResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/tenants/{tenant_id}/invitations",
     ...options,
     headers: {
@@ -245,7 +369,13 @@ export const resendTenantInvitation = <ThrowOnError extends boolean = false>(
 ): RequestResult<ResendTenantInvitationResponses, ResendTenantInvitationErrors, ThrowOnError> =>
   (options.client ?? client).post<ResendTenantInvitationResponses, ResendTenantInvitationErrors, ThrowOnError>({
     responseValidator: async (data) => await zResendTenantInvitationResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/tenants/{tenant_id}/invitations/{invitation_id}/resend",
     ...options,
   })
@@ -255,7 +385,13 @@ export const cancelTenantInvitation = <ThrowOnError extends boolean = false>(
 ): RequestResult<CancelTenantInvitationResponses, CancelTenantInvitationErrors, ThrowOnError> =>
   (options.client ?? client).delete<CancelTenantInvitationResponses, CancelTenantInvitationErrors, ThrowOnError>({
     responseValidator: async (data) => await zCancelTenantInvitationResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/tenants/{tenant_id}/invitations/{invitation_id}",
     ...options,
   })
@@ -265,7 +401,13 @@ export const resolveTenantPublisherProfiles = <ThrowOnError extends boolean = fa
 ): RequestResult<ResolveTenantPublisherProfilesResponses, ResolveTenantPublisherProfilesErrors, ThrowOnError> =>
   (options.client ?? client).post<ResolveTenantPublisherProfilesResponses, ResolveTenantPublisherProfilesErrors, ThrowOnError>({
     responseValidator: async (data) => await zResolveTenantPublisherProfilesResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/tenants/{tenant_id}/publisher-profiles/resolve",
     ...options,
     headers: {
@@ -279,7 +421,13 @@ export const checkAuthorization = <ThrowOnError extends boolean = false>(
 ): RequestResult<CheckAuthorizationResponses, CheckAuthorizationErrors, ThrowOnError> =>
   (options.client ?? client).post<CheckAuthorizationResponses, CheckAuthorizationErrors, ThrowOnError>({
     responseValidator: async (data) => await zCheckAuthorizationResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/authorization/check",
     ...options,
     headers: {
@@ -293,7 +441,13 @@ export const verifySessionAuthorization = <ThrowOnError extends boolean = false>
 ): RequestResult<VerifySessionAuthorizationResponses, VerifySessionAuthorizationErrors, ThrowOnError> =>
   (options?.client ?? client).post<VerifySessionAuthorizationResponses, VerifySessionAuthorizationErrors, ThrowOnError>({
     responseValidator: async (data) => await zVerifySessionAuthorizationResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/session-authorizations/verify",
     ...options,
   })
@@ -303,7 +457,13 @@ export const checkTenantSkillAuthorization = <ThrowOnError extends boolean = fal
 ): RequestResult<CheckTenantSkillAuthorizationResponses, CheckTenantSkillAuthorizationErrors, ThrowOnError> =>
   (options.client ?? client).post<CheckTenantSkillAuthorizationResponses, CheckTenantSkillAuthorizationErrors, ThrowOnError>({
     responseValidator: async (data) => await zCheckTenantSkillAuthorizationResponse.parseAsync(data),
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/internal/v1/tenants/{tenant_id}/skill-authorizations/check",
     ...options,
     headers: {

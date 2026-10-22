@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util"
+import { authorizePublicSkillList } from "../../auth/public-skill-list-admission.js"
 import { ConnectError, Code } from "@connectrpc/connect"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { BffServerComposition } from "../../bootstrap/runtime.js"
@@ -217,6 +219,34 @@ export async function skillSpecificationReadRoute(
       if (!parsed.success) throw new Error("skill_spec_input_invalid")
       input = parsed.data
     }
+    if (publicList) {
+      const admission = await within(authorizePublicSkillList(request, config, composition.skillListAdmission, requestId, controller.signal))
+      if (!admission.ok) {
+        if (admission.retryAfter !== undefined) response.setHeader("retry-after", admission.retryAfter)
+        error(admission.status, admission.code, "Current Skill list identity is required")
+        return true
+      }
+      if (admission.context.principal.kind === "oauth_app" && !admission.context.principal.trusted && input.project_id !== undefined)
+        throw new Error("skill_spec_input_invalid")
+      const source = composition.skillSpecificationSource
+      if (source === null) throw new Error("skill_dependency_unavailable")
+      const result = await within(source.readPublicList(input, admission.context, controller.signal, deadlineAt))
+      const parsed = publicSkillListSchema.safeParse(result)
+      if (!parsed.success) throw new Error("skill_response_invalid")
+      const fresh = await within(authorizePublicSkillList(request, config, composition.skillListAdmission, requestId, controller.signal))
+      if (!fresh.ok) {
+        if (fresh.retryAfter !== undefined) response.setHeader("retry-after", fresh.retryAfter)
+        error(fresh.status, fresh.code, "Current Skill list identity is required")
+        return true
+      }
+      if (!isDeepStrictEqual(admission.context.principal, fresh.context.principal)) {
+        error(403, "skill_list_identity_changed", "Skill list identity changed during the request")
+        return true
+      }
+      if (controller.signal.aborted || skillRequestRemaining(request) <= 0) throw new Error("skill_read_deadline")
+      if (!response.destroyed && !response.writableEnded) send(response, 200, { ok: true, request_id: requestId, data: parsed.data })
+      return true
+    }
     const admission = await within(authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal))
     if (!admission.ok) {
       if (admission.retryAfter !== undefined) response.setHeader("retry-after", admission.retryAfter)
@@ -250,10 +280,10 @@ export async function skillSpecificationReadRoute(
       }
     } else {
       const result = await within(source.read(operation, input, context, controller.signal, deadlineAt))
-      const schema = publicList ? publicSkillListSchema : operation === "ListSkills" ? websiteListResponseSchema : websiteHubResponseSchema
+      const schema = operation === "ListSkills" ? websiteListResponseSchema : websiteHubResponseSchema
       const parsed = schema.safeParse(result)
       if (!parsed.success) throw new Error("skill_response_invalid")
-      payload = publicList ? { ok: true, request_id: requestId, data: parsed.data } : parsed.data
+      payload = parsed.data
     }
     if (!controller.signal.aborted && skillRequestRemaining(request) > 0 && !response.destroyed && !response.writableEnded) send(response, 200, payload)
     else throw new Error("skill_read_deadline")

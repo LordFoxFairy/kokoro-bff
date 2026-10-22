@@ -1,9 +1,12 @@
+import type { SkillListPrincipal } from "../auth/skill-list-admission.client.js"
 import type { RequestContext } from "../domain/request-context.js"
 import type { SkillDownloadBinding } from "./skill-download-handles.js"
 export type SkillSpecificationContext = RequestContext & Readonly<{ humanBearer: string }>
+export type PublicSkillListContext = RequestContext & Readonly<{ publicBearer: string; principal: SkillListPrincipal }>
 export type SkillSpecificationOperation = "skill.list" | "ListSkills" | "ListHubSkills" | "GetSkill" | "DownloadSkill"
 export type SkillProductFact = Readonly<{ source_kind?: string | undefined; creator_ref?: Readonly<{ kind: string; id: string }> | undefined; cover?: unknown }>
 export type SkillInstallationFact = Readonly<{
+  source_status: string
   acquisition_kind: "unknown" | "direct" | "hub"
   installation_id: string
   source_ref: string
@@ -71,8 +74,9 @@ export type SkillSpecificationOwner = Readonly<{
 }>
 export type SkillSpecificationSource = Readonly<{
   revisionSummary(sourceRef: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<unknown>
+  readPublicList(input: Readonly<Record<string, unknown>>, context: PublicSkillListContext, signal: AbortSignal, deadlineAt: number): Promise<unknown>
   read(
-    operation: "skill.list" | "ListSkills" | "ListHubSkills",
+    operation: "ListSkills" | "ListHubSkills",
     input: Readonly<Record<string, unknown>>,
     context: SkillSpecificationContext,
     signal: AbortSignal,

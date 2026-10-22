@@ -1,6 +1,38 @@
-## 2026-10-21 Public19.0.1 项目列表修复
+## MODEL-1 Public22.3 / System6.1（本地候选）
 
-唯一机器源只增加 `GET /v1/skill.list` 的个人＋项目并集与项目 exact 整条优先说明。原 fields/parameters/security/165 operation inventory 不变；现 closure 检查先精确恢复 Public19 完整字节，再执行不变双父证明。没有运行时旧版接受或新兼容层；正常发布/验收状态见 `docs/CURRENT.md`。
+新增唯一平台管理员 GET `/v1/admin/model-providers/{provider_id}/upstream-models`，Public22.3.0 /182操作。标准data为provider_id与items[{id}]，不含Key/URL/handle；无query/body framing/Content-Type/命令headers，单总10秒含准入、no-store、无自动重试或配置写入。
+
+固定System `845cf46b7b156c9bacf1065384830c12279e2b5b` /6.1.0，artifact SHA256 `77792d3b31446a70adf25693bdea4bd9ebfd39f3b77c6816bc324591827ca758`，provenance SHA256 `2ee7006f2b6c5a87be422a70975750764b40b738261793d8569ed0cb4fb41c57`。沿原生成器15→16精确操作、74个strict对象，旧vendor退出。原Public22.2完整字节与181有序operation由新增构建期proof保护，再沿原历史oracle验证；不建立runtime旧wire兼容。Agent/Billing/其他owner pin不改，App/Admin正式接线与正常激活另验。
+
+## 2026-10-21 发布确认快照（候选）
+
+同一未发布Public22候选现补既有Admin详情required meta.publication，data不变、无新operation；固定owner e95aba2/确认profile1.1。原正常21.2、固定父原字节和独立HTTP6.3不改；消费者须按新commit/digest成对固定后再切换，不作旧缺字段兼容。
+
+当前canonical Public22.0.0/176，两发布请求增加必填expected_publication；发布前确认的空／精确指针版本进入Platform原生oneof与命令摘要，缺字段拒绝。仅窄新增SkillPublishRequest与确认对象，audience编辑及成功表示不变。Native owner固定3fc971e，由现generate-platform-connect-client正式双次生成；原独立HTTP6.3 pin不改。当前byte逆证只限定本次发布delta后委托原历史门，不作为runtime旧版路径；Admin/App配对和正常页面验收尚待。
+
+## 2026-10-21 Public21.1.1 集成
+
+保留MC-02当前模型契约，配入已合Skills项目／个人并集；只有version和指定GET描述改变。现model-configuration-public-contract承接严格patch逆证，既有model-configuration.json及175inventory不改，其他owner发行物不变。没有runtime旧版兼容，当前外部消费者须固定相同commit/digest后才重载。
+
+## 2026-10-20 MC-02 配置管理接线（本地候选）
+
+Public21.1.0 新增10个具名模型配置操作，当前175操作，artifact SHA256 `4db8bab6159a2f36061f8b292fba9074ea2614adab2a1489bf9d1b3b066b6fe3`。固定 System6 `550d65498822d8d2e629199482de4f6990b62708`，artifact `10ff7ee82ca7405dcab473f3fd80e620aa6c4e0bc92e64111797144ce0fa4061`、provenance `ed2e312bc5bc3022111797771190e57133818af83c0bb7ad2024a615a4e033c5`。独立 model-management token，仅代理 provider/definition/feature 目录、只写Key创建和原主体脱敏查回、模型修订创建/CAS发布、业务label创建/修改；不代理运行密钥或新增删除/健康操作。IAM当前管理员、受信tenant/actor、原key/CAS、取消与绝对预算保持；无回退token或自动重试。
+
+停写后格式、lint、类型、contract850 PASS、architecture36 PASS、默认1503 PASS/3原资源SKIP、build全通过；44条既有OpenAPI警告保留。新公开增量精确逆回原Public21，再委托未改历史证明；原165操作保持。独审Approved，修复缺省direct/null别名ACK绑定和解析跨绝对截止后误成功两项P2，均实际RED→GREEN。
+
+Root真实隔离IAM→BFF→System6/PG配置创建、原key查回、发布、业务组合、别名编辑清空、catalog、CAS/重放/冲突/非法session通过；自有数据库94→94、IAM测试key0→0。最终交付提交后再固定提交重跑该链。正常环境、Admin/App页面、整批PR尚未完成，不将组件结果称为完整产品验收。模型、真实工具与扣费暂停，自动化/连接器不改。
+
+## 2026-10-20 MC-02A 当前 Public21.0.0 / System5 配对候选
+
+Public21保持165操作；AdminModelLabel.display_name nullable、AdminModelRevision去feature，ModelCandidate以稳定label name、显式provider及精确model/revision/provider ID、feature/request_model、有效display_name闭合投影；data显式models与required nullable next_cursor。新增getModelCatalog是既有public/models的第5个窄owner消费操作，不是新公开API。
+
+固定正式System `b7fe78e25e3c569ae0e1cb9b42cddab02074ca07` /5.0.0，artifact SHA256 `a83b37269e9e4fa7fb5310a1836975e20ab9eaee965a66c83e35bb1ca1b9e5df`，provenance `97b20e57f66010ba456fac59fe1dd62d90c17325c82d3da80be455ea9d3cf747`；同一正式生成器26个strict对象／16文件，旧当前vendor退休。新shared-model-catalog-public-contract精确逆回Public20，再委托原未改20→19与双父proof；有序inventory不变，无runtime union/fallback。正常激活、Key候选与模型执行独立，下面为历史切片。
+
+## 2026-10-20 唯一 Public20.0.0 / System4 管理配对候选
+
+公开仍 `/v1`、165 operations；只将 `AdminModelRevision` 的旧 `transport`/`gateway_model_name` 替换为必需 `request_model` 和 closed `connection`。固定 System `dafbc66c9ab5e55b556dbd1dd71c79cef354f69c` /4.0.0，artifact SHA256 `c7cda9d09db266cd26dc1b80dfe9bb95c3c9f6a91bdbd6c5d7de4f85295d1dc6`，原始 provenance SHA256 `37e338939ebecc4a61cf7aff4d14c2e28b5bc34381e66324a2009988e793d2d0`；manifest 同时绑定两者，正规生成仍只含现四操作。旧当前 vendor 退休，无多版本 union/fallback。
+
+`system-model-connection-public-contract.mjs` 精确逆回完整 Public19 再运行原两父与历史校验；原历史 proof/hash 不变，该脚本不进入运行时。没有新增 operation、数据表、依赖、provider/revision 写面或执行许可；App/Admin 必须固定新 public artifact。下方均为历史切片，不代表当前正常运行版本。
 
 ## 2026-10-20 项目执行绑定 internal1 收口
 
@@ -337,3 +369,9 @@ requires coordinated IAM populated-schema evolution and strict BFF/Web consumer 
 ## Connector command browser-private error profile 1.0.0
 
 当前MCP/Custom API管理使用 `/browser/v1`，不新增public operation或改变Public14.8/139。`src/infrastructure/clients/platform/connector-command-fault.ts` 的code-first窄policy是唯一可编辑事实，正规生成只读 `connector-command-errors-v1.json`；`contract:check:connector-command-errors` 检测drift，恢复语义不授自动执行、新command或新key许可。Platform Connect唯一vendor固定当前receipt profile/provenance，旧vendor移除；Proto与独立HTTP pin原字节保持。App后继必须固定本BFF commit与该profile digest，当前尚未接UI或正常切换。
+
+## 已合主线阶段记录（与上述当前模型配对状态区分）
+
+## 2026-10-21 Public19.0.1 项目列表修复
+
+唯一机器源只增加 `GET /v1/skill.list` 的个人＋项目并集与项目 exact 整条优先说明。原 fields/parameters/security/165 operation inventory 不变；现 closure 检查先精确恢复 Public19 完整字节，再执行不变双父证明。没有运行时旧版接受或新兼容层；正常发布/验收状态见 `docs/CURRENT.md`。

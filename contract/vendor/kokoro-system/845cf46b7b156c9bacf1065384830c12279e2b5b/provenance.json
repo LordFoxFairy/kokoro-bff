@@ -1,0 +1,59 @@
+{
+  "authority": "runtime Zod HTTP schemas",
+  "version": 2,
+  "openapi": {
+    "file": "openapi/system.openapi.json",
+    "sha256": "77792d3b31446a70adf25693bdea4bd9ebfd39f3b77c6816bc324591827ca758",
+    "source": "runtime-zod",
+    "sourceSha256": {
+      "scripts/generate-system-openapi.ts": "501a56004202c61393c8ba8c6f7d2e294eea79e1cbd0d97d9cea660084c3cfaf",
+      "scripts/system-openapi-operations.ts": "a2829dba26cc853610f3c9ec6b1d6836ad67dfe8e1751ad3a0d158ba4656e759",
+      "src/access/access.guard.ts": "ec27c0211e4e42f7831f647f196c3e10453011cffb177367c4a5f9010b733b13",
+      "src/http/protocol.schema.ts": "72dbe6ee57d842b855b337d1f1603a7ddbb8c3a4bb6c4f7bf3fe62821c8160c0",
+      "src/modules/model-catalog/schemas/connection.schema.ts": "7d9efcaeb0d4d8725b50e2e2da95d37f9c64094ecbe99143aba3076df615ab03",
+      "src/modules/model-catalog/schemas/credential.schema.ts": "19ae4496c1a12c04c1529d8d2f9269971eaa347cc19879cc7e79e9dbaa2bd929",
+      "src/modules/model-catalog/schemas/definition.schema.ts": "e2063b9ae62b8e5c4ca7cccce09dd4874f818831fc8966de2cf6d015a99bef64",
+      "src/modules/model-catalog/schemas/label.schema.ts": "021859b2c762f234419ce9ca1f7d31983a13df13776470e1faa7d2b66c1c64fa",
+      "src/modules/model-catalog/schemas/provider-model-discovery.schema.ts": "2cddec3af100b1bfed066c90632fe26151afed5b1a73b84aa1976738ae7c5878",
+      "src/modules/model-catalog/schemas/provider.schema.ts": "76f1b7b47a158805eb252409d6362fe4bf90b8ace58a1913de63b6dd49be38db",
+      "src/modules/model-catalog/schemas/resolve.schema.ts": "f75d2f22e04fb6af6c40adb5ac678e9349e036d2db159f779f520e4bb701aa34",
+      "src/modules/model-catalog/schemas/revision.schema.ts": "1c8dff196ff037e0565bc67d9abf7984a946829a8fa22e437617e16c326d2f94",
+      "src/modules/products/products.public.ts": "ccea3298f5ca5549d7882ce056e8bbb3445d23a9e1703958bd4b0a220882983e",
+      "src/modules/products/schemas/application.schema.ts": "087d997360add9b9bbb2e244c1b1f9864fc6cf4ba93a7c9e8c14767288ca6a57",
+      "src/modules/products/schemas/config.schema.ts": "92324f19fd4e39fdf2cef0a4a28f9e43f8b70c09fd5290e8153035a5a2aa2060",
+      "src/modules/products/schemas/feature.schema.ts": "5222976ca8ccba5669e868386132dca6489d44c26f9a23526aaaeb0d20147014",
+      "src/modules/products/schemas/presentation.schema.ts": "5cd491fe9788de6fb8e7d575fd303b795251e7f682e89c10506e6ee7601174b5",
+      "src/modules/products/schemas/product.schema.ts": "90c57e7ecfa71346698ed7f399c6e31a5258451d4eea16023d2c011b4986beb6",
+      "src/modules/products/schemas/release.schema.ts": "2d21d41ebb4b0a0c8b33dde26783052f1142eaf8f44ab0027e350cb1b6e2a669",
+      "src/modules/runtime-manifests/schemas/manifest.schema.ts": "8b73a78e98c64174494398bc68c69061a408f53a9e81bf19d5e970d1ef828553",
+      "src/modules/sites/schemas/policy.schema.ts": "b9aa0e7d70d9212a668b7c88133fb337acc8248f956240bbf0afe60d12eff7e9",
+      "src/modules/sites/schemas/site.schema.ts": "98031e74e4badb28d519f9f42e4c29894aa2a7c4b9388b0756764abc9e7b3636",
+      "src/modules/workspaces/schemas/workspace.schema.ts": "a52e63e9fc798eb25b2003830ad4fcebb7ce9edf0a06b90a5f3b72ad752bc16d"
+    }
+  },
+  "releaseClassification": {
+    "contractVersion": "6.1.0",
+    "httpRouteGeneration": "v1",
+    "baseline": "6.0.0",
+    "classification": "provider-model-discovery-additive",
+    "change": "explicit-management-provider-upstream-model-discovery",
+    "publishedCompatibilityRequired": false
+  },
+  "consumers": [
+    {
+      "consumer": "kokoro-bff",
+      "surface": "runtime-manifest/model-catalog",
+      "disposition": "6.1.0-pin-required-before-provider-discovery-consumption"
+    },
+    {
+      "consumer": "kokoro-agent",
+      "surface": "model-catalog/resolve",
+      "disposition": "6.0.0-pin-required-before-runtime-consumption"
+    },
+    {
+      "consumer": "control-plane-service-callers",
+      "surface": "system-control-http",
+      "disposition": "generate-from-final-v1-before-first-release"
+    }
+  ]
+}

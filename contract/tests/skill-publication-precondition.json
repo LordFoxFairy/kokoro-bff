@@ -1,0 +1,63 @@
+{
+  "profile": "skill-publication-precondition-public-v1",
+  "parent_version": "21.2.0",
+  "version": "22.0.0",
+  "parent_sha256": "2c56fd63faa5ed7759133046dfda147bf1d360ddfb32f7570e55df38e487f786",
+  "current_sha256": "65019688691a6d6933146be66d4e7a1293f0dc92418a6f259a983529031b5c27",
+  "inverse": [
+    {
+      "at": 3,
+      "count": 1,
+      "current_sha256": "88eb7c997b7ff4fb24299e8d2c075b202906e273cea8d6aac13285ed48ce0e2d",
+      "previous": "  version: 21.2.0\n"
+    },
+    {
+      "at": 5330,
+      "count": 1,
+      "current_sha256": "cb8680b8f9c3bf6e0a2c11d7b3e4b1614ff288f30b1c31c3773aab4253cf5faf",
+      "previous": "        Public10 corrective preactivation command on the existing /v1 route. Requires a closed JSON audience and expected_state_version, both frozen into the same trusted owner command digest and wire. BFF fixes PERSONAL visibility and re-admits the current IAM subject and tenant on every replay. Platform alone validates the exact draft, CAS and current package/optional cover, then atomically publishes and returns its durable event receipt. Unknown ACK recovery replays the same body/key/CAS; no empty-body fallback or BFF receipt/outbox is added.\n"
+    },
+    {
+      "at": 5339,
+      "count": 1,
+      "current_sha256": "5c2ed64fa69f6eff546596fd4794f96464e5e530f33be34a6819a8e0e263713a",
+      "previous": "              $ref: '#/components/schemas/SkillAudienceRequest'\n"
+    },
+    {
+      "at": 9564,
+      "count": 1,
+      "current_sha256": "db9072b13c1fc78aefb15a871562bfbecbe67b25e4146451b09eb25a06ecb7e7",
+      "previous": "        no fallback.\n"
+    },
+    {
+      "at": 17328,
+      "count": 1,
+      "current_sha256": "058499769d48f867046d95ad46816bcb0e8fde86719df48644b9cc20f50fc85b",
+      "previous": ""
+    },
+    {
+      "at": 17332,
+      "count": 7,
+      "current_sha256": "e74794941606cfd9d40e094f78ce6d4fc7eb5da5d6275c5f76d23538191e6bc1",
+      "previous": ""
+    },
+    {
+      "at": 17569,
+      "count": 1,
+      "current_sha256": "13106c2128bc873d133797277b9e4e4871638d687107ff1a436a1eab3bbb2499",
+      "previous": ""
+    },
+    {
+      "at": 17571,
+      "count": 2,
+      "current_sha256": "9e830b446bf9af35ff9f8684ffe098381f688b09e8ff0f0f320f43cce6054792",
+      "previous": ""
+    },
+    {
+      "at": 17615,
+      "count": 37,
+      "current_sha256": "ab62b31c0c84c7ba8d1842288a14ed2ea9fd4b5053291118a6a8cf4365e92841",
+      "previous": ""
+    }
+  ]
+}

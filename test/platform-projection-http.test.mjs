@@ -581,3 +581,82 @@ test("R357 current catalog rejects duplicate raw response keys rather than picki
   )
   assert.deepEqual(result, { ok: false, status: 502, code: "skill_response_invalid", retryable: false })
 })
+
+test("managed history decoder keeps only a bounded descending page with an exact publication flag", async () => {
+  const good = {
+    data: {
+      series_id: "history",
+      publication: { current_version_id: "old", state_version: "2", withdrawn_at: null },
+      versions: [
+        {
+          skill_id: "new",
+          revision: "2",
+          name: "New",
+          summary: "Old publication retained",
+          status: "disabled",
+          archive_size: "375",
+          file_count: 1,
+          created_at: "2026-10-21T00:00:00Z",
+          is_current: false,
+        },
+        {
+          skill_id: "old",
+          revision: "1",
+          name: "Old",
+          summary: "Current exact version",
+          status: "active",
+          archive_size: "374",
+          file_count: 1,
+          created_at: "2026-10-20T00:00:00Z",
+          is_current: true,
+        },
+      ],
+    },
+  }
+  const invoke = (body) =>
+    withProjectionOwner(
+      async () => new Response(typeof body === "string" ? body : JSON.stringify(body), { status: 200, headers: ownerHeaders }),
+      (client) =>
+        client.readManagedPersonalSkill(
+          "managedSkillHistory",
+          TENANT,
+          "u",
+          "r",
+          { skillId: "anchor", query: { limit: 2 } },
+          new AbortController().signal,
+          performance.now() + 5000,
+        ),
+    )
+  const valid = await invoke(good)
+  assert.equal(valid.ok, true)
+  assert.deepEqual(valid.data, { ...good.data, next_cursor: null })
+  for (const mutate of [
+    (v) => {
+      v.data.versions.reverse()
+    },
+    (v) => {
+      v.data.versions[1].skill_id = "new"
+    },
+    (v) => {
+      v.data.versions[0].is_current = true
+    },
+    (v) => {
+      v.data.publication = null
+    },
+    (v) => {
+      v.data.versions[0].secret = "unexpected"
+    },
+    (v) => {
+      v.data.publication.secret = "unexpected"
+    },
+  ]) {
+    const changed = structuredClone(good)
+    mutate(changed)
+    const invalid = await invoke(changed)
+    assert.equal(invalid.ok, false)
+    assert.equal(invalid.code, "skill_response_invalid")
+  }
+  const duplicate = await invoke(JSON.stringify(good).replace('"versions":[', '"versions":[],"versions":['))
+  assert.equal(duplicate.ok, false)
+  assert.equal(duplicate.code, "skill_response_invalid")
+})

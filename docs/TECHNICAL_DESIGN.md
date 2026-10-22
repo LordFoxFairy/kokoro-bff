@@ -1,10 +1,70 @@
-## 2026-10-21 项目技能列表并集（已确认规则，实施中）
+## MODEL-1 上游模型发现消费（2026-10-22，实施门）
 
-沿现 `SkillSpecificationService.read("skill.list")` 聚合，不新增 owner、API、表或客户端。当前 Product 人类准入与可信租户保持；有 `project_id` 时先核当前项目，再分别完整读取个人及该 canonical 项目安装，按 `series_id` 合并。项目安装整条优先，即使停用或版本较旧；个人独有项保留，不拼字段、不取 latest/current、不自动升级。各范围内重复 series 是非法 owner 响应，不能套用跨范围优先级静默消解。
+沿已批准的共享provider→共享模型→业务组合语义，只在现model-configuration admin路由与窄System client加显式候选GET，不新增模块／服务／Schema或定时同步。Owner已提交System `845cf46b7b156c9bacf1065384830c12279e2b5b`／6.1，artifact `77792d3b31446a70adf25693bdea4bd9ebfd39f3b77c6816bc324591827ca758`，provenance `2ee7006f2b6c5a87be422a70975750764b40b738261793d8569ed0cb4fb41c57`；固定原件并沿原生成器增加单个精确operation，不导入owner源码。
 
-沿各路既有分页循环保护和 1,000 条容量限制，合并后的公开结果也不得超过 1,000；超限或任一路失败不截断、不回半份成功。两路共用原 AbortSignal/绝对截止时间，合并后才解析真实作者，返回前再次核同 tenant/subject 下的项目资格。列表是展示，不授予项目执行权限，不改变消息冻结、项目默认或 Platform exact 安装校验。
+`GET /v1/admin/model-providers/{provider_id}/upstream-models`仅当前Product Session平台管理员，仍使用独立model-management机器身份；actor／tenant来自已准入上下文。无客户端URL／Key／主体现值／query／body framing／命令headers，无自动重试。System GET所需system:write不把BFF普通用户升级；不要因method GET误发system:read。已有列表分页分支不适用于本操作。
 
-唯一 OpenAPI 只补现 GET 描述并以 Public19.0.1 发行修复；wire、165 operation inventory 和 owner pins 不变。现 closure 检查入口精确逆回原 Public19 全文再执行不变双父证明，无新增脚本层或运行兼容路径。修改限聚合、原回归、规范说明与此描述证明；无数据写入/正常服务重载。以多页并集、精确覆盖、空项目/失败、容量、重复和现有撤权/取消回归验收；真实正常 owner 链单独记录。
+System仅回provider_id与items[].id，BFF严解schema并核provider_id等于请求目标，加原meta.request_id；不回Key／URL／handle／原供应商错误，不修改目录／默认项／健康／价格或积分。单预算上限10秒、取消、1MiB边界与no-store复用现client；未知结果为明确读取错误，不伪造空数组。下游页面显式刷新候选，选择后仍走现创建／发布与业务绑定。
+
+Public22.3 additive目标182 operations；原22.2全部operation语义／生成物不增加运行兼容分支，现Agent／Billing／其他owner pin不改。测试覆盖真实HTTP管理/普通用户、可信身份透传、严格read、无重试与取消、错误脱敏和owner错provider绑定；完整本仓门在停写后执行。
+
+## 2026-10-21 本人积分账户无感初始化
+
+新增 Public22.2 PUT `/v1/billing/credit-account`，严格必需空JSON对象、无query，仅当前Product Session主体。BFF公开标注billing.self.write，执行沿现Product Session自主体准入；owner边界沿已有web-bff delegated-self与u1可信tenant/subject传输消费Billing main158579f / experimental.3正式PUT；天然幂等，不新增BFF receipt、Schema或IAM action。返回现summary真实投影，disabled为403；不假零、不充值。GET summary/ledger仍只读；App仅专用缺账户404后发明确PUT，未知结果先GET核实。正式固定artifact及窄生成client；总预算、取消、响应上限与凭据隔离保持。
+
+## 2026-10-21 Skills 公开身份矩阵与 App 绑定（已批准源码候选）
+
+固定 IAM4db7012/0.15 与 Platform451d0fb Native 原件／AppBinding1.0 规范和向量，沿原正式生成链。公开 GET /v1/skill.list 独立消费 IAM 0.15 的不可推断 principal：user_api_key 或 oauth_app（显式 trusted）。网站四 RPC 继续原 Product Session，不接受公开 Key。public context 必含 principal；普通 App 拒绝 project_id，仅读自身精确绑定；Key 读本人与授权项目；trusted 以 project > personal > App 完整行合并。保持总预算、取消、1000 上限与前后项目核验，发送前再核同一完整 principal。公开作者资料显式使用 IAM 专属 publisher-profile 操作。App 绑定管理仅沿现 Product Session + fresh IAM operator exact tenant/app/client 准入，operator 不等于 platformAdmin；Platform 唯一拥有绑定/CAS/回执。
+
+## 2026-10-21 Skills 删除与公开身份收口（实施中）
+
+个人系列删除由 Platform 唯一持有 deleted 终态。BFF 沿当前 Product 会话准入与 catalog 身份代理 DELETE /v1/self/skills/{skill_id}；显式 anchor CAS 与系列 publication 条件固定进原 body/key，不预读后重写，不把撤回/草稿丢弃冒删除。成功回执先于已删对象读取，未知结果只重试原命令。公开 skill.list 的 API Key/Open App 准入另由 IAM 正式身份事实支撑，网站会话入口不放宽。
+
+## 本人历史原包下载配对（2026-10-21，实施中）
+
+固定 Platform `97b27b3056f3024fe1c0509072349e1b274efac4` 实现提交，机器原件/Native descriptor/HTTP6.3 原字节保持。沿现 browser-private POST /browser/v1/skills/{version_id}/download，本人 managed 精确 GET 验证归属后，除原 active 外接受明确 product.source_kind=personal 的 disabled/withdrawn。未知来源、其他来源、草稿/隔离/废弃仍不合格；安装/分享 resolver 规则不改。资格/原包 hash/size 在句柄下载前后仍重新确认，同一 subject/tenant、预算与取消保持，无新 API、公开字段、Schema、缓存或服务。App 必须消费原 ZIP 而非重组预览文本，恢复另走新 UID/上传/扫描/校验/publication 确认；本片不切换正常环境。
+
+## 2026-10-21 Admin 详情确认快照（目标，未正常激活）
+
+固定 Platform e95aba22d6ffc59a2c5979db39418b9a67f2822f 的 Native artifact，沿原 getAdminSkill 详情和窄响应 mapper 接 publication oneof。既有 data 精确 SkillRecord 不变，快照作为 required meta.publication 返回 null 或精确 current_version_id/state_version；无新HTTP操作/服务/表。响应、嵌套未知Proto字段、缺失或非法oneof拒绝502，不以404/缺失猜null，不查current或MAX替代。原人类管理员／租户准入、专用机器凭据、总预算／取消与IAM发布者富化保持；确认快照在App/Admin冻结，提交不重读。Public22尚未发布，本片在同一未发布需求候选内收拢Admin详情；旧正常21.2不激活未配对消费者，原21.2完整父和8摘要向量保持。
+
+## 2026-10-21 发布确认快照接线（源码候选，未正常激活）
+
+复用两条现有发布路由与 Native Connect client，固定 Platform 3fc971edbd99e0c0fe7d8a30a3ebf872f57f5b3c。个人／官方发布均要求用户确认的 expected_publication：null 表示系列从未发布，否则精确 current_version_id/state_version；与新 draft 的 expected_state_version 分开。公开对象只在窄 client 边界映射 Proto oneof，进入原 JCS／幂等绑定；无提交期 current 读取、自动 rebase 或新 receipt。冲突返回现412；未知结果保持原 body/key。普通 audience 操作不受影响。App 复用个人 history 快照；Admin 缺完整 nullable publication 查询，后继由既有详情承接，不把404猜成null。正常环境待全部消费者配对后再切换。
+
+## 2026-10-21 个人系列历史消费者
+
+复用现 managed-personal-skills 路由及 PlatformProjectionHttpClient 的有界请求／凭据／响应校验，不新增服务、数据库或任意代理。固定消费 Platform efe1ed1 的 HTTP6.3，公开当前 Public21.2.0 在原 POST /v1/self/skills/{skill_id}/versions 旁新增只读 GET；保留现模型配置、项目并集及所有原操作。
+
+历史只用当前IAM准入的固定Product tenant/user；不自报subject/owner/series，不把它当公开API Key/Open App身份矩阵。沿原10秒请求预算、取消和迟到结果隔离，只接limit/cursor及精确锚点。owner核整个系列管理权，BFF严格校验闭集wire、页大小/顺序/唯一ID/current标记与publication一致性；next_cursor缺省投影为required null，不改revision/size字符串或补最大版本。
+
+历史没有发布者展示字段，不额外调用IAM publisher profile；不修改现详情／列表的fresh资料富化。读不获取包、执行技能或改安装。精确预览后继复用既有managed package接口，不借catalog current。上游400/404/依赖和无效wire沿原管理读取错误表；body／幂等键／未知或重复query均拒绝。恢复和删除仍保持独立后继，不挂假写入口。
+
+## 2026-10-21 已批准 Skills 并集与 MC-02 正常配对
+
+复用已合PR15的个人／项目并集及MC-02既有模型设计；在独立集成区从f3da7d5承接333b708，不切回旧Public19或覆盖正常运行候选。唯一Public21.1.1仍175操作，wire只改版本与skill.list GET描述，行为逐字承接主线已批准实现。现test-only配置证明先精确核该追加位于指定GET且唯一，再逆回原21.1.0 SHA并沿原模型／双父证明；原proof/inventory不变，不建新proof模块或runtime兼容路径。App/Admin随后固定同一提交与摘要；正常重载须消费者配对及验收完成后进行。无新Schema、SQL、身份、依赖、模型／工具／积分执行或同事连接器改动。
+
+## MC-02 配置旅程实施门（2026-10-20，用户已批准）
+
+沿System6现模块：BFF只投影10个具名配置操作及原4管理操作。新增provider/definition/feature列表、provider只写Key创建/原主体脱敏查回、definition/revision创建/发布、label创建/别名与默认修订PATCH。原owner client共享同一有界HTTP机制；新配置client/route按实际变化职责分离，不做任意proxy。独立可选KOKORO_BFF_MODEL_MANAGEMENT_SERVICE_TOKEN仅用于model-management，未配置503，不借upstreamSecret或system-admin；普通catalog/原routing职责不变。用户仍经IAM当次platformAdmin准入，tenant/actor只来自上下文。
+
+原provider Key仅穿过内存请求到System；日志/错误/响应不回显，不在BFF落receipt。未知由owner原幂等key脱敏查询，404仍未确认。发布空正文+原CAS/key，label缺失/null保真；总预算、取消、无跳转/重试及原routing绑定继续。Public21.1 additive至175，新量做test-only完整inverse恢复21与原165inventory后走原证明，不保runtime旧wire。SQL/lockfile/其他owner pins不改；不扩自动化/连接器、删除/恢复、health、草稿修改或Agent密钥接口。正常模型/工具/扣费暂停，完成整片验收后集中PR。
+
+## 2026-10-20 MC-02A System5 共享模型消费者设计门（隔离候选）
+
+复用 Root 当前 MC-02A：System owner 维护共享 provider/revision 与各业务 label/routing/tenant 覆盖；BFF 不复制模型配置、不取得 Key 或执行模型。固定正式 `b7fe78e25e3c569ae0e1cb9b42cddab02074ca07` /5.0.0 的 OpenAPI/provenance，沿同窄生成器保四管理操作并新增既有 catalog GET 的 `getModelCatalog`；不新增公开路径或模型转发。
+
+Public21.0.0 仍 `/v1`、165 operations。管理员 label 别名可 null，revision 删除 feature_key；业务 ModelCandidate.name 始终是稳定 label key，不是展示别名或上游模型名。catalog 只投影 owner 明确返回的 provider、model_id/revision_id/provider_id、feature_key/request_model、有效 display_name 和 is_default；data 固定 models 与 required nullable next_cursor。generated 严格解码在 owner client 边界终止，删除 application 原 slash 猜 provider 的实现；不从名称猜配置或默认修订，不扫描未绑定项，不接收旧/额外字段。
+
+公开 key/feature/provider 上界128，显示名按有效 alias 或 request_model 上界255；owner catalog 输出未声明的 key/display/feature界由本投影按已发布 label/request_model 事实检查。保现 `/models` owner HTTP、受信 tenant 与请求预算、四管理操作权限/CAS/错误。SQL、lockfile、其他owner pins不变；Key 保存/领取仍独立未批准候选，模型/工具/扣费继续暂停。先复现 chat/fast 被猜为 provider=chat，再验证严格新wire与完整相关门；真实资源与正常切换由Root统一。
+
+## 2026-10-20 System4 模型管理配对设计门（隔离候选）
+
+沿已批准的 System4 immutable connection 模型，现有 `src/http/routes/model-routing-admin.ts` 和 owner 窄 client 不增加边界：仅消费 `listModelLabel`、`listModelRevision`、`listRoutingPolicy`、`putRoutingPolicy`。固定 owner Draft `dafbc66c9ab5e55b556dbd1dd71c79cef354f69c` 的 4.0.0 OpenAPI/provenance，并沿现生成器更新；Agent 当前固定消费者和其他 owner 不变。
+
+Public20.0.0 仍为 `/v1`、165 operations；唯一 breaking 表示是管理员 revision 删除 `transport`/`gateway_model_name`，必需 `request_model` 与 closed `connection`（`protocol=openai_chat_completions`、`connection_type=direct|litellm`、`base_url`、`secret_handle_ref`）。快照由 System 拥有，BFF 只严格验证并投影，不推导连接、读取密钥或执行模型。没有旧字段 union、alias、fallback、新 provider/revision 写操作或新表。
+
+保留当前 IAM platformAdmin/tenant 准入、四操作错误、分页、写入 key/CAS、总预算/取消和未知结果语义。验收使用固定 owner artifact、生成漂移、真实 BFF HTTP 与受控 owner wire 的正负例及完整相关工程门；正常旧修订盘点/数据处置、资源切换、App/Admin固定消费者由 Root 统筹。正常数据库与进程不在本写区；模型、实际工具、扣费继续暂停。下方历史版本说明按当时状态读取。
 
 ## 2026-10-20 既定项目执行绑定 producer 收口（未激活）
 
@@ -3953,3 +4013,13 @@ The public read surface preserves the IAM owner’s closed filters, ordering, op
 本仓browser-private错误恢复policy为唯一可编辑事实，按现local-import policy模式生成只读contract/connector-command-errors-v1.json，消费者以后固定BFF commit/digest；不把它塞入public OpenAPI、不复制owner错误class或产生第二API。状态/body/header/身份/CAS/key及取消预算保持；existing conflict/in-progress错误码保留，新增unknown/expired/ownership-lost及三种MCP原因。所有恢复均无自动重放/新key许可，App只在正式消费后提示。先行为RED、pin/生成与code-first publication、两route真实HTTP错误及零额外调用，再全本仓门禁；正常服务仅成对验收时另加载，本片不重启。
 
 本片核实 needs_client/auth_method_unsupported 来自原生 OAuth 服务，故共享 typed 前置条件分类也承接 Begin/Reconnect/Complete/CreateConnection，而不限 Prepare。URL server 分支仍要求已有 typed detail；原生 OAuth 无 detail 的合法 CAS 前置失败保持 generic412，未知/混合 detail 则502。原生 OAuth 不添加 Idempotency-Key；只移动错误职责至窄 connector-command-fault 模块，删除旧 server-response 中的错误 export，不留 alias。
+
+## 已合主线阶段记录（与上述当前模型配对状态区分）
+
+## 2026-10-21 项目技能列表并集（已确认规则，实施中）
+
+沿现 `SkillSpecificationService.read("skill.list")` 聚合，不新增 owner、API、表或客户端。当前 Product 人类准入与可信租户保持；有 `project_id` 时先核当前项目，再分别完整读取个人及该 canonical 项目安装，按 `series_id` 合并。项目安装整条优先，即使停用或版本较旧；个人独有项保留，不拼字段、不取 latest/current、不自动升级。各范围内重复 series 是非法 owner 响应，不能套用跨范围优先级静默消解。
+
+沿各路既有分页循环保护和 1,000 条容量限制，合并后的公开结果也不得超过 1,000；超限或任一路失败不截断、不回半份成功。两路共用原 AbortSignal/绝对截止时间，合并后才解析真实作者，返回前再次核同 tenant/subject 下的项目资格。列表是展示，不授予项目执行权限，不改变消息冻结、项目默认或 Platform exact 安装校验。
+
+唯一 OpenAPI 只补现 GET 描述并以 Public19.0.1 发行修复；wire、165 operation inventory 和 owner pins 不变。现 closure 检查入口精确逆回原 Public19 全文再执行不变双父证明，无新增脚本层或运行兼容路径。修改限聚合、原回归、规范说明与此描述证明；无数据写入/正常服务重载。以多页并集、精确覆盖、空项目/失败、容量、重复和现有撤权/取消回归验收；真实正常 owner 链单独记录。

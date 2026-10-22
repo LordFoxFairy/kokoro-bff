@@ -1,0 +1,485 @@
+{
+  "profile": "skill-publication-precondition-v1",
+  "vectors": [
+    {
+      "id": "PublishSkill/absent",
+      "parent_vector": "PublishSkill/current",
+      "parent_sha256": "571da07672bf2ab0185a985f9f8a088f5a80e73f6922be1202b58fe0e7d0c0a5",
+      "request": {
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillCatalogService/PublishSkill",
+        "tenant_ref": "tenant-1",
+        "request": {
+          "product_context": {
+            "subject_id": "user-1",
+            "owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            }
+          },
+          "skill_id": {
+            "value": "skill-1"
+          },
+          "expected_state_version": "1",
+          "visibility": 1,
+          "audience": "catalog",
+          "expected_publication": {
+            "absent": true
+          }
+        }
+      },
+      "canonical": {
+        "command": {
+          "audience": "catalog",
+          "expected_state_version": "1",
+          "product_context": {
+            "owner_scope": {
+              "id": "user-1",
+              "kind": "user"
+            },
+            "subject_id": "user-1"
+          },
+          "skill_id": {
+            "present": true,
+            "value": "skill-1"
+          },
+          "visibility": 1,
+          "expected_publication": null
+        },
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillCatalogService/PublishSkill",
+        "tenant_ref": "tenant-1"
+      },
+      "sha256": "414780f4c45a8260ce87d7792d68496626f332af17b316e71ac06249170e5881"
+    },
+    {
+      "id": "PublishSkill/current",
+      "parent_vector": "PublishSkill/current",
+      "parent_sha256": "571da07672bf2ab0185a985f9f8a088f5a80e73f6922be1202b58fe0e7d0c0a5",
+      "request": {
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillCatalogService/PublishSkill",
+        "tenant_ref": "tenant-1",
+        "request": {
+          "product_context": {
+            "subject_id": "user-1",
+            "owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            }
+          },
+          "skill_id": {
+            "value": "skill-1"
+          },
+          "expected_state_version": "1",
+          "visibility": 1,
+          "audience": "catalog",
+          "expected_publication": {
+            "current": {
+              "current_version_id": {
+                "value": "previous"
+              },
+              "state_version": "1"
+            }
+          }
+        }
+      },
+      "canonical": {
+        "command": {
+          "audience": "catalog",
+          "expected_state_version": "1",
+          "product_context": {
+            "owner_scope": {
+              "id": "user-1",
+              "kind": "user"
+            },
+            "subject_id": "user-1"
+          },
+          "skill_id": {
+            "present": true,
+            "value": "skill-1"
+          },
+          "visibility": 1,
+          "expected_publication": {
+            "current_version_id": "previous",
+            "state_version": "1"
+          }
+        },
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillCatalogService/PublishSkill",
+        "tenant_ref": "tenant-1"
+      },
+      "sha256": "2fd464bf74eb38c8c60b28ec21b8d9add5a9e24922331ad76c77c0341e7e0109"
+    },
+    {
+      "id": "PublishSkill/other-pointer",
+      "parent_vector": "PublishSkill/current",
+      "parent_sha256": "571da07672bf2ab0185a985f9f8a088f5a80e73f6922be1202b58fe0e7d0c0a5",
+      "request": {
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillCatalogService/PublishSkill",
+        "tenant_ref": "tenant-1",
+        "request": {
+          "product_context": {
+            "subject_id": "user-1",
+            "owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            }
+          },
+          "skill_id": {
+            "value": "skill-1"
+          },
+          "expected_state_version": "1",
+          "visibility": 1,
+          "audience": "catalog",
+          "expected_publication": {
+            "current": {
+              "current_version_id": {
+                "value": "another"
+              },
+              "state_version": "1"
+            }
+          }
+        }
+      },
+      "canonical": {
+        "command": {
+          "audience": "catalog",
+          "expected_state_version": "1",
+          "product_context": {
+            "owner_scope": {
+              "id": "user-1",
+              "kind": "user"
+            },
+            "subject_id": "user-1"
+          },
+          "skill_id": {
+            "present": true,
+            "value": "skill-1"
+          },
+          "visibility": 1,
+          "expected_publication": {
+            "current_version_id": "another",
+            "state_version": "1"
+          }
+        },
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillCatalogService/PublishSkill",
+        "tenant_ref": "tenant-1"
+      },
+      "sha256": "6d32dbcbc546ac29f9ab87e2a4b11f78223390115c8df31bd87533e8b50ec364"
+    },
+    {
+      "id": "PublishSkill/advanced-version",
+      "parent_vector": "PublishSkill/current",
+      "parent_sha256": "571da07672bf2ab0185a985f9f8a088f5a80e73f6922be1202b58fe0e7d0c0a5",
+      "request": {
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillCatalogService/PublishSkill",
+        "tenant_ref": "tenant-1",
+        "request": {
+          "product_context": {
+            "subject_id": "user-1",
+            "owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            }
+          },
+          "skill_id": {
+            "value": "skill-1"
+          },
+          "expected_state_version": "1",
+          "visibility": 1,
+          "audience": "catalog",
+          "expected_publication": {
+            "current": {
+              "current_version_id": {
+                "value": "previous"
+              },
+              "state_version": "2"
+            }
+          }
+        }
+      },
+      "canonical": {
+        "command": {
+          "audience": "catalog",
+          "expected_state_version": "1",
+          "product_context": {
+            "owner_scope": {
+              "id": "user-1",
+              "kind": "user"
+            },
+            "subject_id": "user-1"
+          },
+          "skill_id": {
+            "present": true,
+            "value": "skill-1"
+          },
+          "visibility": 1,
+          "expected_publication": {
+            "current_version_id": "previous",
+            "state_version": "2"
+          }
+        },
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillCatalogService/PublishSkill",
+        "tenant_ref": "tenant-1"
+      },
+      "sha256": "4082fc910bfa222cefa6f6ba83356de36503b874df92e2ecfdab9251cc2d8113"
+    },
+    {
+      "id": "PublishOfficialSkill/absent",
+      "parent_vector": "PublishOfficialSkill/current",
+      "parent_sha256": "903ab202c55a21713566499451fbce54d6f97fc838a6aef96744d92fc5f3c859",
+      "request": {
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillAdminService/PublishOfficialSkill",
+        "tenant_ref": "tenant-1",
+        "request": {
+          "product_context": {
+            "subject_id": "user-1",
+            "owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            }
+          },
+          "skill_id": {
+            "value": "skill-1"
+          },
+          "expected_state_version": "1",
+          "audience": "catalog",
+          "publisher": {
+            "kind": "organization",
+            "id": "org-1"
+          },
+          "expected_publication": {
+            "absent": true
+          }
+        }
+      },
+      "canonical": {
+        "command": {
+          "audience": "catalog",
+          "expected_state_version": "1",
+          "product_context": {
+            "owner_scope": {
+              "id": "user-1",
+              "kind": "user"
+            },
+            "subject_id": "user-1"
+          },
+          "publisher": {
+            "id": "org-1",
+            "kind": "organization"
+          },
+          "skill_id": {
+            "present": true,
+            "value": "skill-1"
+          },
+          "expected_publication": null
+        },
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillAdminService/PublishOfficialSkill",
+        "tenant_ref": "tenant-1"
+      },
+      "sha256": "2764fedfcfc71fb78018dc520a395724b26ea3a18cb863ddccfdf8e4fd53e22f"
+    },
+    {
+      "id": "PublishOfficialSkill/current",
+      "parent_vector": "PublishOfficialSkill/current",
+      "parent_sha256": "903ab202c55a21713566499451fbce54d6f97fc838a6aef96744d92fc5f3c859",
+      "request": {
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillAdminService/PublishOfficialSkill",
+        "tenant_ref": "tenant-1",
+        "request": {
+          "product_context": {
+            "subject_id": "user-1",
+            "owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            }
+          },
+          "skill_id": {
+            "value": "skill-1"
+          },
+          "expected_state_version": "1",
+          "audience": "catalog",
+          "publisher": {
+            "kind": "organization",
+            "id": "org-1"
+          },
+          "expected_publication": {
+            "current": {
+              "current_version_id": {
+                "value": "previous"
+              },
+              "state_version": "1"
+            }
+          }
+        }
+      },
+      "canonical": {
+        "command": {
+          "audience": "catalog",
+          "expected_state_version": "1",
+          "product_context": {
+            "owner_scope": {
+              "id": "user-1",
+              "kind": "user"
+            },
+            "subject_id": "user-1"
+          },
+          "publisher": {
+            "id": "org-1",
+            "kind": "organization"
+          },
+          "skill_id": {
+            "present": true,
+            "value": "skill-1"
+          },
+          "expected_publication": {
+            "current_version_id": "previous",
+            "state_version": "1"
+          }
+        },
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillAdminService/PublishOfficialSkill",
+        "tenant_ref": "tenant-1"
+      },
+      "sha256": "fee423a33073f0e0e001bd8ffa2b8f1cc40c99c39b09beb4e52914a6f09c9722"
+    },
+    {
+      "id": "PublishOfficialSkill/other-pointer",
+      "parent_vector": "PublishOfficialSkill/current",
+      "parent_sha256": "903ab202c55a21713566499451fbce54d6f97fc838a6aef96744d92fc5f3c859",
+      "request": {
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillAdminService/PublishOfficialSkill",
+        "tenant_ref": "tenant-1",
+        "request": {
+          "product_context": {
+            "subject_id": "user-1",
+            "owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            }
+          },
+          "skill_id": {
+            "value": "skill-1"
+          },
+          "expected_state_version": "1",
+          "audience": "catalog",
+          "publisher": {
+            "kind": "organization",
+            "id": "org-1"
+          },
+          "expected_publication": {
+            "current": {
+              "current_version_id": {
+                "value": "another"
+              },
+              "state_version": "1"
+            }
+          }
+        }
+      },
+      "canonical": {
+        "command": {
+          "audience": "catalog",
+          "expected_state_version": "1",
+          "product_context": {
+            "owner_scope": {
+              "id": "user-1",
+              "kind": "user"
+            },
+            "subject_id": "user-1"
+          },
+          "publisher": {
+            "id": "org-1",
+            "kind": "organization"
+          },
+          "skill_id": {
+            "present": true,
+            "value": "skill-1"
+          },
+          "expected_publication": {
+            "current_version_id": "another",
+            "state_version": "1"
+          }
+        },
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillAdminService/PublishOfficialSkill",
+        "tenant_ref": "tenant-1"
+      },
+      "sha256": "6c465aa90f5f7683de96084a086207634813d14cd36a7176424f8c25ac78b887"
+    },
+    {
+      "id": "PublishOfficialSkill/advanced-version",
+      "parent_vector": "PublishOfficialSkill/current",
+      "parent_sha256": "903ab202c55a21713566499451fbce54d6f97fc838a6aef96744d92fc5f3c859",
+      "request": {
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillAdminService/PublishOfficialSkill",
+        "tenant_ref": "tenant-1",
+        "request": {
+          "product_context": {
+            "subject_id": "user-1",
+            "owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            }
+          },
+          "skill_id": {
+            "value": "skill-1"
+          },
+          "expected_state_version": "1",
+          "audience": "catalog",
+          "publisher": {
+            "kind": "organization",
+            "id": "org-1"
+          },
+          "expected_publication": {
+            "current": {
+              "current_version_id": {
+                "value": "previous"
+              },
+              "state_version": "2"
+            }
+          }
+        }
+      },
+      "canonical": {
+        "command": {
+          "audience": "catalog",
+          "expected_state_version": "1",
+          "product_context": {
+            "owner_scope": {
+              "id": "user-1",
+              "kind": "user"
+            },
+            "subject_id": "user-1"
+          },
+          "publisher": {
+            "id": "org-1",
+            "kind": "organization"
+          },
+          "skill_id": {
+            "present": true,
+            "value": "skill-1"
+          },
+          "expected_publication": {
+            "current_version_id": "previous",
+            "state_version": "2"
+          }
+        },
+        "command_digest_version": "3.0.0",
+        "fq_method": "kokoro.platform.v1.SkillAdminService/PublishOfficialSkill",
+        "tenant_ref": "tenant-1"
+      },
+      "sha256": "48b2b0f3fe5a492b54eb405bc094ffc3251069d38389de213ec9c3ae4f290e12"
+    }
+  ]
+}

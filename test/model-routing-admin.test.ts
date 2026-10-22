@@ -104,7 +104,7 @@ const routing = {
 const label = {
   id: labelId,
   label_key: "chat.default",
-  display_name: "Chat default",
+  display_name: null,
   feature_key: "chat",
   default_revision_id: revisionId,
   version: "1",
@@ -119,11 +119,15 @@ const revision = {
   revision: 1,
   provider_model_name: "fixture-model",
   display_name: "Fixture model",
-  feature_key: "chat",
   input_modalities: ["text"],
   output_modalities: ["text"],
-  transport: "litellm",
-  gateway_model_name: "fixture/model",
+  request_model: "fixture/model",
+  connection: {
+    protocol: "openai_chat_completions",
+    connection_type: "direct",
+    base_url: "https://models.fixture.invalid/v1",
+    secret_handle_ref: "secret://fixture/model",
+  },
   context_window: 8192,
   max_output_tokens: 1024,
   priority: 10,
@@ -582,3 +586,638 @@ test("named admin reads accept formal System success responses without an owner 
     "/v1/system/model-catalog/revisions?limit=50",
   ])
 })
+
+test("System5 direct and LiteLLM snapshots pass through unchanged while legacy and malformed revisions fail closed", async () => {
+  let row: Record<string, unknown> = revision
+  const owner = await ownerFixture(() => ({ status: 200, body: { data: { items: [row], next_cursor: null } } }))
+  const bff = await bffFixture(owner.origin)
+  for (const connectionType of ["direct", "litellm"]) {
+    row = { ...revision, connection: { ...revision.connection, connection_type: connectionType } }
+    const response = await fetch(`${bff.origin}/v1/admin/model-revisions`, { headers: browserHeaders() })
+    assert.equal(response.status, 200)
+    assert.deepEqual(((await response.json()) as { data: unknown }).data, [row])
+  }
+  const { request_model: _requestModel, connection: _connection, ...legacyBase } = revision
+  const { protocol: _protocol, ...missingProtocol } = revision.connection
+  const { secret_handle_ref: _secret, ...missingSecret } = revision.connection
+  for (const invalid of [
+    { ...legacyBase, transport: "litellm", gateway_model_name: "legacy/fixture" },
+    { ...revision, transport: "litellm", gateway_model_name: "legacy/fixture" },
+    { ...legacyBase, connection: revision.connection },
+    { ...legacyBase, request_model: revision.request_model },
+    { ...revision, feature_key: "chat" },
+    { ...revision, request_model: "" },
+    { ...revision, request_model: "x".repeat(256) },
+    { ...revision, connection: { ...revision.connection, protocol: "openai_responses" } },
+    { ...revision, connection: { ...revision.connection, connection_type: "proxy" } },
+    { ...revision, connection: missingProtocol },
+    { ...revision, connection: missingSecret },
+    { ...revision, connection: { ...revision.connection, base_url: "ftp://models.fixture.invalid" } },
+    { ...revision, connection: { ...revision.connection, base_url: "https://models.fixture.invalid?token=private" } },
+    { ...revision, connection: { ...revision.connection, secret_handle_ref: "bad secret value" } },
+    { ...revision, connection: { ...revision.connection, api_key: "private-owner-material" } },
+    { ...revision, unexpected: "private-owner-material" },
+  ]) {
+    row = invalid
+    const response = await fetch(`${bff.origin}/v1/admin/model-revisions`, { headers: browserHeaders() })
+    assert.equal(response.status, 502)
+    const body = await response.text()
+    assert.equal(JSON.parse(body).error.code, "admin_model_routing_response_invalid")
+    assert.doesNotMatch(body, /legacy\/fixture|private-owner-material|private|models\.fixture/u)
+  }
+})
+
+test("administrator creates a write-only model connection and recovers its identity with a separate machine credential", async () => {
+  const provider = {
+    id: revisionId,
+    provider: "fixture",
+    provider_key: "connection-one",
+    display_name: "Shared connection",
+    protocol: "openai_chat_completions",
+    connection_type: "direct",
+    base_url: "https://models.fixture.invalid/v1",
+    secret_handle_ref: "model-key:fixture",
+    priority: 0,
+    version: "1",
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+  }
+  const input = {
+    provider: "fixture",
+    provider_key: "connection-one",
+    display_name: "Shared connection",
+    protocol: "openai_chat_completions",
+    connection_type: "direct",
+    base_url: "https://models.fixture.invalid/v1",
+    priority: 0,
+    api_key: "fixture-key-not-real",
+  }
+  const calls: string[] = []
+  const owner = await listen(
+    createServer(async (request, response) => {
+      assert.equal(request.headers["x-kokoro-service"], "model-management")
+      assert.equal(request.headers["authorization"], "Bearer model-management-fixture-token")
+      assert.equal(request.headers["x-kokoro-tenant-id"], tenantId)
+      assert.equal(request.headers["x-kokoro-actor-id"], actorId)
+      assert.equal(request.headers["x-kokoro-iam-permissions"], "system:write")
+      calls.push(`${request.method} ${request.url}`)
+      response.setHeader("content-type", "application/json")
+      response.setHeader("cache-control", "no-store")
+      response.setHeader("x-request-id", "owner-fixture")
+      if (request.method === "POST") {
+        const chunks: Buffer[] = []
+        for await (const chunk of request) chunks.push(Buffer.from(chunk))
+        assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), input)
+        assert.equal(request.headers["idempotency-key"], "model-create-one")
+        response.writeHead(201)
+        response.end(JSON.stringify({ data: provider }))
+      } else response.end(JSON.stringify({ data: { provider_id: revisionId, credential_status: "stored", deleted_at: null } }))
+    }),
+  )
+  const verified = admission(true)
+  const bff = await listen(
+    createBffServer(
+      { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
+      { businessStore: null, readiness: async () => undefined, sessionAdmission: verified },
+    ),
+  )
+  const created = await fetch(`${bff}/v1/admin/model-providers`, {
+    method: "POST",
+    headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "model-create-one" }),
+    body: JSON.stringify(input),
+  })
+  assert.equal(created.status, 201)
+  const text = await created.text()
+  assert.equal(text.includes(input.api_key), false)
+  assert.deepEqual(JSON.parse(text).data, provider)
+  const recovered = await fetch(`${bff}/v1/admin/model-provider-creations?idempotency_key=model-create-one`, { headers: browserHeaders() })
+  assert.equal(recovered.status, 200)
+  assert.equal(recovered.headers.get("cache-control"), "no-store")
+  assert.deepEqual((await recovered.json()).data, { provider_id: revisionId, credential_status: "stored", deleted_at: null })
+  assert.equal(calls.length, 2)
+})
+
+test("model configuration rejects missing credentials, non-admins and invalid sensitive bodies before owner I/O", async () => {
+  let ownerCalls = 0
+  const owner = await listen(
+    createServer((_request, response) => {
+      ownerCalls++
+      response.writeHead(500)
+      response.end()
+    }),
+  )
+  for (const [allowed, token, expected] of [
+    [false, "model-management-fixture-token", 403],
+    [true, null, 503],
+  ] as const) {
+    const bff = await listen(
+      createBffServer(
+        { ...config(owner), systemModelManagementToken: token },
+        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(allowed) },
+      ),
+    )
+    const response = await fetch(`${bff}/v1/admin/model-providers?limit=50`, { headers: browserHeaders() })
+    assert.equal(response.status, expected)
+  }
+  const bff = await listen(
+    createBffServer(
+      { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
+      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+    ),
+  )
+  for (const [path, method, body, extra, status] of [
+    ["model-providers", "POST", { api_key: "fixture-secret-key", tenant_id: "forged" }, {}, 400],
+    [`model-revisions/${revisionId}/publish`, "POST", undefined, {}, 428],
+    [`model-labels/${labelId}`, "PATCH", { display_name: null }, {}, 428],
+    ["model-provider-creations?idempotency_key=a&idempotency_key=b", "GET", undefined, {}, 400],
+    ["model-provider-creations?idempotency_key=a&tenant_id=forged", "GET", undefined, {}, 400],
+    ["model-providers", "POST", {}, { "if-match": '"1"' }, 400],
+  ] as const) {
+    const response = await fetch(`${bff}/v1/admin/${path}`, {
+      method,
+      headers: browserHeaders({
+        ...(method === "GET" ? {} : { "idempotency-key": "sensitive-command" }),
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+        ...extra,
+      }),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+    assert.equal(response.status, status)
+    assert.equal((await response.text()).includes("fixture-secret-key"), false)
+  }
+  assert.equal(ownerCalls, 0)
+})
+
+test("sensitive creation lookup preserves unconfirmed status and never retries writes or leaks owner messages", async () => {
+  const methods: string[] = []
+  const owner = await listen(
+    createServer((request, response) => {
+      methods.push(request.method ?? "")
+      response.setHeader("content-type", "application/json")
+      response.setHeader("x-request-id", "lookup-fixture")
+      response.setHeader("cache-control", "no-store")
+      response.writeHead(request.method === "GET" ? 404 : 503)
+      response.end(
+        JSON.stringify({
+          error: { code: request.method === "GET" ? "NOT_FOUND" : "SYSTEM_UNAVAILABLE", message: "fixture-private-key", retryable: request.method !== "GET" },
+        }),
+      )
+    }),
+  )
+  const bff = await listen(
+    createBffServer(
+      { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
+      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+    ),
+  )
+  const input = {
+    provider: "fixture",
+    provider_key: "unknown-key",
+    display_name: "Fixture",
+    protocol: "openai_chat_completions",
+    base_url: "https://model.fixture.invalid/v1",
+    priority: 0,
+    api_key: "fixture-private-key",
+  }
+  const first = await fetch(`${bff}/v1/admin/model-providers`, {
+    method: "POST",
+    headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "original-sensitive-command" }),
+    body: JSON.stringify(input),
+  })
+  assert.equal(first.status, 503)
+  assert.equal((await first.text()).includes(input.api_key), false)
+  const lookup = await fetch(`${bff}/v1/admin/model-provider-creations?idempotency_key=original-sensitive-command`, { headers: browserHeaders() })
+  assert.equal(lookup.status, 404)
+  assert.equal((await lookup.text()).includes(input.api_key), false)
+  assert.deepEqual(methods, ["POST", "GET"])
+})
+
+test("configuration acknowledgements bind owner defaults without changing original command bytes", async () => {
+  const cases = [
+    {
+      path: "model-providers",
+      input: {
+        provider: "fixture",
+        provider_key: "connection-default",
+        display_name: "Default connection",
+        protocol: "openai_chat_completions",
+        base_url: "https://models.fixture.invalid/v1",
+        priority: 0,
+        api_key: "fixture-key",
+      },
+      reply: {
+        id: revisionId,
+        provider: "fixture",
+        provider_key: "connection-default",
+        display_name: "Default connection",
+        protocol: "openai_chat_completions",
+        connection_type: "litellm",
+        base_url: "https://models.fixture.invalid/v1",
+        secret_handle_ref: "model-key:fixture",
+        priority: 0,
+        version: "1",
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      },
+    },
+    {
+      path: "model-labels",
+      input: { label_key: label.label_key, feature_key: label.feature_key, default_revision_id: label.default_revision_id },
+      reply: { ...label, display_name: "unexpected alias" },
+    },
+  ]
+  for (const entry of cases) {
+    let calls = 0
+    const owner = await listen(
+      createServer(async (request, response) => {
+        calls++
+        const chunks: Buffer[] = []
+        for await (const chunk of request) chunks.push(Buffer.from(chunk))
+        assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), entry.input)
+        response.setHeader("content-type", "application/json")
+        response.setHeader("x-request-id", "default-fixture")
+        response.setHeader("cache-control", "no-store")
+        response.writeHead(201)
+        response.end(JSON.stringify({ data: entry.reply }))
+      }),
+    )
+    const bff = await listen(
+      createBffServer(
+        { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
+        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+      ),
+    )
+    const result = await fetch(`${bff}/v1/admin/${entry.path}`, {
+      method: "POST",
+      headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "default-protected-command" }),
+      body: JSON.stringify(entry.input),
+    })
+    assert.equal(result.status, 502)
+    assert.equal(calls, 1)
+  }
+})
+
+test("a response parsed after the absolute model configuration deadline is never acknowledged", async () => {
+  const { systemModelConfiguration } = await import("../dist/infrastructure/clients/owner/system-model-configuration.js")
+  const originalFetch = globalThis.fetch,
+    originalParse = JSON.parse,
+    originalNow = Date.now
+  const started = originalNow(),
+    deadlineAt = started + 10_000
+  let clock = started
+  try {
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ data: { items: [], next_cursor: null } }), {
+        status: 200,
+        headers: { "content-type": "application/json", "x-request-id": "deadline-fixture" },
+      })
+    Date.now = () => clock
+    JSON.parse = ((...args: Parameters<typeof JSON.parse>) => {
+      const value = originalParse(...args)
+      clock = deadlineAt + 1
+      return value
+    }) as typeof JSON.parse
+    const result = await systemModelConfiguration({
+      baseUrl: "https://fixture.invalid",
+      secret: "model-management-fixture-token",
+      tenantId,
+      actorId,
+      requestId: "deadline-fixture",
+      signal: new AbortController().signal,
+      deadlineAt,
+      maxResponseBytes: 1024 * 1024,
+      operation: "providers",
+      query: new URLSearchParams(),
+    })
+    assert.deepEqual(result, { ok: false, status: 503, code: "admin_model_routing_unavailable" })
+  } finally {
+    globalThis.fetch = originalFetch
+    JSON.parse = originalParse
+    Date.now = originalNow
+  }
+})
+
+test("upstream provider candidates use the explicit management read with trusted identity and no body or pagination", async () => {
+  const candidate = { provider_id: revisionId, items: [{ id: "vendor/model" }] }
+  const owner = await ownerFixture(() => ({ status: 200, body: { data: candidate } }))
+  const verified = admission(true)
+  const origin = await listen(
+    createBffServer(
+      { ...config(owner.origin), adminWebSharedSecret: "admin-browser-secret", systemModelManagementToken: "model-management-fixture-token" },
+      { businessStore: null, readiness: async () => undefined, sessionAdmission: verified },
+    ),
+  )
+  const response = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, {
+    headers: browserHeaders({
+      "x-kokoro-service": "admin-web-bff",
+      "x-kokoro-internal-secret": "admin-browser-secret",
+      "x-kokoro-user-id": "forged",
+      "x-kokoro-tenant-id": "forged",
+    }),
+  })
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("cache-control"), "no-store")
+  const result = (await response.json()) as { data: unknown; meta: { request_id: string } }
+  assert.deepEqual(result.data, candidate)
+  assert.equal(result.meta.request_id, response.headers.get("x-request-id"))
+  assert.equal(owner.calls.length, 1)
+  const call = owner.calls[0]!
+  assert.equal(call.path, `/v1/system/model-catalog/providers/${revisionId}/upstream-models`)
+  assert.equal(call.headers["x-kokoro-service"], "model-management")
+  assert.equal(call.headers.authorization, "Bearer model-management-fixture-token")
+  assert.equal(call.headers["x-kokoro-iam-permissions"], "system:write")
+  assert.equal(call.headers["x-kokoro-actor-id"], actorId)
+  assert.equal(call.headers["x-kokoro-tenant-id"], tenantId)
+  assert.equal(call.headers["content-type"], undefined)
+  assert.equal(call.headers["content-length"], undefined)
+  assert.equal(call.body, null)
+})
+
+test("upstream provider candidates reject non-admins and missing management credentials without owner I/O", async () => {
+  const owner = await ownerFixture(() => ({ status: 200, body: { data: { provider_id: revisionId, items: [] } } }))
+  for (const [platformAdmin, key, status] of [
+    [false, "manager-fixture", 403],
+    [true, null, 503],
+  ] as const) {
+    const origin = await listen(
+      createBffServer(
+        { ...config(owner.origin), systemModelManagementToken: key },
+        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(platformAdmin) },
+      ),
+    )
+    const result = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, {
+      headers: browserHeaders({ "x-kokoro-platform-admin": "true", "x-kokoro-tenant-id": "forged" }),
+    })
+    assert.equal(result.status, status)
+  }
+  assert.equal(owner.calls.length, 0)
+})
+
+test("upstream provider candidates reject all query, body framing and command headers before owner I/O", async () => {
+  const owner = await ownerFixture()
+  const origin = await listen(
+    createBffServer(
+      { ...config(owner.origin), systemModelManagementToken: "manager-fixture" },
+      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+    ),
+  )
+  const path = `/v1/admin/model-providers/${revisionId}/upstream-models`
+  const normal = Object.entries(browserHeaders())
+  for (const [name, value] of [
+    ["content-length", "0"],
+    ["content-type", "application/json"],
+    ["idempotency-key", "fixture"],
+    ["if-match", '"1"'],
+    ["if-none-match", "*"],
+    ["transfer-encoding", "chunked"],
+  ]) {
+    const response = await rawRequest(origin, path, "GET", [...normal, [name!, value!]], name === "transfer-encoding" ? Buffer.alloc(0) : undefined)
+    assert.equal(response.status, 400, name)
+  }
+  for (const query of ["limit=50", "cursor=opaque", "url=ignored", "tenant_id=forged"])
+    assert.equal((await fetch(`${origin}${path}?${query}`, { headers: browserHeaders() })).status, 400)
+  assert.equal(owner.calls.length, 0)
+})
+
+test("upstream provider candidates bind the exact provider and strictly reject credential-bearing or malformed owner data", async () => {
+  for (const data of [
+    { provider_id: labelId, items: [] },
+    { provider_id: revisionId, items: [{ id: "model", api_key: "fixture-secret" }] },
+    { provider_id: revisionId, items: [], secret_handle_ref: "fixture-secret" },
+    { provider_id: revisionId, items: [{ id: "" }] },
+  ]) {
+    const owner = await ownerFixture(() => ({ status: 200, body: { data } }))
+    const origin = await listen(
+      createBffServer(
+        { ...config(owner.origin), systemModelManagementToken: "manager-fixture" },
+        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+      ),
+    )
+    const response = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders() })
+    assert.equal(response.status, 502)
+    assert.equal((await response.text()).includes("fixture-secret"), false)
+    assert.equal(owner.calls.length, 1)
+  }
+})
+
+test("upstream provider candidate owner failures are stable, sanitized and never retried", async () => {
+  for (const [status, code, retryable, expected] of [
+    [503, "MODEL_UNAVAILABLE", false, 503],
+    [503, "MODEL_UNAVAILABLE", true, 503],
+    [403, "POLICY_DENIED", false, 403],
+    [404, "NOT_FOUND", false, 404],
+    [403, "service_auth_failed", false, 503],
+    [503, "unknown_supplier_error", true, 502],
+  ] as const) {
+    const owner = await ownerFixture(() => ({ status, body: { error: { code, message: "fixture-secret", retryable } } }))
+    const origin = await listen(
+      createBffServer(
+        { ...config(owner.origin), systemModelManagementToken: "manager-fixture" },
+        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+      ),
+    )
+    const response = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders() })
+    assert.equal(response.status, expected, code)
+    assert.equal((await response.text()).includes("fixture-secret"), false)
+    assert.equal(owner.calls.length, 1)
+  }
+})
+
+test("upstream provider candidate deadline cancels the actual upstream response socket", { timeout: 2000 }, async () => {
+  let sends = 0
+  let closed!: () => void
+  const done = new Promise<void>((resolve) => {
+    closed = resolve
+  })
+  const owner = await listen(
+    createServer((_request, response) => {
+      sends++
+      response.once("close", closed)
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "fixture" })
+      response.write('{"data":')
+    }),
+  )
+  const origin = await listen(
+    createBffServer(
+      { ...config(owner, 50), systemModelManagementToken: "manager-fixture" },
+      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+    ),
+  )
+  const response = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders() })
+  assert.equal(response.status, 503)
+  await done
+  assert.equal(sends, 1)
+})
+
+test("upstream provider candidate deadline includes fresh admission without restarting the budget", async () => {
+  const owner = await ownerFixture()
+  const originalNow = Date.now
+  let clock = originalNow()
+  try {
+    Date.now = () => clock
+    const source = {
+      verify: async () => {
+        clock += 11_000
+        return { ok: true, identity: { namespace: tenantId, userId: actorId }, platformAdmin: true } as const
+      },
+    }
+    const origin = await listen(
+      createBffServer(
+        { ...config(owner.origin, 10_000), systemModelManagementToken: "manager-fixture" },
+        { businessStore: null, readiness: async () => undefined, sessionAdmission: source },
+      ),
+    )
+    const result = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders() })
+    assert.equal(result.status, 503)
+    assert.equal(owner.calls.length, 0)
+  } finally {
+    Date.now = originalNow
+  }
+})
+
+test("upstream provider candidates parsed after the absolute deadline are not returned", async () => {
+  const { systemModelConfiguration } = await import("../dist/infrastructure/clients/owner/system-model-configuration.js")
+  const originalFetch = globalThis.fetch,
+    originalParse = JSON.parse,
+    originalNow = Date.now
+  const deadlineAt = originalNow() + 10_000
+  const prepared = new Response(JSON.stringify({ data: { provider_id: revisionId, items: [] } }), {
+    status: 200,
+    headers: { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "fixture" },
+  })
+  let clock = deadlineAt - 1000
+  try {
+    globalThis.fetch = async () => prepared
+    Date.now = () => clock
+    JSON.parse = ((...args: Parameters<typeof JSON.parse>) => {
+      const result = originalParse(...args)
+      clock = deadlineAt + 1
+      return result
+    }) as typeof JSON.parse
+    const result = await systemModelConfiguration({
+      baseUrl: "https://fixture.invalid",
+      secret: "manager-fixture",
+      tenantId,
+      actorId,
+      requestId: "fixture",
+      signal: new AbortController().signal,
+      deadlineAt,
+      maxResponseBytes: 1024 * 1024,
+      operation: "upstreamModels",
+      id: revisionId,
+      query: new URLSearchParams(),
+    })
+    assert.deepEqual(result, { ok: false, status: 503, code: "admin_model_routing_unavailable" })
+  } finally {
+    globalThis.fetch = originalFetch
+    JSON.parse = originalParse
+    Date.now = originalNow
+  }
+})
+
+test("upstream provider candidate caller cancellation closes the owner socket without retry", { timeout: 2000 }, async () => {
+  let started!: () => void,
+    closed!: () => void,
+    sends = 0
+  const seen = new Promise<void>((resolve) => {
+      started = resolve
+    }),
+    done = new Promise<void>((resolve) => {
+      closed = resolve
+    })
+  const owner = await listen(
+    createServer((_request, response) => {
+      sends++
+      response.once("close", closed)
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "fixture" })
+      response.write('{"data":')
+      started()
+    }),
+  )
+  const origin = await listen(
+    createBffServer(
+      { ...config(owner), systemModelManagementToken: "manager-fixture" },
+      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+    ),
+  )
+  const abort = new AbortController(),
+    pending = fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders(), signal: abort.signal })
+  await seen
+  abort.abort()
+  await assert.rejects(pending)
+  await done
+  assert.equal(sends, 1)
+})
+
+test("upstream provider candidate reads require owner no-store and the complete one-MiB response budget", async () => {
+  const data = JSON.stringify({ data: { provider_id: revisionId, items: [] } })
+  for (const [cache, body] of [
+    [null, data],
+    ["no-store", " ".repeat(1024 * 1024) + data],
+  ] as const) {
+    let sends = 0
+    const owner = await listen(
+      createServer((_request, response) => {
+        sends++
+        response.writeHead(200, { "content-type": "application/json", "x-request-id": "fixture", ...(cache === null ? {} : { "cache-control": cache }) })
+        response.end(body)
+      }),
+    )
+    const origin = await listen(
+      createBffServer(
+        { ...config(owner), systemModelManagementToken: "manager-fixture" },
+        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
+      ),
+    )
+    assert.equal((await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders() })).status, 502)
+    assert.equal(sends, 1)
+  }
+})
+
+for (const mode of ["deadline", "abort"] as const)
+  test(`upstream provider candidate owner error decoding rechecks ${mode} before mapping status`, async () => {
+    const { systemModelConfiguration } = await import("../dist/infrastructure/clients/owner/system-model-configuration.js")
+    const originalFetch = globalThis.fetch,
+      originalParse = JSON.parse,
+      originalNow = Date.now
+    const prepared = new Response(JSON.stringify({ error: { code: "NOT_FOUND", message: "fixture", retryable: false } }), {
+      status: 404,
+      headers: { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "fixture" },
+    })
+    const deadlineAt = originalNow() + 10_000,
+      controller = new AbortController()
+    let clock = deadlineAt - 1000,
+      parses = 0
+    try {
+      globalThis.fetch = async () => prepared
+      Date.now = () => clock
+      JSON.parse = ((...args: Parameters<typeof JSON.parse>) => {
+        const result = originalParse(...args)
+        parses++
+        if (mode === "deadline") clock = deadlineAt + 1
+        else controller.abort()
+        return result
+      }) as typeof JSON.parse
+      const result = await systemModelConfiguration({
+        baseUrl: "https://fixture.invalid",
+        secret: "manager-fixture",
+        tenantId,
+        actorId,
+        requestId: "fixture",
+        signal: controller.signal,
+        deadlineAt,
+        maxResponseBytes: 1024 * 1024,
+        operation: "upstreamModels",
+        id: revisionId,
+        query: new URLSearchParams(),
+      })
+      assert.equal(parses, 1)
+      assert.deepEqual(result, { ok: false, status: 503, code: "admin_model_routing_unavailable" })
+    } finally {
+      globalThis.fetch = originalFetch
+      JSON.parse = originalParse
+      Date.now = originalNow
+    }
+  })

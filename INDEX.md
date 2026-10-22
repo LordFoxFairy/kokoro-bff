@@ -1,3 +1,25 @@
+## MODEL-1 上游候选读取（2026-10-22）
+
+现 `model-configuration-admin.ts` / `system-model-configuration.ts` 显式 provider upstream-models GET，固定 System6.1。只管理读取候选，无分页／正文／命令头；与准入共用10秒预算，严格回包绑定provider。`provider-model-discovery-public-contract.mjs` 仅构建期完整逆证Public22.2，无运行fallback。后继App/Admin须固定正式Public22.3后接线。
+
+## 2026-10-21 本人积分账户初始化
+
+Public22.2新增天然幂等PUT `/v1/billing/credit-account`，沿个人owner client与Billing正式experimental.3，GET仍只读。生成来源见billing-http manifest，构建期完整父逆证见 `scripts/billing-account-public-contract.mjs`；主路径回归在 `test/billing-personal-read.test.mjs`，未接App或正常环境。
+
+## 发布确认快照入口（2026-10-21）
+
+Admin既有详情的meta.publication复用skill-product-response窄mapper，核整个Proto未知字段并拒绝缺值，不猜null；当前Native pin 97b27b3（本人历史原包资格），独立HTTP6.3不变。
+
+沿现publish-skill、skill-admin路由和skill-product-input/schema、CatalogConnectClient：用户确认的publication为空或精确pointer/version，变更进入create-skill-draft-projector原摘要。Platform固定artifact和八向量见当前vendor与platform-connect manifest；原合同历史门在personal-skill-history-public-contract接入窄发布delta。两路冲突沿既有412，无提交重读／新存储。正常配对未完成，状态见docs/CURRENT.md。
+
+## 2026-10-20 MC-02A System5 当前入口
+
+`src/infrastructure/clients/owner/system-model-catalog.ts` 严格消费固定 generated `getModelCatalog`，投影owner显式provider/精确身份，替代原application slash猜测。原四管理操作继续由 `system-model-routing.ts` 消费，revision无feature/label别名nullable。canonical Public21/165及 `scripts/shared-model-catalog-public-contract.mjs` 精确逆回20后委托原20/19证明；旧oracle不改、脚本不进入runtime。相关回归仍在 bff/model-routing-admin/system-http-contract 原suite，当前验证与正常未激活边界见 `docs/CURRENT.md`。
+
+## 2026-10-20 System4 管理配对当前入口
+
+Public20/165 的唯一wire增量在 `AdminModelRevision`；原 `src/infrastructure/clients/owner/system-model-routing.ts` 严格消费正规 `src/generated/system-http`，仍现四操作，无额外mapper。固定System4 owner artifact/provenance见 `contract/dependencies/system-http.json`；`scripts/system-model-connection-public-contract.mjs` 只做完整Public19逆证，原历史proof不变且不进入runtime。正负例留原 `test/model-routing-admin.test.ts` 与 `test/system-http-contract.test.mjs`；验收及正常未激活边界见 `docs/CURRENT.md`。下列切片按历史读取。
+
 ## MCP 当前可用性消费
 
 原 `mcp-personal-response.ts` 负责严格enum→五态及Connector投影；原 `mcp-personal-server-response.ts` 复用同一投影并保完整安全header描述。原两个Platform生成器固定同一个已合4a4e4c4 /HTTP6.2发布物，测试仍在原MCP suites内承接，无新模块/持久事实。

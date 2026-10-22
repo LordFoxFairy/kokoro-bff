@@ -1,0 +1,125 @@
+{
+  "profile": "app-skill-binding-v1",
+  "version": "1.0.0",
+  "owner": "Platform/Skills",
+  "status": "candidate",
+  "parent_commit": "883d7713556b8cee9d41b9c9d904931715033808",
+  "parents": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+      "path": "contract/descriptor/platform-app-skill-binding-parent.proto.snapshot",
+      "sha256": "4cf055deb6dca9c9739037a2431d827185703ef4e1e5611b63dd3fd43e410d96"
+    },
+    "contract/descriptor/platform-v1.binpb": {
+      "path": "contract/descriptor/platform-app-skill-binding-parent.descriptor.snapshot",
+      "sha256": "7925997178cfd047506423da2586eac087a4191fd1e0808f39e91d090ec2ea1a"
+    },
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+      "path": "contract/descriptor/platform-app-skill-binding-parent.generated.snapshot",
+      "sha256": "22aaf5791966335fd9dedd0b120429eca2951518c24568083211f3ded0bfbc06"
+    },
+    "prisma/schema.prisma": {
+      "path": "contract/descriptor/platform-app-skill-binding-parent.prisma.snapshot",
+      "sha256": "22ba403afd410f3c4986e96a2c100a40747b0594aa1274c15cd2990f3e37bec9"
+    }
+  },
+  "current": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "e4c9e692284b4797fdc691e729171500730a698b5b9402502fac8c304acf135b",
+    "contract/descriptor/platform-v1.binpb": "8b25cb3f11b0531b06212493924fd8f50ea12b3427a763c73bd29a9d8f9b81b6",
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "b29974575f844cd27c7f8a1d97f9409be380d3e5c46464d6acb119d65a0831e9",
+    "prisma/schema.prisma": "4f69427e758a286d0578badf8588e8014078465d8e54e8b97ad03a83cc7b9372"
+  },
+  "methods": [
+    "kokoro.platform.v1.SkillCatalogService/PutAppSkillBinding",
+    "kokoro.platform.v1.SkillCatalogService/RemoveAppSkillBinding",
+    "kokoro.platform.v1.ProductSkillReadService/ListAppSkillBindings"
+  ],
+  "identity": "trusted BFF workload tenant plus x-kokoro-subject and x-kokoro-app-id; no body identity",
+  "request_digest": {
+    "algorithm": "SHA-256",
+    "canonicalization": "RFC8785",
+    "encoding": "UTF-8",
+    "projection": {
+      "operation": "operation",
+      "tenant_id": "tenantId",
+      "subject_id": "subjectId",
+      "app_id": "appId",
+      "target_id": "target",
+      "expected_binding_version": "expected_binding_version"
+    },
+    "trusted_fields": {
+      "tenant_id": "admitted workload tenant",
+      "subject_id": "x-kokoro-subject",
+      "app_id": "x-kokoro-app-id"
+    },
+    "target_id": {
+      "skill.app_binding.put": "exact request.skill_id.value",
+      "skill.app_binding.remove": "stable request.series_id.value"
+    },
+    "expected_binding_version": "canonical base-10 integer string in [0,9223372036854775806]; zero only for first-ever Put; Remove requires positive",
+    "excluded": [
+      "request_id",
+      "command.command_id",
+      "command.request_digest"
+    ],
+    "vector_inputs": "projection values name vector.input members; these are not additional request body fields"
+  },
+  "expected_zero": "row never existed; removed tombstone requires positive CAS",
+  "list": "exact binding facts including removed tombstones; current eligible exact metadata only; no execution or installation",
+  "vectors": [
+    {
+      "input": {
+        "tenantId": "tenant-1",
+        "subjectId": "operator-1",
+        "appId": "app-1",
+        "operation": "skill.app_binding.put",
+        "target": "skill-1",
+        "expected_binding_version": "0"
+      },
+      "sha256": "f21a142a4569a4de81014302fea447385a9d59cd6548a2b875af67f6c2185b72"
+    },
+    {
+      "input": {
+        "tenantId": "tenant-1",
+        "subjectId": "operator-1",
+        "appId": "app-1",
+        "operation": "skill.app_binding.put",
+        "target": "skill-1",
+        "expected_binding_version": "2"
+      },
+      "sha256": "186968175b5ff55545a56a3288bb13991a4480aa35f7b16b027048c849ac0dc9"
+    },
+    {
+      "input": {
+        "tenantId": "tenant-1",
+        "subjectId": "operator-1",
+        "appId": "app-2",
+        "operation": "skill.app_binding.put",
+        "target": "skill-1",
+        "expected_binding_version": "0"
+      },
+      "sha256": "fbf7fb79dd30419ba6f7a13011cc3314b8e1ab336a8fa5ef855fed717309a859"
+    },
+    {
+      "input": {
+        "tenantId": "tenant-1",
+        "subjectId": "operator-2",
+        "appId": "app-1",
+        "operation": "skill.app_binding.put",
+        "target": "skill-1",
+        "expected_binding_version": "0"
+      },
+      "sha256": "8eb54483bf4d46f6bc3fa7775251b542d6a612c67ac563ebc99147d7513cd6f8"
+    },
+    {
+      "input": {
+        "tenantId": "tenant-1",
+        "subjectId": "operator-1",
+        "appId": "app-1",
+        "operation": "skill.app_binding.remove",
+        "target": "series-1",
+        "expected_binding_version": "1"
+      },
+      "sha256": "fb40ee55c66b149e1a21fbfe463f40f3ea85af7a2c63aab5dfa3a0ef74702f2b"
+    }
+  ]
+}

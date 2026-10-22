@@ -1,3 +1,6 @@
+import { restorePublic21ModelConfigurationContract, modelConfigurationParentBaseline } from "./model-configuration-public-contract.mjs"
+import { restorePublic20SharedModelCatalogContract } from "./shared-model-catalog-public-contract.mjs"
+import { restorePublic19SystemModelConnectionContract } from "./system-model-connection-public-contract.mjs"
 // Exact proof of the two approved merge parents; never used by runtime decoders.
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
@@ -17,6 +20,7 @@ function restoreProjectListPatch(source) {
   return restored
 }
 function restore(source, name) {
+  source = restorePublic19SystemModelConnectionContract(restorePublic20SharedModelCatalogContract(restorePublic21ModelConfigurationContract(source)))
   source = restoreProjectListPatch(source)
   if (!current(source)) return source
   if (digest(source) !== proof.current_sha256) throw Error("Public19 complete integration source drift")
@@ -31,6 +35,7 @@ function restore(source, name) {
   return result
 }
 function restoreBaseline(baseline, name) {
+  baseline = modelConfigurationParentBaseline(baseline)
   if (digest(JSON.stringify(baseline)) !== proof.current_inventory_sha256) throw Error("Public19 exact165 ordered inventory drift")
   const parent = proof.parents[name]
   if (digest(JSON.stringify(parent.inventory)) !== parent.inventory_sha256) throw Error("Public19 frozen parent inventory drift")
@@ -42,6 +47,8 @@ export const closureLocalBaseline = (baseline) => restoreBaseline(baseline, "loc
 export const closureMainBaseline = (baseline) => restoreBaseline(baseline, "main")
 export function inspectClosureIntegrationContract(source, baseline) {
   try {
+    baseline = modelConfigurationParentBaseline(baseline)
+    source = restorePublic19SystemModelConnectionContract(restorePublic20SharedModelCatalogContract(restorePublic21ModelConfigurationContract(source)))
     source = restoreProjectListPatch(source)
     if (!current(source)) throw Error("current public artifact must be Public19.0.0")
     restoreClosureLocalContract(source)

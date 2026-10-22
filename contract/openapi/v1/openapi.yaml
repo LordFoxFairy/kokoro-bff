@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 19.0.1
+  version: 22.3.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -3082,6 +3082,73 @@ paths:
         '503':
           $ref: '#/components/responses/AdminModelRoutingUnavailable'
   /v1/admin/model-labels:
+    post:
+      tags:
+      - Models
+      operationId: createAdminModelLabel
+      summary: createAdminModelLabel
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.model_configuration.write
+      parameters:
+      - $ref: '#/components/parameters/AdminModelRoutingIdempotencyKey'
+      responses:
+        '201':
+          description: Confirmed model configuration result; never returns an API key.
+          headers:
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Content-Length:
+              required: true
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminModelLabel'
+                  meta:
+                    $ref: '#/components/schemas/RequestMeta'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '404':
+          $ref: '#/components/responses/AdminModelRoutingNotFound'
+        '409':
+          $ref: '#/components/responses/AdminModelRoutingConflict'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminModelLabelInput'
     get:
       tags:
         - Models
@@ -3111,6 +3178,73 @@ paths:
         '503':
           $ref: '#/components/responses/AdminModelRoutingUnavailable'
   /v1/admin/model-revisions:
+    post:
+      tags:
+      - Models
+      operationId: createAdminModelRevision
+      summary: createAdminModelRevision
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.model_configuration.write
+      parameters:
+      - $ref: '#/components/parameters/AdminModelRoutingIdempotencyKey'
+      responses:
+        '201':
+          description: Confirmed model configuration result; never returns an API key.
+          headers:
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Content-Length:
+              required: true
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminModelRevision'
+                  meta:
+                    $ref: '#/components/schemas/RequestMeta'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '404':
+          $ref: '#/components/responses/AdminModelRoutingNotFound'
+        '409':
+          $ref: '#/components/responses/AdminModelRoutingConflict'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminModelRevisionInput'
     get:
       tags:
         - Models
@@ -4954,6 +5088,44 @@ paths:
         '429': { $ref: '#/components/responses/ManagedPersonalSkillRateLimited' }
         '502': { $ref: '#/components/responses/ManagedPersonalSkillBadGateway' }
         '503': { $ref: '#/components/responses/ManagedPersonalSkillUnavailable' }
+    delete:
+      tags: [Skills]
+      operationId: deletePersonalSkillSeries
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.manage_personal
+      summary: Delete the current subject's entire personal Skill series
+      description: >-
+        Freeze the exact anchor state and explicit series publication at confirmation. All revisions become terminal deleted;
+        existing immutable installation and asset references remain retained but confer no read, install or execution eligibility.
+        Unknown outcomes may only replay the original body and key, never infer success from a missing list item.
+      parameters:
+        - $ref: '#/components/parameters/PersonalSkillLifecycleSkillId'
+        - $ref: '#/components/parameters/WithdrawPersonalSkillIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeletePersonalSkillSeriesRequest' }
+      responses:
+        '200':
+          description: Entire series deleted or original durable receipt replayed
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/DeletePersonalSkillSeriesResponse' } } }
+        '400': { $ref: '#/components/responses/PersonalSkillLifecycleBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalSkillLifecycleUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalSkillLifecycleForbidden' }
+        '404': { $ref: '#/components/responses/PersonalSkillLifecycleNotFound' }
+        '409': { $ref: '#/components/responses/PersonalSkillLifecycleConflict' }
+        '412': { $ref: '#/components/responses/PersonalSkillLifecyclePreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalSkillLifecyclePayloadTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }
   /v1/self/skills/{skill_id}/package:
     get:
       tags: [Skills]
@@ -5194,7 +5366,7 @@ paths:
       x-kokoro-permission: product.skill.publish
       summary: Publish the current validated ZIP package of a user-owned draft Skill
       description: >-
-        Public10 corrective preactivation command on the existing /v1 route. Requires a closed JSON audience and expected_state_version, both frozen into the same trusted owner command digest and wire. BFF fixes PERSONAL visibility and re-admits the current IAM subject and tenant on every replay. Platform alone validates the exact draft, CAS and current package/optional cover, then atomically publishes and returns its durable event receipt. Unknown ACK recovery replays the same body/key/CAS; no empty-body fallback or BFF receipt/outbox is added.
+        Public10 corrective preactivation command on the existing /v1 route. Requires a closed JSON audience, expected_state_version and explicit expected_publication, all frozen into the same trusted owner command digest and wire. BFF fixes PERSONAL visibility and re-admits the current IAM subject and tenant on every replay. Platform alone validates the exact draft, CAS and current package/optional cover, then atomically publishes and returns its durable event receipt. Unknown ACK recovery replays the same body/key/CAS; no empty-body fallback or BFF receipt/outbox is added. The publication expectation is the user-confirmed series pointer and state version, or explicit null for a never-published series; BFF never re-reads or rebases it on submission. Stale snapshots fail 412 without automatic replay.
       parameters:
         - $ref: '#/components/parameters/SkillPackageUploadSkillId'
         - $ref: '#/components/parameters/SkillPublishIdempotencyKey'
@@ -5203,7 +5375,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SkillAudienceRequest'
+              $ref: '#/components/schemas/SkillPublishRequest'
       responses:
         '200':
           description: Skill is active or the same healthy publication is durably replayed
@@ -6831,6 +7003,34 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/billing/credit-account:
+    put:
+      tags: [Billing]
+      operationId: initializeBillingCreditAccount
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: inherent
+      x-kokoro-permission: billing.self.write
+      summary: Initialize only the admitted subject's zero Credit account
+      description: Inherently idempotent. No query parameters; no recharge or grant. Unknown outcomes are checked through summary before an explicit retry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, maxProperties: 0 }
+      responses:
+        '200': { $ref: '#/components/responses/BillingSummarySuccess' }
+        '400': { $ref: '#/components/responses/BillingReadBadRequest' }
+        '401': { $ref: '#/components/responses/BillingReadUnauthorized' }
+        '403':
+          description: Current subject forbidden or credit account disabled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/BillingReadRateLimited' }
+        '502': { $ref: '#/components/responses/BillingReadBadGateway' }
+        '503': { $ref: '#/components/responses/BillingReadUnavailable' }
   /v1/billing/summary:
     get:
       tags: [Billing]
@@ -6916,6 +7116,38 @@ paths:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/self/skills/{skill_id}/versions:
+    get:
+      tags: [Skills]
+      operationId: listPersonalSkillVersions
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.read_managed_personal
+      summary: Read exact published revisions in the current subject owned series
+      description: One bounded current owner snapshot. Current is the formal publication pointer, not the largest revision. History never changes installation pins or grants execution. Publication changes invalidate the continuation cursor.
+      parameters:
+        - name: skill_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+      responses:
+        '200': { $ref: '#/components/responses/PersonalSkillHistoryOk' }
+        '400': { $ref: '#/components/responses/ManagedPersonalSkillBadRequest' }
+        '401': { $ref: '#/components/responses/ManagedPersonalSkillUnauthorized' }
+        '403': { $ref: '#/components/responses/ManagedPersonalSkillForbidden' }
+        '404': { $ref: '#/components/responses/ManagedPersonalSkillNotFound' }
+        '429': { $ref: '#/components/responses/ManagedPersonalSkillRateLimited' }
+        '502': { $ref: '#/components/responses/ManagedPersonalSkillBadGateway' }
+        '503': { $ref: '#/components/responses/ManagedPersonalSkillUnavailable' }
     post:
       tags: [Skills]
       operationId: createPersonalSkillVersion
@@ -9396,7 +9628,7 @@ paths:
       summary: getAdminSkill
       description: >-
         Closed Product9 boundary. Identity comes from fresh IAM admission; no caller-supplied tenant, actor or admin status. One bounded admission and I/O budget,
-        no fallback.
+        no fallback. The required meta.publication is the explicit owner-confirmed series pointer/version (including withdrawn or disabled current), or null only when no publication exists. It is independent of the selected exact version; missing or malformed owner snapshots fail closed rather than claiming first publication.
       parameters:
         - name: skill_id
           in: path
@@ -12258,6 +12490,126 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SkillProductErrorResponse"
+  /v1/admin/open-apps/{app_id}/skill-bindings:
+    get:
+      tags: [Skills]
+      operationId: listOpenAppSkillBindings
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.manage_app_binding
+      summary: listOpenAppSkillBindings
+      description: Current Product Session and fresh IAM Open App operator qualification for the exact tenant, App and managed OAuth client. Platform-admin status is not operator authority. Binding targets one exact Skill version; no latest resolution, installation or execution. Unknown writes retry only the original body and key; zero CAS means no prior binding, including no removed tombstone.
+      parameters:
+        - name: app_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: cursor
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 4096 }
+      responses:
+        '200':
+          description: Exact owner binding facts, current nullable metadata and original receipt for writes
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppSkillBindingListResponse' } } }
+        '400': { $ref: '#/components/responses/PersonalSkillLifecycleBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalSkillLifecycleUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalSkillLifecycleForbidden' }
+        '404': { $ref: '#/components/responses/PersonalSkillLifecycleNotFound' }
+        '409': { $ref: '#/components/responses/PersonalSkillLifecycleConflict' }
+        '412': { $ref: '#/components/responses/PersonalSkillLifecyclePreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalSkillLifecyclePayloadTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }
+    post:
+      tags: [Skills]
+      operationId: putOpenAppSkillBinding
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.manage_app_binding
+      summary: putOpenAppSkillBinding
+      description: Current Product Session and fresh IAM Open App operator qualification for the exact tenant, App and managed OAuth client. Platform-admin status is not operator authority. Binding targets one exact Skill version; no latest resolution, installation or execution. Unknown writes retry only the original body and key; zero CAS means no prior binding, including no removed tombstone.
+      parameters:
+        - name: app_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - $ref: '#/components/parameters/WithdrawPersonalSkillIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PutAppSkillBindingRequest' }
+      responses:
+        '200':
+          description: Exact owner binding facts, current nullable metadata and original receipt for writes
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppSkillBindingCommandResponse' } } }
+        '400': { $ref: '#/components/responses/PersonalSkillLifecycleBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalSkillLifecycleUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalSkillLifecycleForbidden' }
+        '404': { $ref: '#/components/responses/PersonalSkillLifecycleNotFound' }
+        '409': { $ref: '#/components/responses/PersonalSkillLifecycleConflict' }
+        '412': { $ref: '#/components/responses/PersonalSkillLifecyclePreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalSkillLifecyclePayloadTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }
+  /v1/admin/open-apps/{app_id}/skill-bindings/{series_id}:
+    delete:
+      tags: [Skills]
+      operationId: removeOpenAppSkillBinding
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.manage_app_binding
+      summary: removeOpenAppSkillBinding
+      description: Current Product Session and fresh IAM Open App operator qualification for the exact tenant, App and managed OAuth client. Platform-admin status is not operator authority. Binding targets one exact Skill version; no latest resolution, installation or execution. Unknown writes retry only the original body and key; zero CAS means no prior binding, including no removed tombstone.
+      parameters:
+        - name: app_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - name: series_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - $ref: '#/components/parameters/WithdrawPersonalSkillIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RemoveAppSkillBindingRequest' }
+      responses:
+        '200':
+          description: Exact owner binding facts, current nullable metadata and original receipt for writes
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppSkillBindingCommandResponse' } } }
+        '400': { $ref: '#/components/responses/PersonalSkillLifecycleBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalSkillLifecycleUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalSkillLifecycleForbidden' }
+        '404': { $ref: '#/components/responses/PersonalSkillLifecycleNotFound' }
+        '409': { $ref: '#/components/responses/PersonalSkillLifecycleConflict' }
+        '412': { $ref: '#/components/responses/PersonalSkillLifecyclePreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalSkillLifecyclePayloadTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }
   /v1/skill.list:
     get:
       tags:
@@ -12269,7 +12621,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: capability.skill.read
       summary: listSkills
-      description: Fresh current human and fixed Product tenant admission. Source facts are qualified by the owner; no anonymous access, latest fallback or write side effect. Personal and project installations form a union when project_id is present; the complete exact project installation takes precedence for the same series, including disabled installations. Personal-only items remain; no latest substitution, automatic upgrade or execution authorization. Both scopes share the request deadline, the result remains limited to 1000 items, and current project access is rechecked before disclosure.
+      description: Current IAM User API Key or registered OAuth Open App identity in the fixed Product tenant, inside the existing service envelope. Ordinary OAuth App reads only its own exact App bindings and rejects project_id with400. User API Key reads personal and authorized project installations; trusted App additionally includes its own bindings. Same-series precedence is the complete project row, then personal row, then App row, including disabled installations. No latest substitution, automatic upgrade, inferred trust or execution authorization. Removed or invalid bindings are omitted. All scopes share the request deadline and1000-item cap; project access and the same complete IAM principal are rechecked before disclosure. Public author profiles use the dedicated IAM Skill list endpoint; website RPCs retain Session admission.
       responses:
         "200":
           description: Specification representation; no legacy data/meta wrapper.
@@ -13444,6 +13796,586 @@ paths:
           schema:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
+  /v1/admin/model-providers:
+    get:
+      tags:
+      - Models
+      operationId: listAdminModelProviders
+      summary: listAdminModelProviders
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.model_configuration.read
+      parameters:
+      - $ref: '#/components/parameters/AdminModelRoutingLimit'
+      - $ref: '#/components/parameters/AdminModelRoutingCursor'
+      responses:
+        '200':
+          description: Confirmed model configuration result; never returns an API key.
+          headers:
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Content-Length:
+              required: true
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminModelProvider'
+                  meta:
+                    $ref: '#/components/schemas/AdminPageMeta'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+    post:
+      tags:
+      - Models
+      operationId: createAdminModelProvider
+      summary: createAdminModelProvider
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.model_configuration.write
+      parameters:
+      - $ref: '#/components/parameters/AdminModelRoutingIdempotencyKey'
+      responses:
+        '201':
+          description: Confirmed model configuration result; never returns an API key.
+          headers:
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Content-Length:
+              required: true
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminModelProvider'
+                  meta:
+                    $ref: '#/components/schemas/RequestMeta'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '404':
+          $ref: '#/components/responses/AdminModelRoutingNotFound'
+        '409':
+          $ref: '#/components/responses/AdminModelRoutingConflict'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminModelProviderInput'
+  /v1/admin/model-provider-creations:
+    get:
+      tags:
+      - Models
+      operationId: getAdminModelProviderCreation
+      summary: getAdminModelProviderCreation
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.model_configuration.write
+      parameters:
+      - name: idempotency_key
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+      responses:
+        '200':
+          description: Confirmed model configuration result; never returns an API key.
+          headers:
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Content-Length:
+              required: true
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminModelProviderCreation'
+                  meta:
+                    $ref: '#/components/schemas/RequestMeta'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '404':
+          $ref: '#/components/responses/AdminModelRoutingNotFound'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+  /v1/admin/model-definitions:
+    get:
+      tags:
+      - Models
+      operationId: listAdminModelDefinitions
+      summary: listAdminModelDefinitions
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.model_configuration.read
+      parameters:
+      - $ref: '#/components/parameters/AdminModelRoutingLimit'
+      - $ref: '#/components/parameters/AdminModelRoutingCursor'
+      responses:
+        '200':
+          description: Confirmed model configuration result; never returns an API key.
+          headers:
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Content-Length:
+              required: true
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminModelDefinition'
+                  meta:
+                    $ref: '#/components/schemas/AdminPageMeta'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+    post:
+      tags:
+      - Models
+      operationId: createAdminModelDefinition
+      summary: createAdminModelDefinition
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.model_configuration.write
+      parameters:
+      - $ref: '#/components/parameters/AdminModelRoutingIdempotencyKey'
+      responses:
+        '201':
+          description: Confirmed model configuration result; never returns an API key.
+          headers:
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Content-Length:
+              required: true
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminModelDefinition'
+                  meta:
+                    $ref: '#/components/schemas/RequestMeta'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '404':
+          $ref: '#/components/responses/AdminModelRoutingNotFound'
+        '409':
+          $ref: '#/components/responses/AdminModelRoutingConflict'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminModelDefinitionInput'
+  /v1/admin/model-features:
+    get:
+      tags:
+      - Models
+      operationId: listAdminModelFeatures
+      summary: listAdminModelFeatures
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.model_configuration.read
+      parameters:
+      - $ref: '#/components/parameters/AdminModelRoutingLimit'
+      - $ref: '#/components/parameters/AdminModelRoutingCursor'
+      responses:
+        '200':
+          description: Confirmed model configuration result; never returns an API key.
+          headers:
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Content-Length:
+              required: true
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminModelFeature'
+                  meta:
+                    $ref: '#/components/schemas/AdminPageMeta'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+  /v1/admin/model-revisions/{revision_id}/publish:
+    post:
+      tags:
+      - Models
+      operationId: publishAdminModelRevision
+      summary: publishAdminModelRevision
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.model_configuration.write
+      parameters:
+      - name: revision_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/AdminModelRoutingIdempotencyKey'
+      - name: If-Match
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^"[1-9][0-9]*"$
+      responses:
+        '200':
+          description: Confirmed model configuration result; never returns an API key.
+          headers:
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Content-Length:
+              required: true
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminModelRevision'
+                  meta:
+                    $ref: '#/components/schemas/RequestMeta'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '404':
+          $ref: '#/components/responses/AdminModelRoutingNotFound'
+        '409':
+          $ref: '#/components/responses/AdminModelRoutingConflict'
+        '428':
+          $ref: '#/components/responses/AdminModelRoutingPreconditionRequired'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+  /v1/admin/model-labels/{label_id}:
+    patch:
+      tags:
+      - Models
+      operationId: updateAdminModelLabel
+      summary: updateAdminModelLabel
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.model_configuration.write
+      parameters:
+      - name: label_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/AdminModelRoutingIdempotencyKey'
+      - name: If-Match
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^"[1-9][0-9]*"$
+      responses:
+        '200':
+          description: Confirmed model configuration result; never returns an API key.
+          headers:
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Content-Length:
+              required: true
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminModelLabel'
+                  meta:
+                    $ref: '#/components/schemas/RequestMeta'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '404':
+          $ref: '#/components/responses/AdminModelRoutingNotFound'
+        '409':
+          $ref: '#/components/responses/AdminModelRoutingConflict'
+        '428':
+          $ref: '#/components/responses/AdminModelRoutingPreconditionRequired'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminModelLabelUpdate'
+  /v1/admin/model-providers/{provider_id}/upstream-models:
+    get:
+      tags: [Models]
+      operationId: listAdminModelProviderUpstreamModels
+      summary: Read upstream candidate model IDs for one saved provider
+      description: Explicit current-platform-administrator read. No query, body framing, Content-Type, CAS or idempotency headers. Uses only the saved owner connection; candidates are not published models, capabilities, prices or execution authorization. No automatic retry or configuration mutation.
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.model_configuration.read
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Candidate IDs from the exact saved provider; no credentials or upstream metadata.
+          headers:
+            x-request-id:
+              required: true
+              schema: { type: string, pattern: '^[A-Za-z0-9._:-]{1,128}$' }
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
+            Content-Length:
+              required: true
+              schema: { type: string, pattern: '^[0-9]+$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminModelProviderUpstreamModelsResponse' }
+        '400': { $ref: '#/components/responses/AdminModelRoutingBadRequest' }
+        '401': { $ref: '#/components/responses/AdminModelRoutingUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminModelRoutingForbidden' }
+        '404': { $ref: '#/components/responses/AdminModelRoutingNotFound' }
+        '429': { $ref: '#/components/responses/AdminModelRoutingRateLimited' }
+        '502': { $ref: '#/components/responses/AdminModelRoutingInvalidResponse' }
+        '503': { $ref: '#/components/responses/AdminModelRoutingUnavailable' }
 components:
   securitySchemes:
     serviceHeader:
@@ -13883,6 +14815,423 @@ components:
         not trim or normalize a non-NFC value.
       schema: { type: string, minLength: 1 }
   schemas:
+    AdminModelProvider:
+      type: object
+      properties:
+        protocol:
+          type: string
+          const: openai_chat_completions
+        connection_type:
+          type: string
+          enum:
+          - direct
+          - litellm
+        base_url:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          pattern: ^https?:\/\/[^\s\\?#]+$
+        secret_handle_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._:/-]*$
+        provider:
+          type: string
+          minLength: 1
+          maxLength: 128
+        provider_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100000
+        id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        created_at:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+        updated_at:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+        deleted_at:
+          anyOf:
+          - type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+          - type: 'null'
+      required:
+      - protocol
+      - connection_type
+      - base_url
+      - secret_handle_ref
+      - provider
+      - provider_key
+      - display_name
+      - priority
+      - id
+      - version
+      - created_at
+      - updated_at
+      - deleted_at
+      additionalProperties: false
+    AdminModelDefinition:
+      type: object
+      properties:
+        model_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        created_at:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+        updated_at:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+        deleted_at:
+          anyOf:
+          - type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+          - type: 'null'
+      required:
+      - model_key
+      - display_name
+      - id
+      - version
+      - created_at
+      - updated_at
+      - deleted_at
+      additionalProperties: false
+    AdminModelFeature:
+      type: object
+      properties:
+        global_feature_key:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]{0,127}$
+        product_id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        result_contract:
+          type: object
+          properties:
+            schema_version:
+              type: number
+              const: 1
+            outcome_kind:
+              type: string
+              enum:
+              - message
+              - artifact
+              - structured
+            media_types:
+              maxItems: 32
+              type: array
+              items:
+                type: string
+                minLength: 1
+                maxLength: 128
+            required_fields:
+              maxItems: 64
+              type: array
+              items:
+                type: string
+                minLength: 1
+                maxLength: 128
+          required:
+          - schema_version
+          - outcome_kind
+          - media_types
+          - required_fields
+          additionalProperties: false
+        id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        created_at:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+        retired_at:
+          anyOf:
+          - type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+          - type: 'null'
+      required:
+      - global_feature_key
+      - product_id
+      - display_name
+      - result_contract
+      - id
+      - version
+      - created_at
+      - retired_at
+      additionalProperties: false
+    AdminModelProviderInput:
+      type: object
+      properties:
+        protocol:
+          type: string
+          const: openai_chat_completions
+        connection_type:
+          default: direct
+          type: string
+          enum:
+          - direct
+          - litellm
+        base_url:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          pattern: ^https?:\/\/[^\s\\?#]+$
+        provider:
+          type: string
+          minLength: 1
+          maxLength: 128
+        provider_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100000
+        api_key:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          pattern: ^[\x21-\x7e]+$
+          writeOnly: true
+      required:
+      - protocol
+      - base_url
+      - provider
+      - provider_key
+      - display_name
+      - priority
+      - api_key
+      additionalProperties: false
+    AdminModelDefinitionInput:
+      type: object
+      properties:
+        model_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+      required:
+      - model_key
+      - display_name
+      additionalProperties: false
+    AdminModelRevisionInput:
+      type: object
+      properties:
+        model_id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        provider_id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        revision:
+          type: integer
+          exclusiveMinimum: 0
+          maximum: 9007199254740991
+        provider_model_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        input_modalities:
+          minItems: 1
+          maxItems: 4
+          type: array
+          items:
+            type: string
+            enum:
+            - text
+            - image
+            - audio
+            - video
+        output_modalities:
+          minItems: 1
+          maxItems: 4
+          type: array
+          items:
+            type: string
+            enum:
+            - text
+            - image
+            - audio
+            - video
+        request_model:
+          type: string
+          minLength: 1
+          maxLength: 255
+        context_window:
+          anyOf:
+          - type: integer
+            minimum: 1
+            maximum: 2147483647
+          - type: 'null'
+        max_output_tokens:
+          anyOf:
+          - type: integer
+            minimum: 1
+            maximum: 2147483647
+          - type: 'null'
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100000
+      required:
+      - model_id
+      - provider_id
+      - revision
+      - provider_model_name
+      - display_name
+      - input_modalities
+      - output_modalities
+      - request_model
+      - context_window
+      - max_output_tokens
+      - priority
+      additionalProperties: false
+    AdminModelLabelInput:
+      type: object
+      properties:
+        label_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        display_name:
+          default: null
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 160
+          - type: 'null'
+        feature_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        default_revision_id:
+          anyOf:
+          - type: string
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+          - type: 'null'
+      required:
+      - label_key
+      - feature_key
+      - default_revision_id
+      additionalProperties: false
+    AdminModelLabelUpdate:
+      type: object
+      properties:
+        display_name:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 160
+          - type: 'null'
+        default_revision_id:
+          anyOf:
+          - type: string
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+          - type: 'null'
+      additionalProperties: false
+    AdminModelProviderUpstreamModelsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [provider_id, items]
+          properties:
+            provider_id: { type: string, format: uuid }
+            items:
+              type: array
+              maxItems: 2000
+              items:
+                type: object
+                additionalProperties: false
+                required: [id]
+                properties:
+                  id: { type: string, minLength: 1, maxLength: 255 }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AdminModelProviderCreation:
+      type: object
+      properties:
+        provider_id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        credential_status:
+          type: string
+          enum:
+          - stored
+          - erased
+        deleted_at:
+          anyOf:
+          - type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+          - type: 'null'
+      required:
+      - provider_id
+      - credential_status
+      - deleted_at
+      additionalProperties: false
     ArchivedTaskItem:
       type: object
       additionalProperties: false
@@ -16223,9 +17572,17 @@ components:
       additionalProperties: false
       required:
         - data
+        - meta
       properties:
         data:
           $ref: "#/components/schemas/SkillProductRecord"
+        meta:
+          type: object
+          additionalProperties: false
+          required: [publication]
+          properties:
+            publication:
+              $ref: "#/components/schemas/SkillPublicationPrecondition"
     SkillProductAckResponse:
       type: object
       additionalProperties: false
@@ -16247,6 +17604,78 @@ components:
               pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$
             replayed:
               type: boolean
+    PutAppSkillBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [skill_id, expected_binding_version]
+      properties:
+        skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        expected_binding_version: { type: string, pattern: '^(0|[1-9][0-9]*)$', maxLength: 19 }
+    RemoveAppSkillBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_binding_version]
+      properties:
+        expected_binding_version: { type: string, pattern: '^[1-9][0-9]*$', maxLength: 19 }
+    AppSkillBinding:
+      type: object
+      additionalProperties: false
+      required: [binding_id, series_id, skill_id, revision, state_version, source_status, created_at, updated_at, removed_at, metadata]
+      properties:
+        binding_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        revision: { type: string, pattern: '^[1-9][0-9]*$', maxLength: 20 }
+        state_version: { type: string, pattern: '^[1-9][0-9]*$', maxLength: 19 }
+        source_status: { type: string, enum: [draft, active, disabled, withdrawn, quarantined, discarded, deleted] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        removed_at:
+          oneOf:
+            - { type: 'null' }
+            - { type: string, format: date-time }
+        metadata:
+          oneOf:
+            - { type: 'null' }
+            - type: object
+              additionalProperties: false
+              required: [name, summary, created_at, updated_at, product]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 255 }
+                summary: { type: string, maxLength: 65535 }
+                created_at: { type: string, format: date-time }
+                updated_at: { type: string, format: date-time }
+                product: { $ref: '#/components/schemas/Public9SkillProductFacts' }
+    AppSkillBindingListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [bindings, next_cursor]
+          properties:
+            bindings: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/AppSkillBinding' } }
+            next_cursor:
+              oneOf:
+                - { type: 'null' }
+                - { type: string, minLength: 1, maxLength: 4096 }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AppSkillBindingCommandResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [binding, event_id, replayed]
+          properties:
+            binding: { $ref: '#/components/schemas/AppSkillBinding' }
+            event_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+            replayed: { type: boolean }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     SkillProductRecord:
       type: object
       additionalProperties: false
@@ -16456,7 +17885,10 @@ components:
         - expected_state_version
         - audience
         - publisher
+        - expected_publication
       properties:
+        expected_publication:
+          $ref: "#/components/schemas/SkillPublicationPrecondition"
         expected_state_version:
           type: string
           pattern: ^[1-9][0-9]*$
@@ -16499,6 +17931,77 @@ components:
         - expected_state_version
         - audience
       properties:
+        expected_state_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          maxLength: 19
+          description: Canonical positive decimal; runtime bounds to signed 64-bit maximum 9223372036854775807.
+        audience:
+          type: string
+          enum:
+            - owner
+            - tenant
+            - catalog
+    SkillPublicationPrecondition:
+      description: Explicit user-confirmed series publication. Null means no publication exists, not an unavailable read. Freeze this value with the command body and key; do not replace it during submission or recovery.
+      oneOf:
+        - type: 'null'
+        - type: object
+          additionalProperties: false
+          required: [current_version_id, state_version]
+          properties:
+            current_version_id:
+              type: string
+              pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$
+            state_version:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              maxLength: 19
+              description: Canonical positive decimal through 9223372036854775806; the owner must increment this version atomically.
+    DeletePersonalSkillSeriesRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_state_version, expected_publication]
+      properties:
+        expected_state_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          maxLength: 19
+          description: Canonical positive decimal through 9223372036854775806; frozen anchor version, not a JavaScript number.
+        expected_publication:
+          $ref: '#/components/schemas/SkillPublicationPrecondition'
+    DeletePersonalSkillSeriesResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [series_id, skill_id, state_version, status, event_id, replayed]
+          properties:
+            series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+            skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+            state_version: { type: string, pattern: '^[1-9][0-9]*$', maxLength: 19 }
+            status: { type: string, const: deleted }
+            event_id: { type: string, pattern: '^evt:[a-f0-9]{64}$' }
+            replayed: { type: boolean }
+        meta:
+          type: object
+          additionalProperties: false
+          required: [request_id]
+          properties:
+            request_id: { type: string }
+    SkillPublishRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_state_version
+        - audience
+        - expected_publication
+      properties:
+        expected_publication:
+          $ref: "#/components/schemas/SkillPublicationPrecondition"
         expected_state_version:
           type: string
           pattern: ^[1-9][0-9]*$
@@ -17572,6 +19075,50 @@ components:
       additionalProperties: false
       properties:
         error: { $ref: '#/components/schemas/SkillPublishErrorDetail' }
+    PersonalSkillHistoryVersion:
+      type: object
+      additionalProperties: false
+      required: [skill_id, revision, name, summary, status, archive_size, file_count, created_at, is_current]
+      properties:
+        skill_id: { type: string, minLength: 1, maxLength: 191 }
+        revision: { type: string, pattern: '^[1-9][0-9]*$' }
+        name: { type: string, maxLength: 255 }
+        summary: { type: string, maxLength: 65535 }
+        status: { type: string, enum: [active, disabled, withdrawn, quarantined] }
+        archive_size: { type: string, pattern: '^[1-9][0-9]*$' }
+        file_count: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time, pattern: 'Z$' }
+        is_current: { type: boolean }
+    PersonalSkillHistoryPublication:
+      type: object
+      additionalProperties: false
+      required: [current_version_id, state_version, withdrawn_at]
+      properties:
+        current_version_id: { type: string, minLength: 1, maxLength: 191 }
+        state_version: { type: string, pattern: '^[1-9][0-9]*$' }
+        withdrawn_at: { type: [string, 'null'], format: date-time, pattern: 'Z$' }
+    PersonalSkillHistoryPage:
+      type: object
+      additionalProperties: false
+      required: [series_id, publication, versions, next_cursor]
+      properties:
+        series_id: { type: string, minLength: 1, maxLength: 191 }
+        publication:
+          anyOf:
+            - { $ref: '#/components/schemas/PersonalSkillHistoryPublication' }
+            - { type: 'null' }
+        versions:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/PersonalSkillHistoryVersion' }
+        next_cursor: { type: [string, 'null'], minLength: 1, maxLength: 2048 }
+    PersonalSkillHistoryResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/PersonalSkillHistoryPage' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     ManagedPersonalSkillResource:
       type: object
       required:
@@ -20127,7 +21674,7 @@ components:
           minLength: 1
           maxLength: 128
         display_name:
-          type: string
+          type: [string, 'null']
           minLength: 1
           maxLength: 160
         feature_key:
@@ -20163,11 +21710,10 @@ components:
         - revision
         - provider_model_name
         - display_name
-        - feature_key
         - input_modalities
         - output_modalities
-        - transport
-        - gateway_model_name
+        - request_model
+        - connection
         - context_window
         - max_output_tokens
         - priority
@@ -20199,10 +21745,6 @@ components:
           type: string
           minLength: 1
           maxLength: 160
-        feature_key:
-          type: string
-          minLength: 1
-          maxLength: 128
         input_modalities:
           type: array
           minItems: 1
@@ -20225,13 +21767,31 @@ components:
               - image
               - audio
               - video
-        transport:
-          type: string
-          const: litellm
-        gateway_model_name:
+        request_model:
           type: string
           minLength: 1
           maxLength: 255
+        connection:
+          type: object
+          additionalProperties: false
+          required: [protocol, connection_type, base_url, secret_handle_ref]
+          properties:
+            protocol:
+              type: string
+              const: openai_chat_completions
+            connection_type:
+              type: string
+              enum: [direct, litellm]
+            base_url:
+              type: string
+              minLength: 1
+              maxLength: 2048
+              pattern: '^https?:\/\/[^\s\\?#]+$'
+            secret_handle_ref:
+              type: string
+              minLength: 1
+              maxLength: 255
+              pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]*$'
         context_window:
           type:
             - integer
@@ -20350,23 +21910,36 @@ components:
           $ref: '#/components/schemas/RequestMeta'
     ModelCandidate:
       type: object
-      required: [provider, name, is_default]
+      required: [provider, name, is_default, display_name, model_id, revision_id, provider_id, feature_key, request_model]
+      additionalProperties: false
       properties:
-        provider: { type: string }
-        name: { type: string }
+        provider: { type: string, minLength: 1, maxLength: 128 }
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Stable business label key; never the display alias or upstream request_model.
         is_default: { type: boolean }
-        display_name: { type: string }
+        display_name: { type: string, minLength: 1, maxLength: 255 }
+        model_id: { type: string, format: uuid }
+        revision_id: { type: string, format: uuid }
+        provider_id: { type: string, format: uuid }
+        feature_key: { type: string, minLength: 1, maxLength: 128 }
+        request_model: { type: string, minLength: 1, maxLength: 255 }
     ModelCandidateListResponse:
       type: object
       required: [data, meta]
+      additionalProperties: false
       properties:
         data:
           type: object
-          required: [models]
+          required: [models, next_cursor]
+          additionalProperties: false
           properties:
             models:
               type: array
               items: { $ref: '#/components/schemas/ModelCandidate' }
+            next_cursor: { type: [string, 'null'] }
         meta: { $ref: '#/components/schemas/RequestMeta' }
     BillingSummary:
       type: object
@@ -20526,6 +22099,7 @@ components:
             - disabled
             - withdrawn
             - quarantined
+            - deleted
         category_keys:
           $ref: "#/components/schemas/SkillProductCategoryKeys"
         product:
@@ -23078,6 +24652,14 @@ components:
                     type: object
                     properties:
                       code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }
+    PersonalSkillHistoryOk:
+      description: A bounded private series history snapshot; reads never upgrade or execute.
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PersonalSkillHistoryResponse' }
     ManagedPersonalSkillListOk:
       description: Current subject management-visible Skill page
       headers:

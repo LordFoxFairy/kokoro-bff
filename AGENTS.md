@@ -33,7 +33,7 @@
 - 文件和目录按持续变化原因与业务能力聚合；只在语义或生命周期不同时分离 wire/internal/row 类型，禁止机械分层、
   万能 service、repository、common 或 utils。
 - 普通用户 `/v1/*` 身份只来自当前固定 IAM `0.7.0` 契约中的 session admission；legacy namespace/principal header 不是 authority。Team 操作消费同一用户 Bearer 与已验证 tenant，不自报身份。
-  Share、runtime manifest 与 Scheduler callback 保持各自显式服务边界。
+  Share、runtime manifest 与 Scheduler callback 保持各自显式服务边界。唯一 GET /v1/skill.list 在既有服务 envelope 内消费 IAM 正式 UserApiKey/OpenApp principal，并在发送前重验；网站四 RPC 和其余用户路由不接受此身份替代 Session。App 绑定管理仍先 Session，再由 IAM operator exact tenant/app/client 资格准入，不以 platformAdmin 替代。
 - 生产 `src/` 不新增 Mock/Fake/InMemory；测试替身放 `test/fixtures/` 或 `test/doubles/`。
 - 不覆盖协作者未提交文件；只暂存当前任务拥有的路径。
 

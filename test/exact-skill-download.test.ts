@@ -46,6 +46,16 @@ test("fresh installation and managed projections must match their exact requeste
   )
 })
 
+for (const status of ["disabled", "withdrawn"]) {
+  test(`personal publisher retains exact original ${status} package qualification`, () => {
+    const row = { skill_id: "old-version", source_ref: "skill:old-version", revision: "4", status, product: { source_kind: "personal" } }
+    assert.deepEqual(exactManagedRecord("old-version", row), { sourceRef: "skill:old-version", revision: "4" })
+    for (const source_kind of [undefined, "official", "third_party"])
+      assert.equal(exactManagedRecord("old-version", { ...row, product: { source_kind } }), null)
+    for (const invalid of ["draft", "quarantined", "discarded"]) assert.equal(exactManagedRecord("old-version", { ...row, status: invalid }), null)
+  })
+}
+
 test("old installation and new catalog current remain distinct exact bindings", async () => {
   let downloads = 0
   const service = new ExactSkillDownloadService({
@@ -134,4 +144,30 @@ test("historic managed version remains exact and cancellation fences a late reco
   release({ sourceRef: "skill:historic-version", revision: "3" })
   await assert.rejects(pending, /cancelled/u)
   assert.equal(downloads, 0)
+})
+
+test("historical publisher handle rechecks current managed eligibility before releasing bytes", async () => {
+  let status = "withdrawn"
+  let downloads = 0
+  const service = new ExactSkillDownloadService({
+    handles: new SkillDownloadHandles(),
+    objectOrigin: "http://objects.test",
+    installation: async () => null,
+    managed: async (id) => exactManagedRecord(id, { skill_id: id, source_ref: `skill:${id}`, revision: "4", status, product: { source_kind: "personal" } }),
+    share: async () => null,
+    download: async (sourceRef) => {
+      downloads++
+      return fact(sourceRef, "4")
+    },
+  })
+  const entry = await service.prepare({ kind: "managed", versionId: "old-version" }, context, signal, performance.now() + 10_000)
+  assert.equal(entry.binding.sourceRef, "skill:old-version")
+  await service.confirm(entry.binding, context, signal, performance.now() + 10_000)
+  assert.equal(downloads, 2)
+  status = "quarantined"
+  await assert.rejects(
+    service.confirm(entry.binding, context, signal, performance.now() + 10_000),
+    (error) => error instanceof ConnectError && error.code === Code.NotFound,
+  )
+  assert.equal(downloads, 2)
 })

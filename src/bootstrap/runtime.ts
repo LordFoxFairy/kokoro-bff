@@ -1,3 +1,7 @@
+import { AppSkillBindingConnectClient } from "../infrastructure/clients/platform/app-skill-binding-connect.js"
+import type { AppSkillBindingClient } from "../application/app-skill-bindings.types.js"
+import { OpenAppManagementAdmissionClient, type OpenAppManagementAdmission } from "../auth/open-app-management-admission.client.js"
+import { SkillListAdmissionClient, type SkillListAdmission } from "../auth/skill-list-admission.client.js"
 import { McpPackageAdminConnectClient } from "../infrastructure/clients/platform/mcp-package-admin-connect.js"
 import { ScheduledTaskReadService } from "../application/scheduled-task-read-service.js"
 import { SchedulerTaskStateReader } from "../infrastructure/clients/scheduler/task-state-reader.js"
@@ -94,6 +98,9 @@ export type BffServerComposition = {
   businessStore: BffBusinessStore | null
   scheduledTaskReader: ScheduledTaskReadService | null
   sessionAdmission: SessionAdmission
+  skillListAdmission: SkillListAdmission
+  openAppManagementAdmission: OpenAppManagementAdmission
+  appSkillBindingClient: AppSkillBindingClient | null
   idempotency: Map<string, IdempotencyEntry>
   agUiRuntime: AgUiSessionRuntime
   agUiProjector?: AgUiProjectorRunner
@@ -131,6 +138,9 @@ export type BffCompositionOptions = {
   /** Supplying null is an explicit test composition; omitted means real persistence. */
   businessStore?: BffBusinessStore | null
   sessionAdmission?: SessionAdmission
+  skillListAdmission?: SkillListAdmission
+  openAppManagementAdmission?: OpenAppManagementAdmission
+  appSkillBindingClient?: AppSkillBindingClient | null
   idempotency?: Map<string, IdempotencyEntry>
   agUiRuntime?: AgUiSessionRuntime
   agUiProjector?: AgUiProjectorRunner
@@ -188,6 +198,17 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       timeoutMs: 5000,
       maxResponseBytes: 65_536,
     })
+  const appSkillBindingClient =
+    options.appSkillBindingClient !== undefined
+      ? options.appSkillBindingClient
+      : config.skillDraft?.platformBaseUrl && config.skillDraft.credentialFile && config.platformProjection?.credentialFile
+        ? new AppSkillBindingConnectClient(
+            config.skillDraft.platformBaseUrl,
+            new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
+            new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
+            config.skillDraft.timeoutMs,
+          )
+        : null
   const skillProductClient =
     options.skillProductClient !== undefined
       ? options.skillProductClient
@@ -434,6 +455,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         ? options.skillSpecificationSource
         : skillProductClient && installationClient && config.platformProjection?.baseUrl && config.platformProjection.credentialFile && config.iamBaseUrl
           ? new SkillSpecificationService({
+              ...(appSkillBindingClient === null ? {} : { appBindings: appSkillBindingClient }),
               owner: new PlatformSkillSpecificationFacade({
                 product: skillProductClient,
                 installations: installationClient,
@@ -546,6 +568,21 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     businessStore,
     scheduledTaskReader,
     sessionAdmission,
+    appSkillBindingClient,
+    openAppManagementAdmission:
+      options.openAppManagementAdmission ??
+      new OpenAppManagementAdmissionClient({
+        baseUrl: config.iamBaseUrl,
+        timeoutMs: config.upstreamTimeoutMs,
+        maxResponseBytes: config.upstreamMaxResponseBytes,
+      }),
+    skillListAdmission:
+      options.skillListAdmission ??
+      new SkillListAdmissionClient({
+        baseUrl: config.iamBaseUrl,
+        timeoutMs: config.upstreamTimeoutMs,
+        maxResponseBytes: config.upstreamMaxResponseBytes,
+      }),
     idempotency: options.idempotency ?? new Map<string, IdempotencyEntry>(),
     agUiRuntime: options.agUiRuntime ?? createAgUiRuntime(config),
     ...(agUiProjector === undefined ? {} : { agUiProjector }),

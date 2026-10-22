@@ -61,6 +61,10 @@ export type CreditAccountResponse = {
   data: CreditAccount
 }
 
+export type OpenCreditAccountRequest = {
+  [key: string]: never
+}
+
 export type LedgerEntry = {
   journal_id: Uuid
   sequence: NonNegativeDecimal
@@ -188,6 +192,52 @@ export type GetMyCreditAccountResponses = {
 }
 
 export type GetMyCreditAccountResponse = GetMyCreditAccountResponses[keyof GetMyCreditAccountResponses]
+
+export type OpenMyCreditAccountData = {
+  body: OpenCreditAccountRequest
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+  }
+  path?: never
+  query?: never
+  url: "/v1/billing/me/credit-account"
+}
+
+export type OpenMyCreditAccountErrors = {
+  /**
+   * Request failed
+   */
+  400: ErrorResponse
+  /**
+   * Authentication required
+   */
+  401: ErrorResponse
+  /**
+   * Forbidden
+   */
+  403: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type OpenMyCreditAccountError = OpenMyCreditAccountErrors[keyof OpenMyCreditAccountErrors]
+
+export type OpenMyCreditAccountResponses = {
+  /**
+   * Success
+   */
+  200: CreditAccountResponse
+}
+
+export type OpenMyCreditAccountResponse = OpenMyCreditAccountResponses[keyof OpenMyCreditAccountResponses]
 
 export type GetMyCreditLedgerData = {
   body?: never

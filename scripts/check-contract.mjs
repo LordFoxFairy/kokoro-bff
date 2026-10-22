@@ -1,3 +1,10 @@
+import {
+  inspectModelConfigurationContract,
+  restorePublic21ModelConfigurationContract,
+  modelConfigurationParentBaseline,
+} from "./model-configuration-public-contract.mjs"
+import { inspectSharedModelCatalogContract, restorePublic20SharedModelCatalogContract } from "./shared-model-catalog-public-contract.mjs"
+import { inspectSystemModelConnectionContract } from "./system-model-connection-public-contract.mjs"
 import { inspectClosureIntegrationContract } from "./verify-closure-integration-contract.mjs"
 import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "./archived-tasks-public-contract.mjs"
 import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "./shared-tasks-public-contract.mjs"
@@ -67,6 +74,8 @@ export function parseOpenApiOperations(source) {
 }
 
 function expectedIdempotency(operation) {
+  if (operation.method === "PUT" && operation.path === "/v1/billing/credit-account" && operation.fields.get("operationId") === "initializeBillingCreditAccount")
+    return "inherent"
   if (
     new Set(["DELETE /v1/account/sessions/{session_id} revokeAccountSession", "PATCH /v1/account/profile updateAccountProfile"]).has(
       `${operation.method} ${operation.path} ${operation.fields.get("operationId")}`,
@@ -277,6 +286,12 @@ async function main() {
       operation.fields.get("operationId") === "getManagedPersonalSkillPackage" || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
   )
   const errors = [
+    ...inspectModelConfigurationContract(openapi, parsedBaseline.operations),
+    ...inspectSharedModelCatalogContract(restorePublic21ModelConfigurationContract(openapi), modelConfigurationParentBaseline(parsedBaseline.operations)),
+    ...inspectSystemModelConnectionContract(
+      restorePublic20SharedModelCatalogContract(restorePublic21ModelConfigurationContract(openapi)),
+      modelConfigurationParentBaseline(parsedBaseline.operations),
+    ),
     ...inspectClosureIntegrationContract(openapi, parsedBaseline.operations),
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),

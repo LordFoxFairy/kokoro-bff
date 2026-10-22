@@ -23,6 +23,20 @@ function adminBusinessRoute(method: string, target: string): boolean {
   }
   if (method === "GET" && /^\/v1\/admin\/mcp\/packages\/[^/]+\/uploads\/[^/]+$/u.test(path)) return true
   if (method === "POST" && /^\/v1\/admin\/mcp\/packages\/[^/]+\/(uploads|publish|uploads\/[^/]+\/(complete|abort))$/u.test(path)) return true
+  if (
+    method === "GET" &&
+    ["/v1/admin/model-providers", "/v1/admin/model-definitions", "/v1/admin/model-features", "/v1/admin/model-provider-creations"].includes(path)
+  )
+    return true
+  if (
+    method === "GET" &&
+    /^\/v1\/admin\/model-providers\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/upstream-models$/iu.test(path)
+  )
+    return true
+  if (method === "POST" && ["/v1/admin/model-providers", "/v1/admin/model-definitions", "/v1/admin/model-revisions", "/v1/admin/model-labels"].includes(path))
+    return true
+  if (method === "POST" && /^\/v1\/admin\/model-revisions\/[0-9a-f-]{36}\/publish$/iu.test(path)) return true
+  if (method === "PATCH" && /^\/v1\/admin\/model-labels\/[0-9a-f-]{36}$/iu.test(path)) return true
   if (method === "GET" && path === "/v1/me") return true
   if (
     method === "GET" &&
@@ -36,6 +50,9 @@ function adminBusinessRoute(method: string, target: string): boolean {
       "/v1/admin/identity/roles",
     ].includes(path)
   )
+    return true
+  if ((method === "GET" || method === "POST") && /^\/v1\/admin\/open-apps\/[A-Za-z0-9][A-Za-z0-9._:-]{0,190}\/skill-bindings$/u.test(path)) return true
+  if (method === "DELETE" && /^\/v1\/admin\/open-apps\/[A-Za-z0-9][A-Za-z0-9._:-]{0,190}\/skill-bindings\/[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(path))
     return true
   if (method === "GET" && /^\/v1\/admin\/skills\/[^/]+$/u.test(path)) return true
   if (method === "GET" && /^\/v1\/admin\/mcp\/providers(?:\/[a-z0-9][a-z0-9._-]{0,63})?$/u.test(path)) return true

@@ -172,9 +172,19 @@
       "operation_id": "listAdminModelRouting"
     },
     {
+      "method": "POST",
+      "path": "/v1/admin/model-labels",
+      "operation_id": "createAdminModelLabel"
+    },
+    {
       "method": "GET",
       "path": "/v1/admin/model-labels",
       "operation_id": "listAdminModelLabels"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/model-revisions",
+      "operation_id": "createAdminModelRevision"
     },
     {
       "method": "GET",
@@ -402,6 +412,11 @@
       "operation_id": "getManagedPersonalSkill"
     },
     {
+      "method": "DELETE",
+      "path": "/v1/self/skills/{skill_id}",
+      "operation_id": "deletePersonalSkillSeries"
+    },
+    {
       "method": "GET",
       "path": "/v1/self/skills/{skill_id}/package",
       "operation_id": "getManagedPersonalSkillPackage"
@@ -592,6 +607,11 @@
       "operation_id": "listBillingPlans"
     },
     {
+      "method": "PUT",
+      "path": "/v1/billing/credit-account",
+      "operation_id": "initializeBillingCreditAccount"
+    },
+    {
       "method": "GET",
       "path": "/v1/billing/summary",
       "operation_id": "getBillingSummary"
@@ -605,6 +625,11 @@
       "method": "POST",
       "path": "/v1/billing/checkout",
       "operation_id": "createBillingCheckout"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/self/skills/{skill_id}/versions",
+      "operation_id": "listPersonalSkillVersions"
     },
     {
       "method": "POST",
@@ -793,6 +818,21 @@
     },
     {
       "method": "GET",
+      "path": "/v1/admin/open-apps/{app_id}/skill-bindings",
+      "operation_id": "listOpenAppSkillBindings"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/open-apps/{app_id}/skill-bindings",
+      "operation_id": "putOpenAppSkillBinding"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/admin/open-apps/{app_id}/skill-bindings/{series_id}",
+      "operation_id": "removeOpenAppSkillBinding"
+    },
+    {
+      "method": "GET",
       "path": "/v1/skill.list",
       "operation_id": "listSkills"
     },
@@ -825,6 +865,51 @@
       "method": "GET",
       "path": "/skill-downloads/{handle}",
       "operation_id": "downloadSkillBytes"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-providers",
+      "operation_id": "listAdminModelProviders"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/model-providers",
+      "operation_id": "createAdminModelProvider"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-provider-creations",
+      "operation_id": "getAdminModelProviderCreation"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-definitions",
+      "operation_id": "listAdminModelDefinitions"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/model-definitions",
+      "operation_id": "createAdminModelDefinition"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-features",
+      "operation_id": "listAdminModelFeatures"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/model-revisions/{revision_id}/publish",
+      "operation_id": "publishAdminModelRevision"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/admin/model-labels/{label_id}",
+      "operation_id": "updateAdminModelLabel"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-providers/{provider_id}/upstream-models",
+      "operation_id": "listAdminModelProviderUpstreamModels"
     }
   ]
 }

@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { modelCatalogData } from "../../application/projections.js"
+import { modelCatalogData } from "../../infrastructure/clients/owner/system-model-catalog.js"
 import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
 import { reply } from "../response.js"
 import { normalizeSystemUpstreamResponse, normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
@@ -13,7 +13,7 @@ import type { IdempotencyEntry, MutationTicket } from "../../application/idempot
 import type { LiveOwnerResult } from "./types.js"
 import { livePlatformProjectionRead } from "./platform-projection.js"
 import { readBillingCatalog } from "../../infrastructure/clients/owner/billing-catalog.js"
-import { readBillingCreditAccount, readBillingCreditLedger } from "../../infrastructure/clients/owner/billing-personal-read.js"
+import { readBillingCreditAccount, readBillingCreditLedger, initializeBillingCreditAccount } from "../../infrastructure/clients/owner/billing-personal-read.js"
 
 function billingLedgerQuery(request: IncomingMessage): Readonly<{ limit: number; cursor?: string }> | null {
   const query = queryOf(request)
@@ -37,10 +37,14 @@ async function billingPersonalRead(
   json: Record<string, unknown>,
   idempotency: Map<string, IdempotencyEntry>,
 ): Promise<boolean> {
-  if (request.method !== "GET" || businessPath[0] !== "billing" || businessPath.length !== 2 || !["summary", "ledger"].includes(businessPath[1] ?? "")) {
+  const initializing = request.method === "PUT" && businessPath.join("/") === "billing/credit-account"
+  if (
+    !initializing &&
+    (request.method !== "GET" || businessPath[0] !== "billing" || businessPath.length !== 2 || !["summary", "ledger"].includes(businessPath[1] ?? ""))
+  ) {
     return false
   }
-  if (Object.keys(json).length !== 0 || (businessPath[1] === "summary" && queryOf(request).size !== 0)) {
+  if (Object.keys(json).length !== 0 || (businessPath[1] === "summary" && queryOf(request).size !== 0) || (initializing && (request.url ?? "").includes("?"))) {
     await reply(response, 400, failure("invalid_query_parameter", "Billing read parameters are invalid", context.requestId), context, idempotency, null)
     return true
   }
@@ -58,19 +62,22 @@ async function billingPersonalRead(
   response.once("close", onClose)
   if (request.aborted || response.destroyed) abort.abort()
   try {
-    const result =
-      businessPath[1] === "summary"
+    const result = initializing
+      ? await initializeBillingCreditAccount(config, context, abort.signal)
+      : businessPath[1] === "summary"
         ? await readBillingCreditAccount(config, context, abort.signal)
         : await readBillingCreditLedger(config, context, ledgerQuery!, abort.signal)
     if (response.destroyed) return true
     if (result.ok) await reply(response, 200, ok(result.data, context.requestId), context, idempotency, null)
     else {
       const message =
-        result.code === "billing_account_not_found"
-          ? "Billing account was not found"
-          : result.code === "upstream_response_invalid"
-            ? "Billing returned an invalid response"
-            : "Billing is unavailable"
+        result.code === "billing_account_disabled"
+          ? "Billing account is disabled"
+          : result.code === "billing_account_not_found"
+            ? "Billing account was not found"
+            : result.code === "upstream_response_invalid"
+              ? "Billing returned an invalid response"
+              : "Billing is unavailable"
       await reply(response, result.status, failure(result.code, message, context.requestId), context, idempotency, null)
     }
     return true

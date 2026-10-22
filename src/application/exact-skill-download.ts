@@ -29,7 +29,14 @@ export function exactManagedRecord(requestedId: string, input: unknown): ExactSk
     !["draft", "active", "disabled", "withdrawn", "quarantined", "discarded"].includes(String(value.status))
   )
     throw new Error("skill_response_invalid")
-  return value.status === "active" ? { sourceRef: value.source_ref, revision: value.revision } : null
+  const product = value.product
+  const recoverable =
+    (value.status === "disabled" || value.status === "withdrawn") &&
+    typeof product === "object" &&
+    product !== null &&
+    !Array.isArray(product) &&
+    (product as Record<string, unknown>).source_kind === "personal"
+  return value.status === "active" || recoverable ? { sourceRef: value.source_ref, revision: value.revision } : null
 }
 
 export type ExactSkillDownloadSource = Readonly<{

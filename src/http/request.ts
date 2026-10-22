@@ -164,6 +164,7 @@ export function isMutation(method: string): boolean {
 
 export function requiresIdempotency(method: string, segments: string[]): boolean {
   if (!isMutation(method)) return false
+  if (method === "PUT" && segments.length === 2 && segments[0] === "billing" && segments[1] === "credit-account") return false
   if (method === "POST" && segments[0] === "skills" && segments[1] === "github" && segments[2] === "preview") return false
   return true
 }
@@ -186,6 +187,9 @@ export async function readBody(request: IncomingMessage, maxBytes = 1024 * 1024)
 }
 
 export function requestBodyJson(request: IncomingMessage, body: Buffer): Record<string, unknown> | null {
+  if (request.method === "PUT" && pathOf(request).join("/") === "v1/billing/credit-account") {
+    if (body.byteLength === 0 || !/^application\/json(?:\s*;\s*charset=utf-8)?$/iu.test(requestContentType(request))) return null
+  }
   if (body.byteLength === 0 || requestContentType(request).startsWith("multipart/form-data")) return {}
   try {
     const parsed: unknown = JSON.parse(body.toString("utf8"))

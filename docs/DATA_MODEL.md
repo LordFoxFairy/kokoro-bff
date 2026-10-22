@@ -1,3 +1,43 @@
+## MODEL-1 上游模型候选（2026-10-22）
+
+无BFF Schema／数据迁移／receipt。System拥有已保存连接、密文与出站许可；本方仅投影瞬时候选ID，读取不推进任何目录／业务路由／计价事实，不落API Key或原供应商响应。选择候选后的定义／revision／发布／label仍归现System命令，实际扣积分仍归Billing。
+
+## 2026-10-21 Skills 公开身份矩阵与 App 绑定（已批准，实施中）
+
+无新增 BFF 表、Schema、缓存或授权事实。IAM 持有 UserApiKey/OpenApp/trusted，Platform 持有 AppSkillBinding exact skill_id/CAS；BFF 只投影当次可信 principal、绑定与资料，缺失身份不回退 Session、不以 skipConsent 推断 trusted、不伪造安装或 OwnerKind。公开列表只读，不增加执行权限；幂等与绑定版本回执由 owner 保存。
+
+## 2026-10-21 Skills 删除与公开身份收口（实施中）
+
+本片不新增 BFF SQL 表或删除副本；系列终态、精确安装及资产保留均归 Platform。浏览器持有原删除命令恢复意图，不把列表缺项视作成功；BFF 只消费 owner 回执。IAM API Key/Open App 事实不进入 BFF 数据库。
+
+## 2026-10-21 Admin 详情确认快照（目标，未正常激活）
+
+不改BFF canonical schema、SQL、Redis或receipt/outbox，不读取owner数据库。Admin快照只来自固定owner既有GetAdminSkill同租户确认读取，不缓存、不从列表／selected Skill state_version推导，不把不可用current等同无publication。meta随当次详情返回；浏览器后续沿既有冻结意图保存，真正CAS与提交事实仍唯一在Platform。
+
+## 2026-10-21 发布确认快照接线（源码候选，未正常激活）
+
+无 BFF Schema、表、Redis、outbox 或 receipt 变更。确认快照只属于现请求及浏览器冻结意图，真实 publication 和事务 CAS／回执仍由 Platform 唯一写入。BFF 不读 owner SQL、不从 draft CAS或最大revision推导系列publication，也不把缺失／404当从未发布。
+
+## 2026-10-21 历史读取无本仓新数据
+
+Platform现Skill/SkillSeriesPublication独占系列、精确包、历史及current事实；BFF不读owner SQL，不保存历史副本、最大revision、cursor缓存或第二套publication。该GET只投影一次受信请求的有界读取，将owner可选next_cursor映射为public required nullable字段；不持久化、改变安装或冻结执行引用。数据库Schema、调度、连接器、模型路由和计费事实均不变。
+
+## MC-02 数据边界（2026-10-20）
+
+BFF无DDL/新表/密钥持久化，不读System SQL。System6独占密文/永久创建身份/收据/版本与发布；BFF只带当次IAM准入tenant/actor和原command key/CAS，经窄机器身份调用。敏感创建查回仅provider_id/credential_status/deleted_at，不保存Key或裸摘要。原BFF个人/项目/自动化/连接器数据均不变。
+
+## 2026-10-20 MC-02A：消费共享配置，不新增本 owner 数据
+
+System5拥有共享provider/revision和各业务label/routing/tenant选择事实；BFF只消费该有效catalog及四管理操作。业务 name 保留稳定label key，model_id/revision_id/provider_id 为owner精确引用，不按别名/上游ID或默认修订重建事实。nullable alias与无feature共享revision只是public读表示变化，无BFF持久事实/回执/Schema变更。
+
+canonical SQL、lockfile和全部其他owner pins保持；本片无数据库读写、迁移或正常资源操作。秘密保存/领取候选、实际模型/工具/扣费均未放行，正常数据处置及消费者切换由Root统一验收。
+
+## 2026-10-20 System4 管理配对：本 owner 数据模型不变
+
+模型标签、immutable revision/connection 快照、路由策略和相关幂等/CAS事实仍只由 System 拥有。BFF Public20 仅将原管理员 revision 读表示换为 `request_model` 与 System4 的 closed `connection`，不落库、不缓存或推导连接、不解析密钥引用。`database/schema.sql`、BFF 回执与全部现有持久事实保持字节不变；本任务没有安装、迁移或正常数据写入。
+
+旧 System 修订若非空须由 owner/Root 先盘点并批准处置，不猜 base URL、secret 引用或重算旧 digest；BFF 无历史数据修复责任。正常资源/消费者配对与实际模型执行独立验收，后者仍暂停。
+
 ## 2026-10-20 既定项目执行事实收口（fresh schema，未激活）
 
 仅扩原 bff_agent_dispatch_outbox：execution_project_ref TEXT nullable（NULL 明确 direct），execution_context_retired_at TIMESTAMPTZ(3) nullable（首次跨 canonical scope Move 置位、不复活）。Chat 同事务写独立 canonical project；payload schema3 的必需 nullable project_ref 必须等独立列，reader/claim/delivery 交叉核验，refs 仍由 Message 原有序事实拥有。无新表、FK、ACL 或跨 owner SQL；不从旧 trace 回填 authority、不重写历史 Run/admission/receipt。canonical fresh schema 及隔离真实资源验证与正常既有数据处置分开，正常 DDL/配置/服务未授权执行。

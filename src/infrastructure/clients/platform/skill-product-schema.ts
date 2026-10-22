@@ -7,6 +7,20 @@ export const skillDecimalSchema = z
   .string()
   .regex(/^[1-9][0-9]*$/u)
   .refine((value) => BigInt(value) <= 9_223_372_036_854_775_807n)
+export const skillPublicationPreconditionSchema = z
+  .object({
+    current_version_id: skillIdSchema,
+    state_version: skillDecimalSchema.refine((value) => BigInt(value) < 9_223_372_036_854_775_807n),
+  })
+  .strict()
+  .nullable()
+export type SkillPublicationPrecondition = z.infer<typeof skillPublicationPreconditionSchema>
+export function skillPublicationPreconditionWire(value: SkillPublicationPrecondition) {
+  const expected = skillPublicationPreconditionSchema.parse(value)
+  return expected === null
+    ? { absent: true }
+    : { current: { current_version_id: { value: expected.current_version_id }, state_version: expected.state_version } }
+}
 export const skillCategoryKeysSchema = z
   .array(z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"]))
   .max(8)

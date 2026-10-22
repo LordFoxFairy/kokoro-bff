@@ -11,7 +11,12 @@ import { DEFAULT_AGUI_CONFIG } from "../../src/config/runtime.ts"
 import { SkillInstallationChange, SkillProductFactsSchema } from "../../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts"
 
 const website = "/skill.v1.SkillOptionalService/"
-const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", authorization: "Bearer human", "x-request-id": "spec-request" }
+const headers = {
+  "x-kokoro-service": "web-bff",
+  "x-kokoro-internal-secret": "test-secret",
+  authorization: "Bearer human",
+  "x-request-id": "spec-request",
+}
 const publicSkill = {
   id: "stable-series",
   name: "Skill",
@@ -21,21 +26,36 @@ const publicSkill = {
   created_at: 1750000000,
   updated_at: 1750000001,
 }
-const detail = { id: "stable-series", name: "Skill", version: "version-one", defaultEnable: false, defaultAdd: false }
+const detail = {
+  id: "stable-series",
+  name: "Skill",
+  version: "version-one",
+  defaultEnable: false,
+  defaultAdd: false,
+}
 const hub = {
   skills: [
     {
       skillId: "stable-series",
       originalName: "original",
       displayName: "Skill",
-      currentVersion: { versionUid: "version-one", archiveSize: "3", fileCount: 1, current: true },
+      currentVersion: {
+        versionUid: "version-one",
+        archiveSize: "3",
+        fileCount: 1,
+        current: true,
+      },
     },
   ],
   tagOptions: { values: [{ tag: "coding", displayName: "Coding" }] },
 }
 async function fixture(
   source,
-  admission = async () => ({ ok: true, identity: { namespace: "tenant", userId: "human" }, platformAdmin: false }),
+  admission = async () => ({
+    ok: true,
+    identity: { namespace: "tenant", userId: "human" },
+    platformAdmin: false,
+  }),
   configOverride = {},
   options = {},
 ) {
@@ -56,16 +76,48 @@ async function fixture(
     postgresUrl: null,
     redisUrl: null,
     agUi: DEFAULT_AGUI_CONFIG,
-    upstreams: { system: null, capability: null, scheduler: null, agents: null, billing: null, music: null },
+    upstreams: {
+      system: null,
+      capability: null,
+      scheduler: null,
+      agents: null,
+      billing: null,
+      music: null,
+    },
     ...configOverride,
   }
-  const server = createBffServer(config, { businessStore: null, sessionAdmission: { verify: admission }, skillSpecificationSource: source, ...options })
+  const server = createBffServer(config, {
+    businessStore: null,
+    sessionAdmission: { verify: admission },
+    skillListAdmission: { verify: async () => ({ ok: true, principal: { kind: "user_api_key", tenant_id: "tenant", user_id: "human", key_id: "key" } }) },
+    skillSpecificationSource:
+      source === null
+        ? null
+        : {
+            ...source,
+            readPublicList:
+              source.readPublicList?.bind(source) ?? ((input, context, signal, deadline) => source.read("skill.list", input, context, signal, deadline)),
+            read: source.read?.bind(source),
+            prepareDownload: source.prepareDownload?.bind(source),
+            confirmDownload: source.confirmDownload?.bind(source),
+          },
+    ...options,
+  })
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
   return {
     async request(path, input, extra = {}) {
       const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, {
-        headers: { ...headers, ...(input === undefined ? {} : { "content-type": "application/json" }), ...extra.headers },
-        ...(input === undefined ? {} : { method: "POST", body: typeof input === "string" ? input : JSON.stringify(input) }),
+        headers: {
+          ...headers,
+          ...(input === undefined ? {} : { "content-type": "application/json" }),
+          ...extra.headers,
+        },
+        ...(input === undefined
+          ? {}
+          : {
+              method: "POST",
+              body: typeof input === "string" ? input : JSON.stringify(input),
+            }),
         ...extra,
       })
       return {
@@ -92,7 +144,11 @@ test("R357 public skill.list uses original ok/request_id/data, immutable identit
   try {
     const result = await app.request("/v1/skill.list?project_id=project")
     assert.equal(result.status, 200)
-    assert.deepEqual(result.body, { ok: true, request_id: "spec-request", data: [publicSkill] })
+    assert.deepEqual(result.body, {
+      ok: true,
+      request_id: "spec-request",
+      data: [publicSkill],
+    })
     assert.equal(result.headers.get("cache-control"), "no-store")
     assert.equal(calls.length, 1)
     assert.deepEqual(calls[0].input, { project_id: "project" })
@@ -164,7 +220,14 @@ test("R357 unpublished owner dependency fails closed503, never falls back to pre
   try {
     const r = await app.request("/v1/skill.list")
     assert.equal(r.status, 503)
-    assert.deepEqual(r.body, { ok: false, request_id: "spec-request", error: { code: "Unavailable", message: "Skills dependency is unavailable" } })
+    assert.deepEqual(r.body, {
+      ok: false,
+      request_id: "spec-request",
+      error: {
+        code: "Unavailable",
+        message: "Skills dependency is unavailable",
+      },
+    })
   } finally {
     await app.close()
   }
@@ -211,7 +274,12 @@ test("R357 Hub forwards observed tag/query/includeOfficialSkills before owner pa
     },
   })
   try {
-    const input = { query: "excel", pageSize: 9, tag: "SKILL_HUB_TAG_CODING", includeOfficialSkills: true }
+    const input = {
+      query: "excel",
+      pageSize: 9,
+      tag: "SKILL_HUB_TAG_CODING",
+      includeOfficialSkills: true,
+    }
     assert.equal((await app.request(website + "ListHubSkills", input)).status, 200)
     assert.deepEqual(calls, [input])
     assert.equal((await app.request(website + "ListHubSkills", { cursor: "opaque" })).status, 400)
@@ -232,7 +300,12 @@ for (const name of ["GetSkill", "DownloadSkill"])
       sizeBytes: 3,
       contentSha256: "a".repeat(64),
       expiresAt: Date.now() + 300000,
-      transfer: { url: "http://private-store.invalid/secret", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 300000 },
+      transfer: {
+        url: "http://private-store.invalid/secret",
+        method: "GET",
+        requiredHeaders: {},
+        expiresAt: Date.now() + 300000,
+      },
     }
     const app = await fixture({
       async prepareDownload() {
@@ -259,7 +332,9 @@ test("R357 prepare refuses different stable identity/tenant/subject without disc
     },
   })
   try {
-    const r = await app.request(website + "GetSkill", { skillId: "stable-series" })
+    const r = await app.request(website + "GetSkill", {
+      skillId: "stable-series",
+    })
     assert.equal(r.status, 502)
     assert.equal(JSON.stringify(r.body).includes("another"), false)
   } finally {
@@ -292,7 +367,12 @@ test("R357 opaque handle remains tenant/subject/version bound, expires and is ca
     sizeBytes: 3,
     contentSha256: "a".repeat(64),
     expiresAt: 5000,
-    transfer: { url: "http://store.invalid/key", method: "GET", requiredHeaders: {}, expiresAt: 5000 },
+    transfer: {
+      url: "http://store.invalid/key",
+      method: "GET",
+      requiredHeaders: {},
+      expiresAt: 5000,
+    },
   }
   const handle = store.issue(binding)
   binding.sourceRef = "skill:newest"
@@ -331,7 +411,12 @@ async function bytesFixture(confirm, admission, filename = "原始技能.zip") {
     sizeBytes: bytes.length,
     contentSha256: createHash("sha256").update(bytes).digest("hex"),
     expiresAt: Date.now() + 300000,
-    transfer: { url: origin + "/bytes", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 300000 },
+    transfer: {
+      url: origin + "/bytes",
+      method: "GET",
+      requiredHeaders: {},
+      expiresAt: Date.now() + 300000,
+    },
   }
   const app = await fixture(
     {
@@ -345,7 +430,9 @@ async function bytesFixture(confirm, admission, filename = "原始技能.zip") {
     admission,
     { storageObjectOrigin: origin },
   )
-  const metadata = await app.request("/skill.v1.SkillService/DownloadSkill", { skillId: "stable-series" })
+  const metadata = await app.request("/skill.v1.SkillService/DownloadSkill", {
+    skillId: "stable-series",
+  })
   assert.equal(metadata.status, 200)
   return {
     ...app,
@@ -408,7 +495,14 @@ test("R357 changed current human after spool denies without publishing bytes", a
   let admissions = 0
   const app = await bytesFixture(
     async () => {},
-    async () => ({ ok: true, identity: { namespace: "tenant", userId: ++admissions > 2 ? "other" : "human" }, platformAdmin: false }),
+    async () => ({
+      ok: true,
+      identity: {
+        namespace: "tenant",
+        userId: ++admissions > 2 ? "other" : "human",
+      },
+      platformAdmin: false,
+    }),
   )
   try {
     const r = await app.request(app.path)
@@ -421,7 +515,10 @@ test("R357 changed current human after spool denies without publishing bytes", a
 test("R357 metadata invalid response remains502; never synthesizes absent actor/name/false/count", async () => {
   const app = await fixture({
     async read() {
-      return { skills: [{ skillId: "stable-series", verified: null }], tagOptions: {} }
+      return {
+        skills: [{ skillId: "stable-series", verified: null }],
+        tagOptions: {},
+      }
     },
   })
   try {
@@ -450,7 +547,10 @@ test("T-K03.19 SetSkillInstallationEnabled uses only owner-issued installation i
     skillUpdatedAt: { seconds: 2n, nanos: 0 },
     examplePrompts: { prompts: [] },
     categoryKeys: { keys: [] },
-    product: create(SkillProductFactsSchema, { publicationAudience: "owner", stateVersion: 1n }),
+    product: create(SkillProductFactsSchema, {
+      publicationAudience: "owner",
+      stateVersion: 1n,
+    }),
   }
   const client = {
     async setEnabled(input) {
@@ -476,7 +576,11 @@ test("T-K03.19 SetSkillInstallationEnabled uses only owner-issued installation i
   )
   try {
     const command = website + "SetSkillInstallationEnabled"
-    const commandHeaders = { ...headers, "content-type": "application/json", "idempotency-key": "same-key" }
+    const commandHeaders = {
+      ...headers,
+      "content-type": "application/json",
+      "idempotency-key": "same-key",
+    }
     const first = await app.request(command, { installationId: "installation-stable", enabled: false }, { headers: commandHeaders })
     const replay = await app.request(command, { installationId: "installation-stable", enabled: false }, { headers: commandHeaders })
     const drift = await app.request(command, { installationId: "installation-stable", enabled: true }, { headers: commandHeaders })
@@ -494,7 +598,13 @@ test("T-K03.19 SetSkillInstallationEnabled uses only owner-issued installation i
     const displayName = await app.request(
       command,
       { installationId: "清单整理助手", enabled: false },
-      { headers: { ...headers, "content-type": "application/json", "idempotency-key": "display-name" } },
+      {
+        headers: {
+          ...headers,
+          "content-type": "application/json",
+          "idempotency-key": "display-name",
+        },
+      },
     )
     assert.equal(displayName.status, 400)
     assert.equal(calls.length, 3)
@@ -507,8 +617,9 @@ test("T-K03.19 SetSkillInstallationEnabled uses only owner-issued installation i
 test("R357 active public contract declares original skill.list and distinct observed website/bytes resources, deletes aliases and preserves effective commands", async () => {
   const { readFile } = await import("node:fs/promises")
   const { load } = await import("js-yaml")
-  const document = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
-  assert.equal(document.info.version, "19.0.1")
+  const { restoreBillingAccountContract } = await import("../../scripts/billing-account-public-contract.mjs")
+  const document = load(restoreBillingAccountContract(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")))
+  assert.equal(document.info.version, "22.1.0")
   assert.equal(document.paths["/v1/skill.list"].get.operationId, "listSkills")
   for (const path of [website + "ListSkills", website + "ListHubSkills", website + "GetSkill", "/skill.v1.SkillService/DownloadSkill"]) {
     assert.equal(document.paths[path].post["x-kokoro-visibility"], "browser-private")
@@ -550,11 +661,18 @@ test("R357 active contract rejects observed-field/type/error/alias/auth/cache dr
   assert.deepEqual(inspectCurrentSkillsSpecificationContract(raw), [])
   for (const change of [
     (d) => (d.paths["/v1/skill.list"].get.security = []),
-    (d) => d.paths["/v1/skill.list"].get.parameters.push({ name: "tenant", in: "query" }),
+    (d) =>
+      d.paths["/v1/skill.list"].get.parameters.push({
+        name: "tenant",
+        in: "query",
+      }),
     (d) => (d.components.schemas.SpecificationPublicSkill.properties.created_at.type = "string"),
     (d) => d.components.schemas.SpecificationPublicSkill.properties.owner_type.enum.pop(),
     (d) => d.components.schemas.SpecificationPublicSkill.properties.owner_type.enum.push("forged"),
-    (d) => (d.components.schemas.SpecificationHubRequest.properties.cursor = { type: "string" }),
+    (d) =>
+      (d.components.schemas.SpecificationHubRequest.properties.cursor = {
+        type: "string",
+      }),
     (d) => (d.components.schemas.SpecificationHubRequest.properties.includeOfficialSkills.type = "string"),
     (d) => (d.components.schemas.SpecificationDownloadInfo.properties.downloadInfo.properties.expiresAt.type = "integer"),
     (d) => (d.components.schemas.SpecificationPublicError.properties.error.properties.retryable = { type: "boolean" }),
@@ -597,7 +715,7 @@ test("R357 adapter sees only freshly admitted human bearer in request context, n
   let token
   const app = await fixture({
     async read(_operation, _input, context) {
-      token = context.humanBearer
+      token = context.publicBearer
       return [publicSkill]
     },
   })
@@ -636,7 +754,9 @@ test("R357 malformed download owner envelope is502 with fixed error, not transpo
     },
   })
   try {
-    const r = await app.request(website + "GetSkill", { skillId: "stable-series" })
+    const r = await app.request(website + "GetSkill", {
+      skillId: "stable-series",
+    })
     assert.equal(r.status, 502)
     assert.equal(r.body.error.code, "InvalidResponse")
   } finally {
@@ -653,7 +773,12 @@ test("R357 observed next page sends original pageToken/excludeTop and original f
     },
   })
   try {
-    const input = { pageSize: 9, pageToken: "opaque-original-page", excludeTop: true, includeOfficialSkills: true }
+    const input = {
+      pageSize: 9,
+      pageToken: "opaque-original-page",
+      excludeTop: true,
+      includeOfficialSkills: true,
+    }
     assert.equal((await app.request(website + "ListHubSkills", input)).status, 200)
     assert.deepEqual(calls, [input])
     for (const invalid of [{ pageToken: null }, { excludeTop: null }, { excludeTop: "true" }])
@@ -673,17 +798,28 @@ test("R357 formal current-publication adapter uses actual generated binary reque
   const owner = createServer(async (request, response) => {
     const chunks = []
     for await (const part of request) chunks.push(part)
-    received = { path: request.url, body: fromBinary(p.GetCurrentSkillRequestSchema, Buffer.concat(chunks)), headers: request.headers }
+    received = {
+      path: request.url,
+      body: fromBinary(p.GetCurrentSkillRequestSchema, Buffer.concat(chunks)),
+      headers: request.headers,
+    }
     const result = create(p.GetCurrentSkillResponseSchema, {
       publication: {
         seriesId: { value: "stable-series" },
-        currentVersion: { skillId: { value: "exact-version" }, seriesId: { value: "stable-series" } },
+        currentVersion: {
+          skillId: { value: "exact-version" },
+          seriesId: { value: "stable-series" },
+        },
         current: true,
         audience: "public",
         stateVersion: 3n,
       },
     })
-    response.writeHead(200, { "content-type": "application/proto", "cache-control": "no-store", "x-kokoro-request-id": "current-request" })
+    response.writeHead(200, {
+      "content-type": "application/proto",
+      "cache-control": "no-store",
+      "x-kokoro-request-id": "current-request",
+    })
     response.end(toBinary(p.GetCurrentSkillResponseSchema, result))
   })
   await new Promise((resolve) => owner.listen(0, "127.0.0.1", resolve))
@@ -701,7 +837,12 @@ test("R357 formal current-publication adapter uses actual generated binary reque
   const client = new SkillProductConnectClient(`http://127.0.0.1:${owner.address().port}`, token, token, 1000)
   try {
     const result = await client.current(
-      { requestId: "current-request", tenant: "tenant", subject: "human", seriesId: "stable-series" },
+      {
+        requestId: "current-request",
+        tenant: "tenant",
+        subject: "human",
+        seriesId: "stable-series",
+      },
       controller.signal,
       performance.now() + 1000,
     )
@@ -728,7 +869,12 @@ test("R357 malformed qualified handle facts fail502 before any successful metada
     sizeBytes: 3,
     contentSha256: "a".repeat(64),
     expiresAt: Date.now() + 300000,
-    transfer: { url: "http://store.invalid/blob", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 300000 },
+    transfer: {
+      url: "http://store.invalid/blob",
+      method: "GET",
+      requiredHeaders: {},
+      expiresAt: Date.now() + 300000,
+    },
   }
   for (const change of [
     (b) => (b.revision = 4),
@@ -744,7 +890,9 @@ test("R357 malformed qualified handle facts fail502 before any successful metada
       },
     })
     try {
-      const r = await app.request(website + "GetSkill", { skillId: "stable-series" })
+      const r = await app.request(website + "GetSkill", {
+        skillId: "stable-series",
+      })
       assert.equal(r.status, 502)
       assert.equal(JSON.stringify(r.body).includes("hidden"), false)
     } finally {
@@ -786,7 +934,9 @@ test("R357 raw read body budget rejects oversized JSON413 without owner I/O or s
     },
   })
   try {
-    const r = await app.request(website + "ListHubSkills", { query: "sensitive".repeat(9000) })
+    const r = await app.request(website + "ListHubSkills", {
+      query: "sensitive".repeat(9000),
+    })
     assert.equal(r.status, 413)
     assert.equal(calls, 0)
     assert.equal(JSON.stringify(r.body).includes("sensitive"), false)
@@ -801,7 +951,12 @@ async function specificationServiceFixture() {
   const { create } = await import("@bufbuild/protobuf")
   const product = {
     creatorRef: { kind: "user", id: "actual-creator" },
-    publisher: { publisher: { case: "iam", value: { kind: "user", id: "actual-publisher" } } },
+    publisher: {
+      publisher: {
+        case: "iam",
+        value: { kind: "user", id: "actual-publisher" },
+      },
+    },
     sourceKind: "personal",
     presentationKind: "first_party",
     publicationAudience: "catalog",
@@ -849,7 +1004,10 @@ async function specificationServiceFixture() {
   Object.assign(installation, {
     acquisitionKind: 2,
     skillCreatedAt: create(TimestampSchema, { seconds: 1749999990n }),
-    sourceOwnerScope: create(p.OwnerScopeSchema, { kind: "project", id: "source-project" }),
+    sourceOwnerScope: create(p.OwnerScopeSchema, {
+      kind: "project",
+      id: "source-project",
+    }),
   })
   const calls = []
   let changed = false
@@ -860,7 +1018,13 @@ async function specificationServiceFixture() {
         return create(p.GetCurrentSkillResponseSchema, {
           publication: {
             seriesId: { value: input.seriesId },
-            currentVersion: changed ? { ...record, skillId: { value: "replacement" }, sourceRef: { value: "skill:replacement" } } : record,
+            currentVersion: changed
+              ? {
+                  ...record,
+                  skillId: { value: "replacement" },
+                  sourceRef: { value: "skill:replacement" },
+                }
+              : record,
             current: true,
             audience: "catalog",
             stateVersion: 1n,
@@ -915,7 +1079,10 @@ async function specificationServiceFixture() {
                 category_keys: ["programming"],
                 product: {
                   creator_ref: { kind: "user", id: "actual-creator" },
-                  publisher: { kind: "iam", iam: { kind: "user", id: "actual-publisher" } },
+                  publisher: {
+                    kind: "iam",
+                    iam: { kind: "user", id: "actual-publisher" },
+                  },
                   source_kind: "personal",
                   publication_audience: "catalog",
                   state_version: "2",
@@ -937,7 +1104,12 @@ async function specificationServiceFixture() {
         return new Map(
           refs.map((ref) => [
             JSON.stringify([ref.kind, ref.id]),
-            { ...ref, status: "found", display_name: ref.id === "actual-creator" ? "Real Creator" : "Real Publisher", image_url: null },
+            {
+              ...ref,
+              status: "found",
+              display_name: ref.id === "actual-creator" ? "Real Creator" : "Real Publisher",
+              image_url: null,
+            },
           ]),
         )
       },
@@ -951,10 +1123,13 @@ async function specificationServiceFixture() {
     installations: deps.installations,
     projection: deps.projection,
   })
+  deps.profiles.resolvePublic = deps.profiles.resolve
   const context = Object.freeze({
     requestId: "aggregate-request",
     identity: Object.freeze({ namespace: "tenant", userId: "human" }),
     humanBearer: "actual-human",
+    publicBearer: "actual-human",
+    principal: Object.freeze({ kind: "user_api_key", tenant_id: "tenant", user_id: "human", key_id: "key" }),
   })
   return {
     service: new SkillSpecificationService(deps),
@@ -1006,8 +1181,12 @@ test("S2 installation acquisition decides public classification without rewritin
     app.installation.acquisitionKind = acquisition
     app.installation.sourceOwnerScope.kind = kind
     app.installation.product.sourceKind = source
-    app.deps.projection.read = async () => ({ ok: true, status: 200, data: { skills: [] } })
-    const data = await app.service.read("skill.list", {}, app.context, app.signal, app.deadline)
+    app.deps.projection.read = async () => ({
+      ok: true,
+      status: 200,
+      data: { skills: [] },
+    })
+    const data = await app.service.readPublicList({}, app.context, app.signal, app.deadline)
     assert.equal(data[0].owner_type, expected, `${acquisition}/${kind}/${source}`)
     const list = await app.service.read("ListSkills", {}, app.context, app.signal, app.deadline)
     assert.equal(list.userAddedSkills[0].ownerType, website)
@@ -1025,7 +1204,7 @@ test("S2 missing or unsupported owner acquisition fails closed rather than becom
   for (const acquisition of [0, 4, -1, undefined]) {
     const app = await specificationServiceFixture()
     app.installation.acquisitionKind = acquisition
-    await assert.rejects(app.service.read("skill.list", {}, app.context, app.signal, app.deadline), /skill_installation_response_invalid/)
+    await assert.rejects(app.service.readPublicList({}, app.context, app.signal, app.deadline), /skill_installation_response_invalid/)
     assert.equal(
       app.calls.some((call) => call.kind === "profiles" || call.kind === "current"),
       false,
@@ -1035,11 +1214,14 @@ test("S2 missing or unsupported owner acquisition fails closed rather than becom
 
 test("R357 formal aggregation lists stopped exact installations, resolves actual creator distinct from publisher and never substitutes current timestamps", async () => {
   const app = await specificationServiceFixture()
-  const data = await app.service.read("skill.list", {}, app.context, app.signal, app.deadline)
+  const data = await app.service.readPublicList({}, app.context, app.signal, app.deadline)
   assert.equal(data[0].id, "stable-series")
   assert.equal(data[0].name, "Old exact")
   assert.equal(data[0].updated_at, 1749999999)
-  assert.deepEqual(data[0].creator_info, { user_id: "actual-creator", name: "Real Creator" })
+  assert.deepEqual(data[0].creator_info, {
+    user_id: "actual-creator",
+    name: "Real Creator",
+  })
   assert.equal(data[0].created_at, 1749999990, "exact source creation time, not installation/current time")
   assert.equal(data[0].owner_type, "project")
   assert.equal(
@@ -1053,7 +1235,14 @@ test("R357 formal Hub aggregation binds true stable/current/exact publication an
   const app = await specificationServiceFixture()
   const data = await app.service.read(
     "ListHubSkills",
-    { pageSize: 9, query: "excel", tag: "SKILL_HUB_TAG_CODING", pageToken: "owner-token", excludeTop: true, includeOfficialSkills: true },
+    {
+      pageSize: 9,
+      query: "excel",
+      tag: "SKILL_HUB_TAG_CODING",
+      pageToken: "owner-token",
+      excludeTop: true,
+      includeOfficialSkills: true,
+    },
     app.context,
     app.signal,
     app.deadline,
@@ -1066,13 +1255,23 @@ test("R357 formal Hub aggregation binds true stable/current/exact publication an
   assert.equal(Object.hasOwn(data.skills[0], "verified"), false)
   assert.equal(Object.hasOwn(data.skills[0], "syncStatus"), false)
   assert.deepEqual(app.calls.find((call) => call.kind === "projection").input, {
-    query: { limit: 9, query: "excel", category_key: "programming", cursor: "owner-token", include_official_skills: true },
+    query: {
+      limit: 9,
+      query: "excel",
+      category_key: "programming",
+      cursor: "owner-token",
+      include_official_skills: true,
+    },
   })
   assert.equal(app.calls.find((call) => call.kind === "current").input.seriesId, "stable-series")
 })
 test("R357 formal Hub returns an empty category page without querying usage", async () => {
   const app = await specificationServiceFixture()
-  app.deps.projection.read = async () => ({ ok: true, status: 200, data: { skills: [], next_cursor: null } })
+  app.deps.projection.read = async () => ({
+    ok: true,
+    status: 200,
+    data: { skills: [], next_cursor: null },
+  })
   app.deps.usage = async () => assert.fail("an empty catalog page must not query usage")
 
   const data = await app.service.read(
@@ -1107,7 +1306,11 @@ test("R357 production composition uses the formal Skills aggregation rather than
     upstreams: { agents: null },
     iamBaseUrl: "http://iam.test",
     upstreamTimeoutMs: 1000,
-    platformProjection: { baseUrl: "http://platform.test", credentialFile: "/unused-test-credential", timeoutMs: 1000 },
+    platformProjection: {
+      baseUrl: "http://platform.test",
+      credentialFile: "/unused-test-credential",
+      timeoutMs: 1000,
+    },
     agUi: DEFAULT_AGUI_CONFIG,
     postgresUrl: null,
     redisUrl: null,
@@ -1134,13 +1337,16 @@ test("R357 successor project list admits canonical current Project before owner 
       return { id: "canonical-project" }
     },
   }
-  const data = await app.service.read("skill.list", { project_id: "project-slug" }, app.context, app.signal, app.deadline)
+  const data = await app.service.readPublicList({ project_id: "project-slug" }, app.context, app.signal, app.deadline)
   assert.equal(data[0].created_at, 1749999990)
   assert.equal(data[0].owner_type, "project")
   assert.equal(data[0].name, "Old exact")
   assert.deepEqual(projects, [
     { scope: { tenantId: "tenant", subjectId: "human" }, id: "project-slug" },
-    { scope: { tenantId: "tenant", subjectId: "human" }, id: "canonical-project" },
+    {
+      scope: { tenantId: "tenant", subjectId: "human" },
+      id: "canonical-project",
+    },
   ])
   assert.deepEqual(
     app.calls.filter((c) => c.kind === "installed").map((c) => c.input.projectRef),
@@ -1233,7 +1439,7 @@ test("an empty project keeps personal installs while either owner failure never 
       if (scope === failedScope) throw new ConnectError("owner unavailable", Code.Unavailable)
       return { installations: scope === "personal" ? [app.installation] : [] }
     }
-    const read = () => app.service.read("skill.list", { project_id: "project" }, app.context, app.signal, app.deadline)
+    const read = () => app.service.readPublicList({ project_id: "project" }, app.context, app.signal, app.deadline)
     if (failedScope === null)
       assert.deepEqual(
         (await read()).map((item) => item.name),
@@ -1261,7 +1467,7 @@ test("project skill.list retains the 1000 unique-item limit after combining indi
     }
   }
   await assert.rejects(
-    app.service.read("skill.list", { project_id: "project" }, app.context, app.signal, app.deadline),
+    app.service.readPublicList({ project_id: "project" }, app.context, app.signal, app.deadline),
     (error) => error instanceof ConnectError && error.code === Code.ResourceExhausted,
   )
   assert.equal(
@@ -1282,7 +1488,7 @@ test("same-scope duplicate series remain an invalid owner result rather than app
       },
     ],
   })
-  await assert.rejects(app.service.read("skill.list", {}, app.context, app.signal, app.deadline), /skill_response_invalid/)
+  await assert.rejects(app.service.readPublicList({}, app.context, app.signal, app.deadline), /skill_response_invalid/)
 })
 
 test("R357 successor project missing/deleted/revoked or changed canonical identity is closed without replacing exact installations", async () => {
@@ -1296,7 +1502,7 @@ test("R357 successor project missing/deleted/revoked or changed canonical identi
       },
     }
     await assert.rejects(
-      app.service.read("skill.list", { project_id: "project-slug" }, app.context, app.signal, app.deadline),
+      app.service.readPublicList({ project_id: "project-slug" }, app.context, app.signal, app.deadline),
       (e) => e instanceof ConnectError && e.code === Code.NotFound,
     )
     assert.equal(
@@ -1311,7 +1517,7 @@ test("R357 successor project missing/deleted/revoked or changed canonical identi
     },
   }
   await assert.rejects(
-    app.service.read("skill.list", { project_id: "not-owned" }, app.context, app.signal, app.deadline),
+    app.service.readPublicList({ project_id: "not-owned" }, app.context, app.signal, app.deadline),
     (e) => e instanceof ConnectError && e.code === Code.NotFound,
   )
   assert.equal(app.calls.length, 0)
@@ -1320,17 +1526,33 @@ test("R357 successor Hub sends official exclusion and initial shuffle to owner, 
   const app = await specificationServiceFixture()
   const first = await app.service.read(
     "ListHubSkills",
-    { pageSize: 1, includeOfficialSkills: false, shuffle: true, query: "literal%_" },
+    {
+      pageSize: 1,
+      includeOfficialSkills: false,
+      shuffle: true,
+      query: "literal%_",
+    },
     app.context,
     app.signal,
     app.deadline,
   )
   assert.equal(first.skills.length, 1)
-  assert.deepEqual(app.calls.find((c) => c.kind === "projection").input.query, { limit: 1, include_official_skills: false, shuffle: true, query: "literal%_" })
+  assert.deepEqual(app.calls.find((c) => c.kind === "projection").input.query, {
+    limit: 1,
+    include_official_skills: false,
+    shuffle: true,
+    query: "literal%_",
+  })
   app.calls.length = 0
   await app.service.read(
     "ListHubSkills",
-    { pageSize: 1, includeOfficialSkills: false, pageToken: first.nextPageToken, excludeTop: true, query: "literal%_" },
+    {
+      pageSize: 1,
+      includeOfficialSkills: false,
+      pageToken: first.nextPageToken,
+      excludeTop: true,
+      query: "literal%_",
+    },
     app.context,
     app.signal,
     app.deadline,
@@ -1365,9 +1587,20 @@ test("R357 successor native binary installation client sends canonical project o
       body: fromBinary(project ? p.ListProjectSkillInstallationsRequestSchema : p.ListPersonalSkillInstallationsRequestSchema, Buffer.concat(chunks)),
       project,
     })
-    res.writeHead(200, { "content-type": "application/proto", "cache-control": "no-store" })
+    res.writeHead(200, {
+      "content-type": "application/proto",
+      "cache-control": "no-store",
+    })
     const schema = project ? p.ListProjectSkillInstallationsResponseSchema : p.ListPersonalSkillInstallationsResponseSchema
-    res.end(toBinary(schema, create(schema, { installations: [sample.installation], ...(project ? { projectRef: "canonical-project" } : {}) })))
+    res.end(
+      toBinary(
+        schema,
+        create(schema, {
+          installations: [sample.installation],
+          ...(project ? { projectRef: "canonical-project" } : {}),
+        }),
+      ),
+    )
   })
   await new Promise((r) => owner.listen(0, "127.0.0.1", r))
   try {
@@ -1377,9 +1610,19 @@ test("R357 successor native binary installation client sends canonical project o
       { get: async () => "projection-token" },
       1000,
     )
-    const input = { requestId: "native-project", tenant: "tenant", subject: "human", installed: true, limit: 1 }
+    const input = {
+      requestId: "native-project",
+      tenant: "tenant",
+      subject: "human",
+      installed: true,
+      limit: 1,
+    }
     const { PlatformSkillSpecificationFacade } = await import("../../src/infrastructure/clients/platform/skill-specification-facade.ts")
-    const facade = new PlatformSkillSpecificationFacade({ product: sample.deps.product, projection: sample.deps.projection, installations: client })
+    const facade = new PlatformSkillSpecificationFacade({
+      product: sample.deps.product,
+      projection: sample.deps.projection,
+      installations: client,
+    })
     const page = await facade.listInstallations({ ...input, projectRef: "canonical-project" }, new AbortController().signal)
     assert.equal(page.items[0].acquisition_kind, "hub")
     await client.list(input)
@@ -1417,7 +1660,7 @@ test("R357 successor exact-source missing/malformed facts close specification re
   ]) {
     const app = await specificationServiceFixture()
     Object.assign(app.installation, patch)
-    await assert.rejects(app.service.read("skill.list", {}, app.context, app.signal, app.deadline), /skill_installation_response_invalid/)
+    await assert.rejects(app.service.readPublicList({}, app.context, app.signal, app.deadline), /skill_installation_response_invalid/)
     assert.equal(
       app.calls.some((c) => c.kind === "current"),
       false,
@@ -1435,7 +1678,7 @@ test("R357 successor cancelled project authorization never issues an installatio
       return await new Promise((r) => (complete = r))
     },
   }
-  const result = app.service.read("skill.list", { project_id: "slug" }, app.context, controller.signal, app.deadline)
+  const result = app.service.readPublicList({ project_id: "slug" }, app.context, controller.signal, app.deadline)
   await pending
   controller.abort()
   complete({ id: "canonical-project" })
@@ -1451,7 +1694,7 @@ test("R357 successor project owner dependency failure stays stable503 without pr
     },
   }
   await assert.rejects(
-    app.service.read("skill.list", { project_id: "slug" }, app.context, app.signal, app.deadline),
+    app.service.readPublicList({ project_id: "slug" }, app.context, app.signal, app.deadline),
     (error) => error instanceof ConnectError && error.code === Code.Unavailable && !error.message.includes("private"),
   )
   assert.equal(app.calls.length, 0)
@@ -1468,7 +1711,12 @@ function downloadBinding(subjectId = "human") {
     sizeBytes: 3,
     contentSha256: "a".repeat(64),
     expiresAt: 5000,
-    transfer: { url: "http://store.invalid/key", method: "GET", requiredHeaders: {}, expiresAt: 5000 },
+    transfer: {
+      url: "http://store.invalid/key",
+      method: "GET",
+      requiredHeaders: {},
+      expiresAt: 5000,
+    },
   }
 }
 test("R357 handle identical qualification reuse never extends TTL or crosses tenant/subject", () => {
@@ -1514,18 +1762,33 @@ test("R357 over128 cross-subject previews retain normal GetSkill and DownloadSki
   const app = await fixture(
     {
       async prepareDownload() {
-        return { skill: detail, binding: { ...downloadBinding(subject), expiresAt, transfer: { ...downloadBinding().transfer, expiresAt } } }
+        return {
+          skill: detail,
+          binding: {
+            ...downloadBinding(subject),
+            expiresAt,
+            transfer: { ...downloadBinding().transfer, expiresAt },
+          },
+        }
       },
     },
-    async () => ({ ok: true, identity: { namespace: "tenant", userId: subject }, platformAdmin: false }),
+    async () => ({
+      ok: true,
+      identity: { namespace: "tenant", userId: subject },
+      platformAdmin: false,
+    }),
   )
   try {
-    const first = await app.request(website + "GetSkill", { skillId: "stable-series" })
+    const first = await app.request(website + "GetSkill", {
+      skillId: "stable-series",
+    })
     assert.equal(first.status, 200)
     const oldPath = first.body.downloadInfo.downloadUrl.slice(4)
     for (let i = 1; i <= 129; i++) {
       subject = `human-${i}`
-      const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
+      const result = await app.request(website + "GetSkill", {
+        skillId: "stable-series",
+      })
       assert.equal(result.status, 200, `preview ${i}`)
     }
     subject = "human-0"
@@ -1562,13 +1825,19 @@ test("R357 reuse requires every exact qualification fact, never mutates or rebin
   const variations = [
     (b) => ({ ...b, tenantId: "other" }),
     (b) => ({ ...b, subjectId: "other" }),
-    (b) => ({ ...b, qualifier: { kind: "catalog_current", seriesId: "other-series" } }),
+    (b) => ({
+      ...b,
+      qualifier: { kind: "catalog_current", seriesId: "other-series" },
+    }),
     (b) => ({ ...b, sourceRef: "skill:other-version" }),
     (b) => ({ ...b, filename: "other.zip" }),
     (b) => ({ ...b, sizeBytes: 4 }),
     (b) => ({ ...b, contentSha256: "b".repeat(64) }),
     (b) => ({ ...b, expiresAt: 4000 }),
-    (b) => ({ ...b, transfer: { ...b.transfer, url: "http://store.invalid/other" } }),
+    (b) => ({
+      ...b,
+      transfer: { ...b.transfer, url: "http://store.invalid/other" },
+    }),
     (b) => ({ ...b, transfer: { ...b.transfer, expiresAt: 4000 } }),
   ]
   for (const variation of variations) {
@@ -1640,7 +1909,13 @@ test("shared revision summary serves exact old revision through the admitted pub
   try {
     const result = await app.request("/v1/skill-shares/shared-old/skill")
     assert.equal(result.status, 200)
-    assert.deepEqual(result.body, { data: { share_id: share.shareId, source_ref: share.sourceRef, skill: sharedSummary } })
+    assert.deepEqual(result.body, {
+      data: {
+        share_id: share.shareId,
+        source_ref: share.sourceRef,
+        skill: sharedSummary,
+      },
+    })
     assert.equal(reads, 2)
     assert.equal(summaries, 1)
     assert.equal(result.headers.get("cache-control"), "no-store")
@@ -1683,7 +1958,11 @@ test("shared summary never calls series current or prepares a download", async (
   })
   const result = await service.revisionSummary(
     "skill:version-old",
-    { identity: { namespace: "tenant", userId: "human" }, requestId: "shared", humanBearer: "human" },
+    {
+      identity: { namespace: "tenant", userId: "human" },
+      requestId: "shared",
+      humanBearer: "human",
+    },
     new AbortController().signal,
     performance.now() + 1000,
   )
@@ -1768,7 +2047,11 @@ for (const scenario of ["revoked", "expired", "changed-source", "other-tenant", 
 
 test("shared summary exact metadata checks active/phase and obtains only formal found IAM author", async () => {
   const { SkillSpecificationService } = await import("../../src/application/skill-specification.ts")
-  const context = { identity: { namespace: "tenant", userId: "human" }, requestId: "shared", humanBearer: "human" }
+  const context = {
+    identity: { namespace: "tenant", userId: "human" },
+    requestId: "shared",
+    humanBearer: "human",
+  }
   for (const status of ["found", "missing", "throw"]) {
     const service = new SkillSpecificationService({
       owner: {
@@ -1786,7 +2069,10 @@ test("shared summary exact metadata checks active/phase and obtains only formal 
             example_prompts: [],
             category_keys: [],
             skill_updated_at: sharedSummary.updated_at,
-            product: { source_kind: "third_party", creator_ref: { kind: "user", id: "creator" } },
+            product: {
+              source_kind: "third_party",
+              creator_ref: { kind: "user", id: "creator" },
+            },
           },
           record: { ownerKind: "user" },
           createdAt: sharedSummary.created_at,
@@ -1798,7 +2084,15 @@ test("shared summary exact metadata checks active/phase and obtains only formal 
           assert.equal(bearer, "human")
           assert.deepEqual(refs, [{ kind: "user", id: "creator" }])
           if (status === "throw") throw new Error("publisher_profile_unavailable")
-          return new Map([[JSON.stringify(["user", "creator"]), { status, ...(status === "found" ? { display_name: "Real creator" } : {}) }]])
+          return new Map([
+            [
+              JSON.stringify(["user", "creator"]),
+              {
+                status,
+                ...(status === "found" ? { display_name: "Real creator" } : {}),
+              },
+            ],
+          ])
         },
       },
       objectOrigin: null,
@@ -1808,7 +2102,11 @@ test("shared summary exact metadata checks active/phase and obtains only formal 
     else {
       const result = await read()
       assert.equal(result.source_kind, "third_party")
-      if (status === "found") assert.deepEqual(result.author, { user_id: "creator", display_name: "Real creator" })
+      if (status === "found")
+        assert.deepEqual(result.author, {
+          user_id: "creator",
+          display_name: "Real creator",
+        })
       else assert.equal(Object.hasOwn(result, "author"), false)
     }
   }
@@ -1869,4 +2167,167 @@ test("shared summary disconnect cancels exact metadata and prevents a late secon
   } finally {
     await app.close()
   }
+})
+
+test("deleted series are not public availability even while their exact installation remains retained", async () => {
+  const app = await specificationServiceFixture()
+  app.installation.sourceStatus = 7
+  const result = await app.service.readPublicList({}, app.context, app.signal, app.deadline)
+  assert.deepEqual(result, [])
+  assert.equal(app.installation.installed, true)
+  assert.equal(
+    app.calls.some((call) => call.kind === "profiles" || call.kind === "current"),
+    false,
+  )
+})
+
+test("public source requires explicit IAM principal and never recovers it from website identity or bearer", async () => {
+  const app = await specificationServiceFixture()
+  const { principal: _principal, ...missing } = app.context
+  await assert.rejects(app.service.readPublicList({}, missing, app.signal, app.deadline), (error) => error.code === Code.Unauthenticated)
+  await assert.rejects(
+    app.service.readPublicList({}, { ...app.context, principal: { ...app.context.principal, user_id: "other" } }, app.signal, app.deadline),
+    (error) => error.code === Code.Unauthenticated,
+  )
+  assert.equal(app.calls.length, 0)
+})
+
+function appBinding(series, name = "App exact") {
+  return {
+    binding_id: `binding-${series}`,
+    series_id: series,
+    skill_id: `exact-${series}`,
+    revision: "1",
+    state_version: "1",
+    source_status: "active",
+    created_at: "2025-01-01T00:00:00.000Z",
+    updated_at: "2025-01-02T00:00:00.000Z",
+    removed_at: null,
+    metadata: {
+      name,
+      summary: "App description",
+      created_at: "2025-01-01T00:00:00.000Z",
+      updated_at: "2025-01-02T00:00:00.000Z",
+      product: { source_kind: "official", creator_ref: { kind: "user", id: "actual-creator" } },
+    },
+  }
+}
+function openAppContext(context, trusted) {
+  return { ...context, principal: { kind: "oauth_app", tenant_id: "tenant", user_id: "human", client_id: "managed-client", app_id: "registered-app", trusted } }
+}
+test("ordinary Open App reads only its own exact App binding pages, never personal installations or latest; removed/invalid stay hidden", async () => {
+  const app = await specificationServiceFixture()
+  const reads = []
+  app.deps.appBindings = {
+    async list(context, page) {
+      reads.push({ context, page })
+      return page.cursor === undefined
+        ? { items: [appBinding("stable-series"), { ...appBinding("removed"), removed_at: "2025-01-03T00:00:00.000Z" }], nextCursor: "binding-page" }
+        : { items: [{ ...appBinding("invalid"), metadata: null }, appBinding("other-series")] }
+    },
+  }
+  const result = await app.service.readPublicList({}, openAppContext(app.context, false), app.signal, app.deadline)
+  assert.deepEqual(
+    result.map((item) => [item.id, item.name, item.owner_type]),
+    [
+      ["stable-series", "App exact", "app"],
+      ["other-series", "App exact", "app"],
+    ],
+  )
+  assert.equal(result[0].creator_info.name, "Real Creator")
+  assert.deepEqual(
+    app.calls.map((c) => c.kind),
+    ["profiles"],
+  )
+  assert.equal(reads.length, 2)
+  assert.equal(reads[0].context.appId, "registered-app")
+  assert.equal(reads[0].context.subject, "human")
+  assert.equal(reads[1].page.cursor, "binding-page")
+  await assert.rejects(
+    app.service.readPublicList({ project_id: "project" }, openAppContext(app.context, false), app.signal, app.deadline),
+    (error) => error.code === Code.InvalidArgument,
+  )
+  assert.equal(reads.length, 2)
+})
+test("trusted App union prioritizes complete project over personal over App rows, without version or author mixing", async () => {
+  const app = await specificationServiceFixture()
+  app.deps.projects = { find: async () => ({ id: "canonical-project" }) }
+  app.deps.appBindings = { list: async () => ({ items: [appBinding("stable-series", "App newer"), appBinding("app-only")] }) }
+  const original = app.deps.owner.listInstallations.bind(app.deps.owner)
+  app.deps.owner.listInstallations = async (input, signal) => {
+    const result = await original(input, signal)
+    return {
+      items: result.items.map((item) => ({
+        ...item,
+        display_name: input.projectRef === undefined ? "Personal row" : "Project older disabled",
+        enabled: false,
+      })),
+    }
+  }
+  const personal = await app.service.readPublicList({}, openAppContext(app.context, true), app.signal, app.deadline)
+  assert.equal(personal.find((row) => row.id === "stable-series").name, "Personal row")
+  const project = await app.service.readPublicList({ project_id: "project" }, openAppContext(app.context, true), app.signal, app.deadline)
+  assert.equal(project.find((row) => row.id === "stable-series").name, "Project older disabled")
+  assert.equal(project.find((row) => row.id === "app-only").owner_type, "app")
+  assert.equal(project.length, 2)
+})
+
+test("Open App pagination rejects repeated cursors/duplicate binding identity and bounds the combined trusted union at1000", async () => {
+  for (const invalid of ["cursor", "identity", "capacity"]) {
+    const app = await specificationServiceFixture()
+    let page = 0
+    app.deps.appBindings = {
+      list: async () => {
+        if (invalid === "capacity") {
+          const start = page++ * 100
+          return { items: Array.from({ length: 100 }, (_, i) => appBinding(`app-${start + i}`)), ...(page < 10 ? { nextCursor: `page-${page}` } : {}) }
+        }
+        return {
+          items: [{ ...appBinding(`app-${page++}`), ...(invalid === "identity" ? { binding_id: "same-binding" } : {}) }],
+          nextCursor: invalid === "cursor" ? "same-cursor" : `page-${page}`,
+        }
+      },
+    }
+    await assert.rejects(
+      app.service.readPublicList({}, openAppContext(app.context, true), app.signal, app.deadline),
+      invalid === "capacity" ? (error) => error.code === Code.ResourceExhausted : /skill_response_invalid/,
+    )
+  }
+})
+
+test("public Open App maps an exact disabled binding's approved metadata, without failing or inventing installation authority", async () => {
+  const app = await specificationServiceFixture()
+  const { projectAppSkillBinding } = await import("../../src/infrastructure/clients/platform/app-skill-binding-response.ts")
+  const p = await import("../../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts")
+  const disabled = projectAppSkillBinding(
+    create(p.AppSkillBindingSchema, {
+      bindingId: "disabled-binding",
+      seriesId: { value: "disabled-series" },
+      skillId: { value: "disabled-version" },
+      revision: 1n,
+      stateVersion: 2n,
+      sourceStatus: p.SkillStatus.DISABLED,
+      createdAt: { seconds: 1n },
+      updatedAt: { seconds: 3n },
+      skill: {
+        skillId: { value: "disabled-version" },
+        seriesId: { value: "disabled-series" },
+        sourceRef: { value: "skill:disabled-version" },
+        revision: 1n,
+        status: p.SkillStatus.DISABLED,
+        metadata: { displayName: "Disabled exact", summary: "Retained approved metadata", examplePrompts: { prompts: [] }, categoryKeys: { keys: [] } },
+        createdAt: { seconds: 1n },
+        skillUpdatedAt: { seconds: 2n },
+        product: { publicationAudience: "catalog", stateVersion: 1n },
+        packagePhase: p.SkillPackagePhase.VALIDATED,
+      },
+    }),
+  )
+  app.deps.appBindings = { list: async () => ({ items: [disabled] }) }
+  const rows = await app.service.readPublicList({}, openAppContext(app.context, false), app.signal, app.deadline)
+  assert.deepEqual(
+    rows.map((row) => [row.id, row.name, row.owner_type]),
+    [["disabled-series", "Disabled exact", "app"]],
+  )
+  assert.equal(app.calls.filter((call) => call.kind === "installed").length, 0)
 })

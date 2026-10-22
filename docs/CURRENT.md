@@ -1,10 +1,79 @@
-## 2026-10-21 项目技能并集修复（main 隔离验收完成，待 PR）
+## 2026-10-21 公开身份矩阵与 App 绑定（当前源码候选，未正常激活）
 
-按用户确认规则，`skill.list?project_id` 现合并个人与已授权项目安装；同 series 采用项目完整 exact 表示，停用/较旧项目项也不回退个人项。不取 current/latest、不升级安装、不授项目执行资格。沿既有分页/取消/绝对总预算及出口权限复核；单路与最终列表均限1000，同scope重复series拒绝，任一路失败不返回半份成功。无新模块、API、Schema、依赖或运行兼容分支。
+Public22.1.0 /180 operations：公开 skill.list 使用 IAM 0.15 明确的用户 API Key／普通 App／可信 App 主体；四个网站读取继续使用 Product Session，保留原服务入口保护。普通 App 仅返回正式绑定，可信 App 精确并集按项目、个人、App 优先去重，读取前后复核权限与同一主体，扫描上限1000；不隐式升级版本。三个 App 绑定管理操作要求新鲜 IAM operator 资格及精确 app/tenant/client，不以平台管理员或请求 body 自报身份代替。
 
-从 `origin/main@5dc86e4` 独立实现，未带入模型候选三笔提交。原67项基线通过；新增独有风险及原授权测试RED5→GREEN，最终相关75 PASS。Public19.0.1仅补该GET描述，165操作、wire、参数和owner pins不变；原Public19完整SHA、双父proof与inventory原字节保持。独审发现描述逆回可被移到其他块的漏洞，已绑定目标GET并补RED→GREEN负控，复核关闭。
+固定 IAM `4db7012a85752071f5fd30b9a5a3b4977e9dd4f3` 和 Platform `451d0fb5a2df76f9050a685eef02782989d94cce`；Native 正规生成，摘要按正式 RFC8785 profile，写 ACK 必须精确 expected+1，移除记录不得携带元数据。Public22.1/180 SHA256 `f726cac620362524f92474ca9d647229280db308d16105820c718f9bc32db1ae`，构建期精确逆回原 Public22/176，原父 hash、历史 oracle 和业务网络协议保持，无新 BFF 表或运行时兼容入口。
 
-Node22：format/lint/types、完整contract852 PASS、architecture36 PASS及build通过；默认并发全量1499 PASS/1 FAIL/3原资源SKIP，唯一失败是原模型管理5ms预算测试在到owner前超时（503正确、预期ownerCalls=1实际0），本片未修改该测试/产品。相同完整文件清单以`node --import tsx --test --test-concurrency=1`固定并发再次验收1500 PASS/0 FAIL/3原资源SKIP，断言/超时/skip不变；最终format/lint再次通过，704份非文档输入冻结零漂移。保留首失败，不宣称修复模型时序问题。无数据库/Redis变更，未重载正常服务或进行模型/工具/积分操作；正常 owner 链与 App/Admin 完整旅程仍需后续配对，不以受控 HTTP/Connect 证据冒整产品闭环。App自身登录刷新JSON500另记，未夹入本BFF修复。
+最终停写七门 format/lint/typecheck/contract/architecture/test/build exit0：contract909 PASS，architecture36 PASS，默认1563 PASS、0 FAIL、3项原资源 SKIP。独审发现的 disabled 元数据、ACK跳版本、tombstone 元数据三项 P2 已修复并定向86 PASS；主方独立公开 HTTP／Native client 20 PASS，84受影响路径零漂移。未以 fixture peer 冒称真实 IAM＋Platform 数据库整链；正常配对、App 精确 pin、页面验收和集中 PR merge 仍待完成，模型／工具执行／扣费保持暂停。
+
+## 2026-10-21 个人系列删除消费者（当前源码候选）
+
+Public22.1.0 /177 operations 仅新增 `DELETE /v1/self/skills/{skill_id}`：当前 Product 会话与 IAM `delete_series` 准入、明确 anchor CAS 和 publication 空／精确确认、原 key/digest 重试；不先读取 source 后才重放，不把撤回或404当删除成功。Platform Native 固定 `883d7713556b8cee9d41b9c9d904931715033808`，安装管理保留 `source_status=deleted`，可用列表排除该来源且扫描总量上限仍为1000。旧 Public22 全文字节及有序 inventory 以独立构建期 inverse 复核，不引入运行兼容层。
+
+IAM 固定 `4db7012a85752071f5fd30b9a5a3b4977e9dd4f3` /0.15.0，仅新增三个身份／作者／App管理资格消费生成入口；专用 SkillListAdmissionClient 已有闭集验证，但公开 skill.list 尚未改用它，不能据此称公开身份矩阵完成。无新 BFF 表、模型／工具／扣费调用，正常服务未加载此删除候选，App 仍待固定提交后配对。最终验证记录由本段后续收据补充，现不冒称已合并。
+
+最终停写复核：format/lint/typecheck/contract/architecture/default/build 七门 exit0，contract884PASS、默认1538PASS／3原资源SKIP，726非文档输入零漂移；独立审查无确定P0–P2。首轮旧版本／artifact inventory断言失败已按精确新pin及构建期逆证修正，原完整父hash未替换。另一次未改动的账户会话25ms测试在并发资源负载下未进入fetch而失败；原28项隔离通过、相同冻结源码完整默认重跑通过，未放宽超时或改无关代码。此前失败日志保留，不称资源整链或正常生效。
+
+## 2026-10-21 本人历史原包下载资格已配对（源码候选）
+
+沿现 exactManagedRecord，仅为已获本人 managed GET 的明确 personal disabled/withdrawn 放行精确原包；active、安装、分享和current规则不改，句柄前后重新准入/绑定/资格和原hash/size校验保持。Platform固定97b27b3056f3024fe1c0509072349e1b274efac4，21个vendor原件逐一核对该commit，旧目录退休；正规Native生成，HTTP6.3/Public22/176与原generated业务字节保持。没有新API、Schema、表、缓存或兼容分支。
+
+定向两行为RED后修复，8PASS（含发行句柄后隔离拒绝）；初次用Node strip-types未解析仓内.js→.ts仅为命令错误，改用本仓tsx。首次生成入口漏改buf路径被原门拒绝，补完整pin后再生成成功；没有修改原完整父图/摘要向量断言。停写完整七门exit0：contract877、architecture36、默认1529PASS/3既有资源SKIP、构建/类型/lint/格式；非文档冻结输入无漂移。只读独审无确定P0–P2。本片未另跑BFF真实PG/Redis或正常页面，不冒完整restore验收。
+
+App还需接现private下载入口、取原ZIP/确认及新UID完整发布，正常四端尚未加载本片；未push/PR/merge、不改正常数据/配置，不启模型/实际工具/扣费。完整删除、公开身份、后台与MCP目标仍active。
+
+## 2026-10-21 Admin 详情快照接线（源码候选，未正常激活）
+
+同一未发布Public22/176候选固定owner `e95aba22d6ffc59a2c5979db39418b9a67f2822f` Native artifact；现GET Admin详情保原data，新增required closed meta.publication，显式null或精确指针／版本。不从selected record、列表/current/最大revision推导，不把缺字段／404当空；缺失、坏oneof、越界或未知wire拒绝502。写摘要及原8向量、独立HTTP6.3 pin/字节和SQL保持；无新API、服务、表或自动重读。原IAM人类管理员与租户准入、专用机器身份、请求预算／取消保持，富化后再次检查signal。
+
+10个HTTP子例最初全部RED（缺meta或坏值误200），修复后连同既有用例及契约共119项通过；其中另有真实BFF listener→正规Native Connect binary client→owner protocol peer→BFF projection，明确保留9007199254740993和不同于selected版本的指针／专用机器身份。该peer不是实际owner数据库／IAM整链，未激活正常服务或UI。正式固定SDK双次生成通过；停写后完整七门均exit0：format:check、lint、typecheck、contract:check（874PASS／0SKIP）、test:architecture（36PASS）、test（1526PASS／3既有资源SKIP）、build，719份非文档输入前后无漂移。独立只读审查无确定阻断；提交前非递归fetch确认origin/main仍为本候选祖先。App/Admin确认及恢复旅程、删除、公开身份矩阵、后台和MCP完整目标保留，模型／工具／扣费暂停，未push/PR/merge。
+
+## 2026-10-21 发布确认快照（源码候选，未正常激活）
+
+BFF Public22.0.0 /176 operations 固定 Platform `3fc971edbd99e0c0fe7d8a30a3ebf872f57f5b3c` Native artifact；HTTP历史读取继续固定原 `efe1ed1` /6.3 原字节。个人／官方发布必须显式携带确认的 expected_publication（null或current_version_id/state_version），窄映射oneof并进入原摘要／key绑定；不在提交或未知结果恢复时重读／改写期待值。普通audience编辑、SQL、其他owner pin和运行开关不变。两路发布的snapshot冲突412不可重试，普通in-progress仍409可重试。旧缺字段请求拒绝，不增加服务、表或兼容入口。
+
+
+停写后完整七门均exit0：format:check、lint、typecheck、contract:check（862PASS／0SKIP）、test:architecture（36PASS）、test（1514PASS／3既有资源SKIP）、build；719份非文档输入前后无漂移。两条初始输入／HTTP RED和独审后Admin快照冲突409→412的真实HTTP RED均保留，修复后Admin16项通过；原失效编辑脚本未写入且旧测试PASS，不计RED。正式SDK双次生成一致，新vendor21文件由独审逐字节核对owner Git原件，原HTTP artifact／历史proof未改。独审无确定阻断。本片没有BFF真实PG/Redis或正常UI验收，不把owner隔离PG或本片fixture HTTP当完整产品链。相关四仓重新非递归fetch，远端main仍为候选祖先；未push／PR／merge或加载正常服务。
+
+App确认页与Admin消费者尚未配对；Admin既有详情缺完整nullable publication读取（withdrawn current不能用原GetCurrentSkill的404猜null），下一步沿原详情补齐，不另建读取框架。正常环境仍旧合同，本候选未切换，完整Skills恢复／删除／公开身份矩阵／后台及MCP目标未完成；模型、工具执行和扣费暂停。
+
+## 2026-10-21 本人技能历史读取（候选，正常尚未加载）
+
+沿用已配对模型／Skills 并集基线 `192396d`，新增 Public21.2.0 /176 operations 的 `GET /v1/self/skills/{skill_id}/versions`，固定 Platform6.3.0 `efe1ed1a3f81e87df1edded53e6e796d20edea55`。只读当前主体拥有系列的精确发布历史，current 来自正式 publication 指针；不取最新替代、不改变安装、不执行工具。仅接收 limit/cursor，同一入口预算覆盖身份核验与 owner 读取；末页 next_cursor 规范为 null。严格原始 JSON／嵌套闭集拒绝重复键和未知字段，历史读取不额外富化发布者。
+
+初始两条定向回归已复现缺路由／解码，真实 BFF listener 配 owner fixture 与窄 client 共46项通过；新增原始重复键复现后已修复。独立只读审查的旧165 inventory重复归一问题已修复，原完整父字节与历史证明保持；固定 SDK 两次生成逐字一致，semantic176通过。停写后完整七门 format:check/lint/typecheck/contract:check/test:architecture/test/build 均exit0：契约857PASS/0SKIP、架构36PASS、默认1509PASS/3既有资源SKIP；23份非文档输入前后无漂移。首次完整门的3处新增文件／固定版本断言未配对已更正并全门重跑，原失败日志保留；先前runner误把并发参数放NODE_OPTIONS导致的启动exit9不作代码失败或通过证据。固定 SDK 两次生成一致、独立只读审查及主会话复验通过。未执行BFF实际PG/Redis集成或正常App/Admin页面旅程；本批不改Schema，owner真实PG/HTTP23项为独立证据，不能相加称完整链通过。App 历史列表／精确版本预览与正常端到端尚未交付；模型、工具、扣费保持暂停。
+
+## 2026-10-21 Skills 正常配对（独立集成中）
+
+正常BFF仍运行f3da7d5/Public21.1.0模型候选，直接切到main Public19.0.1会丢失当前模型字段／表单，故保留正常候选并在独立topic承接已合333b708 Skills并集。目标Public21.1.1/175；Schema、模型字段和owner pins不变，App/Admin待正式提交后固定配对。已在该模型基线上复现5个真实Skills并集行为失败；额外1个测试失败是搬入主线全artifact版本断言尚未配对，单列不当业务失败。当前局部实现及主线冲突集成已完成，正常加载与完整产品验收仍未完成，原业务进程和数据未动。
+
+停写基线本地完整七门均exit0：contract854 PASS、architecture36 PASS、完整test1507 PASS／3既有资源SKIP（预先固定test-concurrency=1），格式／lint／types／build均通过。711份非文档输入前后hash无漂移；79项定向及合并组合独立审查通过。原历史proof／inventory不改，主线19.0.1与模型21.1.1补丁按精确原件逆证；运行时不新增兼容入口。App/Admin精确消费者pin、正常页面回读和整批PR仍待收口，不以组件门替代。
+
+## 2026-10-20 MC-02 配置管理接线（本地候选）
+
+Public21.1.0 新增10个具名模型配置操作，当前175操作，artifact SHA256 `4db8bab6159a2f36061f8b292fba9074ea2614adab2a1489bf9d1b3b066b6fe3`。固定 System6 `550d65498822d8d2e629199482de4f6990b62708`，artifact `10ff7ee82ca7405dcab473f3fd80e620aa6c4e0bc92e64111797144ce0fa4061`、provenance `ed2e312bc5bc3022111797771190e57133818af83c0bb7ad2024a615a4e033c5`。独立 model-management token，仅代理 provider/definition/feature 目录、只写Key创建和原主体脱敏查回、模型修订创建/CAS发布、业务label创建/修改；不代理运行密钥或新增删除/健康操作。IAM当前管理员、受信tenant/actor、原key/CAS、取消与绝对预算保持；无回退token或自动重试。
+
+停写后格式、lint、类型、contract850 PASS、architecture36 PASS、默认1503 PASS/3原资源SKIP、build全通过；44条既有OpenAPI警告保留。新公开增量精确逆回原Public21，再委托未改历史证明；原165操作保持。独审Approved，修复缺省direct/null别名ACK绑定和解析跨绝对截止后误成功两项P2，均实际RED→GREEN。
+
+Root真实隔离IAM→BFF→System6/PG配置创建、原key查回、发布、业务组合、别名编辑清空、catalog、CAS/重放/冲突/非法session通过；自有数据库94→94、IAM测试key0→0。最终交付提交后再固定提交重跑该链。正常环境、Admin/App页面、整批PR尚未完成，不将组件结果称为完整产品验收。模型、真实工具与扣费暂停，自动化/连接器不改。
+
+## 2026-10-20 MC-02A System5 消费者工程验收（隔离候选，正常未切）
+
+本候选唯一 Public21.0.0 /165 operations：AdminModelLabel.display_name required nullable，AdminModelRevision无feature；业务 `/models` 保稳定label name，并用owner显式provider与精确model/revision/provider ID、feature/request_model、有效display_name和required nullable next_cursor闭合投影。正式固定System `b7fe78e25e3c569ae0e1cb9b42cddab02074ca07` /5.0.0，artifact `a83b37269e9e4fa7fb5310a1836975e20ab9eaee965a66c83e35bb1ca1b9e5df`、provenance `97b20e57f66010ba456fac59fe1dd62d90c17325c82d3da80be455ea9d3cf747`；同唯一生成器新增getModelCatalog第5窄操作，16文件／26 strict对象，旧当前vendor退休。
+
+三D0先行；真实BFF HTTP RED已复现key=chat/fast被旧projection猜成provider=chat且丢失精确引用。现client边界用固定generated严格解析并投影ownerprovider，不改label key、不猜别名/默认修订；删除application旧猜测函数，无第二兼容实现。原四管理操作、受信tenant/权限、CAS/key、HTTP预算与错误保持。升级原成功/失败夹具，保缺default、错误类型、缺cursor、裸envelope/meta及原安全断言，补旧catalog/默认修订伪值、精确ID/名称界、unknown连接内容拒绝与alias/default有效名；伪造浏览器tenant/权限不转发。
+
+最终focused四套48PASS/0SKIP；首次新test-only逆证因空/重复片段定位失败的2项保留日志，改为精确行区间/SHA及完整父hash后通过，Public21 wire未改、旧20→19 oracle字节未动。新21→20全文逆回完整原Public20再委托原19/双父证明；正规baseline更新后有序165 inventory无diff。代码停写后 Node22.22.2/pnpm11.25.0完整七门 format:check/lint/typecheck/contract:check/test:architecture/test/build 均exit0：contract849PASS/0SKIP、architecture36PASS、default1498PASS/0FAIL/3原资源SKIP；System双次byte-identical生成漂移随contract通过。主会话独审/复验及精确提交随后进行，不把本writer自验冒为已审合并。
+
+基线 `15e4a7423ceed83dbb09d02e24e802ac78d9ed9e`，本writer未切分支/暂存/提交/push或修改正常配置/进程/数据。SQL、lockfile、其他owner pins、operation inventory与旧20/19/双父oracle保持；本片未运行真实PG/Redis、真实System业务owner HTTP、App/Admin整链或正常激活。Key保存/领取仍独立候选，模型、工具、扣费继续暂停。Root ignored `var/dev/system-management-20261020/bff-mc02a-*` 保存RED、首逆证失败、最终门及受影响文件冻结收据；消费者固定与正常切换由Root统筹。下方为历史切片。
+
+## 2026-10-20 System4 管理配对完成工程验收（隔离候选，未正常激活）
+
+本候选唯一 Public20.0.0 /165 operations，只替换管理员 revision 的旧 `transport`/`gateway_model_name` 为 System4 必需 `request_model`＋closed `connection`；现四操作闭集、标签/路由/PUT、身份/tenant、分页、CAS/key、错误/取消/预算保持。三面文档门先收敛；固定 System Draft `dafbc66c9ab5e55b556dbd1dd71c79cef354f69c` /4.0.0 原始 artifact `c7cda9d09db266cd26dc1b80dfe9bb95c3c9f6a91bdbd6c5d7de4f85295d1dc6` 和 provenance `37e338939ebecc4a61cf7aff4d14c2e28b5bc34381e66324a2009988e793d2d0`，正规生成16文件，退休System3当前vendor。无新写操作、mapper、兼容union/fallback；原严格窄client直接消费新生成schema。
+
+先保留旧生成物红测12PASS/5FAIL，证明新快照被旧System3消费拒绝；正规生成后增独有HTTP正负例及Public20精确逆证，最终focused四套90PASS/0SKIP。首次完整contract848PASS/1FAIL及default1496PASS/1FAIL/3原资源SKIP仅暴露现行Skills版本断言19未升20；只改该期望，原字段/历史proof/负控不变。最终代码停写后 Node22.22.2/pnpm11.25.0 七门 format:check、lint、typecheck、contract:check、test:architecture、test、build 均 exit0：contract849PASS/0SKIP、architecture36PASS、default1497PASS/0FAIL/3原资源SKIP；System生成双次byte-identical漂移门随contract通过。只读独审无确定P0–P2，原Public19与两父全文/有序inventory保持。
+
+canonical SQL、lockfile、其他owner pins、操作inventory与原双父proof无diff。三个SKIP仍是原schema/catalog资源用例；本批未运行真实PostgreSQL/Redis、System业务owner HTTP、App/Admin整链或正常激活，不把受控owner wire称真实整链。Root后继负责固定App/Admin、System旧行盘点/处置与受管资源配对；本writer未改正常资源、未提交/推送或合并，模型、实际工具与扣费继续暂停。基线 `5dc86e4c77ea7fa85ca0495e4c430d2a50c67c65`；完整失败/最终门收据与受影响文件冻结清单由Root ignored `var/dev/system-management-20261020/bff-*` 保存。
 
 ## 2026-10-20 保留项目执行绑定 producer 定向集成（源码已验，正常执行未激活）
 
@@ -1965,3 +2034,13 @@ Skill record 对应值的 `UNSPECIFIED`、`INTENT` 及未知值 fail closed。Fi
 Platform Connect 固定 ac56a1f8e9491e3e8383bff833b0f9f771fae3b1 receipt error profile/provenance并正规生成，旧vendor删除；Public14.8/139、Proto与HTTP独立pin未变。窄错误mapper/私有恢复policy区分原receipt状态和MCP原生OAuth三项typed原因，拒绝未知/重复/错码/混合/read marker；不按message猜、不自动重放或新key。原server-response错误export删除并移至对应client错误边界，无alias。code-first profile正规发布为只读JSON，App尚未消费，正常服务无watch/未重启。
 
 原unknown被误报generic retryable及原生OAuth typed原因被丢失均实际HTTP RED后修复；真实两个HTTP hop使用production Connect client确认expired不被旧typed-detail guard误报502。HTTP/SDK是真实传输，owner/凭据/IAM仍为受控fixture，不冒真实receipt DB、正常用户或第三方授权。完整门禁、独审与最终commit由Root有效计划收口。
+
+## 已合主线阶段记录（与上述当前模型配对状态区分）
+
+## 2026-10-21 项目技能并集修复（main 隔离验收完成，待 PR）
+
+按用户确认规则，`skill.list?project_id` 现合并个人与已授权项目安装；同 series 采用项目完整 exact 表示，停用/较旧项目项也不回退个人项。不取 current/latest、不升级安装、不授项目执行资格。沿既有分页/取消/绝对总预算及出口权限复核；单路与最终列表均限1000，同scope重复series拒绝，任一路失败不返回半份成功。无新模块、API、Schema、依赖或运行兼容分支。
+
+从 `origin/main@5dc86e4` 独立实现，未带入模型候选三笔提交。原67项基线通过；新增独有风险及原授权测试RED5→GREEN，最终相关75 PASS。Public19.0.1仅补该GET描述，165操作、wire、参数和owner pins不变；原Public19完整SHA、双父proof与inventory原字节保持。独审发现描述逆回可被移到其他块的漏洞，已绑定目标GET并补RED→GREEN负控，复核关闭。
+
+Node22：format/lint/types、完整contract852 PASS、architecture36 PASS及build通过；默认并发全量1499 PASS/1 FAIL/3原资源SKIP，唯一失败是原模型管理5ms预算测试在到owner前超时（503正确、预期ownerCalls=1实际0），本片未修改该测试/产品。相同完整文件清单以`node --import tsx --test --test-concurrency=1`固定并发再次验收1500 PASS/0 FAIL/3原资源SKIP，断言/超时/skip不变；最终format/lint再次通过，704份非文档输入冻结零漂移。保留首失败，不宣称修复模型时序问题。无数据库/Redis变更，未重载正常服务或进行模型/工具/积分操作；正常 owner 链与 App/Admin 完整旅程仍需后续配对，不以受控 HTTP/Connect 证据冒整产品闭环。App自身登录刷新JSON500另记，未夹入本BFF修复。

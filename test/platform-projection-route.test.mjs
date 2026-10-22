@@ -853,3 +853,63 @@ test("R357 MCP owner projection uses only entrance remaining budget and never co
     await app.close()
   }
 })
+
+test("owned series history preserves exact revisions and rejects mutation or caller query fields", async () => {
+  const data = {
+    series_id: "series-history",
+    publication: { current_version_id: "old-current", state_version: "7", withdrawn_at: null },
+    versions: [
+      {
+        skill_id: "newer-history",
+        revision: "3",
+        name: "History",
+        summary: "Newest retained revision",
+        status: "disabled",
+        archive_size: "375",
+        file_count: 1,
+        created_at: "2026-10-21T00:00:00Z",
+        is_current: false,
+      },
+      {
+        skill_id: "old-current",
+        revision: "1",
+        name: "History",
+        summary: "Current exact revision",
+        status: "active",
+        archive_size: "374",
+        file_count: 1,
+        created_at: "2026-10-20T00:00:00Z",
+        is_current: true,
+      },
+    ],
+  }
+  const app = await managedFixture({
+    owner: async (request) => {
+      assert.equal(new URL(request.url).pathname, "/v1/self/skills/anchor-history/versions")
+      assert.equal(new URL(request.url).searchParams.get("limit"), "2")
+      assert.equal(request.headers.get("x-kokoro-subject"), "person")
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { "content-type": "application/json", "cache-control": "no-store", "x-kokoro-request-id": request.headers.get("x-kokoro-request-id") },
+      })
+    },
+  })
+  try {
+    const response = await fetch(`${app.origin}/v1/self/skills/anchor-history/versions?limit=2`, { headers: managedBrowserHeaders() })
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get("cache-control"), "no-store")
+    const body = await response.json()
+    assert.deepEqual(body.data, { ...data, next_cursor: null })
+    assert.equal(body.meta.request_id, response.headers.get("x-request-id"))
+    const before = app.calls.length
+    for (const suffix of ["?limit=0", "?limit=101", "?limit=1&limit=2", "?status=active", "?subject_id=other"])
+      assert.equal((await fetch(`${app.origin}/v1/self/skills/anchor-history/versions${suffix}`, { headers: managedBrowserHeaders() })).status, 400)
+    assert.equal(
+      (await fetch(`${app.origin}/v1/self/skills/anchor-history/versions`, { headers: managedBrowserHeaders({ "idempotency-key": "not-a-write" }) })).status,
+      400,
+    )
+    assert.equal(app.calls.length, before)
+  } finally {
+    await app.close()
+  }
+})

@@ -1,3 +1,19 @@
+## 2026-10-21 个人系列删除候选
+
+当前机器契约 Public22.1.0 /177，新增个人系列 DELETE，保留 distinct withdraw；严格 CAS/publication、当前 IAM delete_series 和原 key 回执。Platform Native 固定883d771、IAM0.15固定4db7012。公开三身份矩阵及 App 页面尚待接线，正常环境未激活；边界与实际验证见 `docs/CURRENT.md`。下方版本段为阶段历史。
+
+## 2026-10-21 Skills 发布确认快照候选
+
+当前源码 Public22.0.0/176，个人与官方发布沿既有路由显式绑定确认的系列publication，旧缺字段请求拒绝；非发布audience编辑不变。原生owner固定e95aba2，Admin详情以meta.publication返回明确空或精确系列指针／版本、HTTP历史仍efe1ed1/6.3；无新服务、表或运行兼容层。App/Admin尚未配对、正常服务未切换，不能据此称恢复旅程闭环；实际验证及下一步见 `docs/CURRENT.md`。下面日期段保留各阶段事实。
+
+## 2026-10-20 MC-02A System5 / Public21 消费者候选
+
+当前源码唯一 Public21.0.0 /165 operations：业务模型保持稳定label name、owner显式provider与精确三ID/feature/request_model，显示名为有效alias或原模型名；管理员label别名nullable、共享revision无feature。System5固定来源/五操作窄生成见 `contract/dependencies/system-http.json`；SQL/其他pins不变。正常配对及完整门收据见 `docs/CURRENT.md`，Key保存/领取未在本片实施，模型/工具/扣费仍暂停。下方旧版本按历史读取。
+
+## 2026-10-20 System4 管理消费者候选
+
+当前源码唯一公开契约 Public20.0.0 /165 operations：管理员修订只读表示使用 System4 的 `request_model` 与 closed `connection`，旧 transport/gateway 字段退休。仍只消费标签、修订、路由列表和路由 PUT 四操作；固定来源/生成见 `contract/dependencies/system-http.json`。其他 owner pins、canonical SQL 与执行暂停保持。实际门禁与未激活边界见 `docs/CURRENT.md`，下方旧版本段按历史读取。
+
 ## 2026-10-19 MCP availability 消费者候选
 
 修既有跨仓版本不配对，不新增功能模块。Platform固定已合入4a4e4c4/HTTP6.2，原HTTP/Connect生成链产物固定摘要；Connector/Server按owner五态独立投影当前可用性，不由status/enabled猜测，不兼容旧缺字段或跳过unknown。Public19/165、SQL、权限与独立错误profile保持。

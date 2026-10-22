@@ -12,8 +12,11 @@ import type {
   GetMyCreditLedgerData,
   GetMyCreditLedgerErrors,
   GetMyCreditLedgerResponses,
+  OpenMyCreditAccountData,
+  OpenMyCreditAccountErrors,
+  OpenMyCreditAccountResponses,
 } from "./types.gen.js"
-import { zGetCatalogResponse, zGetMyCreditAccountResponse, zGetMyCreditLedgerResponse } from "./zod.gen.js"
+import { zGetCatalogResponse, zGetMyCreditAccountResponse, zGetMyCreditLedgerResponse, zOpenMyCreditAccountResponse } from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
   TData,
@@ -91,6 +94,34 @@ export const getMyCreditAccount = <ThrowOnError extends boolean = false>(
     ],
     url: "/v1/billing/me/credit-account",
     ...options,
+  })
+
+export const openMyCreditAccount = <ThrowOnError extends boolean = false>(
+  options: Options<OpenMyCreditAccountData, ThrowOnError>,
+): RequestResult<OpenMyCreditAccountResponses, OpenMyCreditAccountErrors, ThrowOnError> =>
+  (options.client ?? client).put<OpenMyCreditAccountResponses, OpenMyCreditAccountErrors, ThrowOnError>({
+    responseValidator: async (data) => await zOpenMyCreditAccountResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+    ],
+    url: "/v1/billing/me/credit-account",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   })
 
 export const getMyCreditLedger = <ThrowOnError extends boolean = false>(

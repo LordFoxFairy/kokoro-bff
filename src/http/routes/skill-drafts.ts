@@ -198,14 +198,17 @@ export async function runSkillRoute(
         status = 404
         code = "skill_not_found"
         retryable = false
+      } else if (
+        error.code === Code.FailedPrecondition ||
+        (error.code === Code.Aborted && error.metadata.get("x-kokoro-error-code") === "publish_snapshot_conflict")
+      ) {
+        status = 412
+        code = "skill_precondition_failed"
+        retryable = false
       } else if ([Code.AlreadyExists, Code.Aborted].includes(error.code)) {
         status = 409
         code = error.code === Code.Aborted ? "skill_command_in_progress" : "skill_idempotency_conflict"
         retryable = error.code === Code.Aborted
-      } else if (error.code === Code.FailedPrecondition) {
-        status = 412
-        code = "skill_precondition_failed"
-        retryable = false
       } else if (error.code === Code.ResourceExhausted) {
         status = 429
         code = "skill_rate_limited"

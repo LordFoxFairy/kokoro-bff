@@ -1,4 +1,11 @@
 import {
+  inspectModelConfigurationContract,
+  restorePublic21ModelConfigurationContract,
+  modelConfigurationParentBaseline,
+} from "./model-configuration-public-contract.mjs"
+import { inspectSharedModelCatalogContract, restorePublic20SharedModelCatalogContract } from "./shared-model-catalog-public-contract.mjs"
+import { inspectSystemModelConnectionContract } from "./system-model-connection-public-contract.mjs"
+import {
   inspectClosureIntegrationContract,
   restoreClosureLocalContract,
   restoreClosureMainContract,
@@ -3145,9 +3152,15 @@ export function restorePublic15TeamPermissionsContract(source: string): string {
 }
 
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
-  const currentSource = source,
-    currentBaseline = baseline
-  const integrationErrors = inspectClosureIntegrationContract(currentSource, currentBaseline)
+  const configurationErrors = inspectModelConfigurationContract(source, baseline)
+  if (configurationErrors.length > 0) return configurationErrors
+  const currentSource = restorePublic21ModelConfigurationContract(source),
+    currentBaseline = modelConfigurationParentBaseline(baseline)
+  const integrationErrors = [
+    ...inspectSharedModelCatalogContract(currentSource, currentBaseline),
+    ...inspectSystemModelConnectionContract(restorePublic20SharedModelCatalogContract(currentSource), currentBaseline),
+    ...inspectClosureIntegrationContract(currentSource, currentBaseline),
+  ]
   if (integrationErrors.length > 0) return integrationErrors
   source = restoreClosureLocalContract(currentSource)
   baseline = closureLocalBaseline(currentBaseline)

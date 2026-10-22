@@ -2829,3 +2829,58 @@ test("SET13 exact inverse preserves the entire committed public14.7 artifact", a
     "598407a3dfc17d62eb4fe703837b836ba85f05b7102a018dac160351ad807c19",
   )
 })
+
+test("current publication contract requires an explicit confirmation only for publish and preserves its full parent", async () => {
+  const { load } = await import("js-yaml")
+  const { restoreSkillPublicationContract } = await import("../../scripts/skill-publication-public-contract.mjs")
+  const { restoreSkillSeriesDeleteContract } = await import("../../scripts/skill-series-delete-public-contract.mjs")
+  const source = restoreSkillSeriesDeleteContract(await readFile(currentOpenapiUrl, "utf8")),
+    document = load(source)
+  assert.equal(document.info.version, "22.0.0")
+  for (const name of ["SkillPublishRequest", "SkillOfficialPublishRequest"]) {
+    const schema = document.components.schemas[name]
+    assert.ok(schema.required.includes("expected_publication"))
+    assert.equal(schema.properties.expected_publication.$ref, "#/components/schemas/SkillPublicationPrecondition")
+    assert.equal(schema.additionalProperties, false)
+  }
+  assert.equal(document.components.schemas.SkillAudienceRequest.properties.expected_publication, undefined)
+  const adminDetail = document.components.schemas.SkillProductRecordResponse
+  assert.deepEqual(adminDetail.required, ["data", "meta"])
+  assert.deepEqual(adminDetail.properties.meta.required, ["publication"])
+  assert.equal(adminDetail.properties.meta.additionalProperties, false)
+  assert.equal(adminDetail.properties.meta.properties.publication.$ref, "#/components/schemas/SkillPublicationPrecondition")
+  assert.equal(
+    document.paths["/v1/skills/{skill_id}/publish"].post.requestBody.content["application/json"].schema.$ref,
+    "#/components/schemas/SkillPublishRequest",
+  )
+  const parent = restoreSkillPublicationContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "2c56fd63faa5ed7759133046dfda147bf1d360ddfb32f7570e55df38e487f786")
+  for (const altered of [
+    source.replace("required: [current_version_id, state_version]", "required: [current_version_id]"),
+    source.replace("Current IAM-admitted Product identity projections.", "changed identity"),
+  ]) {
+    assert.notEqual(altered, source)
+    assert.throws(() => restoreSkillPublicationContract(altered), /publication.*drift/u)
+  }
+})
+
+test("personal series delete is additive and preserves the complete published confirmation parent", async () => {
+  const { load } = await import("js-yaml")
+  const { restoreSkillSeriesDeleteContract, skillSeriesDeleteParentBaseline } = await import("../../scripts/skill-series-delete-public-contract.mjs")
+  const source = (await import("../../scripts/billing-account-public-contract.mjs")).restoreBillingAccountContract(await readFile(currentOpenapiUrl, "utf8")),
+    document = load(source)
+  assert.equal(document.info.version, "22.1.0")
+  const operation = document.paths["/v1/self/skills/{skill_id}"].delete
+  assert.equal(operation.operationId, "deletePersonalSkillSeries")
+  assert.equal(operation["x-kokoro-idempotency"], "required")
+  assert.deepEqual(document.components.schemas.DeletePersonalSkillSeriesRequest.required, ["expected_state_version", "expected_publication"])
+  assert.equal(document.components.schemas.DeletePersonalSkillSeriesRequest.additionalProperties, false)
+  assert.ok(document.components.schemas.SkillInstallation.properties.source_status.enum.includes("deleted"))
+  assert.equal(
+    createHash("sha256").update(restoreSkillSeriesDeleteContract(source)).digest("hex"),
+    "65019688691a6d6933146be66d4e7a1293f0dc92418a6f259a983529031b5c27",
+  )
+  const inventory = JSON.parse(await readFile(baselineUrl, "utf8")).operations
+  assert.equal(skillSeriesDeleteParentBaseline(inventory).length, 176)
+  assert.throws(() => restoreSkillSeriesDeleteContract(source.replace("entire personal Skill series", "different personal Skill series")), /delete.*drift/u)
+})

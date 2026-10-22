@@ -239,6 +239,31 @@ export const zPersonalMcpProvider = z.object({
   state_version: z.int().gte(1).lte(2147483647),
 })
 
+export const zPersonalSkillHistoryVersion = z.object({
+  skill_id: z.string().min(1).max(191),
+  revision: z.string().regex(/^[1-9][0-9]*$/),
+  name: z.string().max(255),
+  summary: z.string().max(65535),
+  status: z.enum(["active", "disabled", "withdrawn", "quarantined"]),
+  archive_size: z.string().regex(/^[1-9][0-9]*$/),
+  file_count: z.int().gte(1),
+  created_at: z.iso.datetime(),
+  is_current: z.boolean(),
+})
+
+export const zPersonalSkillHistory = z.object({
+  series_id: z.string().min(1).max(191),
+  publication: z
+    .object({
+      current_version_id: z.string().min(1).max(191),
+      state_version: z.string().regex(/^[1-9][0-9]*$/),
+      withdrawn_at: z.iso.datetime().nullable(),
+    })
+    .nullable(),
+  versions: z.array(zPersonalSkillHistoryVersion).max(100),
+  next_cursor: z.string().min(1).max(2048).optional(),
+})
+
 export const zRequestId = z.string().min(1).max(255)
 
 /**
@@ -515,4 +540,34 @@ export const zGetSelfManagedSkillPath = z.object({
  */
 export const zGetSelfManagedSkillResponse = z.object({
   data: zSelfManagedSkill,
+})
+
+export const zListSelfSkillVersionsHeaders = z.object({
+  "x-kokoro-request-id": z.string().min(1).max(255).optional(),
+  "x-kokoro-tenant-id": z.string().min(1).max(255).optional(),
+  "x-kokoro-subject": z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:@\/-]{0,254}$/),
+})
+
+export const zListSelfSkillVersionsPath = z.object({
+  skill_id: z
+    .string()
+    .min(1)
+    .max(191)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+})
+
+export const zListSelfSkillVersionsQuery = z.object({
+  limit: z.int().gte(1).lte(100).optional().default(50),
+  cursor: z.string().min(1).max(2048).optional(),
+})
+
+/**
+ * A private series history page; current identity is independent from availability.
+ */
+export const zListSelfSkillVersionsResponse = z.object({
+  data: zPersonalSkillHistory,
 })

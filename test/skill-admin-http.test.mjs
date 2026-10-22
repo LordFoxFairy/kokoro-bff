@@ -115,7 +115,7 @@ test("Admin real HTTP distinguishes bad protobuf owner facts and ACK from browse
         skillAdminClient: {
           get: async () => {
             calls++
-            return { skill: received }
+            return { skill: received, publication: create(wire.SkillPublicationPreconditionSchema, { expectation: { case: "absent", value: true } }) }
           },
           command: async () => {
             calls++
@@ -222,7 +222,7 @@ test("Admin creates one official draft without caller-chosen identity or CAS", a
       },
     },
     skillAdminClient: {
-      get: async () => ({ skill: received }),
+      get: async () => ({ skill: received, publication: create(wire.SkillPublicationPreconditionSchema, { expectation: { case: "absent", value: true } }) }),
       command: async (operation, context, members) => {
         calls.push({ operation, context, members })
         return { skill: received, eventId: "event-1", replayed: false }
@@ -355,4 +355,192 @@ test("machine credentials never replace the current session and fresh Skills adm
         await new Promise((resolve) => server.close(resolve))
       }
     })
+})
+
+test("Admin publish preserves explicit absent/current publication as native expectation and rejects missing before owner", async () => {
+  const calls = []
+  const skill = create(wire.SkillProductRecordSchema, {
+    skillId: { value: "s" },
+    sourceRef: { value: "skill:s" },
+    seriesId: { value: "series" },
+    revision: 1n,
+    status: 2,
+    packagePhase: wire.SkillPackagePhase.NONE,
+    skillUpdatedAt: { seconds: 1n, nanos: 0 },
+    metadata: { displayName: "Name", summary: "", categoryKeys: { keys: [] } },
+    product: { publicationAudience: "owner", stateVersion: 1n },
+  })
+  const server = createBffServer(correctionConfig, {
+    businessStore: null,
+    sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: true }) },
+    skillAuthorization: { check: async () => ({ ok: true }) },
+    skillAdminClient: {
+      command: async (operation, context, members) => {
+        calls.push({ operation, context, members })
+        if (members.expected_publication.current?.state_version === "2")
+          throw new ConnectError("stale snapshot", Code.Aborted, { "x-kokoro-error-code": "publish_snapshot_conflict" })
+        if (members.expected_publication.current?.state_version === "3") throw new ConnectError("busy", Code.Aborted)
+        return { skill, eventId: "event", replayed: false }
+      },
+    },
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const body = { audience: "owner", expected_state_version: "5", publisher: { kind: "user", id: "publisher" } }
+    const send = (value) =>
+      fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills/s/publish`, { method: "POST", headers: correctionHeaders, body: JSON.stringify(value) })
+    assert.equal((await send(body)).status, 400)
+    assert.equal(calls.length, 0)
+    assert.equal((await send({ ...body, expected_publication: null })).status, 200)
+    assert.equal((await send({ ...body, expected_publication: { current_version_id: "previous", state_version: "9007199254740993" } })).status, 200)
+    assert.equal(calls.length, 2)
+    assert.equal(calls[0].operation, "publishOfficialSkill")
+    assert.deepEqual(calls[0].members.expected_publication, { absent: true })
+    assert.deepEqual(calls[1].members.expected_publication, { current: { current_version_id: { value: "previous" }, state_version: "9007199254740993" } })
+    assert.equal(calls[0].context.commandId, calls[1].context.commandId)
+    const stale = await send({ ...body, expected_publication: { current_version_id: "previous", state_version: "2" } })
+    assert.equal(stale.status, 412)
+    assert.equal((await stale.json()).error.retryable, false)
+    const busy = await send({ ...body, expected_publication: { current_version_id: "previous", state_version: "3" } })
+    assert.equal(busy.status, 409)
+    assert.equal((await busy.json()).error.retryable, true)
+    assert.equal(calls.length, 4)
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test("Admin detail projects only explicit publication snapshots; missing, malformed or unknown wire is not absence", async (t) => {
+  const skill = create(wire.SkillProductRecordSchema, {
+    skillId: { value: "s" },
+    sourceRef: { value: "skill:s" },
+    seriesId: { value: "series" },
+    revision: 1n,
+    status: wire.SkillStatus.WITHDRAWN,
+    packagePhase: wire.SkillPackagePhase.NONE,
+    skillUpdatedAt: { seconds: 1n, nanos: 0 },
+    metadata: { displayName: "Retired revision", summary: "", categoryKeys: { keys: [] } },
+    product: { publicationAudience: "owner", stateVersion: 1n },
+  })
+  for (const [label, publication, expected] of [
+    ["never published", { expectation: { case: "absent", value: true } }, null],
+    [
+      "current is another exact version",
+      { expectation: { case: "current", value: { currentVersionId: { value: "current-retired" }, stateVersion: 9007199254740993n } } },
+      { current_version_id: "current-retired", state_version: "9007199254740993" },
+    ],
+    ["missing", undefined, undefined],
+    ["empty oneof", { expectation: { case: undefined } }, undefined],
+    ["false absence", { expectation: { case: "absent", value: false } }, undefined],
+    ["missing current id", { expectation: { case: "current", value: { stateVersion: 1n } } }, undefined],
+    ["zero current version", { expectation: { case: "current", value: { currentVersionId: { value: "current" }, stateVersion: 0n } } }, undefined],
+    [
+      "overflowing current version",
+      { expectation: { case: "current", value: { currentVersionId: { value: "current" }, stateVersion: 9223372036854775807n } } },
+      undefined,
+    ],
+    ["number current version", { expectation: { case: "current", value: { currentVersionId: { value: "current" }, stateVersion: 1 } } }, undefined],
+    ["unknown nested wire", { expectation: { case: "absent", value: true }, $unknown: [{ no: 99, wireType: 0, data: Uint8Array.of(1) }] }, undefined],
+  ])
+    await t.test(label, async () => {
+      let calls = 0
+      const server = createBffServer(correctionConfig, {
+        businessStore: null,
+        sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: true }) },
+        skillAuthorization: { check: async () => ({ ok: true }) },
+        skillAdminClient: {
+          get: async () => {
+            calls++
+            return { skill, publication }
+          },
+        },
+      })
+      server.listen(0, "127.0.0.1")
+      await once(server, "listening")
+      try {
+        const headers = { ...correctionHeaders }
+        delete headers["idempotency-key"]
+        delete headers["content-type"]
+        const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills/s`, { headers })
+        assert.equal(response.status, expected === undefined ? 502 : 200)
+        const body = await response.json()
+        if (expected === undefined) assert.equal(body.error.code, "skill_response_invalid")
+        else {
+          assert.deepEqual(body.meta, { publication: expected })
+          assert.equal(body.data.skill_id, "s")
+          assert.equal(body.data.status, "withdrawn")
+        }
+        assert.equal(calls, 1)
+        assert.equal(response.headers.get("cache-control"), "no-store")
+      } finally {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
+    })
+})
+
+test("Admin detail crosses the real Native Connect binary client with exact confirmation and dedicated machine identity", async () => {
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { SkillAdminConnectClient } = await import("../src/infrastructure/clients/platform/skill-admin-connect.ts")
+  let calls = 0
+  const owner = createServer(
+    connectNodeAdapter({
+      routes(router) {
+        router.service(wire.SkillAdminService, {
+          getAdminSkill(request, context) {
+            calls++
+            assert.equal(context.requestHeader.get("authorization"), "Bearer admin-machine")
+            assert.equal(context.requestHeader.get("x-kokoro-tenant"), "tenant")
+            assert.equal(context.requestHeader.get("x-kokoro-subject"), "admin")
+            assert.equal(request.productContext?.subjectId, "admin")
+            assert.equal(request.skillId?.value, "s")
+            context.responseHeader.set("x-kokoro-request-id", request.requestId)
+            context.responseHeader.set("cache-control", "no-store")
+            return {
+              skill: create(wire.SkillProductRecordSchema, {
+                skillId: { value: "s" },
+                sourceRef: { value: "skill:s" },
+                seriesId: { value: "series" },
+                revision: 1n,
+                status: wire.SkillStatus.DRAFT,
+                packagePhase: wire.SkillPackagePhase.NONE,
+                skillUpdatedAt: { seconds: 1n, nanos: 0 },
+                metadata: { displayName: "Draft", summary: "", categoryKeys: { keys: [] } },
+                product: { publicationAudience: "owner", stateVersion: 1n },
+              }),
+              publication: { expectation: { case: "current", value: { currentVersionId: { value: "other-current" }, stateVersion: 9007199254740993n } } },
+            }
+          },
+        })
+      },
+    }),
+  )
+  owner.listen(0, "127.0.0.1")
+  await once(owner, "listening")
+  const client = new SkillAdminConnectClient(`http://127.0.0.1:${owner.address().port}`, { get: async () => "admin-machine" }, 1000)
+  const server = createBffServer(correctionConfig, {
+    businessStore: null,
+    sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "admin" }, platformAdmin: true }) },
+    skillAuthorization: { check: async () => ({ ok: true }) },
+    skillAdminClient: client,
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const headers = { ...correctionHeaders }
+    delete headers["idempotency-key"]
+    delete headers["content-type"]
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills/s`, { headers })
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.data.skill_id, "s")
+    assert.deepEqual(body.meta, { publication: { current_version_id: "other-current", state_version: "9007199254740993" } })
+    assert.equal(calls, 1)
+  } finally {
+    server.closeAllConnections()
+    owner.closeAllConnections()
+    await Promise.all([new Promise((resolve) => server.close(resolve)), new Promise((resolve) => owner.close(resolve))])
+  }
 })

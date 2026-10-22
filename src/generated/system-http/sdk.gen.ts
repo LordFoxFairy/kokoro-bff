@@ -3,20 +3,73 @@
 import { client } from "./client.gen.js"
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from "./client/index.js"
 import type {
+  CreateModelDefinitionData,
+  CreateModelDefinitionErrors,
+  CreateModelDefinitionResponses,
+  CreateModelLabelData,
+  CreateModelLabelErrors,
+  CreateModelLabelResponses,
+  CreateModelProviderData,
+  CreateModelProviderErrors,
+  CreateModelProviderResponses,
+  CreateModelRevisionData,
+  CreateModelRevisionErrors,
+  CreateModelRevisionResponses,
+  GetModelCatalogData,
+  GetModelCatalogErrors,
+  GetModelCatalogResponses,
+  GetModelProviderCreationData,
+  GetModelProviderCreationErrors,
+  GetModelProviderCreationResponses,
+  ListFeatureData,
+  ListFeatureErrors,
+  ListFeatureResponses,
+  ListModelDefinitionData,
+  ListModelDefinitionErrors,
+  ListModelDefinitionResponses,
   ListModelLabelData,
   ListModelLabelErrors,
   ListModelLabelResponses,
+  ListModelProviderData,
+  ListModelProviderErrors,
+  ListModelProviderResponses,
+  ListModelProviderUpstreamModelsData,
+  ListModelProviderUpstreamModelsErrors,
+  ListModelProviderUpstreamModelsResponses,
   ListModelRevisionData,
   ListModelRevisionErrors,
   ListModelRevisionResponses,
   ListRoutingPolicyData,
   ListRoutingPolicyErrors,
   ListRoutingPolicyResponses,
+  PublishModelRevisionData,
+  PublishModelRevisionErrors,
+  PublishModelRevisionResponses,
   PutRoutingPolicyData,
   PutRoutingPolicyErrors,
   PutRoutingPolicyResponses,
+  UpdateModelLabelData,
+  UpdateModelLabelErrors,
+  UpdateModelLabelResponses,
 } from "./types.gen.js"
-import { zListModelLabelResponse, zListModelRevisionResponse, zListRoutingPolicyResponse, zPutRoutingPolicyResponse } from "./zod.gen.js"
+import {
+  zCreateModelDefinitionResponse,
+  zCreateModelLabelResponse,
+  zCreateModelProviderResponse,
+  zCreateModelRevisionResponse,
+  zGetModelCatalogResponse,
+  zGetModelProviderCreationResponse,
+  zListFeatureResponse,
+  zListModelDefinitionResponse,
+  zListModelLabelResponse,
+  zListModelProviderResponse,
+  zListModelProviderUpstreamModelsResponse,
+  zListModelRevisionResponse,
+  zListRoutingPolicyResponse,
+  zPublishModelRevisionResponse,
+  zPutRoutingPolicyResponse,
+  zUpdateModelLabelResponse,
+} from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
   TData,
@@ -37,6 +90,104 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 }
 
 /**
+ * listFeature
+ *
+ * tenant scope; global requires authenticated system-admin
+ */
+export const listFeature = <ThrowOnError extends boolean = false>(
+  options: Options<ListFeatureData, ThrowOnError>,
+): RequestResult<ListFeatureResponses, ListFeatureErrors, ThrowOnError> =>
+  (options.client ?? client).get<ListFeatureResponses, ListFeatureErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListFeatureResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/features",
+    ...options,
+  })
+
+/**
+ * listModelDefinition
+ *
+ * tenant scope; global requires authenticated system-admin
+ */
+export const listModelDefinition = <ThrowOnError extends boolean = false>(
+  options: Options<ListModelDefinitionData, ThrowOnError>,
+): RequestResult<ListModelDefinitionResponses, ListModelDefinitionErrors, ThrowOnError> =>
+  (options.client ?? client).get<ListModelDefinitionResponses, ListModelDefinitionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListModelDefinitionResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/definitions",
+    ...options,
+  })
+
+/**
+ * createModelDefinition
+ *
+ * global scope; global requires authenticated system-admin
+ */
+export const createModelDefinition = <ThrowOnError extends boolean = false>(
+  options: Options<CreateModelDefinitionData, ThrowOnError>,
+): RequestResult<CreateModelDefinitionResponses, CreateModelDefinitionErrors, ThrowOnError> =>
+  (options.client ?? client).post<CreateModelDefinitionResponses, CreateModelDefinitionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCreateModelDefinitionResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/definitions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * listModelProvider
+ *
+ * tenant scope; global requires authenticated system-admin
+ */
+export const listModelProvider = <ThrowOnError extends boolean = false>(
+  options: Options<ListModelProviderData, ThrowOnError>,
+): RequestResult<ListModelProviderResponses, ListModelProviderErrors, ThrowOnError> =>
+  (options.client ?? client).get<ListModelProviderResponses, ListModelProviderErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListModelProviderResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/providers",
+    ...options,
+  })
+
+/**
+ * createModelProvider
+ *
+ * global scope; global requires authenticated system-admin
+ */
+export const createModelProvider = <ThrowOnError extends boolean = false>(
+  options: Options<CreateModelProviderData, ThrowOnError>,
+): RequestResult<CreateModelProviderResponses, CreateModelProviderErrors, ThrowOnError> =>
+  (options.client ?? client).post<CreateModelProviderResponses, CreateModelProviderErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCreateModelProviderResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/providers",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
  * listModelLabel
  *
  * tenant scope; global requires authenticated system-admin
@@ -55,6 +206,50 @@ export const listModelLabel = <ThrowOnError extends boolean = false>(
   })
 
 /**
+ * createModelLabel
+ *
+ * global scope; global requires authenticated system-admin
+ */
+export const createModelLabel = <ThrowOnError extends boolean = false>(
+  options: Options<CreateModelLabelData, ThrowOnError>,
+): RequestResult<CreateModelLabelResponses, CreateModelLabelErrors, ThrowOnError> =>
+  (options.client ?? client).post<CreateModelLabelResponses, CreateModelLabelErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCreateModelLabelResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/labels",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * updateModelLabel
+ *
+ * global scope; global requires authenticated system-admin
+ */
+export const updateModelLabel = <ThrowOnError extends boolean = false>(
+  options: Options<UpdateModelLabelData, ThrowOnError>,
+): RequestResult<UpdateModelLabelResponses, UpdateModelLabelErrors, ThrowOnError> =>
+  (options.client ?? client).patch<UpdateModelLabelResponses, UpdateModelLabelErrors, ThrowOnError>({
+    responseValidator: async (data) => await zUpdateModelLabelResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/labels/{label_id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
  * listModelRevision
  *
  * tenant scope; global requires authenticated system-admin
@@ -69,6 +264,46 @@ export const listModelRevision = <ThrowOnError extends boolean = false>(
       { name: "x-kokoro-internal-secret", type: "apiKey" },
     ],
     url: "/v1/system/model-catalog/revisions",
+    ...options,
+  })
+
+/**
+ * createModelRevision
+ *
+ * global scope; global requires authenticated system-admin
+ */
+export const createModelRevision = <ThrowOnError extends boolean = false>(
+  options: Options<CreateModelRevisionData, ThrowOnError>,
+): RequestResult<CreateModelRevisionResponses, CreateModelRevisionErrors, ThrowOnError> =>
+  (options.client ?? client).post<CreateModelRevisionResponses, CreateModelRevisionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCreateModelRevisionResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/revisions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * publishModelRevision
+ *
+ * global scope; global requires authenticated system-admin
+ */
+export const publishModelRevision = <ThrowOnError extends boolean = false>(
+  options: Options<PublishModelRevisionData, ThrowOnError>,
+): RequestResult<PublishModelRevisionResponses, PublishModelRevisionErrors, ThrowOnError> =>
+  (options.client ?? client).post<PublishModelRevisionResponses, PublishModelRevisionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zPublishModelRevisionResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/revisions/{revision_id}/publish",
     ...options,
   })
 
@@ -110,4 +345,58 @@ export const putRoutingPolicy = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  })
+
+/**
+ * getModelCatalog
+ *
+ * tenant scope; global requires authenticated system-admin
+ */
+export const getModelCatalog = <ThrowOnError extends boolean = false>(
+  options: Options<GetModelCatalogData, ThrowOnError>,
+): RequestResult<GetModelCatalogResponses, GetModelCatalogErrors, ThrowOnError> =>
+  (options.client ?? client).get<GetModelCatalogResponses, GetModelCatalogErrors, ThrowOnError>({
+    responseValidator: async (data) => await zGetModelCatalogResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/catalog",
+    ...options,
+  })
+
+/**
+ * getModelProviderCreation
+ *
+ * global scope; global requires authenticated system-admin
+ */
+export const getModelProviderCreation = <ThrowOnError extends boolean = false>(
+  options: Options<GetModelProviderCreationData, ThrowOnError>,
+): RequestResult<GetModelProviderCreationResponses, GetModelProviderCreationErrors, ThrowOnError> =>
+  (options.client ?? client).get<GetModelProviderCreationResponses, GetModelProviderCreationErrors, ThrowOnError>({
+    responseValidator: async (data) => await zGetModelProviderCreationResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/provider-creations",
+    ...options,
+  })
+
+/**
+ * listModelProviderUpstreamModels
+ *
+ * Management-only global write read; trusted actor and actor tenant required. No body, query, command headers, persistence or automatic retry. Candidate IDs are not published models or capability guarantees.
+ */
+export const listModelProviderUpstreamModels = <ThrowOnError extends boolean = false>(
+  options: Options<ListModelProviderUpstreamModelsData, ThrowOnError>,
+): RequestResult<ListModelProviderUpstreamModelsResponses, ListModelProviderUpstreamModelsErrors, ThrowOnError> =>
+  (options.client ?? client).get<ListModelProviderUpstreamModelsResponses, ListModelProviderUpstreamModelsErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListModelProviderUpstreamModelsResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/providers/{provider_id}/upstream-models",
+    ...options,
   })
