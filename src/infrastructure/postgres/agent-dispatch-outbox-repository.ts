@@ -23,7 +23,8 @@ import { commitChatTurn, prepareChatTurnSelection } from "./chat-turn-commit.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
 import { instant } from "./chat-repository-mappers.js"
 import type { ProjectExecutionBindingInput, ProjectExecutionBindingReader } from "../../application/ports/project-execution-binding-reader.js"
-import { readProjectExecutionBinding } from "./project-execution-binding.js"
+import type { SubmittedAgentRunInput, SubmittedAgentRunReader } from "../../application/ports/submitted-agent-run-reader.js"
+import { readSubmittedAgentRun, readProjectExecutionBinding } from "./project-execution-binding.js"
 
 type AgentDispatchRow = {
   outbox_id: string
@@ -160,8 +161,12 @@ function claimedAgentDispatch(row: AgentDispatchRow): AgentDispatchCommand {
 }
 
 /** PostgreSQL transaction boundary for Chat admission and Agent delivery. */
-export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutboxRepository, ProjectExecutionBindingReader {
+export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutboxRepository, ProjectExecutionBindingReader, SubmittedAgentRunReader {
   public constructor(private readonly database: PostgresBffDatabase) {}
+
+  public readSubmittedAgentRun(input: SubmittedAgentRunInput) {
+    return readSubmittedAgentRun(this.database, input)
+  }
 
   public readProjectExecutionBinding(input: ProjectExecutionBindingInput) {
     return readProjectExecutionBinding(this.database, input)

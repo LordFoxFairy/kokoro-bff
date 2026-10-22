@@ -12,6 +12,16 @@ const runtimeEnv = {
 }
 
 describe("BFF owner PostgreSQL schema", () => {
+  it("keeps Agent model budget ingress on its explicit independent credential file", () => {
+    assert.equal(loadConfig(runtimeEnv).agentModelAdmissionCredentialFile, null)
+    const config = loadConfig({
+      ...runtimeEnv,
+      KOKORO_BFF_AGENT_MODEL_ADMISSION_CREDENTIAL_FILE: "/fixture/agent-budget.json",
+      KOKORO_BFF_PROJECT_EXECUTION_CREDENTIAL_FILE: "/fixture/iam-binding.json",
+    })
+    assert.equal(config.agentModelAdmissionCredentialFile, "/fixture/agent-budget.json")
+    assert.equal(config.projectExecutionCredentialFile, "/fixture/iam-binding.json")
+  })
   it("configures direct MCP credentials without a machine IAM URL", () => {
     const config = loadConfig({
       ...runtimeEnv,

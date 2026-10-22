@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "2d3ed0fbee9219a93f02b67b23f69492fd568917"
+const ownerCommit = "d34502595e2cb1ac12e5b57fb372497ef04c90fd"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962"
+const ownerDigest = "2c65b64c896a85cb89e6b8f23ee9802b6e5cf2440d9a8debaa23973f5c199b6e"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -171,6 +171,9 @@ async function closeOwnerResponseSchemas(directory) {
     "CreditLedgerResponse",
     "AdminCreditGrantRequest",
     "AdminCreditGrantResponse",
+    "AdmissionCreateRequest",
+    "Admission",
+    "AdmissionResponse",
   ]) {
     source = closeGeneratedObject(source, schemaName)
   }
@@ -187,6 +190,20 @@ async function closeOwnerResponseSchemas(directory) {
   funding = replaceExactInSource(funding, ".max(255)", ".refine((value) => [...value].length <= 255)", 1, "subject Unicode code-point bound")
   funding = replaceExactInSource(funding, ".max(500)", ".refine((value) => [...value].length <= 500)", 1, "reason Unicode code-point bound")
   source = source.slice(0, fundingStart) + funding + source.slice(fundingEnd)
+  for (const name of ["AdmissionCreateRequest", "Admission"]) {
+    const start = source.indexOf(`export const z${name} =`)
+    assert.ok(start >= 0, `Admission validator ${name} missing`)
+    const end = source.indexOf("export const ", start + 1)
+    const block = source.slice(start, end)
+    const normalized = replaceExactInSource(
+      block,
+      ".max(512)",
+      ".refine((value) => [...value].length <= 512).meta({ maxLength: 512 })",
+      2,
+      `${name} identity code-point bounds`,
+    )
+    source = source.slice(0, start) + normalized + source.slice(end)
+  }
   const meteringObjects = {
     MeteringRational: 1,
     MeteringRate: 4,
@@ -265,6 +282,7 @@ async function generate(directory) {
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
     [
       "createAdminCreditGrant",
+      "createAdmission",
       "getAdminMeteringPricing",
       "getCatalog",
       "getMyCreditAccount",
@@ -301,7 +319,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "4.0.0-experimental.6",
+      contract_version: "4.0.0-experimental.8",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },

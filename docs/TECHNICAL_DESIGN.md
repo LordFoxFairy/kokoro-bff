@@ -1,3 +1,13 @@
+## AGENT-1／CREDIT-1：Agent预算回程接缝（2026-10-22，已实施）
+
+承接Root16项计划及用户“Run不持用户token／内部身份处理”的裁决；基线a77276b、主方唯一writer。复用现BFF进程／Chat outbox／Billing正式d345025 exp8，不建服务、App回程broker、用户grant、钱包、幂等表或Run token字段。Agent使用独立接收方凭据（固定kokoro-agent/model_admission/tenant），不扩IAM project_execution_binding凭据、不冒用Scheduler／Web／管理员身份。新增配置KOKORO_BFF_AGENT_MODEL_ADMISSION_CREDENTIAL_FILE；未配置只使此内部操作503，不影响既有业务。
+
+Agent POST /internal/v1/model-admissions：body仅既有六个attempt绑定事实，独立Idempotency-Key与x-billing-execution-proof。tenant只从新凭据、payer只从BFF已提交Chat Run来源读取，不接收body身份。提交来源是现outbox＋原Conversation owner＋原user Message的单语句只读快照：核direct actor=subject、原launch Run/conversation/request/message/project、原技能选择及原message；非唯一／损坏／跨tenant均隐藏。来源读取不是当前执行许可，不按active/deleted/current项目位置/context_retired/status过滤，不依赖当前lease，保留软删／移动／终态后原receipt恢复。首次权限仍由Billing读取Agent prepared、IAM现live binding与当前tenant/user/member验证，禁止用来源读取绕过；Billing自身决定恢复还是首次，Agent不自报recovery标志。
+
+沿现AgentDispatchOutboxRepository挂具名来源读取叶子，独立端口暴露到businessStore；复用现binding单查询取消边界，不改原IAM live query语义。HTTP严格原路径／POST／单JSON／受界body／单header，凭据鲜读及固定caller/surface，既有原始JSON重复键拒绝。为合法16KiB proof＋独立bearer，现HTTP server显式32KiB header上限（不解除界限）。一次总预算覆盖凭据／body／来源／Billing／回包，取消后不再派发或回成功；不自动重试，晚HTTP body关闭。Billing专用机器bearer＋u1可信tenant/payer与原六字段/key/proof单次发送，完整严格ACK核对。Billing拥有预算和永久回执；响应未知保留同一意图供Agent原命令恢复，BFF不另写receipt，不凭超时释放hold。
+
+只改上述auth/config/route/来源query和装配、固定Billing vendor/generated及相关TDD与文档。public23／186、AG-UI、原IAM internal operation、canonical SQL／Schema、其他owner pins及连接器／自动化不变。内部code-first契约沿现生成器加operation/security/schema并升1.1，原1.0 operation及schema精确保护；Billing新增第九个窄消费，旧八项wire保持。验收先RED→GREEN，覆盖凭据角色/tenant、body自报身份、错误ACK、deadline/晚响应/取消、真实PG损坏与退休后来源恢复、真实BFF→Billing→IAM预算幂等；再停写完整owner门与独审。实际Agent proof供应商／唯一dispatch／usage结算为紧接的同一主链，不将本片称全部执行闭环。正常资金／服务本片不激活。
+
 ## AGENT-1／MODEL-1：精确模型绑定消费者（2026-10-22，本地已验）
 
 本地停写七门全0、contract973／architecture36／默认1658 PASS及3原资源SKIP，真实compiled owner HTTP＋独占PG13项通过，758输入无漂移，独审Approved。正常未激活；详细证据与限制见CURRENT首节。

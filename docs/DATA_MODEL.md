@@ -1,3 +1,9 @@
+## AGENT-1：消费主体由已提交Chat来源派生（2026-10-22，已实施）
+
+无SQL／Prisma／表／列／默认或migration变化。只读现bff_agent_dispatch_outbox、bff_conversation、bff_message，可信Agent credential给tenant、Run定位原提交者；完整原launch与message选择校验，不能从请求body猜payer。仅本owner JOIN，不访问IAM／Agent／Billing数据表。
+
+该读取用于同一资金命令首次／恢复的路由身份，不发执行许可；来源不因软删／项目移动／context退休／Run终态失效，不加当前project／lease过滤。现删除路径保留对应outbox/message来源；不为假设未来hard-delete建新retention表。首次授权仍由现IAM live binding单独核验，原live reader不放宽。proof、bearer、签名材料不落Run／outbox／receipt／日志；资金、price snapshot和永久幂等仍归Billing唯一owner。未知结果不写本地成功，不根据超时释放资金。
+
 ## AGENT-1／MODEL-1：精确模型绑定消费者（2026-10-22，本地已验）
 
 本地停写七门全0、contract973／architecture36／默认1658 PASS及3原资源SKIP，真实compiled owner HTTP＋独占PG13项通过，758输入无漂移，独审Approved。正常未激活；详细证据与限制见CURRENT首节。

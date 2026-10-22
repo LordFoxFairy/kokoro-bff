@@ -4,6 +4,7 @@ import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
+import { agentModelAdmissionRoute } from "../http/routes/model-admission.js"
 import { projectExecutionBindingRoute } from "../http/routes/project-execution-binding.js"
 import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
@@ -125,6 +126,10 @@ async function handle(
   }
   if (request.method === "GET" && (request.url === "/v1/account/shared-tasks" || request.url?.startsWith("/v1/account/shared-tasks?"))) {
     await sharedTasksRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.services.chat, id)
+    return
+  }
+  if ((request.url ?? "").split("?", 1)[0] === "/internal/v1/model-admissions") {
+    await agentModelAdmissionRoute(request, response, config, composition.businessStore?.submittedAgentRuns ?? null)
     return
   }
   if ((request.url ?? "").split("?", 1)[0] === "/internal/v1/project-execution-bindings/verify") {
@@ -1178,7 +1183,7 @@ export type BffServer = Server & {
 export function createBffServer(config: BffConfig = loadConfig(), options: BffServerOptions = {}): BffServer {
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
-  const server = createServer((request, response) => {
+  const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
     void handle(request, response, config, composition).catch(() => {
       if (!response.headersSent) {
         if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {

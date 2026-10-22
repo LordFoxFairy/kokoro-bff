@@ -9,13 +9,48 @@ import {
   projectExecutionBindingResponse,
   projectExecutionBindingError,
 } from "../src/http/project-execution-binding.contract.ts"
+import { agentModelAdmissionRequest, agentModelAdmissionResponse, agentModelAdmissionError } from "../src/http/model-admission.contract.ts"
 const json = (schema) => z.toJSONSchema(schema, { target: "draft-2020-12" })
 const content = (schema) => ({ "application/json": { schema } })
 const response = (description, schema) => ({ description, headers: { "x-request-id": { schema: { type: "string" } } }, content: content(schema) })
 const doc = {
   openapi: "3.1.0",
-  info: { title: "Kokoro BFF internal project execution binding", version: "1.0.0" },
+  info: { title: "Kokoro BFF internal project execution binding", version: "1.1.0" },
   paths: {
+    "/internal/v1/model-admissions": {
+      post: {
+        operationId: "createAgentModelAdmission",
+        summary: "Reserve or recover one bound model attempt budget for its durable Chat submitter",
+        "x-kokoro-owner": "kokoro-bff",
+        "x-kokoro-visibility": "internal",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "permanent-billing-command-receipt",
+        "x-kokoro-permission": "agent.model_admission",
+        security: [{ AgentModelAdmissionBearer: [] }],
+        parameters: [
+          { in: "header", name: "Idempotency-Key", required: true, schema: { type: "string", minLength: 8, maxLength: 128, pattern: "^[!-~]+$" } },
+          { in: "header", name: "x-billing-execution-proof", required: true, schema: { type: "string", minLength: 1, maxLength: 16384, pattern: "^[!-~]+$" } },
+        ],
+        requestBody: { required: true, content: content({ $ref: "#/components/schemas/AgentModelAdmissionRequest" }) },
+        responses: Object.fromEntries(
+          [
+            [201, "Original held budget receipt"],
+            [400, "Invalid closed request"],
+            [403, "Dedicated service or consumption authority denied"],
+            [404, "Submission or owner resource not visible"],
+            [409, "Permanent command identity conflict"],
+            [422, "Insufficient credits, pricing or attempt ineligible"],
+            [502, "Invalid upstream acknowledgement"],
+            [503, "Dependency or shared deadline unavailable"],
+          ].map(([code, description]) => [
+            code,
+            response(description, {
+              $ref: code === 201 ? "#/components/schemas/AgentModelAdmissionResponse" : "#/components/schemas/AgentModelAdmissionError",
+            }),
+          ]),
+        ),
+      },
+    },
     "/internal/v1/project-execution-bindings/verify": {
       post: {
         operationId: "verifyProjectExecutionBinding",
@@ -46,6 +81,11 @@ const doc = {
   },
   components: {
     securitySchemes: {
+      AgentModelAdmissionBearer: {
+        type: "http",
+        scheme: "bearer",
+        description: "Fresh receiver-owned independent secret file: fixed kokoro-agent/model_admission/tenant; never an IAM, Web or user token",
+      },
       IamBindingReaderBearer: {
         type: "http",
         scheme: "bearer",
@@ -53,6 +93,9 @@ const doc = {
       },
     },
     schemas: {
+      AgentModelAdmissionRequest: json(agentModelAdmissionRequest),
+      AgentModelAdmissionResponse: json(agentModelAdmissionResponse),
+      AgentModelAdmissionError: json(agentModelAdmissionError),
       ProjectExecutionBindingRequest: json(projectExecutionBindingRequest),
       ProjectExecutionBindingResponse: json(projectExecutionBindingResponse),
       ProjectExecutionBindingError: json(projectExecutionBindingError),
@@ -65,4 +108,4 @@ if (process.argv.includes("--write")) {
   await mkdir(dirname(output), { recursive: true })
   await writeFile(output, body)
 } else if ((await readFile(output, "utf8")) !== body) throw Error("BFF project execution contract drift")
-console.log(`BFF internal1.0.0 ${createHash("sha256").update(body).digest("hex")}`)
+console.log(`BFF internal1.1.0 ${createHash("sha256").update(body).digest("hex")}`)

@@ -1,3 +1,7 @@
+## AGENT-1 内部模型预算入口（2026-10-22）
+
+`src/http/routes/model-admission.ts`／`model-admission.contract.ts`拥有Agent专用内部HTTP，`src/auth/agent-model-admission-credential.ts`鲜读独立caller/surface/tenant；`clients/owner/billing-model-admission.ts`消费固定exp8九操作生成集。`postgres/project-execution-binding.ts`追加已提交来源读取（原live reader不改），现outbox repository／businessStore正式暴露。源码按transport／凭据／事实来源职责拆分，不建新服务或表。测试为model-admission-{http,transport,contract}及submitted-agent-run.integration；正式内契约仍由现生成器产出，实际门禁与证据边界见CURRENT首节。
+
 ## AGENT-1／CREDIT-1 计价管理消费者（2026-10-22）
 
 `src/http/routes/billing-metering-admin.ts`拥有三具名route及fresh管理员／同主体准入；`src/infrastructure/clients/owner/billing-metering-wire.ts`消费固定生成类型／严格JSON，`billing-metering.ts`负责固定owner SDK、绝对预算／bounded EOF与完整ACK。Public23.0／Billing2d3ed0f（exp6，必填精确model_revision pair），构建期精确inverse在 `scripts/billing-metering-public-contract.mjs`；对应HTTP、transport及contract回归在 `test/billing-metering-*.test.mjs`，已注册完整门。无新SQL、通用代理或运行兼容。最终门禁／真实HTTP＋PG／未正常激活边界见 `docs/CURRENT.md`。

@@ -6,6 +6,9 @@ import type {
   CreateAdminCreditGrantData,
   CreateAdminCreditGrantErrors,
   CreateAdminCreditGrantResponses,
+  CreateAdmissionData,
+  CreateAdmissionErrors,
+  CreateAdmissionResponses,
   GetAdminMeteringPricingData,
   GetAdminMeteringPricingErrors,
   GetAdminMeteringPricingResponses,
@@ -30,6 +33,7 @@ import type {
 } from "./types.gen.js"
 import {
   zCreateAdminCreditGrantResponse,
+  zCreateAdmissionResponse,
   zGetAdminMeteringPricingResponse,
   zGetCatalogResponse,
   zGetMyCreditAccountResponse,
@@ -172,6 +176,37 @@ export const getMyCreditLedger = <ThrowOnError extends boolean = false>(
     ],
     url: "/v1/billing/me/credit-ledger",
     ...options,
+  })
+
+/**
+ * Commits the configured whole-attempt credit budget before dispatch. A durable command-receipt replay returns the original creation representation (held); GET reads the current financial status. A dependency failure permits only recovery with the same command, never an automatic new attempt, price guess, free usage or duplicate dispatch.
+ */
+export const createAdmission = <ThrowOnError extends boolean = false>(
+  options: Options<CreateAdmissionData, ThrowOnError>,
+): RequestResult<CreateAdmissionResponses, CreateAdmissionErrors, ThrowOnError> =>
+  (options.client ?? client).post<CreateAdmissionResponses, CreateAdmissionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCreateAdmissionResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+    ],
+    url: "/v1/internal/billing/admissions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   })
 
 /**

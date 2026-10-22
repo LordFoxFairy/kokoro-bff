@@ -1,3 +1,15 @@
+## AGENT-1／CREDIT-1：Agent预算内部接线已本地验收（2026-10-22）
+
+主方唯一writer，沿a77276b既有分支。独立Agent receiver credential（固定kokoro-agent/model_admission/tenant）与唯一POST /internal/v1/model-admissions；严格六字段、原key／proof，payer从本owner已提交Chat来源派生，不相信body身份或复用IAM／Scheduler／浏览器token。来源读取核原Conversation owner、user Message、outbox launch及选择，允许软删／移动／终态后的原receipt恢复，不授新执行权；原IAM live reader未放宽。无新服务／用户grant／App回程broker／SQL或Schema。完整bounded client、raw JSON／ACK六事实和held原时间核验，单次10秒总预算及取消，未知结果不自动重发。
+
+唯一Billing pin d34502595e2cb1ac12e5b57fb372497ef04c90fd／exp8，raw SHA2c65b64c；正规9操作生成，旧exp6及无引用exp2 vendor删除，原八项语义保持。public23／186和原始SHA34ea71e0保持，AG-UI无改。内部code-first沿现生成链新增一操作升1.1.0，raw SHA695901b23f1f0322fd18ec2a11be27c5b6efcce07b04f57839498eab402d17c6；测试精确逆回旧完整internal1.0 parsed SHA，原IAM operation/security/schema不变。16KiB proof＋机器认证需要显式32KiB HTTP头界限，两owner均有限扩容；16KiB body覆盖512码点转义，仍拒BOM、重复键和越界。
+
+主方停写769非文档输入前后无漂移，Node22.22.2完整七门全0：format／lint／typecheck／contract986 PASS／architecture36 PASS／默认1672 PASS及3原资源SKIP／build。新来源真实PG从缺方法RED→GREEN，最终独立canonical库1 PASS；完整HTTP／transport／原IAM／contract／config定向48 PASS／0SKIP，包含主动断连、重复原始proof头、完整16KiB头、凭据鲜读／重复键、慢来源禁止晚派发、EOF及不响应cancel的peer。默认SKIP非真实集成，未跑无关全BFF PG／Redis套件。
+
+仓外25检查：actual Node22 compiled BFF HTTP／PG→actual Billing Nest／PG→actual IAM Nest／PG／Redis→actual BFF live binding，读取actual Agent HTTP／PG准备事实。已退休来源、尚无receipt的首次预算被live权限拒绝；恢复原live后正确请求仅QA100中预占10，可用90／冻结10；随后BFF软删／context退休、Agent lease过期／成员撤销，BFF仍派生原提交者并恢复同一receipt，资金不多冻结。BFF来源／Agent准备行保持只读，零usage／capture。BFF原Chat事实为明确隔离seed，Agent签名JWKS为具名fixture；不冒正常浏览器提交、真实Agent预算proof供应商、模型／工具或结算已完成。自有库每次94→94、IAM自有Redis prefix退出清理，正常余额和配置未动。
+
+保留全部失败：header真实431负控、重复credential字段及8KiB转义body的RED；初次source测试终态fixture缺admitted_at违反原约束，仅补合法fixture，未改Schema。原IAM两测试一次仓外漏--import tsx失败，仅按正式入口重跑通过。配对fixture第一次仓外.ts被当CJS、第二次installer URL漏schema被原owner guard拒绝；均只修仓外设置、保失败和清理收据，不加生产fallback。原context退休／恢复两旅程独审无确定P0–P2。正常未激活，未push／PR／merge；下一步Agent预算proof／HTTP消费者→原single-dispatch→真实usage整数结算，App内部在线指南随最终固定组合同步，不重开MCP。
+
 ## 2026-10-22 AGENT-1／MODEL-1 精确模型绑定消费者已本地验收
 
 固定Billing2d3ed0fbee9219a93f02b67b23f69492fd568917／exp6／7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962，原八操作官方生成；MeteringRate新增required严格闭集model_revision{id,content_digest}，发布／读回完整保留。旧无绑定请求、坏UUID／摘要和多余字段均拒绝，无fallback。Public23.0.0／186操作，raw SHA256 34ea71e0aa56256ca00fc5b3c40abd4d142bea82e664a6871190b8547ec2b9e6；仅pair/version delta精确逆回完整22.5原件再沿原链，186有序inventory原字节不变。原权限／绝对10秒／1MiB／12层／原命令恢复runtime逐字未改。

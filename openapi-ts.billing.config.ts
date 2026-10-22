@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 import { defineConfig } from "@hey-api/openapi-ts"
 
 const repositoryRoot = dirname(fileURLToPath(import.meta.url))
-const ownerCommit = "2d3ed0fbee9219a93f02b67b23f69492fd568917"
+const ownerCommit = "d34502595e2cb1ac12e5b57fb372497ef04c90fd"
 
 export default defineConfig({
   input: resolve(repositoryRoot, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`),
@@ -18,6 +18,7 @@ export default defineConfig({
     filters: {
       operations: {
         include: [
+          "POST /v1/internal/billing/admissions",
           "GET /v1/admin/billing/metering/pricing",
           "POST /v1/admin/billing/metering/rate-revisions",
           "POST /v1/admin/billing/metering/policy-revisions",

@@ -1,3 +1,7 @@
+## 2026-10-22 内部模型预算发行
+
+public23／186原件保持。内部code-first源新增Agent model admission，正式生成internal1.1原件SHA256 `695901b23f1f0322fd18ec2a11be27c5b6efcce07b04f57839498eab402d17c6`，旧internal1.0 IAM全图精确保护。唯一Billing d345025／experimental.8仍SHA2c65b64c，现生成集九操作／strict Admission闭集，旧八操作不改变；退役旧vendor，不存在runtime兼容。字段只在各owner机器契约维护，不复制第二份手写Admission。详细失败／通过与未正常激活见CURRENT首节。
+
 ## 2026-10-22 精确模型选价绑定发行
 
 本地Public23.0.0／186操作，raw SHA256 `34ea71e0aa56256ca00fc5b3c40abd4d142bea82e664a6871190b8547ec2b9e6`；固定Billing `2d3ed0fbee9219a93f02b67b23f69492fd568917`／exp6／`7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962`。唯一wire变化为MeteringRate required闭集model_revision{id,content_digest}，八消费正式生成且嵌套严格；无旧字段默认／兼容。原完整22.5与186有序操作受既有build-only inverse承接，正常配对和实际Agent资金链仍待。当前验证见CURRENT，以下仅历史。

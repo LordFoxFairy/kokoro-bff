@@ -1,3 +1,9 @@
+## AGENT-1：内部预算入口／Billing exp8消费（2026-10-22，已实施）
+
+public23.0／186完全不变。现内部code-first生成链新增POST /internal/v1/model-admissions（createAgentModelAdmission），internal1.1；独立AgentModelAdmissionBearer，权限agent.model_admission，非浏览器／人类Bearer／IAM绑定读取者。body上限16KiB（覆盖512码点双引用的转义表示），闭集为run_id、attempt_id、request_ref、attempt_binding_digest、planned_digest、final_request_digest；必需单一Idempotency-Key8..128和x-billing-execution-proof1..16384 visible ASCII，不接tenant/user/recovery。成功201原held Admission及完整绑定／整数预算／snapshot摘要／毫秒UTC时间；原receipt恢复亦201原表示，不返回当前状态代替原回执。
+
+唯一Billing来源d345025／experimental.8／raw SHA256 2c65b64c896a85cb89e6b8f23ee9802b6e5cf2440d9a8debaa23973f5c199b6e；现固定生成器选择原八操作＋createAdmission，退役旧exp6 vendor，不兼容header／body。SDK closed原六事实绑定，成功还核status=held及created_at=updated_at；错误只映射稳定安全码，不泄露上游message或proof，未知回包／超时均不作拒绝已提交的证明。BFF内部输入错误400、服务身份403、来源不可见404、资金意图冲突409、业务拒绝403、不足积分／无配置价／attempt不合格422、坏上游502、依赖503；所有响应no-store／x-request-id。原IAM binding operation与schema保持完整相等，不让Agent使用IAM凭据。
+
 ## AGENT-1／MODEL-1：精确模型绑定消费者（2026-10-22，本地已验）
 
 本地停写七门全0、contract973／architecture36／默认1658 PASS及3原资源SKIP，真实compiled owner HTTP＋独占PG13项通过，758输入无漂移，独审Approved。正常未激活；详细证据与限制见CURRENT首节。

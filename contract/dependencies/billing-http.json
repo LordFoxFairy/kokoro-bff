@@ -3,16 +3,16 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-billing",
-    "repository_commit": "2d3ed0fbee9219a93f02b67b23f69492fd568917",
-    "contract_version": "4.0.0-experimental.6",
+    "repository_commit": "d34502595e2cb1ac12e5b57fb372497ef04c90fd",
+    "contract_version": "4.0.0-experimental.8",
     "contract_path": "contract/openapi/v1/openapi.yaml",
-    "contract_sha256": "7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962"
+    "contract_sha256": "2c65b64c896a85cb89e6b8f23ee9802b6e5cf2440d9a8debaa23973f5c199b6e"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.billing.config.ts",
-    "config_sha256": "ab2392c21c31203ab66cd2e59319202429f90b50448b3138c2e50311a6ead06d"
+    "config_sha256": "df666406cc812ecf0646dc5210df30712a40cc108f0dbd465dd09a47b71bbed4"
   },
   "runtime": {
     "node": "22.22.2",
@@ -75,15 +75,15 @@
     },
     {
       "path": "sdk.gen.ts",
-      "sha256": "f6b352b0d8b735867c249e7df103c4837230a6a31a809a8e6c2b270d1ebda696"
+      "sha256": "28f20b43e4dda1635b8b73ef5f84647f345bf87d6833fe0b334ad0106a5d3e63"
     },
     {
       "path": "types.gen.ts",
-      "sha256": "e368b4e0936d0c1b43255ed600f195fb2cd6473cf7b0fe9cf8758f2f761ce35a"
+      "sha256": "d8bf2789bed2095aa62cb29c91fc191859bc748fd0dd48a56dd6e8a8d4ec1051"
     },
     {
       "path": "zod.gen.ts",
-      "sha256": "8aa03c0b4540835c652672421a0ab0f11954ae3244cf761dcb1a363d505fe825"
+      "sha256": "198a84d93a3b30aa52fe1cd74e5343c9f66e052fd1d4357c342c97b6304300e5"
     }
   ]
 }

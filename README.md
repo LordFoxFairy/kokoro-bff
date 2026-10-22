@@ -1,3 +1,7 @@
+## 2026-10-22 当前内部模型预算入口
+
+Agent使用独立 `KOKORO_BFF_AGENT_MODEL_ADMISSION_CREDENTIAL_FILE` 调用内部POST；BFF从原提交Run来源派生租户／付款用户，再单次调用固定Billing d345025／exp8。无浏览器token回取、用户grant、额外服务或本地receipt；internal1.1新增一操作、public23／186不变。最小运行配置／边界见三设计首节，完整验收与尚待Agent消费者／实际结算见 `docs/CURRENT.md`。以下较早切片仅历史。
+
 ## 当前实现入口（2026-10-22）
 
 当前公共契约 Public23.0.0／186 operations，计价费率必须绑定精确System模型修订ID／摘要；固定Billing exp6，旧无绑定rate拒绝。原管理／非现金充值不变，本地完整门与真实owner HTTP／PG已验，详细范围见 [docs/CURRENT.md](docs/CURRENT.md)。App/Admin新字段消费者及Agent实际用量结算后继，正常环境未因本片激活。下方日期段仅保留阶段历史。

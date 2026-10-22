@@ -201,6 +201,35 @@ export type CreditLedgerResponse = {
   }
 }
 
+export type AdmissionCreateRequest = {
+  run_id: string
+  attempt_id: string
+  request_ref: string
+  attempt_binding_digest: string
+  planned_digest: string
+  final_request_digest: string
+}
+
+export type Admission = {
+  admission_id: string
+  run_id: string
+  attempt_id: string
+  request_ref: string
+  attempt_binding_digest: string
+  planned_digest: string
+  final_request_digest: string
+  hold_id: string
+  budget_credits: string
+  pricing_snapshot_digest: string
+  status: "held" | "captured" | "released" | "pending_reconciliation"
+  created_at: string
+  updated_at: string
+}
+
+export type AdmissionResponse = {
+  data: Admission
+}
+
 export type PersonalTenantId = string
 
 export type PersonalSubjectId = string
@@ -412,6 +441,66 @@ export type GetMyCreditLedgerResponses = {
 }
 
 export type GetMyCreditLedgerResponse = GetMyCreditLedgerResponses[keyof GetMyCreditLedgerResponses]
+
+export type CreateAdmissionData = {
+  body: AdmissionCreateRequest
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+    "idempotency-key": string
+    "x-billing-execution-proof": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/internal/billing/admissions"
+}
+
+export type CreateAdmissionErrors = {
+  /**
+   * Request failed
+   */
+  400: ErrorResponse
+  /**
+   * Authentication required
+   */
+  401: ErrorResponse
+  /**
+   * Forbidden
+   */
+  403: ErrorResponse
+  /**
+   * Not found
+   */
+  404: ErrorResponse
+  /**
+   * Conflict
+   */
+  409: ErrorResponse
+  /**
+   * Invalid state
+   */
+  422: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type CreateAdmissionError = CreateAdmissionErrors[keyof CreateAdmissionErrors]
+
+export type CreateAdmissionResponses = {
+  /**
+   * Success
+   */
+  201: AdmissionResponse
+}
+
+export type CreateAdmissionResponse = CreateAdmissionResponses[keyof CreateAdmissionResponses]
 
 export type GetAdminMeteringPricingData = {
   body?: never
