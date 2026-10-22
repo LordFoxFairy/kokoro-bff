@@ -5,7 +5,7 @@ import { load } from "js-yaml"
 const source = () => readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
 test("formal billing metering management is an additive current-admin capability", async () => {
   const doc = load(await source())
-  assert.equal(doc.info.version, "22.5.0")
+  assert.equal(doc.info.version, "23.0.0")
   for (const [method, path, id] of [
     ["get", "/v1/admin/billing/metering/pricing", "getAdminMeteringPricing"],
     ["post", "/v1/admin/billing/metering/rate-revisions", "publishAdminMeteringRate"],
@@ -36,6 +36,7 @@ test("generated metering validators reject unknown nested fields rather than str
   const z = await import("../dist/generated/billing-http/zod.gen.js")
   const common = { effective_from: "2026-01-01T00:00:00.000Z", verified_at: "2026-01-01T00:00:00.000Z", source_ref: "QA" }
   const row = {
+    model_revision: { id: "22222222-2222-4222-8222-222222222222", content_digest: "b".repeat(64) },
     provider_ref: "provider",
     environment: "test",
     pricing_account_ref: "account",
@@ -58,4 +59,78 @@ test("generated metering validators reject unknown nested fields rather than str
   ])
     assert.equal(z.zAdminMeteringRatePublishRequest.safeParse(value).success, false)
   assert.equal(z.zAdminMeteringPricingResponse.safeParse({ data: { rate_revision: null, policy_revision: null, extra: true } }).success, false)
+})
+
+test("an unbound or malformed technical revision is rejected, including nested extras, without a legacy fallback", async () => {
+  const { parseMeteringCommand, parseMeteringResult } = await import("../dist/infrastructure/clients/owner/billing-metering-wire.js")
+  const common = { effective_from: "2026-01-01T00:00:00.000Z", verified_at: "2026-01-01T00:00:00.000Z", source_ref: "QA" }
+  const pair = { id: "22222222-2222-4222-8222-222222222222", content_digest: "b".repeat(64) }
+  const commercial = {
+    provider_ref: "provider",
+    environment: "test",
+    pricing_account_ref: "account",
+    model_ref: "model",
+    model_version: "1",
+    bucket: "input_total",
+    unit: "token",
+    applicability: { kind: "all" },
+    currency_code: "USD",
+    minor_per_unit: { numerator: "1", denominator: "1000" },
+  }
+  const body = (row) => ({ publication_id: "11111111-1111-4111-8111-111111111111", reason: "QA", configuration: { ...common, rates: [row] } })
+  const valid = body({ ...commercial, model_revision: pair })
+  assert.deepEqual(parseMeteringCommand("rate", Buffer.from(JSON.stringify(valid)), "original-key"), { kind: "rate", body: valid, key: "original-key" })
+  for (const row of [
+    commercial,
+    ...[
+      null,
+      { ...pair, id: "DISPLAY_NAME" },
+      { ...pair, content_digest: "b".repeat(63) },
+      { ...pair, content_digest: "B".repeat(64) },
+      { ...pair, extra: "not allowed" },
+    ].map((model_revision) => ({ ...commercial, model_revision })),
+  ]) {
+    const invalid = body(row)
+    assert.equal(parseMeteringCommand("rate", Buffer.from(JSON.stringify(invalid)), "original-key"), null)
+    assert.equal(
+      parseMeteringResult(
+        { kind: "read" },
+        {
+          data: {
+            rate_revision: { revision: "1", content_digest: "a".repeat(64), published_at: common.verified_at, configuration: invalid.configuration },
+            policy_revision: null,
+          },
+        },
+      ),
+      null,
+    )
+  }
+  assert.deepEqual(
+    parseMeteringResult(
+      { kind: "read" },
+      {
+        data: {
+          rate_revision: { revision: "1", content_digest: "a".repeat(64), published_at: common.verified_at, configuration: valid.configuration },
+          policy_revision: null,
+        },
+      },
+    )?.rate_revision?.configuration,
+    valid.configuration,
+  )
+})
+
+test("required exact model pair is the only change from the complete preceding public publication", async () => {
+  const raw = await source(),
+    doc = load(raw)
+  const pair = doc.components.schemas.MeteringRate.properties.model_revision
+  assert.equal(doc.components.schemas.MeteringRate.required.includes("model_revision"), true)
+  assert.equal(pair.additionalProperties, false)
+  assert.deepEqual(pair.required, ["id", "content_digest"])
+  const { restoreMeteringContract } = await import("../scripts/billing-metering-public-contract.mjs")
+  for (const altered of [
+    raw.replace("        - model_revision\n", ""),
+    raw.replace("        - content_digest\n", ""),
+    raw.replace("/v1/account/archived-tasks", "/v1/account/retired-tasks"),
+  ])
+    assert.throws(() => restoreMeteringContract(altered))
 })

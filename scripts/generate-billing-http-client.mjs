@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "35651fcea0d89edb7358a43e83ac1149d7742a01"
+const ownerCommit = "2d3ed0fbee9219a93f02b67b23f69492fd568917"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab"
+const ownerDigest = "7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -189,7 +189,7 @@ async function closeOwnerResponseSchemas(directory) {
   source = source.slice(0, fundingStart) + funding + source.slice(fundingEnd)
   const meteringObjects = {
     MeteringRational: 1,
-    MeteringRate: 3,
+    MeteringRate: 4,
     MeteringRateConfiguration: 1,
     MeteringPolicyConfiguration: 1,
     AdminMeteringRatePublishRequest: 1,
@@ -301,7 +301,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "4.0.0-experimental.5",
+      contract_version: "4.0.0-experimental.6",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },

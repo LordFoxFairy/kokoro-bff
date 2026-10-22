@@ -1,3 +1,7 @@
+## 2026-10-22 精确模型选价绑定发行
+
+本地Public23.0.0／186操作，raw SHA256 `34ea71e0aa56256ca00fc5b3c40abd4d142bea82e664a6871190b8547ec2b9e6`；固定Billing `2d3ed0fbee9219a93f02b67b23f69492fd568917`／exp6／`7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962`。唯一wire变化为MeteringRate required闭集model_revision{id,content_digest}，八消费正式生成且嵌套严格；无旧字段默认／兼容。原完整22.5与186有序操作受既有build-only inverse承接，正常配对和实际Agent资金链仍待。当前验证见CURRENT，以下仅历史。
+
 ## 当前计价管理Public22.5（2026-10-22）
 
 本地候选Public22.5.0／186操作，raw SHA256 `c77e4921ccce98cfd91d77fc6897cf327599f237ed13438117323b6a3f8555eb`。沿固定Billing35651fc／experimental.5（8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab），原5＋计价管理3操作由唯一生成器正规派生；原183操作及顺序全文逆证，旧runtime vendor退出。新增仅两发布POST及最新发布配置RR单体GET，不是有效价/执行许可；当前Product管理员每次派发前重验。POST1MiB/12层／当前协议绑定owner固定，充值16KiB原界不变；未知状态只能原publication_id/key/config/time恢复。源码/契约候选尚不代表App/Admin或正常部署、实际扣分完成。

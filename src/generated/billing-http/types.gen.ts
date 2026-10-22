@@ -10,6 +10,10 @@ export type MeteringRational = {
 }
 
 export type MeteringRate = {
+  model_revision: {
+    id: string
+    content_digest: string
+  }
   provider_ref: string
   environment: string
   pricing_account_ref: string

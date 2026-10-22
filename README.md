@@ -1,6 +1,6 @@
 ## 当前实现入口（2026-10-22）
 
-当前公共契约 Public22.5.0／186 operations，新增具名管理员计价配置读取／发布，原非现金充值保留；实际验证及未完成边界见 [docs/CURRENT.md](docs/CURRENT.md)。下方日期段仅保留阶段历史。App／Admin计价页面和Agent实际用量结算尚未完成。
+当前公共契约 Public23.0.0／186 operations，计价费率必须绑定精确System模型修订ID／摘要；固定Billing exp6，旧无绑定rate拒绝。原管理／非现金充值不变，本地完整门与真实owner HTTP／PG已验，详细范围见 [docs/CURRENT.md](docs/CURRENT.md)。App/Admin新字段消费者及Agent实际用量结算后继，正常环境未因本片激活。下方日期段仅保留阶段历史。
 
 ## 2026-10-21 个人系列删除候选
 

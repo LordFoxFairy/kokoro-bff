@@ -38,6 +38,7 @@ const rate = {
   ...common,
   rates: [
     {
+      model_revision: { id: "22222222-2222-4222-8222-222222222222", content_digest: "b".repeat(64) },
       provider_ref: "provider",
       environment: "test",
       pricing_account_ref: "account",
@@ -384,4 +385,18 @@ test("the existing stricter global response cap remains effective for Metering",
   assert.equal(result.status, 502)
   await result.text()
   assert.equal(state.ownerCalls.length, 1)
+})
+
+test("unbound or extra technical model identity is rejected before dispatch, not silently stripped", async () => {
+  const state = await setup()
+  const { model_revision, ...unbound } = rate.rates[0]
+  for (const row of [unbound, { ...rate.rates[0], model_revision: { ...model_revision, extra: "not allowed" } }]) {
+    const response = await fetch(state.base + root + "/rate-revisions", {
+      method: "POST",
+      headers: bodyHeaders,
+      body: JSON.stringify(command({ ...rate, rates: [row] })),
+    })
+    assert.equal(response.status, 400)
+  }
+  assert.equal(state.ownerCalls.length, 0)
 })

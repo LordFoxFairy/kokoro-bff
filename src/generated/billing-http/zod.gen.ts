@@ -82,6 +82,12 @@ export const zCurrencyCode = z.string().regex(/^[A-Z]{3}$/)
 
 export const zMeteringRate = z
   .object({
+    model_revision: z
+      .object({
+        id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+        content_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+      })
+      .strict(),
     provider_ref: z
       .string()
       .min(1)

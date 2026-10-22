@@ -1,3 +1,11 @@
+## AGENT-1／MODEL-1：精确模型绑定消费者（2026-10-22，本地已验）
+
+本地停写七门全0、contract973／architecture36／默认1658 PASS及3原资源SKIP，真实compiled owner HTTP＋独占PG13项通过，758输入无漂移，独审Approved。正常未激活；详细证据与限制见CURRENT首节。
+
+沿Root有效主链及已批Billing rate2；主方唯一writer，BFF基线4d8a028，固定owner2d3ed0fbee9219a93f02b67b23f69492fd568917／exp6／7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962。沿原八操作生成链，只为原MeteringRate加入required闭集model_revision{id,content_digest}；保原商业字段供管理员显式配置，不由BFF猜映射／计价或验证System存在。发布与读回均完整保留pair，缺失／坏pair／额外字段拒绝，不添加旧rate fallback。
+
+Public升23.0.0表示必填字段破坏变更，186有序操作不变；build-only inverse逐字还原完整22.5原件，再沿原所有父门，无运行兼容。无SQL／配置／服务／身份或预算变化，三具名管理员route、同tenant/actor、绝对10秒、1MiB/12层、原key/body/time与未知恢复语义保持。写区仅canonical／固定owner vendor与正规SDK／精确inverse、直接风险回归及当前文档；既定方案不新增服务或协议。先请求／读回pair与旧缺字段真实RED，再正规配对／完整BFF门、真实compiled owner HTTP＋独占PG；正常激活及App/Admin后继，不以消费者绿称实际Agent扣分。
+
 ## AGENT-1／CREDIT-1：计价管理Public22.5（2026-10-22）
 
 只新增3个具名管理操作：GET /v1/admin/billing/metering/pricing和POST /v1/admin/billing/metering/{rate-revisions,policy-revisions}，Public22.5／186操作。请求及配置字段从固定Billing experimental.5同语义消费，外部snake_case；新增机器字段仍只在本canonical编辑，data沿owner表示，meta.request_id沿原BFF envelope。POST required key，完整publication_id/reason/configuration固定；201仅正式kind/revision/content_digest/published_at/effective_from，核对应kind和原生效时间。HTTP400输入错/owner正式拒绝，401/403身份或管理权拒绝，409原identity/key漂移，429原限流，502坏owner数据，503依赖/未知；不回echo私有错误。

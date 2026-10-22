@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 22.5.0
+  version: 23.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -19592,6 +19592,7 @@ components:
       type: object
       additionalProperties: false
       required:
+        - model_revision
         - provider_ref
         - environment
         - pricing_account_ref
@@ -19603,6 +19604,20 @@ components:
         - currency_code
         - minor_per_unit
       properties:
+        model_revision:
+          type: object
+          additionalProperties: false
+          required:
+            - id
+            - content_digest
+          properties:
+            id:
+              type: string
+              format: uuid
+              pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])
+            content_digest:
+              type: string
+              pattern: ^[0-9a-f]{64}$(?![\s\S])
         provider_ref:
           type: string
           minLength: 1

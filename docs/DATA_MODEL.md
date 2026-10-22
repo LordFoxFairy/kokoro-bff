@@ -1,3 +1,11 @@
+## AGENT-1／MODEL-1：精确模型绑定消费者（2026-10-22，本地已验）
+
+本地停写七门全0、contract973／architecture36／默认1658 PASS及3原资源SKIP，真实compiled owner HTTP＋独占PG13项通过，758输入无漂移，独审Approved。正常未激活；详细证据与限制见CURRENT首节。
+
+沿Root有效主链及已批Billing rate2；主方唯一writer，BFF基线4d8a028，固定owner2d3ed0fbee9219a93f02b67b23f69492fd568917／exp6／7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962。沿原八操作生成链，只为原MeteringRate加入required闭集model_revision{id,content_digest}；保原商业字段供管理员显式配置，不由BFF猜映射／计价或验证System存在。发布与读回均完整保留pair，缺失／坏pair／额外字段拒绝，不添加旧rate fallback。
+
+Public升23.0.0表示必填字段破坏变更，186有序操作不变；build-only inverse逐字还原完整22.5原件，再沿原所有父门，无运行兼容。无SQL／配置／服务／身份或预算变化，三具名管理员route、同tenant/actor、绝对10秒、1MiB/12层、原key/body/time与未知恢复语义保持。写区仅canonical／固定owner vendor与正规SDK／精确inverse、直接风险回归及当前文档；既定方案不新增服务或协议。先请求／读回pair与旧缺字段真实RED，再正规配对／完整BFF门、真实compiled owner HTTP＋独占PG；正常激活及App/Admin后继，不以消费者绿称实际Agent扣分。
+
 ## AGENT-1／CREDIT-1：计价事实仍由Billing唯一持有（2026-10-22）
 
 无BFF SQL/Schema/receipt/缓存/配置副本。Billing持有不可变price/policy revision、整数单次预算、永久命令identity/key/digest和audit；BFF仅当前管理员/tenant准入与具名透传/验证。GET是owner同一RR最新配置，不在BFF拼最大revision或根据effective_from推断当前价。未知发布意图仍由后继Admin按原命令保存，不把GET/null当作未提交证明，不落provider Key或计价SQL。

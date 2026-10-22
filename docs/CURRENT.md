@@ -1,3 +1,13 @@
+## 2026-10-22 AGENT-1／MODEL-1 精确模型绑定消费者已本地验收
+
+固定Billing2d3ed0fbee9219a93f02b67b23f69492fd568917／exp6／7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962，原八操作官方生成；MeteringRate新增required严格闭集model_revision{id,content_digest}，发布／读回完整保留。旧无绑定请求、坏UUID／摘要和多余字段均拒绝，无fallback。Public23.0.0／186操作，raw SHA256 34ea71e0aa56256ca00fc5b3c40abd4d142bea82e664a6871190b8547ec2b9e6；仅pair/version delta精确逆回完整22.5原件再沿原链，186有序inventory原字节不变。原权限／绝对10秒／1MiB／12层／原命令恢复runtime逐字未改。
+
+先实际44 PASS／5 FAIL验证新pair误拒及旧缺字段误收，另public字段4 PASS／2 FAIL；实现后四套focused61 PASS。最终758非文档输入停写无漂移，Node22.22.2七门format/lint/types/contract/architecture/default/build全exit0：contract973 PASS、architecture36 PASS、默认1658 PASS／3原资源SKIP。原44项OpenAPI警告保留。独立只读审查Approved，无确定新增P0–P2；原所有全文／inventory／取消／超时负控未放宽。
+
+实际compiled BFF→Billing Nest→独占canonical PG13项通过，含64-row大Unicode完整pair、缺pair零owner、同原命令换模型digest冲突、同pair商业映射歧义由owner拒绝、原key恢复／权限／未来快照和精确持久效果；零账户／资金流水，自有库94→94，922编译文件无漂移。Session/IAM明确夹具，不称正常页面或完整IAM旅程；未跑全BFF PG/Redis集成。首private runner从Root执行因fixture相对schema路径ENOENT，未创建库，改从Billing既定cwd重跑；失败收据留ignored。机械替换完整owner schema的保护assert也先拒绝了原public币种展开／quote形式差异，最终只增必填pair，未改变其余字段。
+
+正常服务／Schema／配置／1000余额未变，零模型／工具／真实结算。App/Admin仍固定原22.5，下一步固定本Public23发行并补正式修订选择，然后Agent可信prepared reader、逐attempt合法资金授权／预占／唯一派发／真实usage整数结算。未push／PR／merge，Root不提前pin；不据本片通过标AGENT-1／CREDIT-1整项完成，真钱支付不做。下列日期段仅各自历史证据。
+
 ## AGENT-1／CREDIT-1：计价管理 BFF 消费已验（2026-10-22，本地候选）
 
 canonical Public22.5.0／186 operations，SHA256 `c77e4921ccce98cfd91d77fc6897cf327599f237ed13438117323b6a3f8555eb`；固定 Billing `35651fcea0d89edb7358a43e83ac1149d7742a01`／experimental.5，正规窄生成原5＋新3操作。当前平台管理员／trusted tenant-actor、派发前重验及原独立三凭据/u1共同保护；GET最新发布快照不是有效报价或未知提交证明。POST仅新两操作允许1MiB／12层／64 rate，充值16KiB不变；整个准入→正文→重验→owner EOF／解析共一个最多10秒绝对预算，取消不等待异常peer的cleanup ACK，不自动重试。
