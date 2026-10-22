@@ -617,7 +617,8 @@ test("T-K03.19 SetSkillInstallationEnabled uses only owner-issued installation i
 test("R357 active public contract declares original skill.list and distinct observed website/bytes resources, deletes aliases and preserves effective commands", async () => {
   const { readFile } = await import("node:fs/promises")
   const { load } = await import("js-yaml")
-  const document = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  const { restoreBillingAccountContract } = await import("../../scripts/billing-account-public-contract.mjs")
+  const document = load(restoreBillingAccountContract(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")))
   assert.equal(document.info.version, "22.1.0")
   assert.equal(document.paths["/v1/skill.list"].get.operationId, "listSkills")
   for (const path of [website + "ListSkills", website + "ListHubSkills", website + "GetSkill", "/skill.v1.SkillService/DownloadSkill"]) {

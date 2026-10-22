@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
 const root = new URL("../", import.meta.url)
-const ownerSourceUrl = new URL("contract/vendor/kokoro-billing/3f5e0dacc25c1e24d87cbe0c59337d3b909466de/openapi.yaml", root)
+const ownerSourceUrl = new URL("contract/vendor/kokoro-billing/158579f8fdeb62ba5064365260942b62a195a4bb/openapi.yaml", root)
 const dependencyManifestUrl = new URL("contract/dependencies/billing-http.json", root)
 const generatedSdkUrl = new URL("src/generated/billing-http/sdk.gen.ts", root)
 const generatedZodUrl = new URL("src/generated/billing-http/zod.gen.ts", root)
@@ -12,7 +12,7 @@ const publicSourceUrl = new URL("contract/openapi/v1/openapi.yaml", root)
 const fakeStoreUrl = new URL("test/doubles/bff-store.ts", root)
 const mockRouteUrl = new URL("test/doubles/mock-route.ts", root)
 
-const ownerSourceSha256 = "9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6"
+const ownerSourceSha256 = "f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe"
 const creditAccountFields = ["credit_account_id", "status", "available_micros", "held_micros"]
 const ledgerEntryFields = ["journal_id", "sequence", "delta_micros", "balance_after_micros", "source_kind", "source_ref", "created_at"]
 
@@ -76,13 +76,18 @@ test("generated Billing dependency is fixed and exposes Catalog and the two pers
   const manifest = JSON.parse(await readFile(dependencyManifestUrl, "utf8"))
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-billing",
-    repository_commit: "3f5e0dacc25c1e24d87cbe0c59337d3b909466de",
-    contract_version: "4.0.0-experimental.2",
+    repository_commit: "158579f8fdeb62ba5064365260942b62a195a4bb",
+    contract_version: "4.0.0-experimental.3",
     contract_path: "contract/openapi/v1/openapi.yaml",
     contract_sha256: ownerSourceSha256,
   })
   const sdk = await readFile(generatedSdkUrl, "utf8")
-  assert.deepEqual([...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(), ["getCatalog", "getMyCreditAccount", "getMyCreditLedger"])
+  assert.deepEqual([...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(), [
+    "getCatalog",
+    "getMyCreditAccount",
+    "getMyCreditLedger",
+    "openMyCreditAccount",
+  ])
   const zod = await readFile(generatedZodUrl, "utf8")
   for (const name of [
     "zErrorResponse",
@@ -161,4 +166,18 @@ test("Catalog generated response is fully closed and key comes only from the own
   const zod = await readFile(generatedZodUrl, "utf8")
   assert.equal([...generatedExportBlock(zod, "zCatalogResponse").matchAll(/\.strict\(\)/gu)].length, 2)
   assert.match(generatedExportBlock(zod, "zCatalogItem"), /offer_key: z\.string\(\)\.min\(1\)\.max\(255\)/u)
+})
+
+test("personal account initialization is an additive inherent self command with the complete previous contract preserved", async () => {
+  const { load } = await import("js-yaml")
+  const { restoreBillingAccountContract } = await import("../scripts/billing-account-public-contract.mjs")
+  const source = await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8")
+  const doc = load(source)
+  const operation = doc.paths["/v1/billing/credit-account"].put
+  assert.equal(doc.info.version, "22.2.0")
+  assert.equal(operation["x-kokoro-idempotency"], "inherent")
+  assert.equal(operation["x-kokoro-permission"], "billing.self.write")
+  assert.deepEqual(operation.requestBody.content["application/json"].schema, { type: "object", additionalProperties: false, maxProperties: 0 })
+  assert.equal(load(restoreBillingAccountContract(source)).info.version, "22.1.0")
+  assert.throws(() => restoreBillingAccountContract(source.replace("zero Credit account", "funded Credit account")), /contract drift/u)
 })

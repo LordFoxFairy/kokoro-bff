@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "3f5e0dacc25c1e24d87cbe0c59337d3b909466de"
+const ownerCommit = "158579f8fdeb62ba5064365260942b62a195a4bb"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6"
+const ownerDigest = "f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -222,7 +222,7 @@ async function generate(directory) {
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
-    ["getCatalog", "getMyCreditAccount", "getMyCreditLedger"],
+    ["getCatalog", "getMyCreditAccount", "getMyCreditLedger", "openMyCreditAccount"],
     "Billing HTTP generated operation surface drifted",
   )
   const prettier = path.join(root, "node_modules/prettier/bin/prettier.cjs")
@@ -251,7 +251,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "4.0.0-experimental.2",
+      contract_version: "4.0.0-experimental.3",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },

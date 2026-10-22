@@ -74,6 +74,8 @@ export function parseOpenApiOperations(source) {
 }
 
 function expectedIdempotency(operation) {
+  if (operation.method === "PUT" && operation.path === "/v1/billing/credit-account" && operation.fields.get("operationId") === "initializeBillingCreditAccount")
+    return "inherent"
   if (
     new Set(["DELETE /v1/account/sessions/{session_id} revokeAccountSession", "PATCH /v1/account/profile updateAccountProfile"]).has(
       `${operation.method} ${operation.path} ${operation.fields.get("operationId")}`,

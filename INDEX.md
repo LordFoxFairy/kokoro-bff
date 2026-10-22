@@ -1,3 +1,7 @@
+## 2026-10-21 本人积分账户初始化
+
+Public22.2新增天然幂等PUT `/v1/billing/credit-account`，沿个人owner client与Billing正式experimental.3，GET仍只读。生成来源见billing-http manifest，构建期完整父逆证见 `scripts/billing-account-public-contract.mjs`；主路径回归在 `test/billing-personal-read.test.mjs`，未接App或正常环境。
+
 ## 发布确认快照入口（2026-10-21）
 
 Admin既有详情的meta.publication复用skill-product-response窄mapper，核整个Proto未知字段并拒绝缺值，不猜null；当前Native pin 97b27b3（本人历史原包资格），独立HTTP6.3不变。

@@ -798,3 +798,14 @@ test("SET13 rejects closed permission and non-Team historical drift", async () =
   ]
   for (const mutation of mutations) assert.throws(() => restorePublic15TeamPermissionsContract(mutation), /SET13/u)
 })
+
+test("only the exact personal account initialization operation allows inherent idempotency", async () => {
+  const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  assert.deepEqual(inspectOpenApiGovernance(source), [])
+  for (const altered of [
+    source.replace("  /v1/billing/credit-account:\n", "  /v1/billing/other-account:\n"),
+    source.replace("operationId: initializeBillingCreditAccount", "operationId: grantBillingCredit"),
+    source.replace("  /v1/billing/credit-account:\n    put:", "  /v1/billing/credit-account:\n    post:"),
+  ])
+    assert.ok(inspectOpenApiGovernance(altered).some((error) => error.includes("idempotency=required")))
+})

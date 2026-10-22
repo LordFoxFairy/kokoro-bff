@@ -1,3 +1,7 @@
+## 2026-10-21 本人积分账户无感初始化
+
+新增 Public22.2 PUT `/v1/billing/credit-account`，严格必需空JSON对象、无query，仅当前Product Session主体。BFF公开标注billing.self.write，执行沿现Product Session自主体准入；owner边界沿已有web-bff delegated-self与u1可信tenant/subject传输消费Billing main158579f / experimental.3正式PUT；天然幂等，不新增BFF receipt、Schema或IAM action。返回现summary真实投影，disabled为403；不假零、不充值。GET summary/ledger仍只读；App仅专用缺账户404后发明确PUT，未知结果先GET核实。正式固定artifact及窄生成client；总预算、取消、响应上限与凭据隔离保持。
+
 ## 2026-10-21 Skills 公开身份矩阵与 App 绑定（已批准，实施中）
 
 GET /v1/skill.list 保持原 ok/request_id/data 及固定错误结构，仅使用 IAM VerifySkillListIdentity；普通 oauth_app 带 project_id 返回400，网站四 RPC 仍仅 Session。管理新增 GET/POST /v1/admin/open-apps/{app_id}/skill-bindings 与 DELETE /v1/admin/open-apps/{app_id}/skill-bindings/{series_id}；POST 仅 skill_id 与必填 expected_binding_version（0=首次或正 CAS），DELETE 仅正 CAS，写入必需 Idempotency-Key。app_id 只是选择器，可信 tenant/app/client 来自 fresh IAM VerifyOpenAppManagementAuthorization；不接 body 身份或 trusted。固定 Platform451d0fb。管理返回 exact binding_id/series_id/skill_id/revision/state_version/source_status/created_at/updated_at/removed_at 与 nullable metadata；元数据仅 name/summary/created_at/updated_at/product，不伪造安装。列表为 data.bindings + required nullable next_cursor；写回执为 data.binding/event_id/replayed，沿 meta.request_id。原 ok/request_id/data 公开 Skill 列表不变。Public22.1 未发行候选180操作；current增量完整逆回原22.0字节与原176有序inventory，旧父hash不变。

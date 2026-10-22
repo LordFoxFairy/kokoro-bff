@@ -1,3 +1,7 @@
+## 2026-10-21 本人积分账户无感初始化
+
+新增 Public22.2 PUT `/v1/billing/credit-account`，严格必需空JSON对象、无query，仅当前Product Session主体。BFF公开标注billing.self.write，执行沿现Product Session自主体准入；owner边界沿已有web-bff delegated-self与u1可信tenant/subject传输消费Billing main158579f / experimental.3正式PUT；天然幂等，不新增BFF receipt、Schema或IAM action。返回现summary真实投影，disabled为403；不假零、不充值。GET summary/ledger仍只读；App仅专用缺账户404后发明确PUT，未知结果先GET核实。正式固定artifact及窄生成client；总预算、取消、响应上限与凭据隔离保持。
+
 ## 2026-10-21 Skills 公开身份矩阵与 App 绑定（已批准源码候选）
 
 固定 IAM4db7012/0.15 与 Platform451d0fb Native 原件／AppBinding1.0 规范和向量，沿原正式生成链。公开 GET /v1/skill.list 独立消费 IAM 0.15 的不可推断 principal：user_api_key 或 oauth_app（显式 trusted）。网站四 RPC 继续原 Product Session，不接受公开 Key。public context 必含 principal；普通 App 拒绝 project_id，仅读自身精确绑定；Key 读本人与授权项目；trusted 以 project > personal > App 完整行合并。保持总预算、取消、1000 上限与前后项目核验，发送前再核同一完整 principal。公开作者资料显式使用 IAM 专属 publisher-profile 操作。App 绑定管理仅沿现 Product Session + fresh IAM operator exact tenant/app/client 准入，operator 不等于 platformAdmin；Platform 唯一拥有绑定/CAS/回执。

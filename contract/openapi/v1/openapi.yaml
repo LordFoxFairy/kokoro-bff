@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 22.1.0
+  version: 22.2.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -7003,6 +7003,34 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/billing/credit-account:
+    put:
+      tags: [Billing]
+      operationId: initializeBillingCreditAccount
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: inherent
+      x-kokoro-permission: billing.self.write
+      summary: Initialize only the admitted subject's zero Credit account
+      description: Inherently idempotent. No query parameters; no recharge or grant. Unknown outcomes are checked through summary before an explicit retry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, maxProperties: 0 }
+      responses:
+        '200': { $ref: '#/components/responses/BillingSummarySuccess' }
+        '400': { $ref: '#/components/responses/BillingReadBadRequest' }
+        '401': { $ref: '#/components/responses/BillingReadUnauthorized' }
+        '403':
+          description: Current subject forbidden or credit account disabled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/BillingReadRateLimited' }
+        '502': { $ref: '#/components/responses/BillingReadBadGateway' }
+        '503': { $ref: '#/components/responses/BillingReadUnavailable' }
   /v1/billing/summary:
     get:
       tags: [Billing]
