@@ -157,9 +157,9 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
-test("the IAM consumer pins the complete 0.14.0 owner artifact and generates only approved admission, human qualification, Skill, Team and invitation operations", async () => {
-  const commit = "7cbe988d8f3868f293a15120135e1885de8516ff"
-  const digest = "ab9c644e73bb3e89f11204035c1a2f78a828d493ff5029ba3ff85056bc01d9c5"
+test("the IAM consumer pins the complete 0.15.0 owner artifact and generates only approved admission, human qualification, Skill, Team and invitation operations", async () => {
+  const commit = "4db7012a85752071f5fd30b9a5a3b4977e9dd4f3"
+  const digest = "db46bc6a3f0e821f0a6e94f7ee9f75a80d8e92cfbbe5ae5c1ca612d0b2754600"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -172,16 +172,18 @@ test("the IAM consumer pins the complete 0.14.0 owner artifact and generates onl
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.14.0")
+  assert.equal(owner.info.version, "0.15.0")
   const admissionSchema = owner.paths["/internal/v1/session-authorizations/verify"].post.responses["200"].content["application/json"].schema.properties.data
   assert.ok(admissionSchema.required.includes("platform_admin"))
-  assert.deepEqual(admissionSchema.properties.platform_admin, { type: "boolean" })
+  assert.deepEqual(admissionSchema.properties.platform_admin, {
+    type: "boolean",
+  })
   assert.match(types, /platform_admin: boolean/u)
   assert.ok(Object.keys(owner.paths).length > 1)
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.14.0",
+    contract_version: "0.15.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -233,10 +235,13 @@ test("the IAM consumer pins the complete 0.14.0 owner artifact and generates onl
     "removeTenantMember",
     "replaceTenantMemberRoles",
     "resendTenantInvitation",
+    "resolveSkillListPublisherProfiles",
     "resolveTenantPublisherProfiles",
     "revokeAccountSession",
     "updateAccountProfile",
+    "verifyOpenAppManagementAuthorization",
     "verifySessionAuthorization",
+    "verifySkillListIdentity",
   ])
   assert.doesNotMatch(`${sdk}\n${types}`, /getMetrics|healthz|readyz/u)
   assert.match(config, /POST \/internal\/v1\/authorization\/check/u)

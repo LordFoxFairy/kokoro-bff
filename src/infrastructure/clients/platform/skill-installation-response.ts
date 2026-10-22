@@ -27,6 +27,7 @@ const sourceStatuses: Partial<Record<SkillStatus, string>> = {
   [SkillStatus.DISABLED]: "disabled",
   [SkillStatus.WITHDRAWN]: "withdrawn",
   [SkillStatus.QUARANTINED]: "quarantined",
+  [SkillStatus.DELETED]: "deleted",
 }
 function installationAcquisition(value: SkillAcquisitionKind | undefined): "unknown" | "direct" | "hub" {
   switch (value) {

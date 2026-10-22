@@ -1,3 +1,4 @@
+import { skillSeriesDeleteParentBaseline } from "./skill-series-delete-public-contract.mjs"
 import { restoreSkillPublicationContract } from "./skill-publication-public-contract.mjs"
 // Build/test-only additive proof; no runtime compatibility branch.
 import { createHash } from "node:crypto"
@@ -18,6 +19,7 @@ export function restorePersonalSkillHistoryContract(source) {
   return restored
 }
 export function personalSkillHistoryParentBaseline(baseline) {
+  baseline = skillSeriesDeleteParentBaseline(baseline)
   if (baseline.length === 175) {
     if (hash(JSON.stringify(baseline)) !== proof.parent_inventory_sha256) throw Error("Personal Skill history parent inventory drift")
     return baseline
@@ -29,6 +31,7 @@ export function personalSkillHistoryParentBaseline(baseline) {
   return parent
 }
 export function inspectPersonalSkillHistoryContract(source, baseline) {
+  baseline = skillSeriesDeleteParentBaseline(baseline)
   try {
     source = restoreSkillPublicationContract(source)
     if (!/^  version: 21\.2\.0$/mu.test(source) || baseline.length !== 176) throw Error("Personal Skill history current publication differs")

@@ -37,6 +37,95 @@ export const zApiErrorResponse = z
   })
   .strict()
 
+export const zVerifySkillListIdentityHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zVerifySkillListIdentityResponse = z.object({
+  data: z.union([
+    z.object({
+      kind: z.enum(["user_api_key"]),
+      tenant_id: z.string().min(1),
+      user_id: z.string().min(1),
+      key_id: z.string().min(1),
+    }),
+    z.object({
+      kind: z.enum(["oauth_app"]),
+      tenant_id: z.string().min(1),
+      user_id: z.string().min(1),
+      client_id: z.string().min(1),
+      app_id: z.string().min(1),
+      trusted: z.boolean(),
+    }),
+  ]),
+})
+
+export const zResolveSkillListPublisherProfilesBody = z.object({
+  refs: z
+    .array(
+      z.object({
+        kind: z.enum(["user", "organization"]),
+        id: z.string().min(1).max(255),
+      }),
+    )
+    .min(1)
+    .max(100),
+})
+
+export const zResolveSkillListPublisherProfilesHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zResolveSkillListPublisherProfilesResponse = z.object({
+  data: z.object({
+    items: z
+      .array(
+        z.union([
+          z.object({
+            kind: z.enum(["user", "organization"]),
+            id: z.string().min(1).max(255),
+            status: z.enum(["found"]),
+            display_name: z.string(),
+            image_url: z.string().nullable(),
+          }),
+          z.object({
+            kind: z.enum(["user"]),
+            id: z.string().min(1).max(255),
+            status: z.enum(["missing"]),
+          }),
+        ]),
+      )
+      .min(1)
+      .max(100),
+  }),
+})
+
+export const zVerifyOpenAppManagementAuthorizationHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zVerifyOpenAppManagementAuthorizationPath = z.object({
+  app_id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+})
+
+export const zVerifyOpenAppManagementAuthorizationResponse = z.object({
+  data: z.object({
+    allowed: z.literal(true),
+    tenant_id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+    app_id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+    client_id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+  }),
+})
+
 export const zUpdateAccountProfileBody = z.object({
   name: z.string().min(1).max(100),
   expected_name: z.string().max(16384),
@@ -376,6 +465,7 @@ export const zListTenantRolesResponse = z.object({
             z.enum([
               "create_draft",
               "create_version",
+              "delete_series",
               "begin_upload",
               "complete_upload",
               "abort_upload",
@@ -631,6 +721,7 @@ export const zCheckTenantSkillAuthorizationBody = z.object({
   action: z.enum([
     "create_draft",
     "create_version",
+    "delete_series",
     "begin_upload",
     "complete_upload",
     "abort_upload",
@@ -675,6 +766,7 @@ export const zCheckTenantSkillAuthorizationResponse = z.object({
     action: z.enum([
       "create_draft",
       "create_version",
+      "delete_series",
       "begin_upload",
       "complete_upload",
       "abort_upload",

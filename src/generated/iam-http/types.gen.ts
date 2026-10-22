@@ -34,6 +34,213 @@ export type ApiErrorResponse = {
   }
 }
 
+export type VerifySkillListIdentityData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path?: never
+  query?: never
+  url: "/internal/v1/skill-list-identities/verify"
+}
+
+export type VerifySkillListIdentityErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  413: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type VerifySkillListIdentityError = VerifySkillListIdentityErrors[keyof VerifySkillListIdentityErrors]
+
+export type VerifySkillListIdentityResponses = {
+  200: {
+    data:
+      | {
+          kind: "user_api_key"
+          tenant_id: string
+          user_id: string
+          key_id: string
+        }
+      | {
+          kind: "oauth_app"
+          tenant_id: string
+          user_id: string
+          client_id: string
+          app_id: string
+          trusted: boolean
+        }
+  }
+}
+
+export type VerifySkillListIdentityResponse = VerifySkillListIdentityResponses[keyof VerifySkillListIdentityResponses]
+
+export type ResolveSkillListPublisherProfilesData = {
+  body: {
+    refs: Array<{
+      kind: "user" | "organization"
+      id: string
+    }>
+  }
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path?: never
+  query?: never
+  url: "/internal/v1/skill-list-identities/publisher-profiles/resolve"
+}
+
+export type ResolveSkillListPublisherProfilesErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  413: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type ResolveSkillListPublisherProfilesError = ResolveSkillListPublisherProfilesErrors[keyof ResolveSkillListPublisherProfilesErrors]
+
+export type ResolveSkillListPublisherProfilesResponses = {
+  200: {
+    data: {
+      items: Array<
+        | {
+            kind: "user" | "organization"
+            id: string
+            status: "found"
+            display_name: string
+            image_url: string | null
+          }
+        | {
+            kind: "user"
+            id: string
+            status: "missing"
+          }
+      >
+    }
+  }
+}
+
+export type ResolveSkillListPublisherProfilesResponse = ResolveSkillListPublisherProfilesResponses[keyof ResolveSkillListPublisherProfilesResponses]
+
+export type VerifyOpenAppManagementAuthorizationData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path: {
+    app_id: string
+  }
+  query?: never
+  url: "/internal/v1/open-app-registrations/{app_id}/management-authorizations/verify"
+}
+
+export type VerifyOpenAppManagementAuthorizationErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  404: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  413: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type VerifyOpenAppManagementAuthorizationError = VerifyOpenAppManagementAuthorizationErrors[keyof VerifyOpenAppManagementAuthorizationErrors]
+
+export type VerifyOpenAppManagementAuthorizationResponses = {
+  200: {
+    data: {
+      allowed: true
+      tenant_id: string
+      app_id: string
+      client_id: string
+    }
+  }
+}
+
+export type VerifyOpenAppManagementAuthorizationResponse = VerifyOpenAppManagementAuthorizationResponses[keyof VerifyOpenAppManagementAuthorizationResponses]
+
 export type UpdateAccountProfileData = {
   body: {
     /**
@@ -1449,6 +1656,7 @@ export type ListTenantRolesResponses = {
         skill?: Array<
           | "create_draft"
           | "create_version"
+          | "delete_series"
           | "begin_upload"
           | "complete_upload"
           | "abort_upload"
@@ -1985,6 +2193,7 @@ export type CheckTenantSkillAuthorizationData = {
     action:
       | "create_draft"
       | "create_version"
+      | "delete_series"
       | "begin_upload"
       | "complete_upload"
       | "abort_upload"
@@ -2063,6 +2272,7 @@ export type CheckTenantSkillAuthorizationResponses = {
       action:
         | "create_draft"
         | "create_version"
+        | "delete_series"
         | "begin_upload"
         | "complete_upload"
         | "abort_upload"

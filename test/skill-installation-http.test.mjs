@@ -1090,3 +1090,12 @@ test("project qualification that ignores cancellation cannot hold the public ins
     await new Promise((resolve) => server.close(resolve))
   }
 })
+
+test("a deleted source retains its exact installation reference without update or cover eligibility", () => {
+  const value = projectInstallation({ ...installation(), sourceStatus: 7 })
+  assert.equal(value.source_status, "deleted")
+  assert.equal(value.source_ref, "skill:one")
+  assert.equal(value.revision, "18446744073709551615")
+  assert.equal(value.available_update, undefined)
+  assert.equal(value.product.cover, undefined)
+})

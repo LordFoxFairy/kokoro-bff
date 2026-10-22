@@ -68,9 +68,9 @@ test("published browser-private policy is a deterministic read-only projection o
   })
 })
 
-test("vendored IAM 0.14.0 contract and generated-client manifest pin the execution owner bytes", async () => {
-  const ownerCommit = "7cbe988d8f3868f293a15120135e1885de8516ff"
-  const expectedDigest = "ab9c644e73bb3e89f11204035c1a2f78a828d493ff5029ba3ff85056bc01d9c5"
+test("vendored IAM 0.15.0 contract and generated-client manifest pin the execution owner bytes", async () => {
+  const ownerCommit = "4db7012a85752071f5fd30b9a5a3b4977e9dd4f3"
+  const expectedDigest = "db46bc6a3f0e821f0a6e94f7ee9f75a80d8e92cfbbe5ae5c1ca612d0b2754600"
   const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
   assert.notEqual(vendor, null)
   assert.equal(createHash("sha256").update(vendor!).digest("hex"), expectedDigest)
@@ -88,14 +88,14 @@ test("vendored IAM 0.14.0 contract and generated-client manifest pin the executi
   ).catch(() => null)
   assert.equal(retiredAdmissionVendor, null, "retired 0.7 admission vendor path must be removed")
   const contract = JSON.parse(vendor!.toString("utf8")) as { info?: { version?: string } }
-  assert.equal(contract.info?.version, "0.14.0")
+  assert.equal(contract.info?.version, "0.15.0")
   const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8")) as {
     owner?: { repository_commit?: string; contract_version?: string; contract_sha256?: string }
   }
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: ownerCommit,
-    contract_version: "0.14.0",
+    contract_version: "0.15.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: expectedDigest,
   })
@@ -241,7 +241,7 @@ test("relay URL configuration rejects partial settings and callback authority al
 
 test("R357 IAM 0.12 preserves all original fifteen consumer operations and their complete shared schemas", async () => {
   const vendor = JSON.parse(
-    await readFile(new URL("../contract/vendor/kokoro-iam/7cbe988d8f3868f293a15120135e1885de8516ff/iam.internal.v1.json", import.meta.url), "utf8"),
+    await readFile(new URL("../contract/vendor/kokoro-iam/4db7012a85752071f5fd30b9a5a3b4977e9dd4f3/iam.internal.v1.json", import.meta.url), "utf8"),
   )
   const originalOperations = [
     "POST /internal/v1/session-authorizations/verify",
@@ -269,6 +269,26 @@ test("R357 IAM 0.12 preserves all original fifteen consumer operations and their
           .map(([key, item]) => [key, canonical(item)]),
       )
     return value
+  }
+  // The only changes in the original surface are this explicit deletion action
+  // and the new narrow bearer scheme. Undo exactly these before the old hash.
+  assert.deepEqual(vendor.components.securitySchemes.skillListBearer, {
+    scheme: "bearer",
+    bearerFormat: "JWT",
+    type: "http",
+    description: "Only Skills-list identity/profile operations accept user API Keys or registered App OAuth.",
+  })
+  delete vendor.components.securitySchemes.skillListBearer
+  const skillAuthorization = vendor.paths["/internal/v1/tenants/{tenant_id}/skill-authorizations/check"].post
+  for (const action of [
+    skillAuthorization.requestBody.content["application/json"].schema.properties.action.enum,
+    skillAuthorization.responses["200"].content["application/json"].schema.properties.data.properties.action.enum,
+    vendor.paths["/internal/v1/tenants/{tenant_id}/roles"].get.responses["200"].content["application/json"].schema.properties.data.items.properties.permissions
+      .properties.skill.items.enum,
+  ]) {
+    assert.equal(action.indexOf("delete_series"), 2)
+    assert.equal(action.filter((value: string) => value === "delete_series").length, 1)
+    action.splice(2, 1)
   }
   const operations = Object.fromEntries(
     originalOperations.map((op) => {

@@ -117,7 +117,7 @@ test("both publication command digests match the fixed owner vectors and reject 
   const vectors = JSON.parse(
     await readFile(
       new URL(
-        "../contract/vendor/kokoro-platform/97b27b3056f3024fe1c0509072349e1b274efac4/execution-operations/skill-publication-precondition-v1.vectors.json",
+        "../contract/vendor/kokoro-platform/883d7713556b8cee9d41b9c9d904931715033808/execution-operations/skill-publication-precondition-v1.vectors.json",
         import.meta.url,
       ),
       "utf8",
@@ -140,5 +140,56 @@ test("both publication command digests match the fixed owner vectors and reject 
         projector.projectSkillProductCommand(JSON.stringify({ ...vector.request, request: { ...vector.request.request, expected_publication } }), true),
       )
     }
+  }
+})
+
+test("personal series deletion requires the exact confirmation snapshot and rejects self-reported identity", async () => {
+  const { parseSkillProductInput } = await import("../src/http/skill-product-input.js")
+  const current = { current_version_id: "current-revision", state_version: "9007199254740993" }
+  for (const expected_publication of [null, current]) {
+    const body = { expected_state_version: "9007199254740993", expected_publication }
+    assert.deepEqual(parseSkillProductInput("deleteSeries", Buffer.from(JSON.stringify(body))), body)
+    for (const extra of [{ tenant_id: "other" }, { subject_id: "other" }, { reason: "irrelevant" }]) {
+      assert.throws(() => parseSkillProductInput("deleteSeries", Buffer.from(JSON.stringify({ ...body, ...extra }))))
+    }
+  }
+  for (const body of [
+    {},
+    { expected_state_version: "1" },
+    { expected_publication: null },
+    { expected_state_version: "0", expected_publication: null },
+    { expected_state_version: "9223372036854775807", expected_publication: null },
+    { expected_state_version: 1, expected_publication: null },
+    { expected_state_version: "1", expected_publication: {} },
+  ])
+    assert.throws(() => parseSkillProductInput("deleteSeries", Buffer.from(JSON.stringify(body))))
+  assert.throws(() =>
+    parseSkillProductInput("deleteSeries", Buffer.from('{"expected_state_version":"1","expected_publication":null,"expected_publication":null}')),
+  )
+})
+
+test("personal series delete digest matches the fixed owner vectors and binds actor, tenant and confirmation", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const { projectDeletePersonalSkillSeries } = await import("../src/infrastructure/clients/platform/delete-personal-skill-series-projector.js")
+  const vectors = JSON.parse(
+    await readFile(
+      new URL("../contract/vendor/kokoro-platform/883d7713556b8cee9d41b9c9d904931715033808/execution-operations/skill-series-delete-v1.json", import.meta.url),
+      "utf8",
+    ),
+  ).vectors
+  for (const vector of vectors) {
+    const v = vector.input
+    const input = {
+      tenant: v.tenantId,
+      user: v.subjectId,
+      skillId: v.skillId,
+      expectedStateVersion: v.expectedStateVersion,
+      expectedPublication:
+        v.expectedPublication === null
+          ? null
+          : { current_version_id: v.expectedPublication.currentVersionId, state_version: v.expectedPublication.stateVersion },
+    }
+    assert.equal(projectDeletePersonalSkillSeries(input).sha256, vector.sha256)
+    assert.notEqual(projectDeletePersonalSkillSeries({ ...input, user: "different" }).sha256, vector.sha256)
   }
 })

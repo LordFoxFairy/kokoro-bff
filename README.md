@@ -1,3 +1,7 @@
+## 2026-10-21 个人系列删除候选
+
+当前机器契约 Public22.1.0 /177，新增个人系列 DELETE，保留 distinct withdraw；严格 CAS/publication、当前 IAM delete_series 和原 key 回执。Platform Native 固定883d771、IAM0.15固定4db7012。公开三身份矩阵及 App 页面尚待接线，正常环境未激活；边界与实际验证见 `docs/CURRENT.md`。下方版本段为阶段历史。
+
 ## 2026-10-21 Skills 发布确认快照候选
 
 当前源码 Public22.0.0/176，个人与官方发布沿既有路由显式绑定确认的系列publication，旧缺字段请求拒绝；非发布audience编辑不变。原生owner固定e95aba2，Admin详情以meta.publication返回明确空或精确系列指针／版本、HTTP历史仍efe1ed1/6.3；无新服务、表或运行兼容层。App/Admin尚未配对、正常服务未切换，不能据此称恢复旅程闭环；实际验证及下一步见 `docs/CURRENT.md`。下面日期段保留各阶段事实。

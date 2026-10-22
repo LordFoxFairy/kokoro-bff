@@ -3,11 +3,21 @@ import { fromJson, type JsonValue, type MessageShape } from "@bufbuild/protobuf"
 import { Code, ConnectError, createClient } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
 import { SkillCatalogService } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
+import { projectDeletePersonalSkillSeries } from "./delete-personal-skill-series-projector.js"
 import { projectSkillProductCommand } from "./create-skill-draft-projector.js"
 
 import { skillPublicationPreconditionWire, type SkillPublicationPrecondition } from "./skill-product-schema.js"
 
-type Context = { requestId: string; commandId: string; digest: string; tenant: string; user: string; expectedStateVersion?: string }
+type Context = {
+  requestId: string
+  commandId: string
+  digest: string
+  tenant: string
+  user: string
+  expectedStateVersion?: string
+  skillId?: string
+  expectedPublication?: SkillPublicationPrecondition
+}
 type Metadata = { displayName: string; summary: string; tags: string[]; examplePrompts?: string[]; categoryKeys?: string[] }
 function metadata(input: Metadata): Record<string, JsonValue> {
   return {
@@ -51,20 +61,28 @@ export class CatalogConnectClient {
     const request = {
       ...members,
       ...(input.expectedStateVersion === undefined ? {} : { expected_state_version: input.expectedStateVersion }),
-      product_context: { subject_id: input.user, owner_scope: { kind: "user", id: input.user } },
+      ...(operation === "deletePersonalSkillSeries" ? {} : { product_context: { subject_id: input.user, owner_scope: { kind: "user", id: input.user } } }),
     }
     const digest =
       input.commandId === undefined
         ? undefined
-        : projectSkillProductCommand(
-            JSON.stringify({
-              command_digest_version: "3.0.0",
-              fq_method: `${SkillCatalogService.typeName}/${descriptor.name}`,
-              tenant_ref: input.tenant,
-              request,
-            }),
-            true,
-          ).sha256
+        : operation === "deletePersonalSkillSeries"
+          ? projectDeletePersonalSkillSeries({
+              tenant: input.tenant,
+              user: input.user,
+              skillId: input.skillId,
+              expectedStateVersion: input.expectedStateVersion,
+              expectedPublication: input.expectedPublication,
+            }).sha256
+          : projectSkillProductCommand(
+              JSON.stringify({
+                command_digest_version: "3.0.0",
+                fq_method: `${SkillCatalogService.typeName}/${descriptor.name}`,
+                tenant_ref: input.tenant,
+                request,
+              }),
+              true,
+            ).sha256
     if (digest !== undefined && digest !== input.digest) throw new Error("skill_request_digest_mismatch")
     const wire = fromJson(descriptor.input, {
       ...request,
@@ -189,6 +207,19 @@ export class CatalogConnectClient {
       "createSkillVersion",
       input,
       { owner_scope: { kind: "user", id: input.user }, base_skill_id: { value: input.baseSkillId }, metadata: metadata(input) },
+      signal,
+      deadlineAt,
+    )
+  }
+  deletePersonalSeries(
+    input: Context & { skillId: string; expectedStateVersion: string; expectedPublication: SkillPublicationPrecondition },
+    signal: AbortSignal,
+    deadlineAt: number,
+  ) {
+    return this.#call(
+      "deletePersonalSkillSeries",
+      input,
+      { skill_id: { value: input.skillId }, expected_publication: skillPublicationPreconditionWire(input.expectedPublication) },
       signal,
       deadlineAt,
     )

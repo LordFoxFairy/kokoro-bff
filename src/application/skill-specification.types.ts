@@ -4,6 +4,7 @@ export type SkillSpecificationContext = RequestContext & Readonly<{ humanBearer:
 export type SkillSpecificationOperation = "skill.list" | "ListSkills" | "ListHubSkills" | "GetSkill" | "DownloadSkill"
 export type SkillProductFact = Readonly<{ source_kind?: string | undefined; creator_ref?: Readonly<{ kind: string; id: string }> | undefined; cover?: unknown }>
 export type SkillInstallationFact = Readonly<{
+  source_status: string
   acquisition_kind: "unknown" | "direct" | "hub"
   installation_id: string
   source_ref: string

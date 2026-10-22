@@ -1,3 +1,7 @@
+## 2026-10-21 Skills 删除与公开身份收口（实施中）
+
+新增 DELETE /v1/self/skills/{skill_id}：Idempotency-Key 必填，JSON 仅 expected_state_version 与 expected_publication（显式 null 或 current_version_id/state_version）。200 返回 series_id、skill_id、state_version、status=deleted、event_id、replayed；400 输入、404 不可见、409 原命令冲突/处理中、412 确认快照失效、429 受限、502 非法 owner 响应、503 依赖。禁止客户端传 tenant/subject。完整 canonical 与发行固定 owner 后同步。
+
 ## 本人历史原包下载配对（2026-10-21，实施中）
 
 固定 Platform `97b27b3056f3024fe1c0509072349e1b274efac4` 实现提交，机器原件/Native descriptor/HTTP6.3 原字节保持。沿现 browser-private POST /browser/v1/skills/{version_id}/download，本人 managed 精确 GET 验证归属后，除原 active 外接受明确 product.source_kind=personal 的 disabled/withdrawn。未知来源、其他来源、草稿/隔离/废弃仍不合格；安装/分享 resolver 规则不改。资格/原包 hash/size 在句柄下载前后仍重新确认，同一 subject/tenant、预算与取消保持，无新 API、公开字段、Schema、缓存或服务。App 必须消费原 ZIP 而非重组预览文本，恢复另走新 UID/上传/扫描/校验/publication 确认；本片不切换正常环境。

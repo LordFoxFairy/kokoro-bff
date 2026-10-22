@@ -1,3 +1,4 @@
+import { skillSeriesDeleteParentBaseline } from "./skill-series-delete-public-contract.mjs"
 import {
   restorePersonalSkillHistoryContract,
   personalSkillHistoryParentBaseline,
@@ -35,6 +36,7 @@ export function restorePublic21ModelConfigurationContract(source) {
   return parent
 }
 export function modelConfigurationParentBaseline(baseline) {
+  baseline = skillSeriesDeleteParentBaseline(baseline)
   if (baseline.length === 176) baseline = personalSkillHistoryParentBaseline(baseline)
   if (baseline.length === 165) {
     if (hash(JSON.stringify(baseline)) !== proof.parent_inventory_sha256) throw Error("Configuration parent inventory drift")

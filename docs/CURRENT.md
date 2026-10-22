@@ -1,3 +1,11 @@
+## 2026-10-21 个人系列删除消费者（当前源码候选）
+
+Public22.1.0 /177 operations 仅新增 `DELETE /v1/self/skills/{skill_id}`：当前 Product 会话与 IAM `delete_series` 准入、明确 anchor CAS 和 publication 空／精确确认、原 key/digest 重试；不先读取 source 后才重放，不把撤回或404当删除成功。Platform Native 固定 `883d7713556b8cee9d41b9c9d904931715033808`，安装管理保留 `source_status=deleted`，可用列表排除该来源且扫描总量上限仍为1000。旧 Public22 全文字节及有序 inventory 以独立构建期 inverse 复核，不引入运行兼容层。
+
+IAM 固定 `4db7012a85752071f5fd30b9a5a3b4977e9dd4f3` /0.15.0，仅新增三个身份／作者／App管理资格消费生成入口；专用 SkillListAdmissionClient 已有闭集验证，但公开 skill.list 尚未改用它，不能据此称公开身份矩阵完成。无新 BFF 表、模型／工具／扣费调用，正常服务未加载此删除候选，App 仍待固定提交后配对。最终验证记录由本段后续收据补充，现不冒称已合并。
+
+最终停写复核：format/lint/typecheck/contract/architecture/default/build 七门 exit0，contract884PASS、默认1538PASS／3原资源SKIP，726非文档输入零漂移；独立审查无确定P0–P2。首轮旧版本／artifact inventory断言失败已按精确新pin及构建期逆证修正，原完整父hash未替换。另一次未改动的账户会话25ms测试在并发资源负载下未进入fetch而失败；原28项隔离通过、相同冻结源码完整默认重跑通过，未放宽超时或改无关代码。此前失败日志保留，不称资源整链或正常生效。
+
 ## 2026-10-21 本人历史原包下载资格已配对（源码候选）
 
 沿现 exactManagedRecord，仅为已获本人 managed GET 的明确 personal disabled/withdrawn 放行精确原包；active、安装、分享和current规则不改，句柄前后重新准入/绑定/资格和原hash/size校验保持。Platform固定97b27b3056f3024fe1c0509072349e1b274efac4，21个vendor原件逐一核对该commit，旧目录退休；正规Native生成，HTTP6.3/Public22/176与原generated业务字节保持。没有新API、Schema、表、缓存或兼容分支。

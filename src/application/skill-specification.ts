@@ -111,9 +111,11 @@ export class SkillSpecificationService implements SkillSpecificationSource {
         if (!item.installed || seen.has(item.installation_id) || series.has(item.series_id)) throw new Error("skill_response_invalid")
         seen.add(item.installation_id)
         series.add(item.series_id)
-        items.push(item)
+        // Retain the installation for management/history, not as a newly
+        // available public Skill after its whole source series was deleted.
+        if (item.source_status !== "deleted") items.push(item)
       }
-      if (items.length > 1000) throw new ConnectError("Skill list capacity exceeded", Code.ResourceExhausted)
+      if (seen.size > 1000) throw new ConnectError("Skill list capacity exceeded", Code.ResourceExhausted)
       cursor = result.nextCursor
       if (cursor !== undefined) {
         if (cursors.has(cursor)) throw new Error("skill_response_invalid")

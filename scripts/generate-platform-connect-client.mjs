@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "97b27b3056f3024fe1c0509072349e1b274efac4"
+const ownerCommit = "883d7713556b8cee9d41b9c9d904931715033808"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-connect"
@@ -15,7 +15,7 @@ const manifestPath = "contract/dependencies/platform-connect.json"
 
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "6a428a7f6e69102bafa19e3deaf460b1f85341e736caf569e3b8e9afb82166d0",
+  "kokoro/platform/v1/platform_runtime.proto": "4cf055deb6dca9c9739037a2431d827185703ef4e1e5611b63dd3fd43e410d96",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
   "kokoro/platform/v1/mcp_package_admin.proto": "60b6778cbb3024f09184bbfc1e06e124191a6583ad892e48e0bcb3c4d0667b31",
 }
@@ -26,10 +26,10 @@ const artifactDigests = {
   "errors/command-receipt-v1.json": "d82a4b30039adc0754fe1bcc43738fc68be2cd3cbef0e710d14089f55bc0ac68",
   "auth/bff-service-auth-v1.json": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef",
   "execution-operations/skill-installation-update-v1.json": "9b75d679665f42eb48d89e9c6fe99c39f2f019894db4a54de15e9f97622dd194",
-  "descriptor/platform-v1.binpb": "3e695f87dee76712d7ef34685dc79f3e9e55c404f8eaa213f907e5bd8864445b",
+  "descriptor/platform-v1.binpb": "7925997178cfd047506423da2586eac087a4191fd1e0808f39e91d090ec2ea1a",
   "execution-operations/custom-api-v1.json": "eca45ebd0f3c31d48cc174256dc23bda22de288ded91aa12198b1a2a37516a38",
   "execution-operations/mcp-private-server-v1.json": "c3246a5d88b79f1358205e67658570bf6ced4b805fb414b3016f816e88dbc92a",
-  "provenance.json": "6c0b079a6baa971000ff818107b41f32b3dcdefb8a4682757a147c5d2baf152b",
+  "provenance.json": "91dc0fb55c5441add3118166731b2127a3b0e46af84e33fd8bfa151db71a56f5",
   "execution-operations/skill-acquisition-v1.json": "7c9cf9ed456199d4acd3d25f29154c8f098ed8866554476d37f058add0d78028",
   "openapi/platform-http.openapi.json": "3a187ad6e98b1824cf8d8e50c80218e77c7f14f4eb2a5cfcfe8d4be97c677a08",
   "mcp-package-admin/v1/profile.json": "d4b29dba0a5a6df8a0f36a654fcb81d5e95381568c0f5afd0bd104984366be75",
@@ -37,11 +37,12 @@ const artifactDigests = {
   "descriptor/mcp-package-admin-v1.binpb": "847caf55170d2a0779e78c19a5d4bd61e6de397e6c873794c3e2811ddc4467f5",
   "execution-operations/skill-publication-precondition-v1.json": "9e4434d3786c8a8a40edc75e0733367e731cf2458eeb6f036f85f3256c4b6fcd",
   "execution-operations/skill-publication-precondition-v1.vectors.json": "f995955cf5fb79ba5067b34fd7b46011692bf584aade7b956fb4b423e3b9a055",
+  "execution-operations/skill-series-delete-v1.json": "d1d12d52a244cb4abba87ed04d5480e5c6db3a2653d1b2b07be91d6a3576a1c3",
 }
-const provenanceCombinedSha256 = "4e9af30154fd7f8a635458a45f01b53457a5e584dd4875f74e2b4671b4396e3b"
+const provenanceCombinedSha256 = "2f96672625f91358bb7b72829058191ebee6092d115954e4d08cf598214c53ae"
 const ownerGenerated = {
   path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
-  sha256: "dd041ec89f368f70e145b9c6fe83c4b464154080db1a2a06a1b23eda7b50edf2",
+  sha256: "22aaf5791966335fd9dedd0b120429eca2951518c24568083211f3ded0bfbc06",
 }
 const generatedFiles = [
   "command-receipt-errors.ts",
@@ -178,6 +179,7 @@ async function manifestFor(directory) {
       package_name: "kokoro.platform.v1",
       sources: Object.entries(sourceDigests).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
       artifacts: [
+        { path: "contract/execution-operations/skill-series-delete-v1.json", sha256: artifactDigests["execution-operations/skill-series-delete-v1.json"] },
         {
           path: "contract/execution-operations/skill-publication-precondition-v1.json",
           sha256: artifactDigests["execution-operations/skill-publication-precondition-v1.json"],

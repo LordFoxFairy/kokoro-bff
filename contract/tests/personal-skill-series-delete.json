@@ -1,0 +1,36 @@
+{
+  "profile": "personal-skill-series-delete-public-v1",
+  "parent_version": "22.0.0",
+  "version": "22.1.0",
+  "parent_sha256": "65019688691a6d6933146be66d4e7a1293f0dc92418a6f259a983529031b5c27",
+  "current_sha256": "50ce4c54225ee7e87099f2b4a8b62b13d9f3fba186dad853648601cf734c3759",
+  "parent_inventory_sha256": "298efad0d55ca307791b2a5290853a2dfe8d4afe92ed592bd0e333beea421494",
+  "current_inventory_sha256": "33dad547a247a45b86ef3c3d2e97b52a1fbc0301afc19e359862cee0295edb24",
+  "operation_id": "deletePersonalSkillSeries",
+  "inverse": [
+    {
+      "at": 3,
+      "count": 1,
+      "current_sha256": "07908206eae194c5e6fd21718119cb75b72c98154efa7edad10ecdba775a942d",
+      "previous": "  version: 22.0.0\n"
+    },
+    {
+      "at": 5090,
+      "count": 38,
+      "current_sha256": "dcb20f93afe13f2a39951a8fbb3ed0fc953ac707cfa422ad0d51505170272879",
+      "previous": ""
+    },
+    {
+      "at": 17680,
+      "count": 34,
+      "current_sha256": "fbeb7d1a26c63e1f9df665f94b64be206fb3e3caa1ef4649815bbafa0f579615",
+      "previous": ""
+    },
+    {
+      "at": 21821,
+      "count": 1,
+      "current_sha256": "6b4b57fbc44acf4aba31c5a2df9b71736dfaeb76ed558c2fbf4e25e0561ee456",
+      "previous": ""
+    }
+  ]
+}

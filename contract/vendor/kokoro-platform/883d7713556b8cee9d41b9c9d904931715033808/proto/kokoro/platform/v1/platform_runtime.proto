@@ -22,6 +22,7 @@ enum SkillStatus {
   SKILL_STATUS_QUARANTINED = 4;
   SKILL_STATUS_DISABLED = 5;
   SKILL_STATUS_DISCARDED = 6;
+  SKILL_STATUS_DELETED = 7;
 }
 
 enum McpConnectorType {
@@ -896,6 +897,7 @@ message AuthorizeMcpToolResponse {
 }
 
 service SkillCatalogService {
+  rpc DeletePersonalSkillSeries(kokoro.platform.v1.DeletePersonalSkillSeriesRequest) returns (kokoro.platform.v1.DeletePersonalSkillSeriesResponse);
   rpc BeginLocalSkillImport(kokoro.platform.v1.BeginLocalSkillImportRequest) returns (kokoro.platform.v1.BeginLocalSkillImportResponse);
   rpc CompleteLocalSkillImport(kokoro.platform.v1.CompleteLocalSkillImportRequest) returns (kokoro.platform.v1.CompleteLocalSkillImportResponse);
   rpc FinalizeLocalSkillImport(kokoro.platform.v1.FinalizeLocalSkillImportRequest) returns (kokoro.platform.v1.FinalizeLocalSkillImportResponse);
@@ -2262,4 +2264,20 @@ service ProductProjectSkillInstallationService {
   rpc RemoveProjectSkillInstallation(kokoro.platform.v1.RemoveProjectSkillInstallationRequest) returns (kokoro.platform.v1.RemoveProjectSkillInstallationResponse);
   rpc GetProjectSkillInstallation(kokoro.platform.v1.GetProjectSkillInstallationRequest) returns (kokoro.platform.v1.GetProjectSkillInstallationResponse);
   rpc ListProjectSkillInstallations(kokoro.platform.v1.ListProjectSkillInstallationsRequest) returns (kokoro.platform.v1.ListProjectSkillInstallationsResponse);
+}
+
+message DeletePersonalSkillSeriesRequest {
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.SkillId skill_id = 3;
+  optional uint64 expected_state_version = 4;
+  kokoro.platform.v1.SkillPublicationPrecondition expected_publication = 5;
+}
+
+message DeletePersonalSkillSeriesResponse {
+  kokoro.platform.v1.SkillSeriesId series_id = 1;
+  kokoro.platform.v1.SkillId skill_id = 2;
+  uint64 state_version = 3;
+  string event_id = 4;
+  bool replayed = 5;
 }

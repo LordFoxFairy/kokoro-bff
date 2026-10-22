@@ -953,3 +953,80 @@ test("Public11 registered Withdraw requires actual CAS before owner I/O", async 
   )
   assert.equal(calls, 0)
 })
+
+test("personal series deletion sends the original confirmation under fresh delete admission and replays the exact command", async () => {
+  const calls = []
+  await withServer(
+    {
+      async deletePersonalSeries(input) {
+        calls.push(input)
+        return {
+          seriesId: { value: "series-1" },
+          skillId: { value: "skill-base" },
+          stateVersion: 6n,
+          eventId: `evt:${"a".repeat(64)}`,
+          replayed: calls.length > 1,
+        }
+      },
+    },
+    async (origin) => {
+      const body = JSON.stringify({ expected_state_version: "5", expected_publication: { current_version_id: "different-current", state_version: "9" } })
+      for (let n = 0; n < 2; n++) {
+        const response = await fetch(origin + "/v1/self/skills/skill-base", { method: "DELETE", headers: baseHeaders, body })
+        assert.equal(response.status, 200)
+        const result = await response.json()
+        assert.equal(result.data.status, "deleted")
+        assert.equal(result.data.replayed, n === 1)
+      }
+    },
+  )
+  assert.equal(calls.length, 2)
+  assert.equal(calls[0].commandId, calls[1].commandId)
+  assert.equal(calls[0].digest, calls[1].digest)
+  assert.equal(calls[0].tenant, "tenant-personal")
+  assert.equal(calls[0].user, "user-personal")
+  assert.deepEqual(calls[0].expectedPublication, { current_version_id: "different-current", state_version: "9" })
+})
+
+test("series deletion refuses wrong-anchor or non-incrementing owner ACKs and never calls owner after denied admission", async () => {
+  const body = { expected_state_version: "5", expected_publication: null }
+  for (const override of [{ skillId: { value: "other" } }, { stateVersion: 5n }]) {
+    await withServer(
+      {
+        async deletePersonalSeries() {
+          return {
+            seriesId: { value: "series-1" },
+            skillId: { value: "skill-base" },
+            stateVersion: 6n,
+            eventId: `evt:${"a".repeat(64)}`,
+            replayed: false,
+            ...override,
+          }
+        },
+      },
+      async (origin) => {
+        const response = await fetch(origin + "/v1/self/skills/skill-base", { method: "DELETE", headers: baseHeaders, body: JSON.stringify(body) })
+        assert.equal(response.status, 502)
+      },
+    )
+  }
+  let calls = 0
+  await withServer(
+    {
+      async deletePersonalSeries() {
+        calls++
+        throw Error("must not call")
+      },
+    },
+    async (origin) => {
+      const response = await fetch(origin + "/v1/self/skills/skill-base", { method: "DELETE", headers: baseHeaders, body: JSON.stringify(body) })
+      assert.equal(response.status, 403)
+    },
+    {
+      async verify() {
+        return { ok: false, status: 403, code: "session_forbidden" }
+      },
+    },
+  )
+  assert.equal(calls, 0)
+})

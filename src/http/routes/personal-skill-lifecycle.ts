@@ -1,3 +1,4 @@
+import { Code, ConnectError } from "@connectrpc/connect"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import { authorizeUserRequest } from "../../auth/user-admission.js"
@@ -222,3 +223,31 @@ export async function readPersonalSkillLifecycleBody(request: IncomingMessage, s
 }
 
 export const lifecycleError = payload
+
+export function personalSkillLifecycleFailure(error: unknown): {
+  status: number
+  code: string
+  retryAfter?: string
+} {
+  if (!(error instanceof ConnectError))
+    return error instanceof Error && error.message === "skill_response_invalid"
+      ? { status: 502, code: "skill_response_invalid" }
+      : { status: 503, code: "skill_dependency_unavailable" }
+  if (error.code === Code.NotFound || error.code === Code.PermissionDenied) return { status: 404, code: "skill_not_found" }
+  if (error.code === Code.AlreadyExists) return { status: 409, code: "skill_idempotency_conflict" }
+  if (error.code === Code.Aborted) return { status: 409, code: "skill_command_in_progress" }
+  if (error.code === Code.FailedPrecondition) return { status: 412, code: "skill_precondition_failed" }
+  if (error.code === Code.ResourceExhausted) {
+    const retryAfter = error.metadata.get("retry-after")
+    return /^(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)$/u.test(retryAfter ?? "")
+      ? {
+          status: 429,
+          code: "skill_rate_limited",
+          retryAfter: retryAfter as string,
+        }
+      : { status: 502, code: "skill_response_invalid" }
+  }
+  if ([Code.Unavailable, Code.DeadlineExceeded, Code.Canceled, Code.Unauthenticated].includes(error.code))
+    return { status: 503, code: "skill_dependency_unavailable" }
+  return { status: 502, code: "skill_response_invalid" }
+}

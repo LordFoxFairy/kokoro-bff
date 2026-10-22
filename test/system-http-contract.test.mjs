@@ -1,3 +1,4 @@
+import { restoreSkillSeriesDeleteContract, skillSeriesDeleteParentBaseline } from "../scripts/skill-series-delete-public-contract.mjs"
 import {
   inspectModelConfigurationContract,
   restorePublic21ModelConfigurationContract,
@@ -66,7 +67,12 @@ test("System HTTP6 model configuration client pins reviewed owner bytes and fift
 
 test("System generated validators reject unknown owner fields at every reviewed response boundary", async () => {
   const { zPutRoutingPolicyBody, zPutRoutingPolicyResponse } = await import("../dist/generated/system-http/zod.gen.js")
-  const body = { model_revision_id: null, visible: true, is_default: false, priority: 0 }
+  const body = {
+    model_revision_id: null,
+    visible: true,
+    is_default: false,
+    priority: 0,
+  }
   assert.equal(zPutRoutingPolicyBody.safeParse(body).success, true)
   assert.equal(zPutRoutingPolicyBody.safeParse({ ...body, extra: "secret" }).success, false)
   const routing = {
@@ -80,7 +86,12 @@ test("System generated validators reject unknown owner fields at every reviewed 
     updated_at: "2026-10-06T00:00:00Z",
   }
   assert.equal(zPutRoutingPolicyResponse.safeParse({ data: routing }).success, true)
-  assert.equal(zPutRoutingPolicyResponse.safeParse({ data: { ...routing, extra: "secret" } }).success, false)
+  assert.equal(
+    zPutRoutingPolicyResponse.safeParse({
+      data: { ...routing, extra: "secret" },
+    }).success,
+    false,
+  )
   assert.equal(zPutRoutingPolicyResponse.safeParse({ data: routing, extra: "secret" }).success, false)
 })
 
@@ -132,8 +143,8 @@ test("Public21 consumes shared System5 models and restores the complete unchange
 })
 
 test("configuration additive contract protects all prior bytes and never publishes credential reads", async () => {
-  const source = await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8")
-  const baseline = JSON.parse(await readFile(new URL("contract/tests/v1-operations.json", root), "utf8")).operations
+  const source = restoreSkillSeriesDeleteContract(await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8"))
+  const baseline = skillSeriesDeleteParentBaseline(JSON.parse(await readFile(new URL("contract/tests/v1-operations.json", root), "utf8")).operations)
   assert.deepEqual(inspectModelConfigurationContract(source, baseline), [])
   assert.equal(load(source).info.version, "22.0.0")
   const projectUnion = source.match(/ Personal and project installations form a union[^\n]+/u)?.[0]

@@ -412,6 +412,11 @@
       "operation_id": "getManagedPersonalSkill"
     },
     {
+      "method": "DELETE",
+      "path": "/v1/self/skills/{skill_id}",
+      "operation_id": "deletePersonalSkillSeries"
+    },
+    {
       "method": "GET",
       "path": "/v1/self/skills/{skill_id}/package",
       "operation_id": "getManagedPersonalSkillPackage"

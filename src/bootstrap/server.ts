@@ -92,6 +92,7 @@ import { skillInstallationRoute } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { managedPersonalSkillsRoute } from "../http/routes/managed-personal-skills.js"
 import { createPersonalSkillVersionRoute } from "../http/routes/create-personal-skill-version.js"
+import { deletePersonalSkillSeriesRoute } from "../http/routes/delete-personal-skill-series.js"
 import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-skill.js"
 import { skillPackageInspectionRoute } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
@@ -327,6 +328,18 @@ async function handle(
       (businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "versions"))
   if (isManagedPersonalSkillRead) {
     await managedPersonalSkillsRoute(request, response, config, composition.sessionAdmission, id, businessPath)
+    return
+  }
+  if (request.method === "DELETE" && businessPath.length === 3 && businessPath[0] === "self" && businessPath[1] === "skills") {
+    await deletePersonalSkillSeriesRoute(
+      request,
+      response,
+      config,
+      withSkillActionAdmission(composition.sessionAdmission, composition.skillAuthorization, "delete_series", config.tenantId),
+      id,
+      businessPath[2] ?? "",
+      composition.skillDraftClient,
+    )
     return
   }
   const isCreatePersonalSkillVersion =

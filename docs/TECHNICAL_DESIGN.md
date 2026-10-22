@@ -1,3 +1,7 @@
+## 2026-10-21 Skills 删除与公开身份收口（实施中）
+
+个人系列删除由 Platform 唯一持有 deleted 终态。BFF 沿当前 Product 会话准入与 catalog 身份代理 DELETE /v1/self/skills/{skill_id}；显式 anchor CAS 与系列 publication 条件固定进原 body/key，不预读后重写，不把撤回/草稿丢弃冒删除。成功回执先于已删对象读取，未知结果只重试原命令。公开 skill.list 的 API Key/Open App 准入另由 IAM 正式身份事实支撑，网站会话入口不放宽。
+
 ## 本人历史原包下载配对（2026-10-21，实施中）
 
 固定 Platform `97b27b3056f3024fe1c0509072349e1b274efac4` 实现提交，机器原件/Native descriptor/HTTP6.3 原字节保持。沿现 browser-private POST /browser/v1/skills/{version_id}/download，本人 managed 精确 GET 验证归属后，除原 active 外接受明确 product.source_kind=personal 的 disabled/withdrawn。未知来源、其他来源、草稿/隔离/废弃仍不合格；安装/分享 resolver 规则不改。资格/原包 hash/size 在句柄下载前后仍重新确认，同一 subject/tenant、预算与取消保持，无新 API、公开字段、Schema、缓存或服务。App 必须消费原 ZIP 而非重组预览文本，恢复另走新 UID/上传/扫描/校验/publication 确认；本片不切换正常环境。

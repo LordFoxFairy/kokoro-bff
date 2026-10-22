@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 22.0.0
+  version: 22.1.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -5088,6 +5088,44 @@ paths:
         '429': { $ref: '#/components/responses/ManagedPersonalSkillRateLimited' }
         '502': { $ref: '#/components/responses/ManagedPersonalSkillBadGateway' }
         '503': { $ref: '#/components/responses/ManagedPersonalSkillUnavailable' }
+    delete:
+      tags: [Skills]
+      operationId: deletePersonalSkillSeries
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.manage_personal
+      summary: Delete the current subject's entire personal Skill series
+      description: >-
+        Freeze the exact anchor state and explicit series publication at confirmation. All revisions become terminal deleted;
+        existing immutable installation and asset references remain retained but confer no read, install or execution eligibility.
+        Unknown outcomes may only replay the original body and key, never infer success from a missing list item.
+      parameters:
+        - $ref: '#/components/parameters/PersonalSkillLifecycleSkillId'
+        - $ref: '#/components/parameters/WithdrawPersonalSkillIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeletePersonalSkillSeriesRequest' }
+      responses:
+        '200':
+          description: Entire series deleted or original durable receipt replayed
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/DeletePersonalSkillSeriesResponse' } } }
+        '400': { $ref: '#/components/responses/PersonalSkillLifecycleBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalSkillLifecycleUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalSkillLifecycleForbidden' }
+        '404': { $ref: '#/components/responses/PersonalSkillLifecycleNotFound' }
+        '409': { $ref: '#/components/responses/PersonalSkillLifecycleConflict' }
+        '412': { $ref: '#/components/responses/PersonalSkillLifecyclePreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalSkillLifecyclePayloadTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }
   /v1/self/skills/{skill_id}/package:
     get:
       tags: [Skills]
@@ -17640,6 +17678,40 @@ components:
               pattern: ^[1-9][0-9]*$
               maxLength: 19
               description: Canonical positive decimal through 9223372036854775806; the owner must increment this version atomically.
+    DeletePersonalSkillSeriesRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_state_version, expected_publication]
+      properties:
+        expected_state_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          maxLength: 19
+          description: Canonical positive decimal through 9223372036854775806; frozen anchor version, not a JavaScript number.
+        expected_publication:
+          $ref: '#/components/schemas/SkillPublicationPrecondition'
+    DeletePersonalSkillSeriesResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [series_id, skill_id, state_version, status, event_id, replayed]
+          properties:
+            series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+            skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+            state_version: { type: string, pattern: '^[1-9][0-9]*$', maxLength: 19 }
+            status: { type: string, const: deleted }
+            event_id: { type: string, pattern: '^evt:[a-f0-9]{64}$' }
+            replayed: { type: boolean }
+        meta:
+          type: object
+          additionalProperties: false
+          required: [request_id]
+          properties:
+            request_id: { type: string }
     SkillPublishRequest:
       type: object
       additionalProperties: false
@@ -21747,6 +21819,7 @@ components:
             - disabled
             - withdrawn
             - quarantined
+            - deleted
         category_keys:
           $ref: "#/components/schemas/SkillProductCategoryKeys"
         product:

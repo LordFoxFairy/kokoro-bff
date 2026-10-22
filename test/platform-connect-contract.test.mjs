@@ -47,6 +47,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     package_name: "kokoro.platform.v1",
     sources: Object.entries(sources).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
     artifacts: [
+      "execution-operations/skill-series-delete-v1.json",
       "execution-operations/skill-publication-precondition-v1.json",
       "execution-operations/skill-publication-precondition-v1.vectors.json",
       "errors/command-receipt-v1.json",
@@ -70,7 +71,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     provenance: { path: "contract/provenance.json", sha256: artifacts["provenance.json"], combined_sha256: combinedSha256 },
     generated: ownerGenerated,
   })
-  assert.equal(manifest.owner.repository_commit, "97b27b3056f3024fe1c0509072349e1b274efac4")
+  assert.equal(manifest.owner.repository_commit, "883d7713556b8cee9d41b9c9d904931715033808")
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.lockfile_sha256, sha256(await requiredFile("pnpm-lock.yaml")))
   for (const [file, bytes] of Object.entries(await sourceBytes())) assert.equal(sha256(bytes), sources[file])

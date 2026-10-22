@@ -36,6 +36,7 @@
     "execution-operations/mcp-availability-v1.json",
     "execution-operations/skill-publication-precondition-v1.json",
     "execution-operations/skill-publication-precondition-v1.vectors.json",
+    "execution-operations/skill-series-delete-v1.json",
     "auth/bff-service-auth-v1.json",
     "errors/command-receipt-v1.json",
     "openapi/platform-http.openapi.json",
@@ -43,5 +44,5 @@
     "mcp-package-admin/v1/profile.json",
     "mcp-package-admin/v1/request-vectors.json"
   ],
-  "combinedSha256": "4e9af30154fd7f8a635458a45f01b53457a5e584dd4875f74e2b4671b4396e3b"
+  "combinedSha256": "2f96672625f91358bb7b72829058191ebee6092d115954e4d08cf598214c53ae"
 }

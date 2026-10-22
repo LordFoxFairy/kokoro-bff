@@ -1,3 +1,7 @@
+## 2026-10-21 Skills 删除与公开身份收口（实施中）
+
+本片不新增 BFF SQL 表或删除副本；系列终态、精确安装及资产保留均归 Platform。浏览器持有原删除命令恢复意图，不把列表缺项视作成功；BFF 只消费 owner 回执。IAM API Key/Open App 事实不进入 BFF 数据库。
+
 ## 2026-10-21 Admin 详情确认快照（目标，未正常激活）
 
 不改BFF canonical schema、SQL、Redis或receipt/outbox，不读取owner数据库。Admin快照只来自固定owner既有GetAdminSkill同租户确认读取，不缓存、不从列表／selected Skill state_version推导，不把不可用current等同无publication。meta随当次详情返回；浏览器后续沿既有冻结意图保存，真正CAS与提交事实仍唯一在Platform。
