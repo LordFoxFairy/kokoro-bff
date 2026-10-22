@@ -1,3 +1,4 @@
+import { liveAdminMetering, matchMeteringAdmin } from "../http/routes/billing-metering-admin.js"
 import { liveAdminCreditGrant } from "../http/routes/billing-credit-grant-admin.js"
 import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
@@ -292,7 +293,8 @@ async function handle(
       businessPath[0] === "admin" &&
       businessPath[1] === "model-providers" &&
       businessPath[3] === "upstream-models") ||
-      (request.method === "POST" && businessPath.join("/") === "admin/billing/credit-grants"))
+      (request.method === "POST" && businessPath.join("/") === "admin/billing/credit-grants") ||
+      matchMeteringAdmin(request.method ?? "", businessPath) !== null)
       ? Date.now() + Math.min(config.upstreamTimeoutMs, 10_000)
       : undefined
   if (!browserPrivateMcp && businessPath[0] === "self" && businessPath[1] === "mcp") {
@@ -650,6 +652,21 @@ async function handle(
       composition.skillProductClient,
       config.storage?.objectOrigin ?? null,
       readmitSkill,
+    )
+    return
+  }
+
+  const meteringKind = matchMeteringAdmin(request.method ?? "", businessPath)
+  if (meteringKind !== null) {
+    await liveAdminMetering(
+      request,
+      response,
+      config,
+      context,
+      admission.bearerToken,
+      composition.sessionAdmission,
+      meteringKind,
+      adminOperationDeadline ?? Date.now(),
     )
     return
   }

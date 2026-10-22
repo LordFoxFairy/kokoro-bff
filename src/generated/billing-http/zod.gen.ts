@@ -2,6 +2,38 @@
 
 import * as z from "zod"
 
+export const zMeteringRational = z
+  .object({
+    numerator: z
+      .string()
+      .max(78)
+      .regex(/^(?:0|[1-9][0-9]{0,77})$(?![\s\S])/),
+    denominator: z
+      .string()
+      .max(78)
+      .regex(/^[1-9][0-9]{0,77}$(?![\s\S])/),
+  })
+  .strict()
+
+export const zMeteringPublication = z
+  .object({
+    kind: z.enum(["rate", "policy"]),
+    revision: z
+      .string()
+      .max(19)
+      .regex(/^[1-9][0-9]{0,18}$(?![\s\S])/),
+    content_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    published_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    effective_from: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+  })
+  .strict()
+
+export const zMeteringPublicationResponse = z
+  .object({
+    data: zMeteringPublication,
+  })
+  .strict()
+
 export const zAdminCreditGrantRequest = z
   .object({
     funding_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/),
@@ -47,6 +79,157 @@ export const zCreditMicros = zDecimalInteger
 export const zNonNegativeCreditMicros = zCreditMicros.and(zNonNegativeDecimal)
 
 export const zCurrencyCode = z.string().regex(/^[A-Z]{3}$/)
+
+export const zMeteringRate = z
+  .object({
+    provider_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    environment: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    pricing_account_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    model_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    model_version: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    bucket: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 128),
+    unit: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 128),
+    applicability: z.union([
+      z
+        .object({
+          kind: z.literal("all"),
+        })
+        .strict(),
+      z
+        .object({
+          kind: z.literal("range"),
+          dimension: z
+            .string()
+            .min(1)
+            .refine((value) => [...value].length <= 128),
+          unit: z
+            .string()
+            .min(1)
+            .refine((value) => [...value].length <= 128),
+          lower_inclusive: z
+            .string()
+            .max(19)
+            .regex(/^(?:0|[1-9][0-9]{0,77})$(?![\s\S])/),
+          upper_exclusive: z
+            .string()
+            .max(19)
+            .regex(/^(?:0|[1-9][0-9]{0,18})$(?![\s\S])/)
+            .nullable(),
+        })
+        .strict(),
+    ]),
+    currency_code: zCurrencyCode,
+    minor_per_unit: zMeteringRational,
+  })
+  .strict()
+
+export const zMeteringRateConfiguration = z
+  .object({
+    effective_from: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    source_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    verified_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    rates: z.array(zMeteringRate).min(1).max(64),
+  })
+  .strict()
+
+export const zMeteringPolicyConfiguration = z
+  .object({
+    effective_from: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    source_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    verified_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    currency_code: zCurrencyCode,
+    multiplier: zMeteringRational,
+    credit_micros_per_minor: zMeteringRational,
+    max_attempt_credits: z
+      .string()
+      .max(13)
+      .regex(/^[1-9][0-9]{0,12}$(?![\s\S])/),
+  })
+  .strict()
+
+export const zAdminMeteringRatePublishRequest = z
+  .object({
+    publication_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/),
+    reason: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 500),
+    configuration: zMeteringRateConfiguration,
+  })
+  .strict()
+
+export const zAdminMeteringPolicyPublishRequest = z
+  .object({
+    publication_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/),
+    reason: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 500),
+    configuration: zMeteringPolicyConfiguration,
+  })
+  .strict()
+
+export const zMeteringRateRevision = z
+  .object({
+    revision: z
+      .string()
+      .max(19)
+      .regex(/^[1-9][0-9]{0,18}$(?![\s\S])/),
+    content_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    published_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    configuration: zMeteringRateConfiguration,
+  })
+  .strict()
+
+export const zMeteringPolicyRevision = z
+  .object({
+    revision: z
+      .string()
+      .max(19)
+      .regex(/^[1-9][0-9]{0,18}$(?![\s\S])/),
+    content_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    published_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    configuration: zMeteringPolicyConfiguration,
+  })
+  .strict()
+
+export const zAdminMeteringPricingResponse = z
+  .object({
+    data: z
+      .object({
+        rate_revision: zMeteringRateRevision.nullable(),
+        policy_revision: zMeteringPolicyRevision.nullable(),
+      })
+      .strict(),
+  })
+  .strict()
 
 export const zErrorResponse = z
   .object({
@@ -242,6 +425,77 @@ export const zGetMyCreditLedgerQuery = z.object({
  * Success
  */
 export const zGetMyCreditLedgerResponse = zCreditLedgerResponse
+
+export const zGetAdminMeteringPricingHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+})
+
+/**
+ * Latest published configurations (not necessarily active)
+ */
+export const zGetAdminMeteringPricingResponse = zAdminMeteringPricingResponse
+
+export const zPublishAdminMeteringRateBody = zAdminMeteringRatePublishRequest
+
+export const zPublishAdminMeteringRateHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+  "idempotency-key": z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[\x20-\x7E]+$/),
+})
+
+/**
+ * Immutable revision published or original receipt replay
+ */
+export const zPublishAdminMeteringRateResponse = zMeteringPublicationResponse
+
+export const zPublishAdminMeteringPolicyBody = zAdminMeteringPolicyPublishRequest
+
+export const zPublishAdminMeteringPolicyHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+  "idempotency-key": z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[\x20-\x7E]+$/),
+})
+
+/**
+ * Immutable revision published or original receipt replay
+ */
+export const zPublishAdminMeteringPolicyResponse = zMeteringPublicationResponse
 
 export const zCreateAdminCreditGrantBody = zAdminCreditGrantRequest
 

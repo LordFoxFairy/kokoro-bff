@@ -4,6 +4,99 @@ export type ClientOptions = {
   baseUrl: "https://billing.internal" | (string & {})
 }
 
+export type MeteringRational = {
+  numerator: string
+  denominator: string
+}
+
+export type MeteringRate = {
+  provider_ref: string
+  environment: string
+  pricing_account_ref: string
+  model_ref: string
+  model_version: string
+  bucket: string
+  unit: string
+  applicability:
+    | {
+        kind: "all"
+      }
+    | {
+        kind: "range"
+        dimension: string
+        unit: string
+        lower_inclusive: string
+        upper_exclusive: string | null
+      }
+  currency_code: CurrencyCode
+  minor_per_unit: MeteringRational
+}
+
+export type MeteringRateConfiguration = {
+  effective_from: string
+  source_ref: string
+  verified_at: string
+  rates: Array<MeteringRate>
+}
+
+export type MeteringPolicyConfiguration = {
+  effective_from: string
+  source_ref: string
+  verified_at: string
+  currency_code: CurrencyCode
+  multiplier: MeteringRational
+  credit_micros_per_minor: MeteringRational
+  /**
+   * Whole Credits, 1 through 9223372036854. A spending budget, not a supplier cost guarantee.
+   */
+  max_attempt_credits: string
+}
+
+export type AdminMeteringRatePublishRequest = {
+  publication_id: string
+  reason: string
+  configuration: MeteringRateConfiguration
+}
+
+export type AdminMeteringPolicyPublishRequest = {
+  publication_id: string
+  reason: string
+  configuration: MeteringPolicyConfiguration
+}
+
+export type MeteringPublication = {
+  kind: "rate" | "policy"
+  revision: string
+  content_digest: string
+  published_at: string
+  effective_from: string
+}
+
+export type MeteringPublicationResponse = {
+  data: MeteringPublication
+}
+
+export type MeteringRateRevision = {
+  revision: string
+  content_digest: string
+  published_at: string
+  configuration: MeteringRateConfiguration
+}
+
+export type MeteringPolicyRevision = {
+  revision: string
+  content_digest: string
+  published_at: string
+  configuration: MeteringPolicyConfiguration
+}
+
+export type AdminMeteringPricingResponse = {
+  data: {
+    rate_revision: MeteringRateRevision | null
+    policy_revision: MeteringPolicyRevision | null
+  }
+}
+
 export type AdminCreditGrantRequest = {
   funding_id: string
   subject_id: string
@@ -315,6 +408,142 @@ export type GetMyCreditLedgerResponses = {
 }
 
 export type GetMyCreditLedgerResponse = GetMyCreditLedgerResponses[keyof GetMyCreditLedgerResponses]
+
+export type GetAdminMeteringPricingData = {
+  body?: never
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+  }
+  path?: never
+  query?: never
+  url: "/v1/admin/billing/metering/pricing"
+}
+
+export type GetAdminMeteringPricingErrors = {
+  /**
+   * Invalid request
+   */
+  400: ErrorResponse
+  /**
+   * Privileged service admission denied
+   */
+  403: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type GetAdminMeteringPricingError = GetAdminMeteringPricingErrors[keyof GetAdminMeteringPricingErrors]
+
+export type GetAdminMeteringPricingResponses = {
+  /**
+   * Latest published configurations (not necessarily active)
+   */
+  200: AdminMeteringPricingResponse
+}
+
+export type GetAdminMeteringPricingResponse = GetAdminMeteringPricingResponses[keyof GetAdminMeteringPricingResponses]
+
+export type PublishAdminMeteringRateData = {
+  body: AdminMeteringRatePublishRequest
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+    "idempotency-key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/admin/billing/metering/rate-revisions"
+}
+
+export type PublishAdminMeteringRateErrors = {
+  /**
+   * Invalid request
+   */
+  400: ErrorResponse
+  /**
+   * Privileged service admission denied
+   */
+  403: ErrorResponse
+  /**
+   * Command identity conflicts
+   */
+  409: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type PublishAdminMeteringRateError = PublishAdminMeteringRateErrors[keyof PublishAdminMeteringRateErrors]
+
+export type PublishAdminMeteringRateResponses = {
+  /**
+   * Immutable revision published or original receipt replay
+   */
+  201: MeteringPublicationResponse
+}
+
+export type PublishAdminMeteringRateResponse = PublishAdminMeteringRateResponses[keyof PublishAdminMeteringRateResponses]
+
+export type PublishAdminMeteringPolicyData = {
+  body: AdminMeteringPolicyPublishRequest
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+    "idempotency-key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/admin/billing/metering/policy-revisions"
+}
+
+export type PublishAdminMeteringPolicyErrors = {
+  /**
+   * Invalid request
+   */
+  400: ErrorResponse
+  /**
+   * Privileged service admission denied
+   */
+  403: ErrorResponse
+  /**
+   * Command identity conflicts
+   */
+  409: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type PublishAdminMeteringPolicyError = PublishAdminMeteringPolicyErrors[keyof PublishAdminMeteringPolicyErrors]
+
+export type PublishAdminMeteringPolicyResponses = {
+  /**
+   * Immutable revision published or original receipt replay
+   */
+  201: MeteringPublicationResponse
+}
+
+export type PublishAdminMeteringPolicyResponse = PublishAdminMeteringPolicyResponses[keyof PublishAdminMeteringPolicyResponses]
 
 export type CreateAdminCreditGrantData = {
   body: AdminCreditGrantRequest

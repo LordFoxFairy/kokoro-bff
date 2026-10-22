@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
 const root = new URL("../", import.meta.url)
-const ownerSourceUrl = new URL("contract/vendor/kokoro-billing/158579f8fdeb62ba5064365260942b62a195a4bb/openapi.yaml", root)
+const ownerSourceUrl = new URL("contract/vendor/kokoro-billing/35651fcea0d89edb7358a43e83ac1149d7742a01/openapi.yaml", root)
 const dependencyManifestUrl = new URL("contract/dependencies/billing-http.json", root)
 const generatedSdkUrl = new URL("src/generated/billing-http/sdk.gen.ts", root)
 const generatedZodUrl = new URL("src/generated/billing-http/zod.gen.ts", root)
@@ -12,7 +12,7 @@ const publicSourceUrl = new URL("contract/openapi/v1/openapi.yaml", root)
 const fakeStoreUrl = new URL("test/doubles/bff-store.ts", root)
 const mockRouteUrl = new URL("test/doubles/mock-route.ts", root)
 
-const ownerSourceSha256 = "f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe"
+const ownerSourceSha256 = "8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab"
 const creditAccountFields = ["credit_account_id", "status", "available_micros", "held_micros"]
 const ledgerEntryFields = ["journal_id", "sequence", "delta_micros", "balance_after_micros", "source_kind", "source_ref", "created_at"]
 
@@ -76,17 +76,21 @@ test("generated Billing dependency is fixed and exposes Catalog and the two pers
   const manifest = JSON.parse(await readFile(dependencyManifestUrl, "utf8"))
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-billing",
-    repository_commit: "158579f8fdeb62ba5064365260942b62a195a4bb",
-    contract_version: "4.0.0-experimental.3",
+    repository_commit: "35651fcea0d89edb7358a43e83ac1149d7742a01",
+    contract_version: "4.0.0-experimental.5",
     contract_path: "contract/openapi/v1/openapi.yaml",
     contract_sha256: ownerSourceSha256,
   })
   const sdk = await readFile(generatedSdkUrl, "utf8")
   assert.deepEqual([...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(), [
+    "createAdminCreditGrant",
+    "getAdminMeteringPricing",
     "getCatalog",
     "getMyCreditAccount",
     "getMyCreditLedger",
     "openMyCreditAccount",
+    "publishAdminMeteringPolicy",
+    "publishAdminMeteringRate",
   ])
   const zod = await readFile(generatedZodUrl, "utf8")
   for (const name of [

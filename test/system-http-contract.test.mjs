@@ -177,8 +177,9 @@ test("configuration additive contract protects all prior bytes and never publish
 test("provider discovery is a single additive closed read preserving every Public22.2 byte and ordered operation", async () => {
   const { restoreProviderModelDiscoveryContract, providerModelDiscoveryParentBaseline } =
     await import("../scripts/provider-model-discovery-public-contract.mjs")
-  const source = await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8")
-  const inventory = JSON.parse(await readFile(new URL("contract/tests/v1-operations.json", root), "utf8")).operations
+  const { restoreMeteringContract, meteringParentBaseline } = await import("../scripts/billing-metering-public-contract.mjs")
+  const source = restoreMeteringContract(await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8"))
+  const inventory = meteringParentBaseline(JSON.parse(await readFile(new URL("contract/tests/v1-operations.json", root), "utf8")).operations)
   const parent = restoreProviderModelDiscoveryContract(source)
   assert.equal(createHash("sha256").update(parent).digest("hex"), "365d61aa5b3b4c01a178f077914e03b5fdbaeebc95fe740b9be46ca8fadc3205")
   assert.equal(inventory.length, 183)

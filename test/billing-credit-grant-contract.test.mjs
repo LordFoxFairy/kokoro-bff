@@ -1,3 +1,4 @@
+import { meteringParentBaseline } from "../scripts/billing-metering-public-contract.mjs"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
@@ -13,7 +14,7 @@ test("credit funding preserves all 182 preceding operations and the complete par
   assert.match(parent, /^  version: 22\.3\.0$/mu)
   assert.doesNotMatch(parent, /createAdminCreditGrant/u)
   assert.match(restoreProviderModelDiscoveryContract(raw), /^  version: 22\.2\.0$/mu)
-  const inventory = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+  const inventory = meteringParentBaseline(JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations)
   assert.equal(inventory.length, 183)
   assert.equal(creditGrantParentBaseline(inventory).length, 182)
   for (const [from, to] of [

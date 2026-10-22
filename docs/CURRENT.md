@@ -1,3 +1,13 @@
+## AGENT-1／CREDIT-1：计价管理 BFF 消费已验（2026-10-22，本地候选）
+
+canonical Public22.5.0／186 operations，SHA256 `c77e4921ccce98cfd91d77fc6897cf327599f237ed13438117323b6a3f8555eb`；固定 Billing `35651fcea0d89edb7358a43e83ac1149d7742a01`／experimental.5，正规窄生成原5＋新3操作。当前平台管理员／trusted tenant-actor、派发前重验及原独立三凭据/u1共同保护；GET最新发布快照不是有效报价或未知提交证明。POST仅新两操作允许1MiB／12层／64 rate，充值16KiB不变；整个准入→正文→重验→owner EOF／解析共一个最多10秒绝对预算，取消不等待异常peer的cleanup ACK，不自动重试。
+
+最终758非文档输入停写无漂移，format／lint／types／contract／architecture／test／build七门exit0：contract970 PASS／0SKIP，architecture36 PASS，默认1655 PASS／3原资源SKIP；OpenAPI44项既有警告未隐藏。定向取消测试先2 RED后修复；首次完整contract失败4项（新GET错误幂等声明及旧当前版本测试配对）留证，修正为正式none、历史测试先应用精确inverse，原父全文hash／有序inventory及负控未放宽。独立只读复核无确定新增P0–P2。
+
+实际compiled BFF→Billing Nest HTTP→独占canonical PG共10项通过，涵盖空快照、policy/rate发布、超过64KiB的64-row Unicode配置、同key／新key原publication恢复、预算漂移409、普通成员零owner请求、owner语义400及未来生效完整配置。持久效果精确rate1／policy2／receipt3／key4／audit3，零账户／资金流水；自有临时库库存94→94，922编译文件前后无漂移。Session准入是明确夹具，不冒正常IAM／后台页面旅程；没有运行全BFF PG/Redis integration、正常DDL或重载，没有模型／工具／实际积分结算或真钱支付。
+
+下一步固定本候选提交后接App同源adapter和Admin计价表单／原命令恢复容量，再配正常计价与Agent预算预占及真实用量结算。未push／PR／merge；本片不代表主链闭环。下面充值等为各自当时证据，不覆盖本节当前pin／版本或Root最新授权。
+
 ## 2026-10-22 CREDIT-1 正式非现金充值接线（本地候选）
 
 当前 canonical 为 Public22.4.0／183 operations。新增管理员 `POST /v1/admin/billing/credit-grants`，固定 Billing `90929ef316470f2e9de9eda05d5510761637bd6e`／4.0.0-experimental.4；原22.3全文和182项顺序由构建期精确逆证保留。仅配置独立 operator proxy secret，未配置时本操作503，不影响原读取；无新表、余额写旁路、自动业务重试或真钱支付。

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 4.0.0-experimental.4
+  version: 4.0.0-experimental.5
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -2132,6 +2132,357 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /v1/admin/billing/metering/pricing:
+    get:
+      operationId: getAdminMeteringPricing
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: experimental
+      x-kokoro-idempotency: read-only
+      x-kokoro-permission: web-bff-billing-admin-proxy
+      x-kokoro-identity-transport: personal-identity-u1
+      description: Latest published rate and policy configurations in one read-only tenant
+        snapshot, independently nullable; may be future effective. Not an active price quote
+        or a history collection. No query or request body.
+      security:
+        - serviceCaller: []
+          internalSecret: []
+          serviceBearer: []
+          tenantContext: []
+          subjectContext: []
+          operatorProxySecret: []
+      parameters:
+        - $ref: "#/components/parameters/PersonalTenantId"
+        - name: x-kokoro-subject
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 5
+            maxLength: 1363
+            pattern: ^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])
+        - name: x-kokoro-service
+          in: header
+          required: true
+          schema:
+            type: string
+            const: web-bff
+      responses:
+        "200":
+          description: Latest published configurations (not necessarily active)
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminMeteringPricingResponse"
+        "400":
+          description: Invalid request
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.invalid_request
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Privileged service admission denied
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.forbidden
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal failure
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.internal_error
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Dependency unavailable
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.dependency_unavailable
+              retryable: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/admin/billing/metering/rate-revisions:
+    post:
+      operationId: publishAdminMeteringRate
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: experimental
+      x-kokoro-idempotency: required
+      x-kokoro-permission: web-bff-billing-admin-proxy
+      x-kokoro-identity-transport: personal-identity-u1
+      description: Publish one immutable pricing revision. BFF verifies current platform
+        administrator membership. Current usage profile and settlement semantics are owner
+        fixed; no funds or model dispatch.
+      security:
+        - serviceCaller: []
+          internalSecret: []
+          serviceBearer: []
+          tenantContext: []
+          subjectContext: []
+          operatorProxySecret: []
+      parameters:
+        - $ref: "#/components/parameters/PersonalTenantId"
+        - name: x-kokoro-subject
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 5
+            maxLength: 1363
+            pattern: ^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])
+        - name: x-kokoro-service
+          in: header
+          required: true
+          schema:
+            type: string
+            const: web-bff
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminMeteringRatePublishRequest"
+      responses:
+        "201":
+          description: Immutable revision published or original receipt replay
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeteringPublicationResponse"
+        "400":
+          description: Invalid request
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.invalid_request
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Privileged service admission denied
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.forbidden
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Command identity conflicts
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.idempotency_conflict
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal failure
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.internal_error
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Dependency unavailable
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.dependency_unavailable
+              retryable: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/admin/billing/metering/policy-revisions:
+    post:
+      operationId: publishAdminMeteringPolicy
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: experimental
+      x-kokoro-idempotency: required
+      x-kokoro-permission: web-bff-billing-admin-proxy
+      x-kokoro-identity-transport: personal-identity-u1
+      description: Publish one immutable pricing revision. BFF verifies current platform
+        administrator membership. Current usage profile and settlement semantics are owner
+        fixed; no funds or model dispatch.
+      security:
+        - serviceCaller: []
+          internalSecret: []
+          serviceBearer: []
+          tenantContext: []
+          subjectContext: []
+          operatorProxySecret: []
+      parameters:
+        - $ref: "#/components/parameters/PersonalTenantId"
+        - name: x-kokoro-subject
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 5
+            maxLength: 1363
+            pattern: ^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])
+        - name: x-kokoro-service
+          in: header
+          required: true
+          schema:
+            type: string
+            const: web-bff
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminMeteringPolicyPublishRequest"
+      responses:
+        "201":
+          description: Immutable revision published or original receipt replay
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeteringPublicationResponse"
+        "400":
+          description: Invalid request
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.invalid_request
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Privileged service admission denied
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.forbidden
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Command identity conflicts
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.idempotency_conflict
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal failure
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.internal_error
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Dependency unavailable
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+          x-kokoro-errors:
+            - code: billing.dependency_unavailable
+              retryable: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /v1/admin/billing/credit-grants:
     post:
       operationId: createAdminCreditGrant
@@ -2889,6 +3240,280 @@ components:
       in: header
       name: Wechatpay-Signature
   schemas:
+    MeteringRational:
+      type: object
+      additionalProperties: false
+      required:
+        - numerator
+        - denominator
+      properties:
+        numerator:
+          type: string
+          pattern: ^(?:0|[1-9][0-9]{0,77})$(?![\s\S])
+          maxLength: 78
+        denominator:
+          type: string
+          pattern: ^[1-9][0-9]{0,77}$(?![\s\S])
+          maxLength: 78
+    MeteringRate:
+      type: object
+      additionalProperties: false
+      required:
+        - provider_ref
+        - environment
+        - pricing_account_ref
+        - model_ref
+        - model_version
+        - bucket
+        - unit
+        - applicability
+        - currency_code
+        - minor_per_unit
+      properties:
+        provider_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        environment:
+          type: string
+          minLength: 1
+          maxLength: 255
+        pricing_account_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        model_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        model_version:
+          type: string
+          minLength: 1
+          maxLength: 255
+        bucket:
+          type: string
+          minLength: 1
+          maxLength: 128
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 128
+        applicability:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required:
+                - kind
+              properties:
+                kind:
+                  type: string
+                  const: all
+            - type: object
+              additionalProperties: false
+              required:
+                - kind
+                - dimension
+                - unit
+                - lower_inclusive
+                - upper_exclusive
+              properties:
+                kind:
+                  type: string
+                  const: range
+                dimension:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                unit:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                lower_inclusive:
+                  type: string
+                  pattern: ^(?:0|[1-9][0-9]{0,77})$(?![\s\S])
+                  maxLength: 19
+                upper_exclusive:
+                  type:
+                    - string
+                    - "null"
+                  pattern: ^(?:0|[1-9][0-9]{0,18})$(?![\s\S])
+                  maxLength: 19
+        currency_code:
+          $ref: "#/components/schemas/CurrencyCode"
+        minor_per_unit:
+          $ref: "#/components/schemas/MeteringRational"
+    MeteringRateConfiguration:
+      type: object
+      additionalProperties: false
+      required:
+        - effective_from
+        - source_ref
+        - verified_at
+        - rates
+      properties:
+        effective_from: &a1
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+        source_ref: &a2
+          type: string
+          minLength: 1
+          maxLength: 255
+        verified_at: *a1
+        rates:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            $ref: "#/components/schemas/MeteringRate"
+    MeteringPolicyConfiguration:
+      type: object
+      additionalProperties: false
+      required:
+        - effective_from
+        - source_ref
+        - verified_at
+        - currency_code
+        - multiplier
+        - credit_micros_per_minor
+        - max_attempt_credits
+      properties:
+        effective_from: *a1
+        source_ref: *a2
+        verified_at: *a1
+        currency_code:
+          $ref: "#/components/schemas/CurrencyCode"
+        multiplier:
+          $ref: "#/components/schemas/MeteringRational"
+        credit_micros_per_minor:
+          $ref: "#/components/schemas/MeteringRational"
+        max_attempt_credits:
+          type: string
+          pattern: ^[1-9][0-9]{0,12}$(?![\s\S])
+          maxLength: 13
+          description: Whole Credits, 1 through 9223372036854. A spending budget, not a supplier
+            cost guarantee.
+    AdminMeteringRatePublishRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - publication_id
+        - reason
+        - configuration
+      properties:
+        publication_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        configuration:
+          $ref: "#/components/schemas/MeteringRateConfiguration"
+    AdminMeteringPolicyPublishRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - publication_id
+        - reason
+        - configuration
+      properties:
+        publication_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        configuration:
+          $ref: "#/components/schemas/MeteringPolicyConfiguration"
+    MeteringPublication:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - revision
+        - content_digest
+        - published_at
+        - effective_from
+      properties:
+        kind:
+          type: string
+          enum:
+            - rate
+            - policy
+        revision: &a3
+          type: string
+          pattern: ^[1-9][0-9]{0,18}$(?![\s\S])
+          maxLength: 19
+        content_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$(?![\s\S])
+        published_at: *a1
+        effective_from: *a1
+    MeteringPublicationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/MeteringPublication"
+    MeteringRateRevision:
+      type: object
+      additionalProperties: false
+      required:
+        - revision
+        - content_digest
+        - published_at
+        - configuration
+      properties:
+        revision: *a3
+        content_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$(?![\s\S])
+        published_at: *a1
+        configuration:
+          $ref: "#/components/schemas/MeteringRateConfiguration"
+    MeteringPolicyRevision:
+      type: object
+      additionalProperties: false
+      required:
+        - revision
+        - content_digest
+        - published_at
+        - configuration
+      properties:
+        revision: *a3
+        content_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$(?![\s\S])
+        published_at: *a1
+        configuration:
+          $ref: "#/components/schemas/MeteringPolicyConfiguration"
+    AdminMeteringPricingResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - rate_revision
+            - policy_revision
+          properties:
+            rate_revision:
+              anyOf:
+                - $ref: "#/components/schemas/MeteringRateRevision"
+                - type: "null"
+            policy_revision:
+              anyOf:
+                - $ref: "#/components/schemas/MeteringPolicyRevision"
+                - type: "null"
     AdminCreditGrantRequest:
       type: object
       additionalProperties: false

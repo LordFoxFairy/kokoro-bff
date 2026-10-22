@@ -1,3 +1,7 @@
+## 当前计价管理Public22.5（2026-10-22）
+
+本地候选Public22.5.0／186操作，raw SHA256 `c77e4921ccce98cfd91d77fc6897cf327599f237ed13438117323b6a3f8555eb`。沿固定Billing35651fc／experimental.5（8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab），原5＋计价管理3操作由唯一生成器正规派生；原183操作及顺序全文逆证，旧runtime vendor退出。新增仅两发布POST及最新发布配置RR单体GET，不是有效价/执行许可；当前Product管理员每次派发前重验。POST1MiB/12层／当前协议绑定owner固定，充值16KiB原界不变；未知状态只能原publication_id/key/config/time恢复。源码/契约候选尚不代表App/Admin或正常部署、实际扣分完成。
+
 ## CREDIT-1 非现金发放消费者（2026-10-22，源码候选）
 
 唯一当前Public22.4.0 /183操作；新增POST /v1/admin/billing/credit-grants，strict五字段与required key，先当前管理员/可信tenant成员资格、发送前同主体重验，再向Billing固定90929ef/4.0.0-experimental.4单次派发。owner原blob SHA256 a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2，正规生成五操作；原旧pin退休，无runtime兼容/第二账本。旧182操作全文与inventory完整逆恢复，仅作为构建保护，不替代新旅程验收。当前public源码摘要 f6b8f3bd250c144a2d648af94c9fd5fe068db33991a4289b849a077eef009f32。Admin页面和正常资金/Agent计费仍待，不以本契约发布代替整链。

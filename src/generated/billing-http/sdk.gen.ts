@@ -6,6 +6,9 @@ import type {
   CreateAdminCreditGrantData,
   CreateAdminCreditGrantErrors,
   CreateAdminCreditGrantResponses,
+  GetAdminMeteringPricingData,
+  GetAdminMeteringPricingErrors,
+  GetAdminMeteringPricingResponses,
   GetCatalogData,
   GetCatalogErrors,
   GetCatalogResponses,
@@ -18,13 +21,22 @@ import type {
   OpenMyCreditAccountData,
   OpenMyCreditAccountErrors,
   OpenMyCreditAccountResponses,
+  PublishAdminMeteringPolicyData,
+  PublishAdminMeteringPolicyErrors,
+  PublishAdminMeteringPolicyResponses,
+  PublishAdminMeteringRateData,
+  PublishAdminMeteringRateErrors,
+  PublishAdminMeteringRateResponses,
 } from "./types.gen.js"
 import {
   zCreateAdminCreditGrantResponse,
+  zGetAdminMeteringPricingResponse,
   zGetCatalogResponse,
   zGetMyCreditAccountResponse,
   zGetMyCreditLedgerResponse,
   zOpenMyCreditAccountResponse,
+  zPublishAdminMeteringPolicyResponse,
+  zPublishAdminMeteringRateResponse,
 } from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
@@ -160,6 +172,98 @@ export const getMyCreditLedger = <ThrowOnError extends boolean = false>(
     ],
     url: "/v1/billing/me/credit-ledger",
     ...options,
+  })
+
+/**
+ * Latest published rate and policy configurations in one read-only tenant snapshot, independently nullable; may be future effective. Not an active price quote or a history collection. No query or request body.
+ */
+export const getAdminMeteringPricing = <ThrowOnError extends boolean = false>(
+  options: Options<GetAdminMeteringPricingData, ThrowOnError>,
+): RequestResult<GetAdminMeteringPricingResponses, GetAdminMeteringPricingErrors, ThrowOnError> =>
+  (options.client ?? client).get<GetAdminMeteringPricingResponses, GetAdminMeteringPricingErrors, ThrowOnError>({
+    responseValidator: async (data) => await zGetAdminMeteringPricingResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+      { name: "x-kokoro-proxy-secret", type: "apiKey" },
+    ],
+    url: "/v1/admin/billing/metering/pricing",
+    ...options,
+  })
+
+/**
+ * Publish one immutable pricing revision. BFF verifies current platform administrator membership. Current usage profile and settlement semantics are owner fixed; no funds or model dispatch.
+ */
+export const publishAdminMeteringRate = <ThrowOnError extends boolean = false>(
+  options: Options<PublishAdminMeteringRateData, ThrowOnError>,
+): RequestResult<PublishAdminMeteringRateResponses, PublishAdminMeteringRateErrors, ThrowOnError> =>
+  (options.client ?? client).post<PublishAdminMeteringRateResponses, PublishAdminMeteringRateErrors, ThrowOnError>({
+    responseValidator: async (data) => await zPublishAdminMeteringRateResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+      { name: "x-kokoro-proxy-secret", type: "apiKey" },
+    ],
+    url: "/v1/admin/billing/metering/rate-revisions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * Publish one immutable pricing revision. BFF verifies current platform administrator membership. Current usage profile and settlement semantics are owner fixed; no funds or model dispatch.
+ */
+export const publishAdminMeteringPolicy = <ThrowOnError extends boolean = false>(
+  options: Options<PublishAdminMeteringPolicyData, ThrowOnError>,
+): RequestResult<PublishAdminMeteringPolicyResponses, PublishAdminMeteringPolicyErrors, ThrowOnError> =>
+  (options.client ?? client).post<PublishAdminMeteringPolicyResponses, PublishAdminMeteringPolicyErrors, ThrowOnError>({
+    responseValidator: async (data) => await zPublishAdminMeteringPolicyResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+      { name: "x-kokoro-proxy-secret", type: "apiKey" },
+    ],
+    url: "/v1/admin/billing/metering/policy-revisions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   })
 
 /**

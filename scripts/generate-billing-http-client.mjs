@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "90929ef316470f2e9de9eda05d5510761637bd6e"
+const ownerCommit = "35651fcea0d89edb7358a43e83ac1149d7742a01"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2"
+const ownerDigest = "8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -187,6 +187,32 @@ async function closeOwnerResponseSchemas(directory) {
   funding = replaceExactInSource(funding, ".max(255)", ".refine((value) => [...value].length <= 255)", 1, "subject Unicode code-point bound")
   funding = replaceExactInSource(funding, ".max(500)", ".refine((value) => [...value].length <= 500)", 1, "reason Unicode code-point bound")
   source = source.slice(0, fundingStart) + funding + source.slice(fundingEnd)
+  const meteringObjects = {
+    MeteringRational: 1,
+    MeteringRate: 3,
+    MeteringRateConfiguration: 1,
+    MeteringPolicyConfiguration: 1,
+    AdminMeteringRatePublishRequest: 1,
+    AdminMeteringPolicyPublishRequest: 1,
+    MeteringPublication: 1,
+    MeteringPublicationResponse: 1,
+    MeteringRateRevision: 1,
+    MeteringPolicyRevision: 1,
+    AdminMeteringPricingResponse: 2,
+  }
+  for (const [name, expected] of Object.entries(meteringObjects)) {
+    const start = source.indexOf(`export const z${name} =`)
+    assert.ok(start >= 0, `Metering validator ${name} missing`)
+    const next = source.indexOf("export const ", start + 1)
+    const end = next < 0 ? source.length : next
+    let block = source.slice(start, end)
+    const positions = [...block.matchAll(/z\.object\(/gu)].map((match) => match.index)
+    assert.equal(positions.length, expected, `Metering ${name} closed object count drift`)
+    for (const offset of positions.reverse()) block = closeObjectExpression(block, "z.object(", `${name} nested`, offset)
+    // JSON Schema maxLength counts Unicode code points, not JS UTF-16 units.
+    block = block.replace(/\.max\((128|255|500)\)/gu, (_match, bound) => `.refine((value) => [...value].length <= ${bound})`)
+    source = source.slice(0, start) + block + source.slice(end)
+  }
   await writeFile(file, source)
 }
 
@@ -237,7 +263,16 @@ async function generate(directory) {
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
-    ["createAdminCreditGrant", "getCatalog", "getMyCreditAccount", "getMyCreditLedger", "openMyCreditAccount"],
+    [
+      "createAdminCreditGrant",
+      "getAdminMeteringPricing",
+      "getCatalog",
+      "getMyCreditAccount",
+      "getMyCreditLedger",
+      "openMyCreditAccount",
+      "publishAdminMeteringPolicy",
+      "publishAdminMeteringRate",
+    ],
     "Billing HTTP generated operation surface drifted",
   )
   const prettier = path.join(root, "node_modules/prettier/bin/prettier.cjs")
@@ -266,7 +301,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "4.0.0-experimental.4",
+      contract_version: "4.0.0-experimental.5",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },

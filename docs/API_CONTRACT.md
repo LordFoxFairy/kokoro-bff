@@ -1,3 +1,9 @@
+## AGENT-1／CREDIT-1：计价管理Public22.5（2026-10-22）
+
+只新增3个具名管理操作：GET /v1/admin/billing/metering/pricing和POST /v1/admin/billing/metering/{rate-revisions,policy-revisions}，Public22.5／186操作。请求及配置字段从固定Billing experimental.5同语义消费，外部snake_case；新增机器字段仍只在本canonical编辑，data沿owner表示，meta.request_id沿原BFF envelope。POST required key，完整publication_id/reason/configuration固定；201仅正式kind/revision/content_digest/published_at/effective_from，核对应kind和原生效时间。HTTP400输入错/owner正式拒绝，401/403身份或管理权拒绝，409原identity/key漂移，429原限流，502坏owner数据，503依赖/未知；不回echo私有错误。
+
+GET无query／body／Content-Type／framing（包括CL0）／命令头，200 data中rate_revision和policy_revision可独立null，表明未发布；返回最大已发布revision，可未来生效，不用它推断active或未知POST结果。POST1MiB/12层/闭集JSON保原命令，没有默认价格或预算；响应最多1MiB（受原全局更严格cap限制），严格JSON/重复键、当前tenant上下文、协议数值字符串不经Number。billing operator三凭据/u1仅server持有，浏览器不发送owner secret/角色。保原183操作全文与顺序，inverse只构建期使用，SDK正式生成无手改。
+
 ## CREDIT-1：后台非现金积分命令（2026-10-22）
 
 Public22.4新增POST /v1/admin/billing/credit-grants，required Idempotency-Key、strict {funding_id,subject_id,amount_credits,reason,effective_at}。金额为正整数字符串（最多9223372036854），不是micros或货币；首次表单意图冻结v4UUID、key和UTC毫秒生效时间，刷新/未知重试不新建。201 data仅account_id/grant_id/journal_id，加原meta.request_id；不返回合成余额或支付成功。400非法请求，401/403当前身份/成员资格拒绝，409原命令参数漂移，429限流，502坏owner回包，503依赖/未知；提交后失败不证明零效果，只恢复原命令。BFF当前管理员与同tenant成员资格每次核实，body不承载tenant/operator/role/source/price。

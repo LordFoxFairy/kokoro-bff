@@ -915,6 +915,21 @@
       "method": "GET",
       "path": "/v1/admin/model-providers/{provider_id}/upstream-models",
       "operation_id": "listAdminModelProviderUpstreamModels"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/billing/metering/pricing",
+      "operation_id": "getAdminMeteringPricing"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/billing/metering/rate-revisions",
+      "operation_id": "publishAdminMeteringRate"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/billing/metering/policy-revisions",
+      "operation_id": "publishAdminMeteringPolicy"
     }
   ]
 }

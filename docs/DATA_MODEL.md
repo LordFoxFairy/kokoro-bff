@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1：计价事实仍由Billing唯一持有（2026-10-22）
+
+无BFF SQL/Schema/receipt/缓存/配置副本。Billing持有不可变price/policy revision、整数单次预算、永久命令identity/key/digest和audit；BFF仅当前管理员/tenant准入与具名透传/验证。GET是owner同一RR最新配置，不在BFF拼最大revision或根据effective_from推断当前价。未知发布意图仍由后继Admin按原命令保存，不把GET/null当作未提交证明，不落provider Key或计价SQL。
+
 ## CREDIT-1：资金仍由Billing唯一写入（2026-10-22）
 
 BFF无DDL/余额表/资金receipt/权限缓存。Billing永久保存funding身份、幂等键/原payload digest、grant/journal/audit原子效果；IAM拥有当前tenant/member/admin。BFF仅按可信上下文校验并严格转送一次，不写其他owner数据库，也不把列表空/传输失败或超时推断成没有入账。表单恢复意图由后继Admin按原业务样式持有，刷新不主动发放。

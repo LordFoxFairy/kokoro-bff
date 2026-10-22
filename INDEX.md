@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1 计价管理消费者（2026-10-22）
+
+`src/http/routes/billing-metering-admin.ts`拥有三具名route及fresh管理员／同主体准入；`src/infrastructure/clients/owner/billing-metering-wire.ts`消费固定生成类型／严格JSON，`billing-metering.ts`负责固定owner SDK、绝对预算／bounded EOF与完整ACK。Public22.5／Billing35651fc，构建期精确inverse在 `scripts/billing-metering-public-contract.mjs`；对应HTTP、transport及contract回归在 `test/billing-metering-*.test.mjs`，已注册完整门。无新SQL、通用代理或运行兼容。最终门禁／真实HTTP＋PG／未正常激活边界见 `docs/CURRENT.md`。
+
 ## MODEL-1 上游候选读取（2026-10-22）
 
 现 `model-configuration-admin.ts` / `system-model-configuration.ts` 显式 provider upstream-models GET，固定 System6.1。只管理读取候选，无分页／正文／命令头；与准入共用10秒预算，严格回包绑定provider。`provider-model-discovery-public-contract.mjs` 仅构建期完整逆证Public22.2，无运行fallback。后继App/Admin须固定正式Public22.3后接线。

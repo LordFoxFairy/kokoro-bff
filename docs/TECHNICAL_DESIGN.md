@@ -1,3 +1,13 @@
+## AGENT-1／CREDIT-1：计价管理正式消费者（2026-10-22）
+
+沿Root唯一主链继续，BFF主方唯一writer，基线c48a9bc；固定Billing35651fcea0d89edb7358a43e83ac1149d7742a01／experimental.5／8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab，通过原具名生成器消费原5＋新3操作，旧runtime vendor退出。BFF Public22.5在原183操作上增加GET /v1/admin/billing/metering/pricing及POST /v1/admin/billing/metering/{rate-revisions,policy-revisions}，原全文／有序inventory精确逆恢复保护，不做runtime fallback。Admin管理是已批准Kokoro能力差异，不冒称观察到Manus私有后台。
+
+具名route／input-wire／owner client分担HTTP准入、固定Zod/原始JSON和传输；不扩充值组件、不建通用代理／服务／表。所有3操作只当前Product平台管理员和trusted tenant/actor，沿原admin-web-bff精确路由准入；正式派发前重验同一管理员／主体／租户，不扫描充值收款成员。3独立owner凭据和u1沿用，缺配置仅新操作503，不回退个人bearer／旧role header。初始Session、POST body、管理员重验、owner HEAD/EOF/解析共用一个最多10秒绝对预算；取消／超时后不迟派发或回成功，无自动业务重试。
+
+新POST仅具名放行1MiB／12层JSON和64 rate，严格MIME／key／framing／query，无CAS或身份自报；原充值16KiB不改。response以具名最多1MiB与既有更严格全局cap取小，request-id/no-store/JSON/decoded重复键/完整Zod/BigInt与时间及ACK kind/effective_from均验证。GET是最新发布RR单体，rate/policy独立null，可未来生效，不是quote或执行授权，也不证明未知POST未发生。浏览器后继必须冻结原publication_id/key/configuration和时间，恢复容量跟正式配置同步，刷新不自动发布。
+
+写区：三设计、public canonical/inventory/inverse、原Billing pin/vendor/生成器＋派生、新具名HTTP route/owner wire/client、bootstrap和浏览服务3路由及对应测试/脚本注册。无SQL/依赖/正常配置/自动化/连接器改动。先契约与HTTP风险RED→GREEN，再完整七门、真实编译BFF→Billing Nest／独占PG（IAM/session显式夹具），owner发布确认后再App/Admin接线；不以本片标实际扣分或正常页面完成。
+
 ## CREDIT-1：后台非现金积分发放接线（2026-10-22）
 
 主方唯一writer；沿Root唯一主链计划，复用已验Billing 90929ef/4.0.0-experimental.4。Browser→Admin同源adapter→BFF新POST /v1/admin/billing/credit-grants→Billing，新增Public22.4/183；同一closed五字段body和required Idempotency-Key，永久funding_id与key均不改写，BFF不采样/替换effective_at或创建第二份资金receipt。BFF只核当前Product Session/platformAdmin、固定受信tenant和收款user_id的当前IAM成员资格，再将受信operator/tenant编码u1，以独立billing service token/internal secret/operator proxy secret调用owner。不给浏览器owner密钥、角色/tenant参数或余额写旁路；仅非现金发放，不启动模型、工具或真钱支付。
