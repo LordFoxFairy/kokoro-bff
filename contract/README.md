@@ -1,3 +1,7 @@
+## 2026-10-22 当前内部恢复发行
+
+Public23／186及原件SHA34ea71e0保持；内部code-first当前1.3 raw SHA256 `4de1a6c7564f3a994d879cfc93588021c5ef4aeebbcc89959fa574d5b6f16d39`，只增加 `POST /internal/v1/model-admissions/recover`，复用原schema／独立Agent身份，禁proof／旧consumption。Billing唯一固定 `23ff71993f7772219cab8d3a3a4c7fbb4d66f735`／exp10，原件SHA256 `f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654`；正规生成十一操作、原十项保持，旧exp9 vendor退役。精确剥本op核完整1.2 parsed hash64b3d8a5，再过原1.1／1.0及Public原件门；保not、码点、strict交集normalize，无第二DTO／运行fallback。详细验收及未激活边界见CURRENT首节；以下为历史快照。
+
 ## 2026-10-22 内部正式结算发行
 
 Public23／186原件SHA34ea71e0保持。内部code-first新增原admission的settle命令，当前internal1.2原件SHA256 `8b3d9d788434d7a3d67cc42909a9e7f545b7e6464eef84bc760d17b55bf5f126`；精确删除本delta后原internal1.1全图hash保持，再过原1.0保护。唯一Billing固定deab94efc9ee7d86d1d1072481920423d55b36ff／exp9，原件SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`，正规生成十操作，原九项保持；旧exp8 vendor退役无runtime兼容。settle只收原Run与sealed身份，owner／internal schema均拒自报金额、证据原文与身份；新ACK严格三态、整积分／修订上界及原Run绑定。生成器补全not、codepoint与strict-before-intersection，规则直接来自固定owner原件，不手改产物／维护第二DTO。实际验收和未激活边界见CURRENT首节；后续Agent必须固定本次正式提交后消费，不直接引用工作树。

@@ -30,6 +30,9 @@ import type {
   PublishAdminMeteringRateData,
   PublishAdminMeteringRateErrors,
   PublishAdminMeteringRateResponses,
+  RecoverModelAdmissionData,
+  RecoverModelAdmissionErrors,
+  RecoverModelAdmissionResponses,
   SettleModelAdmissionData,
   SettleModelAdmissionErrors,
   SettleModelAdmissionResponses,
@@ -44,6 +47,7 @@ import {
   zOpenMyCreditAccountResponse,
   zPublishAdminMeteringPolicyResponse,
   zPublishAdminMeteringRateResponse,
+  zRecoverModelAdmissionResponse,
   zSettleModelAdmissionResponse,
 } from "./zod.gen.js"
 
@@ -206,6 +210,39 @@ export const createAdmission = <ThrowOnError extends boolean = false>(
       { name: "x-kokoro-subject", type: "apiKey" },
     ],
     url: "/v1/internal/billing/admissions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * Recover only a committed original model budget receipt; a miss does not prove cancellation or permit a new dispatch
+ *
+ * Both execution proof and retired consumption headers are forbidden. No live Agent or IAM call and no new hold. A concurrent original create may commit after a recovery miss; recover again with the original facts and key.
+ */
+export const recoverModelAdmission = <ThrowOnError extends boolean = false>(
+  options: Options<RecoverModelAdmissionData, ThrowOnError>,
+): RequestResult<RecoverModelAdmissionResponses, RecoverModelAdmissionErrors, ThrowOnError> =>
+  (options.client ?? client).post<RecoverModelAdmissionResponses, RecoverModelAdmissionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zRecoverModelAdmissionResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+    ],
+    url: "/v1/internal/billing/admissions/recover",
     ...options,
     headers: {
       "Content-Type": "application/json",

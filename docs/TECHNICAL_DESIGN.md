@@ -1,3 +1,13 @@
+## AGENT-1／CREDIT-1：原预占仅恢复消费（2026-10-22，本地已验）
+
+本片已按下述设计完成实现和本地验收：778输入无漂移、完整七门0、定向39／真实PG1／隔离实际四方30检查通过，独审Approved。实际范围和未正常激活边界见CURRENT首节；以下保留实施设计，不作为新增任务。
+
+主方唯一writer，基线ebe7ca5。固定Billing23ff71993f7772219cab8d3a3a4c7fbb4d66f735 exp10原件／digest，唯一窄生成十一操作，原十项保持，删除旧exp9 vendor。Public23、SQL／依赖及其他owner pin不改。内部code-first1.3仅新增POST /internal/v1/model-admissions/recover，复用原六字段／held创建ACK及错误schema，无新editable DTO。
+
+仍原独立Agent模型预算credential与原durable Chat提交者派生payer；recover不要求亦不接受proof／旧consumption header，不调Session／IAM／live project或Agent prepared；create proof要求与settle语义原样保持。原route明确admit／recover／settle三分支，独立具名owner recovery client，原创建ACK校验提取供create／recover共用，沿现bounded transport单发及总deadline。200严格原六事实／held／原时间，404只表示该次查无已提交receipt，不证明在途create取消或允许新派发；unknown不自动换key／新attempt／重发供应商。不记录新资金或补旧fence执行授权。
+
+写区为单一固定artifact／生成器、内部contract／现route、新owner client及共享ACK校验、直接HTTP／契约／真实PG退休来源回路和现文档。先缺operation／route RED，补proof禁止／ACK绑定／miss只一调用／迟到取消与物理header负控；保完整旧1.2→1.1→1.0全图和Public raw门。停写后完整BFF七门、正式生成、独立只读审查，尽量补actual Billing配对；QA wire peer与真实资金验收分开。后继Agent金融关联／逐事件ACK／历史sealed及唯一派发仍属同一主链，真钱支付不做。
+
 ## AGENT-1／CREDIT-1：正式结算消费者（2026-10-22，实施门）
 
 沿0082b5c现内部模型预算能力，主方唯一writer。固定Billing deab94efc9ee7d86d1d1072481920423d55b36ff exp9原件及SHA，窄生成增加settle一操作、原九操作保持；删除不再引用的exp8 vendor，不改Public23、SQL、依赖或其他owner pin。

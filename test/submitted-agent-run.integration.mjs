@@ -11,7 +11,7 @@ import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/po
 import { buildAgentDispatchPayload } from "../dist/domain/chat/agent-dispatch.js"
 
 // Real BFF repository + HTTP route; the named Billing peer is a wire fixture, not a money/model execution claim.
-async function settleRetiredSubmission(repository, tenant, runId, user) {
+async function recoverAndSettleRetiredSubmission(repository, tenant, runId, user) {
   const dir = await mkdtemp(join(tmpdir(), "kokoro-retired-settlement-")),
     file = join(dir, "credential.json"),
     secret = "agent-only-" + "a".repeat(40),
@@ -45,13 +45,31 @@ async function settleRetiredSubmission(repository, tenant, runId, user) {
       settlement_id: null,
       updated_at: "2026-10-22T00:00:00.000Z",
     }
+    const recoveryWire = {
+      run_id: runId,
+      attempt_id: ack.attempt_id,
+      request_ref: "original-attempt-request",
+      attempt_binding_digest: "b".repeat(64),
+      planned_digest: "c".repeat(64),
+      final_request_digest: "d".repeat(64),
+    }
+    const recoveryAck = {
+      ...recoveryWire,
+      admission_id: admissionId,
+      hold_id: "44444444-4444-4444-8444-444444444444",
+      budget_credits: "10",
+      pricing_snapshot_digest: "e".repeat(64),
+      status: "held",
+      created_at: "2026-10-22T00:00:00.000Z",
+      updated_at: "2026-10-22T00:00:00.000Z",
+    }
     const billing = await listen(
       createServer(async (req, res) => {
         const chunks = []
         for await (const c of req) chunks.push(c)
         calls.push({ headers: req.headers, url: req.url, body: JSON.parse(Buffer.concat(chunks).toString()) })
         res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": req.headers["x-request-id"] })
-        res.end(JSON.stringify({ data: ack }))
+        res.end(JSON.stringify({ data: req.url === "/v1/internal/billing/admissions/recover" ? recoveryAck : ack }))
       }),
     )
     const config = {
@@ -80,6 +98,26 @@ async function settleRetiredSubmission(repository, tenant, runId, user) {
     assert.equal(calls[0].headers["x-kokoro-tenant-id"], "u1." + Buffer.from(tenant).toString("base64url"))
     assert.equal(calls[0].headers["x-kokoro-subject"], "u1." + Buffer.from(user).toString("base64url"))
     assert.equal(calls[0].headers["x-billing-execution-proof"], undefined)
+    const recovered = await fetch(`${base}/internal/v1/model-admissions/recover`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${secret}`,
+        "content-type": "application/json",
+        "idempotency-key": "original-admission-command",
+        "x-request-id": "retired-recovery",
+      },
+      body: JSON.stringify(recoveryWire),
+    })
+    assert.equal(recovered.status, 200)
+    assert.deepEqual(await recovered.json(), { data: recoveryAck })
+    assert.equal(calls.length, 2)
+    assert.equal(calls[1].url, "/v1/internal/billing/admissions/recover")
+    assert.deepEqual(calls[1].body, recoveryWire)
+    assert.equal(calls[1].headers["x-kokoro-tenant-id"], calls[0].headers["x-kokoro-tenant-id"])
+    assert.equal(calls[1].headers["x-kokoro-subject"], calls[0].headers["x-kokoro-subject"])
+    assert.equal(calls[1].headers["idempotency-key"], "original-admission-command")
+    assert.equal(calls[1].headers["x-billing-execution-proof"], undefined)
+    assert.equal(calls[1].headers["x-billing-consumption-token"], undefined)
   } finally {
     for (const server of servers.reverse())
       await new Promise((resolve) => {
@@ -167,7 +205,7 @@ integration("submitted Run source survives retirement, but rejects foreign and i
     )
     assert.deepEqual(await repository.readSubmittedAgentRun(input), original)
     const retired = await facts()
-    await settleRetiredSubmission(repository, tenant, ids.run, user)
+    await recoverAndSettleRetiredSubmission(repository, tenant, ids.run, user)
     assert.deepEqual(await facts(), retired)
     await repository.readSubmittedAgentRun(input)
     assert.deepEqual(await facts(), retired)

@@ -69,7 +69,7 @@ test("internal settlement is separately declared, proof-free and Agent-only with
   const { readFile } = await import("node:fs/promises"),
     { load } = await import("js-yaml")
   const doc = load(await readFile(new URL("../contract/openapi/internal/v1/openapi.yaml", import.meta.url), "utf8"))
-  assert.equal(doc.info.version, "1.2.0")
+  assert.equal(doc.info.version, "1.3.0")
   const op = doc.paths["/internal/v1/model-admissions/{admission_id}/settle"].post
   assert.equal(op.operationId, "settleAgentModelAdmission")
   assert.deepEqual(op.security, [{ AgentModelAdmissionBearer: [] }])

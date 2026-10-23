@@ -724,6 +724,32 @@ export const zCreateAdmissionHeaders = z.object({
  */
 export const zCreateAdmissionResponse = zAdmissionResponse
 
+export const zRecoverModelAdmissionBody = zAdmissionCreateRequest
+
+export const zRecoverModelAdmissionHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+  "idempotency-key": z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[\x21-\x7e]{8,128}$(?![\s\S])/),
+})
+
+/**
+ * Original held creation receipt, including after settlement; not current status
+ */
+export const zRecoverModelAdmissionResponse = zAdmissionResponse
+
 export const zSettleModelAdmissionBody = zAdmissionSettlementRequest
 
 export const zSettleModelAdmissionHeaders = z.object({

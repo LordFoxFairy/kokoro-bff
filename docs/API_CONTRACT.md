@@ -1,3 +1,9 @@
+## AGENT-1／CREDIT-1：原预算仅恢复内部HTTP（2026-10-22，本地已验）
+
+固定Billing23ff719／exp10（raw f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654），十一操作正规窄生成。内部1.3原件SHA256 `4de1a6c7564f3a994d879cfc93588021c5ef4aeebbcc89959fa574d5b6f16d39`，原1.2完整parsed hash `64b3d8a5d73c4b07e25f4283f932a755a513f0a409d924eb27403f152e7fdb29` 由仅删除recover／还原版本精确承接，再串原1.1／1.0保护。内部1.3唯一新增POST /internal/v1/model-admissions/recover，Agent专用机器credential、原durable Run提交者、原永久key；复用AgentModelAdmissionRequest／Response／Error，body仍六事实、禁proof／旧consumption header及身份／金额。200为原held创建ACK，不是GET当前态；404不是取消、没有资金或可派发证明。known bindings／whole budget／UTC时间严格核验、no-store／request ID／bounded EOF／总deadline及取消保持；仅一次owner recover调用，不回落到create。原create／settle／Public23不改语义，无运行alias。
+
+以下旧版本段落保留当时发行快照，不覆盖本节当前1.3／exp10。
+
 ## AGENT-1／CREDIT-1：正式结算内部HTTP（2026-10-22）
 
 固定Billing deab94efc9ee7d86d1d1072481920423d55b36ff／exp9，raw SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`；单一窄生成十操作，原九项保持，旧exp8 vendor退役，无alias。内部code-first1.2新增唯一POST `/internal/v1/model-admissions/{admission_id}/settle`；Public23／186及原raw保持。request只有owner原run_id／evidence_event_id／evidence_revision／evidence_digest，必需原永久Idempotency-Key，禁止proof与旧consumption header；create仍必需proof。独立kokoro-agent/model_admission/tenant credential，不信自报payer，不借浏览器／IAM／Scheduler凭据。

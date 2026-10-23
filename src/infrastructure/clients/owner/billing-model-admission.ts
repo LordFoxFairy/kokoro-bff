@@ -1,10 +1,9 @@
-import { isDeepStrictEqual } from "node:util"
 import type { BffConfig } from "../../../config/runtime.js"
 import type { RequestContext } from "../../../domain/request-context.js"
 import { createClient } from "../../../generated/billing-http/client/client.gen.js"
 import { createAdmission } from "../../../generated/billing-http/sdk.gen.js"
 import type { AdmissionCreateRequest, AdmissionResponse } from "../../../generated/billing-http/types.gen.js"
-import { zAdmissionResponse } from "../../../generated/billing-http/zod.gen.js"
+import { originalModelAdmissionAck } from "./billing-model-admission-ack.js"
 import { billingModelTransport, billingModelDenial } from "./billing-model-transport.js"
 import { billingPersonalIdentity } from "./billing-personal-read.js"
 
@@ -46,17 +45,8 @@ export async function requestBillingModelAdmission(
     })
     check()
     if (result.response?.status === 201) {
-      const parsed = zAdmissionResponse.safeParse(result.data)
-      if (!parsed.success || !isDeepStrictEqual(parsed.data, result.data)) return fail(502, "upstream_invalid")
-      const data = parsed.data.data
-      if (
-        Object.entries(body).some(([key, value]) => data[key as keyof typeof data] !== value) ||
-        data.status !== "held" ||
-        data.created_at !== data.updated_at ||
-        new Date(data.created_at).toISOString() !== data.created_at
-      )
-        return fail(502, "upstream_invalid")
-      return { ok: true, data: parsed.data }
+      const data = originalModelAdmissionAck(body, result.data)
+      return data === null ? fail(502, "upstream_invalid") : { ok: true, data }
     }
     if (!result.response) return fail(invalid() ? 502 : 503, invalid() ? "upstream_invalid" : "unavailable")
     const denial = billingModelDenial(result.response.status, result.error)

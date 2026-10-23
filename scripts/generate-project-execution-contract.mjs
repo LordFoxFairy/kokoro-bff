@@ -22,7 +22,7 @@ const content = (schema) => ({ "application/json": { schema } })
 const response = (description, schema) => ({ description, headers: { "x-request-id": { schema: { type: "string" } } }, content: content(schema) })
 const doc = {
   openapi: "3.1.0",
-  info: { title: "Kokoro BFF internal project execution binding", version: "1.2.0" },
+  info: { title: "Kokoro BFF internal project execution binding", version: "1.3.0" },
   paths: {
     "/internal/v1/model-admissions": {
       post: {
@@ -53,6 +53,38 @@ const doc = {
             code,
             response(description, {
               $ref: code === 201 ? "#/components/schemas/AgentModelAdmissionResponse" : "#/components/schemas/AgentModelAdmissionError",
+            }),
+          ]),
+        ),
+      },
+    },
+    "/internal/v1/model-admissions/recover": {
+      post: {
+        operationId: "recoverAgentModelAdmission",
+        summary: "Recover only an already committed original budget receipt; never a new reserve or execution permit",
+        description:
+          "Execution proof and retired consumption headers are forbidden. A 404 means only no committed receipt at the observed point; an original create may still commit later.",
+        "x-kokoro-owner": "kokoro-bff",
+        "x-kokoro-visibility": "internal",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "permanent-billing-command-receipt",
+        "x-kokoro-permission": "agent.model_admission_recovery",
+        security: [{ AgentModelAdmissionBearer: [] }],
+        parameters: [{ in: "header", name: "Idempotency-Key", required: true, schema: { type: "string", minLength: 8, maxLength: 128, pattern: "^[!-~]+$" } }],
+        requestBody: { required: true, content: content({ $ref: "#/components/schemas/AgentModelAdmissionRequest" }) },
+        responses: Object.fromEntries(
+          [
+            [200, "Original held creation receipt, including after settlement"],
+            [400, "Invalid closed request; execution proof and retired consumption headers forbidden"],
+            [403, "Dedicated service or original payer denied"],
+            [404, "Submission hidden or no committed original receipt at this observation; not proof of cancellation"],
+            [409, "Permanent command identity conflict"],
+            [502, "Invalid original receipt acknowledgement"],
+            [503, "Dependency or shared deadline unavailable"],
+          ].map(([code, description]) => [
+            code,
+            response(description, {
+              $ref: code === 200 ? "#/components/schemas/AgentModelAdmissionResponse" : "#/components/schemas/AgentModelAdmissionError",
             }),
           ]),
         ),
@@ -157,4 +189,4 @@ if (process.argv.includes("--write")) {
   await mkdir(dirname(output), { recursive: true })
   await writeFile(output, body)
 } else if ((await readFile(output, "utf8")) !== body) throw Error("BFF project execution contract drift")
-console.log(`BFF internal1.2.0 ${createHash("sha256").update(body).digest("hex")}`)
+console.log(`BFF internal1.3.0 ${createHash("sha256").update(body).digest("hex")}`)

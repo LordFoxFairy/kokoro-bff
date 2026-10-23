@@ -6,7 +6,10 @@ import { load } from "js-yaml"
 
 test("internal admission adds one Agent-only surface without changing original IAM binding or public product API", async () => {
   const doc = load(await readFile(new URL("../contract/openapi/internal/v1/openapi.yaml", import.meta.url), "utf8"))
-  assert.equal(doc.info.version, "1.2.0")
+  assert.equal(doc.info.version, "1.3.0")
+  delete doc.paths["/internal/v1/model-admissions/recover"]
+  doc.info.version = "1.2.0"
+  assert.equal(createHash("sha256").update(JSON.stringify(doc)).digest("hex"), "64b3d8a5d73c4b07e25f4283f932a755a513f0a409d924eb27403f152e7fdb29")
   delete doc.paths["/internal/v1/model-admissions/{admission_id}/settle"]
   for (const name of ["AgentModelSettlementRequest", "AgentModelSettlementResponse", "AgentModelSettlementError"]) delete doc.components.schemas[name]
   doc.info.version = "1.1.0"

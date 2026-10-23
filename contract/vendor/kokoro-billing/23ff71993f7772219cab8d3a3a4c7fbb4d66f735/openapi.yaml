@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 4.0.0-experimental.9
+  version: 4.0.0-experimental.10
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -869,6 +869,163 @@ paths:
         representation (held); GET reads the current financial status.
         A dependency failure permits only recovery with the same command, never
         an automatic new attempt, price guess, free usage or duplicate dispatch.
+  /v1/internal/billing/admissions/recover:
+    post:
+      operationId: recoverModelAdmission
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: experimental
+      x-kokoro-idempotency: required
+      x-kokoro-permission: web-bff-model-admission
+      security:
+        - serviceCaller: []
+          internalSecret: []
+          serviceBearer: []
+          tenantContext: []
+          subjectContext: []
+      parameters:
+        - $ref: "#/components/parameters/PersonalTenantId"
+        - name: x-kokoro-subject
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 5
+            maxLength: 1363
+            pattern: ^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])
+        - name: x-kokoro-service
+          in: header
+          required: true
+          schema:
+            type: string
+            const: web-bff
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+            pattern: ^[\x21-\x7e]{8,128}$(?![\s\S])
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdmissionCreateRequest"
+      responses:
+        "200":
+          description: Original held creation receipt, including after settlement; not current status
+          headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdmissionResponse"
+        "400":
+          description: Request failed
+          headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+          x-kokoro-errors:
+            - code: billing.invalid_request
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+          x-kokoro-errors:
+            - code: billing.unauthenticated
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+          x-kokoro-errors:
+            - code: billing.forbidden
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+          x-kokoro-errors:
+            - code: billing.not_found
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict
+          headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+          x-kokoro-errors:
+            - code: billing.idempotency_conflict
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal failure
+          headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+          x-kokoro-errors:
+            - code: billing.internal_error
+              retryable: false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Dependency unavailable
+          headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
+            x-request-id:
+              $ref: "#/components/headers/RequestId"
+          x-kokoro-errors:
+            - code: billing.dependency_unavailable
+              retryable: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      description: Both execution proof and retired consumption headers are forbidden. No live Agent or IAM call and no new hold. A concurrent
+        original create may commit after a recovery miss; recover again with the original facts and key.
+      summary: Recover only a committed original model budget receipt; a miss does not prove cancellation or permit a new dispatch
   /v1/internal/billing/admissions/{admission_id}:
     get:
       operationId: getAdmission

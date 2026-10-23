@@ -12,9 +12,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "deab94efc9ee7d86d1d1072481920423d55b36ff"
+const ownerCommit = "23ff71993f7772219cab8d3a3a4c7fbb4d66f735"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924"
+const ownerDigest = "f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -334,6 +334,7 @@ async function generate(directory) {
       "openMyCreditAccount",
       "publishAdminMeteringPolicy",
       "publishAdminMeteringRate",
+      "recoverModelAdmission",
       "settleModelAdmission",
     ],
     "Billing HTTP generated operation surface drifted",
@@ -364,7 +365,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "4.0.0-experimental.9",
+      contract_version: "4.0.0-experimental.10",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },

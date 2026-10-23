@@ -4,7 +4,7 @@ import { zErrorResponse } from "../../../generated/billing-http/zod.gen.js"
 import { strictParseRawJson } from "../../raw-json.js"
 export type ModelBillingFailure = Readonly<{ ok: false; status: 400 | 403 | 404 | 409 | 422 | 502 | 503; code: string }>
 const failure = (status: ModelBillingFailure["status"], code: string): ModelBillingFailure => ({ ok: false, status, code })
-/** Shared bounded transport for these two fixed model commands, never an arbitrary owner proxy. */
+/** Shared bounded transport for the fixed reserve, recover and settlement commands, never an arbitrary owner proxy. */
 export function billingModelTransport(config: BffConfig, context: RequestContext, signal: AbortSignal, deadlineAt: number) {
   const check = () => {
     if (signal.aborted || Date.now() >= deadlineAt) throw new Error("model_admission_cancelled")

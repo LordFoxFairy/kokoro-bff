@@ -1,3 +1,11 @@
+## AGENT-1／CREDIT-1：原预占恢复BFF消费者已本地验收（2026-10-22）
+
+固定Billing `23ff71993f7772219cab8d3a3a4c7fbb4d66f735`／exp10，十一操作正规生成，原十操作保持；内部1.3 raw SHA256 `4de1a6c7564f3a994d879cfc93588021c5ef4aeebbcc89959fa574d5b6f16d39`。仅加recover，复用六字段与原held ACK，无新DTO／SQL／依赖／兼容路径；Public23原字节及原internal1.2→1.1→1.0全图保护通过。默认未配置不触达owner，首次create仍必需proof，recover明确禁proof／旧consumption，只用原提交者／永久key，不回落create。
+
+主方778非文档输入冻结无漂移，完整七门全0：format／lint／typecheck／contract1008 PASS／architecture36 PASS／默认1694 PASS与3原资源SKIP／build。39定向PASS，真实BFF来源PG＋route退休／terminal／会话移动软删回路1 PASS／0SKIP；独立只读审查Approved。实际隔离BFF HTTP／PG→Billing runtime／PG、原Agent HTTP／repository及IAM HTTP／PG／Redis配对30检查通过：首次预算被授权后关停Agent与IAM进程，原key无proof恢复仍回原ACK，十表含xmin逐字不变，miss／冲突也不改资金或receipt，不赋新执行权。只一次QA100发放／10预占，无usage/capture，计价为明确合成QA，不冒真实供应商费用／正常会话；Chat事实显式seed，签名JWKS具名fixture。库94→94，自有IAM Redis prefix清理完成，正常配置／资金／服务未改，零实际模型／工具调用。
+
+契约2项与HTTP8项实际RED保留，再实现与完整门通过；原not／码点／strict交集生成normalize不改。Root＋12子仓非递归fetch均成功，main无新增。本片仅本地交付，未PR合并或正常激活；紧接Agent金融关联／逐事件持久ACK与历史sealed／崩溃恢复，再装配唯一派发及真实用量结算，不勾整链完成。
+
 ## AGENT-1／CREDIT-1：正式结算BFF消费者已本地验收（2026-10-22）
 
 固定Billing deab94efc9ee7d86d1d1072481920423d55b36ff／exp9，原件SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`；正规生成十操作、原九项消费保持，旧exp8 vendor删除，无新依赖／SQL／Schema或运行兼容。Public23／186及raw SHA34ea71e0原字节保持；内部code-first1.2新增settle，raw SHA256 `8b3d9d788434d7a3d67cc42909a9e7f545b7e6464eef84bc760d17b55bf5f126`。本delta精确逆回原1.1 parsed全图，再过原1.0 oracle；未删弱历史保护。

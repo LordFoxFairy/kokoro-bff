@@ -551,6 +551,61 @@ export type CreateAdmissionResponses = {
 
 export type CreateAdmissionResponse = CreateAdmissionResponses[keyof CreateAdmissionResponses]
 
+export type RecoverModelAdmissionData = {
+  body: AdmissionCreateRequest
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+    "idempotency-key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/internal/billing/admissions/recover"
+}
+
+export type RecoverModelAdmissionErrors = {
+  /**
+   * Request failed
+   */
+  400: ErrorResponse
+  /**
+   * Authentication required
+   */
+  401: ErrorResponse
+  /**
+   * Forbidden
+   */
+  403: ErrorResponse
+  /**
+   * Not found
+   */
+  404: ErrorResponse
+  /**
+   * Conflict
+   */
+  409: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type RecoverModelAdmissionError = RecoverModelAdmissionErrors[keyof RecoverModelAdmissionErrors]
+
+export type RecoverModelAdmissionResponses = {
+  /**
+   * Original held creation receipt, including after settlement; not current status
+   */
+  200: AdmissionResponse
+}
+
+export type RecoverModelAdmissionResponse = RecoverModelAdmissionResponses[keyof RecoverModelAdmissionResponses]
+
 export type SettleModelAdmissionData = {
   body: AdmissionSettlementRequest
   headers: {

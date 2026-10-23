@@ -2,7 +2,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro BFF internal project execution binding
-  version: 1.2.0
+  version: 1.3.0
 paths:
   /internal/v1/model-admissions:
     post:
@@ -101,6 +101,106 @@ paths:
                 $ref: '#/components/schemas/AgentModelAdmissionError'
         '502':
           description: Invalid upstream acknowledgement
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentModelAdmissionError'
+        '503':
+          description: Dependency or shared deadline unavailable
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentModelAdmissionError'
+  /internal/v1/model-admissions/recover:
+    post:
+      operationId: recoverAgentModelAdmission
+      summary: Recover only an already committed original budget receipt; never a new reserve or execution permit
+      description: >-
+        Execution proof and retired consumption headers are forbidden. A 404 means only no committed receipt at the observed point; an
+        original create may still commit later.
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: internal
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: permanent-billing-command-receipt
+      x-kokoro-permission: agent.model_admission_recovery
+      security:
+        - AgentModelAdmissionBearer: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+            pattern: ^[!-~]+$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentModelAdmissionRequest'
+      responses:
+        '200':
+          description: Original held creation receipt, including after settlement
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentModelAdmissionResponse'
+        '400':
+          description: Invalid closed request; execution proof and retired consumption headers forbidden
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentModelAdmissionError'
+        '403':
+          description: Dedicated service or original payer denied
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentModelAdmissionError'
+        '404':
+          description: Submission hidden or no committed original receipt at this observation; not proof of cancellation
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentModelAdmissionError'
+        '409':
+          description: Permanent command identity conflict
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentModelAdmissionError'
+        '502':
+          description: Invalid original receipt acknowledgement
           headers:
             x-request-id:
               schema:
