@@ -2,9 +2,10 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SubmittedAgentRunReader } from "../../application/ports/submitted-agent-run-reader.js"
 import { agentModelAdmissionCredentialTenant } from "../../auth/agent-model-admission-credential.js"
+import { requestBillingModelSettlement } from "../../infrastructure/clients/owner/billing-model-settlement.js"
 import { requestBillingModelAdmission } from "../../infrastructure/clients/owner/billing-model-admission.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
-import { agentModelAdmissionRequest } from "../model-admission.contract.js"
+import { agentModelAdmissionRequest, agentModelSettlementRequest } from "../model-admission.contract.js"
 import { readBody, requestId } from "../request.js"
 import { send } from "../response.js"
 
@@ -15,13 +16,23 @@ export async function agentModelAdmissionRoute(
   config: BffConfig,
   source: SubmittedAgentRunReader | null,
 ): Promise<void> {
+  const settlementId = /^\/internal\/v1\/model-admissions\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/settle$(?![\s\S])/u.exec(
+    request.url ?? "",
+  )?.[1]
+  const settling = (request.url ?? "").startsWith("/internal/v1/model-admissions/")
   const id = requestId(request)
   response.setHeader("x-request-id", id)
   const failure = (status: number, code: string) => {
     if (!response.destroyed && !response.writableEnded)
-      send(response, status, { error: { code: `model_admission_${code}`, message: "Model budget admission is unavailable", retryable: status === 503 } })
+      send(response, status, {
+        error: {
+          code: `${settling ? "model_settlement" : "model_admission"}_${code}`,
+          message: settling ? "Model settlement is unavailable" : "Model budget admission is unavailable",
+          retryable: status === 503,
+        },
+      })
   }
-  if (request.method !== "POST" || request.url !== "/internal/v1/model-admissions") {
+  if (request.method !== "POST" || (settling ? settlementId === undefined : request.url !== "/internal/v1/model-admissions")) {
     failure(400, "invalid_request")
     return
   }
@@ -49,8 +60,7 @@ export async function agentModelAdmissionRoute(
   if (
     !key ||
     !/^[\x21-\x7e]{8,128}$(?![\s\S])/u.test(key) ||
-    !proof ||
-    !/^[\x21-\x7e]{1,16384}$(?![\s\S])/u.test(proof) ||
+    (settling ? request.headers["x-billing-execution-proof"] !== undefined : !proof || !/^[\x21-\x7e]{1,16384}$(?![\s\S])/u.test(proof)) ||
     request.headers["x-billing-consumption-token"] !== undefined ||
     mime?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json" ||
     !/^[A-Za-z0-9._:-]{1,128}$(?![\s\S])/u.test(id)
@@ -83,34 +93,35 @@ export async function agentModelAdmissionRoute(
       try {
         const bytes = await readBody(request, 16_384)
         if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) throw new Error("model_admission_invalid_json")
-        body = agentModelAdmissionRequest.parse(strictParseRawJson(bytes))
+        const input = strictParseRawJson(bytes)
+        // The two commands retain independent required/forbidden proof semantics.
+        body =
+          settlementId === undefined
+            ? { kind: "admit" as const, body: agentModelAdmissionRequest.parse(input), proof: proof! }
+            : { kind: "settle" as const, admissionId: settlementId, body: agentModelSettlementRequest.parse(input) }
       } catch {
         check()
         failure(400, "invalid_request")
         return
       }
       check()
-      const origin = await source.readSubmittedAgentRun({ tenantId: tenant, runId: body.run_id, signal })
+      const origin = await source.readSubmittedAgentRun({ tenantId: tenant, runId: body.body.run_id, signal })
       check()
-      if (!origin || origin.tenantId !== tenant || origin.runId !== body.run_id) {
+      if (!origin || origin.tenantId !== tenant || origin.runId !== body.body.run_id) {
         failure(404, "not_found")
         return
       }
-      const result = await requestBillingModelAdmission(
-        config,
-        { requestId: id, identity: { namespace: tenant, userId: origin.userId } },
-        body,
-        key,
-        proof,
-        signal,
-        deadlineAt,
-      )
+      const context = { requestId: id, identity: { namespace: tenant, userId: origin.userId } }
+      const result =
+        body.kind === "admit"
+          ? await requestBillingModelAdmission(config, context, body.body, key, body.proof, signal, deadlineAt)
+          : await requestBillingModelSettlement(config, context, body.admissionId, body.body, key, signal, deadlineAt)
       check()
       if (!result.ok) {
-        failure(result.status, result.code.replace(/^model_admission_/u, ""))
+        failure(result.status, result.code.replace(/^model_(?:admission|settlement)_/u, ""))
         return
       }
-      send(response, 201, result.data)
+      send(response, body.kind === "admit" ? 201 : 200, result.data)
     }
     await Promise.race([
       work(),

@@ -1,3 +1,11 @@
+## AGENT-1／CREDIT-1：正式结算内部HTTP（2026-10-22）
+
+固定Billing deab94efc9ee7d86d1d1072481920423d55b36ff／exp9，raw SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`；单一窄生成十操作，原九项保持，旧exp8 vendor退役，无alias。内部code-first1.2新增唯一POST `/internal/v1/model-admissions/{admission_id}/settle`；Public23／186及原raw保持。request只有owner原run_id／evidence_event_id／evidence_revision／evidence_digest，必需原永久Idempotency-Key，禁止proof与旧consumption header；create仍必需proof。独立kokoro-agent/model_admission/tenant credential，不信自报payer，不借浏览器／IAM／Scheduler凭据。
+
+200为原sealed命令ACK：admission／Run／attempt、原证据三字段、captured／released／pending_reconciliation及reason、整Credit字符串、usage／settlement引用与UTC毫秒时间。字段、三态闭集与上界由固定owner generated schema定义，规范化补全not／codepoint及strict-before-intersection，不复制第二手写DTO。BFF核已知admission／Run／证据逐项相同；attempt由owner绑定、后继Agent再核原attempt。旧pending ACK不变为当前GET结果；不回原证据／价格／凭据，不接受调用方金额／usage。
+
+原提交者经durable reader派生，用户退出／Run terminal／Conversation移动软删不触发新Session／IAM／live project准入；Billing仍核原Admission关联。400／403／404／409／422／502／503映射固定model_settlement码，不透owner错误message；no-store／request-id、单次共享deadline／取消、bounded EOF／原key恢复保持。未知结果不自动重发或重定向，不以pending授新派发。原internal1.1及1.0全图有精确逆保护；默认未配置独立credential不接触peer。
+
 ## AGENT-1：内部预算入口／Billing exp8消费（2026-10-22，已实施）
 
 public23.0／186完全不变。现内部code-first生成链新增POST /internal/v1/model-admissions（createAgentModelAdmission），internal1.1；独立AgentModelAdmissionBearer，权限agent.model_admission，非浏览器／人类Bearer／IAM绑定读取者。body上限16KiB（覆盖512码点双引用的转义表示），闭集为run_id、attempt_id、request_ref、attempt_binding_digest、planned_digest、final_request_digest；必需单一Idempotency-Key8..128和x-billing-execution-proof1..16384 visible ASCII，不接tenant/user/recovery。成功201原held Admission及完整绑定／整数预算／snapshot摘要／毫秒UTC时间；原receipt恢复亦201原表示，不返回当前状态代替原回执。

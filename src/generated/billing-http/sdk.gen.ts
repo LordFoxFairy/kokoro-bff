@@ -30,6 +30,9 @@ import type {
   PublishAdminMeteringRateData,
   PublishAdminMeteringRateErrors,
   PublishAdminMeteringRateResponses,
+  SettleModelAdmissionData,
+  SettleModelAdmissionErrors,
+  SettleModelAdmissionResponses,
 } from "./types.gen.js"
 import {
   zCreateAdminCreditGrantResponse,
@@ -41,6 +44,7 @@ import {
   zOpenMyCreditAccountResponse,
   zPublishAdminMeteringPolicyResponse,
   zPublishAdminMeteringRateResponse,
+  zSettleModelAdmissionResponse,
 } from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
@@ -202,6 +206,34 @@ export const createAdmission = <ThrowOnError extends boolean = false>(
       { name: "x-kokoro-subject", type: "apiKey" },
     ],
     url: "/v1/internal/billing/admissions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+export const settleModelAdmission = <ThrowOnError extends boolean = false>(
+  options: Options<SettleModelAdmissionData, ThrowOnError>,
+): RequestResult<SettleModelAdmissionResponses, SettleModelAdmissionErrors, ThrowOnError> =>
+  (options.client ?? client).post<SettleModelAdmissionResponses, SettleModelAdmissionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zSettleModelAdmissionResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+    ],
+    url: "/v1/internal/billing/admissions/{admission_id}/settle",
     ...options,
     headers: {
       "Content-Type": "application/json",

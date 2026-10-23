@@ -4,6 +4,7 @@ import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
+import { load } from "js-yaml"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -11,9 +12,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "d34502595e2cb1ac12e5b57fb372497ef04c90fd"
+const ownerCommit = "deab94efc9ee7d86d1d1072481920423d55b36ff"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "2c65b64c896a85cb89e6b8f23ee9802b6e5cf2440d9a8debaa23973f5c199b6e"
+const ownerDigest = "7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -174,6 +175,8 @@ async function closeOwnerResponseSchemas(directory) {
     "AdmissionCreateRequest",
     "Admission",
     "AdmissionResponse",
+    "AdmissionSettlementRequest",
+    "AdmissionSettlementResponse",
   ]) {
     source = closeGeneratedObject(source, schemaName)
   }
@@ -203,6 +206,47 @@ async function closeOwnerResponseSchemas(directory) {
       `${name} identity code-point bounds`,
     )
     source = source.slice(0, start) + normalized + source.slice(end)
+  }
+  // The generator omits JSON Schema `not` and uses UTF-16 maxLength. Preserve the fixed owner's exact rules, not a second editable wire schema.
+  const ownerSchemas = load(await readFile(vendorPath, "utf8")).components.schemas
+  for (const name of ["AdmissionSettlementRequest", "AdmissionSettlement"]) {
+    const start = source.indexOf(`export const z${name} =`)
+    assert.ok(start >= 0, `Settlement validator ${name} missing`)
+    const next = source.indexOf("export const ", start + 1)
+    const end = next < 0 ? source.length : next
+    let block = source.slice(start, end)
+    block = replaceExactInSource(block, ".max(512)", ".refine((value) => [...value].length <= 512).meta({ maxLength: 512 })", 1, `${name} Run code-point bound`)
+    const not = ownerSchemas[name].properties.evidence_revision.not
+    assert.equal(typeof not.pattern, "string")
+    block = replaceExactInSource(
+      block,
+      ".max(19)",
+      `.max(19).refine((value) => !new RegExp(${JSON.stringify(not.pattern)}).test(value)).meta(${JSON.stringify({ not })})`,
+      1,
+      `${name} revision upper bound`,
+    )
+    if (name === "AdmissionSettlement") {
+      const creditNot = ownerSchemas[name].properties.captured_credits.not
+      assert.deepEqual(creditNot, ownerSchemas[name].properties.released_credits.not)
+      block = replaceExactInSource(
+        block,
+        ".max(13)",
+        `.max(13).refine((value) => !new RegExp(${JSON.stringify(creditNot.pattern)}).test(value)).meta(${JSON.stringify({ not: creditNot })})`,
+        2,
+        "whole Credit upper bounds",
+      )
+      const positions = [...block.matchAll(/z\.object\(/gu)].map((x) => x.index)
+      assert.equal(positions.length, 4, "Settlement three partial branches plus one closed base")
+      block = closeObjectExpression(block, "z.object(", "Settlement closed base", positions[3])
+      // Zod intersection accepts keys stripped by a permissive partial branch. Validate the complete strict base *before* intersection; both expressions are generated from the same owner schema.
+      const baseEnd = block.lastIndexOf(".strict()") + ".strict()".length
+      const base = block.slice(positions[3], baseEnd)
+      assert.ok(base.startsWith("z.object("))
+      block = replaceExactInSource(block, "= z.intersection(", `= ${base}.pipe(z.intersection(`, 1, "strict input before partial intersection")
+      assert.ok(block.trimEnd().endsWith(");"), "Settlement generated expression end drift")
+      block = block.trimEnd().slice(0, -2) + "));\n\n"
+    }
+    source = source.slice(0, start) + block + source.slice(end)
   }
   const meteringObjects = {
     MeteringRational: 1,
@@ -290,6 +334,7 @@ async function generate(directory) {
       "openMyCreditAccount",
       "publishAdminMeteringPolicy",
       "publishAdminMeteringRate",
+      "settleModelAdmission",
     ],
     "Billing HTTP generated operation surface drifted",
   )
@@ -319,7 +364,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "4.0.0-experimental.8",
+      contract_version: "4.0.0-experimental.9",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },

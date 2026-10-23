@@ -128,7 +128,7 @@ async function handle(
     await sharedTasksRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.services.chat, id)
     return
   }
-  if ((request.url ?? "").split("?", 1)[0] === "/internal/v1/model-admissions") {
+  if ((request.url ?? "").split("?", 1)[0] === "/internal/v1/model-admissions" || (request.url ?? "").startsWith("/internal/v1/model-admissions/")) {
     await agentModelAdmissionRoute(request, response, config, composition.businessStore?.submittedAgentRuns ?? null)
     return
   }

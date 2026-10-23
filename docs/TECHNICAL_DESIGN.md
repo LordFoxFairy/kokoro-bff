@@ -1,3 +1,12 @@
+## AGENT-1／CREDIT-1：正式结算消费者（2026-10-22，实施门）
+
+沿0082b5c现内部模型预算能力，主方唯一writer。固定Billing deab94efc9ee7d86d1d1072481920423d55b36ff exp9原件及SHA，窄生成增加settle一操作、原九操作保持；删除不再引用的exp8 vendor，不改Public23、SQL、依赖或其他owner pin。
+内部code-first发行1.2，新增唯一POST /internal/v1/model-admissions/{admission_id}/settle，body沿owner四字段与原永久key。复用独立kokoro-agent/model_admission/tenant凭据及原durable submitter来源；create仍必需proof，settle明确禁止proof及旧消费header，不把两种权限混淆。不信body或额外header自报user，原用户退出、Run terminal、Conversation移动／软删除不阻断原结算；不额外调Session／IAM／live project／Agent prepared。owner仍核原Admission↔Run与payer绑定。
+
+复用现具名model admission route并以明确路径／命令分支解析，保create原输入、授权及201语义；settle独立generated request与client、200原ACK。仅提取已存在bounded transport／owner error mapping供两命令复用，非通用代理／新服务。整积分字符串原样透传；严格核ACK admission／Run／event／revision／digest及UTC毫秒，attempt由Billing绑定，后继Agent还须核原attempt，BFF不伪称有额外已知attempt。原evidence JSON／价格／凭据不回传。旧pending ACK保持原结果，超时未知不换key自动重发，不因pending开放派发。
+
+写区为固定contract／generator、既有内部contract/server/route、具名owner clients、直接测试与现文档；来源reader不改、不加表或跨owner SQL。先wire／路由缺失RED，补strict bounds／绑定／取消／raw header风险；实际PG terminal＋retired＋移动／软删来源经新settle回路验收。主方停写后完整BFF门、正式生成和独立只读审查，后继交Agent固定消费／恢复；本片不改正常服务／资金或发实际模型／工具。
+
 ## AGENT-1／CREDIT-1：Agent预算回程接缝（2026-10-22，已实施）
 
 承接Root16项计划及用户“Run不持用户token／内部身份处理”的裁决；基线a77276b、主方唯一writer。复用现BFF进程／Chat outbox／Billing正式d345025 exp8，不建服务、App回程broker、用户grant、钱包、幂等表或Run token字段。Agent使用独立接收方凭据（固定kokoro-agent/model_admission/tenant），不扩IAM project_execution_binding凭据、不冒用Scheduler／Web／管理员身份。新增配置KOKORO_BFF_AGENT_MODEL_ADMISSION_CREDENTIAL_FILE；未配置只使此内部操作503，不影响既有业务。

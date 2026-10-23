@@ -1,3 +1,7 @@
+## 2026-10-22 内部正式结算发行
+
+Public23／186原件SHA34ea71e0保持。内部code-first新增原admission的settle命令，当前internal1.2原件SHA256 `8b3d9d788434d7a3d67cc42909a9e7f545b7e6464eef84bc760d17b55bf5f126`；精确删除本delta后原internal1.1全图hash保持，再过原1.0保护。唯一Billing固定deab94efc9ee7d86d1d1072481920423d55b36ff／exp9，原件SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`，正规生成十操作，原九项保持；旧exp8 vendor退役无runtime兼容。settle只收原Run与sealed身份，owner／internal schema均拒自报金额、证据原文与身份；新ACK严格三态、整积分／修订上界及原Run绑定。生成器补全not、codepoint与strict-before-intersection，规则直接来自固定owner原件，不手改产物／维护第二DTO。实际验收和未激活边界见CURRENT首节；后续Agent必须固定本次正式提交后消费，不直接引用工作树。
+
 ## 2026-10-22 内部模型预算发行
 
 public23／186原件保持。内部code-first源新增Agent model admission，正式生成internal1.1原件SHA256 `695901b23f1f0322fd18ec2a11be27c5b6efcce07b04f57839498eab402d17c6`，旧internal1.0 IAM全图精确保护。唯一Billing d345025／experimental.8仍SHA2c65b64c，现生成集九操作／strict Admission闭集，旧八操作不改变；退役旧vendor，不存在runtime兼容。字段只在各owner机器契约维护，不复制第二份手写Admission。详细失败／通过与未正常激活见CURRENT首节。

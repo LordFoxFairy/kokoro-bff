@@ -9,13 +9,20 @@ import {
   projectExecutionBindingResponse,
   projectExecutionBindingError,
 } from "../src/http/project-execution-binding.contract.ts"
-import { agentModelAdmissionRequest, agentModelAdmissionResponse, agentModelAdmissionError } from "../src/http/model-admission.contract.ts"
+import {
+  agentModelAdmissionRequest,
+  agentModelAdmissionResponse,
+  agentModelAdmissionError,
+  agentModelSettlementRequest,
+  agentModelSettlementResponse,
+  agentModelSettlementError,
+} from "../src/http/model-admission.contract.ts"
 const json = (schema) => z.toJSONSchema(schema, { target: "draft-2020-12" })
 const content = (schema) => ({ "application/json": { schema } })
 const response = (description, schema) => ({ description, headers: { "x-request-id": { schema: { type: "string" } } }, content: content(schema) })
 const doc = {
   openapi: "3.1.0",
-  info: { title: "Kokoro BFF internal project execution binding", version: "1.1.0" },
+  info: { title: "Kokoro BFF internal project execution binding", version: "1.2.0" },
   paths: {
     "/internal/v1/model-admissions": {
       post: {
@@ -46,6 +53,45 @@ const doc = {
             code,
             response(description, {
               $ref: code === 201 ? "#/components/schemas/AgentModelAdmissionResponse" : "#/components/schemas/AgentModelAdmissionError",
+            }),
+          ]),
+        ),
+      },
+    },
+    "/internal/v1/model-admissions/{admission_id}/settle": {
+      post: {
+        operationId: "settleAgentModelAdmission",
+        summary: "Apply or recover sealed usage settlement for the original durable Chat submitter; no live user token or execution permission",
+        "x-kokoro-owner": "kokoro-bff",
+        "x-kokoro-visibility": "internal",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "permanent-billing-command-receipt",
+        "x-kokoro-permission": "agent.model_settlement",
+        security: [{ AgentModelAdmissionBearer: [] }],
+        parameters: [
+          {
+            in: "path",
+            name: "admission_id",
+            required: true,
+            schema: { type: "string", format: "uuid", pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])" },
+          },
+          { in: "header", name: "Idempotency-Key", required: true, schema: { type: "string", minLength: 8, maxLength: 128, pattern: "^[!-~]+$" } },
+        ],
+        requestBody: { required: true, content: content({ $ref: "#/components/schemas/AgentModelSettlementRequest" }) },
+        responses: Object.fromEntries(
+          [
+            [200, "Original sealed settlement acknowledgement"],
+            [400, "Invalid closed request; execution proof and old consumption headers are forbidden"],
+            [403, "Dedicated service or original payer denied"],
+            [404, "Original submission not visible"],
+            [409, "Permanent command conflict"],
+            [422, "Evidence or attempt ineligible"],
+            [502, "Invalid upstream acknowledgement"],
+            [503, "Dependency or shared deadline unavailable"],
+          ].map(([code, description]) => [
+            code,
+            response(description, {
+              $ref: code === 200 ? "#/components/schemas/AgentModelSettlementResponse" : "#/components/schemas/AgentModelSettlementError",
             }),
           ]),
         ),
@@ -93,6 +139,9 @@ const doc = {
       },
     },
     schemas: {
+      AgentModelSettlementRequest: json(agentModelSettlementRequest),
+      AgentModelSettlementResponse: json(agentModelSettlementResponse),
+      AgentModelSettlementError: json(agentModelSettlementError),
       AgentModelAdmissionRequest: json(agentModelAdmissionRequest),
       AgentModelAdmissionResponse: json(agentModelAdmissionResponse),
       AgentModelAdmissionError: json(agentModelAdmissionError),
@@ -108,4 +157,4 @@ if (process.argv.includes("--write")) {
   await mkdir(dirname(output), { recursive: true })
   await writeFile(output, body)
 } else if ((await readFile(output, "utf8")) !== body) throw Error("BFF project execution contract drift")
-console.log(`BFF internal1.1.0 ${createHash("sha256").update(body).digest("hex")}`)
+console.log(`BFF internal1.2.0 ${createHash("sha256").update(body).digest("hex")}`)

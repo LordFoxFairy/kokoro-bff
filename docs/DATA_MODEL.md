@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1：结算来源与持久化边界（2026-10-22）
+
+无SQL／Schema／迁移或新表。BFF复用已提交Chat的原tenant／subject／actor、Message与dispatch来源，不读取Billing／Agent数据库，也不持久化资金／sealed证据／用户token。移动、软删除、退休及terminal后原来源仍保留；结算不授新执行权。原Admission↔Run／payer、资金与永久ACK仍归Billing，Agent负责sealed生产与通知恢复。未来硬删持久来源的策略不在本片新增假想保留表解决。内部HTTP字段及固定artifact见API_CONTRACT本节，写面与失败恢复见TECHNICAL_DESIGN。
+
 ## AGENT-1：消费主体由已提交Chat来源派生（2026-10-22，已实施）
 
 无SQL／Prisma／表／列／默认或migration变化。只读现bff_agent_dispatch_outbox、bff_conversation、bff_message，可信Agent credential给tenant、Run定位原提交者；完整原launch与message选择校验，不能从请求body猜payer。仅本owner JOIN，不访问IAM／Agent／Billing数据表。

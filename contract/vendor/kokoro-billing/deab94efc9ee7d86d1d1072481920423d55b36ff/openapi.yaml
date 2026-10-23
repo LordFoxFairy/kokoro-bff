@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 4.0.0-experimental.8
+  version: 4.0.0-experimental.9
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -1002,45 +1002,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/internal/billing/admissions/{admission_id}/capture:
+  /v1/internal/billing/admissions/{admission_id}/settle:
     post:
-      operationId: captureAdmission
+      operationId: settleModelAdmission
       x-kokoro-owner: kokoro-billing
       x-kokoro-visibility: internal-owner
       x-kokoro-stability: experimental
       x-kokoro-idempotency: required
-      x-kokoro-permission: agent-model-studio-service
+      x-kokoro-permission: web-bff-model-admission
       security:
-        - tenantContext: []
-          serviceCaller: []
+        - serviceCaller: []
           internalSecret: []
+          serviceBearer: []
+          tenantContext: []
+          subjectContext: []
       parameters:
-        - $ref: "#/components/parameters/TenantId"
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/PersonalTenantId"
+        - name: x-kokoro-subject
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 5
+            maxLength: 1363
+            pattern: ^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])
+        - name: x-kokoro-service
+          in: header
+          required: true
+          schema:
+            type: string
+            const: web-bff
         - name: admission_id
           in: path
           required: true
           schema:
-            $ref: "#/components/schemas/Uuid"
+            type: string
+            format: uuid
+            pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AdmissionCaptureRequest"
+              $ref: "#/components/schemas/AdmissionSettlementRequest"
       responses:
         "200":
           description: Success
           headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
             x-request-id:
               $ref: "#/components/headers/RequestId"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AdmissionResponse"
+                $ref: "#/components/schemas/AdmissionSettlementResponse"
         "400":
           description: Request failed
           headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
             x-request-id:
               $ref: "#/components/headers/RequestId"
           x-kokoro-errors:
@@ -1053,6 +1075,8 @@ paths:
         "401":
           description: Authentication required
           headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
             x-request-id:
               $ref: "#/components/headers/RequestId"
           x-kokoro-errors:
@@ -1065,6 +1089,8 @@ paths:
         "403":
           description: Forbidden
           headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
             x-request-id:
               $ref: "#/components/headers/RequestId"
           x-kokoro-errors:
@@ -1077,6 +1103,8 @@ paths:
         "404":
           description: Not found
           headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
             x-request-id:
               $ref: "#/components/headers/RequestId"
           x-kokoro-errors:
@@ -1089,6 +1117,8 @@ paths:
         "409":
           description: Conflict
           headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
             x-request-id:
               $ref: "#/components/headers/RequestId"
           x-kokoro-errors:
@@ -1101,6 +1131,8 @@ paths:
         "422":
           description: Invalid state
           headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
             x-request-id:
               $ref: "#/components/headers/RequestId"
           x-kokoro-errors:
@@ -1113,6 +1145,8 @@ paths:
         "500":
           description: Internal failure
           headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
             x-request-id:
               $ref: "#/components/headers/RequestId"
           x-kokoro-errors:
@@ -1125,138 +1159,8 @@ paths:
         "503":
           description: Dependency unavailable
           headers:
-            x-request-id:
-              $ref: "#/components/headers/RequestId"
-          x-kokoro-errors:
-            - code: billing.dependency_unavailable
-              retryable: true
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /v1/internal/billing/admissions/{admission_id}/release:
-    post:
-      operationId: releaseAdmission
-      x-kokoro-owner: kokoro-billing
-      x-kokoro-visibility: internal-owner
-      x-kokoro-stability: experimental
-      x-kokoro-idempotency: required
-      x-kokoro-permission: agent-model-studio-service
-      security:
-        - tenantContext: []
-          serviceCaller: []
-          internalSecret: []
-      parameters:
-        - $ref: "#/components/parameters/TenantId"
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - name: admission_id
-          in: path
-          required: true
-          schema:
-            $ref: "#/components/schemas/Uuid"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AdmissionReleaseRequest"
-      responses:
-        "200":
-          description: Success
-          headers:
-            x-request-id:
-              $ref: "#/components/headers/RequestId"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AdmissionResponse"
-        "400":
-          description: Request failed
-          headers:
-            x-request-id:
-              $ref: "#/components/headers/RequestId"
-          x-kokoro-errors:
-            - code: billing.invalid_request
-              retryable: false
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Authentication required
-          headers:
-            x-request-id:
-              $ref: "#/components/headers/RequestId"
-          x-kokoro-errors:
-            - code: billing.unauthenticated
-              retryable: false
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "403":
-          description: Forbidden
-          headers:
-            x-request-id:
-              $ref: "#/components/headers/RequestId"
-          x-kokoro-errors:
-            - code: billing.forbidden
-              retryable: false
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Not found
-          headers:
-            x-request-id:
-              $ref: "#/components/headers/RequestId"
-          x-kokoro-errors:
-            - code: billing.not_found
-              retryable: false
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "409":
-          description: Conflict
-          headers:
-            x-request-id:
-              $ref: "#/components/headers/RequestId"
-          x-kokoro-errors:
-            - code: billing.idempotency_conflict
-              retryable: false
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "422":
-          description: Invalid state
-          headers:
-            x-request-id:
-              $ref: "#/components/headers/RequestId"
-          x-kokoro-errors:
-            - code: billing.invalid_state
-              retryable: false
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          description: Internal failure
-          headers:
-            x-request-id:
-              $ref: "#/components/headers/RequestId"
-          x-kokoro-errors:
-            - code: billing.internal_error
-              retryable: false
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "503":
-          description: Dependency unavailable
-          headers:
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
             x-request-id:
               $ref: "#/components/headers/RequestId"
           x-kokoro-errors:
@@ -4008,93 +3912,120 @@ components:
         final_request_digest:
           type: string
           pattern: ^[0-9a-f]{64}$(?![\s\S])
-    AdmissionCaptureRequest:
+    AdmissionSettlementRequest:
       type: object
       additionalProperties: false
-      required:
-        - run_id
-        - call_id
-        - attempt_id
-        - evidence_schema_version
-        - evidence_ref
-        - evidence_event_id
-        - evidence_revision
-        - evidence_digest
+      required: [run_id, evidence_event_id, evidence_revision, evidence_digest]
       properties:
         run_id:
           type: string
           minLength: 1
-          maxLength: 255
-        call_id:
-          type: string
-          format: uuid
-        attempt_id:
-          type: string
-          format: uuid
-        evidence_schema_version:
-          type: string
-          const: 2.0.0
-        evidence_ref:
-          type: string
-          minLength: 1
-          maxLength: 255
+          maxLength: 512
         evidence_event_id:
           type: string
           format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])
         evidence_revision:
-          $ref: "#/components/schemas/PositiveDecimal"
+          type: string
+          maxLength: 19
+          pattern: ^[1-9][0-9]*$(?![\s\S])
+          not:
+            pattern: ^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\s\S])
         evidence_digest:
           type: string
-          pattern: ^[0-9a-f]{64}$
-    AdmissionReleaseRequest:
+          pattern: ^[0-9a-f]{64}$(?![\s\S])
+    AdmissionSettlement:
       type: object
       additionalProperties: false
-      required:
-        - run_id
-        - call_id
-        - attempt_id
-        - release_basis
-        - evidence_schema_version
-        - evidence_ref
-        - evidence_event_id
-        - evidence_revision
-        - evidence_digest
-        - reason
+      required: [admission_id, run_id, attempt_id, evidence_event_id, evidence_revision, evidence_digest, status, reason, captured_credits, released_credits, usage_event_id, settlement_id, updated_at]
       properties:
+        admission_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])
+        attempt_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])
+        evidence_event_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])
         run_id:
           type: string
           minLength: 1
-          maxLength: 255
-        call_id:
-          type: string
-          format: uuid
-        attempt_id:
-          type: string
-          format: uuid
-        release_basis:
-          type: string
-          enum:
-            - not_dispatched
-            - settled_remainder
-        evidence_schema_version:
-          type: string
-          const: 2.0.0
-        evidence_ref:
-          type: string
-          minLength: 1
-          maxLength: 255
-        evidence_event_id:
-          type: string
-          format: uuid
+          maxLength: 512
         evidence_revision:
-          $ref: "#/components/schemas/PositiveDecimal"
+          type: string
+          maxLength: 19
+          pattern: ^[1-9][0-9]*$(?![\s\S])
+          not:
+            pattern: ^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\s\S])
         evidence_digest:
           type: string
-          pattern: ^[0-9a-f]{64}$
+          pattern: ^[0-9a-f]{64}$(?![\s\S])
+        status:
+          type: string
+          enum: [captured, released, pending_reconciliation]
         reason:
+          type: [string, "null"]
+          enum: [null, unknown_usage_or_outcome, budget_exceeded]
+        captured_credits:
           type: string
-          minLength: 1
-          maxLength: 255
+          maxLength: 13
+          pattern: ^(?:0|[1-9][0-9]*)$(?![\s\S])
+          not:
+            pattern: ^(?:9[3-9][0-9]{11}|92[3-9][0-9]{10}|922[4-9][0-9]{9}|9223[4-9][0-9]{8}|92233[8-9][0-9]{7}|922337[3-9][0-9]{6}|9223372[1-9][0-9]{5}|92233720[4-9][0-9]{4}|922337203[7-9][0-9]{3}|92233720369[0-9]{2}|92233720368[6-9][0-9]{1}|922337203685[5-9])$(?![\s\S])
+        released_credits:
+          type: string
+          maxLength: 13
+          pattern: ^(?:0|[1-9][0-9]*)$(?![\s\S])
+          not:
+            pattern: ^(?:9[3-9][0-9]{11}|92[3-9][0-9]{10}|922[4-9][0-9]{9}|9223[4-9][0-9]{8}|92233[8-9][0-9]{7}|922337[3-9][0-9]{6}|9223372[1-9][0-9]{5}|92233720[4-9][0-9]{4}|922337203[7-9][0-9]{3}|92233720369[0-9]{2}|92233720368[6-9][0-9]{1}|922337203685[5-9])$(?![\s\S])
+        usage_event_id:
+          type: [string, "null"]
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])
+        settlement_id:
+          type: [string, "null"]
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])
+        updated_at:
+          type: string
+          format: date-time
+          pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+      oneOf:
+        - type: object
+          required: [status]
+          properties:
+            status: { const: captured }
+            reason: { type: "null" }
+            usage_event_id: { type: string }
+            settlement_id: { type: string }
+        - type: object
+          required: [status]
+          properties:
+            status: { const: released }
+            reason: { type: "null" }
+            captured_credits: { const: "0" }
+            usage_event_id: { type: "null" }
+            settlement_id: { type: "null" }
+        - type: object
+          required: [status]
+          properties:
+            status: { const: pending_reconciliation }
+            reason: { enum: [unknown_usage_or_outcome, budget_exceeded] }
+            captured_credits: { const: "0" }
+            released_credits: { const: "0" }
+            usage_event_id: { type: "null" }
+            settlement_id: { type: "null" }
+    AdmissionSettlementResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdmissionSettlement"
     Admission:
       type: object
       additionalProperties: false

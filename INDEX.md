@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1 正式结算消费者（2026-10-22）
+
+原model-admission route拥有create／settle明确分支，proof分别必需／禁止；原独立Agent凭据及durable submitter reader复用。具名billing-model-settlement.ts消费固定exp9，billing-model-transport.ts仅抽取原bounded传输与owner错误映射供两命令共享，不做通用代理。内部1.2由现code-first生成链产出，Public23与Schema不改；测试沿model-settlement-{contract,http,transport}及扩展submitted-agent-run真实PG来源回路。实际门禁见CURRENT首节。
+
 ## AGENT-1 内部模型预算入口（2026-10-22）
 
 `src/http/routes/model-admission.ts`／`model-admission.contract.ts`拥有Agent专用内部HTTP，`src/auth/agent-model-admission-credential.ts`鲜读独立caller/surface/tenant；`clients/owner/billing-model-admission.ts`消费固定exp8九操作生成集。`postgres/project-execution-binding.ts`追加已提交来源读取（原live reader不改），现outbox repository／businessStore正式暴露。源码按transport／凭据／事实来源职责拆分，不建新服务或表。测试为model-admission-{http,transport,contract}及submitted-agent-run.integration；正式内契约仍由现生成器产出，实际门禁与证据边界见CURRENT首节。

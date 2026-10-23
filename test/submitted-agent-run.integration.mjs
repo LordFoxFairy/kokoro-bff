@@ -1,9 +1,94 @@
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import test from "node:test"
+import { createServer } from "node:http"
+import { mkdtemp, writeFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { agentModelAdmissionRoute } from "../dist/http/routes/model-admission.js"
 import { Pool } from "pg"
 import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
 import { buildAgentDispatchPayload } from "../dist/domain/chat/agent-dispatch.js"
+
+// Real BFF repository + HTTP route; the named Billing peer is a wire fixture, not a money/model execution claim.
+async function settleRetiredSubmission(repository, tenant, runId, user) {
+  const dir = await mkdtemp(join(tmpdir(), "kokoro-retired-settlement-")),
+    file = join(dir, "credential.json"),
+    secret = "agent-only-" + "a".repeat(40),
+    servers = [],
+    calls = []
+  const listen = async (server) => {
+    servers.push(server)
+    await new Promise((resolve, reject) => {
+      server.once("error", reject)
+      server.listen(0, "127.0.0.1", resolve)
+    })
+    return `http://127.0.0.1:${server.address().port}`
+  }
+  try {
+    await writeFile(
+      file,
+      JSON.stringify({ version: 1, entries: [{ credential_id: "settlement", caller: "kokoro-agent", surface: "model_admission", tenant_id: tenant, secret }] }),
+      { mode: 0o600 },
+    )
+    const admissionId = "33333333-3333-4333-8333-333333333333",
+      wire = { run_id: runId, evidence_event_id: "66666666-6666-4666-8666-666666666666", evidence_revision: "1", evidence_digest: "a".repeat(64) }
+    const ack = {
+      ...wire,
+      admission_id: admissionId,
+      attempt_id: "22222222-2222-4222-8222-222222222222",
+      status: "pending_reconciliation",
+      reason: "unknown_usage_or_outcome",
+      captured_credits: "0",
+      released_credits: "0",
+      usage_event_id: null,
+      settlement_id: null,
+      updated_at: "2026-10-22T00:00:00.000Z",
+    }
+    const billing = await listen(
+      createServer(async (req, res) => {
+        const chunks = []
+        for await (const c of req) chunks.push(c)
+        calls.push({ headers: req.headers, url: req.url, body: JSON.parse(Buffer.concat(chunks).toString()) })
+        res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": req.headers["x-request-id"] })
+        res.end(JSON.stringify({ data: ack }))
+      }),
+    )
+    const config = {
+      agentModelAdmissionCredentialFile: file,
+      upstreamTimeoutMs: 1000,
+      upstreamMaxResponseBytes: 32768,
+      billingServiceToken: "billing-service-fixture",
+      upstreamSecret: "billing-internal-fixture",
+      upstreams: { billing },
+    }
+    const base = await listen(createServer((req, res) => void agentModelAdmissionRoute(req, res, config, repository)))
+    const response = await fetch(`${base}/internal/v1/model-admissions/${admissionId}/settle`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${secret}`,
+        "content-type": "application/json",
+        "idempotency-key": "retired-original-command",
+        "x-request-id": "retired-settlement",
+      },
+      body: JSON.stringify(wire),
+    })
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), { data: ack })
+    assert.equal(calls.length, 1)
+    assert.deepEqual(calls[0].body, wire)
+    assert.equal(calls[0].headers["x-kokoro-tenant-id"], "u1." + Buffer.from(tenant).toString("base64url"))
+    assert.equal(calls[0].headers["x-kokoro-subject"], "u1." + Buffer.from(user).toString("base64url"))
+    assert.equal(calls[0].headers["x-billing-execution-proof"], undefined)
+  } finally {
+    for (const server of servers.reverse())
+      await new Promise((resolve) => {
+        server.closeAllConnections()
+        server.close(resolve)
+      })
+    await rm(dir, { recursive: true, force: true })
+  }
+}
 
 const url = process.env.KOKORO_TEST_POSTGRES_URL
 const integration = url ? test : test.skip
@@ -82,6 +167,8 @@ integration("submitted Run source survives retirement, but rejects foreign and i
     )
     assert.deepEqual(await repository.readSubmittedAgentRun(input), original)
     const retired = await facts()
+    await settleRetiredSubmission(repository, tenant, ids.run, user)
+    assert.deepEqual(await facts(), retired)
     await repository.readSubmittedAgentRun(input)
     assert.deepEqual(await facts(), retired)
     for (const mutate of [

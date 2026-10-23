@@ -1,3 +1,15 @@
+## AGENT-1／CREDIT-1：正式结算BFF消费者已本地验收（2026-10-22）
+
+固定Billing deab94efc9ee7d86d1d1072481920423d55b36ff／exp9，原件SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`；正规生成十操作、原九项消费保持，旧exp8 vendor删除，无新依赖／SQL／Schema或运行兼容。Public23／186及raw SHA34ea71e0原字节保持；内部code-first1.2新增settle，raw SHA256 `8b3d9d788434d7a3d67cc42909a9e7f545b7e6464eef84bc760d17b55bf5f126`。本delta精确逆回原1.1 parsed全图，再过原1.0 oracle；未删弱历史保护。
+
+沿原model-admission route明确create／settle分支：create仍必需proof，settle禁proof／旧consumption header，复用独立Agent credential及原Chat提交者来源，拒自报身份／金额／usage。用户退出、Run terminal、会话移动软删不补调Session／IAM／live project。原bounded transport与错误映射只提取共享一次，无新服务／通用代理／重试；settle ACK严格核原admission／Run／证据三事实、整Credit及毫秒UTC，attempt归owner绑定，由后继Agent核原attempt。旧pending原ACK保留，不以pending开放派发。
+
+定向34 PASS。wire先2 FAIL缺正式schema，正规生成后仍漏not、码点与strict交集，按固定owner原件补精确normalize；strict base先pipe再原三态intersection，非手改产物／第二DTO。内部新route缺失6 FAIL后实现；第二次17 PASS／1 FAIL定位到测试TextDecoder先吞BOM，改发送真实\uFEFF字节，生产拒绝不改，失败保留不冒修复业务缺陷。原预算回归仍通过。独立Python Draft202012实际验证22向量／44次，与owner canonical、内部发行和native Zod一致，含上界、三态、额外键与Unicode；仓外首Node模块解析设置错误保留，改验收模块绝对文件引用，不给生产加fallback。
+
+主方停写774非文档输入无漂移，完整七门exit0：format／lint／typecheck／contract 998 PASS／architecture36 PASS／默认test1684 PASS及3原资源SKIP／build；独立只读最终Approved。fresh canonical自有PG中，真实来源reader＋actual HTTP route在retired／terminal／移动／软删后沿原payer转发并保持三表原facts不变，最终重验1 PASS／0SKIP，库存94→94；Billing端为具名wire fixture，不冒真实资金／供应商执行。原shared transport单发、bounded EOF、晚响应取消、物理重复headers带成功同帧TCP正控、旧proof要求和错误安全投影均验。
+
+Root＋12子仓非递归fetch全成功，远端main均无新增；正常配置／进程／资金保持，零实际模型／工具调用，未PR合并或正常激活。后继Agent固定消费者、逐事件ACK和seal后通知前崩溃恢复仍待；现模型journal无金融通知ACK，原Chat outbox不混用。另已识别Billing已hold而Agent grant未落库／失租的恢复窗口，以及Billing仅读当前sealed head时跳过相邻revision的问题，须在同一恢复切片补齐后才装配真实执行；不拿fresh proof／dummy proof或重新派发代替原回执恢复。主线及结束标准仍是Root唯一16项TODO，真钱支付不做。
+
 ## AGENT-1／CREDIT-1：Agent预算内部接线已本地验收（2026-10-22）
 
 主方唯一writer，沿a77276b既有分支。独立Agent receiver credential（固定kokoro-agent/model_admission/tenant）与唯一POST /internal/v1/model-admissions；严格六字段、原key／proof，payer从本owner已提交Chat来源派生，不相信body身份或复用IAM／Scheduler／浏览器token。来源读取核原Conversation owner、user Message、outbox launch及选择，允许软删／移动／终态后的原receipt恢复，不授新执行权；原IAM live reader未放宽。无新服务／用户grant／App回程broker／SQL或Schema。完整bounded client、raw JSON／ACK六事实和held原时间核验，单次10秒总预算及取消，未知结果不自动重发。
