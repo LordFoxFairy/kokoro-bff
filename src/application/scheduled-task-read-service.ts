@@ -4,7 +4,12 @@ import type { ScheduledTaskStateReader, ScheduledTaskSchedulingState } from "./p
 import type { ScheduledTaskFact } from "../domain/scheduled-task/task.js"
 
 export type ScheduledTaskReadOptions = Readonly<{ taskId?: string; revalidate?: () => Promise<void>; deadline?: number }>
-export type ScheduledTaskCurrentView = Readonly<{ task: ScheduledTaskFact; state: ScheduledTaskSchedulingState; nextRunAt: Date | null }>
+export type ScheduledTaskCurrentView = Readonly<{
+  task: ScheduledTaskFact
+  state: ScheduledTaskSchedulingState
+  nextRunAt: Date | null
+  feed?: import("../domain/scheduled-task/rss-poll.types.js").RssFeedFacts
+}>
 type Snapshots = { snapshots(scope: ScheduledTaskOwnerScope, signal: AbortSignal, taskId?: string): Promise<ScheduledTaskReadSnapshot[]> }
 /** Bounded parallel reads; all rows or an explicit error, never a partially fresh list. */
 export class ScheduledTaskReadService {
@@ -46,7 +51,8 @@ export class ScheduledTaskReadService {
               : { state: snapshot.deliveryStatus === "failed" ? ("failed" as const) : ("pending" as const), nextRunAt: null }
           check()
           combined.throwIfAborted()
-          views[index] = { task: snapshot.task, ...current }
+          if (snapshot.task.triggerKind === "rss" && snapshot.feed === undefined) throw Error("scheduled_task_feed_missing")
+          views[index] = { task: snapshot.task, ...current, ...(snapshot.feed === undefined ? {} : { feed: snapshot.feed }) }
         }
       } catch (error) {
         if (failure === undefined) failure = error

@@ -1,3 +1,4 @@
+import { inspectRssTriggerContract } from "./rss-trigger-public-contract.mjs"
 import { inspectBillingCreditAccountContract } from "./billing-credit-account-public-contract.mjs"
 import { inspectClosureIntegrationContract } from "./verify-closure-integration-contract.mjs"
 import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "./archived-tasks-public-contract.mjs"
@@ -280,6 +281,7 @@ async function main() {
       operation.fields.get("operationId") === "getManagedPersonalSkillPackage" || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
   )
   const errors = [
+    ...inspectRssTriggerContract(openapi, parsedBaseline.operations),
     ...inspectBillingCreditAccountContract(openapi, parsedBaseline.operations),
     ...inspectClosureIntegrationContract(openapi, parsedBaseline.operations),
     ...inspectOpenApiGovernance(openapi),

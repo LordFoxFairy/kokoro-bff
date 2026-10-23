@@ -11,7 +11,9 @@ export type ScheduledRunItem = Readonly<{
   title: string
   project_ref: string | null
   run_id: string
-  scheduled_for: string
+  trigger_kind: "calendar" | "rss"
+  observed_at?: string
+  scheduled_for: string | null
   state: ScheduledRunState
   terminal_event_at: string | null
 }>
@@ -25,6 +27,8 @@ export type ScheduledRunCandidate = Readonly<{
   taskRevision: string
   runId: string
   orderKey: string
+  sourceKind: "calendar" | "rss"
+  sourceObservedAt: string | null
   status: string
   unknownSeen: boolean
   terminals: readonly unknown[]

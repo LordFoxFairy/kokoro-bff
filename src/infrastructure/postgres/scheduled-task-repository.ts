@@ -1,3 +1,5 @@
+import { canonicalEpoch, triggerFromWire, type ScheduledTrigger } from "../../domain/scheduled-task/trigger.js"
+import { invalidateRssPoll } from "./rss-poll-lifecycle.js"
 import { calendarFromWire, calendarWire, freezeCalendar, type ScheduledCalendar, type ScheduledTaskFrequency } from "../../domain/scheduled-task/calendar.js"
 import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
@@ -37,6 +39,10 @@ type ScheduledTaskRow = {
   owner_id: string
   title: string
   prompt: string
+  trigger_kind: "calendar" | "rss"
+  trigger_epoch: string
+  rss_url: string | null
+  rss_conditions: unknown
   frequency: ScheduledTaskFrequency
   task_time: string
   timezone: string
@@ -81,7 +87,7 @@ type ScheduledTaskProjectRow = {
   deleted_at: Date | string | null
 }
 
-const TASK_COLUMNS = `task_id, tenant_id, project_id, owner_id, title, prompt, frequency, task_time, timezone,
+const TASK_COLUMNS = `task_id, tenant_id, project_id, owner_id, title, prompt, trigger_kind, trigger_epoch::text, rss_url, rss_conditions, frequency, task_time, timezone,
               weekdays, month_days, to_char(local_date, 'YYYY-MM-DD') AS local_date, run_at, expires_at, auto_approve, enabled, status, revision, created_at, updated_at`
 
 function dbDate(value: Date | string, errorCode: string): Date {
@@ -101,7 +107,8 @@ function scheduledTaskFromRow(row: ScheduledTaskRow): ScheduledTaskFact {
     ...(row.project_id === null ? {} : { projectId: row.project_id }),
     title: row.title,
     prompt: row.prompt,
-    ...storedCalendar(row),
+    ...storedTrigger(row),
+    triggerEpoch: canonicalEpoch(row.trigger_epoch),
     ...(row.expires_at === null ? {} : { expiresAt: dbDate(row.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID") }),
     autoApprove: row.auto_approve,
     enabled: row.enabled,
@@ -110,6 +117,15 @@ function scheduledTaskFromRow(row: ScheduledTaskRow): ScheduledTaskFact {
   }
 }
 
+function storedTrigger(row: ScheduledTaskRow): ScheduledTrigger {
+  if (row.trigger_kind === "rss") {
+    const parsed = triggerFromWire({ trigger_kind: "rss", feed_url: row.rss_url, conditions: row.rss_conditions })
+    if (parsed === null) throw Error("SCHEDULED_TASK_TRIGGER_INVALID")
+    return parsed
+  }
+  if (row.trigger_kind !== "calendar") throw Error("SCHEDULED_TASK_TRIGGER_INVALID")
+  return { ...storedCalendar(row), triggerKind: "calendar" }
+}
 function storedCalendar(row: ScheduledTaskRow): ScheduledCalendar {
   const calendar = calendarFromWire({
     frequency: row.frequency,
@@ -183,6 +199,8 @@ export async function pauseProjectScheduledTasks(
     )
     const row = updated.rows[0]
     if (row === undefined) throw new Error("PROJECT_DELETE_TASK_UPDATE_FAILED")
+    if (task.trigger_kind === "rss") await invalidateRssPoll({ client, tenantId: scope.tenantId, taskId: task.task_id, retireSeen: false })
+    await initializePoll(client, row)
     await insertScheduledTaskOutbox(
       client,
       "replace",
@@ -298,8 +316,16 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
       await Promise.race([acquisition, aborted])
       signal.throwIfAborted()
       const result = await Promise.race([
-        client!.query<ScheduledTaskRow & { delivery_status: ScheduledTaskOutboxStatus | null; project_available: boolean }>(
+        client!.query<
+          ScheduledTaskRow & {
+            delivery_status: ScheduledTaskOutboxStatus | null
+            project_available: boolean
+            feed: import("../../domain/scheduled-task/rss-poll.types.js").RssFeedFacts | null
+          }
+        >(
           `SELECT ${TASK_COLUMNS},
+                (SELECT jsonb_build_object('feedState',CASE WHEN r.last_error_code='limit_reached' OR r.seen_count=100000 THEN 'limit_reached' WHEN r.last_error_code IS NOT NULL THEN 'backoff' WHEN r.initialized THEN 'active' ELSE 'initializing' END,'lastCheckedAt',CASE WHEN r.last_checked_at IS NULL THEN NULL ELSE to_char(r.last_checked_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,'nextCheckAt',CASE WHEN r.last_error_code='limit_reached' OR r.seen_count=100000 THEN NULL ELSE to_char(r.next_poll_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,'errorCode',r.last_error_code)
+                 FROM bff_scheduled_rss_poll r WHERE r.tenant_id=t.tenant_id AND r.task_id=t.task_id AND r.source_epoch=t.trigger_epoch AND r.task_revision=t.revision AND r.subject_id=t.owner_id) AS feed,
                 (SELECT o.status FROM bff_scheduled_task_outbox o
                   WHERE o.tenant_id = t.tenant_id AND o.task_id = t.task_id
                     AND o.aggregate_revision = t.revision
@@ -316,7 +342,12 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
         aborted,
       ])
       signal.throwIfAborted()
-      return result.rows.map((row) => ({ task: scheduledTaskFromRow(row), deliveryStatus: row.delivery_status, projectAvailable: row.project_available }))
+      return result.rows.map((row) => ({
+        task: scheduledTaskFromRow(row),
+        deliveryStatus: row.delivery_status,
+        projectAvailable: row.project_available,
+        ...(row.feed === null ? {} : { feed: row.feed }),
+      }))
     } finally {
       if (cancel !== undefined) signal.removeEventListener("abort", cancel)
       release(signal.aborted)
@@ -374,12 +405,12 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
       if (input.projectId !== undefined && ownedProjectId === null) {
         throw new Error("PROJECT_NOT_FOUND")
       }
-      const calendar = newCalendar(input, this.clock())
+      const calendar = input.triggerKind === "rss" ? input : { ...newCalendar(input, this.clock()), triggerKind: "calendar" as const }
       const inserted = await client.query<ScheduledTaskRow>(
         `INSERT INTO bff_scheduled_task
           (task_id, tenant_id, project_id, owner_id, title, prompt, frequency, task_time, timezone,
-           weekdays, month_days, local_date, run_at, expires_at, auto_approve, enabled, status, revision)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::smallint[], $11::smallint[], $12::date, $13::timestamptz, $14::timestamptz, $15, true, 'active', 1)
+           weekdays, month_days, local_date, run_at, expires_at, auto_approve, enabled, status, revision, trigger_kind,trigger_epoch,rss_url,rss_conditions)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::smallint[], $11::smallint[], $12::date, $13::timestamptz, $14::timestamptz, $15, true, 'active', 1,$16,1,$17,$18::jsonb)
          ON CONFLICT (task_id) DO NOTHING
          RETURNING ${TASK_COLUMNS}`,
         [
@@ -389,15 +420,18 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
           scope.subjectId,
           input.title,
           input.prompt,
-          calendar.frequency,
-          calendar.time,
-          calendar.timezone,
+          calendar.frequency ?? null,
+          calendar.time ?? null,
+          calendar.timezone ?? null,
           calendar.weekdays ?? null,
           calendar.monthDays ?? null,
           calendar.localDate ?? null,
           calendar.runAt ?? null,
           input.expiresAt ?? null,
           input.autoApprove,
+          input.triggerKind,
+          input.feedUrl ?? null,
+          input.triggerKind === "rss" ? JSON.stringify(input.conditions) : null,
         ],
       )
       const row = inserted.rows[0]
@@ -411,6 +445,7 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
         }
         throw new Error("SCHEDULED_TASK_CREATE_CONFLICT")
       }
+      await initializePoll(client, row)
       await this.insertOutbox(client, "register", taskLineage, row)
       return scheduledTaskFromRow(row)
     })
@@ -435,13 +470,17 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
         return scheduledTaskFromRow(current)
       }
       if (project !== null && project.deleted_at !== null) throw new Error("PROJECT_NOT_FOUND")
-      const changedRule = ["frequency", "time", "timezone", "weekdays", "monthDays", "localDate", "runAt"].some((field) => Object.hasOwn(input, field))
-      const priorCalendar = storedCalendar(current)
-      const calendar = changedRule ? newCalendar(input as ScheduledCalendar, this.clock(), priorCalendar.runAt) : priorCalendar
+      const prior = storedTrigger(current)
+      const changedRule = input.triggerKind !== undefined
+      const trigger = changedRule ? (input as ScheduledTrigger) : prior
+      const calendar: ScheduledTrigger =
+        trigger.triggerKind === "rss" ? trigger : { ...newCalendar(trigger, this.clock(), prior.runAt), triggerKind: "calendar" as const }
+      const sourceChanged = calendar.triggerKind !== prior.triggerKind || calendar.feedUrl !== prior.feedUrl
+      const epoch = sourceChanged ? canonicalEpoch((BigInt(canonicalEpoch(current.trigger_epoch)) + 1n).toString()) : canonicalEpoch(current.trigger_epoch)
       const updated = await client.query<ScheduledTaskRow>(
         `UPDATE bff_scheduled_task SET title = $4, prompt = $5, frequency = $6, task_time = $7,
           timezone = $8, weekdays = $9::smallint[], month_days = $10::smallint[], local_date = $11::date, run_at = $12::timestamptz, expires_at = $13::timestamptz,
-          auto_approve = $14, enabled = $15, status = $16, revision = revision + 1,
+          auto_approve = $14, enabled = $15, status = $16, trigger_kind=$17,trigger_epoch=$18::bigint,rss_url=$19,rss_conditions=$20::jsonb, revision = revision + 1,
           updated_at = CURRENT_TIMESTAMP(3)
          WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3
          RETURNING ${TASK_COLUMNS}`,
@@ -451,9 +490,9 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
           taskId,
           input.title ?? current.title,
           input.prompt ?? current.prompt,
-          calendar.frequency,
-          calendar.time,
-          calendar.timezone,
+          calendar.frequency ?? null,
+          calendar.time ?? null,
+          calendar.timezone ?? null,
           calendar.weekdays ?? null,
           calendar.monthDays ?? null,
           calendar.localDate ?? null,
@@ -462,10 +501,16 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
           input.autoApprove ?? current.auto_approve,
           input.enabled ?? current.enabled,
           input.status ?? current.status,
+          calendar.triggerKind,
+          epoch,
+          calendar.feedUrl ?? null,
+          calendar.triggerKind === "rss" ? JSON.stringify(calendar.conditions) : null,
         ],
       )
       const row = updated.rows[0]
       if (row === undefined) return null
+      if (prior.triggerKind === "rss" || sourceChanged) await invalidateRssPoll({ client, tenantId: scope.tenantId, taskId, retireSeen: sourceChanged })
+      await initializePoll(client, row)
       await this.insertOutbox(client, "replace", taskLineage, row)
       return scheduledTaskFromRow(row)
     })
@@ -474,9 +519,13 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
   public async deleteScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean> {
     const taskLineage = requireLineage(scope, lineage)
     return this.transaction(async (client) => {
+      const binding = await this.taskBinding(client, scope, taskId)
+      if (binding?.project_id !== null && binding?.project_id !== undefined) await this.lockedProject(client, scope, binding.project_id)
       const current = await this.lockedTask(client, scope, taskId)
+      if (current !== null && current.project_id !== binding?.project_id) throw Error("SCHEDULED_TASK_CHANGED")
       if (current === null) return this.outboxExists(client, scope.tenantId, taskId, "delete", taskLineage.idempotencyKey, scope.subjectId)
       if (await this.outboxExists(client, scope.tenantId, taskId, "delete", taskLineage.idempotencyKey, scope.subjectId)) return true
+      if (current.trigger_kind === "rss") await invalidateRssPoll({ client, tenantId: scope.tenantId, taskId, retireSeen: true })
       await this.insertOutbox(client, "delete", taskLineage, current)
       const deleted = await client.query("DELETE FROM bff_scheduled_task WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3", [
         scope.tenantId,
@@ -693,4 +742,13 @@ function assertLease(lease: ScheduledTaskOutboxLease): void {
   requiredIdentity(lease.leaseOwner, "SCHEDULED_TASK_OUTBOX_LEASE_OWNER")
   requiredIdentity(lease.leaseToken, "SCHEDULED_TASK_OUTBOX_LEASE_TOKEN")
   if (!Number.isSafeInteger(lease.fence) || lease.fence < 1) throw new Error("SCHEDULED_TASK_OUTBOX_FENCE_INVALID")
+}
+
+async function initializePoll(client: PoolClient, row: ScheduledTaskRow): Promise<void> {
+  if (row.trigger_kind !== "rss") return
+  await client.query(
+    `INSERT INTO bff_scheduled_rss_poll(tenant_id,task_id,source_epoch,task_revision,subject_id,next_poll_at)
+ VALUES($1,$2,$3,$4,$5,clock_timestamp()) ON CONFLICT(tenant_id,task_id) DO UPDATE SET source_epoch=EXCLUDED.source_epoch,task_revision=EXCLUDED.task_revision,subject_id=EXCLUDED.subject_id,updated_at=CURRENT_TIMESTAMP(3)`,
+    [row.tenant_id, row.task_id, row.trigger_epoch, row.revision, row.owner_id],
+  )
 }

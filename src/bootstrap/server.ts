@@ -244,7 +244,7 @@ async function handle(
   }
 
   if (segments[0] === "internal" && segments[1] === "bff" && segments[2] === "scheduled-tasks" && segments[3] === "dispatch" && segments.length === 4) {
-    await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency)
+    await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency, composition.rssPollService)
     return
   }
   if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return

@@ -4,11 +4,29 @@ import { describe, it } from "node:test"
 import { scheduledCreateInput, scheduledPatchInput } from "../dist/application/scheduled/input.js"
 
 describe("explicit calendar periods", () => {
-  const base = { title: "Review", prompt: "Review once due.", time: "08:15", timezone: "UTC" }
+  const base = { trigger_kind: "calendar", title: "Review", prompt: "Review once due.", time: "08:15", timezone: "UTC" }
   it("stores multiple selected weekdays and month days without an inferred anchor", async () => {
     const { scheduledCreateInput: parse } = await r73ScheduledInputSource()
-    assert.deepEqual(parse({ ...base, frequency: "weekly", weekdays: [6, 0, 2] }), { ...base, frequency: "weekly", weekdays: [0, 2, 6], autoApprove: false })
-    assert.deepEqual(parse({ ...base, frequency: "monthly", month_days: [31, 18] }), { ...base, frequency: "monthly", monthDays: [18, 31], autoApprove: false })
+    assert.deepEqual(parse({ ...base, frequency: "weekly", weekdays: [6, 0, 2] }), {
+      title: base.title,
+      prompt: base.prompt,
+      time: base.time,
+      timezone: base.timezone,
+      triggerKind: "calendar",
+      frequency: "weekly",
+      weekdays: [0, 2, 6],
+      autoApprove: false,
+    })
+    assert.deepEqual(parse({ ...base, frequency: "monthly", month_days: [31, 18] }), {
+      title: base.title,
+      prompt: base.prompt,
+      time: base.time,
+      timezone: base.timezone,
+      triggerKind: "calendar",
+      frequency: "monthly",
+      monthDays: [18, 31],
+      autoApprove: false,
+    })
   })
   it("resolves once date in the selected zone, not the machine zone or current date", async () => {
     const { scheduledCreateInput: parse } = await r73ScheduledInputSource()
@@ -56,7 +74,8 @@ describe("explicit calendar periods", () => {
     const { scheduledPatchInput: parse } = await r73ScheduledInputSource()
     assert.equal(parse({ time: "10:30" }), null)
     assert.equal(parse({ frequency: "weekly", weekdays: [1] }), null)
-    assert.deepEqual(parse({ frequency: "weekly", weekdays: [4, 1], time: "10:30", timezone: "UTC" }), {
+    assert.deepEqual(parse({ trigger_kind: "calendar", frequency: "weekly", weekdays: [4, 1], time: "10:30", timezone: "UTC" }), {
+      triggerKind: "calendar",
       frequency: "weekly",
       weekdays: [1, 4],
       time: "10:30",
@@ -69,6 +88,7 @@ describe("explicit calendar periods", () => {
 describe("ScheduledTask time boundary", () => {
   it("normalizes offset-bearing expiry to aware UTC without inventing an anchor", () => {
     const input = scheduledCreateInput({
+      trigger_kind: "calendar",
       title: "Review",
       prompt: "Review the project.",
       frequency: "daily",
@@ -85,6 +105,7 @@ describe("ScheduledTask time boundary", () => {
   it("rejects a non-IANA timezone and a timezone-less instant", () => {
     assert.equal(
       scheduledCreateInput({
+        trigger_kind: "calendar",
         title: "Review",
         prompt: "Review the project.",
         frequency: "daily",
@@ -95,6 +116,7 @@ describe("ScheduledTask time boundary", () => {
     )
     assert.equal(
       scheduledCreateInput({
+        trigger_kind: "calendar",
         title: "Review",
         prompt: "Review the project.",
         frequency: "daily",
@@ -108,6 +130,7 @@ describe("ScheduledTask time boundary", () => {
 
   it("keeps patch clearing semantics while returning Date values", () => {
     const patch = scheduledPatchInput({
+      trigger_kind: "calendar",
       frequency: "weekly",
       time: "08:00",
       weekdays: [2, 4],
@@ -128,6 +151,7 @@ async function r73ScheduledInputSource() {
 
 function r73ScheduledPayload(): Record<string, unknown> {
   return {
+    trigger_kind: "calendar",
     title: "R73 independent review",
     prompt: "Review the next steps.",
     frequency: "daily",
@@ -148,6 +172,7 @@ describe("R73 ScheduledTask create closed input", () => {
   it("keeps a legal independent task without Project or Conversation", async () => {
     const input = await r73ParseCreate(r73ScheduledPayload())
     assert.deepEqual(input, {
+      triggerKind: "calendar",
       title: "R73 independent review",
       prompt: "Review the next steps.",
       frequency: "daily",

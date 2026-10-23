@@ -29,6 +29,7 @@ export interface ArtifactLibraryRepository {
 
 /** Runtime port consumed by BFF routes; PostgreSQL is one infrastructure implementation. */
 export interface BffBusinessStore extends IdempotencyRepository {
+  readonly rssPoll?: import("./rss-poll-repository.js").RssPollRepository
   readonly scheduledTaskRuns?: ScheduledTaskRunsReader
   readonly artifactLibrary?: ArtifactLibraryRepository
   readonly services: BffApplicationServices

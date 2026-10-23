@@ -1,3 +1,4 @@
+import { inspectRssTriggerContract } from "./rss-trigger-public-contract.mjs"
 import { inspectBillingCreditAccountContract } from "./billing-credit-account-public-contract.mjs"
 import {
   inspectClosureIntegrationContract,
@@ -3250,6 +3251,7 @@ async function main(): Promise<void> {
   const baseline = Reflect.get(parsedBaseline, "operations") as BaselineOperation[]
   const agentControlSnapshot: unknown = JSON.parse(agentControlSnapshotDocument)
   const errors = [
+    ...inspectRssTriggerContract(source, baseline),
     ...inspectBillingCreditAccountContract(source, baseline),
     ...inspectBffOpenApi(source, baseline),
     ...inspectAgentControlSnapshot(agentControlSnapshot),

@@ -1,9 +1,9 @@
-import { CALENDAR_FIELDS, calendarFromWire, freezeCalendar } from "../../domain/scheduled-task/calendar.js"
+import { TRIGGER_FIELDS, triggerFromWire } from "../../domain/scheduled-task/trigger.js"
 import type { ScheduledTaskCreateInput, ScheduledTaskPatch } from "../ports/scheduled-task-repository.js"
 import { parseUtcTimestamp } from "../../domain/scheduled-task/task.js"
 
-const CREATE_FIELDS = new Set(["project_id", "title", "prompt", ...CALENDAR_FIELDS, "expires_at", "auto_approve"])
-const PATCH_FIELDS = new Set(["title", "prompt", ...CALENDAR_FIELDS, "expires_at", "auto_approve", "enabled", "status"])
+const CREATE_FIELDS = new Set(["project_id", "title", "prompt", ...TRIGGER_FIELDS, "expires_at", "auto_approve"])
+const PATCH_FIELDS = new Set(["title", "prompt", ...TRIGGER_FIELDS, "expires_at", "auto_approve", "enabled", "status"])
 
 function exactProjectReference(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.trim() === value
@@ -26,14 +26,8 @@ export function scheduledCreateInput(json: Record<string, unknown>, projectId?: 
   const projectReference = projectId ?? (typeof json.project_id === "string" ? json.project_id : undefined)
   const title = typeof json.title === "string" ? json.title.trim() : ""
   const prompt = typeof json.prompt === "string" ? json.prompt.trim() : ""
-  const calendar = calendarFromWire(json)
-  if (calendar === null) return null
-  let rule
-  try {
-    rule = freezeCalendar(calendar)
-  } catch {
-    return null
-  }
+  const rule = triggerFromWire(json)
+  if (rule === null) return null
   const expiresAt = json.expires_at === undefined ? undefined : json.expires_at === null ? null : instant(json.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID")
   if (title === "" || prompt === "" || expiresAt === null) return null
   return {
@@ -57,14 +51,10 @@ export function scheduledPatchInput(json: Record<string, unknown>): ScheduledTas
     if (typeof json.prompt !== "string" || json.prompt.trim() === "") return null
     input.prompt = json.prompt.trim()
   }
-  if (CALENDAR_FIELDS.some((field) => Object.hasOwn(json, field))) {
-    const calendar = calendarFromWire(json)
-    if (calendar === null) return null
-    try {
-      Object.assign(input, freezeCalendar(calendar))
-    } catch {
-      return null
-    }
+  if (TRIGGER_FIELDS.some((field) => Object.hasOwn(json, field))) {
+    const rule = triggerFromWire(json)
+    if (rule === null) return null
+    Object.assign(input, rule)
   }
   if (json.expires_at !== undefined) {
     if (json.expires_at === null) {

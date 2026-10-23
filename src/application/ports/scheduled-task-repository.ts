@@ -1,6 +1,7 @@
 import type { ScheduledTaskOutboxStatus } from "../../domain/scheduled-task/outbox.js"
 import type { ScheduledTaskFact, ScheduledTaskStatus } from "../../domain/scheduled-task/task.js"
-import type { ScheduledCalendar } from "../../domain/scheduled-task/calendar.js"
+import type { ScheduledTrigger } from "../../domain/scheduled-task/trigger.js"
+import type { RssFeedFacts } from "../../domain/scheduled-task/rss-poll.types.js"
 
 export type ScheduledTaskMutationLineage = {
   tenantId: string
@@ -14,7 +15,7 @@ export type ScheduledTaskOwnerScope = Readonly<{
   subjectId: string
 }>
 
-export type ScheduledTaskCreateInput = ScheduledCalendar & {
+export type ScheduledTaskCreateInput = ScheduledTrigger & {
   projectId?: string
   title: string
   prompt: string
@@ -30,14 +31,19 @@ export type ScheduledTaskPatch = Partial<{
   enabled: boolean
   status: ScheduledTaskStatus
 }> &
-  Partial<ScheduledCalendar>
+  Partial<ScheduledTrigger>
 
 export type ScheduledTaskRecord = {
   task: ScheduledTaskFact
   ownerId: string
 }
 
-export type ScheduledTaskReadSnapshot = Readonly<{ task: ScheduledTaskFact; deliveryStatus: ScheduledTaskOutboxStatus | null; projectAvailable: boolean }>
+export type ScheduledTaskReadSnapshot = Readonly<{
+  task: ScheduledTaskFact
+  deliveryStatus: ScheduledTaskOutboxStatus | null
+  projectAvailable: boolean
+  feed?: RssFeedFacts
+}>
 
 /** Port consumed by the BFF application layer. It contains no SQL or driver types. */
 export interface ScheduledTaskRepository {

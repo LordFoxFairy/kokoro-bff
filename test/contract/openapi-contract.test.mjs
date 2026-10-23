@@ -1150,6 +1150,7 @@ async function r71ScheduledCreateSource() {
 
 function r71ScheduledCreatePayload() {
   return {
+    trigger_kind: "calendar",
     title: "Independent scheduled task",
     prompt: "Summarize the next steps",
     frequency: "daily",
@@ -1172,6 +1173,7 @@ async function r71ScheduledCreateSchema() {
 
 function r71AssertScheduledInput(input, payload) {
   assert.ok(input !== null, "the production source parser must accept the legal control")
+  assert.equal(input.triggerKind, "calendar")
   assert.equal(input.title, payload.title)
   assert.equal(input.prompt, payload.prompt)
   assert.equal(input.frequency, payload.frequency)
@@ -1333,6 +1335,7 @@ test("R73 create still declares no query input and keeps the existing PATCH cont
 
 function r75RequiredScheduledPayload() {
   return {
+    trigger_kind: "calendar",
     title: "R75 independent task",
     prompt: "Review the next steps.",
     frequency: "daily",
@@ -1425,11 +1428,12 @@ test("R255 ScheduledTask semantic gate rejects anchor aliases, date-time drift, 
   }
 })
 
-test("R75 production accepts an independent task with only the five required properties", async () => {
+test("R75 current production accepts an independent calendar task with explicit kind and its five required properties", async () => {
   const { scheduledCreateInput: parse } = await r71ScheduledCreateSource()
   const payload = r75RequiredScheduledPayload()
   const input = parse(payload)
   assert.ok(input !== null)
+  assert.equal(input.triggerKind, "calendar")
   for (const field of ["title", "prompt", "frequency", "time", "timezone"]) assert.equal(input[field], payload[field])
   assert.equal(input.autoApprove, false)
   assert.equal(Object.hasOwn(input, "recurrenceAnchorAt"), false)
@@ -2828,4 +2832,11 @@ test("SET13 exact inverse preserves the entire committed public14.7 artifact", a
       .digest("hex"),
     "598407a3dfc17d62eb4fe703837b836ba85f05b7102a018dac160351ad807c19",
   )
+})
+
+test("R75 current production rejects creation without explicit trigger_kind", async () => {
+  const { scheduledCreateInput: parse } = await r71ScheduledCreateSource()
+  const payload = r75RequiredScheduledPayload()
+  delete payload.trigger_kind
+  assert.equal(parse(payload), null)
 })

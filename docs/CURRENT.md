@@ -1,3 +1,63 @@
+## I6 runtime review-fix candidate (2026-10-23)
+
+Calendar-to-calendar edits, pause, task deletion and Project deletion retain the existing calendar dispatch lifecycle. Prior RSS revisions and either trigger-kind transition retire only known-never-sent rows; leased, admitted and admission-unknown rows retain their original identities. Both dispatch ID and run ID must match before clearing active scope.
+
+Non-once outbox payloads reject an own run_at field. Additional real-PG oracles are written in the existing RSS integration suite for opposing claim/pause locks, Project eligibility, exact active release, recovery after deletion, epoch round-trips, two 200-item batches and authoritative details/run projection. The same logical nanosecond baseline is a controlled test query-result seam after real clock SQL; actual PostgreSQL now and observed_at are unchanged. These new PG assertions are not yet executed by the implementation writer; Root owns resource verification. Public20, canonical SQL and package remain unchanged.
+
+## I6 RSS 持久运行时离线候选（2026-10-23）
+
+已接显式 calendar/rss、epoch 字符串、v5 outbox、minutely UTC 唤醒、RSS v3 receipt、锁外读取/解析/整批 launch 预检、PG claim/settle 与原 dispatch 队列。新定义不缺省 calendar，旧 v2 calendar 终态 receipt 保持原响应。RSS 实际发现时间独立于逻辑纳秒排序键；没有启动网络轮询器、正常服务或 Agent。
+
+当前只完成离线实现与具名门，准确命令/失败/保护见 i6-rss-persistence-runtime-worker-v1.json。新增真实 PG integration 仅写入未执行：baseline/重放、容量与永久 seen 限额优先级、真实锁重叠、source epoch/unknown、取消重试与已提交丢 ACK、100k 退休与 timeout 原子回滚均待 Root 在自有 fresh fixture 验证。完整 default/build/资源/公网 feed/浏览器/模型未执行，不能宣称 RSS 产品可用。
+
+## I6 RSS 机器契约与 canonical SQL 候选（2026-10-23，运行时未实施）
+
+唯一Public20已落入canonical；168个operation原顺序不变，最外层proof完整逆回19.3原字节后委托旧门。新current测试直接读取20，覆盖创建/PATCH互斥分支、七field十operator与OR/AND界、不可变mutation与独立Details、RSS实际发现时间以及新/旧面篡改拒绝；旧billing测试仅loader逆投影，正文不变。SQL仅fresh canonical，task排他CHECK用显式非空与IS TRUE闭合三值逻辑；poll/seen/dispatch/lease字段及索引已声明。1000未完成为task锁内跨epoch事务计数，不伪造行CHECK；100000 seen退休成本尚未实测。
+
+本片准确命令与保护见A/测试验收/i6-rss-trigger-contract-worker-v1.json；新增断言在旧19.3为0PASS/4FAIL，最终具名结果以manifest为准。未运行PG安装、持久poll、完整测试/build、正常Browser或模型；运行时src、105 generated及固定owner artifact原字节保持。Redocly通过但保留warning，schema资源测试跳过不当通过。
+
+## 2026-10-23 I6：reader前置验收，持久RSS设计门进行中
+
+BFF 9fac同一功能分支未提交；内核/安全reader冻结独审无确定P1/P2，Root187专项/37架构/types/lint通过。八个正规generator仅刷新新sax锁SHA，105 generated文件字节不变。原contract聚合1042PASS/0FAIL（65.116秒）、原默认1885PASS/0FAIL/3原资源SKIP（48.579秒），均含原build成功，773输入首末精确。证据i6-reader-full-root-v1.json。历史RED/失败保留；未做公网feed/PG持久poll/模型验收。
+
+当前三设计前缀已定Public20 calendar/rss真实互斥、持久poll/seen、原dispatch队列、epoch/fence/原子receipt、逻辑顺序与实际发现时间；机器contract/SQL尚待同设计收敛与验证，运行时未实施，不能当RSS产品已启用。正常3314/各owner/schema保持，Agent关闭，Skills/MCP业务未改。下一实施限定本BFF同功能分支、无新Git授权。
+
+## I6 RSS 安全 HTTPS reader（2026-10-23，源码候选待独审）
+
+`readRssFeed({url,signal})`仅返回完整有界bytes；显式内部factory供受控测试，生产固定node DNS/HTTPS和公网地址策略。新增`rss-feed-address.ts`拥有URL/BlockList策略，`rss-feed-reader.ts`拥有单pin、TLS、10秒总期限/5秒idle、16KiB头/1MiB正文及取消释放。没有配置覆盖、外网feed访问、公开接口、SQL、poll或Web激活。后继唯一编排调用点仍为计划中的`application/rss-poll-service.ts`，成功后再交现parser/conditions与持久事务。
+
+根外CDATA窄修同时检查sax `onopencdata`和`oncdata`：空CDATA不产生后一个事件，只有前一个检查可拒空输入；原92内核断言正文保持，根内CDATA仍正常。可执行stub定向RED为29项1PASS/28FAIL；首轮实现184项182PASS/2空CDATA FAIL后按Root裁决修复。首次全组stub因accepted等待未到而终止，保留原日志，不冒完成RED。
+
+自有loopback TLS factory仅映射已验证public pin，保Host/SNI/证书校验；该证据不代表公网可达。实际5秒idle与10秒drip总期限、错SAN、取消socket、启动时环境代理trap及响应边界纳入专项。准确终态计数、命令和全输入保护见A/测试验收/i6-rss-reader-worker-v1.json。未执行build/default/full/contract聚合、DB/Redis或正常Browser；新sax锁的旧生成provenance仍待Root后续聚合门，不在此片重生成。没有hix-code-review通过结论。
+
+## I6 RSS reader 当前阶段（2026-10-23，待实现）
+
+内核v2已通过Root92项/37架构/types/lint与独审原两P2闭合。根外CDATA P3将在reader片窄修。安全HTTPS读取按三设计当前前缀准备，尚无网络/持久poll/Web可用结论；新sax锁变化引起的生成provenance待聚合门核验，不冒全部门通过。
+
+## I6 内核 XML 语义窄修（2026-10-23，待独审）
+
+已修复独审P2：实体前literal CRLF/CR归一LF、实体CR保真；声明仅XML S、固定关键字和standalone值严格小写，仅UTF-8 encoding值可大小写折叠。所有解码属性（包括namespace/未知/字符引用）含TAB/LF/CR即整份拒绝，这是明确的支持子集，不声称完整XML属性归一。guid/id保留XML解码后精确值已由Root裁决；64KiB指投影文本字段和全属性，不限制未知扩展单字段，仍受1MiB/深度/节点总界。
+
+原58内核和37架构测试断言保持；新增行为RED为92项61PASS/31FAIL，修后92PASS。终态命令、哈希与保护见A/测试验收/i6-rss-kernel-worker-v2.json；v1日志/manifest原样保留。未开启reader/网络/资源/poll/Web。
+
+## I6 RSS 内核独审当前状态（2026-10-23）
+
+Root复验58内核/37架构及types/lint通过，但独审发现声明语法与XML行尾两P2，尚未修正关闭。后续窄修按三设计当前前缀执行；原GREEN与失败报告保留。依赖toolchain路径的Node22.22.2与Root当前Homebrew22.23.2分别记录，不混写版本。
+
+## I6 RSS 内核候选实现（2026-10-23，等待Root独审）
+
+已实现纯RSS2/Atom1.0解析及10文本运算符、最多8 OR组/16 AND规则。parser位于`infrastructure/clients/rss-feed-parser.ts`，domain/rss-feed仅Entry类型；conditions仍纯domain。整份拒绝DTD/XXE/XInclude/非法XML字符、重复attribute/root、坏尾或超限；稳定ID、相同重复合并/冲突整份拒绝；输出冻结。未接网络/HTTP/SQL/定时poll/持久seen/outbox/Web，不执行模型，不声称RSS产品完成。
+
+终态纯门：58项内核测试PASS/0SKIP，37项architecture PASS，direct tsc --noEmit、lint和改动路径Prettier均exit0。未执行旧rm build、默认全测或contract聚合。
+
+历史RED：缺文件/初次错误工作目录属于setup失败，不作行为证据。可执行空内核stub为36测试21PASS/15FAIL；真实parser后55测试48PASS/7FAIL证明literal非法XML字符缺口，修复后全通过；重复XML declaration另有56PASS/1FAIL→修复记录。所有日志保留A/测试验收/i6-rss-kernel-*，最终精确命令/计数见冻结manifest，不把中间collection失败当功能RED。
+
+依赖固定sax1.6.1/@types/sax1.2.7，--ignore-scripts；官方registry两integrity与lock完全相等，仅新增这两包与既有Node类型引用。原架构门拒domain crypto后已按裁决移动parser；lint/architecture的旧整字符串/modules/检查改为真正模块引用，新增静态/动态/require负控和namespace数据正控，原domain职责门保留。完整默认/资源测试、网络reader和正常Browser均未执行，本片不涉及这些效果；hix-code-review未执行，不冒指定评审通过。
+
+## I6 RSS 读取/匹配内核（2026-10-23，实施前）
+
+BFF基线9fac77d，工作区此前clean。三设计已明确现owner内的严格RSS2/Atom解析、closed文本条件与后继DNS固定HTTPS边界；尚未安装依赖、实施或运行测试。Public19.3/168、SQL/generated/所有既有业务保持。RSS定义持久化、poll/去重/执行、Web仍未实现，模型授权硬拒绝未被绕过。
+
 ## I5 BFF 初始化切片验收（2026-10-21；尚未正常激活）
 
 Public19.3/168 固定 Billing158579f8 的正规v1四操作SDK。独立只读审查未发现确定P1/P2；原167操作与19.2全文、旧GET行为及历史断言均保留。格式/lint/types/direct build/架构均通过，原默认清单1697PASS/0FAIL/3资源SKIP，原contract:test完整清单1042PASS/0FAIL；聚合契约前置检查全部通过，Redocly保留44warnings。构建使用fresh dist移Trash后原tsc，测试包装仅把自有临时目录/当前PID套接字清理改为Trash，不改断言、时限或网络行为；原包装失败记录保留。

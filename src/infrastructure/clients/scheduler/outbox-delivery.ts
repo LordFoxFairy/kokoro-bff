@@ -101,24 +101,8 @@ export class SchedulerOutboxDelivery implements ScheduledTaskOutboxDeliveryPort 
     try {
       const name = schedulerScheduleName(command.taskId)
       const task = scheduledTaskOutboxTaskFromPayload(command.payload.task)
-      const scheduledTask: ScheduledTaskFact = {
-        id: task.taskId,
-        ...(task.projectId === undefined ? {} : { projectId: task.projectId }),
-        title: task.title,
-        prompt: task.prompt,
-        frequency: task.frequency,
-        time: task.time,
-        timezone: task.timezone,
-        ...(task.weekdays === undefined ? {} : { weekdays: task.weekdays }),
-        ...(task.monthDays === undefined ? {} : { monthDays: task.monthDays }),
-        ...(task.localDate === undefined ? {} : { localDate: task.localDate }),
-        ...(task.runAt === undefined ? {} : { runAt: task.runAt }),
-        ...(task.expiresAt === undefined ? {} : { expiresAt: task.expiresAt }),
-        autoApprove: task.autoApprove,
-        enabled: task.enabled,
-        status: task.status,
-        revision: task.revision,
-      }
+      const { taskId: _taskId, ownerId: _ownerId, ...fact } = task
+      const scheduledTask: ScheduledTaskFact = { ...fact, id: task.taskId }
       const body =
         operation === "delete" ? undefined : buildSchedulerSchedule(scheduledTask, command.tenantId, task.ownerId, this.config.schedulerTargetUrl ?? "")
       const lineage = { tenantId: command.tenantId, requestId: command.requestId, idempotencyKey: command.idempotencyKey }

@@ -684,8 +684,10 @@ test("BFF production code has one explicit owner boundary", async () => {
   for (const file of files) {
     if (typeof file !== "string" || !file.endsWith(".ts")) continue
     const source = await readFile(path.join(root, "src", file), "utf8")
-    assert.equal(source.includes("/adapters/"), false, `src/${file}`)
-    assert.equal(source.includes("/modules/"), false, `src/${file}`)
+    for (const specifier of staticLiteralModuleSpecifiers(source)) {
+      assert.equal(specifier.includes("/adapters/"), false, `src/${file}`)
+      assert.equal(specifier.includes("/modules/"), false, `src/${file}`)
+    }
   }
 })
 
@@ -1013,4 +1015,20 @@ test("shared tasks stays in the existing Chat owner without a new pool or capabi
   assert.doesNotMatch(repository, /new Pool|new Redis|share_id|s\.url/u)
   assert.match(route, /authorizeUserRequest/u)
   assert.match(route, /Math\.min\(config\.upstreamTimeoutMs, 10000\)/u)
+})
+
+test("legacy module boundary checks imports, dynamic imports and require rather than namespace data", async () => {
+  const { legacyModuleReferences } = await import("../scripts/lint-source.mjs")
+  for (const source of [
+    'import x from "../modules/x.js"',
+    'import "../adapters/x.js"',
+    'const x = import("../modules/x.js")',
+    'const x = require("../adapters/x.js")',
+  ]) {
+    assert.ok(legacyModuleReferences(source).length > 0)
+    assert.ok(staticLiteralModuleSpecifiers(source).some((s) => s.includes("/modules/") || s.includes("/adapters/")))
+  }
+  const data = 'const namespace = "http://purl.org/rss/1.0/modules/content/"; const sample = "/adapters/not-an-import/"'
+  assert.deepEqual(legacyModuleReferences(data), [])
+  assert.deepEqual(staticLiteralModuleSpecifiers(data), [])
 })

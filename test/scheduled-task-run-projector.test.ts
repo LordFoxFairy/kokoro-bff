@@ -16,6 +16,8 @@ const query = () => ({
 })
 function row(status = "pending", unknownSeen = false) {
   return {
+    sourceKind: "calendar",
+    sourceObservedAt: null,
     dispatchId: "d",
     tenantId: "tenant",
     subjectId: "owner",
@@ -97,7 +99,16 @@ for (const payload of [
     const r = row("terminal")
     r.terminals = [terminal(payload)]
     assert.equal(page(r).items[0]!.state, "completed")
-    assert.deepEqual(Object.keys(page(r).items[0]!).sort(), ["project_ref", "run_id", "scheduled_for", "state", "task_id", "terminal_event_at", "title"])
+    assert.deepEqual(Object.keys(page(r).items[0]!).sort(), [
+      "project_ref",
+      "run_id",
+      "scheduled_for",
+      "state",
+      "task_id",
+      "terminal_event_at",
+      "title",
+      "trigger_kind",
+    ])
   })
 for (const payload of [
   '{"status":"completed","sta\\u0074us":"cancelled"}',

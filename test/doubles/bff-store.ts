@@ -64,6 +64,7 @@ export class MockBffStore {
 
   readonly scheduledTasks: ScheduledTask[] = [
     {
+      trigger_kind: "calendar",
       id: "scheduled_contract_review",
       title: "Review the API contract",
       prompt: "Review the current business API contract.",
@@ -260,13 +261,14 @@ export class MockBffStore {
 
   createScheduledTask(input: Partial<ScheduledTask>): ScheduledTask {
     const task: ScheduledTask = {
+      trigger_kind: input.trigger_kind ?? "calendar",
+      ...(input.trigger_kind === "rss"
+        ? { feed_url: input.feed_url, conditions: input.conditions }
+        : { frequency: input.frequency || "daily", time: input.time || "09:00", timezone: input.timezone || "UTC" }),
       id: `scheduled_${this.scheduledTasks.length + 1}`,
       project_id: input.project_id,
       title: input.title || "Untitled task",
       prompt: input.prompt || "",
-      frequency: input.frequency || "daily",
-      time: input.time || "09:00",
-      timezone: input.timezone || "UTC",
       next_run_at: null,
       expires_at: input.expires_at,
       auto_approve: input.auto_approve ?? false,

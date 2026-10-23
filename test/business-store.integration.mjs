@@ -178,6 +178,7 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
       project_id: projectId,
       title: "Private schedule",
       prompt: "Review privately.",
+      trigger_kind: "calendar",
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
@@ -366,6 +367,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     const createPayload = {
       title: "Daily review",
       prompt: "Review the project.",
+      trigger_kind: "calendar",
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
@@ -559,6 +561,7 @@ function r73CreatePayload(extra = {}) {
   return {
     title: "R73 independent review",
     prompt: "Review the next steps.",
+    trigger_kind: "calendar",
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
@@ -716,7 +719,7 @@ integrationTest("explicit calendar HTTP persists selections, rejects retired inp
       })
       return { status: response.status, body: await response.json() }
     }
-    const sameRule = { frequency: body.frequency, time: body.time, timezone: body.timezone, local_date: body.local_date }
+    const sameRule = { trigger_kind: "calendar", frequency: body.frequency, time: body.time, timezone: body.timezone, local_date: body.local_date }
     const firstEdit = { title: "Edited after due" }
     const firstAck = await patch(`${key}-edit`, firstEdit)
     assert.equal(firstAck.status, 200)
@@ -1152,6 +1155,7 @@ function r237Schedule(projectId) {
     project_id: projectId,
     title: "R237 task",
     prompt: "Review",
+    trigger_kind: "calendar",
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
@@ -1385,6 +1389,7 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
             projectId: ref,
             title: "Denied",
             prompt: "Denied",
+            triggerKind: "calendar",
             frequency: "daily",
             time: "08:00",
             timezone: "UTC",
@@ -1512,6 +1517,7 @@ integrationTest("R237 real Project row-lock races revalidate active before Messa
               projectId: project.id,
               title: "Denied",
               prompt: "Denied",
+              triggerKind: "calendar",
               frequency: "daily",
               time: "08:00",
               timezone: "UTC",
@@ -2940,6 +2946,7 @@ integrationTest("R257 terminal Scheduler rejection is projected by authoritative
       body: JSON.stringify({
         title: "Terminal failure projection",
         prompt: "Do not execute this integration fixture.",
+        trigger_kind: "calendar",
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",
@@ -5149,7 +5156,15 @@ integrationTest("current scheduled HTTP reads authoritative next, rechecks admis
       { sessionAdmission, scheduledTaskDispatcher: { start() {}, async stop() {} } },
     )
     const base = await listen(bff)
-    const createBody = { title: "Current", prompt: "No execution", frequency: "daily", time: "08:15", timezone: "UTC", auto_approve: false }
+    const createBody = {
+      trigger_kind: "calendar",
+      title: "Current",
+      prompt: "No execution",
+      frequency: "daily",
+      time: "08:15",
+      timezone: "UTC",
+      auto_approve: false,
+    }
     const mutationHeaders = { ...headers, "content-type": "application/json", "idempotency-key": "current-create" }
     const created = await fetch(`${base}/v1/scheduled-tasks`, { method: "POST", headers: mutationHeaders, body: JSON.stringify(createBody) })
     assert.equal(created.status, 200)
@@ -5254,7 +5269,7 @@ integrationTest("current scheduled HTTP reads authoritative next, rechecks admis
     await repository.updateScheduledTask(
       { tenantId: suffix, subjectId: subject },
       original.id,
-      { frequency: "once", localDate: "2030-01-01", time: "08:15", timezone: "UTC", enabled: false, status: "paused" },
+      { triggerKind: "calendar", frequency: "once", localDate: "2030-01-01", time: "08:15", timezone: "UTC", enabled: false, status: "paused" },
       { tenantId: suffix, actorId: subject, requestId: "req-consumed", idempotencyKey: "paused-once-current" },
     )
     // One aggregate is delivered serially: settle the earlier race edit before the once replacement.

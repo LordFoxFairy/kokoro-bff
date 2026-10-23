@@ -1,10 +1,12 @@
+import { restoreRssTriggerParent } from "./rss-trigger-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 const proof = JSON.parse(readFileSync(new URL("../contract/tests/billing-credit-account.json", import.meta.url), "utf8"))
 const hash = (value) => createHash("sha256").update(value).digest("hex")
-export const isBillingCreditAccountContract = (source) => /^  version: 19\.3\.0$/mu.test(source)
+export const isBillingCreditAccountContract = (source) => /^  version: 19\.3\.0$/mu.test(restoreRssTriggerParent(source))
 export function restoreBillingCreditAccountParent(source) {
+  source = restoreRssTriggerParent(source)
   if (!isBillingCreditAccountContract(source)) return source
   const start = source.indexOf("  /v1/billing/credit-account:\n"),
     end = source.indexOf("  /v1/billing/summary:\n", start)

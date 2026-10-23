@@ -1,3 +1,4 @@
+import { restoreRssTriggerSchemaParent } from "./rss-trigger-schema-proof.mjs"
 import { restoreScheduledRunsParent, scheduledRunsParentBaseline } from "../../scripts/scheduled-task-runs-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
@@ -142,7 +143,7 @@ test("Public19.1 download proof rejects new shape drift while retaining the orig
 })
 
 test("merged canonical SQL adds exactly main archive facts to the intact local owner schema", async () => {
-  const currentSchema = await readFile(new URL("../../database/schema.sql", import.meta.url), "utf8")
+  const currentSchema = restoreRssTriggerSchemaParent(await readFile(new URL("../../database/schema.sql", import.meta.url), "utf8"))
   const terminalIndex =
     "-- Bounded exact-run terminal metadata reads.\nCREATE INDEX IF NOT EXISTS ix_bff_scheduled_source_terminal_run\n  ON bff_scheduled_agent_source_event (tenant_id,task_id,source_run_id,source_sequence)\n  WHERE event_type IN ('run.completed','run.failed');\n\n"
   assert.equal(currentSchema.split(terminalIndex).length, 2, "the exact approved run metadata index must remain present once")
@@ -166,5 +167,18 @@ test("merged canonical SQL adds exactly main archive facts to the intact local o
   ]) {
     assert.notEqual(drift, schema)
     assert.throws(() => verify(drift))
+  }
+})
+
+test("RSS SQL certificate restores the exact frozen parent and rejects all current drift", async () => {
+  const source = await readFile(new URL("../../database/schema.sql", import.meta.url), "utf8")
+  assert.equal(digest(restoreRssTriggerSchemaParent(source)), "b4bbfaf0fbf92a528ae38dc2b143ea8bcc08db765074c024b9552447a438e218")
+  for (const drift of [
+    source.replace("seen_count BETWEEN 0 AND 100000", "seen_count BETWEEN 0 AND 100001"),
+    source.replace("CREATE TABLE IF NOT EXISTS bff_message (", "CREATE TABLE IF NOT EXISTS bff_message_changed ("),
+    source + "\nCREATE TABLE unapproved_extra(id TEXT);\n",
+  ]) {
+    assert.notEqual(drift, source, "each negative must really mutate the canonical bytes")
+    assert.throws(() => restoreRssTriggerSchemaParent(drift), /RSS schema .* drift/u)
   }
 })

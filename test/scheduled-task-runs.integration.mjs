@@ -79,7 +79,7 @@ test("I4 fresh PG metadata: exact current qualification, terminal integrity, nan
       ["orphan", "owner", "missing", "active"],
     ]) {
       await observer.query(
-        "INSERT INTO bff_scheduled_task(task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,enabled,status,project_id) VALUES($1,'tenant',$2,$1,'p','daily','08:00','UTC',FALSE,$3,$4)",
+        "INSERT INTO bff_scheduled_task(trigger_kind,trigger_epoch,task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,enabled,status,project_id) VALUES('calendar',1,$1,'tenant',$2,$1,'p','daily','08:00','UTC',FALSE,$3,$4)",
         [id, owner, status, parent],
       )
     }
@@ -90,8 +90,8 @@ test("I4 fresh PG metadata: exact current qualification, terminal integrity, nan
         owner = task === "foreign" ? "other" : "owner",
         status = options.status ?? "pending"
       await observer.query(
-        `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at,completed_at)
-        VALUES($1,'tenant',$2,$3,$3,$4,'request',$1,$5,$6,'assertion','{}',$7,CASE WHEN $7 IN ('admitted','terminal') THEN CURRENT_TIMESTAMP ELSE NULL END,CASE WHEN $7 IN ('terminal','failed') THEN CURRENT_TIMESTAMP ELSE NULL END)`,
+        `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at,completed_at)
+        VALUES('calendar',1,1,$1,'tenant',$2,$3,$3,$4,'request',$1,$5,$6,'assertion','{}',$7,CASE WHEN $7 IN ('admitted','terminal') THEN CURRENT_TIMESTAMP ELSE NULL END,CASE WHEN $7 IN ('terminal','failed') THEN CURRENT_TIMESTAMP ELSE NULL END)`,
         [id, task, order, owner, "0".repeat(64), run, status],
       )
       return { id, run, task }

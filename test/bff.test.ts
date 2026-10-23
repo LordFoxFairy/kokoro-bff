@@ -240,6 +240,7 @@ describe("kokoro-bff v1 mock contract", () => {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "project-scheduled-flow" },
       body: JSON.stringify({
+        trigger_kind: "calendar",
         title: "Daily briefing",
         prompt: "Summarize the project updates.",
         frequency: "daily",
@@ -278,7 +279,15 @@ describe("kokoro-bff v1 mock contract", () => {
     const created = await fetch(`${base}/v1/scheduled-tasks`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ title: "Daily review", prompt: "Review", frequency: "daily", time: "10:00", timezone: "UTC", auto_approve: false }),
+      body: JSON.stringify({
+        trigger_kind: "calendar",
+        title: "Daily review",
+        prompt: "Review",
+        frequency: "daily",
+        time: "10:00",
+        timezone: "UTC",
+        auto_approve: false,
+      }),
     })
     assert.equal(created.status, 200)
     const createdBody = (await created.json()) as { data: { task: { id: string } } }

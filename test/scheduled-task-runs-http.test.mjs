@@ -7,6 +7,8 @@ import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", authorization: "Bearer token", "x-kokoro-request-id": "runs-http" }
 const row = () => ({
+  sourceKind: "calendar",
+  sourceObservedAt: null,
   dispatchId: "dispatch-1",
   tenantId: "tenant",
   subjectId: "owner",
@@ -73,6 +75,7 @@ test("runs HTTP current owner metadata requires two snapshots and two IAM admiss
           title: "Current title",
           project_ref: null,
           run_id: "run-1",
+          trigger_kind: "calendar",
           scheduled_for: "2026-10-21T00:00:00.000000001Z",
           state: "pending",
           terminal_event_at: null,

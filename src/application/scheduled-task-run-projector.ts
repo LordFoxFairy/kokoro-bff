@@ -70,7 +70,15 @@ function terminal(row: ScheduledRunCandidate, strictParseRawJson: (value: string
   return { state: body.status, terminal_event_at: instant.toISOString() }
 }
 function project(row: ScheduledRunCandidate, strictParseRawJson: (value: string) => unknown): ScheduledRunItem {
-  const base = { task_id: row.taskId, title: row.title, project_ref: row.projectRef, run_id: row.runId, scheduled_for: row.orderKey }
+  const base = {
+    task_id: row.taskId,
+    title: row.title,
+    project_ref: row.projectRef,
+    run_id: row.runId,
+    trigger_kind: row.sourceKind,
+    scheduled_for: row.sourceKind === "rss" ? null : row.orderKey,
+    ...(row.sourceKind === "rss" ? { observed_at: row.sourceObservedAt! } : {}),
+  }
   if (row.status === "terminal") return { ...base, ...terminal(row, strictParseRawJson) }
   if (row.terminals.length !== 0) return invalid()
   if (["pending", "leased", "retryable"].includes(row.status))
@@ -99,7 +107,10 @@ export function projectScheduledRuns(snapshot: unknown, query: ScheduledRunsQuer
   for (const value of snapshot.rows) {
     if (
       !record(value) ||
-      !exact(value, "dispatchId,orderKey,projectRef,runId,status,subjectId,taskId,taskRevision,tenantId,terminals,title,unknownSeen") ||
+      !exact(
+        value,
+        "dispatchId,orderKey,projectRef,runId,sourceKind,sourceObservedAt,status,subjectId,taskId,taskRevision,tenantId,terminals,title,unknownSeen",
+      ) ||
       !text(value.dispatchId, 1024) ||
       !text(value.taskId) ||
       !text(value.runId) ||
@@ -112,6 +123,13 @@ export function projectScheduledRuns(snapshot: unknown, query: ScheduledRunsQuer
       typeof value.taskRevision !== "string" ||
       !/^[1-9][0-9]*$/u.test(value.taskRevision) ||
       !validRunOrder(value.orderKey) ||
+      (value.sourceKind !== "calendar" && value.sourceKind !== "rss") ||
+      (value.sourceKind === "calendar"
+        ? value.sourceObservedAt !== null
+        : typeof value.sourceObservedAt !== "string" ||
+          !/^\d{4}-.*\.\d{3}Z$/u.test(value.sourceObservedAt) ||
+          !Number.isFinite(Date.parse(value.sourceObservedAt)) ||
+          new Date(value.sourceObservedAt).toISOString() !== value.sourceObservedAt) ||
       typeof value.status !== "string" ||
       typeof value.unknownSeen !== "boolean" ||
       !Array.isArray(value.terminals) ||

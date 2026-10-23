@@ -1,8 +1,9 @@
+import { restoreRssTriggerParent } from "../scripts/rss-trigger-public-contract.mjs"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { readFileSync } from "node:fs"
 import { load } from "js-yaml"
-const source = readFileSync(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+const source = restoreRssTriggerParent(readFileSync(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
 test("Public19.3 exposes natural-idempotent current credit account initialization", () => {
   const doc = load(source)
   assert.equal(doc.info.version, "19.3.0")

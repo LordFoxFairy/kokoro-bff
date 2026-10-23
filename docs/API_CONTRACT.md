@@ -1,3 +1,59 @@
+## I6 runtime review-fix candidate (2026-10-23)
+
+Calendar-to-calendar edits, pause, task deletion and Project deletion retain the existing calendar dispatch lifecycle. Prior RSS revisions and either trigger-kind transition retire only known-never-sent rows; leased, admitted and admission-unknown rows retain their original identities. Both dispatch ID and run ID must match before clearing active scope.
+
+Non-once outbox payloads reject an own run_at field. Additional real-PG oracles are written in the existing RSS integration suite for opposing claim/pause locks, Project eligibility, exact active release, recovery after deletion, epoch round-trips, two 200-item batches and authoritative details/run projection. The same logical nanosecond baseline is a controlled test query-result seam after real clock SQL; actual PostgreSQL now and observed_at are unchanged. These new PG assertions are not yet executed by the implementation writer; Root owns resource verification. Public20, canonical SQL and package remain unchanged.
+
+## I6 RSS 运行时消费状态（2026-10-23，尚未发行）
+
+当前离线候选按唯一 Public20 实现 required trigger_kind，不引入旧输入 fallback；mutation 仍只返回定义，RSS Details 单独返回 feed 事实，RSS RunItem 以 observed_at 表达实际发现时间且 scheduled_for=null。内部 v5 epoch 为规范十进制字符串。Scheduler RSS callback 返回真实 poll summary，不构造 run_id；旧 calendar v2 terminal 响应原样重放。canonical/artifact 未在本运行时片改写，Web 仍不得提前消费未发行源码。
+
+### I6 机器契约候选状态（2026-10-23）
+
+current20已落盘，新增目标测试直接读20；完整raw逆恢复19.3后再委托旧billing/历史oracle。168有序清单保持，不提前发行Web pin。条件的maxLength仅为字符侧上界，1024 UTF8字节仍需parseRssConditions；URL2048 UTF8字节和固定安全策略同理。机器门通过不代表当前运行时已接受RSS；运行时仍待下一卡，不可将历史19.3服务当20验收。
+
+## I6 RSS trigger：唯一 Public20.0.0（2026-10-23，当前设计；尚未发行）
+
+唯一事实源仍contract/openapi/v1/openapi.yaml；在19.3原168有序operation不变的基础上，只演进ScheduledTask、请求/详情与ScheduledTaskRunItem相关schemas及version。完整19.3原字节可逆证明，历史proof/hash/安全断言保留，新normalizer先逆回19.3再执行原历史门。没有新连接器/Skills API或第二contract。
+
+create与mutation task为flat calendar/rss union，required trigger_kind=calendar|rss；calendar必须frequency/time/timezone并保四周期规则，禁止feed_url/conditions；rss必须feed_url/conditions且禁止frequency/time/timezone/weekdays/month_days/local_date，next_run_at恒null。URL与条件使用现reader policy/parseRssConditions（<=8 OR组，每组1..16 AND；[]不过滤，10种文本operator/7 field，空值operator禁止value，其余非空<=1024UTF8字节）。不接收用户regex或宽松未知字段。通用title/prompt/project/expiry/approval/enabled/status沿现语义。
+
+PATCH仅公共字段可独立变更；任何trigger字段出现必须给完整闭合分支及trigger_kind，禁止半更新或混合分支；不缺省calendar、不伪daily。kind或规范URL改变重置当前feed baseline并递增内部epoch，不回放历史；其余修改保seen，未发送旧revision按数据规则失效。mutation ACK是不可变定义，不含feed_state/last_checked_at/next_check_at/error_code。
+
+Details采用单独闭合对象，在定义字段之外required scheduling_state；RSS还required feed_state=initializing|active|backoff|limit_reached、last_checked_at/next_check_at为date-time|null、error_code为closed code|null，均为当前BFF poll事实。calendar禁止四个feed字段，next_run_at仍Scheduler权威事实；RSS next_run_at=null，不能冒下一次poll为计划执行时刻。registration pending/failed与feed状态分别表达，不把入队/读取成功写成执行成功。closed error_code使用reader固定9码及feed_invalid/queue_full/launch_too_large/limit_reached，不回传URL/正文/异常。
+
+ScheduledTaskRunItem required trigger_kind；calendar保原scheduled_for且禁止observed_at；rss scheduled_for=null，required observed_at真实DB发现时间，绝不把逻辑排队key或publisher日期当发现事实。state/terminal_event_at与内部二元cursor不变；当前身份/Project资格及单一1MiB响应边界保持。Web在owner完成并提交后固定20artifact，按kind展示时间，不能提前手抄未提交工作树。
+
+内部task outbox唯一v5冻结真实trigger；RSS Scheduler固定每分钟cron/UTC仅传输唤醒。callback body冻结tenant/task/owner/project/revision/kind/epoch；URL/prompt/conditions不得自报。Scheduler固定3bb/3.0接受HTTP2xx且有界丢弃response body，RSS可202 {poll_id,outcome,observed_count,enqueued_count}，不返回假run_id；outcome闭集baseline/enqueued/unchanged/not_due/backoff/limit_reached/ineligible，计数0..200。旧calendar receipt v2重放原结果，RSSv3明确rss_poll快照与固定摘要。同scope/digest终态重放零网络，不同digest409；并发pending425、claim丢失/DB依赖503；不把网络poll失败伪执行失败。
+
+readRssFeed/parseRssFeed/conditions包内接口沿下方已验内核；公共20和持久功能此时仍是设计，不能标已可用。原聚合1042、默认1885/3资源SKIP和reader187证明前置保留行为，不代表新20运行时通过。
+
+## I6 RSS 安全 HTTPS reader（2026-10-23，源码候选待独审）
+
+`readRssFeed({url,signal})`仅返回完整有界bytes；显式内部factory供受控测试，生产固定node DNS/HTTPS和公网地址策略。新增`rss-feed-address.ts`拥有URL/BlockList策略，`rss-feed-reader.ts`拥有单pin、TLS、10秒总期限/5秒idle、16KiB头/1MiB正文及取消释放。没有配置覆盖、外网feed访问、公开接口、SQL、poll或Web激活。后继唯一编排调用点仍为计划中的`application/rss-poll-service.ts`，成功后再交现parser/conditions与持久事务。
+
+根外CDATA窄修同时检查sax `onopencdata`和`oncdata`：空CDATA不产生后一个事件，只有前一个检查可拒空输入；原92内核断言正文保持，根内CDATA仍正常。可执行stub定向RED为29项1PASS/28FAIL；首轮实现184项182PASS/2空CDATA FAIL后按Root裁决修复。首次全组stub因accepted等待未到而终止，保留原日志，不冒完成RED。
+
+自有loopback TLS factory仅映射已验证public pin，保Host/SNI/证书校验；该证据不代表公网可达。实际5秒idle与10秒drip总期限、错SAN、取消socket、启动时环境代理trap及响应边界纳入专项。准确终态计数、命令和全输入保护见A/测试验收/i6-rss-reader-worker-v1.json。未执行build/default/full/contract聚合、DB/Redis或正常Browser；新sax锁的旧生成provenance仍待Root后续聚合门，不在此片重生成。没有hix-code-review通过结论。
+
+## I6 RSS HTTPS reader 包内接口（2026-10-23，实施前）
+
+唯一生产函数infrastructure/clients/rss-feed-reader.ts::readRssFeed(input: Readonly<{url:string;signal:AbortSignal}>): Promise<Uint8Array>，替代早期位置参数草稿，不保留alias。返回完整有界raw bytes，调用者再调用parser；不承诺此函数已匹配/持久化/启动任务。网络测试factory为包内显式接缝，不是HTTP/配置能力，生产入口始终固定node依赖和安全策略。地址策略模块只供该reader和纯测试使用，不复制公共DTO。
+
+错误闭集采用rss_feed_url_invalid、rss_feed_address_forbidden、rss_feed_dns_unavailable、rss_feed_dns_busy、rss_feed_unavailable、rss_feed_timeout、rss_feed_cancelled、rss_feed_response_invalid、rss_feed_too_large；message仅受控code，不透出URL/host/body/底层error。具体边界、取消与真实受控TLS oracle见TECHNICAL_DESIGN当前reader节。Public19.3/168、全部owner pins/generated保持；reader没有可注册的路由或SQL输入。根外CDATA窄修仍只rss_feed_invalid，不新增对外字段。
+
+## I6 XML 语义修正（2026-10-23，实施前）
+
+包内parse签名、固定rss_feed_invalid及Public19.3/168保持。literal行尾在实体解析前按XML归一；opaque ID其余字符保真。声明只接受XML S及正确小写关键字/standalone，UTF-8 encoding值可大小写不敏感。作为本片受支持输入子集，所有已解码属性值含TAB/LF/CR均整份拒绝（含字符引用及未知/ns属性）。64KiB只约束投影文本字段及所有属性值；未知文本仍有1MiB全输入界。详细语义以TECHNICAL_DESIGN本节为准，不增加HTTP/SQL边界。
+
+## I6 RSS 内核包内接口（2026-10-23，未公开）
+
+与TECHNICAL_DESIGN同片：Public19.3/168、所有公开operations/owner pins/generated原字节不变，无RSS HTTP endpoint已发布。`infrastructure/clients/rss-feed-parser.ts::parseRssFeed(bytes: Uint8Array): readonly RssFeedEntry[]`整份成功或抛出仅受控code的RssFeedError；不在异常中带URL、XML或用户文本。Entry含identity/title/summary/content/authors/categories/link/domain/publishedAt/updatedAt/enclosures，未出现字段为空串、空数组或null，不以placeholder补事实。身份、解析上限与冲突规则遵TECHNICAL_DESIGN。
+
+`parseRssConditions(value: unknown): RssConditionGroups`执行closed完整验证，`matchesRssConditions(entry, groups): boolean`只接受其归一化结果且保持无副作用；无规则true，OR-of-AND完整验证后匹配。每项closed `{field,operator,value?}`，空值运算符无value，其余必有非空value。首片不接正则/date/numeric规则，不把未支持运算符当false或删除规则。返回及参数不泄漏sax类型。
+
+后继 `readRssFeed({url,signal})`返回同一严格快照；每次读取独立总deadline，生产DNS策略不可由HTTP输入覆盖，测试resolver/transport仅测试夹具注入。尚未完成安全网络、配置持久化、Scheduler poll、entry inbox/执行、Web消费或正常验收；内核green不能标记RSS已可使用。
+
 ## I5 BFF 初始化切片验收（2026-10-21；尚未正常激活）
 
 Public19.3/168 固定 Billing158579f8 的正规v1四操作SDK。独立只读审查未发现确定P1/P2；原167操作与19.2全文、旧GET行为及历史断言均保留。格式/lint/types/direct build/架构均通过，原默认清单1697PASS/0FAIL/3资源SKIP，原contract:test完整清单1042PASS/0FAIL；聚合契约前置检查全部通过，Redocly保留44warnings。构建使用fresh dist移Trash后原tsc，测试包装仅把自有临时目录/当前PID套接字清理改为Trash，不改断言、时限或网络行为；原包装失败记录保留。

@@ -135,7 +135,7 @@ function dispatchHeaders(idempotencyKey = "budget-key", requestId = "transport-r
 }
 
 function dispatchBody(extra = ""): string {
-  return `{"tenant_id":"tenant_fixture","task_id":"scheduled_fixture","task_revision":1,"owner_id":"owner_fixture","prompt":"go","auto_approve":false,"timezone":"UTC"${extra}}`
+  return `{"tenant_id":"tenant_fixture","task_id":"scheduled_fixture","task_revision":1,"trigger_kind":"calendar","trigger_epoch":"1","owner_id":"owner_fixture","prompt":"go","auto_approve":false,"timezone":"UTC"${extra}}`
 }
 
 describe("Scheduler receiver admission", () => {
@@ -428,6 +428,8 @@ describe("Scheduler receiver admission", () => {
         id: "scheduled_fixture",
         title: "Fixture",
         prompt: "go",
+        triggerKind: "calendar",
+        triggerEpoch: "1",
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",

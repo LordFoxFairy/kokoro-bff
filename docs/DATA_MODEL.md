@@ -1,3 +1,104 @@
+## I6 runtime review-fix candidate (2026-10-23)
+
+Calendar-to-calendar edits, pause, task deletion and Project deletion retain the existing calendar dispatch lifecycle. Prior RSS revisions and either trigger-kind transition retire only known-never-sent rows; leased, admitted and admission-unknown rows retain their original identities. Both dispatch ID and run ID must match before clearing active scope.
+
+Non-once outbox payloads reject an own run_at field. Additional real-PG oracles are written in the existing RSS integration suite for opposing claim/pause locks, Project eligibility, exact active release, recovery after deletion, epoch round-trips, two 200-item batches and authoritative details/run projection. The same logical nanosecond baseline is a controlled test query-result seam after real clock SQL; actual PostgreSQL now and observed_at are unchanged. These new PG assertions are not yet executed by the implementation writer; Root owns resource verification. Public20, canonical SQL and package remain unchanged.
+
+## I6 RSS 事务实施状态（2026-10-23，待真实运行时验收）
+
+实现使用唯一 canonical 的 task/poll/seen 与原 dispatch/scope/receipt：receipt→Project→task→poll→scope→dispatch/seen 锁序；未知/已送达命令保留，已知 never-sent 旧 revision 才停止。跨 epoch 1000 unfinished 在 task 锁内计数；100000 seen 永久停止优先于瞬时 queue_full，失败不落部分 seen。source 退休的 100k DELETE 在同 mutation 事务内受局部 5s statement/2s lock timeout，失败整体回滚。
+
+Root 已独立确认 fresh canonical 32 表与 100 条 SQL 约束 oracle；该证据不替代当前新运行时事务、取消、容量、锁序和清理成本验证。新增 integration 源尚未运行，本片没有数据库/Redis写入或迁移正常库。
+
+### I6 canonical 候选验证边界（2026-10-23）
+
+当前poll只由Scheduler的exact tenant/task callback访问；PK覆盖due和lease复验，不存在全局扫描消费者，因此不建独立due/lease索引。dispatch的RSS自然身份unique与跨epoch未完成计数partial索引各有实际查询职责。
+
+本节字段/约束已落入唯一database/schema.sql，尚未安装。task calendar/rss排他分支对必要列显式IS NOT NULL，并用IS TRUE拒NULL三值穿透；poll lease三列全空或全非空，seen匹配与dispatch引用同一行闭合，source identity另有RSS partial unique。1000未完成跨epoch容量必须在task锁内计数并整批验证，partial index不是行CHECK保证；seen100000计数一致性及退休成本同样待真实事务/PG验证。离线schema门资源skip不冒安装成功，无migration或正常库变化。
+
+## I6 RSS 持久化模型（2026-10-23，当前设计；仅fresh canonical，未安装）
+
+以下是当前唯一模型，替代下方reader阶段“无后继SQL变化”的草稿。所有表属于BFF ScheduledTask、唯一database/schema.sql，无FK/第二schema/migration链；仅自有fresh fixture验证，不自动改正常应用schema或他人数据。PostgreSQL为权威，Redis无seen/队列事实副本。
+
+### bff_scheduled_task 增量
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| trigger_kind | TEXT NOT NULL | calendar/rss闭集，无运行时缺省兼容。 |
+| trigger_epoch | BIGINT NOT NULL | 初始1，>=1，kind或规范feed URL改变递增，所有kind保留。 |
+| rss_url | TEXT NULL | 仅RSS必填，固定reader URL策略，<=2048UTF8字节。 |
+| rss_conditions | JSONB NULL | 仅RSS为已完整验证的有界OR/AND数组，calendar为NULL。 |
+| frequency/task_time/timezone/weekdays/month_days/local_date/run_at | 原类型，可空 | calendar保持原四规则且前三非空；RSS七列全部NULL。 |
+
+通用Project/owner/revision/expiry/状态不复制。trigger CHECK外包原calendar CHECK并显式IS NOT NULL，避免NULL三值逻辑穿透；RSS分支排斥日历，calendar排斥RSS。触发源更新revision+1同时epoch按源语义决定；poll失效/seen退休/never-sent队列失效与outbox v5同一事务。
+
+### bff_scheduled_rss_poll（一task一当前poll）
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| tenant_id/task_id | TEXT，联合PK | 唯一当前行，按task受信owner访问。 |
+| source_epoch/task_revision | BIGINT NOT NULL | >=1，绑定当前定义与fence。 |
+| subject_id | TEXT NOT NULL | 当前可信owner，禁止浏览器自报。 |
+| initialized | BOOLEAN NOT NULL | 第一次完整成功baseline后true。 |
+| poll_sequence | BIGINT NOT NULL | >=0，每份成功快照+1，与Agent seq不同。 |
+| seen_count | INTEGER NOT NULL | 0..100000，与当前epoch seen原子一致。 |
+| next_poll_at/last_checked_at | TIMESTAMPTZ，前者非空 | 当前due与实际观察；未读last为NULL。 |
+| failure_count/last_error_code | INTEGER非负/TEXT NULL | closed code派生backoff；limit_reached不再fetch。 |
+| lease_owner/lease_token/lease_until | TEXT/TEXT/TIMESTAMPTZ NULL | 三者同时空或同时非空，token+fence条件提交。 |
+| fence | BIGINT NOT NULL | >=0，领取及失效递增。 |
+| created_at/updated_at | TIMESTAMPTZ NOT NULL | DB事实时间。 |
+
+task创建RSS即初始化poll；同源revision变更更新绑定并废lease但保baseline/seen；换源清当前poll状态并退休旧epoch seen，epoch不复用；转calendar/物理删task则移除poll。旧dispatch/receipt/scope保留以恢复unknown。seen上限是终止当前源自动读取，不静默TTL重置。
+
+### bff_scheduled_rss_seen（条目幂等）
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| tenant_id/task_id/source_epoch/item_identity | TEXT/TEXT/BIGINT/TEXT，联合PK | item SHA256小写64；source隔离，唯一永久去重。 |
+| content_digest | TEXT NOT NULL | 规范Entry闭合JSON摘要，仅诊断，不作为身份。 |
+| first_poll_sequence/first_seen_at | BIGINT/TIMESTAMPTZ NOT NULL | >0，实际成功观察，非publisher日期。 |
+| matched/dispatch_id | BOOLEAN/TEXT NULL | 此新条目确已匹配并入队才true且dispatch非空；baseline/不匹配为false且NULL，CHECK一致。 |
+
+无FK完整性由同事务和当前task/poll锁保证。当前epoch seen不TTL。换源/转calendar/删除只按indexed tenant/task/epoch退休至多100000条，须真实测持锁耗时；达不到有界statement预算则改有界可恢复清理方案后再放行，不在失败事务里清半seen。按PK做已见查询，当前poll无需额外无用途全局索引。
+
+### 现dispatch/scope的增量
+
+| 表/字段 | 类型 | 说明 |
+| --- | --- | --- |
+| dispatch.source_kind | TEXT NOT NULL | calendar/rss，不能靠occurrence字符串猜。 |
+| dispatch.source_revision/source_epoch | BIGINT NOT NULL | 原冻结定义版本与源epoch，均>=1。 |
+| dispatch.source_item_identity | TEXT NULL | RSS必填SHA64，calendar为NULL。 |
+| dispatch.source_observed_at | TIMESTAMPTZ NULL | RSS实际DB发现事实，calendar为NULL，不能从逻辑键反推。 |
+| scope.rss_order_high_watermark | TEXT NULL | 固定9位UTC逻辑键，跨poll/epoch/kind与重启保留，非Agent seq。 |
+
+RSS新增唯一(tenant_id,task_id,source_epoch,source_item_identity) partial约束防重复；未完成容量/失效查询按真实谓词给partial索引，不建第二queue。现dispatch/session/run/idempotency/terminals及scope单active保持。RSS occurrence为rss:<epoch>:<item_sha>，全部run/key/dispatch身份摘要由trusted tenant/task/epoch/item闭合JSON固定。
+
+receipt→Project→task→poll→scope→dispatch/seen；网络在锁外，成功0..200seen/dispatch+poll+receipt固定summary同事务。BigInt逻辑key分配及真实source_observed_at见TECHNICAL_DESIGN；旧calendar排序含义不变。pause/update/删除使poll fence失效，失败化仅unknown=false且pending/retryable的never-sent，exact active同事务清两字段；unknown/leased/admitted保留原恢复/可信终态。claim never-sent不得现scope锁后反取task。Project删除顺序沿现Project→task并稳定task/item锁序，无反取Conversation。
+
+部署/回滚仅此fresh候选版本整体配对，不能对旧正常数据原地CREATE IF NOT EXISTS冒迁移成功。现normal服务仍旧9fac/schema；reader工程门通过不等于这些新表已验。
+
+## I6 RSS 安全 HTTPS reader（2026-10-23，源码候选待独审）
+
+`readRssFeed({url,signal})`仅返回完整有界bytes；显式内部factory供受控测试，生产固定node DNS/HTTPS和公网地址策略。新增`rss-feed-address.ts`拥有URL/BlockList策略，`rss-feed-reader.ts`拥有单pin、TLS、10秒总期限/5秒idle、16KiB头/1MiB正文及取消释放。没有配置覆盖、外网feed访问、公开接口、SQL、poll或Web激活。后继唯一编排调用点仍为计划中的`application/rss-poll-service.ts`，成功后再交现parser/conditions与持久事务。
+
+根外CDATA窄修同时检查sax `onopencdata`和`oncdata`：空CDATA不产生后一个事件，只有前一个检查可拒空输入；原92内核断言正文保持，根内CDATA仍正常。可执行stub定向RED为29项1PASS/28FAIL；首轮实现184项182PASS/2空CDATA FAIL后按Root裁决修复。首次全组stub因accepted等待未到而终止，保留原日志，不冒完成RED。
+
+自有loopback TLS factory仅映射已验证public pin，保Host/SNI/证书校验；该证据不代表公网可达。实际5秒idle与10秒drip总期限、错SAN、取消socket、启动时环境代理trap及响应边界纳入专项。准确终态计数、命令和全输入保护见A/测试验收/i6-rss-reader-worker-v1.json。未执行build/default/full/contract聚合、DB/Redis或正常Browser；新sax锁的旧生成provenance仍待Root后续聚合门，不在此片重生成。没有hix-code-review通过结论。
+
+## I6 RSS reader 无持久化变更（2026-10-23，实施前）
+
+网络层只拥有一次read的有界bytes/timer/取消和最多8个未物理完成DNS lookup的进程内资源，不拥有订阅事实/seen/receipt/缓存/DB/Redis。每次独立重新解析DNS，不能缓存上次地址作为后次授权；成功只返回完整bytes。所有网络在后继poll短事务之外，失败不会提前写baseline或seen。canonical、现索引和公开资源本片不变；后继source epoch/永久去重与执行队列必须另过数据设计门。
+
+## I6 XML 语义修正（2026-10-23，实施前）
+
+只修快照解码：literal CRLF/CR在实体解析前归一，opaque ID不额外trim；属性控制空白作为不支持输入整份拒绝。没有已持久化RSS identity可迁移，不重写现有任何事实、canonical或索引。后继seen必须消费通过修正验收后的identity，不能将原候选摘要当已发布持久契约。
+
+## I6 RSS 内核无持久化变更（2026-10-23）
+
+首片parse/match/安全读取只产生有界快照，不拥有持久状态。唯一canonical `database/schema.sql`、已有task/command/dispatch/receipt/索引原字节保持；无新表/列/缓存、跨owner JOIN、DDL、迁移或正常数据操作。identity只为feed内稳定标识，不能单独充当tenant授权或全局执行ID。
+
+后继持久方案仍归BFF ScheduledTask：真实calendar/rss互斥配置、URL变更新source epoch、首次成功poll baseline、seen item唯一tenant/task/epoch/identity、poll lease/fence及其结果与执行outbox原子提交。缺少seen/epoch/锁序与去重保留策略时不启用poll，不用内存Map或localStorage假装完成。数据生命周期、cas/幂等、Project→task→poll→execution锁序及当前资格复验必须随同后继canonical/三设计一起完成；不把这里的候选写成已安装schema。当前片无新数据表，故不创建空SQL或第二事实源。
+
 ## I5 BFF 初始化切片验收（2026-10-21；尚未正常激活）
 
 Public19.3/168 固定 Billing158579f8 的正规v1四操作SDK。独立只读审查未发现确定P1/P2；原167操作与19.2全文、旧GET行为及历史断言均保留。格式/lint/types/direct build/架构均通过，原默认清单1697PASS/0FAIL/3资源SKIP，原contract:test完整清单1042PASS/0FAIL；聚合契约前置检查全部通过，Redocly保留44warnings。构建使用fresh dist移Trash后原tsc，测试包装仅把自有临时目录/当前PID套接字清理改为Trash，不改断言、时限或网络行为；原包装失败记录保留。

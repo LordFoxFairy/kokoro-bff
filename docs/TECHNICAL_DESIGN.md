@@ -1,3 +1,121 @@
+## I6 runtime review-fix candidate (2026-10-23)
+
+Calendar-to-calendar edits, pause, task deletion and Project deletion retain the existing calendar dispatch lifecycle. Prior RSS revisions and either trigger-kind transition retire only known-never-sent rows; leased, admitted and admission-unknown rows retain their original identities. Both dispatch ID and run ID must match before clearing active scope.
+
+Non-once outbox payloads reject an own run_at field. Additional real-PG oracles are written in the existing RSS integration suite for opposing claim/pause locks, Project eligibility, exact active release, recovery after deletion, epoch round-trips, two 200-item batches and authoritative details/run projection. The same logical nanosecond baseline is a controlled test query-result seam after real clock SQL; actual PostgreSQL now and observed_at are unchanged. These new PG assertions are not yet executed by the implementation writer; Root owns resource verification. Public20, canonical SQL and package remain unchanged.
+
+## I6 RSS 运行时实施补充（2026-10-23，离线候选）
+
+RSS callback 从 HTTP 入口建立 20s 父期限，含未完成 body；10s reader 与至少 2s settle 余量共用该期限。持久事务复用 ArchiveSqlLease。取消或未知 settle ACK 的 release 只在剩余父预算内（最多 2s）监督清理：仅 exact pending v3/rss_poll token/digest 与 poll token/fence 可释放并增 fence，不降级 terminal receipt。无剩余预算或数据库故障时仍依原 30s/60s 租约自然回收，不宣称断连能撤销已提交事务。
+
+source/kind/删除的 seen 退休沿原 mutation 事务原子删除；该额外 DELETE 设置事务局部 statement_timeout=5s、lock_timeout=2s。timeout 必须冒泡使 task/poll/seen/dispatch/scope 整体回滚，非分块部分删除；这不代表整个旧 mutation 已获得 callback 的绝对 20s 预算。100k 成本与真实锁竞争待独立资源门。
+
+### I6 当前机器实现边界（2026-10-23，未实现持久运行时）
+
+contract20及canonical SQL已按本节D0/D1落盘；scripts/rss-trigger-public-contract.mjs以完整raw逆恢复19.3与168有序inventory连接全部原门，新目标测试直接检查current20并拒新增面/历史面篡改。没有runtime双版本、第二canonical或schema副本。条件UTF8字节与URL安全必须仍由运行时既有策略校验，不能把OpenAPI maxLength冒充字节或SSRF验证。1000未完成队列是跨行事务不变量，SQL partial index仅支持同task全部epoch查询；此片没有执行事务/资源证据。
+
+## I6 RSS 持久事件自动化（2026-10-23，当前设计门；运行时未实施）
+
+本节是当前持久方案，取代下方“后继待定”和“order key为真实纳秒”的草稿；历史验证记录不重写。产品依据为现首页自动化的RSS触发入口。BFF ScheduledTask仍为唯一资源owner，复用Project权限、revision、Scheduler唤醒、durable dispatch队列和scope单active；不另建EventAutomation服务/队列，不修改Skills/MCP、模型授权或计费政策。正常服务/schema尚未切换。
+
+### 结构与依赖
+
+| 项 | 采用 |
+| --- | --- |
+| 当前事实 | task直接交叉calendar，公开19.3/168；旧callback receipt v2冻结一个Agent launch，无法原子表示0..200条RSS结果；Scheduler固定3bb/3.0以2xx成功且不解读response body；Agent7104/HTTP7整个JSON body上限1MiB。 |
+| 目标 | calendar/rss互斥trigger，共享生命周期；RSS首次成功只建baseline，后续新identity且条件匹配才入队，内容编辑不重跑。 |
+| 位置比较 | 扩展现ScheduledTask采用；独立EventAutomation会复制权限、列表、历史和删除，因此淘汰。现application/scheduled/聚合内扩展trigger解析与投影，普通application/rss-poll-service.ts拥有一次poll编排；ports/rss-poll-repository.ts定义窄事务口；infrastructure/postgres/rss-poll-repository.ts拥有SQL与fence，不建单文件子目录或新进程。 |
+| 复用 | 固定readRssFeed、parseRssFeed、matchesRssConditions；沿现Agent launch及projectSavedAgentLaunch最终wire，不再写HTTP/XML/条件/队列实现。 |
+| 模块依赖 | domain纯类型/条件；application依赖端口与纯匹配，HTTP/bootstrap注入reader/parser/launch factory及PG端口；postgres不访问公网，clients不持SQL锁。保现边界，不跨仓runtime import。 |
+| 删除 | 退休calendar-only task交叉与outbox v4运行时schema，唯一v5真实trigger；不保缺省calendar、假daily或旧输入alias。已有calendar receipt v2不可变重放保留，RSS明确v3分支，不改旧历史结果。 |
+
+task所有kind保留trigger_epoch，初始1，kind或规范feed URL变化递增（A→B→A及RSS→calendar→RSS不复用）；其他revision更新保seen，但确定未发旧revision失效。RSS Scheduler命令用每分钟cron/transport UTC，仅作唤醒，不写成RSS产品日历。callback只冻结tenant/task/owner/project/revision/kind/epoch，无URL/条件/提示词自报授权。
+
+### 事务与恢复
+
+锁序为receipt→Project→task→poll→scope→dispatch/seen稳定identity。短事务核当前owner/Project/active/expiry/revision/epoch，claim receipt及poll fenced lease并固定定义；网络、完整解析、条件及所有匹配launch最终wire预构造在锁外。后短事务复核receipt/token/fence/DBclock/当前资格，原子写seen、0..200 dispatch、poll和固定receipt摘要；失效/错误整份回滚，COMMIT丢ACK只查原receipt。receipt现60秒，RSS入站整体最多20秒，poll lease30秒，固定reader10秒但父取消可更早，至少2秒预留给settle。DB statement/lock timeout受剩余预算，不能客户端断线后继续无界提交。
+
+一task仅一当前poll行；初始化成功全部seen且0dispatch。活跃epoch seen不TTL；100000停止读取并显示limit_reached。最多1000未完成RSS dispatch跨epoch累计；满则整poll不推进seen，以queue_full退避，不静默丢条目。网络/XML/launch超限形成closed code、202固定摘要和60秒起最多1h指数退避+jitter；DB/claim丢失503重试，不误写成功baseline。快照poll不能保证保留publisher在两次读取间删除的条目。
+
+pause/update/delete/Project删除在task锁内使poll fence失效；确定never-sent pending/retryable且unknown=false旧revision失败化，exact active dispatch/run同事务清两active字段。unknown/leased/admitted不假取消、不删scope/session/原run/key，task删除后仍可按原身份恢复到可信终态。RSS never-sent claim先无锁选候选，再Project→task→scope→dispatch复验，绝不scope后反锁task；旧unknown恢复保持现scope→dispatch路径。真实多连接barrier验证两种获锁先后及终态并发。
+
+### 排序与历史事实
+
+scope新增rss_order_high_watermark，保留跨poll/重启/epoch/kind的逻辑顺序；Agent source_high_watermark不变。成功入队按item_identity字节排序，用BigInt base=max(DB实际观察epoch纳秒, oldHigh+1)，分配base+rank且原子保存末值。DB精确数值以text传输；不经Number计算epoch纳秒。只有安全范围整数毫秒可经Date生成日期部分，九位余数由BigInt补齐，覆盖进位/9999年上界。固定UTC格式的order key是逻辑排队键，不能冒真实纳秒。
+
+dispatch另存source_observed_at作为实际DB发现事实，不能从逻辑键反推；Public20 RSS运行项scheduled_for=null且observed_at实际值，calendar仍真实scheduled_for。分页仍内部二元orderKey/dispatchId，active不被后来更早记录抢占。入队不是Agent已执行。
+
+### 数据与安全验证
+
+唯一canonical SQL和公开机器契约先随本设计收敛，实施卡经Root放行才写运行时。字段/约束/retention见DATA_MODEL；Public20 branch/错误见API_CONTRACT。RSS条目仅一个user content里的JSON数据，不作为system/tool/HTML执行，不抓entry/enclosure。最终HTTP7完整JSON UTF8<=1MiB，全部匹配项预构造验证后才记seen；不截断。reader受控TLS187专项、37架构/types/lint已通过；Root刷新八份provenance仅锁摘要，105 generated字节保持，原contract聚合1042PASS、默认1885PASS/3资源SKIP、原build通过。以上不是持久poll/公网/feed产品/模型验收。
+
+下一实施验证包括：旧calendar回归与19.3完整inverse/168inventory；fresh SQL和非法branch约束；同instant两批200/反序identity/重启/进位；首次baseline→新增3→唯一3dispatch、重放/并发lease/丢ACK；pause/换源/删除与claim/terminal实际barrier；unknown保留与never-sent active释放；100000 seen删除成本；1MiB最终wire、取消、backoff/限额；完整本仓门及自有fresh PG/Redis。正常库与运行服务不重置，无新Git授权。
+
+## I6 RSS 安全 HTTPS reader（2026-10-23，源码候选待独审）
+
+`readRssFeed({url,signal})`仅返回完整有界bytes；显式内部factory供受控测试，生产固定node DNS/HTTPS和公网地址策略。新增`rss-feed-address.ts`拥有URL/BlockList策略，`rss-feed-reader.ts`拥有单pin、TLS、10秒总期限/5秒idle、16KiB头/1MiB正文及取消释放。没有配置覆盖、外网feed访问、公开接口、SQL、poll或Web激活。后继唯一编排调用点仍为计划中的`application/rss-poll-service.ts`，成功后再交现parser/conditions与持久事务。
+
+根外CDATA窄修同时检查sax `onopencdata`和`oncdata`：空CDATA不产生后一个事件，只有前一个检查可拒空输入；原92内核断言正文保持，根内CDATA仍正常。可执行stub定向RED为29项1PASS/28FAIL；首轮实现184项182PASS/2空CDATA FAIL后按Root裁决修复。首次全组stub因accepted等待未到而终止，保留原日志，不冒完成RED。
+
+自有loopback TLS factory仅映射已验证public pin，保Host/SNI/证书校验；该证据不代表公网可达。实际5秒idle与10秒drip总期限、错SAN、取消socket、启动时环境代理trap及响应边界纳入专项。准确终态计数、命令和全输入保护见A/测试验收/i6-rss-reader-worker-v1.json。未执行build/default/full/contract聚合、DB/Redis或正常Browser；新sax锁的旧生成provenance仍待Root后续聚合门，不在此片重生成。没有hix-code-review通过结论。
+
+## I6 RSS 安全 HTTPS reader（2026-10-23，实施前）
+
+Owner仍为BFF ScheduledTask；唯一后继调用者为application/rss-poll-service.ts，网络完成后才交parseRssFeed、匹配、短事务去重/入队。本片无新进程、HTTP endpoint、SQL、模型调用或Web按钮激活。比较已知owner客户端扩展与专用外部读取器：已知origin下载器的授权假设无法用于用户feed，采用现infrastructure/clients内普通rss-feed-reader.ts和纯rss-feed-address.ts；不建单文件子目录/通用egress框架，不跨仓import System。
+
+包内readRssFeed({url,signal})固定使用node:dns.lookup与node:https.request，返回完整原始Uint8Array；factory只为内部受控transport测试显式注入network，不从env/body/URL/生产配置选择策略。所有生产调用只使用固定入口；不允许allowPrivate/loopback开关。错误为闭合code，不能带URL、主机、响应正文或原始异常。URL最多2048 UTF-8字节，仅HTTPS/443，拒userinfo（含空userinfo语法）、fragment、控制字符/原始空格、IP literal、尾点/非FQDN/特殊本地域名。URL规范化后再验hostname；不以主机字符串黑名单代替地址检查。
+
+DNS每次一次all/verbatim查询，最多32条，所有address/family合法且均通过策略才选一个固定地址；最多8个尚未实际完成的lookup。父取消或总期限到达可先settle用户promise，但物理lookup未完成仍占slot，迟到完成零request。用node:net.BlockList校验范围，不用字符串前缀猜IPv6。IPv4拒0/8、10/8、100.64/10、127/8、169.254/16、172.16/12、192.0.0/24、192.0.2/24、192.31.196/24、192.52.193/24、192.88.99/24、192.168/16、192.175.48/24、198.18/15、198.51.100/24、203.0.113/24、224/4、240/4。IPv6只允许2000::/3，再拒2001::/23、2001:db8::/32、2002::/16、2620:4f:8000::/48、3ffe::/16、3fff::/20；mapped/transition/zone等不能绕过。保守拒特殊global范围是明确产品限制。范围依据2026-10-23实读IANA特殊用途registry，不能称全公网皆支持。
+
+https.request保原hostname/Host/TLS servername及默认证书/主机名验证，rejectUnauthorized=true；lookup固定刚才唯一address/family，agent=false、autoSelectFamily=false，无二次DNS或连接池复用。本读取显式agent=false，不使用globalAgent及环境代理；受控测试实际以Node22.22.2启动--use-env-proxy和NODE_USE_ENV_PROXY=1证明proxy trap零连接，不声称所有node:https不支持代理；仅静态Accept XML和Accept-Encoding:identity，不转发Cookie/Auth/Referer或调用者headers。独立monotonic总10秒含URL/DNS/连接/头/全body，5秒无进展idle，实际data不重置总期限；16KiB响应头、实际1MiB body，上限及父取消均销毁自有request/response/socket并清timer/listener。检查绝对期限，不能只依赖timeout事件。
+
+只200和单值MIME application/rss+xml、application/atom+xml、application/xml、text/xml；charset缺省或UTF-8/utf8，拒未知参数/冲突。拒重定向、非identity压缩、重复安全header、trailer、非法/超限Content-Length、截断/close-before-end；完整end及长度相符后才返回。304/ETag缓存留后继，不绕过首次baseline。读取条目或附件URL仍禁止。
+
+受控测试使用factory记录未改变的production pin/options后，仅在测试把socket映射到自有loopback TLS peer并注入fixture CA；保留原SNI/Host和证书校验。该证据只证明受控transport，不能冒生产公网可达。测试独立证明127/::1等生产策略拒绝、混合DNS整批拒绝、DNS单pin/迟到零发送、redirect第二目标零请求、错SAN失败、代理trap零连接、1MiB/头/长度/压缩边界、父取消socket关闭；至少实际5秒idle和10秒总滴流样本。测试证书可由openssl直接输出到内存，禁止输出私钥/写永久凭据或全局关闭TLS验证；只关自有server/socket。
+
+验证为Node22.22.2专项实际RED→GREEN、原92内核+37架构/type/lint及变动格式；之后Root独审/聚合门。已发现的根外空白CDATA接受问题同片窄修：oncdata仅允许stack非空，补根前/根后空/空白CDATA拒绝及根内数据正控，不扩大XML语义。
+
+## I6 内核独审后的 XML 语义修正（2026-10-23，实施前）
+
+Root确认两项P2：声明空白/大小写检查与XML行尾语义。UTF-8解码后、实体解析前将literal CRLF/CR归一为LF；字符引用所得CR不改。声明严格区分XML关键字和standalone的大小写，只接受XML S（空格/TAB/CR/LF），encoding值仅UTF-8且该值大小写不敏感；声明仍只能在文档起始出现一次。
+
+guid/id只在判断全空时使用trim，身份摘要保留XML解码后的精确字符串，不额外trim或URI/大小写归一。更正早期trim草稿，依据RFC4287第4.2.6.1节的逐字符比较及RSS2 opaque guid。64KiB范围明确为每个投影文本字段和所有属性值，未知扩展只受全输入/深度/节点限制。
+
+当前sax不区分已解码属性中literal空白与字符引用。此片支持的XML输入子集保守拒绝任何解码属性值含TAB/LF/CR（包括未知属性、namespace及字符引用），不盲目替换成空格，不另写XML扫描器。部分合法feed因此不受支持；不宣称完整XML/XSD校验。修正须有声明正负控、换行等价/冲突重复合并、字符引用保真及全属性拒绝测试，原两P2报告保留到复验。
+
+## I6 RSS 事件自动化：读取与匹配内核设计（2026-10-23，实施前）
+
+目标是订阅源发布新条目后触发自动化。本片先交付无外部副作用的解析/条件内核及安全读取边界，不注册RSS路由、不发送Agent、不声称RSS产品已可用。后继唯一编排入口为 `application/rss-poll-service.ts`：已认证Scheduler唤醒 → 当前RSS定义/revision/epoch → 有界读取 → 纯匹配 → 持久去重与执行outbox同事务。首poll只建baseline、不回放旧内容是本项目的产品取舍，不冒作Manus实现事实。
+
+### 归属与放置
+
+| 项目 | 决定 |
+| --- | --- |
+| Owner | BFF ScheduledTask能力；实施阶段同仓唯一writer。Agent、Billing、Scheduler、Skills/MCP不改。 |
+| 当前事实 | ScheduledTaskFact直接交叉ScheduledCalendar；canonical四种frequency均要求calendar字段。Scheduler register/current只管理cron/run_at；callback occurrence尚不是RSS条目身份。现HTTP客户端均依赖已知owner origin，没有任意feed的DNS固定连接策略。 |
+| 总体方案 | 后继将既有ScheduledTask改成calendar/rss互斥trigger，保留现生命周期/项目权限/执行队列；不为RSS写假daily/time值。独立EventAutomation会复制权限、列表、revision、删除与历史，当前不采用。多trigger workflow与advanced另行闭环，不伪称本片覆盖。 |
+| 内核位置 | `domain/scheduled-task/rss-feed.ts`仅定义只读归一化条目类型；`infrastructure/clients/rss-feed-parser.ts`封装有界XML解析与稳定摘要；`domain/scheduled-task/rss-conditions.ts`仅解析及执行闭合条件；`infrastructure/clients/rss-feed-reader.ts`只负责外部HTTPS读取。未采用application目录单一大文件：网络、XML格式和产品条件有不同变化原因。复用现目录，不为单文件建新目录。 |
+| 依赖 | XML仅由严格sax事件解析，domain只保留数据类型/纯条件，不import sax或node:crypto；parser位于infrastructure/clients，使用sax与node:crypto；reader依赖node:https/dns及domain。不读取邻仓实现或配置。未来poll service依赖reader端口与现执行repo，网络在事务外。 |
+| API/数据 | 本片仅包内函数，签名见API_CONTRACT；Public19.3/168、canonical SQL、generated与owner pins原字节保持。后继trigger/public/SQL需独立三设计、正式提交后消费者配对。 |
+| 删除项 | 当前没有RSS旧实现可退休；不保留第二XML parser、宽松fallback或临时伪订阅。 |
+| 验证 | 先真实parser/conditions行为RED，再实现；Node22 `node --import tsx --test test/rss-feed.test.ts test/rss-conditions.test.ts`、原typecheck/lint/architecture及format。reader另做真实受控HTTPS、DNS pin与取消验证，不把纯测试叫integration。 |
+
+### 解析与条件的固定语义
+
+`parseRssFeed(bytes)`支持RSS2及Atom1.0 namespace，UTF-8（可有UTF-8 BOM），不支持其他charset。整份文档严格解析成功后才返回；DTD、实体声明、外部实体、XInclude、坏尾XML或任一上限超出整份失败，无半页成功。最多1MiB输入、32层、20000节点、200条目，每个投影文本字段及所有属性值UTF-8最多65536字节，作者/分类/附件各最多32项。文本/CDATA只为不可信数据，不执行HTML、不拉取条目或附件地址，不赋予系统指令权限。
+
+条目包含稳定identity、title/summary/content、authors/categories、可空link及其domain、可空publishedAt/updatedAt、enclosures。优先RSS guid / Atom id，缺失时使用规范化http(s) link；仍无稳定身份整份拒绝。不用数组位置、抓取时刻或可变摘要做ID。identity为闭合JSON `["id"|"link", value]`的SHA256，feed source epoch由后继持久owner隔离；同identity且完整内容相同可合并，冲突重复整份拒绝。内容更新后仍保持身份，不自动重跑。URL拒绝userinfo/不合法scheme；条目URL只作为数据，不能借它触发抓取。
+
+条件为最多8个OR组，每组1–16个AND规则；无组表示不过滤，空组非法。首片支持title/summary/content/author/category/link/domain的文本contains/not_contains/equals/not_equals/starts_with/not_starts_with/ends_with/not_ends_with/is_empty/is_not_empty；比较区分大小写、逐Unicode值、不按locale转换，作者/分类以换行连接。缺字段按空文本；空值运算符禁止value，其余要求非空最多1024字节文本。closed解析拒未知字段/field/operator/null、超量或混合错误，先完整验证全部条件，不能短路掩盖坏规则。Manus正则已观察但本片明确拒绝，后继需线性时间实现，不调用用户可控JS RegExp。
+
+### 外部读取安全（后继紧接本片实施）
+
+生产仅HTTPS/443、无userinfo/fragment、自报header/cookie或代理。解析DNS后先拒所有非公网地址再固定本次连接到校验地址，TLS仍校验原hostname；禁redirect，禁压缩请求并拒非identity Content-Encoding；一个10秒总预算含DNS/headers/body，5秒idle和1MiB流式上限。取消销毁请求/响应，不在网络时持PG锁，不缓存或返回正文日志。304只有后继已有baseline且带同epoch条件请求时有意义，首reader不实现缓存快捷路径。安全HTTP不从受信Storage下载器直接套用；其known-origin假设不能用于任意用户URL。
+
+### XML依赖决策（核验2026-10-23）
+
+采用固定 `sax@1.6.1`（npm发布2026-07-24，BlueOak-1.0.0，Node>=11，零runtime依赖）和 `@types/sax@1.2.7`（MIT，仅依赖现有Node类型）。[上游源码/安全说明](https://github.com/isaacs/sax-js)、[manifest](https://github.com/isaacs/sax-js/blob/main/package.json)、npm官方registry实读相符。它是事件解析器，应用额外拒DTD/声明并限制全输入、层次和条目，不能拿严格模式当XSD验证或资源上界。Saxes上游已archive，故不新采用；fast-xml-parser可构造完整树并有更多实体/转换选项，本片不需要。安装禁scripts，manifest与lock固定，验证实际导出及事件语义；若不能满足拒绝矩阵则替换而不降级到自写XML。性能只报告本机实测，未测前无SLO承诺。parser由单一模块封装，退出时只替换该模块/依赖，无公共字段绑定库类型。
+
 ## I5 BFF 初始化切片验收（2026-10-21；尚未正常激活）
 
 Public19.3/168 固定 Billing158579f8 的正规v1四操作SDK。独立只读审查未发现确定P1/P2；原167操作与19.2全文、旧GET行为及历史断言均保留。格式/lint/types/direct build/架构均通过，原默认清单1697PASS/0FAIL/3资源SKIP，原contract:test完整清单1042PASS/0FAIL；聚合契约前置检查全部通过，Redocly保留44warnings。构建使用fresh dist移Trash后原tsc，测试包装仅把自有临时目录/当前PID套接字清理改为Trash，不改断言、时限或网络行为；原包装失败记录保留。
