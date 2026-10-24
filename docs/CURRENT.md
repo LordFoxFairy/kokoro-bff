@@ -1,10 +1,12 @@
-## 2026-10-24 私有MCP发现长描述消费修正（候选，原Prepare恢复仍开放）
+## 2026-10-24 私有MCP发现长描述消费修正（正常读取已验，原Prepare恢复仍开放）
 
-本地783非MD停写输入，lint/types/contract/architecture/默认test/build均exit0，冻结无漂移；新增三类长文本用例先3失败，修后本文件18通过。独立只读审查Approved；默认原资源SKIP不冒真实集成已验。正常尚未激活，详情读取502及原Prepare恢复仍开放，不称JSON CRUD完成。
+正常只读验收收据：同一server/Connection与版本2保持；详情完整网络窗仅一次GET200，硬刷新GET200窗口已截断，不作完整零请求证明。四owner原行/xmin仅Platform读取准入slot变化，原usage保持，派发false；原49行App诊断WIP字节保护、未push/PR/merge。HMR期间曾出现local_recovery_unavailable与连接中断，硬刷新消失但根因未修，不当无感加载已完成。旧tab46本轮已不在清单，仅从既有观测保留原key/body私有证据、未重发；须补正式核验后显式原请求恢复与重开持久性。本次自有47已关闭、原1/10保留。脱敏业务证据与正常绑定由Root原执行板引用，原始材料仅ignored metadata-fix。
+
+本地783非MD停写输入，lint/types/contract/architecture/默认test/build均exit0，冻结无漂移；新增三类长文本用例先3失败，修后本文件18通过。独立只读审查Approved；默认原资源SKIP不冒真实集成已验。正常BFF14bb159/App c3f301e配对后，同一JSON实体详情GET由502恢复200，547/2006字节原文完整、原server/Connection及v2保持，硬刷新重开GET200；原Prepare恢复仍开放，不称JSON CRUD完成。
 
 正常JSON导入201后Prepare返回502，已定位owner合法2006字节工具显示文本被消费者额外1000字节界限拒绝。仅对发现declaration display_name移除逐字段长度上限，保留Unicode/既有内容校验、其它字段上限、strict结构、ID/CAS/声明一致性以及整个传输响应预算；不截断、不改写owner原文或declaration digest。读取与首次/重放Prepare receipt共用该投影。
 
-该面是现有browser-private管理投影；公开Public24原件、固定owner artifact、错误profile、SQL/权限与运行配置不变，不为局部实现伪造新的public发行。502 invalid仍为inspect_owner，旧冻结请求没有因本修正获得重试资格；后继须先正式定义可信核验后仅显式重放原key/body/CAS的Prepare恢复，合法exact receipt到达才完成。其它inspect_owner错误继续封锁。当前源码候选尚未正常激活或完成真实浏览器恢复，不称JSON CRUD已闭环。
+该面是现有browser-private管理投影；公开Public24原件、固定owner artifact、错误profile、SQL/权限与运行配置不变，不为局部实现伪造新的public发行。502 invalid仍为inspect_owner，旧冻结请求没有因本修正获得重试资格；后继须先正式定义可信核验后仅显式重放原key/body/CAS的Prepare恢复，合法exact receipt到达才完成。其它inspect_owner错误继续封锁。BFF14bb159/App c3f301e已正常配对，仅重载BFF及单份App源；同一实体详情GET502→200、硬刷新重开GET200，长文本547/2006字节保持。原Prepare exact receipt未重放，inspect_owner后恢复及关闭/重开持久恢复仍开放，不称JSON CRUD已闭环。
 
 ## 2026-10-24 AGENT-1：普通消息 MCP 选择（BFF 候选已验，App/正常配对待接）
 
