@@ -1,3 +1,9 @@
+## 2026-10-24 Prepare 专属核验恢复政策1.1（候选）
+
+Root783非MD停写输入lint/types/contract/architecture/default/build均0，冻结无漂移，默认原3资源SKIP保留；独立只读代码审查Approved。正式策略已具备供App固定生成资格，尚未正常激活或完成App/browser恢复，相关原始日志仅Root ignored prepare-recovery。
+
+Code-first connector-command-fault.ts新增独立prepare_inspection_recovery，要求同主体、exact server/connector可信读和server版本不倒退后，仅显式原key/body/CAS重放。通用invalid仍inspect_owner；其它fault tuple/恢复、禁止自动重试/新命令均不变。正规生成私有JSON1.1，测试先版本1.0≠1.1失败再19通过，完整parent1.0原件哈希精确复原；Public24、SQL、HTTP/error wire不变。App固定消费与非秘密IndexedDB恢复仍实施中，正常尚未激活本政策，不称原Prepare恢复完成。设计门已只读审查Approved（含同key failure不可降级、RAM K不得采用后继K2约束）。
+
 ## 2026-10-24 私有MCP发现长描述消费修正（正常读取已验，原Prepare恢复仍开放）
 
 正常只读验收收据：同一server/Connection与版本2保持；详情完整网络窗仅一次GET200，硬刷新GET200窗口已截断，不作完整零请求证明。四owner原行/xmin仅Platform读取准入slot变化，原usage保持，派发false；原49行App诊断WIP字节保护、未push/PR/merge。HMR期间曾出现local_recovery_unavailable与连接中断，硬刷新消失但根因未修，不当无感加载已完成。旧tab46本轮已不在清单，仅从既有观测保留原key/body私有证据、未重发；须补正式核验后显式原请求恢复与重开持久性。本次自有47已关闭、原1/10保留。脱敏业务证据与正常绑定由Root原执行板引用，原始材料仅ignored metadata-fix。

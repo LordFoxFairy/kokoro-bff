@@ -927,3 +927,30 @@ for (const kind of ["tool", "resource", "prompt"] as const) {
     }
   })
 }
+
+test("Prepare-only inspection recovery publishes explicit original-command authority without relaxing other faults", async () => {
+  const { CONNECTOR_COMMAND_FAULT_POLICY: policy } = await import("../src/infrastructure/clients/platform/connector-command-fault.js")
+  assert.equal(policy.version, "1.1.0")
+  assert.deepEqual(policy.prepare_inspection_recovery, {
+    operation: "prepareServer",
+    failure: "invalid",
+    reads: ["server", "connector"],
+    binding: "exact_server_connector",
+    same_actor: true,
+    server_version: "not_older_than_original",
+    replay: "same_command",
+    automatic_retries: false,
+    new_command_authorized: false,
+  })
+  const { readFile } = await import("node:fs/promises")
+  const { prepare_inspection_recovery: _added, ...parent } = JSON.parse(
+    await readFile(new URL("../contract/connector-command-errors-v1.json", import.meta.url), "utf8"),
+  )
+  parent.version = "1.0.0"
+  assert.equal(
+    createHash("sha256")
+      .update(JSON.stringify(parent, null, 2) + "\n")
+      .digest("hex"),
+    "24158f50a6f4dac1b34553797f0b1afcc8f99dbc79f36b916d03b56999a67a71",
+  )
+})

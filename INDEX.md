@@ -1,3 +1,7 @@
+## Prepare核验后原请求恢复（2026-10-24）
+
+既有connector-command-fault.ts唯一code-first政策1.1增加Prepare专属核验条件，原错误分类不变；既有generate-connector-command-errors正规生成browser-private JSON。test/mcp-personal-server.test.ts同时证明新闭集与1.0整份原件逆证，无新public operation/表/服务。实际配对与剩余见CURRENT。
+
 ## 私有MCP长发现文本（2026-10-24）
 
 现mcp-personal-server-response只移除declaration显示文本额外1000-byte cap，Connect整体1MiB预算保持；读与Prepare首次/重放使用同一校验。test/mcp-personal-server.test.ts覆盖三类长描述原文/digest/replayed与坏Unicode。旧502冻结请求仍inspect_owner，不因本片自动重放或置成功。

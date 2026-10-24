@@ -10,11 +10,22 @@ type RecoveryFault = Fault & Readonly<{ recovery: "same_command" | "inspect_owne
 /** Code-first browser-private policy; its JSON publication is generated, not edited. */
 export const CONNECTOR_COMMAND_FAULT_POLICY = {
   profile: "connector-command-recovery-errors",
-  version: "1.0.0",
+  version: "1.1.0",
   owner: "kokoro-bff",
   visibility: "browser-private",
   automatic_retries: false,
   new_command_authorized: false,
+  prepare_inspection_recovery: {
+    operation: "prepareServer",
+    failure: "invalid",
+    reads: ["server", "connector"],
+    binding: "exact_server_connector",
+    same_actor: true,
+    server_version: "not_older_than_original",
+    replay: "same_command",
+    automatic_retries: false,
+    new_command_authorized: false,
+  },
   mcp: {
     in_progress: { status: 409, code: "mcp_personal_command_in_progress", retryable: true, recovery: "same_command" },
     outcome_unknown: { status: 503, code: "mcp_personal_command_outcome_unknown", retryable: false, recovery: "same_command" },
