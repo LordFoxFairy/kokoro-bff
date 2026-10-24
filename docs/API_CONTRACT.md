@@ -1,3 +1,12 @@
+## 2026-10-24 普通会话 MCP 精确选择（BFF 候选实施，尚未正常配对）
+
+目标公共24.0：现消息创建请求以selected_mcp_connection_ids替代trace-only mcp_servers。新字段optional、默认无额外MCP，最多16个唯一有序Connection ID，格式/4096-byte限额与待发行Agent后继机器源一致；浏览器自报身份、URL、凭据及未知字段仍拒绝。MCP资格由Agent/Platform当前授权检查，不因通过BFF输入校验而成立。
+
+internal launch只消费Agent正式固定artifact，不手写第二模型；public唯一机器源仍为contract/openapi/v1/openapi.yaml，待owner先交付再改。历史trace mcp_servers只作已有receipt诊断，不是新输入alias/运行fallback。相同idempotency key变化列表触发原请求冲突，恢复不重新计算当前选择。未发行，public当前仍23.1。
+
+
+新非空选择在原幂等material末尾追加具名对象域；旧mcp_servers诊断槽固定null，不复用其数组位置，避免旧trace-only请求与新执行意图碰撞。缺省/[]保持原未选字节；旧trace只在持久payload reader保留，不成为新body别名。
+
 ## 2026-10-24 Agent 待核对失败码纵向消费（候选，未正常激活）
 
 沿既有AGENT-1／CREDIT-1，只接受Agent正式HTTP7.3的具名model_settlement_pending且retryable=false；BFF不从异常文字、已有回答或余额推断结算，不写资金、不改历史generic失败。新码与已生成正文共同持久化，snapshot／replay同义，保持原AG-UI与source／watermark原子事务。Agent先交付固定commit和完整父证明，再以原generator固定单一新source并保原三操作消费范围；公开ChatMessage.failure追加同码后App正规固定消费，不单独提前重载新producer。

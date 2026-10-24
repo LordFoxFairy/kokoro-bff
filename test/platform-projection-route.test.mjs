@@ -507,7 +507,12 @@ async function managedFixture({ owner, admission, mcpAuthorization } = {}) {
       return { ok: true, identity: { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "person" }, platformAdmin: false }
     },
   }
-  const server = createBffServer(managedConfig(credentialFile), { businessStore: null, readiness: async () => undefined, sessionAdmission, ...(mcpAuthorization ? { mcpAuthorization } : {}) })
+  const server = createBffServer(managedConfig(credentialFile), {
+    businessStore: null,
+    readiness: async () => undefined,
+    sessionAdmission,
+    ...(mcpAuthorization ? { mcpAuthorization } : {}),
+  })
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
   origin = `http://127.0.0.1:${server.address().port}`
   return {
@@ -918,11 +923,17 @@ test("owned series history preserves exact revisions and rejects mutation or cal
 test("MCP Connection projection reaches its owner through the production bootstrap, not a generic proxy", async () => {
   const authorization = []
   const app = await managedFixture({
-    mcpAuthorization: { check: async (input) => { authorization.push(input); return { ok: true } } },
-    owner: async (request) => new Response(JSON.stringify({ data: { connections: [] } }), {
-      status: 200,
-      headers: { "content-type": "application/json", "cache-control": "no-store", "x-kokoro-request-id": request.headers.get("x-kokoro-request-id") },
-    }),
+    mcpAuthorization: {
+      check: async (input) => {
+        authorization.push(input)
+        return { ok: true }
+      },
+    },
+    owner: async (request) =>
+      new Response(JSON.stringify({ data: { connections: [] } }), {
+        status: 200,
+        headers: { "content-type": "application/json", "cache-control": "no-store", "x-kokoro-request-id": request.headers.get("x-kokoro-request-id") },
+      }),
   })
   try {
     const response = await fetch(`${app.origin}/v1/mcp/connections`, { headers: managedBrowserHeaders() })
@@ -942,16 +953,19 @@ test("MCP Connection projection reaches its owner through the production bootstr
       await rejected.arrayBuffer()
     }
     assert.equal(app.calls.length, ownerCount, "unknown/private aliases must never reach the projection owner")
-  } finally { await app.close() }
+  } finally {
+    await app.close()
+  }
 })
 
 test("MCP Server projection also keeps its named production handler after admission", async () => {
   const app = await managedFixture({
     mcpAuthorization: { check: async () => ({ ok: true }) },
-    owner: async (request) => new Response(JSON.stringify({ data: { servers: [] } }), {
-      status: 200,
-      headers: { "content-type": "application/json", "cache-control": "no-store", "x-kokoro-request-id": request.headers.get("x-kokoro-request-id") },
-    }),
+    owner: async (request) =>
+      new Response(JSON.stringify({ data: { servers: [] } }), {
+        status: 200,
+        headers: { "content-type": "application/json", "cache-control": "no-store", "x-kokoro-request-id": request.headers.get("x-kokoro-request-id") },
+      }),
   })
   try {
     const response = await fetch(`${app.origin}/v1/mcp/servers`, { headers: managedBrowserHeaders() })
@@ -959,13 +973,17 @@ test("MCP Server projection also keeps its named production handler after admiss
     assert.deepEqual(await response.json(), { data: { servers: [] } })
     assert.equal(app.calls.length, 1)
     assert.equal(new URL(app.calls[0].url).pathname, "/v1/mcp/servers")
-  } finally { await app.close() }
+  } finally {
+    await app.close()
+  }
 })
 
 test("production MCP projection admission denial never reaches its owner", async () => {
   const app = await managedFixture({
     mcpAuthorization: { check: async () => ({ ok: false, status: 403, code: "mcp_action_denied" }) },
-    owner: async () => { throw new Error("denied MCP projection reached owner") },
+    owner: async () => {
+      throw new Error("denied MCP projection reached owner")
+    },
   })
   try {
     for (const path of ["/v1/mcp/connections", "/v1/mcp/servers"]) {
@@ -974,5 +992,7 @@ test("production MCP projection admission denial never reaches its owner", async
       assert.equal((await response.json()).error.code, "mcp_action_denied")
     }
     assert.equal(app.calls.length, 0)
-  } finally { await app.close() }
+  } finally {
+    await app.close()
+  }
 })

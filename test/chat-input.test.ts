@@ -13,7 +13,7 @@ describe("canonical MessageCreateRequest parsing", () => {
           agent: " reviewer ",
           thinking: true,
           selected_skill_source_refs: ["skill:a", "skill:b"],
-          mcp_servers: [" github "],
+          selected_mcp_connection_ids: ["connection-b", "connection-a"],
           project_ref: " project-body ",
         },
         " project-body ",
@@ -24,7 +24,7 @@ describe("canonical MessageCreateRequest parsing", () => {
         agent: "reviewer",
         thinking: true,
         selectedSkillSourceRefs: ["skill:a", "skill:b"],
-        mcpServers: ["github"],
+        selectedMcpConnectionIds: ["connection-b", "connection-a"],
         projectRef: "project-body",
       },
     )
@@ -90,4 +90,30 @@ it("rejects Skill aliases, whitespace, line endings, Unicode, duplicates and ove
 it("keeps omitted Skill selection distinct from explicit empty selection", () => {
   assert.equal(parseMessageCreateRequest({ content: "hello" }, undefined).selectedSkillSourceRefs, undefined)
   assert.deepEqual(parseMessageCreateRequest({ content: "hello", selected_skill_source_refs: [] }, undefined).selectedSkillSourceRefs, [])
+})
+
+it("preserves exact MCP Connection choice and rejects the former trace-only alias", () => {
+  assert.deepEqual(parseMessageCreateRequest({ content: "hello", selected_mcp_connection_ids: [] }, undefined), {
+    content: "hello",
+    selectedMcpConnectionIds: [],
+  })
+  assert.equal(parseMessageCreateRequest({ content: "hello", mcp_servers: ["connection-1"] }, undefined), null)
+  for (const value of [
+    null,
+    "x",
+    [1],
+    [true],
+    [""],
+    [" x"],
+    ["x "],
+    ["a\n"],
+    ["a\r"],
+    ["a\u2028"],
+    ["https://host/mcp"],
+    ["x", "x"],
+    ["a".repeat(192)],
+    Array.from({ length: 17 }, (_, i) => `c${i}`),
+  ]) {
+    assert.equal(parseMessageCreateRequest({ content: "hello", selected_mcp_connection_ids: value }, undefined), null, JSON.stringify(value))
+  }
 })

@@ -31,19 +31,19 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "8cc975e0850ebc990c436d3f2cff544c9424cbda",
-        contract_version: "7.3.0",
+        repository_commit: "4c46ec681ee569e42808acb9409248acddd8ae41",
+        contract_version: "7.4.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "c096eab9f2aa392215351a106a670692d5f58f945980a5e028b3a83d17509731",
+        contract_sha256: "7637757f2f8b1fc1556e62c6566db5de5eb2ae883cf6e24e918b53081cc664ad",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "1fe83d4ef219306df91e0c84e6d753194443d8b33f6484202ff2fdf96c00a690",
+        provenance_sha256: "0899cc6a16622933ff95347e9e33c8f6b271ac34df359ab277ce2cf066f8c46f",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "c096eab9f2aa392215351a106a670692d5f58f945980a5e028b3a83d17509731",
+        source_sha256: "7637757f2f8b1fc1556e62c6566db5de5eb2ae883cf6e24e918b53081cc664ad",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
@@ -53,18 +53,18 @@ describe("Agent event-protocol provenance", () => {
   it("uses one HTTP7 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "8cc975e0850ebc990c436d3f2cff544c9424cbda")
+    assert.equal(manifest.owner.repository_commit, "4c46ec681ee569e42808acb9409248acddd8ae41")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "c096eab9f2aa392215351a106a670692d5f58f945980a5e028b3a83d17509731",
+      "7637757f2f8b1fc1556e62c6566db5de5eb2ae883cf6e24e918b53081cc664ad",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/8cc975e0850ebc990c436d3f2cff544c9424cbda/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/4c46ec681ee569e42808acb9409248acddd8ae41/openapi.json", import.meta.url), "utf8"),
     )
     assert.doesNotThrow(() => assertInteractionContractSchema(owner))
     for (const change of [
@@ -448,4 +448,40 @@ describe("confirmed model settlement pending", () => {
     ])
       assert.throws(() => mapAgentEvent({ ...pending, payload_json: JSON.stringify(payload) }))
   })
+})
+
+it("consumes only the exact optional MCP execution selection from HTTP7.4 and Public24", async () => {
+  const { zLaunchRequest } = await import("../dist/generated/agent-http/zod.gen.js")
+  const { load } = await import("js-yaml")
+  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
+  const owner = JSON.parse(await readFile(new URL(`../contract/vendor/kokoro-agent/${manifest.owner.repository_commit}/openapi.json`, import.meta.url), "utf8"))
+  const doc = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  assert.equal(doc.info.version, "24.0.0")
+  const publicRequest = doc.components.schemas.MessageCreateRequest
+  const internal = owner.components.schemas.LaunchRequest
+  assert.equal(publicRequest.properties.mcp_servers, undefined)
+  assert.equal(publicRequest.required.includes("selected_mcp_connection_ids"), false)
+  assert.equal(internal.required.includes("selected_mcp_connection_ids"), false)
+  for (const key of ["type", "maxItems", "uniqueItems", "x-kokoro-json-byte-limit", "items"]) {
+    assert.deepEqual(publicRequest.properties.selected_mcp_connection_ids[key], internal.properties.selected_mcp_connection_ids[key])
+  }
+  const base = {
+    request_id: "r",
+    run_id: "run",
+    session_id: "conversation",
+    feature_key: "chat",
+    project_ref: null,
+    selected_skill_source_refs: [],
+    message_id: "message",
+    content: "hello",
+  }
+  assert.equal(zLaunchRequest.strict().safeParse(base).success, true)
+  for (const value of [[], ["connection-b", "connection-a"]]) {
+    const parsed = zLaunchRequest.strict().safeParse({ ...base, selected_mcp_connection_ids: value })
+    assert.equal(parsed.success, true)
+    assert.deepEqual(parsed.data.selected_mcp_connection_ids, value)
+  }
+  for (const value of [null, [true], ["x", "x"], ["x\n"], ["https://host/mcp"], ["a".repeat(192)], Array.from({ length: 17 }, (_, i) => `c${i}`)]) {
+    assert.equal(zLaunchRequest.strict().safeParse({ ...base, selected_mcp_connection_ids: value }).success, false, JSON.stringify(value))
+  }
 })

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import test from "node:test"
 import { load } from "js-yaml"
+import { restoreMcpSelectionContract } from "../scripts/billing-metering-public-contract.mjs"
 
 test("internal admission adds one Agent-only surface without changing original IAM binding or public product API", async () => {
   const doc = load(await readFile(new URL("../contract/openapi/internal/v1/openapi.yaml", import.meta.url), "utf8"))
@@ -29,7 +30,7 @@ test("internal admission adds one Agent-only surface without changing original I
   assert.equal(createHash("sha256").update(JSON.stringify(source)).digest("hex"), "c74784b6d946e4dd2837b895751998f7f5e7ebf173e4f6a17ec15ae165ce20cb")
   assert.equal(
     createHash("sha256")
-      .update(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url)))
+      .update(restoreMcpSelectionContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")))
       .digest("hex"),
     "703dba47da8a5c659b4236bb0a72317588ad29a4ca444ff9e5c99cfbcd00634b",
   )

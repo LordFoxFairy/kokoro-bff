@@ -42,6 +42,11 @@ export const zLaunchRequest = z.object({
   requested_model_label: z.string().min(1).optional(),
   trace: z.record(z.string(), z.unknown()).optional(),
   project_ref: z.string().min(1).max(255).nullable(),
+  selected_mcp_connection_ids: z
+    .array(z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")))
+    .max(16)
+    .refine((values) => new Set(values).size === values.length && new TextEncoder().encode(JSON.stringify(values)).byteLength <= 4096)
+    .optional(),
 })
 
 export const zLaunchReceipt = z

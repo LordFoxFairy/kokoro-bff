@@ -1963,6 +1963,45 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     ])
     assert.equal(persistedSelection.rows[0].payload.schema_version, 3)
     assert.deepEqual(persistedSelection.rows[0].payload.launch.selected_skill_source_refs, selectedBody.selected_skill_source_refs)
+    const mcpId = `conv_${randomUUID()}`
+    const mcpBody = { selected_mcp_connection_ids: ["connection-b", "connection-a"] }
+    const mcpResponse = await send("mcp-selected-turn", "MCP choice", mcpId, mcpBody)
+    assert.equal(mcpResponse.status, 202)
+    const mcpReceipt = (await mcpResponse.json()).data
+    const mcpFacts = async () =>
+      (
+        await pool.query("SELECT payload,request_digest,xmin::text AS xmin FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [
+          tenant,
+          mcpId,
+        ])
+      ).rows
+    const savedMcp = await mcpFacts()
+    assert.equal(savedMcp.length, 1)
+    assert.deepEqual(savedMcp[0].payload.launch.selected_mcp_connection_ids, mcpBody.selected_mcp_connection_ids)
+    assert.equal(savedMcp[0].payload.launch.trace.mcp_servers, undefined)
+    const mcpReplay = await send("mcp-selected-turn", "MCP choice", mcpId, mcpBody)
+    assert.equal(mcpReplay.status, 202)
+    assert.deepEqual((await mcpReplay.json()).data, mcpReceipt)
+    for (const ids of [["connection-a", "connection-b"], ["connection-c"], []]) {
+      const conflict = await send("mcp-selected-turn", "MCP choice", mcpId, { selected_mcp_connection_ids: ids })
+      assert.equal(conflict.status, 409)
+    }
+    for (const malformed of [["x", "x"], ["x\n"], [true], null]) {
+      assert.equal((await send("mcp-bad-choice", "MCP choice", mcpId, { selected_mcp_connection_ids: malformed })).status, 400)
+    }
+    assert.equal((await send("retired-trace-alias", "MCP choice", mcpId, { mcp_servers: ["connection-b"] })).status, 400)
+    assert.deepEqual(await mcpFacts(), savedMcp, "replay/conflict/rejected input must not rewrite the committed choice")
+    const reopenedPool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+    try {
+      const reopened = await reopenedPool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [tenant, mcpId])
+      const { parseAgentDispatchPayload } = await import("../dist/domain/chat/agent-dispatch.js")
+      assert.deepEqual(parseAgentDispatchPayload(reopened.rows[0].payload).launch.selected_mcp_connection_ids, mcpBody.selected_mcp_connection_ids)
+    } finally {
+      await reopenedPool.end()
+    }
+    const emptyMcpReplay = await send("first-turn", titleSource, conversationId, { selected_mcp_connection_ids: [] })
+    assert.equal(emptyMcpReplay.status, 202)
+    assert.deepEqual((await emptyMcpReplay.json()).data, receipt)
     const explicitEmptyReplay = await send("first-turn", titleSource, conversationId, { selected_skill_source_refs: [] })
     assert.equal(explicitEmptyReplay.status, 409)
     assert.equal((await explicitEmptyReplay.json()).error.code, "idempotency_conflict")

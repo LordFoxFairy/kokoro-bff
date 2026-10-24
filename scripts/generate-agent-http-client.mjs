@@ -11,12 +11,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "8cc975e0850ebc990c436d3f2cff544c9424cbda"
+const ownerCommit = "4c46ec681ee569e42808acb9409248acddd8ae41"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "c096eab9f2aa392215351a106a670692d5f58f945980a5e028b3a83d17509731"
-const provenanceDigest = "1fe83d4ef219306df91e0c84e6d753194443d8b33f6484202ff2fdf96c00a690"
-const ownerContractVersion = "7.3.0"
+const ownerDigest = "7637757f2f8b1fc1556e62c6566db5de5eb2ae883cf6e24e918b53081cc664ad"
+const provenanceDigest = "0899cc6a16622933ff95347e9e33c8f6b271ac34df359ab277ce2cf066f8c46f"
+const ownerContractVersion = "7.4.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -493,6 +493,23 @@ export function assertGeneratedAllowlist(files, directories, label) {
   assert.deepEqual(directories.slice().sort(), generatedDirectories.slice().sort(), `${label} directory allowlist drifted`)
 }
 
+async function generateMcpSelectionValidator(directory, document) {
+  const schema = document.components.schemas.LaunchRequest.properties.selected_mcp_connection_ids
+  assert.equal(schema.type, "array")
+  assert.equal(schema.items.type, "string")
+  assert.equal(schema.uniqueItems, true)
+  assert.equal(schema["x-kokoro-json-byte-limit"], 4096)
+  const file = path.join(directory, "zod.gen.ts")
+  let source = await readFile(file, "utf8")
+  const property = /^[ \t]*selected_mcp_connection_ids:\s*z\.array\([^\r\n]*$/gmu
+  const matches = [...source.matchAll(property)]
+  assert.equal(matches.length, 1, "generated exact MCP selection property drifted")
+  const item = schema.items
+  const expression = `selected_mcp_connection_ids: z.array(z.string().min(${item.minLength}).max(${item.maxLength}).regex(new RegExp(${JSON.stringify(item.pattern)}, "u"))).max(${schema.maxItems}).refine(values => new Set(values).size === values.length && new TextEncoder().encode(JSON.stringify(values)).byteLength <= ${schema["x-kokoro-json-byte-limit"]}).optional(),`
+  source = source.replace(property, () => expression)
+  await writeFile(file, source)
+}
+
 async function generate(directory) {
   const cli = path.join(root, "node_modules/@hey-api/openapi-ts/bin/run.js")
   await run(process.execPath, [cli, "--silent", "-f", configPath], { env: { ...process.env, AGENT_HTTP_CLIENT_OUTPUT: directory } })
@@ -503,6 +520,7 @@ async function generate(directory) {
   assertGeneratedAllowlist(tree.files, tree.directories, "generated")
   await normalizeGeneratorCompatibility(directory)
   await generateDecodedValidators(directory, ownerDocument)
+  await generateMcpSelectionValidator(directory, ownerDocument)
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),

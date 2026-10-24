@@ -39,10 +39,11 @@ export function projectSavedAgentLaunch(value: unknown): LaunchRequest | null {
   if (Object.hasOwn(value.trace, "project_ref") && (typeof project !== "string" || !/^[^\s\u0000-\u001f\u007f]{1,255}$/u.test(project))) return null
   const projected = zLaunchRequest.strict().safeParse({ ...value, project_ref: project ?? null })
   if (!projected.success) return null
-  const { requested_model_label, trace, ...required } = projected.data
+  const { requested_model_label, trace, selected_mcp_connection_ids, ...required } = projected.data
   return {
     ...required,
     ...(requested_model_label === undefined ? {} : { requested_model_label }),
     ...(trace === undefined ? {} : { trace }),
+    ...(selected_mcp_connection_ids === undefined ? {} : { selected_mcp_connection_ids }),
   }
 }

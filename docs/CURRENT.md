@@ -1,3 +1,15 @@
+## 2026-10-24 AGENT-1：普通消息 MCP 选择（BFF 候选已验，App/正常配对待接）
+
+Public24将原trace-only mcp_servers新输入替换为optional selected_mcp_connection_ids；严格最多16个有序唯一exact IDs，缺省/[]不增加连接。parse→ChatTurn冻结→原JSONB outbox→正式Agent launch已接；等待项目Skill默认值前复制选择，防止幂等digest与派发payload分离。未选请求保原11位置material及payload；非空在原末尾追加具名对象域，旧诊断槽保null，不与旧trace-only意图碰撞。原历史trace只诊断、不提升权限；schema_version3保原scope/FIFO/unknown，既有DB与其他owner事实不改。
+
+Agent唯一当前消费pin为4c46ec681ee569e42808acb9409248acddd8ae41／HTTP7.4的两份Git原件，正规18文件generator/manifest更新；旧8cc当前HTTP原件退役，7104历史scope原件仍保留。生成器补齐新字段uniqueItems/JSON byte cap，不手改生成物；Public24完整逆回23.1原SHA后继续全部既有父证明，186有序操作保持。无新服务、权限、Schema、依赖或资金决定。
+
+783非MD停写输入在精确隔离副本完成七门0：格式/lint/types/contract、architecture36、默认1705 PASS及原3资源SKIP、build；contract1013 PASS。正常BFF正在使用的dist始终按全文件SHA核同，未覆盖预览输出。完整Chat facts真实HTTP/PG/Redis33项及原submitted-Run来源恢复另套真实PG通过，专用库各94→94；覆盖选择落库/新Pool恢复、原key重放、改选409、非法/退役输入400、原payload/digest/xmin不变，以及原事务/并发/unknown/锁等待。独立只读审查Approved；此处的Session admission替身与测试数据不是正常用户或真实模型执行。
+
+踩坑保留：初次脚本cwd错误在任何生产改动前停止；SDK默认漏uniqueItems经真实反例修正规generator，首替换regex跨过末字段使临时生成物语法失败，改成单行精确匹配后按原门通过；新增optional类型需显式省略undefined。原model-admission public SHA断言先逆掉24增量再保原golden，非替换基线。上轮100071d的两处格式遗留按原Prettier收口，未删断言/改条件；非目标大文件格式改动已撤回，仅保新增业务回归。
+
+正常BFF/Agent尚未切换、App尚无选择器；本轮模型/资金命令0，无push/PR/merge。不把本候选称完整会话已通；下一步由App固定本提交Public24，再按原计划配对和同次模型→MCP→产物→重开→真实积分。原始收据仅Root ignored agent-mcp-selection-20261024/bff-selection。
+
 ## 2026-10-24 MCP projection 正常入口404（局部修复候选）
 
 正常App GET /api/hub/mcp/connections实际502，短暂仅响应元数据观测证明其上游BFF为404；正常App观测字节已精确恢复，不留诊断代码。原Platform同主体正式读取200，子client也成功，因此未放宽App wire校验。

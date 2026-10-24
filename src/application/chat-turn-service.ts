@@ -22,6 +22,8 @@ export class ChatTurnApplicationService {
   ): Promise<AgentDispatchReceipt | null> {
     signal?.throwIfAborted()
     const suffix = this.stableIdGenerator.generate(agentDispatchIdentityMaterial(input))
+    // The same MCP intent must bind both digest and payload across awaited defaults.
+    if (input.selectedMcpConnectionIds !== undefined) input = { ...input, selectedMcpConnectionIds: [...input.selectedMcpConnectionIds] }
     const runId = `run_bff_${suffix}`
     const userMessageId = `msg_bff_${suffix}_user`
     const assistantMessageId = `msg_bff_${suffix}_assistant`

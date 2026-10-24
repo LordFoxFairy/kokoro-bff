@@ -1,3 +1,7 @@
+## 2026-10-24 Public24 / Agent7.4 候选
+
+唯一public机器源仅在MessageCreateRequest退役trace-only mcp_servers并新增optional selected_mcp_connection_ids，完整父逆证保全部其它API；正常配对状态见CURRENT。Agent HTTP固定4c46ec681ee569e42808acb9409248acddd8ae41，唯一当前原件与18生成文件/manifest由现generator维护；新字段唯一性/字节限制正规编译，不手改生成物。JSONB恢复保旧诊断trace但不将其升级为执行选择；无Schema变化。
+
 ## 2026-10-22 当前内部恢复发行
 
 Public23／186及原件SHA34ea71e0保持；内部code-first当前1.3 raw SHA256 `4de1a6c7564f3a994d879cfc93588021c5ef4aeebbcc89959fa574d5b6f16d39`，只增加 `POST /internal/v1/model-admissions/recover`，复用原schema／独立Agent身份，禁proof／旧consumption。Billing唯一固定 `23ff71993f7772219cab8d3a3a4c7fbb4d66f735`／exp10，原件SHA256 `f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654`；正规生成十一操作、原十项保持，旧exp9 vendor退役。精确剥本op核完整1.2 parsed hash64b3d8a5，再过原1.1／1.0及Public原件门；保not、码点、strict交集normalize，无第二DTO／运行fallback。详细验收及未激活边界见CURRENT首节；以下为历史快照。

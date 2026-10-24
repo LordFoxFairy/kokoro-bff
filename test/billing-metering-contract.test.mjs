@@ -5,7 +5,7 @@ import { load } from "js-yaml"
 const source = () => readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
 test("formal billing metering management is an additive current-admin capability", async () => {
   const doc = load(await source())
-  assert.equal(doc.info.version, "23.1.0")
+  assert.equal(doc.info.version, "24.0.0")
   for (const [method, path, id] of [
     ["get", "/v1/admin/billing/metering/pricing", "getAdminMeteringPricing"],
     ["post", "/v1/admin/billing/metering/rate-revisions", "publishAdminMeteringRate"],
@@ -137,9 +137,9 @@ test("required exact model pair is the only change from the complete preceding p
 
 test("settlement pending is the only 23.1 failure delta and the complete parent remains exact", async () => {
   const { createHash } = await import("node:crypto")
-  const { restoreMeteringContract } = await import("../scripts/billing-metering-public-contract.mjs")
+  const { restoreMeteringContract, restoreMcpSelectionContract } = await import("../scripts/billing-metering-public-contract.mjs")
   const raw = await source()
-  const parent = raw.replace("                - model_settlement_pending\n", "").replace("  version: 23.1.0", "  version: 23.0.0")
+  const parent = restoreMcpSelectionContract(raw).replace("                - model_settlement_pending\n", "").replace("  version: 23.1.0", "  version: 23.0.0")
   assert.equal(createHash("sha256").update(parent).digest("hex"), "34ea71e0aa56256ca00fc5b3c40abd4d142bea82e664a6871190b8547ec2b9e6")
   assert.equal(restoreMeteringContract(raw), restoreMeteringContract(parent))
   for (const mutation of [
@@ -149,4 +149,20 @@ test("settlement pending is the only 23.1 failure delta and the complete parent 
     raw.replace("- model_unavailable", "- invented_failure"),
   ])
     assert.throws(() => restoreMeteringContract(mutation))
+})
+
+test("Public24 replaces only the trace-only MCP input and proves all Public23.1 bytes", async () => {
+  const { createHash } = await import("node:crypto")
+  const { restoreMcpSelectionContract } = await import("../scripts/billing-metering-public-contract.mjs")
+  const raw = await source()
+  const parent = restoreMcpSelectionContract(raw)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "703dba47da8a5c659b4236bb0a72317588ad29a4ca444ff9e5c99cfbcd00634b")
+  for (const changed of [
+    raw.replace("uniqueItems: true", "uniqueItems: false"),
+    raw.replace("/v1/account/archived-tasks", "/v1/account/retired-tasks"),
+    raw.replace("maxLength: 191", "maxLength: 999"),
+  ]) {
+    assert.notEqual(changed, raw)
+    assert.throws(() => restoreMcpSelectionContract(changed))
+  }
 })

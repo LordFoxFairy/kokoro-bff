@@ -1,3 +1,16 @@
+## 2026-10-24 普通会话 MCP 精确选择（BFF 候选实施，尚未正常配对）
+
+**上游进度。** Agent候选4c46ec681ee569e42808acb9409248acddd8ae41／HTTP7.4已本地提交并验收；本仓已正规生成并实施消费；完整验证/正常配对另列，正常producer不切换。当前会话草稿按已说明的最小合理默认推进，无用户新答复不反复暂停。
+
+原普通message的mcp_servers只进入trace，非Agent正式执行输入；目标用唯一selected_mcp_connection_ids闭合原消息→dispatch→Agent链。App只传选择意图，BFF沿现Session/tenant/project可信上下文冻结并运输，不访问Platform/Agent数据库，不把列表当调用许可。Agent原owner current gate仍裁决执行。
+
+目标公共24.0移除无执行语义的mcp_servers并增加optional selected_mcp_connection_ids（上限/ID/唯一/编码同固定Agent后继artifact）；内部dispatch transport先由Agent正式source生成后消费。未知提交沿原key/body，改变选择触发原digest冲突，不新建第二receipt/adapter。持久历史trace保留为诊断事实，parse不将它升级为新字段；新公众输入不再接受该旧名。未选择请求的旧幂等material必须核等；新选择纳入原material/launch，payload与原scope绑定保持。不把替换字段视为原有公共协议无变化。
+
+本实现消费固定Agent7.4 Git原件，不存在trace升级或新输入别名。写区是原message input/domain dispatch及现Agent HTTP adapter/generator，App公共消费者随后正规生成；其余无关操作、金融/internal协议、Schema不改。正式版本inventory/parent证明以实际contract diff核定，不用预计计数覆盖安全断言。新model/tool正常Run须等整个vertical配对；current普通会话选择作用域仍为已询问的设计假设。
+
+
+新非空选择在原幂等material末尾追加具名对象域；旧mcp_servers诊断槽固定null，不复用其数组位置，避免旧trace-only请求与新执行意图碰撞。缺省/[]保持原未选字节；旧trace只在持久payload reader保留，不成为新body别名。
+
 ## 2026-10-24 Agent 待核对失败码纵向消费（候选，未正常激活）
 
 沿既有AGENT-1／CREDIT-1，只接受Agent正式HTTP7.3的具名model_settlement_pending且retryable=false；BFF不从异常文字、已有回答或余额推断结算，不写资金、不改历史generic失败。新码与已生成正文共同持久化，snapshot／replay同义，保持原AG-UI与source／watermark原子事务。Agent先交付固定commit和完整父证明，再以原generator固定单一新source并保原三操作消费范围；公开ChatMessage.failure追加同码后App正规固定消费，不单独提前重载新producer。

@@ -1,3 +1,9 @@
+## 2026-10-24 普通消息 MCP 选择配对
+
+Public24消息字段为selected_mcp_connection_ids，不再接受新输入mcp_servers；旧已保存payload的trace仍只作诊断，不能据其恢复执行引用。查同一次message→outbox→Agent request的顶层exact IDs，不能以trace有名字或独立SDK成功推断接通。原key/body重试；选择改变应409，不修历史digest或替换连接。缺省/[]均保原未选身份，新非空使用具名追加域；等待默认Skill的异步阶段也不可改变原选择。
+
+App固定当前public artifact并通过编辑器/unknown快照后才与Agent7.4正常配对；先核drain/原活跃Run与备份，不在半条链上开启付费派发。已接纳新非空请求后回退仍保留能消费它的reader，不能让7.3重读新队列。源码开发/验证使用独立副本构建，不覆盖正常BFF cwd的dist；只有明确配对切换才更新实际运行输出。
+
 # kokoro-bff runbook
 
 ## 1. 识别版本与保护现场

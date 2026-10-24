@@ -384,3 +384,116 @@ it("freezes ordered Skill selection in v3 payload and digest, rejecting old dura
     /PAYLOAD_INVALID/,
   )
 })
+
+it("freezes exact MCP choice in launch rather than trace; empty choice retains the old digest", async () => {
+  const { agentDispatchRequestMaterial, buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/domain/chat/agent-dispatch.js")
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conversation",
+    subjectId: "subject",
+    actorId: "actor",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+  }
+  const legacy = JSON.stringify(["tenant", "conversation", null, "subject", "actor", "hello", null, null, null, null, null])
+  assert.equal(agentDispatchRequestMaterial(input), legacy)
+  assert.equal(agentDispatchRequestMaterial({ ...input, selectedMcpConnectionIds: [] }), legacy)
+  const ids = ["connection-b", "connection-a"]
+  const selected = { ...input, selectedMcpConnectionIds: ids }
+  const material = agentDispatchRequestMaterial(selected)
+  assert.notEqual(material, legacy)
+  assert.notEqual(
+    material,
+    JSON.stringify(["tenant", "conversation", null, "subject", "actor", "hello", null, null, null, null, ids]),
+    "old trace-only intent must not share new execution digest",
+  )
+  assert.notEqual(material, agentDispatchRequestMaterial({ ...selected, selectedMcpConnectionIds: [...ids].reverse() }))
+  const payload = buildAgentDispatchPayload(selected, { runId: "run", userMessageId: "message" })
+  ids.push("later-mutated-menu")
+  assert.deepEqual(payload.launch.selected_mcp_connection_ids, ["connection-b", "connection-a"])
+  assert.deepEqual(payload.launch.trace, { source: "kokoro-bff" })
+  assert.deepEqual(parseAgentDispatchPayload(JSON.parse(JSON.stringify(payload))), payload)
+  const historical = buildAgentDispatchPayload(input, { runId: "old-run", userMessageId: "old-message" })
+  historical.launch.trace.mcp_servers = ["historical-diagnostic"]
+  const parsedOld = parseAgentDispatchPayload(historical)
+  assert.deepEqual(parsedOld.launch.trace.mcp_servers, ["historical-diagnostic"])
+  assert.equal(parsedOld.launch.selected_mcp_connection_ids, undefined)
+  for (const invalid of [["x", "x"], ["x\n"], [true], null]) {
+    assert.throws(
+      () => parseAgentDispatchPayload({ ...payload, launch: { ...payload.launch, selected_mcp_connection_ids: invalid } }),
+      /AGENT_DISPATCH_PAYLOAD_INVALID/,
+    )
+  }
+})
+
+it("retains the original selected MCP IDs across a retry after unknown Agent admission", async () => {
+  const repository = new RecordingRepository()
+  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const ids = ["connection-1"]
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conversation",
+    subjectId: "subject",
+    actorId: "actor",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+    selectedMcpConnectionIds: ids,
+  }
+  await service.submit(input)
+  const saved = command(1)
+  saved.payload = repository.commits[0].payload
+  saved.executionProjectRef = null
+  const requests: string[] = []
+  const delivery: AgentDispatchDeliveryPort = {
+    async deliver(current) {
+      requests.push(JSON.stringify(current.payload.launch))
+      return requests.length === 1 ? { outcome: "unknown", errorCode: "transport_unknown" } : { outcome: "admitted" }
+    },
+  }
+  const dispatcher = new AgentDispatchOutboxDispatcher(repository, delivery, { workerId: "worker_fixture", maxClaimsPerTick: 1 })
+  repository.claims = [saved]
+  await dispatcher.runOnce()
+  assert.equal(repository.unknown.length, 1)
+  ids[0] = "connection-2"
+  repository.claims = [{ ...saved, attemptCount: 2 }]
+  await dispatcher.runOnce()
+  assert.equal(repository.admitted.length, 1)
+  assert.equal(requests[0], requests[1])
+  assert.deepEqual(JSON.parse(requests[1]).selected_mcp_connection_ids, ["connection-1"])
+})
+
+it("snapshots MCP intent before awaiting project Skill defaults so the digest and payload cannot diverge", async () => {
+  const repository = new RecordingRepository()
+  let entered
+  let resume
+  const preparing = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const blocked = new Promise<void>((resolve) => {
+    resume = resolve
+  })
+  repository.prepareChatTurnSelection = async () => {
+    entered()
+    await blocked
+    return { kind: "new", projectId: null, installationIds: [] }
+  }
+  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conversation",
+    subjectId: "subject",
+    actorId: "actor",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+    selectedMcpConnectionIds: ["connection-1"],
+  }
+  const submitting = service.submit(input)
+  await preparing
+  input.selectedMcpConnectionIds[0] = "connection-2"
+  resume()
+  await submitting
+  assert.deepEqual(repository.commits[0].payload.launch.selected_mcp_connection_ids, ["connection-1"])
+})

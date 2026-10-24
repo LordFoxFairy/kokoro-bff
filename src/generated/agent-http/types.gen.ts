@@ -37,6 +37,10 @@ export type LaunchRequest = {
     [key: string]: unknown
   }
   project_ref: string | null
+  /**
+   * Exact Platform MCP Connection IDs selected for this Run, in caller order. Omission or [] selects no additional connections; selection is intent, not authorization. JSON ASCII encoding is limited to 4096 bytes.
+   */
+  selected_mcp_connection_ids?: Array<string>
 }
 
 export type LaunchReceipt = {

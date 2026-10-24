@@ -1,3 +1,10 @@
+## 2026-10-24 普通会话 MCP 精确选择（BFF 候选实施，尚未正常配对）
+
+无SQL/Schema/新表。选择冻结进现bff_agent_dispatch_outbox的原launch JSON与request_digest；原Conversation/Message事实、tenant/project/subject/actor、单事务写入及永久幂等键保持。旧trace和旧payload不回写、不把历史诊断提升为执行许可；未选择新请求保持旧幂等material的语义/字节证据。恢复/重复投递沿原精确selection，未知提交不因当前UI勾选变化重建payload。Agent所持request_json、Platform授权和资金仍归各自owner。
+
+
+新非空选择在原幂等material末尾追加具名对象域；旧mcp_servers诊断槽固定null，不复用其数组位置，避免旧trace-only请求与新执行意图碰撞。缺省/[]保持原未选字节；旧trace只在持久payload reader保留，不成为新body别名。
+
 ## 2026-10-24 Agent 待核对失败码纵向消费（候选，未正常激活）
 
 沿既有AGENT-1／CREDIT-1，只接受Agent正式HTTP7.3的具名model_settlement_pending且retryable=false；BFF不从异常文字、已有回答或余额推断结算，不写资金、不改历史generic失败。新码与已生成正文共同持久化，snapshot／replay同义，保持原AG-UI与source／watermark原子事务。Agent先交付固定commit和完整父证明，再以原generator固定单一新source并保原三操作消费范围；公开ChatMessage.failure追加同码后App正规固定消费，不单独提前重载新producer。

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 23.1.0
+  version: 24.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -20962,9 +20962,17 @@ components:
             minLength: 7
             maxLength: 197
             pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
-        mcp_servers:
+        selected_mcp_connection_ids:
           type: array
-          items: { type: string, minLength: 1 }
+          maxItems: 16
+          uniqueItems: true
+          x-kokoro-json-byte-limit: 4096
+          description: Exact ordered Platform MCP Connection IDs for this message. Omission or [] adds no connections. This is intent, not authorization; compact ASCII JSON is limited to 4096 bytes.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 191
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
         project_ref: { type: string, minLength: 1 }
       example:
         content: Review the latest project changes.

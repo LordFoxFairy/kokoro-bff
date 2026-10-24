@@ -3,7 +3,21 @@ import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 const proof = JSON.parse(readFileSync(new URL("../contract/tests/billing-metering.json", import.meta.url), "utf8"))
 const hash = (value) => createHash("sha256").update(value).digest("hex")
+export function restoreMcpSelectionContract(source) {
+  if (/^  version: 24\.0\.0$/mu.test(source)) {
+    if (hash(source) !== "f4caf11f3cd9255d2cd9daf69b74ff9988505d640e31c686ce495e6d8a578b2c") throw Error("Exact MCP selection current contract drift")
+    source = source
+      .replace(
+        "        selected_mcp_connection_ids:\n          type: array\n          maxItems: 16\n          uniqueItems: true\n          x-kokoro-json-byte-limit: 4096\n          description: Exact ordered Platform MCP Connection IDs for this message. Omission or [] adds no connections. This is intent, not authorization; compact ASCII JSON is limited to 4096 bytes.\n          items:\n            type: string\n            minLength: 1\n            maxLength: 191\n            pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])'\n",
+        "        mcp_servers:\n          type: array\n          items: { type: string, minLength: 1 }\n",
+      )
+      .replace("  version: 24.0.0", "  version: 23.1.0")
+    if (hash(source) !== "703dba47da8a5c659b4236bb0a72317588ad29a4ca444ff9e5c99cfbcd00634b") throw Error("Exact MCP selection complete parent drift")
+  }
+  return source
+}
 export function restoreMeteringContract(source) {
+  source = restoreMcpSelectionContract(source)
   if (/^  version: 23\.1\.0$/mu.test(source)) {
     if (hash(source) !== "703dba47da8a5c659b4236bb0a72317588ad29a4ca444ff9e5c99cfbcd00634b") throw Error("Settlement failure current contract drift")
     source = source.replace("                - model_settlement_pending\n", "").replace("  version: 23.1.0", "  version: 23.0.0")
