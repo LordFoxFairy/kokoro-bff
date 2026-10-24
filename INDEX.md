@@ -1,3 +1,8 @@
+## MCP projection bootstrap 回归（2026-10-24）
+
+`src/bootstrap/server.ts` 将原具名MCP projection GET送入现owner处理器，不配置通用MCP上游。
+`test/platform-projection-route.test.mjs` 同时覆盖生产bootstrap和原子handler；前者检查当前Session/MCP准入、真实路由到达及近似路径零owner，避免只验子handler遗漏正常入口。
+
 ## AGENT-1／CREDIT-1 正式结算消费者（2026-10-22）
 
 原model-admission route拥有create／settle明确分支，proof分别必需／禁止；原独立Agent凭据及durable submitter reader复用。具名billing-model-settlement.ts消费固定exp9，billing-model-transport.ts仅抽取原bounded传输与owner错误映射供两命令共享，不做通用代理。内部1.2由现code-first生成链产出，Public23与Schema不改；测试沿model-settlement-{contract,http,transport}及扩展submitted-agent-run真实PG来源回路。实际门禁见CURRENT首节。

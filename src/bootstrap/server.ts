@@ -919,7 +919,7 @@ async function handle(
 
   const key = upstreamKey(businessPath)
   const upstreamBase = key === null ? null : configuredUpstream(config, key)
-  if (composition.routeHandler === undefined && key === null && !bffOwnedBusinessPath(businessPath) && !isMoriBusinessPath(businessPath)) {
+  if (composition.routeHandler === undefined && key === null && !isPlatformProjectionRead && !bffOwnedBusinessPath(businessPath) && !isMoriBusinessPath(businessPath)) {
     send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
     return
   }

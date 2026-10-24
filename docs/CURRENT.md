@@ -1,3 +1,13 @@
+## 2026-10-24 MCP projection 正常入口404（局部修复候选）
+
+正常App GET /api/hub/mcp/connections实际502，短暂仅响应元数据观测证明其上游BFF为404；正常App观测字节已精确恢复，不留诊断代码。原Platform同主体正式读取200，子client也成功，因此未放宽App wire校验。
+
+根因：bootstrap generic unknown-route guard在liveOwnerBusiness之前，以mcp无通用upstreamKey拒绝两个已实现的projection GET。只让既有精确isPlatformProjectionRead穿过该判断，仍先Session和当前MCP read action，再原owner handler；不恢复任意MCP通用代理，不改公共23.1/internal/Schema/owner凭据。回归经生产createBffServer，无测试routeHandler，确实RED404≠200；旧直接子handler夹具漏了这层。补两个读取、授权拒绝零owner和近似路径拒绝，完整结果及正常激活按后继实际证据更新。
+
+主方停写782非文档输入后，Node22相关HTTP93项通过、lint/typecheck/contract/architecture/default/build均exit0；contract1012、architecture36、默认1699 PASS及3原资源SKIP，不称真实资源/整个产品通过。首次定向误用Node24且未加tsx，TS参数属性收集失败保留；按本仓Node22及原tsx入口重跑通过，未改产品代码或断言规避。独审未见本一行确定安全问题；正常服务尚待仅BFF受控重载和浏览器回读。
+
+这是旧读取入口的独立局部修复，不依赖下方尚未发行的会话选择设计。新selected_mcp_connection_ids/public24尚未实现；原金融事实不改。
+
 ## 2026-10-24 AGENT-1：待核对终态持久消费（正常已配对，整链仍未完成）
 
 固定Agent `8cc975e0850ebc990c436d3f2cff544c9424cbda`／HTTP7.3，原三操作和18生成文件范围不扩；新安全码model_settlement_pending仅retryable=false。Public23.1只追加同码，186操作不变、23.0完整字节父证明及旧链保持。BFF不猜资金、不改历史generic失败或原用量／价格，真实captured仍归Billing。
