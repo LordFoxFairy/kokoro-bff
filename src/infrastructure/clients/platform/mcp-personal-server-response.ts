@@ -13,14 +13,14 @@ const version = z
   .string()
   .regex(/^[1-9][0-9]{0,9}(?![\s\S])/u)
   .refine((value) => BigInt(value) <= 2_147_483_647n)
-const text = (min: number, max: number) =>
+const text = (min: number, max?: number) =>
   z
     .string()
     .refine(
       (value) =>
         !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value) &&
         Buffer.byteLength(value, "utf8") >= min &&
-        Buffer.byteLength(value, "utf8") <= max &&
+        (max === undefined || Buffer.byteLength(value, "utf8") <= max) &&
         (min === 0 || Boolean(value.trim())),
     )
 function isDevelopmentLoopback(url: URL): boolean {
@@ -64,7 +64,9 @@ const oauth = z
   .strict()
   .refine((value) => value.configured === (value.status === "configured"))
 const selector = text(1, 256)
-const displayName = text(1, 1000)
+// Owner discovery descriptions have no per-field length cap; the Connect
+// transport already bounds the complete response to 1 MiB. Preserve the text.
+const displayName = text(1)
 const requiredScopes = z
   .array(text(1, 128))
   .max(2000)

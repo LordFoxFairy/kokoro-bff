@@ -1,3 +1,11 @@
+## 2026-10-24 私有MCP发现长描述消费修正（候选，原Prepare恢复仍开放）
+
+本地783非MD停写输入，lint/types/contract/architecture/默认test/build均exit0，冻结无漂移；新增三类长文本用例先3失败，修后本文件18通过。独立只读审查Approved；默认原资源SKIP不冒真实集成已验。正常尚未激活，详情读取502及原Prepare恢复仍开放，不称JSON CRUD完成。
+
+正常JSON导入201后Prepare返回502，已定位owner合法2006字节工具显示文本被消费者额外1000字节界限拒绝。仅对发现declaration display_name移除逐字段长度上限，保留Unicode/既有内容校验、其它字段上限、strict结构、ID/CAS/声明一致性以及整个传输响应预算；不截断、不改写owner原文或declaration digest。读取与首次/重放Prepare receipt共用该投影。
+
+该面是现有browser-private管理投影；公开Public24原件、固定owner artifact、错误profile、SQL/权限与运行配置不变，不为局部实现伪造新的public发行。502 invalid仍为inspect_owner，旧冻结请求没有因本修正获得重试资格；后继须先正式定义可信核验后仅显式重放原key/body/CAS的Prepare恢复，合法exact receipt到达才完成。其它inspect_owner错误继续封锁。当前源码候选尚未正常激活或完成真实浏览器恢复，不称JSON CRUD已闭环。
+
 ## 2026-10-24 AGENT-1：普通消息 MCP 选择（BFF 候选已验，App/正常配对待接）
 
 Public24将原trace-only mcp_servers新输入替换为optional selected_mcp_connection_ids；严格最多16个有序唯一exact IDs，缺省/[]不增加连接。parse→ChatTurn冻结→原JSONB outbox→正式Agent launch已接；等待项目Skill默认值前复制选择，防止幂等digest与派发payload分离。未选请求保原11位置material及payload；非空在原末尾追加具名对象域，旧诊断槽保null，不与旧trace-only意图碰撞。原历史trace只诊断、不提升权限；schema_version3保原scope/FIFO/unknown，既有DB与其他owner事实不改。

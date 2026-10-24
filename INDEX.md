@@ -1,3 +1,7 @@
+## 私有MCP长发现文本（2026-10-24）
+
+现mcp-personal-server-response只移除declaration显示文本额外1000-byte cap，Connect整体1MiB预算保持；读与Prepare首次/重放使用同一校验。test/mcp-personal-server.test.ts覆盖三类长描述原文/digest/replayed与坏Unicode。旧502冻结请求仍inspect_owner，不因本片自动重放或置成功。
+
 ## MCP projection bootstrap 回归（2026-10-24）
 
 `src/bootstrap/server.ts` 将原具名MCP projection GET送入现owner处理器，不配置通用MCP上游。

@@ -1,3 +1,9 @@
+## 2026-10-24 私有MCP发现长描述消费修正（候选，原Prepare恢复仍开放）
+
+正常JSON导入201后Prepare返回502，已定位owner合法2006字节工具显示文本被消费者额外1000字节界限拒绝。仅对发现declaration display_name移除逐字段长度上限，保留Unicode/既有内容校验、其它字段上限、strict结构、ID/CAS/声明一致性以及整个传输响应预算；不截断、不改写owner原文或declaration digest。读取与首次/重放Prepare receipt共用该投影。
+
+该面是现有browser-private管理投影；公开Public24原件、固定owner artifact、错误profile、SQL/权限与运行配置不变，不为局部实现伪造新的public发行。502 invalid仍为inspect_owner，旧冻结请求没有因本修正获得重试资格；后继须先正式定义可信核验后仅显式重放原key/body/CAS的Prepare恢复，合法exact receipt到达才完成。其它inspect_owner错误继续封锁。当前源码候选尚未正常激活或完成真实浏览器恢复，不称JSON CRUD已闭环。
+
 ## 2026-10-24 普通会话 MCP 精确选择（BFF 候选实施，尚未正常配对）
 
 目标公共24.0：现消息创建请求以selected_mcp_connection_ids替代trace-only mcp_servers。新字段optional、默认无额外MCP，最多16个唯一有序Connection ID，格式/4096-byte限额与待发行Agent后继机器源一致；浏览器自报身份、URL、凭据及未知字段仍拒绝。MCP资格由Agent/Platform当前授权检查，不因通过BFF输入校验而成立。

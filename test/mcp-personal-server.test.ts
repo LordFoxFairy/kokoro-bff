@@ -18,6 +18,7 @@ import {
   PersonalMcpConnectorSchema,
   PersonalMcpServerSchema,
   GetPersonalMcpServerResponseSchema,
+  PreparePersonalMcpServerResponseSchema,
   RegisterPersonalMcpServerResponseSchema,
   ImportPersonalMcpJsonResponseSchema,
   DeletePersonalMcpServerResponseSchema,
@@ -867,3 +868,62 @@ test("private Prepare preserves a generic owner CAS precondition without inventi
   const fault = mcpPersonalPreconditionFault(error) ?? mcpPersonalFault(error, false, true)
   assert.deepEqual(fault, { status: 412, code: "mcp_personal_precondition_failed", retryable: false })
 })
+
+for (const kind of ["tool", "resource", "prompt"] as const) {
+  test(`private MCP ${kind} discovery preserves long owner display text in reads and replayed prepare receipts`, () => {
+    for (const displayName of ["x".repeat(2006), "界".repeat(334) + "\nSecond paragraph"]) {
+      const declaration = {
+        kind: {
+          case: kind,
+          value: { selector: "read_docs", displayName, ...(kind === "tool" ? { inputSchemaDigest: "b".repeat(64), requiredScopes: [] } : {}) },
+        },
+      }
+      const server = create(PersonalMcpServerSchema, {
+        availability: 1,
+        serverId: { value: "server-one" },
+        displayName: input.displayName,
+        serverUrl: input.serverUrl,
+        status: "registered",
+        stateVersion: 2n,
+        prepareStatus: PersonalMcpPrepareStatus.READY,
+        declarationsAvailable: true,
+        declarationDigest: "a".repeat(64),
+        declarations: [declaration],
+      })
+      const connector = create(PersonalMcpConnectorSchema, {
+        availability: 1,
+        connectorId: { value: "connector-one" },
+        connectorType: 3,
+        providerKey: "private-server-one",
+        serverId: { value: "server-one" },
+        status: 2,
+        enabled: true,
+        stateVersion: 2n,
+      })
+      const read = projectMcpPersonalServer("server", create(GetPersonalMcpServerResponseSchema, { server }), { ...input, id: "server-one" })
+      assert.equal((read as { server: { declarations: { display_name: string }[] } }).server.declarations[0]?.display_name, displayName)
+      for (const replayed of [false, true]) {
+        const prepared = projectMcpPersonalServer(
+          "prepareServer",
+          create(PreparePersonalMcpServerResponseSchema, {
+            server,
+            connector,
+            declarations: server.declarations,
+            replayed,
+          }),
+          { ...input, id: "server-one", expectedStateVersion: "1" },
+        ) as {
+          server: { declaration_digest: string; declarations: { display_name: string }[] }
+          declarations: { display_name: string }[]
+          replayed: boolean
+        }
+        assert.equal(prepared.server.declarations[0]?.display_name, displayName)
+        assert.equal(prepared.declarations[0]?.display_name, displayName)
+        assert.equal(prepared.server.declaration_digest, "a".repeat(64))
+        assert.equal(prepared.replayed, replayed)
+      }
+      server.declarations[0]!.kind.value!.displayName = "invalid\uD800text"
+      assert.throws(() => projectMcpPersonalServer("server", create(GetPersonalMcpServerResponseSchema, { server }), { ...input, id: "server-one" }))
+    }
+  })
+}
