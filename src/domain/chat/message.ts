@@ -11,6 +11,7 @@ export type AgentFailureCode =
   | "model_unavailable"
   | "dependency_unavailable"
   | "model_access_denied"
+  | "model_settlement_pending"
 
 export type AgentFailureProfile = { source: "agent"; code: AgentFailureCode; retryable: boolean }
 

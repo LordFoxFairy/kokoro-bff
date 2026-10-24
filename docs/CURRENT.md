@@ -1,3 +1,15 @@
+## 2026-10-24 AGENT-1：待核对终态持久消费（本地已验，未正常激活）
+
+固定Agent `8cc975e0850ebc990c436d3f2cff544c9424cbda`／HTTP7.3，原三操作和18生成文件范围不扩；新安全码model_settlement_pending仅retryable=false。Public23.1只追加同码，186操作不变、23.0完整字节父证明及旧链保持。BFF不猜资金、不改历史generic失败或原用量／价格，真实captured仍归Billing。
+
+canonical Message CHECK扩到新码，同时具名 `pnpm db:evolve-agent-failure check|apply` 支持精确非空旧库；只固定旧CHECK或validated目标CHECK、正确永久非继承普通relation，原子替换／重验，保留原正文和xmin。有限总预算／锁等待／取消／COMMIT未知／连接清理保持，无运行时自动迁移，新库installer仍仅空owner。正常旧库未apply，须先备份与恢复演练并与App／Agent配对。
+
+主方停写782非MD输入：format/lint/typecheck/contract/architecture/default/build七门0，contract1009 PASS、architecture36 PASS、默认1696 PASS／3既有资源SKIP；真实独占PG完整projection＋evolution共51 PASS，库存94→94。验证了正文／snapshot／replay／重开连接同义、重复终态不重插、frame失败原子回滚、未知／不合法retryable拒绝、旧CHECK升级及drift／NOT VALID／有限锁等待拒绝。具名受控Agent事件不冒正常真实供应商或资金；无模型／工具／积分命令。
+
+踩坑：首完整门的旧SQL全文证明尚未承接唯一新增枚举，随后仅增加精确逆差和负控、原snapshot不改；第二轮架构门识别新具名evolution需读取canonical，既有read-only双helper例外扩到唯一新路径并承接所有禁止installer／alias／动态import负控，非通配放行。首PG runner把Redis进程PID误作端口，连拒失败保留，改读既有受管配置后通过，没有另起实例。独审发现测试改名断言失败可跳过pool清理，已用局部finally恢复约束和嵌套finally无条件清理；生产演进未发现新增确定P0–P2。
+
+完整终态纵切片仍进行中：App正在固定本片公开发行物；正常BFF派发仍false、Agent未重载新码、原pending资金不动。此片不完成整个Agent链，不推进图标支线、不push/PR/merge或提升Root gitlink。原始收据仅留Root ignored `var/dev/agent-chain-focus-20261024`。
+
 ## AGENT-1／CREDIT-1：原预占恢复BFF消费者已本地验收（2026-10-22）
 
 固定Billing `23ff71993f7772219cab8d3a3a4c7fbb4d66f735`／exp10，十一操作正规生成，原十操作保持；内部1.3 raw SHA256 `4de1a6c7564f3a994d879cfc93588021c5ef4aeebbcc89959fa574d5b6f16d39`。仅加recover，复用六字段与原held ACK，无新DTO／SQL／依赖／兼容路径；Public23原字节及原internal1.2→1.1→1.0全图保护通过。默认未配置不触达owner，首次create仍必需proof，recover明确禁proof／旧consumption，只用原提交者／永久key，不回落create。

@@ -14,6 +14,7 @@ export type ChatFailure = {
     | "model_unavailable"
     | "dependency_unavailable"
     | "model_access_denied"
+    | "model_settlement_pending"
   retryable: boolean
 }
 

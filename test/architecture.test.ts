@@ -58,9 +58,9 @@ function importsCanonicalSchemaInstaller(relativePath: string, source: string): 
   })
 }
 
-// ADR-003 permits these two read-only exports in this one operation, not the installer module as a whole.
-function isNamedPersonalizationSchemaReader(relativePath: string, source: string): boolean {
-  if (relativePath !== "scripts/personalization-schema-evolution.mjs") return false
+// Named owner evolutions may read these two helpers, never execute the fresh-only installer.
+function isNamedSchemaEvolutionReader(relativePath: string, source: string): boolean {
+  if (!["scripts/personalization-schema-evolution.mjs", "scripts/evolve-agent-failure-schema.mjs"].includes(relativePath)) return false
   const imports = [...source.matchAll(/^import\s+\{([^}]+)\}\s+from\s+["']\.\/apply-schema\.mjs["'];?[ \t]*$/gmu)]
   if (imports.length !== 1) return false
   const declaration = imports[0]
@@ -85,7 +85,7 @@ function assertSingleSchemaInstaller(scripts: Record<string, string>, sourceFile
       ({ relativePath, source }) =>
         relativePath !== canonicalInstaller.relativePath &&
         importsCanonicalSchemaInstaller(relativePath, source) &&
-        !isNamedPersonalizationSchemaReader(relativePath, source),
+        !isNamedSchemaEvolutionReader(relativePath, source),
     )
     .map(({ relativePath }) => relativePath)
     .sort()
@@ -929,41 +929,41 @@ test("R257 personalization stays caller-owned and bypasses generic receipt dispa
 })
 
 test("R257 named evolution may import exactly the two approved canonical read helpers", () => {
-  const namedReader: SourceFile = {
-    relativePath: "scripts/personalization-schema-evolution.mjs",
-    source: 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"',
+  for (const relativePath of ["scripts/personalization-schema-evolution.mjs", "scripts/evolve-agent-failure-schema.mjs"]) {
+    const namedReader: SourceFile = {
+      relativePath,
+      source: 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"',
+    }
+    assert.doesNotThrow(() => assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [canonicalInstaller, namedReader]))
   }
-  assert.doesNotThrow(() => assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [canonicalInstaller, namedReader]))
 })
 
 test("R257 named evolution exception rejects installer execution exports and alternate import forms", () => {
   const approved = 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"'
-  for (const source of [
-    'import { applyCanonicalSchema } from "./apply-schema.mjs"',
-    'import { assertBffSchemaUrl, loadCanonicalSchema, applyCanonicalSchema } from "./apply-schema.mjs"',
-    'import { assertBffSchemaUrl, loadCanonicalSchema as applyCanonicalSchema } from "./apply-schema.mjs"',
-    'import * as installer from "./apply-schema.mjs"',
-    'import installer from "./apply-schema.mjs"',
-    'import "./apply-schema.mjs"',
-    'export { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"',
-    'const { assertBffSchemaUrl, loadCanonicalSchema } = require("./apply-schema.mjs")',
-    'const { assertBffSchemaUrl, loadCanonicalSchema } = await import("./apply-schema.mjs")',
-    'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs?mode=install"',
-    'import { loadCanonicalSchema } from "./apply-schema.mjs"',
-    `${approved}\n${approved}`,
-    `${approved}\nconst installer = require( /* alternate */ "./apply-schema.mjs")`,
-    `${approved}\nconst installer = await import( /* alternate */ "./apply-schema.mjs", { with: { type: "module" } })`,
-    `${approved}\nimport { applyCanonicalSchema } from "./apply-schema.mjs"`,
-  ]) {
-    assert.throws(
-      () =>
-        assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [
-          canonicalInstaller,
-          { relativePath: "scripts/personalization-schema-evolution.mjs", source },
-        ]),
-      /static schema installer import/u,
-      source,
-    )
+  for (const relativePath of ["scripts/personalization-schema-evolution.mjs", "scripts/evolve-agent-failure-schema.mjs"]) {
+    for (const source of [
+      'import { applyCanonicalSchema } from "./apply-schema.mjs"',
+      'import { assertBffSchemaUrl, loadCanonicalSchema, applyCanonicalSchema } from "./apply-schema.mjs"',
+      'import { assertBffSchemaUrl, loadCanonicalSchema as applyCanonicalSchema } from "./apply-schema.mjs"',
+      'import * as installer from "./apply-schema.mjs"',
+      'import installer from "./apply-schema.mjs"',
+      'import "./apply-schema.mjs"',
+      'export { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"',
+      'const { assertBffSchemaUrl, loadCanonicalSchema } = require("./apply-schema.mjs")',
+      'const { assertBffSchemaUrl, loadCanonicalSchema } = await import("./apply-schema.mjs")',
+      'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs?mode=install"',
+      'import { loadCanonicalSchema } from "./apply-schema.mjs"',
+      `${approved}\n${approved}`,
+      `${approved}\nconst installer = require( /* alternate */ "./apply-schema.mjs")`,
+      `${approved}\nconst installer = await import( /* alternate */ "./apply-schema.mjs", { with: { type: "module" } })`,
+      `${approved}\nimport { applyCanonicalSchema } from "./apply-schema.mjs"`,
+    ]) {
+      assert.throws(
+        () => assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [canonicalInstaller, { relativePath, source }]),
+        /static schema installer import/u,
+        source,
+      )
+    }
   }
 })
 

@@ -31,6 +31,6 @@ test("internal admission adds one Agent-only surface without changing original I
     createHash("sha256")
       .update(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url)))
       .digest("hex"),
-    "34ea71e0aa56256ca00fc5b3c40abd4d142bea82e664a6871190b8547ec2b9e6",
+    "703dba47da8a5c659b4236bb0a72317588ad29a4ca444ff9e5c99cfbcd00634b",
   )
 })

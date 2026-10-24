@@ -199,3 +199,7 @@ Project resources can be reloaded with `GET /v1/projects/{projectId}/resources?l
 - `src/infrastructure/clients/agent/interaction-state.ts` 严格解码固定 owner schema；`src/application/agui/interaction-state.ts` 校验完整 revision/no-op；`src/application/chat-run-control.ts` 校验当前 pause 的完整 decision 集合。
 - `bff_agui_run_interaction` 是最新 run read projection；source/CUSTOM/cursor 与它同事务。`chat-repository.ts` 在授权 RR 中校验 head、完整 state 与 ledger provenance；ACK 不清除 pause。
 - 本轮静态/纯测试证据与未决 fixture 见 `docs/CURRENT.md`。真实 PG/Redis/HTTP、发布及 Web 消费归 Root 后续验收，不能以源码候选代替。
+
+### Agent 7.3 待核对失败码的既有库配对
+
+Public23.1只追加 `model_settlement_pending`（不可自动重试），不改变真实结算规则。新库继续用原fresh-only installer；非空旧owner须在备份及恢复演练后显式运行 `KOKORO_BFF_POSTGRES_URL=... pnpm db:evolve-agent-failure check` / `apply`，仅接纳精确旧或目标CHECK，绝不清库。此入口不随服务启动自动执行。正常激活须与固定Agent7.3和App消费者配对，具体当前状态见 `docs/CURRENT.md`；组件测试通过不代表正常整链已验收。

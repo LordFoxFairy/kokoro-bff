@@ -5,7 +5,7 @@ import { load } from "js-yaml"
 const source = () => readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
 test("formal billing metering management is an additive current-admin capability", async () => {
   const doc = load(await source())
-  assert.equal(doc.info.version, "23.0.0")
+  assert.equal(doc.info.version, "23.1.0")
   for (const [method, path, id] of [
     ["get", "/v1/admin/billing/metering/pricing", "getAdminMeteringPricing"],
     ["post", "/v1/admin/billing/metering/rate-revisions", "publishAdminMeteringRate"],
@@ -133,4 +133,20 @@ test("required exact model pair is the only change from the complete preceding p
     raw.replace("/v1/account/archived-tasks", "/v1/account/retired-tasks"),
   ])
     assert.throws(() => restoreMeteringContract(altered))
+})
+
+test("settlement pending is the only 23.1 failure delta and the complete parent remains exact", async () => {
+  const { createHash } = await import("node:crypto")
+  const { restoreMeteringContract } = await import("../scripts/billing-metering-public-contract.mjs")
+  const raw = await source()
+  const parent = raw.replace("                - model_settlement_pending\n", "").replace("  version: 23.1.0", "  version: 23.0.0")
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "34ea71e0aa56256ca00fc5b3c40abd4d142bea82e664a6871190b8547ec2b9e6")
+  assert.equal(restoreMeteringContract(raw), restoreMeteringContract(parent))
+  for (const mutation of [
+    raw.replace("- model_settlement_pending", "- invented_failure"),
+    raw.replace("- model_settlement_pending", "- model_settlement_pending\n                - model_settlement_pending"),
+    raw.replace("  title:", "  unexpected_title:"),
+    raw.replace("- model_unavailable", "- invented_failure"),
+  ])
+    assert.throws(() => restoreMeteringContract(mutation))
 })

@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises"
 import { describe, it } from "node:test"
 import { parseAgentErrorCode, parseAgentHttpJson, parseLaunchReceipt, parseReplayPage } from "../dist/infrastructure/clients/agent/http-wire.js"
 
+import { mapAgentEvent } from "../dist/infrastructure/clients/agent/projection.js"
+
 const receipt = { data: { run_id: "run_1", session_id: "session_1", replayed: false }, meta: { request_id: "request_1" } }
 const event = {
   chat_event_id: "event_1",
@@ -29,19 +31,19 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "7104f3da6e812e1092866cf4e60e32826a8992c1",
-        contract_version: "7.0.0",
+        repository_commit: "8cc975e0850ebc990c436d3f2cff544c9424cbda",
+        contract_version: "7.3.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
+        contract_sha256: "c096eab9f2aa392215351a106a670692d5f58f945980a5e028b3a83d17509731",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "e87d077af7729317f8e20ad8423d6c96ac14ad46f002f410274401486a8bf8ec",
+        provenance_sha256: "1fe83d4ef219306df91e0c84e6d753194443d8b33f6484202ff2fdf96c00a690",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
+        source_sha256: "c096eab9f2aa392215351a106a670692d5f58f945980a5e028b3a83d17509731",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
@@ -51,18 +53,18 @@ describe("Agent event-protocol provenance", () => {
   it("uses one HTTP7 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "7104f3da6e812e1092866cf4e60e32826a8992c1")
+    assert.equal(manifest.owner.repository_commit, "8cc975e0850ebc990c436d3f2cff544c9424cbda")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
+      "c096eab9f2aa392215351a106a670692d5f58f945980a5e028b3a83d17509731",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/7104f3da6e812e1092866cf4e60e32826a8992c1/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/8cc975e0850ebc990c436d3f2cff544c9424cbda/openapi.json", import.meta.url), "utf8"),
     )
     assert.doesNotThrow(() => assertInteractionContractSchema(owner))
     for (const change of [
@@ -428,5 +430,22 @@ describe("Agent HTTP7 frozen BFF project projection", () => {
       assert.equal(received[0].body.project_ref, "project_canonical")
       assert.equal(received[0].body.trace.project_ref, "observation_not_authority")
     })
+  })
+})
+
+describe("confirmed model settlement pending", () => {
+  it("projects a nonretryable model settlement pending owner event without diagnostics", () => {
+    const pending = {
+      ...event,
+      event_type: "run.failed",
+      payload_json: JSON.stringify({ status: "failed", code: "model_settlement_pending", retryable: false }),
+    }
+    assert.deepEqual(mapAgentEvent(pending).payload.failure, { source: "agent", code: "model_settlement_pending", retryable: false })
+    for (const payload of [
+      { status: "failed", code: "model_settlement_pending", retryable: true },
+      { status: "failed", code: "model_settlement_pending", retryable: false, amount: "1" },
+      { status: "failed", code: "made_up_settlement_status", retryable: false },
+    ])
+      assert.throws(() => mapAgentEvent({ ...pending, payload_json: JSON.stringify(payload) }))
   })
 })

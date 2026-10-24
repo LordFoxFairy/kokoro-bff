@@ -1,3 +1,13 @@
+## 2026-10-24 Agent 待核对失败码纵向消费（候选，未正常激活）
+
+沿既有AGENT-1／CREDIT-1，只接受Agent正式HTTP7.3的具名model_settlement_pending且retryable=false；BFF不从异常文字、已有回答或余额推断结算，不写资金、不改历史generic失败。新码与已生成正文共同持久化，snapshot／replay同义，保持原AG-UI与source／watermark原子事务。Agent先交付固定commit和完整父证明，再以原generator固定单一新source并保原三操作消费范围；公开ChatMessage.failure追加同码后App正规固定消费，不单独提前重载新producer。
+
+持久边界必须同时承接：旧canonical database/schema.sql的ck_bff_message_agent_failure为十码闭集，新码在现PG写入会拒绝并回滚frame／message／watermark。不得仅改generator／UI。新增具名owner收敛只在精确原CHECK或目标CHECK、已validated／正确relation下原子替换并验证；fresh installer仍仅空schema，不能用于正常旧库、不重建／清数据。已有文本、旧码、原source／事务／actor／Run／取消／幂等均保持，非空隔离PG须验证升级／回滚／drift与新码持久回放后才正常配对。
+
+本片无新的业务表／资金模型／权限／服务或计价决定。未来只读展示用量待核对不证明已capture、released或可重派；unknown、坏回执和身份不符沿原失败。当前BFF候选已实现并在独占PostgreSQL验过具名升级／drift／有限锁等待取消、正文保留及snapshot／replay／重开连接／重复终态／回滚；完整门与App／正常配对仍后继；同一纵切片包含Agent→BFF→App和正常页面，不能把Agent组件通过当产品完成。
+
+具名入口 `KOKORO_BFF_POSTGRES_URL=... pnpm db:evolve-agent-failure check|apply`；URL必须显式schema=kokoro_bff，独占owner advisory lock及受影响表锁，只精确旧／目标、validated、本地非继承普通永久表CHECK可接纳。原CHECK字节固定，目标从唯一canonical提取，经PG原生定义核等；apply在同事务替换并重验，check回滚且不改owner。总预算20秒内、锁等待有限，取消前不迟发COMMIT，实际发送COMMIT后丢ACK为unknown。既有Message正文和xmin不重写；无自动运行迁移。正常旧库尚未apply，必须先备份及恢复演练并配对App后再启用新producer。
+
 ## AGENT-1／CREDIT-1：恢复消费无新增事实（2026-10-22）
 
 无SQL／Schema／新表／缓存或用户token。原Chat来源只读取原tenant、user、Run，退休／terminal／会话软删后不改为live资格；原receipt和资金仍归Billing，Agent后继独立持久化金融关联，不把恢复当补grant／派发许可。BFF不写余额、回执或跨owner数据库；错来源／未配置时零owner请求。

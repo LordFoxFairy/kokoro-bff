@@ -89,7 +89,7 @@ test("integration proof rejects permissions, aliases, extra blocks and unrelated
     assert.ok(inspectClosureIntegrationContract(source, changed).length > 0)
 })
 
-test("merged canonical SQL adds exactly archive and approved execution binding facts to the intact local owner schema", async () => {
+test("merged canonical SQL adds only archive, execution binding and the approved non-retryable settlement failure", async () => {
   const schema = await readFile(new URL("../../database/schema.sql", import.meta.url), "utf8")
   const parent = await readFile(new URL("../../contract/tests/closure-local.schema.sql.snapshot", import.meta.url), "utf8")
   const settings = await readFile(new URL("../../contract/tests/settings-main.schema.sql.snapshot", import.meta.url), "utf8")
@@ -99,6 +99,9 @@ test("merged canonical SQL adds exactly archive and approved execution binding f
   assert.ok(archiveIndexes)
   const bindingColumns = "  execution_project_ref TEXT,\n  execution_context_retired_at TIMESTAMPTZ(3),\n"
   const verify = (value) => {
+    const approvedFailure = "'model_access_denied', 'model_settlement_pending'"
+    assert.equal(value.split(approvedFailure).length, 2, "pending must be added only to the exact failure-code enum")
+    value = value.replace(approvedFailure, "'model_access_denied'")
     assert.equal(value.split(bindingColumns).length, 2, "the exact approved execution binding columns must remain present once")
     const dispatch = value.match(/CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox \([^]*?\n\);/u)?.[0]
     assert.ok(dispatch)
@@ -109,6 +112,10 @@ test("merged canonical SQL adds exactly archive and approved execution binding f
   }
   verify(schema)
   for (const drift of [
+    schema.replace(", 'model_settlement_pending'", ""),
+    schema
+      .replace("'model_access_denied', 'model_settlement_pending'", "'model_access_denied'")
+      .replace("'model_unavailable', 'dependency_unavailable'", "'model_unavailable', 'dependency_unavailable', 'model_settlement_pending'"),
     schema.replace("archived_at DESC", "archived_at ASC"),
     schema.replace("archived_at IS NULL", "archived_at IS NOT NULL"),
     schema.replace("CREATE TABLE IF NOT EXISTS bff_message (", "CREATE TABLE unapproved(id text);\nCREATE TABLE IF NOT EXISTS bff_message ("),

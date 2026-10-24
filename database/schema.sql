@@ -259,7 +259,7 @@ CREATE TABLE IF NOT EXISTS bff_message (
         'internal_error',
         'model_unavailable',
         'dependency_unavailable',
-        'model_access_denied'
+        'model_access_denied', 'model_settlement_pending'
       )
       AND (agent_failure_retryable = FALSE OR agent_failure_code IN ('model_unavailable', 'dependency_unavailable'))
       AND role = 'assistant'
