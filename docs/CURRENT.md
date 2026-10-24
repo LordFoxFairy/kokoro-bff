@@ -4,7 +4,7 @@
 
 根因：bootstrap generic unknown-route guard在liveOwnerBusiness之前，以mcp无通用upstreamKey拒绝两个已实现的projection GET。只让既有精确isPlatformProjectionRead穿过该判断，仍先Session和当前MCP read action，再原owner handler；不恢复任意MCP通用代理，不改公共23.1/internal/Schema/owner凭据。回归经生产createBffServer，无测试routeHandler，确实RED404≠200；旧直接子handler夹具漏了这层。补两个读取、授权拒绝零owner和近似路径拒绝，完整结果及正常激活按后继实际证据更新。
 
-主方停写782非文档输入后，Node22相关HTTP93项通过、lint/typecheck/contract/architecture/default/build均exit0；contract1012、architecture36、默认1699 PASS及3原资源SKIP，不称真实资源/整个产品通过。首次定向误用Node24且未加tsx，TS参数属性收集失败保留；按本仓Node22及原tsx入口重跑通过，未改产品代码或断言规避。独审未见本一行确定安全问题；正常服务尚待仅BFF受控重载和浏览器回读。
+主方停写782非文档输入后，Node22相关HTTP93项通过、lint/typecheck/contract/architecture/default/build均exit0；contract1012、architecture36、默认1699 PASS及3原资源SKIP，不称真实资源/整个产品通过。首次定向误用Node24且未加tsx，TS参数属性收集失败保留；按本仓Node22及原tsx入口重跑通过，未改产品代码或断言规避。独审未见本一行确定安全问题。源码已本地提交100071d；仅正常BFF优雅重载、其余八监听/worker保持，Agent/BFF/Billing原行/xmin核同，派发仍false。正常浏览器同一GET已200/data.connections=[]，不是502；当前空集合仍漏无OAuth私有连接，已定位Platform不区分direct-private的授权资格，后继沿原owner修正，不称列表或普通聊天整链完成。
 
 这是旧读取入口的独立局部修复，不依赖下方尚未发行的会话选择设计。新selected_mcp_connection_ids/public24尚未实现；原金融事实不改。
 
