@@ -586,3 +586,72 @@ test("denied icon mutation reaches no Platform command", async () => {
     await f.close()
   }
 })
+
+for (const stage of ["public-pre-owner", "private-post-owner"]) {
+  for (const retryAfter of ["1", "86400", undefined, "0", "1.5", "86401", "tomorrow"]) {
+    test(`MCP429 ${stage} preserves only a bounded action delay: ${retryAfter ?? "absent"}`, async () => {
+      let checks = 0
+      let ownerReads = 0
+      const f = await fixture(true, {
+        check: async () => {
+          checks++
+          assert.equal(ownerReads, stage === "private-post-owner" ? 1 : 0)
+          return {
+            ok: false,
+            status: 429,
+            code: "session_rate_limited",
+            ...(retryAfter === undefined ? {} : { retryAfter }),
+          }
+        },
+        mcpPersonalClient: {
+          read: async () => {
+            ownerReads++
+            return { items: [connector], next_cursor: null }
+          },
+        },
+      })
+      try {
+        const response = await fetch(`${f.origin}${stage === "public-pre-owner" ? "/v1/mcp/connections" : "/browser/v1/mcp/connectors"}`, { headers })
+        assert.equal(response.status, 429)
+        assert.equal(response.headers.get("retry-after"), retryAfter === "1" || retryAfter === "86400" ? retryAfter : null)
+        assert.equal(response.headers.get("cache-control"), "no-store")
+        assert.equal(response.headers.get("x-request-id"), headers["x-request-id"])
+        const body = await response.json()
+        assert.deepEqual(Object.keys(body), ["error"])
+        assert.deepEqual(Object.keys(body.error).sort(), ["code", "message", "retryable"])
+        assert.equal(body.error.code, "session_rate_limited")
+        assert.equal(body.error.retryable, true)
+        assert.equal(checks, 1)
+        assert.equal(ownerReads, stage === "private-post-owner" ? 1 : 0)
+      } finally {
+        await f.close()
+      }
+    })
+  }
+  test(`MCP429 ${stage} never adds a delay to a non429 rejection`, async () => {
+    let checks = 0
+    const f = await fixture(true, {
+      check: async () => {
+        checks++
+        return {
+          ok: false,
+          status: 403,
+          code: "session_forbidden",
+          retryAfter: "60",
+        }
+      },
+      mcpPersonalClient: {
+        read: async () => ({ items: [connector], next_cursor: null }),
+      },
+    })
+    try {
+      const response = await fetch(`${f.origin}${stage === "public-pre-owner" ? "/v1/mcp/connections" : "/browser/v1/mcp/connectors"}`, { headers })
+      assert.equal(response.status, 403)
+      assert.equal(response.headers.get("retry-after"), null)
+      assert.equal((await response.json()).error.code, "session_forbidden")
+      assert.equal(checks, 1)
+    } finally {
+      await f.close()
+    }
+  })
+}

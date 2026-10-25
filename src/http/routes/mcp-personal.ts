@@ -341,7 +341,7 @@ export async function mcpPersonalRoute(
     }
     const action = actionOutcome.value
     if (!action.ok) {
-      fail(action.status, action.code, action.status === 429 || action.status === 503)
+      fail(action.status, action.code, action.status === 429 || action.status === 503, action.status === 429 ? action.retryAfter : undefined)
       return
     }
     controller.signal.throwIfAborted()

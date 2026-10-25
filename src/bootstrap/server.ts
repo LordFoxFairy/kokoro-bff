@@ -462,7 +462,11 @@ async function handle(
         if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_admission_deadline")
         const checked = await authorizeMcpAction(composition.mcpAuthorization, result, mcpAction, admissionAbort.signal)
         if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_admission_deadline")
-        if (!checked.ok) return { ...checked, retryAfter: undefined }
+        if (!checked.ok)
+          return {
+            ...checked,
+            retryAfter: checked.status === 429 ? checked.retryAfter : undefined,
+          }
       }
       const action = skillActionForRequest(request.method ?? "GET", businessPath)
       if (!result.ok || action === null) return result

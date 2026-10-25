@@ -65,7 +65,16 @@ export class McpAuthorizationClient {
       if (!error.success) return unavailable
       if (response.status === 401 && error.data.error.code === "UNAUTHENTICATED") return { ok: false, status: 401, code: "session_invalid" }
       if (response.status === 403 && error.data.error.code === "PERMISSION_DENIED") return { ok: false, status: 403, code: "session_forbidden" }
-      if (response.status === 429 && error.data.error.code === "RATE_LIMITED") return { ok: false, status: 429, code: "session_rate_limited" }
+      if (response.status === 429 && error.data.error.code === "RATE_LIMITED") {
+        const after = response.headers.get("retry-after")
+        const retryAfter = after !== null && /^[1-9][0-9]{0,4}(?![\s\S])/u.test(after) && Number(after) <= 86_400 ? after : undefined
+        return {
+          ok: false,
+          status: 429,
+          code: "session_rate_limited",
+          ...(retryAfter === undefined ? {} : { retryAfter }),
+        }
+      }
       return unavailable
     } catch {
       return unavailable
