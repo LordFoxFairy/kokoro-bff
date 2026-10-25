@@ -83,6 +83,7 @@ const register = z
   .object({
     display_name: displayName,
     server_url: serverUrl,
+    transport: z.enum(["streamable_http", "sse_compat"]).optional(),
     notes: notes.optional(),
     headers: headerWrites.optional(),
     oauth_client: oauthClient.optional(),
@@ -134,6 +135,7 @@ export function parseMcpPersonalServer(operation: McpPersonalServerMutation, bod
     if (operation === "registerServer") {
       const value = register.parse(raw)
       return {
+        ...(value.transport === undefined ? {} : { transport: value.transport === "streamable_http" ? 2 : 3 }),
         displayName: value.display_name,
         ...(value.icon === undefined ? {} : { icon: { intentId: value.icon.intent_id, expectedStateVersion: value.icon.expected_state_version } }),
         serverUrl: value.server_url,

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kokoro Platform Business HTTP API",
-    "version": "6.3.0",
+    "version": "7.0.0",
     "description": "Platform read-only projections. A Platform-local fixed-tenant service bearer authenticates BFF; authenticated BFF then supplies its Product Session subject."
   },
   "servers": [
@@ -1133,7 +1133,7 @@
           },
           "transport": {
             "type": "string",
-            "enum": ["streamable_http"]
+            "enum": ["streamable_http", "sse_compat"]
           },
           "status": {
             "type": "string",

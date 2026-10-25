@@ -5,6 +5,7 @@ import type { McpPersonalInput } from "./mcp-personal-response.js"
 export type McpPersonalServerOperation = "registerServer" | "server" | "prepareServer" | "updateServer" | "deleteServer"
 export type McpPersonalServerMutation = Exclude<McpPersonalServerOperation, "server">
 export type McpPersonalServerFields = McpIconSaveFields & {
+  transport?: 2 | 3
   displayName?: string
   serverUrl?: string
   notes?: string
@@ -32,6 +33,7 @@ export function bindMcpPersonalServerCommand(
   const body =
     operation === "registerServer"
       ? {
+          ...(input.transport === undefined ? {} : { transport: input.transport }),
           display_name: input.displayName!,
           server_url: input.serverUrl!,
           notes: input.notes ?? null,

@@ -1,3 +1,4 @@
+import { restorePublic25McpPersonalSseContract } from "./mcp-personal-sse-public-contract.mjs"
 import { restorePublic16KnowledgeContract } from "./verify-personal-knowledge-contract.mjs"
 import { readFileSync } from "node:fs"
 import { createHash } from "node:crypto"
@@ -145,7 +146,8 @@ function inspectSkillsSpecificationSurface(source, expectedVersion) {
     require(document?.info?.version === expectedVersion, `Public${expectedVersion.split(".")[0]} version must equal ${expectedVersion}`)
   const paths = document?.paths ?? {},
     schemas = document?.components?.schemas ?? {}
-  const metadataOnly = expectedVersion === null && document?.info?.version === "25.0.0"
+  const metadataOnly = expectedVersion === null && ["25.0.0", "26.0.0"].includes(document?.info?.version)
+  if (document?.info?.version === "26.0.0") restorePublic25McpPersonalSseContract(source)
   const expected = [
     ["/v1/skill.list", "get", "listSkills", "public", "SpecificationPublicSkillList"],
     ["/skill.v1.SkillOptionalService/ListSkills", "post", "websiteListSkills", "browser-private", "SpecificationListResponse"],

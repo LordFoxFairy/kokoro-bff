@@ -86,8 +86,9 @@ const declaration = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("resource"), selector, display_name: displayName }).strict(),
   z.object({ kind: z.literal("prompt"), selector, display_name: displayName }).strict(),
 ])
-const server = z
+const acknowledgementServer = z
   .object({
+    transport: z.enum(["streamable_http", "sse_compat"]).optional(),
     icon: mcpIconBindingSchema.optional(),
     server_id: id,
     availability: mcpPersonalAvailabilitySchema,
@@ -119,6 +120,9 @@ const server = z
     if (value.prepare_status === "ready" && !value.declarations_available) context.addIssue({ code: "custom", message: "ready server lacks declarations" })
   })
 
+// Only current representations require transport; old completed ACKs remain historical facts.
+const currentServer = acknowledgementServer.safeExtend({ transport: z.enum(["streamable_http", "sse_compat"]) })
+
 function object(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("mcp_personal_response_invalid")
   return value as Record<string, unknown>
@@ -142,8 +146,9 @@ function projectDeclaration(raw: unknown): unknown {
   if (kind.case === "resource" || kind.case === "prompt") return { kind: kind.case, selector: item.selector, display_name: item.displayName }
   throw new Error("mcp_personal_response_invalid")
 }
-function projectServer(raw: unknown): z.infer<typeof server> {
+function projectServer(raw: unknown, current: boolean): z.infer<typeof acknowledgementServer> {
   const value = object(raw)
+  if (value.transport !== undefined && value.transport !== 2 && value.transport !== 3) throw new Error("mcp_personal_response_invalid")
   const declarations = Array.isArray(value.declarations) ? value.declarations.map(projectDeclaration) : undefined
   const headers = Array.isArray(value.headers)
     ? value.headers.map((rawHeader) => {
@@ -157,7 +162,8 @@ function projectServer(raw: unknown): z.infer<typeof server> {
       })
     : undefined
   const valueOauth = value.oauthClient === undefined ? undefined : object(value.oauthClient)
-  return server.parse({
+  return (current ? currentServer : acknowledgementServer).parse({
+    ...(value.transport === undefined ? {} : { transport: value.transport === 2 ? "streamable_http" : "sse_compat" }),
     ...(value.icon === undefined ? {} : { icon: projectMcpIconBinding(value.icon) }),
     server_id: identity(value.serverId),
     availability: projectMcpPersonalAvailability(value.availability),
@@ -200,7 +206,15 @@ export function projectMcpPersonalServer(operation: McpPersonalServerOperation, 
     if (result.server_id !== input.id || result.deleted !== true || typeof result.replayed !== "boolean") throw new Error("mcp_personal_response_invalid")
     return result
   }
-  const resultServer = projectServer(value.server)
+  const completedReplay = value.replayed === true && typeof input.commandId === "string" && /^[\x21-\x7e]{1,191}(?![\s\S])/u.test(input.commandId)
+  const historicalAcknowledgement = operation !== "server" && completedReplay && (operation !== "registerServer" || input.transport === undefined)
+  const resultServer = projectServer(value.server, !historicalAcknowledgement)
+  if (
+    operation === "registerServer" &&
+    resultServer.transport !== undefined &&
+    resultServer.transport !== ((input.transport ?? 2) === 2 ? "streamable_http" : "sse_compat")
+  )
+    throw new Error("mcp_personal_response_invalid")
   if (
     (operation === "registerServer" || operation === "updateServer") &&
     ((input.icon !== undefined && resultServer.icon?.intent_id !== input.icon.intentId) || (input.clearIcon === true && resultServer.icon !== undefined))

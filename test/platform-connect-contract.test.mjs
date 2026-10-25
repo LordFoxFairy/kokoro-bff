@@ -67,6 +67,24 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
       "descriptor/mcp-package-admin-v1.binpb",
       "execution-operations/mcp-personal-product-v1.json",
       "execution-operations/mcp-availability-v1.json",
+      "descriptor/platform-mcp-personal-sse-parent.availability.profile.json.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.http.openapi.json.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.icon.profile.json.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.personal-product.profile.json.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.platform.binpb.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.platform.generated.ts.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.platform.proto.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.private-server.profile.json.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.provenance.json.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.runtime.binpb.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.runtime.generated.ts.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.runtime.profile.json.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.runtime.proto.snapshot",
+      "descriptor/platform-mcp-personal-sse-parent.runtime.request-vectors.json.snapshot",
+      "descriptor/platform-mcp-personal-sse-parents.json",
+      "descriptor/platform-mcp-personal-sse-source-delta.json",
+      "execution-operations/mcp-personal-sse-request-vectors-v1.json",
+      "execution-operations/mcp-personal-sse-v1.json",
     ].map((file) => ({
       path: `contract/${file}`,
       sha256: artifacts[file],
@@ -74,7 +92,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     provenance: { path: "contract/provenance.json", sha256: artifacts["provenance.json"], combined_sha256: combinedSha256 },
     generated: ownerGenerated,
   })
-  assert.equal(manifest.owner.repository_commit, "7d8115a4b0dc752687babe7db35d0a936f51c76a")
+  assert.equal(manifest.owner.repository_commit, "8cfead647856ef54ec851a3bebe169a3ca14d212")
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.lockfile_sha256, sha256(await requiredFile("pnpm-lock.yaml")))
   for (const [file, bytes] of Object.entries(await sourceBytes())) assert.equal(sha256(bytes), sources[file])
@@ -110,6 +128,14 @@ test("Platform generator rejects input, artifact, provenance and vendor-layout d
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, "errors/command-receipt-v1.json": Buffer.from("{}") }), /artifact digest/u)
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, "mcp-package-admin/v1/profile.json": Buffer.from("{}") }), /artifact digest/u)
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, "execution-operations/skill-acquisition-v1.json": Buffer.from("{}") }), /artifact digest/u)
+  assert.throws(
+    () =>
+      assertArtifactDigests({
+        ...artifactBytes,
+        "descriptor/platform-v1.binpb": Buffer.concat([artifactBytes["descriptor/platform-v1.binpb"], Buffer.from([0])]),
+      }),
+    /artifact digest/u,
+  )
   assert.doesNotThrow(() =>
     assertVendorLayout({
       directories: [
@@ -223,7 +249,7 @@ test("independent publication pins exact committed owner artifacts without claim
   const candidate = manifest.publication
   assert.ok(candidate, "missing exact committed publication manifest")
   assert.equal(candidate.status, "published-owner-contract")
-  assert.equal(candidate.base_commit, ownerCommit)
+  assert.equal(candidate.base_commit, "7d8115a4b0dc752687babe7db35d0a936f51c76a")
   assert.equal(candidate.repository_commit, "dd8d536a28059cbdbe0674debc47bf28d039fb47")
   assert.equal(candidate.runtime_binding_implemented, false)
   const provenance = JSON.parse(await requiredFile(`${candidate.vendor}/publication-provenance.json`))
@@ -296,4 +322,48 @@ test("private publication schemas publish exact status-code-retryable tuples fro
     vectors.some((value) => value.prior_unknown && value.new_command_authorized),
     false,
   )
+})
+
+test("SSE successor: generated native optional fields match the fixed descriptor known shape and pinned profile", async () => {
+  const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const { FileDescriptorSetSchema, FileDescriptorProtoSchema } = await import("@bufbuild/protobuf/wkt")
+  const generated = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const graph = fromBinary(FileDescriptorSetSchema, await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`))
+  const current = graph.file.find((file) => file.name === "kokoro/platform/v1/platform_runtime.proto")
+  assert.ok(current)
+  // protoc-gen-es omits compiler metadata unknown to its native descriptor runtime.
+  // The preceding artifact test pins the complete original bytes (including field8042).
+  assert.deepEqual(
+    toBinary(FileDescriptorProtoSchema, generated.file_kokoro_platform_v1_platform_runtime.proto, { writeUnknownFields: false }),
+    toBinary(FileDescriptorProtoSchema, current, { writeUnknownFields: false }),
+  )
+  for (const [name, tag] of [
+    ["RegisterPersonalMcpServerRequest", 9],
+    ["PersonalMcpServer", 17],
+  ]) {
+    const field = current.messageType.find((message) => message.name === name)?.field.find((field) => field.number === tag)
+    assert.equal(field?.name, "transport")
+    assert.equal(field?.proto3Optional, true)
+    assert.equal(field?.typeName, ".kokoro.platform.v1.McpTransport")
+    assert.equal(generated[name + "Schema"].fields.find((field) => field.number === tag)?.presence, 1)
+  }
+  const profile = JSON.parse(await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/execution-operations/mcp-personal-sse-v1.json`))
+  assert.equal(profile.profile, "mcp-personal-sse-v1")
+  assert.deepEqual(profile.transports, [2, 3])
+  assert.equal(profile.presence.server.fresh_required, true)
+  assert.equal(profile.http.version, "7.0.0")
+  assert.equal(profile.runtime.version, "1.5.0")
+  // The original companion publications remain exactly their frozen owner bytes.
+  for (const [file, sha] of Object.entries(profile.parents)) {
+    if (
+      [
+        "contract/execution-operations/mcp-private-server-v1.json",
+        "contract/execution-operations/mcp-personal-product-v1.json",
+        "contract/execution-operations/mcp-icon-v1.json",
+        "contract/execution-operations/mcp-availability-v1.json",
+      ].includes(file)
+    ) {
+      assert.equal(sha256(await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/${file.replace("contract/", "")}`)), sha.sha256)
+    }
+  }
 })

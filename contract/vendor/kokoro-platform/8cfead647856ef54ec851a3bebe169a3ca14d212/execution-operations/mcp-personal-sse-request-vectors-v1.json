@@ -1,0 +1,60 @@
+{
+  "profile": "mcp-personal-sse-request-vectors-v1",
+  "version": "1.0.0",
+  "identity": {
+    "tenantId": "tenant-private",
+    "subjectId": "user-private"
+  },
+  "legacy_input": {
+    "request_id": "register-private",
+    "command": {
+      "command_id": "register-private-1",
+      "request_digest": "498643aa37627abacab79231377ff08572c7748170661d1ef45fbf7b4fff145b"
+    },
+    "display_name": "Private tools",
+    "server_url": "https://tools.example/mcp"
+  },
+  "cases": [
+    {
+      "presence": false,
+      "json_token": null,
+      "canonical_transport": null,
+      "digest": "498643aa37627abacab79231377ff08572c7748170661d1ef45fbf7b4fff145b"
+    },
+    {
+      "presence": true,
+      "json_token": 2,
+      "canonical_transport": 2,
+      "digest": "2f06815954fd06cf4032099323803d89b07a59c6a0f72f29d126348d6affecbc"
+    },
+    {
+      "presence": true,
+      "json_token": 3,
+      "canonical_transport": 3,
+      "digest": "89bd8ee86ec3ecdfdebb50019381e8949bb73d5fa7f9fc8f6ae6739aac0b721d"
+    },
+    {
+      "presence": true,
+      "json_token": "MCP_TRANSPORT_STREAMABLE_HTTP",
+      "canonical_transport": 2,
+      "digest": "2f06815954fd06cf4032099323803d89b07a59c6a0f72f29d126348d6affecbc"
+    },
+    {
+      "presence": true,
+      "json_token": "MCP_TRANSPORT_SSE_COMPAT",
+      "canonical_transport": 3,
+      "digest": "89bd8ee86ec3ecdfdebb50019381e8949bb73d5fa7f9fc8f6ae6739aac0b721d"
+    }
+  ],
+  "rejected_raw_transport": [
+    null,
+    0,
+    1,
+    4,
+    -1,
+    "2",
+    "sse",
+    "sse_compat"
+  ],
+  "replay": "absent transport is historical only; never enrich persisted ACK; exact original body/identity/digest and true replay required"
+}

@@ -1,0 +1,11 @@
+{
+  "personal_fields": {
+    "RegisterPersonalMcpServerRequest": "  optional kokoro.platform.v1.McpTransport transport = 9;\n",
+    "PersonalMcpServer": "  optional kokoro.platform.v1.McpTransport transport = 17;\n"
+  },
+  "runtime_fields": {
+    "McpRuntimeResolution": "    McpRuntimeSseConnection sse = 10;\n",
+    "AcquireMcpRuntimeCredentialResponse": "    McpRuntimeSseCredential sse = 5;\n"
+  },
+  "runtime_suffix": "\nmessage McpRuntimeSseConnection {\n  string canonical_endpoint = 1;\n  repeated string header_slots = 2;\n}\n\nmessage McpRuntimeSseCredential {\n  repeated McpRuntimeSecretValue headers = 1;\n}\n"
+}

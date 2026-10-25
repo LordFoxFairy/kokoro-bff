@@ -1,3 +1,9 @@
+## 2026-10-25 Public26 / personal SSE 消费者候选
+
+唯一 canonical Public26.0.0 SHA256 `20d26736cf23da32c242c2c7cf75c45affb62c5d27696dcecb0bc6193bc39a09`，仅 version 与 McpConnectionProjection.transport 增 sse_compat。`scripts/mcp-personal-sse-public-contract.mjs` 只在 build/test 完整恢复 Public25 SHA7261ac9ce2140555ba97ebff2bf0359533cc49dda014b08dcd6a6054a8d38b1c，再沿原25→24完整历史链；旧 hash/断言与所有其它 API 不变。Platform Connect/HTTP7.0 固定正式 `8cfead647856ef54ec851a3bebe169a3ca14d212` 原件、closed allowlist 与现正规生成器；独立项目发布 dd8d536 原 pin/产物保持。
+
+browser-private Register 的 optional 真实传输、SSE JSON 摘要及 Current/历史 ACK 分层见现 API/TECH；缺 transport 不默认 HTTP、不构造 Get 补回执、不据此新 key 重派。consumer 工程候选不表示 normal 或 App/Agent 已配对；无新 endpoint、owner、权限、数据库 Schema、依赖或外部 SSE 网络客户端。
+
 ## 2026-10-25 Public25 metadata/detail 分离候选
 
 唯一 canonical Public25.0.0 原件 SHA256 `7261ac9ce2140555ba97ebff2bf0359533cc49dda014b08dcd6a6054a8d38b1c`；operation inventory 不变。GetSkill 改 strict `{skill}` 的独立 SpecificationDetailResponse，DownloadSkill strict `{skill,downloadInfo}` 原件保持。准确 build-only inverse `scripts/skill-detail-public-contract.mjs` 恢复完整 Public24 SHA f4caf11f3cd9255d2cd9daf69b74ff9988505d640e31c686ce495e6d8a578b2c，再由原检查链证明所有历史父；旧 oracle/hash 未改。源码候选未由本 worker 提交或正常激活，消费者待 Root 正式 commit/digest 后更新唯一 snapshot 与既有生成链。

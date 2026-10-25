@@ -1,3 +1,15 @@
+## 2026-10-25 personal SSE 后继表示与 Public26（Root 已裁决，设计门）
+
+本片消费者源码候选固定正式 Platform `8cfead647856ef54ec851a3bebe169a3ca14d212`；唯一当前机器源为 Public26.0.0，正常与 App/Agent 成套激活另验。正式后继 Public26.0.0 仅 version 与既有 `McpConnectionProjection.transport` 增 `sse_compat`，其它路径、operation、shape、metadata/download 与权限不变；准确恢复完整 Public25 原件 SHA256 `7261ac9ce2140555ba97ebff2bf0359533cc49dda014b08dcd6a6054a8d38b1c` 后，再调用原25→24完整 inverse，旧 hash/断言不改。personal browser-private 成功校验继续在现 client 边界维护，不新增另一份 public 机器事实源。
+
+- `POST /browser/v1/mcp/servers`：optional `transport` 闭集为 `streamable_http|sse_compat`，省略保旧 HTTP 摘要；显式分别带 Proto optional 2/3 并入摘要。null、数字、Proto token、别名、STDIO/未知值拒绝。`PATCH /browser/v1/mcp/servers/{server_id}` 不接受 transport，原 CAS/写字段保持。
+- `POST /browser/v1/mcp/servers/import`：原 opaque `config_json` 与 key 不变；旧 JSON `type:streamableHttp` canonical item 不追加2，新增 `type:sse` item 加 transport3，混合批整体 exact 绑定原顺序/名称/URL等非秘密摘要；不转写原 JSON、泄漏 secret 或把新合法 SSE 送旧 invalid-config 摘要 fallback。owner 原子验证/保存不转归 BFF。
+- fresh `GET /browser/v1/mcp/servers/{server_id}` 的 Current schema 必须有真实 `transport:streamable_http|sse_compat`；新 Register/import ACK 同样必须 present，并与原请求 effective transport 匹配。0/1/unknown、错 ID/版本/请求绑定或新 ACK 缺字段仍拒绝。Current 不是 ACK 的缺省/兼容分支。
+- 历史 ACK schema 与 Current 明确分开。原 absent Register、整批旧 HTTP JSON 仅在 owner `replayed=true`、原输入可证明且其余 exact 绑定均合法时允许 transport absent；显式 HTTP/SSE Register 或混合/SSE JSON 不因 replayed 就获此豁免。新网络的旧 Prepare/Update ACK 同样只能从原 exact completed receipt 以 replayed=true、原 operation/key/request 关联重播时允许缺 transport 并保成功事实；新非 replayed ACK 仍要求真实值。旧 App 内已确认成功不追溯改未执行，此与新 wire 校验分开。缺值只代表没有 current transport 资格，不能改旧 ACK、默认 HTTP、混入 payloadGet 或当未提交发新 key。后续显式 fresh Get 失败/撤权/切主体仍保原确认/unknown/原请求恢复，不产生自动重派。
+- JSON ACK 必须保外层 replayed 与原 config_json 的 exact 上下文，逐项验证/投影，不能丢上下文复用 Get schema。Personal Connect Connection 原字段保持；picker 沿独立 Platform HTTP7.0 与 Public26 闭集消费真实 `sse_compat`，不由 provider/status 猜传输或资格。
+
+沿原 service envelope 与当前人类 Session/MCP action、绝对总10秒、最后同 tenant/subject 重验、AbortSignal/late-response fence、no-store/request ID及 secret-safe 错误；原 unknown 只按原 body/key/digest 恢复，确认回执不是当前授权。无新 endpoint、DB Schema、权限、依赖或外部 SSE client。当前 producer commit/profile/descriptor/OpenAPI 已固定并正规生成；正常 Platform/BFF/App/Agent 同步配对，任一候选或本设计门不表示当前支持 SSE 执行。
+
 ## 2026-10-25 既有 AG-UI 的合法 preflight 前缀（候选）
 
 固定 Agent 允许 Skill activity 早于 initial RUN_STARTED，build 失败可零 START。BFF 保原 source/CUSTOM 顺序和 opaque cursor，仅当前可信 expected/FIFO 接受头、主体全等及既有 leased/retryable/admitted ACK race 可保存 closed Skill prelude；它不是 active/process/执行开始声明。无 START 的首次 terminal interaction 仅接受 revision1、pause0、null pause_ref、groups[]、null action_result；切页/重启快照仍 queued 且无可操作 pause，真正 run.failed/run.completed 才结算 FIFO。其他 pre-START Todo/tool/subagent/可操作 interaction 仍拒绝，source 重用漂移及旧 lease 仍回滚。公开路径、shape、Public25 和 generated 原字节不变。

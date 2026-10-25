@@ -85,7 +85,7 @@ import { projectAppSkillBindingCommand } from "../src/infrastructure/clients/pla
 test("App binding command matches all fixed owner RFC8785 vectors and binds exact App/subject/target/CAS but not correlation or key", async () => {
   const profile = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/7d8115a4b0dc752687babe7db35d0a936f51c76a/execution-operations/app-skill-binding-v1.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/8cfead647856ef54ec851a3bebe169a3ca14d212/execution-operations/app-skill-binding-v1.json", import.meta.url),
       "utf8",
     ),
   )

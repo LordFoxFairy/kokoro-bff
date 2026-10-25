@@ -248,6 +248,7 @@ export class McpPersonalConnectClient {
             ...iconCreateWire(input),
             requestId: input.requestId,
             command: bindMcpPersonalServerCommand(operation, input),
+            ...(input.transport === undefined ? {} : { transport: input.transport }),
             displayName: input.displayName!,
             serverUrl: input.serverUrl!,
             ...(input.notes === undefined ? {} : { notes: input.notes }),

@@ -1,3 +1,15 @@
+## 2026-10-25 personal HTTP/SSE 消费与 Public26（Root 已裁决，设计门）
+
+本片源码候选已从 Root 正式 Platform `8cfead647856ef54ec851a3bebe169a3ca14d212` 固定原件并沿现链生成，不表示正常激活或完整旅程已验。基线为 Root 已核 clean `fd4cd3f4f7821d6921bc33c62eee8a7595112369`；Platform 已批准的 `mcp-personal-sse-v1` 及其完整父证明沿既有 owner 发行承接，不新建传输 owner。BFF 仍用原 unary Connect；外部 GET/endpoint/POST/SSE 协议、DNS/IP pin/TLS 与发现预算归 Platform，不由 BFF 打开外部流。
+
+唯一 public canonical 后继为 **26.0.0**，仅改 version 与 `McpConnectionProjection.transport` 闭集增 `sse_compat`。新具名 build/test-only inverse 必须恢复完整 Public25 SHA256 `7261ac9ce2140555ba97ebff2bf0359533cc49dda014b08dcd6a6054a8d38b1c`，再沿原25→24及历史链；不改旧父 hash、不弱化旧 GetSkill/download 分离或其它 API。browser-private Register 的 optional `transport` 只收 `streamable_http|sse_compat`；缺省仍保旧 HTTP canonical input/digest，显式值映射 Proto presence 2/3 并入摘要。Update 不收或修改 transport。JSON 保原文与原顺序：旧 `type:streamableHttp` 不加摘要字段，新 `type:sse` 明确加3。
+
+当前表示与命令回执分开校验：fresh Get 使用必含真实 transport 的 Current schema；新创建 ACK 也须 present 并匹配原请求的实际传输。ACK schema 只为可证明的历史编码允许 absent，不补 HTTP、不把 fresh Get 填进旧 ACK。原 absent Register／整批旧 HTTP JSON 只有 exact 合法 replayed 与原请求语义、主体及其余绑定全等时可承接缺字段；混合/SSE 批不能借单项 HTTP 降成旧批。新网络 ACK 仅从受信 owner 对原 completed receipt 的重播承接历史缺字段：必须 replayed=true，且关联原 operation/key/request；旧 Prepare/Update 同样保已执行成功，缺 transport 不升级 current/选择/执行资格，新非 replayed ACK 缺值仍拒绝。旧 App 内已确认的成功事实不追溯改为未执行，此与新 wire 校验分开。JSON projector 必须保 outer replayed 与原 JSON exact 上下文，不能把批内行冒成 Get。当前资格另由既有 fresh Get 取得，读失败保原已确认命令、unknown 与草稿，绝不以缺字段换新 key 重派。
+
+现 Connection picker 独立固定消费 Platform HTTP7.0 的 `streamable_http|sse_compat`；Personal Connect Connection 本身没有 transport，不添假字段。保原总10秒覆盖 body/Session/MCP action/owner/末端同 tenant/subject 重验、取消及迟到拒绝；同 body/key/digest、unknown 恢复和安全 descriptor/secret 保护不变。无新 endpoint、权限、数据库 Schema、依赖或自动重试，不开放 personal STDIO／项目 SSE 执行，不改独立 project-publication pin。
+
+唯一 vendor、manifest 与现生成链已绑定该正式 producer commit/digest；不从候选工作树或 sibling 源码导入。后继验收覆盖真实 Connect JSON/binary presence、历史摘要和 typed ACK/Current 边界、原 unknown/准入/取消及 HTTP7 Connection 闭集；完整26→25→24保护与原 owner 门随后执行。正常切换由 Root 将 Platform/BFF/App/Agent 配对，Agent 须正式消费 Runtime1.5 同 case；不单升 BFF，也不把候选、列表可见或官方 SDK 本地互通冒整链执行完成。本片不修改数据库 Schema、锁文件、独立项目发布 pin 与正常服务；最终停写资格及剩余消费者交 Root 收口。
+
 ## 2026-10-25 preflight-first AG-UI 投影（Root 已裁决，候选）
 
 BFF 承接固定 Agent 的 Skill preflight-first 顺序，不前移或伪造 START。沿 Conversation→stream 原锁序、source identity/version/lease fence，仅当前 expected 与 FIFO 接受头、active Conversation owner/consumer/dispatch subject 全等且 dispatch 为 leased/retryable/admitted 时，允许已解码 closed Skill activity 在无该 Run 真 START/process 时原序写 source、CUSTOM 与 activity compact。Todo/tool/subagent、unknown/foreign/stale/retired scope 不获得此豁免；真实 START 才创建 process/start provenance，既有 ACK race 不收窄。

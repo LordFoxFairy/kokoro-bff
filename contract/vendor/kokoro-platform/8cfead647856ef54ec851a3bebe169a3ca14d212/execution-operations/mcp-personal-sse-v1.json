@@ -1,0 +1,157 @@
+{
+  "profile": "mcp-personal-sse-v1",
+  "version": "1.0.0",
+  "owner": "Platform/MCP",
+  "status": "prepared-consumer-pairing-required",
+  "normal_activation": false,
+  "personal_only": true,
+  "transports": [
+    2,
+    3
+  ],
+  "presence": {
+    "request": {
+      "message": "RegisterPersonalMcpServerRequest",
+      "tag": 9,
+      "optional": true,
+      "absent_effective_transport": 2,
+      "canonical_protojson_tokens": [
+        "MCP_TRANSPORT_STREAMABLE_HTTP",
+        "MCP_TRANSPORT_SSE_COMPAT"
+      ]
+    },
+    "server": {
+      "message": "PersonalMcpServer",
+      "tag": 17,
+      "optional_for_historical_encoding_only": true,
+      "fresh_required": true
+    },
+    "legacy_receipt": "preserve exact ACK; absent is not current transport eligibility; no redispatch of confirmed commands",
+    "update_transport": false
+  },
+  "runtime": {
+    "version": "1.5.0",
+    "resolution_sse_tag": 10,
+    "credential_sse_tag": 5,
+    "matching_case_required": true,
+    "request_binding_version": "3.0.0"
+  },
+  "http": {
+    "version": "7.0.0",
+    "connection_transports": [
+      "streamable_http",
+      "sse_compat"
+    ]
+  },
+  "limits": {
+    "endpoint_utf8_bytes": 8192,
+    "stream_bytes": 4194304,
+    "pending_requests": 1,
+    "total_ms": 10000,
+    "rpc_ms": 3000
+  },
+  "parents": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.platform.proto.snapshot",
+      "sha256": "e406e4b0d637f2e1a6736741482c71d6a2285ff36a67db12c68284d9e49e52f6"
+    },
+    "contract/descriptor/platform-v1.binpb": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.platform.binpb.snapshot",
+      "sha256": "81ae8a8c825b87b82b21b7892f7f9bb7a3b70bb3294e4a62d39d72dc34b428a5"
+    },
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.platform.generated.ts.snapshot",
+      "sha256": "e73a4ca8241ec2ee06822a7987957b3433b43ce7e3c761723a465acf9df7817b"
+    },
+    "contract/openapi/platform-http.openapi.json": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.http.openapi.json.snapshot",
+      "sha256": "3a187ad6e98b1824cf8d8e50c80218e77c7f14f4eb2a5cfcfe8d4be97c677a08"
+    },
+    "contract/provenance.json": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.provenance.json.snapshot",
+      "sha256": "157b21b188b867938a629b2d6bfec817496ba3bcd18ff497ed16c7c3a1810516"
+    },
+    "contract/execution-operations/mcp-private-server-v1.json": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.private-server.profile.json.snapshot",
+      "sha256": "c3246a5d88b79f1358205e67658570bf6ced4b805fb414b3016f816e88dbc92a"
+    },
+    "contract/execution-operations/mcp-personal-product-v1.json": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.personal-product.profile.json.snapshot",
+      "sha256": "b996af5f1897fb97c78f1f41e522e6b99af885c8319200a50a6a0865e19b34d0"
+    },
+    "contract/execution-operations/mcp-icon-v1.json": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.icon.profile.json.snapshot",
+      "sha256": "a6dd6d0bfe134c3c46b8c5fd442a7a7d1715c22ce6cea272148c50192e04504c"
+    },
+    "contract/execution-operations/mcp-availability-v1.json": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.availability.profile.json.snapshot",
+      "sha256": "44202f4b491d90414775654fdcfa0538fa5e1ce7585713040c8b7a8052d65e63"
+    },
+    "contract/proto/kokoro/platform/v1/mcp_runtime.proto": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.runtime.proto.snapshot",
+      "sha256": "1c0e942b56c9b711207f9f4e1155c7b5d24ce2632e18adc98cf9884542ab0b17"
+    },
+    "contract/descriptor/mcp-runtime-v1.binpb": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.runtime.binpb.snapshot",
+      "sha256": "d72ae692023b474534c2b0711c7ba70f54e3ca525d2a36576009988897dd7a81"
+    },
+    "src/generated/proto/kokoro/platform/v1/mcp_runtime_pb.ts": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.runtime.generated.ts.snapshot",
+      "sha256": "0dad7af6d2d9d6b359f88d37fa113f7f53db9267356126f9f7fe7ff1c499136e"
+    },
+    "contract/execution-operations/mcp-runtime-v1.json": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.runtime.profile.json.snapshot",
+      "sha256": "b8fb5d4682256e531594976004fec62968e1e5492864da53a0b0f4da2b9685a0"
+    },
+    "contract/execution-operations/mcp-runtime-request-vectors-v1.json": {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parent.runtime.request-vectors.json.snapshot",
+      "sha256": "1217049c5a0833349765ab6d364771264f2dcfda410cb1c63b24abc7dcf2a397"
+    }
+  },
+  "inputs": [
+    {
+      "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
+      "sha256": "fc454844d272afba4815d2cab471518049ee9edaec514b59bb9d3e3b54e93835"
+    },
+    {
+      "path": "contract/descriptor/platform-v1.binpb",
+      "sha256": "a7c8a73925d004b0b18aef0e1a79813ceb589f7d702e6c6e695394f36bca3db3"
+    },
+    {
+      "path": "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
+      "sha256": "08f97b7762285c7d2234bcc707f275cf46eff7c0be3fd588aead4d91ccf89d05"
+    },
+    {
+      "path": "contract/proto/kokoro/platform/v1/mcp_runtime.proto",
+      "sha256": "245ab6b081bf91207caf1d2ea51b453fafea6fbc07c040befbd06937ef9489d7"
+    },
+    {
+      "path": "contract/descriptor/mcp-runtime-v1.binpb",
+      "sha256": "56388f48b7d2f563a7aa9f56e0b9d15e73b2a453d640b3c8297502354fee6dc2"
+    },
+    {
+      "path": "src/generated/proto/kokoro/platform/v1/mcp_runtime_pb.ts",
+      "sha256": "5a4fda4a36b4924a1bd6836f7f28a8a9976d3f903e58ed331aff71a0608981ec"
+    },
+    {
+      "path": "contract/openapi/platform-http.openapi.json",
+      "sha256": "085e1367f69c34edc6b80cbfb448596f36039f9857cee3bd5a407befbc295361"
+    },
+    {
+      "path": "contract/execution-operations/mcp-runtime-v1.json",
+      "sha256": "c35cc7adaeeca98f88449a3d51b08db73071cde6007bbe021030ec5328442b90"
+    },
+    {
+      "path": "contract/execution-operations/mcp-personal-sse-request-vectors-v1.json",
+      "sha256": "95545d2462ec0e3106545685e386b06a253c37b9fa5306419120aef9a35e9087"
+    },
+    {
+      "path": "contract/descriptor/platform-mcp-personal-sse-parents.json",
+      "sha256": "47cf12d9986db44873d6e3665a678e910dce510001453c6b0d7c68718900fad2"
+    },
+    {
+      "path": "contract/descriptor/platform-mcp-personal-sse-source-delta.json",
+      "sha256": "66bae4f03801373df48e1b5129650fabbaf3e46b2e38e8520e3f7748f91bc24d"
+    }
+  ]
+}

@@ -138,6 +138,7 @@ test("private URL MCP registration admits loopback HTTP only in a development ru
 
 test("private URL MCP GET projects declarations_available and the full safe declaration snapshot in one response", () => {
   const server = create(PersonalMcpServerSchema, {
+    transport: 2,
     availability: 5,
     serverId: { value: "server-one" },
     displayName: input.displayName,
@@ -165,6 +166,7 @@ test("private URL MCP GET projects declarations_available and the full safe decl
   })
   assert.deepEqual(projectMcpPersonalServer("server", create(GetPersonalMcpServerResponseSchema, { server }), { ...input, id: "server-one" }), {
     server: {
+      transport: "streamable_http",
       server_id: "server-one",
       availability: "unavailable",
       display_name: input.displayName,
@@ -192,6 +194,7 @@ test("private URL MCP GET projects declarations_available and the full safe decl
   try {
     process.env.NODE_ENV = "development"
     const local = create(PersonalMcpServerSchema, {
+      transport: 2,
       availability: 5,
       ...server,
       serverUrl: "http://127.0.0.1:43191/mcp",
@@ -395,6 +398,7 @@ test("private URL MCP delete projects only the owner acknowledgement", () => {
 
 test("private URL MCP projection returns the complete safe descriptor without secret values", () => {
   const server = create(PersonalMcpServerSchema, {
+    transport: 2,
     availability: 5,
     serverId: { value: "server-one" },
     displayName: input.displayName,
@@ -444,6 +448,7 @@ test("private URL MCP projection returns the complete safe descriptor without se
   })
   assert.deepEqual(projected, {
     server: {
+      transport: "streamable_http",
       server_id: "server-one",
       availability: "unavailable",
       display_name: input.displayName,
@@ -491,6 +496,7 @@ test("private URL MCP projection returns the complete safe descriptor without se
 
 test("JSON import projects newly allocated server descriptors without inventing a selector", () => {
   const server = create(PersonalMcpServerSchema, {
+    transport: 2,
     availability: 5,
     serverId: { value: "server-imported" },
     displayName: "Imported MCP",
@@ -533,6 +539,7 @@ test("JSON import projects newly allocated server descriptors without inventing 
       imports: [
         {
           server: {
+            transport: "streamable_http",
             server_id: "server-imported",
             availability: "unavailable",
             display_name: "Imported MCP",
@@ -588,6 +595,7 @@ test("private URL MCP Connect client forwards only the command body plus trusted
             context.responseHeader.set("x-kokoro-request-id", input.requestId)
             return {
               server: {
+                transport: 2,
                 availability: 5,
                 serverId: { value: "server-one" },
                 displayName: input.displayName,
@@ -674,6 +682,7 @@ test("private URL MCP Connect client forwards only the command body plus trusted
     })
     assert.deepEqual(result, {
       server: {
+        transport: "streamable_http",
         server_id: "server-one",
         availability: "unavailable",
         display_name: input.displayName,
@@ -839,6 +848,7 @@ test("connector receipt markers fail closed when ambiguous, out of scope or inco
 // Returned descriptors retain revoked history; only input/current execution configuration has a 32-active limit.
 test("private server reads retain revoked header history alongside 32 current slots", () => {
   const server = create(PersonalMcpServerSchema, {
+    transport: 2,
     availability: 5,
     serverId: { value: "server-history" },
     displayName: "History",
@@ -879,6 +889,7 @@ for (const kind of ["tool", "resource", "prompt"] as const) {
         },
       }
       const server = create(PersonalMcpServerSchema, {
+        transport: 2,
         availability: 1,
         serverId: { value: "server-one" },
         displayName: input.displayName,
@@ -975,4 +986,205 @@ test("icon-only server updates bind the exact staged selector and explicit clear
     { icon: null },
   ])
     assert.throws(() => parseMcpPersonalServer("updateServer", bytes({ expected_state_version: "7", ...invalid })))
+})
+
+// Transport is a current owner fact; an absent historic ACK is not a GET.
+function transportFixture(transport?: unknown) {
+  const server = Object.assign(
+    create(PersonalMcpServerSchema, {
+      availability: 5,
+      serverId: { value: "server-one" },
+      displayName: input.displayName,
+      serverUrl: input.serverUrl,
+      status: "pending",
+      stateVersion: 1n,
+      prepareStatus: PersonalMcpPrepareStatus.PENDING_PREPARE,
+      declarationsAvailable: false,
+    }),
+    transport === undefined ? {} : { transport },
+  )
+  const connector = create(PersonalMcpConnectorSchema, {
+    availability: 5,
+    connectorId: { value: "connector-one" },
+    connectorType: 3,
+    providerKey: "private-server-one",
+    serverId: server.serverId,
+    status: 1,
+    approvedScopes: [],
+    enabled: false,
+    stateVersion: 1n,
+  })
+  return { server, connector, replayed: false }
+}
+
+test("SSE successor: Register preserves absent HTTP and explicitly binds each real transport", () => {
+  const canonical =
+    '{"input":{"display_name":"Private tools","headers":[],"notes":null,"oauth_client_id":null,"oauth_client_present":false,"server_url":"https://tools.example/mcp","transport":3},"method":"kokoro.platform.v1.ProductMcpPersonalService/RegisterPersonalMcpServer","subject_id":"subject","tenant_id":"tenant"}'
+  for (const [token, transport] of [
+    ["streamable_http", 2],
+    ["sse_compat", 3],
+  ] as const) {
+    const parsed = parseMcpPersonalServer("registerServer", bytes({ display_name: input.displayName, server_url: input.serverUrl, transport: token }))
+    assert.equal((parsed as { transport?: number }).transport, transport)
+    const request = { ...input, ...parsed }
+    assert.equal(
+      bindMcpPersonalServerCommand("registerServer", request).requestDigest,
+      createHash("sha256")
+        .update(canonical.replace('"transport":3', `"transport":${transport}`))
+        .digest("hex"),
+    )
+  }
+  for (const transport of [null, 0, 1, 2, 3, "sse", "http", "MCP_TRANSPORT_SSE_COMPAT", "stdio"]) {
+    assert.throws(() => parseMcpPersonalServer("registerServer", bytes({ display_name: input.displayName, server_url: input.serverUrl, transport })))
+  }
+  assert.throws(() => parseMcpPersonalServer("updateServer", bytes({ expected_state_version: "1", transport: "sse_compat" })))
+})
+
+test("SSE successor: fresh Get and new ACK require real transport; only exact completed replay qualifies as history", () => {
+  for (const transport of [2, 3]) {
+    const raw = transportFixture(transport)
+    const fresh = projectMcpPersonalServer("server", { server: raw.server }, { ...input, id: "server-one" }) as { server: { transport: string } }
+    assert.equal(fresh.server.transport, transport === 2 ? "streamable_http" : "sse_compat")
+    const ack = projectMcpPersonalServer("registerServer", raw, { ...input, transport } as typeof input) as { server: { transport: string } }
+    assert.equal(ack.server.transport, fresh.server.transport)
+    assert.throws(() => projectMcpPersonalServer("registerServer", raw, { ...input, transport: transport === 2 ? 3 : 2 } as typeof input))
+  }
+  const absent = transportFixture()
+  assert.throws(() => projectMcpPersonalServer("server", { ...absent, replayed: true }, { ...input, id: "server-one" }))
+  assert.throws(() => projectMcpPersonalServer("registerServer", absent, input))
+  const old = projectMcpPersonalServer("registerServer", { ...absent, replayed: true }, input) as { server: { transport?: string }; replayed: boolean }
+  assert.equal(old.replayed, true)
+  assert.equal(Object.hasOwn(old.server, "transport"), false)
+  for (const transport of [2, 3])
+    assert.throws(() => projectMcpPersonalServer("registerServer", { ...absent, replayed: true }, { ...input, transport } as typeof input))
+  for (const transport of [null, 0, 1, 4, "sse_compat"])
+    assert.throws(() => projectMcpPersonalServer("registerServer", { ...transportFixture(transport), replayed: true }, input))
+  assert.throws(() => projectMcpPersonalServer("registerServer", { ...absent, replayed: true }, { ...input, commandId: undefined } as unknown as typeof input))
+})
+
+test("SSE successor: historical Prepare/Update ACK remains confirmed but never substitutes for Current", () => {
+  for (const operation of ["prepareServer", "updateServer"] as const) {
+    const raw = transportFixture()
+    raw.server.stateVersion = 2n
+    const original = { ...input, id: "server-one", expectedStateVersion: "1" }
+    const response = { ...raw, replayed: true, ...(operation === "prepareServer" ? { declarations: [] } : {}) }
+    const projected = projectMcpPersonalServer(operation, response, original) as { server: { transport?: string }; replayed: boolean }
+    assert.equal(projected.replayed, true)
+    assert.equal(Object.hasOwn(projected.server, "transport"), false)
+    assert.throws(() => projectMcpPersonalServer(operation, { ...response, replayed: false }, original))
+    assert.throws(() => projectMcpPersonalServer("server", response, original))
+  }
+})
+
+test("SSE successor: JSON digest uses actual SSE transport and preserves the outer replay/original item binding", () => {
+  const configJson = JSON.stringify({ mcpServers: { [input.displayName]: { type: "sse", url: input.serverUrl } } })
+  const request = { ...input, configJson }
+  const canonical =
+    '{"input":{"servers":[{"display_name":"Private tools","headers":[],"notes":null,"server_url":"https://tools.example/mcp","transport":3}]},"method":"kokoro.platform.v1.ProductMcpPersonalService/ImportPersonalMcpJson","subject_id":"subject","tenant_id":"tenant"}'
+  assert.equal(bindMcpPersonalJsonImport(request).requestDigest, createHash("sha256").update(canonical).digest("hex"))
+  const entry = transportFixture(3)
+  assert.equal(
+    (projectMcpPersonalJsonImport({ imports: [entry], replayed: false }, request) as { imports: { server: { transport: string } }[] }).imports[0]?.server
+      .transport,
+    "sse_compat",
+  )
+  assert.throws(() => projectMcpPersonalJsonImport({ imports: [transportFixture()], replayed: true }, request))
+  const http = { ...request, configJson: configJson.replace('"sse"', '"streamableHttp"') }
+  const historic = projectMcpPersonalJsonImport({ imports: [transportFixture()], replayed: true }, http) as {
+    replayed: boolean
+    imports: { server: { transport?: string } }[]
+  }
+  assert.equal(historic.replayed, true)
+  assert.equal(Object.hasOwn(historic.imports[0]!.server, "transport"), false)
+  assert.throws(() => projectMcpPersonalJsonImport({ imports: [transportFixture()], replayed: false }, http))
+  for (const patch of [{ displayName: "another" }, { serverUrl: "https://other.example/mcp" }]) {
+    const wrong = transportFixture(3)
+    Object.assign(wrong.server, patch)
+    assert.throws(() => projectMcpPersonalJsonImport({ imports: [wrong], replayed: false }, request))
+  }
+  assert.throws(() => projectMcpPersonalJsonImport({ imports: [entry, entry], replayed: false }, request))
+})
+
+test("SSE successor: production binary client and native ProtoJSON preserve real optional presence without replay", async () => {
+  const { createServer } = await import("node:http")
+  const { connectNodeAdapter, createConnectTransport } = await import("@connectrpc/connect-node")
+  const { createClient } = await import("@connectrpc/connect")
+  const { ProductMcpPersonalService, RegisterPersonalMcpServerRequestSchema } =
+    await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { McpPersonalConnectClient } = await import("../src/infrastructure/clients/platform/mcp-personal-connect.js")
+  const seen: Array<number | undefined> = []
+  const native = createServer(
+    connectNodeAdapter({
+      routes: (router) =>
+        router.service(ProductMcpPersonalService, {
+          registerPersonalMcpServer(request, context) {
+            seen.push(request.transport)
+            assert.equal(context.requestHeader.get("x-kokoro-subject"), input.subject)
+            assert.equal(
+              request.command?.requestDigest,
+              bindMcpPersonalServerCommand("registerServer", {
+                ...input,
+                ...(request.transport === undefined ? {} : { transport: request.transport as 2 | 3 }),
+              }).requestDigest,
+            )
+            context.responseHeader.set("cache-control", "no-store")
+            context.responseHeader.set("x-request-id", input.requestId)
+            return transportFixture(request.transport ?? 2)
+          },
+        }),
+    }),
+  )
+  await new Promise<void>((resolve) => native.listen(0, "127.0.0.1", resolve))
+  const address = native.address()
+  assert.ok(address && typeof address === "object")
+  const baseUrl = `http://127.0.0.1:${address.port}`
+  const client = new McpPersonalConnectClient(baseUrl, { get: async () => "fixture-only" })
+  const json = createClient(ProductMcpPersonalService, createConnectTransport({ baseUrl, httpVersion: "1.1", useBinaryFormat: false }))
+  try {
+    for (const transport of [undefined, 2, 3] as const) {
+      const original = { ...input, ...(transport === undefined ? {} : { transport }) }
+      const result = (await client.server("registerServer", original, new AbortController().signal, performance.now() + 2000)) as {
+        server: { transport: string }
+      }
+      assert.equal(result.server.transport, transport === 3 ? "sse_compat" : "streamable_http")
+      const direct = await json.registerPersonalMcpServer(
+        create(RegisterPersonalMcpServerRequestSchema, {
+          requestId: input.requestId,
+          command: bindMcpPersonalServerCommand("registerServer", original),
+          displayName: input.displayName,
+          serverUrl: input.serverUrl,
+          ...(transport === undefined ? {} : { transport }),
+        }),
+        { headers: { "x-kokoro-subject": input.subject } },
+      )
+      assert.equal(direct.server?.transport, transport ?? 2)
+    }
+    assert.deepEqual(seen, [undefined, undefined, 2, 2, 3, 3])
+  } finally {
+    client.close()
+    native.closeAllConnections()
+    await new Promise<void>((resolve) => native.close(() => resolve()))
+  }
+})
+
+test("SSE successor: mixed JSON ACK cannot hide a missing HTTP transport behind the batch replay flag", () => {
+  const first = transportFixture(2),
+    second = transportFixture(3)
+  second.server.serverId = { $typeName: "kokoro.platform.v1.McpServerId", value: "server-two" }
+  second.server.displayName = "Second"
+  second.server.serverUrl = "https://second.example/mcp"
+  second.connector.connectorId = { $typeName: "kokoro.platform.v1.McpConnectorId", value: "connector-two" }
+  second.connector.serverId = second.server.serverId
+  const request = {
+    ...input,
+    configJson: JSON.stringify({
+      mcpServers: {
+        [input.displayName]: { type: "streamableHttp", url: input.serverUrl },
+        Second: { type: "sse", url: second.server.serverUrl },
+      },
+    }),
+  }
+  assert.doesNotThrow(() => projectMcpPersonalJsonImport({ imports: [first, second], replayed: true }, request))
+  delete (first.server as { transport?: unknown }).transport
+  assert.throws(() => projectMcpPersonalJsonImport({ imports: [first, second], replayed: true }, request))
 })
