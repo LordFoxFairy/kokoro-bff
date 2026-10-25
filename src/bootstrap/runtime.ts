@@ -81,7 +81,9 @@ export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
   mcpPersonalClient:
-    (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
+    | (Pick<McpPersonalConnectClient, "read"> &
+        Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon">>)
+    | null
   mcpPackageAdminClient: (Pick<McpPackageAdminConnectClient, "execute"> & Partial<Pick<McpPackageAdminConnectClient, "close">>) | null
   mcpProviderAdminClient: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
   customApiClient: (Pick<CustomApiConnectClient, "execute"> & Partial<Pick<CustomApiConnectClient, "close">>) | null
@@ -122,7 +124,9 @@ export type BffServerComposition = {
 
 export type BffCompositionOptions = {
   mcpPersonalClient?:
-    (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
+    | (Pick<McpPersonalConnectClient, "read"> &
+        Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon">>)
+    | null
   mcpPackageAdminClient?: (Pick<McpPackageAdminConnectClient, "execute"> & Partial<Pick<McpPackageAdminConnectClient, "close">>) | null
   mcpProviderAdminClient?: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
   customApiClient?: (Pick<CustomApiConnectClient, "execute"> & Partial<Pick<CustomApiConnectClient, "close">>) | null

@@ -15,7 +15,7 @@ const inputs: McpPackageAdminInput[] = [
 test("matches every published owner digest vector and scopes command meaning without correlation or key changes", async () => {
   const vectors = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/451d0fb5a2df76f9050a685eef02782989d94cce/mcp-package-admin/v1/request-vectors.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/7d8115a4b0dc752687babe7db35d0a936f51c76a/mcp-package-admin/v1/request-vectors.json", import.meta.url),
       "utf8",
     ),
   ) as { vectors: { sha256: string }[] }

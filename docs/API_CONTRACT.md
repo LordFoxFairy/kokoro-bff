@@ -1,3 +1,7 @@
+## 2026-10-24 browser-private 图标暂存（实施中）
+
+固定 Platform 7d8115a4b0dc752687babe7db35d0a936f51c76a／mcp-icon-v1；仍 Public24，原无图请求字节语义保持。POST /browser/v1/mcp/icons/uploads 接 filename/mime_type/content_sha256/size_bytes（十进制字符串，1..1048576）；POST icons/import 接 image_url；GET icons/{intent_id} 无 body/key；POST icons/{intent_id}/complete 接 expected_state_version 与 source_version_id，cancel 仅接 expected_state_version。四写均要求原 Idempotency-Key，主体只来自 admission；UUID intent、版本1..2147483646。返回安全 intent／replayed 与即时 upload_reference 或 preview_reference，no-store。原 Server／CustomAPI create 可选 icon={intent_id,expected_state_version}；update 同字段或 clear_icon=true 互斥，缺省保留绑定；metadata/save ACK 无持久短 URL。错误沿现 MCP／CustomAPI profile，未知结果只能显式复用原命令。
+
 ## 2026-10-24 Prepare 原请求恢复（既有JSON卡，设计门）
 
 **跨tab约束（独审补齐）：** failure存写也核exact subject/server/connector/key，且同key乱序回调不能把inspect_owner/expired/conflict降回undefined或same_command；invalid只可收紧为其它不可恢复分类。已恢复RAM K在核验前后及POST前须与日志原子重核；另一tab已清退K并reserve K2时，旧窗口不得采用K2、沿用K的核验凭证、覆盖其failure或清退K2。保守锁旧窗口并重新加载，不改owner/回执协议。

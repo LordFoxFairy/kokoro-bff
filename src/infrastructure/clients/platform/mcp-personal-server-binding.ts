@@ -1,9 +1,10 @@
+import { iconSaveDigest, type McpIconSaveFields } from "./mcp-icon.js"
 import { sha256Jcs } from "./jcs.js"
 import type { McpPersonalInput } from "./mcp-personal-response.js"
 
 export type McpPersonalServerOperation = "registerServer" | "server" | "prepareServer" | "updateServer" | "deleteServer"
 export type McpPersonalServerMutation = Exclude<McpPersonalServerOperation, "server">
-export type McpPersonalServerFields = {
+export type McpPersonalServerFields = McpIconSaveFields & {
   displayName?: string
   serverUrl?: string
   notes?: string
@@ -59,7 +60,7 @@ export function bindMcpPersonalServerCommand(
       method: `kokoro.platform.v1.ProductMcpPersonalService/${method}`,
       tenant_id: input.tenant,
       subject_id: input.subject,
-      input: body,
+      input: { ...body, ...(operation === "registerServer" || operation === "updateServer" ? iconSaveDigest(input) : {}) },
     }).sha256,
   }
 }

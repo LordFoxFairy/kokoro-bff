@@ -1,3 +1,4 @@
+import { mcpIconSelection } from "../infrastructure/clients/platform/mcp-icon.js"
 import { z } from "zod"
 import { strictParseRawJson } from "../infrastructure/raw-json.js"
 import type { McpPersonalServerFields, McpPersonalServerMutation } from "../infrastructure/clients/platform/mcp-personal-server-binding.js"
@@ -85,6 +86,7 @@ const register = z
     notes: notes.optional(),
     headers: headerWrites.optional(),
     oauth_client: oauthClient.optional(),
+    icon: mcpIconSelection.optional(),
   })
   .strict()
 const prepare = z.object({ expected_state_version: stateVersion }).strict()
@@ -99,9 +101,12 @@ const update = z
     header_removals: headerRemovals.optional(),
     oauth_client: oauthClient.optional(),
     revoke_oauth_client: z.boolean().optional(),
+    icon: mcpIconSelection.optional(),
+    clear_icon: z.literal(true).optional(),
   })
   .strict()
   .superRefine((value, context) => {
+    if (value.icon !== undefined && value.clear_icon === true) context.addIssue({ code: "custom", message: "icon conflict" })
     if (value.notes !== undefined && value.clear_notes === true) context.addIssue({ code: "custom", message: "notes conflict" })
     if (value.oauth_client !== undefined && value.revoke_oauth_client === true) context.addIssue({ code: "custom", message: "OAuth client conflict" })
     const upserts = new Set((value.header_upserts ?? []).map(({ name }) => name))
@@ -114,7 +119,9 @@ const update = z
       (value.header_upserts?.length ?? 0) === 0 &&
       (value.header_removals?.length ?? 0) === 0 &&
       value.oauth_client === undefined &&
-      value.revoke_oauth_client !== true
+      value.revoke_oauth_client !== true &&
+      value.icon === undefined &&
+      value.clear_icon !== true
     )
       context.addIssue({ code: "custom", message: "empty update" })
   })
@@ -128,6 +135,7 @@ export function parseMcpPersonalServer(operation: McpPersonalServerMutation, bod
       const value = register.parse(raw)
       return {
         displayName: value.display_name,
+        ...(value.icon === undefined ? {} : { icon: { intentId: value.icon.intent_id, expectedStateVersion: value.icon.expected_state_version } }),
         serverUrl: value.server_url,
         ...(value.notes === undefined ? {} : { notes: value.notes }),
         headers: value.headers ?? [],
@@ -140,6 +148,8 @@ export function parseMcpPersonalServer(operation: McpPersonalServerMutation, bod
     const value = update.parse(raw)
     return {
       expectedStateVersion: value.expected_state_version,
+      ...(value.icon === undefined ? {} : { icon: { intentId: value.icon.intent_id, expectedStateVersion: value.icon.expected_state_version } }),
+      ...(value.clear_icon === undefined ? {} : { clearIcon: true }),
       ...(value.display_name === undefined ? {} : { displayName: value.display_name }),
       ...(value.notes === undefined ? {} : { notes: value.notes }),
       clearNotes: value.clear_notes ?? false,

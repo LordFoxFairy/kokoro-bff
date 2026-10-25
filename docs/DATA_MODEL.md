@@ -1,3 +1,7 @@
+## 2026-10-24 图标暂存消费者
+
+本片 BFF 无新增数据 owner、表或 Schema。intent、绑定、回收及 receipt 归 Platform；文件／扫描归 Storage。BFF 不落库签名引用，不访问其数据库。原保存幂等由既有 owner receipt 承接。
+
 ## 2026-10-24 普通会话 MCP 精确选择（BFF 候选实施，尚未正常配对）
 
 无SQL/Schema/新表。选择冻结进现bff_agent_dispatch_outbox的原launch JSON与request_digest；原Conversation/Message事实、tenant/project/subject/actor、单事务写入及永久幂等键保持。旧trace和旧payload不回写、不把历史诊断提升为执行许可；未选择新请求保持旧幂等material的语义/字节证据。恢复/重复投递沿原精确selection，未知提交不因当前UI勾选变化重建payload。Agent所持request_json、Platform授权和资金仍归各自owner。

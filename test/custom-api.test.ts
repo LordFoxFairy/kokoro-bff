@@ -268,3 +268,95 @@ test("Custom API HTTP distinguishes receipt recovery states without replaying or
     await fixture.close()
   }
 })
+
+test("Custom API creation and icon-only edits forward the staged selector and clear, never browser identity", async () => {
+  const seen: Record<string, unknown>[] = []
+  const f = await customApiFixture(async (_operation, input) => {
+    seen.push(input)
+    return { custom_api: profile, replayed: false }
+  })
+  const icon = { intent_id: "12345678-1234-1234-1234-123456789abc", expected_state_version: "3" }
+  try {
+    for (const [method, path, body] of [
+      ["POST", "", { name: "API", environment: [], icon }],
+      ["PATCH", "/profile-one", { expected_state_version: "7", icon }],
+      ["PATCH", "/profile-one", { expected_state_version: "7", clear_icon: true }],
+    ] as const) {
+      const result = await fetch(`${f.origin}/browser/v1/connectors/custom-apis${path}`, {
+        method,
+        headers: { ...browserHeaders, "content-type": "application/json", "idempotency-key": "same-icon-original-key" },
+        body: JSON.stringify(body),
+      })
+      assert.equal(result.status, method === "POST" ? 201 : 200)
+      await result.arrayBuffer()
+    }
+    assert.deepEqual(seen[0]!.icon, { intentId: icon.intent_id, expectedStateVersion: "3" })
+    assert.deepEqual(seen[1]!.icon, seen[0]!.icon)
+    assert.equal(seen[2]!.clearIcon, true)
+    assert.equal(seen[1]!.tenant, "tenant-server")
+    for (const bad of [
+      { icon, clear_icon: true },
+      { clear_icon: false },
+      { icon: { ...icon, expected_state_version: 3 } },
+      { icon, subject_id: "someone-else" },
+    ]) {
+      const result = await fetch(`${f.origin}/browser/v1/connectors/custom-apis/profile-one`, {
+        method: "PATCH",
+        headers: { ...browserHeaders, "content-type": "application/json", "idempotency-key": "invalid-icon-key" },
+        body: JSON.stringify({ expected_state_version: "7", ...bad }),
+      })
+      assert.equal(result.status, 400)
+      await result.arrayBuffer()
+    }
+    assert.equal(seen.length, 3)
+  } finally {
+    await f.close()
+  }
+})
+
+test("invalid owner icon ACK is 502 inspect-owner, not a new browser error or retryable dependency failure", async () => {
+  const makeWire = () =>
+    create(CreatePersonalCustomApiResponseSchema, {
+      profile: create(PersonalCustomApiSchema, {
+        profileId: { value: "profile-one" },
+        name: "API",
+        stateVersion: 1n,
+        createdAt: timestampFromDate(new Date(profile.created_at)),
+        updatedAt: timestampFromDate(new Date(profile.updated_at)),
+        icon: {
+          intentId: "12345678-1234-1234-1234-123456789abc",
+          contentSha256: "a".repeat(64),
+          mimeType: "image/png",
+          sizeBytes: 1024n,
+          width: 24,
+          height: 24,
+        },
+      }),
+      replayed: false,
+    })
+  let wire = makeWire()
+  const f = await customApiFixture(async (operation, input) => projectCustomApiResponse(operation as "create", wire, input as typeof identity))
+  try {
+    for (const invalid of ["zero-width", "unknown-wire", "wrong-binding"]) {
+      wire = makeWire()
+      if (invalid === "zero-width") wire.profile!.icon!.width = 0
+      if (invalid === "unknown-wire") wire.profile!.icon!.$unknown = [{ no: 100, wireType: 2, data: new Uint8Array([0]) }]
+      const response = await fetch(`${f.origin}/browser/v1/connectors/custom-apis`, {
+        method: "POST",
+        headers: { ...browserHeaders, "content-type": "application/json", "idempotency-key": "exact-original-key" },
+        body: JSON.stringify({
+          name: "API",
+          environment: [],
+          icon: {
+            intent_id: invalid === "wrong-binding" ? "12345678-1234-1234-1234-123456789abd" : "12345678-1234-1234-1234-123456789abc",
+            expected_state_version: "2",
+          },
+        }),
+      })
+      assert.equal(response.status, 502)
+      assert.deepEqual((await response.json()).error, { code: "custom_api_response_invalid", message: "Custom API request failed", retryable: false })
+    }
+  } finally {
+    await f.close()
+  }
+})

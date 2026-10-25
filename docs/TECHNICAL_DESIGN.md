@@ -1,3 +1,7 @@
+## 2026-10-24 连接器图标消费者（实施中，未激活）
+
+沿已批准独立暂存方案，固定 Platform 7d8115a4b0dc752687babe7db35d0a936f51c76a 原生 Git artifact，复用 ProductMcpPersonalService 与当前 BFF 窄 client／原准入、总预算和取消。Browser 私有五操作在 /browser/v1/mcp/icons：POST uploads、POST import、GET {intent_id}、POST {intent_id}/complete、POST {intent_id}/cancel；不扩 Public24 或新增 BFF 表／资源。选图不创建连接器；原 Server／CustomAPI 保存显式 selector／clear，digest 与 owner 同义。Get 只读、unknown 不自动重试／换 key；短 PUT／GET 引用只即时转发，持久化恢复只保原命令身份，不存签名 URL。失败遵循现 MCP receipt profile。
+
 ## 2026-10-24 Prepare 原请求恢复（既有JSON卡，设计门）
 
 **跨tab约束（独审补齐）：** failure存写也核exact subject/server/connector/key，且同key乱序回调不能把inspect_owner/expired/conflict降回undefined或same_command；invalid只可收紧为其它不可恢复分类。已恢复RAM K在核验前后及POST前须与日志原子重核；另一tab已清退K并reserve K2时，旧窗口不得采用K2、沿用K的核验凭证、覆盖其failure或清退K2。保守锁旧窗口并重新加载，不改owner/回执协议。

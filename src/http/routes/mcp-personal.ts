@@ -1,3 +1,4 @@
+import { mcpIconId, parseMcpIcon, type McpIconInput, type McpIconOperation } from "../../infrastructure/clients/platform/mcp-icon.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { BffServerComposition } from "../../bootstrap/runtime.js"
@@ -31,8 +32,17 @@ import { send } from "../response.js"
 export function mcpPersonalOperation(
   path: string[],
   method: string,
-): McpPersonalOperation | McpPersonalCommandOperation | McpPersonalAuthorizationOperation | McpPersonalServerOperation | "importJson" | null {
+):
+  McpPersonalOperation | McpPersonalCommandOperation | McpPersonalAuthorizationOperation | McpPersonalServerOperation | "importJson" | McpIconOperation | null {
   if (path[0] !== "mcp") return null
+  if (path[1] === "icons") {
+    if (path.length === 3 && path[2] === "uploads" && method === "POST") return "beginIcon"
+    if (path.length === 3 && path[2] === "import" && method === "POST") return "importIcon"
+    if (path.length === 3 && method === "GET") return "getIcon"
+    if (path.length === 4 && path[3] === "complete" && method === "POST") return "completeIcon"
+    if (path.length === 4 && path[3] === "cancel" && method === "POST") return "cancelIcon"
+    return null
+  }
   if (path[1] === "connectors") {
     if (path.length === 2 && method === "POST") return "create"
     if (path.length === 3 && method === "PATCH") return "update"
@@ -68,24 +78,27 @@ export async function mcpPersonalRoute(
 ): Promise<void> {
   const context = initialAdmission.context
   const operation = mcpPersonalOperation(path, request.method ?? "GET")!
+  const iconOperation = ["beginIcon", "completeIcon", "getIcon", "cancelIcon", "importIcon"].includes(operation)
   const authorization = ["begin", "reconnect", "complete", "createConnection"].includes(operation)
   const serverOperation = ["registerServer", "server", "prepareServer", "updateServer", "deleteServer"].includes(operation)
   const importOperation = operation === "importJson"
-  const mutation = [
-    "create",
-    "update",
-    "enabled",
-    "remove",
-    "begin",
-    "reconnect",
-    "complete",
-    "createConnection",
-    "registerServer",
-    "prepareServer",
-    "updateServer",
-    "deleteServer",
-    "importJson",
-  ].includes(operation)
+  const mutation =
+    (iconOperation && operation !== "getIcon") ||
+    [
+      "create",
+      "update",
+      "enabled",
+      "remove",
+      "begin",
+      "reconnect",
+      "complete",
+      "createConnection",
+      "registerServer",
+      "prepareServer",
+      "updateServer",
+      "deleteServer",
+      "importJson",
+    ].includes(operation)
   const fail = (status: number, code: string, retryable = false, retryAfter?: string): void => {
     if (!response.destroyed && !response.writableEnded)
       send(response, status, { error: { code, message: "Personal MCP request failed", retryable } }, retryAfter)
@@ -117,7 +130,12 @@ export async function mcpPersonalRoute(
     invalid()
     return
   }
-  if (authorization && (operation === "begin" || operation === "reconnect")) {
+  if (iconOperation) {
+    if (!["beginIcon", "importIcon"].includes(operation) && !mcpIconId.safeParse(path[2]).success) {
+      invalid()
+      return
+    }
+  } else if (authorization && (operation === "begin" || operation === "reconnect")) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/u.test(path[2] ?? "")) {
       invalid()
       return
@@ -180,10 +198,11 @@ export async function mcpPersonalRoute(
   const client = composition.mcpPersonalClient
   if (
     client === null ||
+    (iconOperation && !client.icon) ||
     (authorization && !client.authorization) ||
     (serverOperation && !client.server) ||
     (importOperation && !client.importJson) ||
-    (!authorization && !serverOperation && !importOperation && mutation && !client.command)
+    (!iconOperation && !authorization && !serverOperation && !importOperation && mutation && !client.command)
   ) {
     fail(503, "mcp_personal_dependency_unavailable", true)
     return
@@ -210,6 +229,7 @@ export async function mcpPersonalRoute(
     let authorizationInput: McpPersonalAuthorizationInput | undefined
     let serverInput: McpPersonalServerInput | undefined
     let importInput: McpPersonalJsonImportInput | undefined
+    let iconInput: McpIconInput = { ...input, ...(["beginIcon", "importIcon"].includes(operation) ? {} : { intentId: path[2] }) }
     if (mutation) {
       const key = request.headers["idempotency-key"]
       const keyCount = request.rawHeaders.filter((_, index) => index % 2 === 0 && request.rawHeaders[index]!.toLowerCase() === "idempotency-key").length
@@ -240,7 +260,9 @@ export async function mcpPersonalRoute(
         if (controller.signal.aborted) request.destroy()
       }
       if (length !== undefined && Number(length) !== size) throw new Error("invalid_mcp_personal_request")
-      if (serverOperation) {
+      if (iconOperation) {
+        iconInput = { ...iconInput, ...parseMcpIcon(operation as Exclude<McpIconOperation, "getIcon">, Buffer.concat(chunks)), commandId: key as string }
+      } else if (serverOperation) {
         serverInput = {
           ...input,
           ...parseMcpPersonalServer(operation as McpPersonalServerMutation, Buffer.concat(chunks)),
@@ -268,26 +290,30 @@ export async function mcpPersonalRoute(
         }
     }
     const result = await within(
-      authorization
-        ? client.authorization!(operation as McpPersonalAuthorizationOperation, authorizationInput!, controller.signal, deadlineAt)
-        : serverOperation
-          ? client.server!(operation as McpPersonalServerOperation, serverInput ?? input, controller.signal, deadlineAt)
-          : importOperation
-            ? client.importJson!(importInput!, controller.signal, deadlineAt)
-            : mutation
-              ? client.command!(operation as McpPersonalCommandOperation, commandInput!, controller.signal, deadlineAt)
-              : client.read(operation as McpPersonalOperation, input, controller.signal, deadlineAt),
+      iconOperation
+        ? client.icon!(operation as McpIconOperation, iconInput, controller.signal, deadlineAt)
+        : authorization
+          ? client.authorization!(operation as McpPersonalAuthorizationOperation, authorizationInput!, controller.signal, deadlineAt)
+          : serverOperation
+            ? client.server!(operation as McpPersonalServerOperation, serverInput ?? input, controller.signal, deadlineAt)
+            : importOperation
+              ? client.importJson!(importInput!, controller.signal, deadlineAt)
+              : mutation
+                ? client.command!(operation as McpPersonalCommandOperation, commandInput!, controller.signal, deadlineAt)
+                : client.read(operation as McpPersonalOperation, input, controller.signal, deadlineAt),
     )
     controller.signal.throwIfAborted()
-    const data = authorization
+    const data = iconOperation
       ? result
-      : serverOperation
+      : authorization
         ? result
-        : importOperation
+        : serverOperation
           ? result
-          : mutation
-            ? validateMcpPersonalCommand(operation as McpPersonalCommandOperation, result, commandInput!)
-            : validateMcpPersonalPublic(operation as McpPersonalOperation, result, input)
+          : importOperation
+            ? result
+            : mutation
+              ? validateMcpPersonalCommand(operation as McpPersonalCommandOperation, result, commandInput!)
+              : validateMcpPersonalPublic(operation as McpPersonalOperation, result, input)
     const [sessionOutcome, actionOutcome] = await within(
       Promise.allSettled([
         mutation

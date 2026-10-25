@@ -1,3 +1,4 @@
+import { mcpIconBindingSchema, projectMcpIconBinding } from "./mcp-icon.js"
 import { z } from "zod"
 import type { McpPersonalServerInput, McpPersonalServerOperation } from "./mcp-personal-server-binding.js"
 import {
@@ -87,6 +88,7 @@ const declaration = z.discriminatedUnion("kind", [
 ])
 const server = z
   .object({
+    icon: mcpIconBindingSchema.optional(),
     server_id: id,
     availability: mcpPersonalAvailabilitySchema,
     display_name: text(1, 100),
@@ -156,6 +158,7 @@ function projectServer(raw: unknown): z.infer<typeof server> {
     : undefined
   const valueOauth = value.oauthClient === undefined ? undefined : object(value.oauthClient)
   return server.parse({
+    ...(value.icon === undefined ? {} : { icon: projectMcpIconBinding(value.icon) }),
     server_id: identity(value.serverId),
     availability: projectMcpPersonalAvailability(value.availability),
     display_name: value.displayName,
@@ -198,6 +201,11 @@ export function projectMcpPersonalServer(operation: McpPersonalServerOperation, 
     return result
   }
   const resultServer = projectServer(value.server)
+  if (
+    (operation === "registerServer" || operation === "updateServer") &&
+    ((input.icon !== undefined && resultServer.icon?.intent_id !== input.icon.intentId) || (input.clearIcon === true && resultServer.icon !== undefined))
+  )
+    throw new Error("mcp_personal_response_invalid")
   // JSON import returns a batch of newly allocated server IDs, so it reuses
   // this descriptor projector without a caller-supplied server selector.
   // Selector-bearing reads and mutations still require an exact ID match.

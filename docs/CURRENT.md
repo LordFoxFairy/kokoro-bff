@@ -1,3 +1,9 @@
+## 2026-10-24 图标暂存消费者已接（未激活）
+
+固定Platform 7d8115a4b0dc752687babe7db35d0a936f51c76a原生Git bundle并正规生成；五个browser-private图标操作沿原Product准入／总预算／取消／receipt profile，原Server／CustomAPI保存已接selector／clear及同义digest，安全图标与fresh引用只投影当前字段。Public24、独立HTTP／其它owner pins及canonical SQL原字节保持。原无图请求不改digest，不提前创建连接器。
+
+实际parser／native Connect与生产BFF HTTP已走五操作、原CAS／key、denied零owner调用。审查发现最大输出版本及坏ACK／CustomAPI投影错误分类，已修复并保留RED：输入CAS仍≤2147483646，输出允许2147483647；Cancel只认released，Complete／Import要求qualified成功态，Begin不向bound／expired授PUT；CustomAPI坏图标ACK统一502 nonretryable inspect-owner而非新输入400／可重试503。原保存返回图标须与selector／clear一致。最终787输入停写的lint／types／contract／默认／build／post-types均0，零漂移；format:check仅报原connector-command-errors-v1.json，已核与base字节相同，不伪报全绿、不为过门重签旧artifact。新增手写文件另查格式。审查两项P2已复核关闭。未正常重载，正在固定本地版本交App，不称真实页面可用或MCP关闭。证据Root ignored connector-icon-closure-20261024/stage12/bff-*。
+
 ## 2026-10-24 Prepare 专属核验恢复政策1.1（候选）
 
 Root783非MD停写输入lint/types/contract/architecture/default/build均0，冻结无漂移，默认原3资源SKIP保留；独立只读代码审查Approved。正式策略已具备供App固定生成资格，尚未正常激活或完成App/browser恢复，相关原始日志仅Root ignored prepare-recovery。

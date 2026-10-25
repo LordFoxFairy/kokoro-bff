@@ -1,3 +1,5 @@
+import { iconCreateWire, iconSaveWire, bindMcpIcon, projectMcpIcon, type McpIconOperation, type McpIconInput } from "./mcp-icon.js"
+import * as iconProto from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { createClient, type CallOptions } from "@connectrpc/connect"
 import { create } from "@bufbuild/protobuf"
 import { createConnectTransport } from "@connectrpc/connect-node"
@@ -243,6 +245,7 @@ export class McpPersonalConnectClient {
       if (operation === "registerServer")
         value = await this.#client.registerPersonalMcpServer(
           create(RegisterPersonalMcpServerRequestSchema, {
+            ...iconCreateWire(input),
             requestId: input.requestId,
             command: bindMcpPersonalServerCommand(operation, input),
             displayName: input.displayName!,
@@ -274,6 +277,7 @@ export class McpPersonalConnectClient {
       else if (operation === "updateServer")
         value = await this.#client.updatePersonalMcpServer(
           create(UpdatePersonalMcpServerRequestSchema, {
+            ...iconSaveWire(input),
             requestId: input.requestId,
             command: bindMcpPersonalServerCommand(operation, input),
             serverId: { value: input.id! },
@@ -300,6 +304,48 @@ export class McpPersonalConnectClient {
           options,
         )
       return projectMcpPersonalServer(operation, value, input)
+    })
+  }
+  async icon(operation: McpIconOperation, input: McpIconInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
+    return this.#call(input, outer, deadlineAt, async (options) => {
+      const command = operation === "getIcon" ? undefined : bindMcpIcon(operation, input)
+      const selected = {
+        requestId: input.requestId,
+        command,
+        intentId: input.intentId!,
+        expectedStateVersion: input.expectedStateVersion === undefined ? undefined : BigInt(input.expectedStateVersion),
+      }
+      let value: unknown
+      if (operation === "beginIcon")
+        value = await this.#client.beginPersonalMcpIconUpload(
+          create(iconProto.BeginPersonalMcpIconUploadRequestSchema, {
+            requestId: input.requestId,
+            command,
+            filename: input.filename!,
+            mimeType: input.mimeType!,
+            contentSha256: input.contentSha256!,
+            sizeBytes: BigInt(input.sizeBytes!),
+          }),
+          options,
+        )
+      else if (operation === "importIcon")
+        value = await this.#client.importPersonalMcpIconUrl(
+          create(iconProto.ImportPersonalMcpIconUrlRequestSchema, { requestId: input.requestId, command, imageUrl: input.imageUrl! }),
+          options,
+        )
+      else if (operation === "getIcon")
+        value = await this.#client.getPersonalMcpIconIntent(
+          create(iconProto.GetPersonalMcpIconIntentRequestSchema, { requestId: input.requestId, intentId: input.intentId! }),
+          options,
+        )
+      else if (operation === "cancelIcon")
+        value = await this.#client.cancelPersonalMcpIconIntent(create(iconProto.CancelPersonalMcpIconIntentRequestSchema, selected), options)
+      else
+        value = await this.#client.completePersonalMcpIconUpload(
+          create(iconProto.CompletePersonalMcpIconUploadRequestSchema, { ...selected, sourceVersionId: input.sourceVersionId! }),
+          options,
+        )
+      return projectMcpIcon(operation, value, input)
     })
   }
   async importJson(input: McpPersonalJsonImportInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {

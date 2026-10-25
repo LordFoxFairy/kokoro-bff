@@ -954,3 +954,25 @@ test("Prepare-only inspection recovery publishes explicit original-command autho
     "24158f50a6f4dac1b34553797f0b1afcc8f99dbc79f36b916d03b56999a67a71",
   )
 })
+
+test("icon-only server updates bind the exact staged selector and explicit clear without changing no-icon command identity", () => {
+  const icon = { intent_id: "12345678-1234-1234-1234-123456789abc", expected_state_version: "3" }
+  const selected = parseMcpPersonalServer("updateServer", bytes({ expected_state_version: "7", icon }))
+  assert.deepEqual((selected as Record<string, unknown>).icon, { intentId: icon.intent_id, expectedStateVersion: "3" })
+  const clear = parseMcpPersonalServer("updateServer", bytes({ expected_state_version: "7", clear_icon: true }))
+  assert.equal((clear as Record<string, unknown>).clearIcon, true)
+  const base = { ...input, id: "server-one", expectedStateVersion: "7", displayName: "Renamed" }
+  assert.notEqual(
+    bindMcpPersonalServerCommand("updateServer", { ...base, ...selected }).requestDigest,
+    bindMcpPersonalServerCommand("updateServer", base).requestDigest,
+  )
+  for (const invalid of [
+    { icon, clear_icon: true },
+    { clear_icon: false },
+    { icon: { ...icon, expected_state_version: 3 } },
+    { icon: { ...icon, expected_state_version: "2147483647" } },
+    { icon: { ...icon, owner_scope: "other" } },
+    { icon: null },
+  ])
+    assert.throws(() => parseMcpPersonalServer("updateServer", bytes({ expected_state_version: "7", ...invalid })))
+})
