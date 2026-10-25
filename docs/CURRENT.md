@@ -1,3 +1,7 @@
+## 2026-10-25 GetSkill 展示元数据与显式下载分离（候选，未正常激活）
+
+Root 已裁决现 browser-private beta GetSkill 只读当前授权 metadata、strict `{skill}`；不先准备 package/Storage 或创建 handle。Public25.0.0 明确替换原 required downloadInfo 耦合，DownloadSkill strict `{skill,downloadInfo}` 与独立 fresh 准入/确认/字节验证不变；无新 endpoint、owner、表、依赖或生成物手改。精确 inverse 保完整 Public24 原件后再过旧历史检查，旧断言/hash保持。本 worker 不提交、切服务或改正常资源；工程门及冻结证据交 Root，App 正式 artifact 固定与浏览器验收后继。
+
 ## 2026-10-25 MCP 项目发布私有消费者已交付（正常未激活）
 
 独立私有 browser/v1 发布、pin 列表／移除及原命令回执接固定 Platform dd8d536a28059cbdbe0674debc47bf28d039fb47 的五项正式 artifact，原通用 Platform pin 不改。BFF沿当前 Session/MCP权限及项目 owner 在调用前后重验，不读 Platform SQL、不复制连接或秘密；只返回定义 pin，execution_ready=false。

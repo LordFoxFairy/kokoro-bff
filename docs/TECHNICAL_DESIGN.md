@@ -1,3 +1,15 @@
+## 2026-10-25 GetSkill 展示与显式下载分离（Root 已裁决，源码候选）
+
+沿同一 browser-private beta GetSkill，不增 endpoint、owner、表或依赖。旧 GetSkill 与 DownloadSkill 共用 package prepare 的耦合使已成功读取的 metadata 因 Storage 下载超时整页失败；Root 裁决 GetSkill 只读取当前授权的 publication metadata，严格返回 `{skill}`，不调用包/Storage、不签发下载 handle。复用现 `SkillSpecificationService.detail/current`，保当前主体、tenant、exact UID/series、生命周期、预算与取消绑定。GetSkill 的成功不是文件存在或可下载证明。
+
+这是当前本地 required 成员删除，明确发行 Public25.0.0，不借 minor/旧 beta 兼容承诺。DownloadSkill 保严格 `{skill,downloadInfo}`、真实包 proof/filename/expiry、prepare/confirm/有界 handle 与下载时 fresh admission；包错误仍是显式下载失败，不伪造 downloadInfo 或吞错误。唯一 canonical 增独立 metadata success schema；窄 build-only inverse 只逆本 delta 后校完整 Public24 原件 SHA，再进入原历史证明，不修改旧 hash/断言。App 待 Root 正式提交后固定同一 artifact，分开展示/下载 schema；正常配对与浏览器由 Root 执行。
+
+## 2026-10-25 Skills 元数据读取与媒体证明分离（源码候选，未正常激活）
+
+沿现 Skills owner/协议，不新增服务、表、缓存、字段或依赖。Platform 元数据投影不携带完整 inline cover proof；BFF `SkillSpecificationService` 在既有已准入的 Hub、详情和 exact revision 摘要上以 owner 返回的 exact version UID 构造 `/api/v1/skills/{uid}/cover`。该地址不是图片存在、扫描 CLEAN 或执行许可声明，不能用 series/current 猜测替换分享旧版，也不直接输出 Web `/api/hub` 路径。实际媒体 GET 继续原当前身份、精确 source、受控 transfer、字节验证、I/O 后绑定与 readmission；200 才是媒体成功，404 与 503 等错误独立于元数据读，不把媒体失败变成元数据列表失败或虚构封面。
+
+更新候选同样只表示当前主体可见的 owner 已发布高版本元数据；不触发候选 Storage verifyPackage，不推进旧安装 pin。Install/Update 的实际 fresh 验证、来源快照/安装 fence、CAS、幂等 receipt/event 与恢复语义保持。消费者仍拒绝坏 exact path/错误来源，GET 候选不代替命令 ACK；本片源码/定向测试不表示正常服务或浏览器已完成配对。
+
 ## 2026-10-25 URL MCP 项目定义发布（隔离候选，未激活）
 
 错误恢复不由HTTP status或retryable单独决定：owner ACK后的第二次准入也可能给403/404/503，故这些失败保原key/body/CAS并只允许当前主体核原receipt。首次确定的自有400输入拒绝和自有412前置条件拒绝可收回未提交意图供用户修改；一旦有历史unknown，同码也收紧为inspect_owner，shared replay_expired412仍原策略。唯一自有tuple定义在application/mcp-project-publication.contract.ts，由runtime mapper与既有generator共用；共享receipt政策只引用现source，不导入第二套错误registry。正式profile绑定与正负consumer向量均生成，HTTP测试覆盖实际前置拒绝/ACK后404/原receipt404/unknown后400或412。

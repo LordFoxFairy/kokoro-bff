@@ -1,10 +1,11 @@
+import { restorePublic24SkillDetailContract } from "../scripts/skill-detail-public-contract.mjs"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 import { load } from "js-yaml"
 const source = () => readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
 test("formal billing metering management is an additive current-admin capability", async () => {
-  const doc = load(await source())
+  const doc = load(restorePublic24SkillDetailContract(await source()))
   assert.equal(doc.info.version, "24.0.0")
   for (const [method, path, id] of [
     ["get", "/v1/admin/billing/metering/pricing", "getAdminMeteringPricing"],

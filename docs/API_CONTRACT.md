@@ -1,3 +1,15 @@
+## 2026-10-25 GetSkill metadata-only / Public25（Root 已裁决，未正常激活）
+
+既有 `POST /skill.v1.SkillOptionalService/GetSkill {skillId}` 仍是当前 Session/tenant 授权的 browser-private beta 展示读取；skillId 保 series 显式 current 语义，成功严格为 `{skill}`，无 downloadInfo，不访问 package/Storage 或创建下载 handle。此成功只证明返回的 exact revision metadata 已获准读取，不证明文件可用。唯一 canonical 的 `SpecificationDetailResponse` 与现展示字段保持单一事实源，无新 endpoint、owner 或 Schema。
+
+`POST /skill.v1.SkillService/DownloadSkill` 成功仍严格 `{skill,downloadInfo}`，三下载字段继续来自真实 package binding 与有界 handle；独立 prepare/confirm、当前身份/精确版本、扫描/字节、文件错误和未知结果语义保持。原 GetSkill required downloadInfo 是本次明确替换的本地展示约束，非已证明的 Manus 全场景必需规则；Public25.0.0 精确逆回完整 Public24 后再验旧合同，operation inventory 不变。消费者须固定 Root 正式交付的 commit/digest 后正规更新 snapshot 与原生成链，禁止 optional fallback/双响应或伪造 downloadInfo。
+
+## 2026-10-25 Skills 媒体地址与更新候选（源码候选，未正常激活）
+
+Hub、详情及分享精确修订摘要的 `coverImage` / `cover_image` 提供 `/api/v1/skills/{exact_version_uid}/cover`，不再依赖元数据内联的 `product.cover`。地址只表达可尝试的同源媒体资源，不证明封面存在、当前 CLEAN 或可执行；不得改用 series ID、外部 URL 或 `/api/hub`。Web 沿既有合法路径映射，实际有图、无图和依赖失败由独立 `/v1/skills/{exact_version_uid}/cover` GET 的原 200/404/503 及其他既有错误确定；该 GET 的当前身份、owner 精确来源绑定、扫描/字节及出口重验不变。
+
+`available_update` 仅为 owner 已发布且当前主体可见的更高 exact revision 元数据候选，不是 Storage 包可用证明或更新 ACK；列表不为候选请求 fresh package proof。实际 Install/Update 仍独立校验当前资格、包及 fresh proof，保原 key/body、CAS、未知结果恢复和错误；metadata 查询失败不得伪造 absent。Proto、成功表示字段、canonical Schema 与媒体 GET 协议未改变，正常配对和页面验收由 Root 后继执行。
+
 ## 2026-10-25 browser-private URL MCP 项目发布（隔离候选）
 
 私有 profile1.1 的每个非200响应现由 canonical code-first 源生成精确 status/code/retryable 闭集；自有9类失败、原bootstrap的8个Session/service/tenant/action准入tuple及现 connector-command-errors-v1.json 的MCP6个receipt tuple组合发布。shared来源带文件SHA，未复制可编辑receipt政策；message不参与分类。生成的consumer vectors区分首次明确拒绝与已有unknown。仅精确400/mcp_project_publication_request_invalid/false和412/mcp_project_publication_precondition_failed/false，在publish/remove无任何历史unknown且用户显式修改意图后允许新命令；其余tuple、错status/bit/未知码、receipt查询、receipt404均不授权新key。所有自动重试=false。

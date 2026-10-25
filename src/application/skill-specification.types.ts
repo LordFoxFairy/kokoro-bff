@@ -73,6 +73,7 @@ export type SkillSpecificationOwner = Readonly<{
   download(sourceRef: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<SkillDownloadFact>
 }>
 export type SkillSpecificationSource = Readonly<{
+  readDetail(skillId: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<unknown>
   revisionSummary(sourceRef: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<unknown>
   readPublicList(input: Readonly<Record<string, unknown>>, context: PublicSkillListContext, signal: AbortSignal, deadlineAt: number): Promise<unknown>
   read(
@@ -83,7 +84,7 @@ export type SkillSpecificationSource = Readonly<{
     deadlineAt: number,
   ): Promise<unknown>
   prepareDownload(
-    operation: "GetSkill" | "DownloadSkill",
+    operation: "DownloadSkill",
     skillId: string,
     context: SkillSpecificationContext,
     signal: AbortSignal,

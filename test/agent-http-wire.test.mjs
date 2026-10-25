@@ -455,7 +455,8 @@ it("consumes only the exact optional MCP execution selection from HTTP7.4 and Pu
   const { load } = await import("js-yaml")
   const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
   const owner = JSON.parse(await readFile(new URL(`../contract/vendor/kokoro-agent/${manifest.owner.repository_commit}/openapi.json`, import.meta.url), "utf8"))
-  const doc = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  const { restorePublic24SkillDetailContract } = await import("../scripts/skill-detail-public-contract.mjs")
+  const doc = load(restorePublic24SkillDetailContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")))
   assert.equal(doc.info.version, "24.0.0")
   const publicRequest = doc.components.schemas.MessageCreateRequest
   const internal = owner.components.schemas.LaunchRequest

@@ -145,11 +145,18 @@ function inspectSkillsSpecificationSurface(source, expectedVersion) {
     require(document?.info?.version === expectedVersion, `Public${expectedVersion.split(".")[0]} version must equal ${expectedVersion}`)
   const paths = document?.paths ?? {},
     schemas = document?.components?.schemas ?? {}
+  const metadataOnly = expectedVersion === null && document?.info?.version === "25.0.0"
   const expected = [
     ["/v1/skill.list", "get", "listSkills", "public", "SpecificationPublicSkillList"],
     ["/skill.v1.SkillOptionalService/ListSkills", "post", "websiteListSkills", "browser-private", "SpecificationListResponse"],
     ["/skill.v1.SkillOptionalService/ListHubSkills", "post", "websiteListHubSkills", "browser-private", "SpecificationHubResponse"],
-    ["/skill.v1.SkillOptionalService/GetSkill", "post", "websiteGetSkill", "browser-private", "SpecificationDownloadInfo"],
+    [
+      "/skill.v1.SkillOptionalService/GetSkill",
+      "post",
+      "websiteGetSkill",
+      "browser-private",
+      metadataOnly ? "SpecificationDetailResponse" : "SpecificationDownloadInfo",
+    ],
     ["/skill.v1.SkillService/DownloadSkill", "post", "websiteDownloadSkill", "browser-private", "SpecificationDownloadInfo"],
     ["/skill-downloads/{handle}", "get", "downloadSkillBytes", "browser-private", null],
   ]
@@ -211,6 +218,13 @@ function inspectSkillsSpecificationSurface(source, expectedVersion) {
     request?.properties?.query?.type === "string" &&
     request?.properties?.pageToken?.type === "string" &&
     request?.properties?.excludeTop?.type === "boolean", "Hub request field types drifted")
+  if (metadataOnly) {
+    const detail = schemas.SpecificationDetailResponse
+    require(detail?.additionalProperties === false &&
+      JSON.stringify(detail?.required) === JSON.stringify(["skill"]) &&
+      JSON.stringify(detail?.properties) ===
+        JSON.stringify({ skill: { $ref: "#/components/schemas/SpecificationSkill" } }), "GetSkill metadata must be a closed skill-only response")
+  }
   const info = schemas.SpecificationDownloadInfo?.properties?.downloadInfo
   require(info?.additionalProperties === false &&
     JSON.stringify(info?.required) === JSON.stringify(["downloadUrl", "filename", "expiresAt"]) &&

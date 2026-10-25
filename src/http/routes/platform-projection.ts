@@ -14,6 +14,7 @@ import {
   websiteListResponseSchema,
   websiteSkillRequestSchema,
   websiteSkillSchema,
+  websiteDetailResponseSchema,
 } from "../skill-specification-schema.js"
 import { startSkillRequestBudget, readSkillBody } from "./skill-drafts.js"
 import { mcpRequestRemaining } from "../mcp-request-budget.js"
@@ -257,7 +258,13 @@ export async function skillSpecificationReadRoute(
     if (source === null) throw new Error("skill_dependency_unavailable")
     const context = Object.freeze({ ...admission.context, identity: Object.freeze({ ...admission.context.identity }), humanBearer: admission.bearerToken })
     let payload: unknown
-    if (operation === "GetSkill" || operation === "DownloadSkill") {
+    if (operation === "GetSkill") {
+      const raw = await within(source.readDetail(input.skillId as string, context, controller.signal, deadlineAt))
+      const result = websiteDetailResponseSchema.safeParse(raw)
+      if (!result.success || result.data.skill.id !== input.skillId || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(result.data.skill.version ?? ""))
+        throw new Error("skill_response_invalid")
+      payload = result.data
+    } else if (operation === "DownloadSkill") {
       const prepared = await within(source.prepareDownload(operation, input.skillId as string, context, controller.signal, deadlineAt))
       if (typeof prepared !== "object" || prepared === null || typeof prepared.binding !== "object" || prepared.binding === null)
         throw new Error("skill_response_invalid")

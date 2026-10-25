@@ -1,3 +1,7 @@
+## 2026-10-25 Public25 metadata/detail 分离候选
+
+唯一 canonical Public25.0.0 原件 SHA256 `7261ac9ce2140555ba97ebff2bf0359533cc49dda014b08dcd6a6054a8d38b1c`；operation inventory 不变。GetSkill 改 strict `{skill}` 的独立 SpecificationDetailResponse，DownloadSkill strict `{skill,downloadInfo}` 原件保持。准确 build-only inverse `scripts/skill-detail-public-contract.mjs` 恢复完整 Public24 SHA f4caf11f3cd9255d2cd9daf69b74ff9988505d640e31c686ce495e6d8a578b2c，再由原检查链证明所有历史父；旧 oracle/hash 未改。源码候选未由本 worker 提交或正常激活，消费者待 Root 正式 commit/digest 后更新唯一 snapshot 与既有生成链。
+
 ## 2026-10-24 Public24 / Agent7.4 候选
 
 唯一public机器源仅在MessageCreateRequest退役trace-only mcp_servers并新增optional selected_mcp_connection_ids，完整父逆证保全部其它API；正常配对状态见CURRENT。Agent HTTP固定4c46ec681ee569e42808acb9409248acddd8ae41，唯一当前原件与18生成文件/manifest由现generator维护；新字段唯一性/字节限制正规编译，不手改生成物。JSONB恢复保旧诊断trace但不将其升级为执行选择；无Schema变化。

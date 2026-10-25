@@ -198,7 +198,8 @@ export class SkillSpecificationService implements SkillSpecificationSource {
         exampleQuestions: skill.example_prompts,
         tags: { values: skill.category_keys.map((key) => this.tag(key)) },
         ...(ownerType === undefined ? {} : { ownerType }),
-        ...(skill.product.cover === undefined ? {} : { coverImage: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover` }),
+        // A locator is not media proof; the independent GET checks this exact revision.
+        coverImage: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover`,
       }),
     }
   }
@@ -461,7 +462,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
             : {}),
         exampleQuestions: skill.example_prompts,
         tags: { values: skill.category_keys.map((key) => this.tag(key)) },
-        ...(skill.product.cover === undefined ? {} : { coverImage: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover` }),
+        coverImage: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover`,
       })
     }
     this.active(signal, deadlineAt)
@@ -509,16 +510,16 @@ export class SkillSpecificationService implements SkillSpecificationSource {
       source_kind: skill.product.source_kind,
       ...(record.originalName === undefined ? {} : { original_name: record.originalName }),
       ...(creator?.kind === "user" && profile?.status === "found" ? { author: { user_id: creator.id, display_name: profile.display_name } } : {}),
-      ...(skill.product.cover === undefined ? {} : { cover_image: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover` }),
+      cover_image: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover`,
     }
   }
-  public async prepareDownload(
-    _operation: "GetSkill" | "DownloadSkill",
-    skillId: string,
-    context: SkillSpecificationContext,
-    signal: AbortSignal,
-    deadlineAt: number,
-  ) {
+  public async readDetail(skillId: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number) {
+    this.active(signal, deadlineAt)
+    const value = await this.detail(skillId, context, signal, deadlineAt)
+    this.active(signal, deadlineAt)
+    return { skill: value.representation }
+  }
+  public async prepareDownload(_operation: "DownloadSkill", skillId: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number) {
     const value = await this.detail(skillId, context, signal, deadlineAt)
     const owner = await this.dependencies.owner.download(value.skill.source_ref, context, signal, deadlineAt)
     const packageFact = verifiedSkillDownloadPackage(

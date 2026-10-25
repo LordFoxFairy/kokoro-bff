@@ -30,6 +30,7 @@ const detailFields = {
   skillIcon: icon,
 }
 export const websiteSkillSchema = optional(detailFields)
+export const websiteDetailResponseSchema = z.object({ skill: websiteSkillSchema }).strict()
 const installed = optional({
   ...detailFields,
   installationId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u),

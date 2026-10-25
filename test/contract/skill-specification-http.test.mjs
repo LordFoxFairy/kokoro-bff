@@ -98,6 +98,7 @@ async function fixture(
             readPublicList:
               source.readPublicList?.bind(source) ?? ((input, context, signal, deadline) => source.read("skill.list", input, context, signal, deadline)),
             read: source.read?.bind(source),
+            readDetail: source.readDetail?.bind(source),
             prepareDownload: source.prepareDownload?.bind(source),
             confirmDownload: source.confirmDownload?.bind(source),
           },
@@ -287,44 +288,183 @@ test("R357 Hub forwards observed tag/query/includeOfficialSkills before owner pa
     await app.close()
   }
 })
-for (const name of ["GetSkill", "DownloadSkill"])
-  test(`R357 ${name} issues same-origin opaque bytes resource bound to exact version, actual filename and expiry`, async () => {
-    const operation = name === "GetSkill" ? website + name : "/skill.v1.SkillService/DownloadSkill"
-    const binding = {
-      tenantId: "tenant",
-      subjectId: "human",
-      qualifier: { kind: "catalog_current", seriesId: "stable-series" },
-      sourceRef: "skill:version-one",
-      revision: "1",
-      filename: "original.zip",
-      sizeBytes: 3,
-      contentSha256: "a".repeat(64),
-      expiresAt: Date.now() + 300000,
-      transfer: {
-        url: "http://private-store.invalid/secret",
-        method: "GET",
-        requiredHeaders: {},
-        expiresAt: Date.now() + 300000,
-      },
-    }
-    const app = await fixture({
-      async prepareDownload() {
-        return { skill: detail, binding }
-      },
+test("metadata detail uses current authorized facts without package IO or handles while explicit download still fails offline", async (t) => {
+  const owner = await specificationServiceFixture()
+  let downloads = 0
+  owner.deps.product.download = async () => {
+    downloads++
+    throw new ConnectError("private package deadline", Code.DeadlineExceeded)
+  }
+  const issued = t.mock.method(SkillDownloadHandles.prototype, "issue")
+  const app = await fixture(owner.service)
+  try {
+    const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
+    assert.equal(result.status, 200)
+    assert.deepEqual(Object.keys(result.body), ["skill"])
+    assert.equal(result.body.skill.id, "stable-series")
+    assert.equal(result.body.skill.version, "current-version")
+    assert.equal(result.body.skill.displayName, "Current")
+    assert.equal(result.body.skill.coverImage, "/api/v1/skills/current-version/cover")
+    assert.deepEqual(owner.calls.find((call) => call.kind === "current").input, {
+      requestId: "spec-request",
+      tenant: "tenant",
+      subject: "human",
+      seriesId: "stable-series",
     })
+    assert.equal(downloads, 0)
+    assert.equal(issued.mock.calls.length, 0)
+    const download = await app.request("/skill.v1.SkillService/DownloadSkill", { skillId: "stable-series" })
+    assert.equal(download.status, 503)
+    assert.equal(download.body.error.code, "Unavailable")
+    assert.equal(JSON.stringify(download.body).includes("private package"), false)
+    assert.equal(downloads, 1)
+    assert.equal(issued.mock.calls.length, 0)
+  } finally {
+    await app.close()
+  }
+})
+
+for (const fault of ["series", "source", "status"])
+  test(`metadata detail rejects owner ${fault} mismatch without package IO or handles`, async (t) => {
+    const owner = await specificationServiceFixture()
+    const current = owner.deps.product.current
+    owner.deps.product.current = async (...args) => {
+      const value = await current(...args)
+      if (fault === "series") value.publication.currentVersion.seriesId.value = "other-series"
+      if (fault === "source") value.publication.currentVersion.sourceRef.value = "skill:other-version"
+      if (fault === "status") value.publication.currentVersion.status = 3
+      return value
+    }
+    let downloads = 0
+    owner.deps.product.download = async () => {
+      downloads++
+      throw Error("package should not be read")
+    }
+    const issued = t.mock.method(SkillDownloadHandles.prototype, "issue")
+    const app = await fixture(owner.service)
     try {
-      const r = await app.request(operation, { skillId: "stable-series" })
-      assert.equal(r.status, 200)
-      assert.deepEqual(r.body.skill, detail)
-      assert.match(r.body.downloadInfo.downloadUrl, /^\/api\/skill-downloads\/[\w-]{43}$/)
-      assert.equal(r.body.downloadInfo.filename, "original.zip")
-      assert.ok(Date.parse(r.body.downloadInfo.expiresAt) > Date.now())
-      assert.ok(Date.parse(r.body.downloadInfo.expiresAt) <= Date.now() + 60000)
-      assert.equal(JSON.stringify(r.body).includes("private-store"), false)
+      const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
+      assert.equal(result.status, 502)
+      assert.equal(downloads, 0)
+      assert.equal(issued.mock.calls.length, 0)
     } finally {
       await app.close()
     }
   })
+
+test("metadata detail Public25 separates the closed GetSkill response from unchanged download information", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const { load } = await import("js-yaml")
+  const document = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  assert.equal(document.info.version, "25.0.0")
+  assert.equal(
+    document.paths[website + "GetSkill"].post.responses["200"].content["application/json"].schema.$ref,
+    "#/components/schemas/SpecificationDetailResponse",
+  )
+  const metadata = document.components.schemas.SpecificationDetailResponse
+  assert.equal(metadata.additionalProperties, false)
+  assert.deepEqual(metadata.required, ["skill"])
+  assert.deepEqual(metadata.properties, { skill: { $ref: "#/components/schemas/SpecificationSkill" } })
+  assert.equal(
+    document.paths["/skill.v1.SkillService/DownloadSkill"].post.responses["200"].content["application/json"].schema.$ref,
+    "#/components/schemas/SpecificationDownloadInfo",
+  )
+  assert.deepEqual(document.components.schemas.SpecificationDownloadInfo.required, ["skill", "downloadInfo"])
+  const { restorePublic24SkillDetailContract } = await import("../../scripts/skill-detail-public-contract.mjs")
+  const raw = await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  assert.equal(
+    createHash("sha256").update(restorePublic24SkillDetailContract(raw)).digest("hex"),
+    "f4caf11f3cd9255d2cd9daf69b74ff9988505d640e31c686ce495e6d8a578b2c",
+  )
+  for (const changed of [
+    raw.replace("required: [skill]", "required: [skill, downloadInfo]"),
+    raw.replace("        - downloadInfo\n", ""),
+    raw.replace("/v1/account/archived-tasks", "/v1/account/retired-tasks"),
+    raw.replace("x-kokoro-permission: capability.skill.read", "x-kokoro-permission: forged.read"),
+  ]) {
+    assert.notEqual(changed, raw)
+    assert.throws(() => restorePublic24SkillDetailContract(changed))
+  }
+})
+
+for (const [fault, payload] of [
+  ["wrong identity", { skill: { ...detail, id: "another-series" } }],
+  ["missing exact version", { skill: { ...detail, version: undefined } }],
+  ["legacy download mixture", { skill: detail, downloadInfo: {} }],
+])
+  test(`metadata detail rejects ${fault} instead of accepting an unbound or fallback response`, async () => {
+    const app = await fixture({ readDetail: async () => payload })
+    try {
+      const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
+      assert.equal(result.status, 502)
+      assert.equal(result.body.error.code, "InvalidResponse")
+    } finally {
+      await app.close()
+    }
+  })
+
+for (const [code, status] of [
+  [Code.PermissionDenied, 403],
+  [Code.NotFound, 404],
+])
+  test(`metadata detail preserves current owner denial ${status} without package IO`, async () => {
+    const owner = await specificationServiceFixture()
+    owner.deps.product.current = async () => {
+      throw new ConnectError("private current denial", code)
+    }
+    let downloads = 0
+    owner.deps.product.download = async () => {
+      downloads++
+      throw Error("package should not be read")
+    }
+    const app = await fixture(owner.service)
+    try {
+      const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
+      assert.equal(result.status, status)
+      assert.equal(downloads, 0)
+      assert.equal(JSON.stringify(result.body).includes("private current"), false)
+    } finally {
+      await app.close()
+    }
+  })
+
+test("R357 DownloadSkill issues same-origin opaque bytes resource bound to exact version, actual filename and expiry", async () => {
+  const operation = "/skill.v1.SkillService/DownloadSkill"
+  const binding = {
+    tenantId: "tenant",
+    subjectId: "human",
+    qualifier: { kind: "catalog_current", seriesId: "stable-series" },
+    sourceRef: "skill:version-one",
+    revision: "1",
+    filename: "original.zip",
+    sizeBytes: 3,
+    contentSha256: "a".repeat(64),
+    expiresAt: Date.now() + 300000,
+    transfer: {
+      url: "http://private-store.invalid/secret",
+      method: "GET",
+      requiredHeaders: {},
+      expiresAt: Date.now() + 300000,
+    },
+  }
+  const app = await fixture({
+    async prepareDownload() {
+      return { skill: detail, binding }
+    },
+  })
+  try {
+    const r = await app.request(operation, { skillId: "stable-series" })
+    assert.equal(r.status, 200)
+    assert.deepEqual(r.body.skill, detail)
+    assert.match(r.body.downloadInfo.downloadUrl, /^\/api\/skill-downloads\/[\w-]{43}$/)
+    assert.equal(r.body.downloadInfo.filename, "original.zip")
+    assert.ok(Date.parse(r.body.downloadInfo.expiresAt) > Date.now())
+    assert.ok(Date.parse(r.body.downloadInfo.expiresAt) <= Date.now() + 60000)
+    assert.equal(JSON.stringify(r.body).includes("private-store"), false)
+  } finally {
+    await app.close()
+  }
+})
 test("R357 prepare refuses different stable identity/tenant/subject without disclosing transport", async () => {
   const app = await fixture({
     async prepareDownload() {
@@ -332,7 +472,7 @@ test("R357 prepare refuses different stable identity/tenant/subject without disc
     },
   })
   try {
-    const r = await app.request(website + "GetSkill", {
+    const r = await app.request("/skill.v1.SkillService/DownloadSkill", {
       skillId: "stable-series",
     })
     assert.equal(r.status, 502)
@@ -754,7 +894,7 @@ test("R357 malformed download owner envelope is502 with fixed error, not transpo
     },
   })
   try {
-    const r = await app.request(website + "GetSkill", {
+    const r = await app.request("/skill.v1.SkillService/DownloadSkill", {
       skillId: "stable-series",
     })
     assert.equal(r.status, 502)
@@ -890,7 +1030,7 @@ test("R357 malformed qualified handle facts fail502 before any successful metada
       },
     })
     try {
-      const r = await app.request(website + "GetSkill", {
+      const r = await app.request("/skill.v1.SkillService/DownloadSkill", {
         skillId: "stable-series",
       })
       assert.equal(r.status, 502)
@@ -901,7 +1041,7 @@ test("R357 malformed qualified handle facts fail502 before any successful metada
   }
 })
 
-test("R357 cancelled metadata never issues a handle from late owner results", async (t) => {
+test("R357 cancelled download preparation never issues a handle from late owner results", async (t) => {
   let finish, entered
   const called = new Promise((resolve) => (entered = resolve))
   const spy = t.mock.method(SkillDownloadHandles.prototype, "issue")
@@ -913,7 +1053,7 @@ test("R357 cancelled metadata never issues a handle from late owner results", as
   })
   const controller = new AbortController()
   try {
-    const pending = app.request(website + "GetSkill", { skillId: "stable-series" }, { signal: controller.signal })
+    const pending = app.request("/skill.v1.SkillService/DownloadSkill", { skillId: "stable-series" }, { signal: controller.signal })
     await called
     controller.abort()
     await assert.rejects(pending, { name: "AbortError" })
@@ -1231,7 +1371,7 @@ test("R357 formal aggregation lists stopped exact installations, resolves actual
   assert.equal(app.calls.find((call) => call.kind === "installed").input.installed, true)
   assert.equal(Object.hasOwn(app.calls.find((call) => call.kind === "installed").input, "enabled"), false)
 })
-test("R357 formal Hub aggregation binds true stable/current/exact publication and owner-side query/tag/page cursor before pagination", async () => {
+test("R357 formal Hub aggregation binds exact publication and its cover locator without inline media proof", async () => {
   const app = await specificationServiceFixture()
   const data = await app.service.read(
     "ListHubSkills",
@@ -1249,6 +1389,7 @@ test("R357 formal Hub aggregation binds true stable/current/exact publication an
   )
   assert.equal(data.skills[0].skillId, "stable-series")
   assert.equal(data.skills[0].currentVersion.versionUid, "current-version")
+  assert.equal(data.skills[0].coverImage, "/api/v1/skills/current-version/cover")
   assert.equal(data.skills[0].currentVersion.archiveSize, "3")
   assert.equal(data.skills[0].usageCount, "7")
   assert.equal(data.nextPageToken, "original-owner-cursor")
@@ -1285,10 +1426,11 @@ test("R357 formal Hub returns an empty category page without querying usage", as
   assert.deepEqual(data.skills, [])
   assert.equal(data.nextPageToken, undefined)
 })
-test("R357 formal download aggregation binds original exact version and rejects current-version rotation instead of rebasing handle", async () => {
+test("R357 formal download aggregation binds exact cover locator without inline proof and rejects version rotation", async () => {
   const app = await specificationServiceFixture()
   const value = await app.service.prepareDownload("DownloadSkill", "stable-series", app.context, app.signal, app.deadline)
   assert.equal(value.skill.id, "stable-series")
+  assert.equal(value.skill.coverImage, "/api/v1/skills/current-version/cover")
   assert.equal(value.binding.sourceRef, "skill:current-version")
   assert.equal(value.binding.filename, "actual.zip")
   assert.equal(app.calls.find((call) => call.kind === "download").input.sourceRef, "skill:current-version")
@@ -1756,7 +1898,7 @@ test("R357 bounded handles evict oldest only after validation, reclaim expiry, a
   assert.throws(() => store.resolve(second.handle, "tenant", "second"), /expired/)
   assert.throws(() => store.resolve(third.handle, "tenant", "third"), /expired/)
 })
-test("R357 over128 cross-subject previews retain normal GetSkill and DownloadSkill, evicted metadata can be reapplied", async () => {
+test("R357 over128 cross-subject explicit downloads retain bounded eviction and renewed metadata", async () => {
   let subject = "human-0"
   const expiresAt = Date.now() + 300000
   const app = await fixture(
@@ -1779,14 +1921,14 @@ test("R357 over128 cross-subject previews retain normal GetSkill and DownloadSki
     }),
   )
   try {
-    const first = await app.request(website + "GetSkill", {
+    const first = await app.request("/skill.v1.SkillService/DownloadSkill", {
       skillId: "stable-series",
     })
     assert.equal(first.status, 200)
     const oldPath = first.body.downloadInfo.downloadUrl.slice(4)
     for (let i = 1; i <= 129; i++) {
       subject = `human-${i}`
-      const result = await app.request(website + "GetSkill", {
+      const result = await app.request("/skill.v1.SkillService/DownloadSkill", {
         skillId: "stable-series",
       })
       assert.equal(result.status, 200, `preview ${i}`)
@@ -1924,7 +2066,7 @@ test("shared revision summary serves exact old revision through the admitted pub
   }
 })
 
-test("shared summary never calls series current or prepares a download", async () => {
+test("shared summary binds the old revision cover locator without inline proof, series current or download", async () => {
   const { SkillSpecificationService } = await import("../../src/application/skill-specification.ts")
   let current = 0
   const service = new SkillSpecificationService({
@@ -1966,7 +2108,7 @@ test("shared summary never calls series current or prepares a download", async (
     new AbortController().signal,
     performance.now() + 1000,
   )
-  assert.deepEqual(result, sharedSummary)
+  assert.deepEqual(result, { ...sharedSummary, cover_image: "/api/v1/skills/version-old/cover" })
   assert.equal(current, 0)
 })
 

@@ -1,9 +1,11 @@
+import { restorePublic24SkillDetailContract } from "./skill-detail-public-contract.mjs"
 // Build/test-only exact inverse; never imported by runtime.
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 const proof = JSON.parse(readFileSync(new URL("../contract/tests/billing-metering.json", import.meta.url), "utf8"))
 const hash = (value) => createHash("sha256").update(value).digest("hex")
 export function restoreMcpSelectionContract(source) {
+  source = restorePublic24SkillDetailContract(source)
   if (/^  version: 24\.0\.0$/mu.test(source)) {
     if (hash(source) !== "f4caf11f3cd9255d2cd9daf69b74ff9988505d640e31c686ce495e6d8a578b2c") throw Error("Exact MCP selection current contract drift")
     source = source
