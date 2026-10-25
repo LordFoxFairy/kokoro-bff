@@ -1,3 +1,13 @@
+## 2026-10-25 MCP 项目发布私有消费者已交付（正常未激活）
+
+独立私有 browser/v1 发布、pin 列表／移除及原命令回执接固定 Platform dd8d536a28059cbdbe0674debc47bf28d039fb47 的五项正式 artifact，原通用 Platform pin 不改。BFF沿当前 Session/MCP权限及项目 owner 在调用前后重验，不读 Platform SQL、不复制连接或秘密；只返回定义 pin，execution_ready=false。
+
+错误 profile1.1闭合 status/code/retryable，46消费者向量来自原共享源加具名错误。只有首次明确自有400/412拒绝、从无unknown且用户改意图才允许新命令；receipt404与ACK后403/404/503不能证明未提交，保原body/key。独立只读复核未发现确定P0–P2。
+
+Root原 owner 停写801非MD输入：contract1070、architecture36、默认1764通过/3资源跳过，lint/types/build（architecture/default内）通过，零漂移。format仍因原 contract/connector-command-errors-v1.json 单文件失败，其原SHA保持；未改门禁、不称完整合并门全绿。新增真实bootstrap HTTP/原生消费者51项已覆盖，非正常上游组合旅程；未执行本片真实PG/Redis，因BFF无数据模型变更且对应主链仍待正常配对。证据Root ignored var/dev/mcp-project-publication-20261025/root-bff-reviewed。
+
+本片仅本地提交，正常仍400fab6；App消费者、浏览器项目选择/刷新恢复及实际执行绑定另行验收。无push/PR/merge或Root gitlink提升。
+
 ## 2026-10-24 图标暂存消费者已接（未激活）
 
 固定Platform 7d8115a4b0dc752687babe7db35d0a936f51c76a原生Git bundle并正规生成；五个browser-private图标操作沿原Product准入／总预算／取消／receipt profile，原Server／CustomAPI保存已接selector／clear及同义digest，安全图标与fresh引用只投影当前字段。Public24、独立HTTP／其它owner pins及canonical SQL原字节保持。原无图请求不改digest，不提前创建连接器。

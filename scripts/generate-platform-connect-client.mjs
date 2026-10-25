@@ -42,6 +42,23 @@ const artifactDigests = {
   "execution-operations/skill-publication-precondition-v1.vectors.json": "f995955cf5fb79ba5067b34fd7b46011692bf584aade7b956fb4b423e3b9a055",
   "execution-operations/skill-series-delete-v1.json": "d1d12d52a244cb4abba87ed04d5480e5c6db3a2653d1b2b07be91d6a3576a1c3",
 }
+// Independently pinned committed publication profile; the existing broad bundle remains unchanged.
+const publicationOwnerCommit = "dd8d536a28059cbdbe0674debc47bf28d039fb47"
+const publicationVendor = `contract/vendor/kokoro-platform/${publicationOwnerCommit}`
+const publicationDigests = {
+  "publication-provenance.json": "10f9d0846ad4cd3c5a1b057e86c4a7aa4db523ecd7b4325847962269454349bb",
+  "descriptor/mcp-project-publication-v1.binpb": "ddd31dbb7577769c80cb5b8f3ff5fd6bd697455f1e50a2a95c537d365669a152",
+  "mcp-project-publication/v1/profile.json": "be466c6bd54eb5abfb288042d53b97595217e6c5b33d7048552048cbb1020b19",
+  "mcp-project-publication/v1/request-vectors.json": "ced732040fa1e25193844c97a70fdd8530a96c548ebad19b9df9835478611fc5",
+  "proto/kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
+  "proto/kokoro/platform/v1/mcp_project_publication.proto": "d27615eed4df8988ce3fa1dea120a76723b1b23559847ab0cb6cd962320226ba",
+}
+async function verifyPublication() {
+  assert.deepEqual((await tree(path.join(root, publicationVendor))).files, Object.keys(publicationDigests).sort(), "publication allowlist drifted")
+  for (const [file, digest] of Object.entries(publicationDigests))
+    assert.equal(sha256(await readFile(path.join(root, publicationVendor, file))), digest, `publication artifact drifted: ${file}`)
+}
+
 const provenanceCombinedSha256 = "bba02331dc06e30fddeeded02a40d5d5730671b86ab6bcc94b5e272ba7c1224e"
 const ownerGenerated = {
   path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
@@ -51,6 +68,7 @@ const generatedFiles = [
   "command-receipt-errors.ts",
   "kokoro/common/v1/common_pb.ts",
   "kokoro/platform/v1/mcp_package_admin_pb.ts",
+  "kokoro/platform/v1/mcp_project_publication_pb.ts",
   "kokoro/platform/v1/platform_runtime_pb.ts",
   "kokoro/storage/v3/storage_pb.ts",
 ]
@@ -158,6 +176,18 @@ async function verifyInputs() {
 
 async function generate(directory) {
   await run(path.join(root, "node_modules/.bin/buf"), ["generate", "--template", "buf.platform.gen.json", "--output", directory, vendorProto])
+  await run(path.join(root, "node_modules/.bin/buf"), [
+    "generate",
+    "--config",
+    JSON.stringify({ version: "v2", modules: [{ path: `${publicationVendor}/proto` }] }),
+    "--template",
+    "buf.platform.gen.json",
+    "--output",
+    directory,
+    `${publicationVendor}/proto`,
+    "--path",
+    `${publicationVendor}/proto/kokoro/platform/v1/mcp_project_publication.proto`,
+  ])
   const receipt = JSON.parse(await readFile(path.join(root, vendorRoot, "errors/command-receipt-v1.json"), "utf8"))
   assert.equal(receipt.profile, "platform-command-receipt-errors")
   assert.equal(receipt.version, "1.0.0")
@@ -225,6 +255,18 @@ async function manifestFor(directory) {
       },
       generated: ownerGenerated,
     },
+    publication: {
+      status: "published-owner-contract",
+      repository_path: "apps/kokoro-capability",
+      repository_commit: publicationOwnerCommit,
+      base_commit: ownerCommit,
+      profile: "mcp-project-publication-v1",
+      version: "1.0.0",
+      runtime_binding_implemented: false,
+      vendor: publicationVendor,
+      inputs: publicationDigests,
+      owner_generated_sha256: "a12957ded3c52e7276cee93d2cbe5788fbd0a1b92a518882991ab3421dd0fb1d",
+    },
     generator: {
       packages: { "@bufbuild/buf": "1.72.0", "@bufbuild/protobuf": "2.14.0", "@connectrpc/connect": "2.2.0", "protoc-gen-es": "2.14.0" },
       configs: await Promise.all(configFiles.map(async (file) => ({ path: file, sha256: sha256(await readFile(path.join(root, file))) }))),
@@ -239,6 +281,7 @@ async function main() {
   const mode = process.argv[2]
   assert.ok(mode === "--write" || mode === "--check", "expected --write or --check")
   await verifyInputs()
+  await verifyPublication()
   const temporary = await mkdtemp(path.join(tmpdir(), "kokoro-platform-connect-"))
   try {
     await writeFile(path.join(temporary, "package.json"), '{"type":"module"}\n')

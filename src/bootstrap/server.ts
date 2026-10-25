@@ -1,3 +1,4 @@
+import { mcpProjectPublicationOperation, mcpProjectPublicationRoute } from "../http/routes/mcp-project-publication.js"
 import { liveAdminMetering, matchMeteringAdmin } from "../http/routes/billing-metering-admin.js"
 import { liveAdminCreditGrant } from "../http/routes/billing-credit-grant-admin.js"
 import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
@@ -317,13 +318,19 @@ async function handle(
     (businessPath[0] === "admin" && businessPath[1] === "skills") ||
     (businessPath[0] === "self" && businessPath[1] === "skills")
   if (hasSkillsBudget) startSkillRequestBudget(request)
-  const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath, browserPrivateMcp)
+  const projectPublicationOperation = browserPrivateMcp ? mcpProjectPublicationOperation(businessPath, request.method ?? "GET") : null
+  const isMcpProjectPublication = projectPublicationOperation !== null
+  const mcpAction = isMcpProjectPublication
+    ? projectPublicationOperation === "list"
+      ? "read"
+      : "manage"
+    : mcpActionForRequest(request.method ?? "GET", businessPath, browserPrivateMcp)
   const isMcpPersonalOperation = browserPrivateMcp && mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
   const isCustomApiOperation = browserPrivateMcp && customApiOperation(businessPath, request.method ?? "GET") !== null
   const defersMcpPersonalReadAction = isMcpPersonalOperation && request.method === "GET"
   const isMcpPackageAdminOperation = !browserPrivateMcp && mcpPackageAdminOperation(businessPath, request.method ?? "GET") !== null
   const isMcpProviderAdminOperation = !browserPrivateMcp && mcpProviderAdminOperation(businessPath, request.method ?? "GET") !== null
-  if (browserPrivateMcp && !isMcpPersonalOperation && !isCustomApiOperation) {
+  if (browserPrivateMcp && !isMcpPersonalOperation && !isCustomApiOperation && !isMcpProjectPublication) {
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
   }
@@ -555,7 +562,7 @@ async function handle(
     await customApiRoute(request, response, composition, admission.context, id, businessPath)
     return
   }
-  if (hasMcpBudget && !isMcpPersonalOperation && (request.method !== "GET" || businessPath[0] === "self")) {
+  if (hasMcpBudget && !isMcpPersonalOperation && !isMcpProjectPublication && (request.method !== "GET" || businessPath[0] === "self")) {
     if (!response.destroyed && !response.writableEnded)
       send(response, 503, failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", id))
     return
@@ -592,6 +599,34 @@ async function handle(
     signal.throwIfAborted()
     if (!project) throw new ConnectError("Project not found", Code.NotFound)
     return project.id
+  }
+  if (isMcpProjectPublication) {
+    await mcpProjectPublicationRoute(
+      request,
+      response,
+      { tenant: context.identity.namespace, subject: context.identity.userId, requestId: context.requestId },
+      businessPath,
+      composition.mcpProjectPublicationClient,
+      async (projectIds, action, signal) => {
+        const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+        if (!fresh.ok) throw new ConnectError("Project publication admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
+        if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+          throw new ConnectError("Project not found", Code.NotFound)
+        const checked = await authorizeMcpAction(composition.mcpAuthorization, fresh, action, signal)
+        if (!checked.ok) throw new ConnectError("MCP action denied", checked.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
+        if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+        for (const projectId of projectIds) {
+          signal.throwIfAborted()
+          const project = await composition.businessStore.services.projects.find(
+            { tenantId: fresh.context.identity.namespace, subjectId: fresh.context.identity.userId },
+            projectId,
+          )
+          signal.throwIfAborted()
+          if (!project || project.id !== projectId) throw new ConnectError("Project not found", Code.NotFound)
+        }
+      },
+    )
+    return
   }
   if (isMcpPersonalOperation) {
     await mcpPersonalRoute(request, response, config, composition, admission, businessPath)

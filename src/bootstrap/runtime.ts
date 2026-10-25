@@ -1,3 +1,5 @@
+import { McpProjectPublicationConnectClient } from "../infrastructure/clients/platform/mcp-project-publication-connect.js"
+import type { McpProjectPublicationClient } from "../infrastructure/clients/platform/mcp-project-publication.js"
 import { AppSkillBindingConnectClient } from "../infrastructure/clients/platform/app-skill-binding-connect.js"
 import type { AppSkillBindingClient } from "../application/app-skill-bindings.types.js"
 import { OpenAppManagementAdmissionClient, type OpenAppManagementAdmission } from "../auth/open-app-management-admission.client.js"
@@ -80,6 +82,7 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
+  mcpProjectPublicationClient: McpProjectPublicationClient | null
   mcpPersonalClient:
     | (Pick<McpPersonalConnectClient, "read"> &
         Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon">>)
@@ -123,6 +126,7 @@ export type BffServerComposition = {
 }
 
 export type BffCompositionOptions = {
+  mcpProjectPublicationClient?: McpProjectPublicationClient | null
   mcpPersonalClient?:
     | (Pick<McpPersonalConnectClient, "read"> &
         Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon">>)
@@ -404,6 +408,15 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     config.platformProjection?.baseUrl && config.platformProjection.credentialFile
       ? new PlatformProjectionHttpClient(config.platformProjection.baseUrl, config.platformProjection.credentialFile, config.platformProjection.timeoutMs)
       : null
+  const mcpProjectPublicationClient =
+    options.mcpProjectPublicationClient !== undefined
+      ? options.mcpProjectPublicationClient
+      : config.mcpPersonal
+        ? new McpProjectPublicationConnectClient(
+            config.mcpPersonal.baseUrl,
+            new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"),
+          )
+        : null
   const mcpPersonalClient =
     options.mcpPersonalClient !== undefined
       ? options.mcpPersonalClient
@@ -438,6 +451,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const close = (): Promise<void> => {
     if (closePromise !== null) return closePromise
     closePromise = (async (): Promise<void> => {
+      mcpProjectPublicationClient?.close?.()
       mcpPersonalClient?.close?.()
       mcpProviderAdminClient?.close?.()
       mcpPackageAdminClient?.close?.()
@@ -449,6 +463,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     return closePromise
   }
   return {
+    mcpProjectPublicationClient,
     mcpPersonalClient,
     mcpProviderAdminClient,
     mcpPackageAdminClient,

@@ -1,3 +1,9 @@
+## URL MCP 项目定义发布候选（2026-10-25）
+
+私有错误profile1.1由同一canonical源发布exact tuple；runtime mapper共用自有定义，generator组合既有MCP receipt policy并绑定SHA，原shared文件不变。HTTP行为回归保首次400/412明确拒绝的有限修改能力与unknown/ACK后404/receipt404锁，机器向量不以retryable授新key。
+
+`src/application/mcp-project-publication.contract.ts` 是四个 browser-private 操作的 code-first 事实源，既有 `generate-connector-command-errors.mjs` 生成其私有 OpenAPI；Public24 不变。`routes/mcp-project-publication.ts` 与 bootstrap 共用现 Session/MCP action 和当前本人 canonical Project 准入，先全目标验证再单次 owner 操作、回包前重验。`clients/platform/mcp-project-publication{,-connect}.ts` 消费固定实际提交 dd8d536a28059cbdbe0674debc47bf28d039fb47 的独立 Platform Proto/profile/descriptor，以原 key/body/CAS/digest 只读查询 receipt；pin ACK 显式 execution_ready=false，不是运行权限。无 BFF Schema 或 message/dispatch 变更。两个 `test/mcp-project-publication-*` 覆盖真实 bootstrap HTTP 及二进制 loopback transport；非正常业务/PG 联调。精确依赖/生成入口见 `contract/dependencies/platform-connect.json`，五项冻结artifact已按实际Git对象核等；BFF集成和正常激活仍由Root负责。
+
 ## Prepare核验后原请求恢复（2026-10-24）
 
 既有connector-command-fault.ts唯一code-first政策1.1增加Prepare专属核验条件，原错误分类不变；既有generate-connector-command-errors正规生成browser-private JSON。test/mcp-personal-server.test.ts同时证明新闭集与1.0整份原件逆证，无新public operation/表/服务。实际配对与剩余见CURRENT。

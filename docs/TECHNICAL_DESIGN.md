@@ -1,3 +1,15 @@
+## 2026-10-25 URL MCP 项目定义发布（隔离候选，未激活）
+
+错误恢复不由HTTP status或retryable单独决定：owner ACK后的第二次准入也可能给403/404/503，故这些失败保原key/body/CAS并只允许当前主体核原receipt。首次确定的自有400输入拒绝和自有412前置条件拒绝可收回未提交意图供用户修改；一旦有历史unknown，同码也收紧为inspect_owner，shared replay_expired412仍原策略。唯一自有tuple定义在application/mcp-project-publication.contract.ts，由runtime mapper与既有generator共用；共享receipt政策只引用现source，不导入第二套错误registry。正式profile绑定与正负consumer向量均生成，HTTP测试覆盖实际前置拒绝/ACK后404/原receipt404/unknown后400或412。
+
+沿 Root 既有 stage12/publish-design-review 及五面板，BFF 只拥有现项目的当前本人准入和 browser-private HTTP 投影；不可变 URL revision、project pin、CAS 与永久原命令回执归 Platform。复用当前 Product Session、mcp_personal 人类 read/manage 与现 service credential；不增加认证方案、owner SQL、表或执行许可。
+
+新增四操作：发布到全部已选项目、读取项目 pins（含墓碑）、显式移除一个 pin、查询原 typed 发布/移除回执。所有项目必须来自正式项目列表的 canonical ID；本 owner find 需精确同 ID，拒绝可变 slug 重解析，避免原 key 的目标发生变化。一次有界请求共享 10 秒预算，解析闭集 body 后 fresh Session/同 tenant/subject、MCP action、全部项目逐个先验通过才调用 owner；返回前再次同样重核。任一不可见/删项目即拒绝，不把部分通过变成部分发布，不把本地准入说成跨 owner 原子事务。
+
+HTTP 层没有自动重试。Publish/Remove 保原 key、source CAS、目标顺序规范及 pin CAS；receipt 请求只能调用 owner 查询，404 仅表示本次未找到已提交回执，不证明未提交/已取消，不授权新 key。调用后取消、准入失败或坏 ACK 均不伪造成功；owner receipt 由原主体后续显式核实。原列表/pin当前状态不是 ACK。查询/变更均拒绝 execution_ready=true，本片 ACK 只证明定义绑定。
+
+消息/dispatch/Agent/IAM/runtime 的精确项目 revision 冻结与 Connection 授权未接；既有个人 MCP 选择和 Run schema 保持。已消费 Platform mcp-project-publication-v1/1.0.0 的实际提交 dd8d536a28059cbdbe0674debc47bf28d039fb47（Proto d27615ee、descriptor ddd31dbb），独立 commit vendor 与现生成器记录 exact Git artifact摘要及 published-owner-contract 状态；五项原冻结artifact字节保持，原7d通用bundle不变。既有 mcpPersonal baseUrl/credential 自动装配四 RPC client，fresh mcp_personal 凭据、1MiB传输上限、预算/取消/no-retry保持。Root 后继串行完成BFF集成和正常完整配对。
+
 ## 2026-10-24 连接器图标消费者（实施中，未激活）
 
 沿已批准独立暂存方案，固定 Platform 7d8115a4b0dc752687babe7db35d0a936f51c76a 原生 Git artifact，复用 ProductMcpPersonalService 与当前 BFF 窄 client／原准入、总预算和取消。Browser 私有五操作在 /browser/v1/mcp/icons：POST uploads、POST import、GET {intent_id}、POST {intent_id}/complete、POST {intent_id}/cancel；不扩 Public24 或新增 BFF 表／资源。选图不创建连接器；原 Server／CustomAPI 保存显式 selector／clear，digest 与 owner 同义。Get 只读、unknown 不自动重试／换 key；短 PUT／GET 引用只即时转发，持久化恢复只保原命令身份，不存签名 URL。失败遵循现 MCP receipt profile。

@@ -1,3 +1,18 @@
+## 2026-10-25 browser-private URL MCP 项目发布（隔离候选）
+
+私有 profile1.1 的每个非200响应现由 canonical code-first 源生成精确 status/code/retryable 闭集；自有9类失败、原bootstrap的8个Session/service/tenant/action准入tuple及现 connector-command-errors-v1.json 的MCP6个receipt tuple组合发布。shared来源带文件SHA，未复制可编辑receipt政策；message不参与分类。生成的consumer vectors区分首次明确拒绝与已有unknown。仅精确400/mcp_project_publication_request_invalid/false和412/mcp_project_publication_precondition_failed/false，在publish/remove无任何历史unknown且用户显式修改意图后允许新命令；其余tuple、错status/bit/未知码、receipt查询、receipt404均不授权新key。所有自动重试=false。
+
+Public24 与现公开 OpenAPI 原件不变。唯一可编辑新 HTTP schema 为 src/application/mcp-project-publication.contract.ts；私有 OpenAPI/profile 只从该源生成，不复制第二份手写 schema。现 browser service envelope + 人类 Session；当前 MCP read/manage 与全部 canonical 本人项目资格每次重核，无body tenant/subject/权限声明。
+
+- POST /browser/v1/mcp/servers/{server_id}/project-publications：原 Idempotency-Key + connector_id、expected_source_state_version、1..32 唯一 targets；每项 project_id 和 expected_pin={absent:true} 或 {current:{pin_id,state_version}}。
+- GET /browser/v1/projects/{project_id}/mcp-pins：limit 默认50/max100、opaque cursor；无body或key，返回真实 pins/next_cursor，包括 removed 墓碑。
+- DELETE /browser/v1/projects/{project_id}/mcp-pins/{pin_id}：原 key + expected_state_version，不删除 source/revision/其他项目。
+- POST /browser/v1/mcp/project-publication-receipts：原 key + 恰一 publication（含原 server_id 和全部原发布字段）或 removal（原 project_id/pin_id/expected_state_version）；只查同操作原ACK，绝不转入变更。
+
+成功200、data envelope、no-store/x-request-id。Publish ACK包含exact revision和全部exact pins/replayed；移除ACK只含本pin/replayed；receipt返回类型化原ACK。execution_ready 必须 false，不能由个人connection状态推断。闭集输入错误400、不可见404、当前权限403、idempotency conflict/in-progress409、CAS412、限制429、坏owner502、依赖/超时/未知503；无异常文本/凭据泄漏。429保合法Retry-After，未知结果只允许当前主体显式原key/body恢复，不授新命令。
+
+source/pin CAS 为1..2147483647十进制字符串；ID沿冻结profile、目标按ASCII canonical ID排序，摘要是固定数组JSON元组而非JCS。新成功current pin推进+1，removed墓碑重发必须exact current，原成功receipt保历史ACK。已固定独立 Platform profile/descriptor/vectors 到实际提交 dd8d536a28059cbdbe0674debc47bf28d039fb47，五项原冻结artifact摘要经该commit逐一核等；receipt marker精确沿原 connector-command-errors-v1.json 的mcp闭集映射，通用错误用mcp_project_publication_*。profile vectors_sha256为向量JCS摘要、vendor manifest为pretty文件字节SHA，两者分开验证。源 metadata/URL/OAuth/Header 不通过新HTTP输出，外部凭据不被复制；本片不改变现删除/授权/消息/运行契约。
+
 ## 2026-10-24 browser-private 图标暂存（实施中）
 
 固定 Platform 7d8115a4b0dc752687babe7db35d0a936f51c76a／mcp-icon-v1；仍 Public24，原无图请求字节语义保持。POST /browser/v1/mcp/icons/uploads 接 filename/mime_type/content_sha256/size_bytes（十进制字符串，1..1048576）；POST icons/import 接 image_url；GET icons/{intent_id} 无 body/key；POST icons/{intent_id}/complete 接 expected_state_version 与 source_version_id，cancel 仅接 expected_state_version。四写均要求原 Idempotency-Key，主体只来自 admission；UUID intent、版本1..2147483646。返回安全 intent／replayed 与即时 upload_reference 或 preview_reference，no-store。原 Server／CustomAPI create 可选 icon={intent_id,expected_state_version}；update 同字段或 clear_icon=true 互斥，缺省保留绑定；metadata/save ACK 无持久短 URL。错误沿现 MCP／CustomAPI profile，未知结果只能显式复用原命令。

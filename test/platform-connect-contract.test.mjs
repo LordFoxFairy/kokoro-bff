@@ -140,6 +140,7 @@ test("Platform generator rejects input, artifact, provenance and vendor-layout d
         "command-receipt-errors.ts",
         "kokoro/common/v1/common_pb.ts",
         "kokoro/platform/v1/mcp_package_admin_pb.ts",
+        "kokoro/platform/v1/mcp_project_publication_pb.ts",
         "kokoro/platform/v1/platform_runtime_pb.ts",
         "kokoro/storage/v3/storage_pb.ts",
       ],
@@ -212,4 +213,87 @@ test("MCP availability publication pins the exact required enum without activati
   )
   assert.deepEqual(profile.response_fields, { PersonalMcpConnector: 13, PersonalMcpServer: 15 })
   assert.deepEqual(profile.json_values, ["available", "refresh_required", "refreshing", "reauthorization_required", "unavailable"])
+})
+
+test("independent publication pins exact committed owner artifacts without claiming execution readiness", async () => {
+  const { fromBinary } = await import("@bufbuild/protobuf")
+  const { FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
+  const { canonicalizeJcs } = await import("../dist/infrastructure/clients/platform/jcs.js")
+  const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
+  const candidate = manifest.publication
+  assert.ok(candidate, "missing exact committed publication manifest")
+  assert.equal(candidate.status, "published-owner-contract")
+  assert.equal(candidate.base_commit, ownerCommit)
+  assert.equal(candidate.repository_commit, "dd8d536a28059cbdbe0674debc47bf28d039fb47")
+  assert.equal(candidate.runtime_binding_implemented, false)
+  const provenance = JSON.parse(await requiredFile(`${candidate.vendor}/publication-provenance.json`))
+  assert.equal(provenance.repository_commit, candidate.repository_commit)
+  assert.equal(provenance.status, "published-owner-contract")
+  assert.equal(provenance.runtime_binding_implemented, false)
+  for (const [file, digest] of Object.entries(candidate.inputs)) assert.equal(sha256(await requiredFile(`${candidate.vendor}/${file}`)), digest)
+  const profile = JSON.parse(await requiredFile(`${candidate.vendor}/mcp-project-publication/v1/profile.json`))
+  const vectors = JSON.parse(await requiredFile(`${candidate.vendor}/mcp-project-publication/v1/request-vectors.json`))
+  assert.equal(profile.vectors_sha256, sha256(canonicalizeJcs(vectors)))
+  assert.equal(profile.semantics.execution_ready, "required presence and false")
+  const descriptor = fromBinary(FileDescriptorSetSchema, await requiredFile(`${candidate.vendor}/descriptor/mcp-project-publication-v1.binpb`))
+  const generated = await import("../dist/generated/platform-connect/kokoro/platform/v1/mcp_project_publication_pb.js")
+  const published = descriptor.file.find((file) => file.name === "kokoro/platform/v1/mcp_project_publication.proto")
+  assert.deepEqual(generated.file_kokoro_platform_v1_mcp_project_publication.proto, published)
+  assert.deepEqual(
+    generated.ProductMcpProjectPublicationService.methods.map((method) => method.name),
+    profile.methods.map((method) => method.method),
+  )
+})
+
+test("private publication schemas publish exact status-code-retryable tuples from the one shared receipt profile", async () => {
+  const contract = JSON.parse(await requiredFile("contract/openapi/browser/v1/mcp-project-publication.json"))
+  const policy = contract["x-kokoro-publication-policy"],
+    sharedBytes = await requiredFile("contract/connector-command-errors-v1.json"),
+    shared = JSON.parse(sharedBytes)
+  assert.equal(policy.version, "1.1.0")
+  assert.equal(contract["x-kokoro-shared-command-errors"].sha256, sha256(sharedBytes))
+  assert.equal(contract["x-kokoro-shared-command-errors"].group, "mcp")
+  const { mcpProjectPublicationError } = await import("../src/application/mcp-project-publication.contract.ts")
+  for (const paths of Object.values(contract.paths))
+    for (const operation of Object.values(paths)) {
+      for (const [status, response] of Object.entries(operation.responses)) {
+        if (status === "200") continue
+        const schema = response.content["application/json"].schema,
+          alternatives = schema.anyOf ?? [schema]
+        assert.ok(alternatives.length > 0)
+        for (const alternative of alternatives) {
+          assert.equal(alternative.additionalProperties, false)
+          const error = alternative.properties.error
+          assert.equal(error.additionalProperties, false)
+          assert.equal(typeof error.properties.code.const, "string")
+          assert.equal(typeof error.properties.retryable.const, "boolean")
+        }
+        const validator = mcpProjectPublicationError(Number(status), Object.values(shared.mcp))
+        assert.equal(validator.safeParse({ error: { code: "unrecognized_failure", message: "opaque", retryable: false } }).success, false)
+        for (const alternative of alternatives) {
+          const value = alternative.properties.error.properties
+          assert.equal(validator.safeParse({ error: { code: value.code.const, message: "opaque", retryable: !value.retryable.const } }).success, false)
+        }
+      }
+    }
+  const vectors = contract["x-kokoro-publication-error-vectors"]
+  for (const value of Object.values(shared.mcp))
+    for (const prior_unknown of [false, true]) {
+      const vector = vectors.find((item) => item.code === value.code && item.prior_unknown === prior_unknown)
+      assert.equal(vector.status, value.status)
+      assert.equal(vector.retryable, value.retryable)
+      assert.equal(vector.recovery, value.recovery)
+      assert.equal(vector.new_command_authorized, false)
+    }
+  assert.deepEqual(
+    vectors
+      .filter((value) => value.new_command_authorized)
+      .map((value) => value.code)
+      .sort(),
+    ["mcp_project_publication_precondition_failed", "mcp_project_publication_request_invalid"],
+  )
+  assert.equal(
+    vectors.some((value) => value.prior_unknown && value.new_command_authorized),
+    false,
+  )
 })

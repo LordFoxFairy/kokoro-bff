@@ -1,3 +1,11 @@
+## 2026-10-25 URL MCP 项目发布消费者（无新增 BFF 数据）
+
+错误profile与consumer向量仅为传输/恢复约束，不保存命令结果或新增BFF状态。已有unknown锁由消费者保留，任何缺回执或当前权限失败不证明原事务未提交；共享receipt事实仍只归Platform。
+
+BFF canonical database/schema.sql 原字节不变；仅通过现 projects.find 的 tenant/subject/current-owned/deleted 谓词读取本 owner 项目并核canonical ID。不新增 revision/pin/receipt 镜像、缓存、表或跨owner事务。Platform 独占不可变 URL revision、当前项目pin与历史ACK；项目删除后的后续读取/发布/执行准入立即失败，残余owner pin不复活项目。
+
+原命令未知结果不落BFF假成功，不从当前pin或源版本重构ACK；当前Session/项目资格与历史receipt分开。Header/OAuth/短时签名引用不复制、不落日志。本片不修改message/dispatch JSONB、执行选择/摘要、Agent Run或runtime模型；真实项目revision执行为后继明确开放。
+
 ## 2026-10-24 图标暂存消费者
 
 本片 BFF 无新增数据 owner、表或 Schema。intent、绑定、回收及 receipt 归 Platform；文件／扫描归 Storage。BFF 不落库签名引用，不访问其数据库。原保存幂等由既有 owner receipt 承接。
