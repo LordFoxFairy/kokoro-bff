@@ -1,3 +1,7 @@
+## preflight-first AG-UI 投影（2026-10-25，候选）
+
+现 postgres agui-projection/process/interaction-projection 在原锁、source、lease 和 FIFO 边界承接 current trusted Skill prelude，不造 START/process；chat-repository 仅容严格 initial terminal 的 queued 中间页，agui-consumer-repository 共享 GC 边界保 selected 真 START 的 activity 首 provenance。回归在现 test/agui-projection.integration.mjs；Schema、Public25、Agent 和正常资源不在本片写区。
+
 ## GetSkill metadata-only（2026-10-25，候选）
 
 现 `SkillSpecificationSource.readDetail` / `SkillSpecificationService.readDetail` 仅复用已授权 owner current 与展示 mapper；`platform-projection.ts` 的 GetSkill 分支校 strict skill-only/id/exact UID，不调用包或 handle。DownloadSkill/confirm/字节链保持独立。Public25 唯一 canonical 与 `scripts/skill-detail-public-contract.mjs` 的完整 Public24 inverse 接原 metering 检查链；具名 RED/边界回归留在现 `test/contract/skill-specification-http.test.mjs`。正常配对由 Root 负责。

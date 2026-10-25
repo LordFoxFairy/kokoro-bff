@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import type { PoolClient } from "pg"
+import { parseAgentProcessPayload } from "../clients/agent/process-state.js"
 
 import type { AgUiEvent } from "../../application/agui/project-chat-event.js"
 import type { AgUiSourceProjection } from "../../application/agui/ports/agui-projection-repository.js"
@@ -27,6 +28,7 @@ export async function projectRunProcessFrame(
   frame: AgUiEvent,
   publicSequence: number,
   publicCursor: string,
+  allowStartlessSkill = false,
 ): Promise<void> {
   const runId = frame.runId ?? frame.metadata.kokoro.run_id
   if (runId === null || runId === undefined || runId === "") return
@@ -79,13 +81,17 @@ export async function projectRunProcessFrame(
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("AGUI_PROCESS_ACTIVITY_INVALID")
   const activity = value as Record<string, unknown>
   if (typeof activity.activity_id !== "string" || typeof activity.activity !== "string") throw new Error("AGUI_PROCESS_ACTIVITY_INVALID")
+  // This exemption is supplied only after the repository's current trusted FIFO gate.
+  // Reuse the owner decoder so it never admits another activity kind or an open shape.
+  const prelude = allowStartlessSkill ? parseAgentProcessPayload("activity", JSON.stringify(activity)) : null
+  const acceptedPrelude = prelude?.kind === "activity.updated" && prelude.value.activity === "skill"
   const result = await client.query(
     `INSERT INTO bff_agui_run_activity
        (tenant_id,session_id,run_id,activity_id,subject_id,activity_kind,safe_payload,payload_digest,
         first_source_owner,first_source_event_id,first_source_sequence,first_source_digest,first_source_occurred_at,first_public_sequence,first_public_cursor,
         latest_source_owner,latest_source_event_id,latest_source_sequence,latest_source_digest,latest_source_occurred_at,latest_public_sequence,latest_public_cursor)
      SELECT $1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15,$9,$10,$11,$12,$13,$14,$15
-      WHERE EXISTS (SELECT 1 FROM bff_agui_run_process WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3 AND subject_id=$5)
+      WHERE $16::boolean OR EXISTS (SELECT 1 FROM bff_agui_run_process WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3 AND subject_id=$5)
      ON CONFLICT (tenant_id,session_id,run_id,activity_id) DO UPDATE SET
        activity_kind=EXCLUDED.activity_kind,safe_payload=EXCLUDED.safe_payload,payload_digest=EXCLUDED.payload_digest,
        latest_source_owner=EXCLUDED.latest_source_owner,latest_source_event_id=EXCLUDED.latest_source_event_id,
@@ -103,6 +109,7 @@ export async function projectRunProcessFrame(
       JSON.stringify(activity),
       digest(activity),
       ...provenance,
+      acceptedPrelude,
     ],
   )
   if (result.rowCount !== 1) throw new Error("AGUI_PROCESS_START_MISSING")

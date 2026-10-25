@@ -1,3 +1,7 @@
+## 2026-10-25 既有 AG-UI 的合法 preflight 前缀（候选）
+
+固定 Agent 允许 Skill activity 早于 initial RUN_STARTED，build 失败可零 START。BFF 保原 source/CUSTOM 顺序和 opaque cursor，仅当前可信 expected/FIFO 接受头、主体全等及既有 leased/retryable/admitted ACK race 可保存 closed Skill prelude；它不是 active/process/执行开始声明。无 START 的首次 terminal interaction 仅接受 revision1、pause0、null pause_ref、groups[]、null action_result；切页/重启快照仍 queued 且无可操作 pause，真正 run.failed/run.completed 才结算 FIFO。其他 pre-START Todo/tool/subagent/可操作 interaction 仍拒绝，source 重用漂移及旧 lease 仍回滚。公开路径、shape、Public25 和 generated 原字节不变。
+
 ## 2026-10-25 GetSkill metadata-only / Public25（Root 已裁决，未正常激活）
 
 既有 `POST /skill.v1.SkillOptionalService/GetSkill {skillId}` 仍是当前 Session/tenant 授权的 browser-private beta 展示读取；skillId 保 series 显式 current 语义，成功严格为 `{skill}`，无 downloadInfo，不访问 package/Storage 或创建下载 handle。此成功只证明返回的 exact revision metadata 已获准读取，不证明文件可用。唯一 canonical 的 `SpecificationDetailResponse` 与现展示字段保持单一事实源，无新 endpoint、owner 或 Schema。

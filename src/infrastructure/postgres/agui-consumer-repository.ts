@@ -427,6 +427,22 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
                      ON dispatch.tenant_id=interaction.tenant_id AND dispatch.conversation_id=interaction.session_id AND dispatch.run_id=interaction.run_id
                   WHERE interaction.tenant_id=bff_agui_stream.tenant_id AND interaction.session_id=bff_agui_stream.session_id
                     AND dispatch.status IN ('pending','leased','retryable','admitted')),
+                bff_agui_stream.latest_run_start_sequence), COALESCE(
+                (SELECT min(activity.first_public_sequence)
+                   FROM bff_agui_run_activity AS activity
+                   JOIN bff_agui_run_process AS process
+                     ON process.tenant_id=activity.tenant_id AND process.session_id=activity.session_id
+                    AND process.run_id=activity.run_id AND process.subject_id=activity.subject_id
+                   JOIN bff_agui_event AS start
+                     ON start.tenant_id=process.tenant_id AND start.session_id=process.session_id
+                    AND start.public_sequence=process.start_public_sequence AND start.cursor=process.start_public_cursor
+                    AND start.source_owner=process.start_source_owner AND start.source_event_id=process.start_source_event_id
+                  WHERE activity.tenant_id=bff_agui_stream.tenant_id AND activity.session_id=bff_agui_stream.session_id
+                    AND activity.subject_id=bff_agui_stream.consumer_subject_id
+                    AND process.start_public_sequence=bff_agui_stream.latest_run_start_sequence
+                    AND start.event_type='RUN_STARTED' AND start.source_owner='kokoro-agent'
+                    AND start.event_payload->>'runId'=process.run_id AND start.event_payload #>> '{metadata,kokoro,run_id}'=process.run_id
+                    AND start.event_payload->>'threadId'=process.session_id),
                 bff_agui_stream.latest_run_start_sequence))`
       const streamCandidatesQuery = `SELECT tenant_id, session_id, ${effectiveRetainFrom}::text AS effective_retain_from
            FROM bff_agui_stream

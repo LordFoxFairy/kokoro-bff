@@ -73,7 +73,7 @@ function agentSource({ id, sequence, kind, payload, sessionId = "session_shared"
   }
 }
 
-async function submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix }) {
+async function submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix, dispatchState = "admitted" }) {
   await pool.query(
     `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
      VALUES ($1, $2, $3, 'Projection fixture') ON CONFLICT (conversation_id) DO NOTHING`,
@@ -89,6 +89,7 @@ async function submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffi
     content: `Turn ${suffix}`,
   })
   assert.ok(turn)
+  if (dispatchState === "pending") return turn.run_id
   const [claim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
     workerId: `worker_${suffix}`,
     limit: 1,
@@ -96,7 +97,9 @@ async function submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffi
     maxAttempts: 8,
   })
   assert.equal(claim.runId, turn.run_id)
-  assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+  if (dispatchState === "admitted") assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+  else if (dispatchState === "retryable") assert.equal(await store.agentDispatchOutbox.markAgentDispatchUnknown(claim, 1000, "fixture_unknown"), true)
+  else assert.equal(dispatchState, "leased")
   return turn.run_id
 }
 
@@ -4138,7 +4141,7 @@ async function r57Bounded(promise, label) {
     clearTimeout(timer)
   }
 }
-async function r57ProjectionContext(context) {
+async function r57ProjectionContext(context, { started = true, dispatchState = "admitted" } = {}) {
   const { randomUUID } = await import("node:crypto")
   const suffix = randomUUID().replaceAll("-", "")
   const tenantId = "r57_projection_" + suffix,
@@ -4209,6 +4212,7 @@ async function r57ProjectionContext(context) {
     sessionId,
     ownerId,
     suffix,
+    dispatchState,
   })
   const source = (sequence, payload, kind = "interaction.state", run = runId) => {
     const id = "r57_source_" + suffix + "_" + sequence
@@ -4267,7 +4271,7 @@ async function r57ProjectionContext(context) {
     }
     return facts
   }
-  await ingest([source(1, { run_id: runId }, "run.created")])
+  if (started) await ingest([source(1, { run_id: runId }, "run.created")])
   return {
     pool,
     store,
@@ -5580,3 +5584,294 @@ integrationTest("R353 same-batch terminal fences late Skill bookkeeping and reje
     await pool.end()
   }
 })
+
+// Preflight is an owner fact before START, not evidence that a process has begun.
+function preflightSource(c, sequence, phase, runId = c.runId) {
+  const value = {
+    activity: "skill",
+    activity_id: "act_" + "a".repeat(64),
+    preflight_id: "spf_" + "b".repeat(64),
+    source_refs: ["skill:revision"],
+    phase,
+    ...(phase === "failed" ? { error_code: "skill_load_failed" } : {}),
+  }
+  const source = c.source(sequence, value, "activity.updated", runId)
+  source.sourcePayload.event_type = "activity"
+  source.event = mapAgentEvent(source.sourcePayload)
+  return source
+}
+
+function initialTerminal() {
+  return { interaction_revision: 1, pause_revision: 0, pause_ref: null, phase: "terminal", groups: [], action_result: null }
+}
+
+function failedSource(c, sequence, runId = c.runId) {
+  return c.source(sequence, { failure: { source: "agent", code: "assembly_failed", retryable: false } }, "run.failed", runId)
+}
+
+integrationTest(
+  "preflight-first Skill pages stay queued until a real START and retain first provenance through selected GC",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context, { started: false })
+    const sources = [preflightSource(c, 1, "resolving"), preflightSource(c, 2, "loading"), preflightSource(c, 3, "ready")]
+    assert.deepEqual(await c.ingest(sources), { insertedSources: 3, insertedFrames: 3, sourceHighWatermark: 3 })
+    const queued = await c.snapshot()
+    assert.deepEqual(queued.execution_head, r57ExpectedHead(c.runId, "queued"))
+    assert.equal(queued.execution_process, null)
+    const before = await c.fingerprint()
+    assert.equal(before.bff_agui_run_process.length, 0)
+    assert.equal(before.bff_agui_stream[0].latest_run_id, null)
+    assert.equal(before.bff_agui_stream[0].latest_run_start_sequence, null)
+    assert.deepEqual(
+      before.bff_agui_event.slice(1).map((row) => [row.event_type, row.event_payload.value.phase]),
+      [
+        ["CUSTOM", "resolving"],
+        ["CUSTOM", "loading"],
+        ["CUSTOM", "ready"],
+      ],
+    )
+    assert.equal(before.bff_agui_run_activity[0].first_source_sequence, "1")
+    assert.equal(before.bff_agui_run_activity[0].latest_source_sequence, "3")
+    assert.equal((await c.ingest(sources)).insertedSources, 0)
+    assert.deepEqual(await c.fingerprint(), before)
+    await assert.rejects(c.ingest([{ ...sources[0], sourcePayload: { ...sources[0].sourcePayload, changed: true } }]))
+    assert.deepEqual(await c.fingerprint(), before)
+    await c.ingest([c.source(4, { run_id: c.runId }, "run.created")])
+    const active = await c.snapshot()
+    assert.deepEqual(active.execution_head, r57ExpectedHead(c.runId, "active"))
+    assert.deepEqual(active.execution_process.activities, [sources[2].event.payload])
+    await c.ingest([c.source(5, { status: "completed" }, "run.completed")])
+    const completed = await c.snapshot()
+    await c.pool.query("UPDATE bff_agui_event SET recorded_at=CURRENT_TIMESTAMP(3)-INTERVAL '40 days' WHERE tenant_id=$1 AND session_id=$2", [
+      c.tenantId,
+      c.sessionId,
+    ])
+    const collect = () =>
+      c.store.agUiConsumers.collectGarbage({ now: new Date().toISOString(), retentionMs: 1, tombstoneRetentionMs: 86400000, batchSize: 100 })
+    await collect()
+    const retained = await c.fingerprint()
+    assert.ok(retained.bff_agui_event.some((row) => row.cursor === before.bff_agui_run_activity[0].first_public_cursor))
+    assert.deepEqual((await c.snapshot()).execution_process, completed.execution_process)
+    const nextRun = await submitAndAdmit(c.store, c.pool, {
+      tenantId: c.tenantId,
+      sessionId: c.sessionId,
+      ownerId: c.ownerId,
+      suffix: "preflight_next_" + c.suffix,
+    })
+    await c.ingest([c.source(6, { run_id: nextRun }, "run.created", nextRun)])
+    await collect()
+    const after = await c.fingerprint()
+    assert.equal(after.bff_agui_run_activity.filter((row) => row.run_id === c.runId).length, 0)
+    assert.equal(after.bff_agui_run_process.filter((row) => row.run_id === c.runId).length, 0)
+    assert.equal((await c.snapshot()).execution_process.run_id, nextRun)
+    assert.equal((await c.store.agUi.replay(c.tenantId, c.sessionId, before.bff_agui_run_activity[0].first_public_cursor, 100)).kind, "expired_cursor")
+  },
+)
+
+integrationTest("preflight-first initial terminal survives a page and restart without START or FIFO settlement", { timeout: 30_000 }, async (context) => {
+  const c = await r57ProjectionContext(context, { started: false })
+  await c.ingest([preflightSource(c, 1, "failed"), c.source(2, initialTerminal())])
+  const before = await c.fingerprint()
+  assert.equal(before.bff_agent_dispatch_outbox[0].status, "admitted")
+  assert.equal(before.bff_agui_stream[0].expected_run_id, c.runId)
+  assert.equal(before.bff_agui_run_process.length, 0)
+  assert.equal(
+    before.bff_agui_event.some((row) => row.event_type === "RUN_STARTED"),
+    false,
+  )
+  const restarted = new PostgresBffRepositories(postgresUrl, redisUrl)
+  try {
+    await restarted.ready()
+    const snapshot = await restarted.services.chat.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+    assert.deepEqual(snapshot.execution_head, r57ExpectedHead(c.runId, "queued"))
+    assert.equal(snapshot.execution_process, null)
+    assert.equal((await restarted.agUi.ingest(c.tenantId, c.sessionId, [c.source(3, initialTerminal())])).insertedFrames, 0)
+    await restarted.agUi.ingest(c.tenantId, c.sessionId, [failedSource(c, 4)])
+  } finally {
+    await restarted.close()
+  }
+  const settled = await c.fingerprint()
+  assert.equal(settled.bff_agent_dispatch_outbox[0].status, "terminal")
+  assert.equal(settled.bff_agui_stream[0].expected_run_id, null)
+  assert.equal(settled.bff_agui_run_process.length, 0)
+  assert.equal((await c.snapshot()).messages.at(-1).status, "failed")
+  await assert.rejects(c.ingest([c.source(5, { run_id: c.runId }, "run.created")]))
+  assert.deepEqual(await c.fingerprint(), settled)
+})
+
+integrationTest(
+  "preflight-first assembly failure without Skills settles only on the real terminal then admits the next FIFO head",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context, { started: false })
+    const next = await c.store.services.chatTurns.submit({
+      tenantId: c.tenantId,
+      conversationId: c.sessionId,
+      subjectId: c.ownerId,
+      actorId: c.ownerId,
+      requestId: "preflight_fifo_" + c.suffix,
+      idempotencyKey: "preflight_fifo_" + c.suffix,
+      content: "next",
+    })
+    assert.ok(next)
+    await c.ingest([c.source(1, initialTerminal()), failedSource(c, 2)])
+    const snapshot = await c.snapshot()
+    assert.deepEqual(snapshot.execution_head, r57ExpectedHead(next.run_id, "queued"))
+    assert.equal(snapshot.execution_process, null)
+    const facts = await c.fingerprint()
+    assert.equal(facts.bff_agui_event.filter((row) => row.event_type === "RUN_STARTED").length, 0)
+    assert.equal(facts.bff_agui_stream[0].expected_run_id, null, "the old expected Run is cleared before the next claim")
+    const [claim] = await c.store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: "preflight_fifo_" + c.suffix,
+      limit: 1,
+      leaseDurationMs: 5000,
+      maxAttempts: 8,
+    })
+    assert.equal(claim.runId, next.run_id)
+    assert.equal(await c.store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+    await c.ingest([preflightSource(c, 3, "resolving", next.run_id)])
+    assert.equal((await c.fingerprint()).bff_agui_stream[0].expected_run_id, next.run_id)
+    assert.deepEqual((await c.snapshot()).execution_head, r57ExpectedHead(next.run_id, "queued"))
+  },
+)
+
+for (const dispatchState of ["leased", "retryable"]) {
+  integrationTest("preflight-first Skill accepts the existing " + dispatchState + " dispatch ACK race", { timeout: 30_000 }, async (context) => {
+    const c = await r57ProjectionContext(context, { started: false, dispatchState })
+    await c.ingest([preflightSource(c, 1, "resolving"), c.source(2, initialTerminal()), failedSource(c, 3)])
+    const facts = await c.fingerprint()
+    assert.equal(facts.bff_agent_dispatch_outbox[0].status, "terminal")
+    assert.equal(facts.bff_agui_run_process.length, 0)
+    assert.equal((await c.snapshot()).messages.at(-1).status, "failed")
+  })
+}
+
+integrationTest("preflight-first never admits pre-START Todo tool subagent or actionable and noninitial interactions", { timeout: 30_000 }, async (context) => {
+  const c = await r57ProjectionContext(context, { started: false })
+  const before = await c.fingerprint()
+  for (const source of [
+    c.source(1, { todos: [] }, "todo.updated"),
+    ...["tool", "subagent"].map((activity) =>
+      c.source(
+        1,
+        { activity, activity_id: "act_" + "c".repeat(64), segment_id: "seg_" + "d".repeat(64), status: "running", display_code: activity + ".execution" },
+        "activity.updated",
+      ),
+    ),
+    c.source(1, { ...initialTerminal(), phase: "active" }),
+    c.source(1, r57Waiting()),
+    c.source(1, { ...r57Waiting(), phase: "resuming", action_result: { command_id: "preflight_resume", pause_revision: 7, kind: "accepted" } }),
+    c.source(1, { ...initialTerminal(), interaction_revision: 2 }),
+    c.source(1, { ...initialTerminal(), pause_revision: 1, pause_ref: "pause:initial:1" }),
+    preflightSource(c, 1, "resolving", "unknown_run"),
+  ]) {
+    await assert.rejects(c.ingest([source]))
+    assert.deepEqual(await c.fingerprint(), before)
+  }
+})
+
+integrationTest(
+  "preflight-first rejects pending foreign actor retired consumer and wrong expected heads without any writes",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context, { started: false })
+    for (const [table, column, value, restore] of [
+      ["bff_agui_stream", "consumer_subject_id", "foreign_subject", c.ownerId],
+      ["bff_agent_dispatch_outbox", "subject_id", "foreign_subject", c.ownerId],
+      ["bff_conversation", "owner_id", "foreign_subject", c.ownerId],
+      ["bff_agui_stream", "expected_run_id", "stale_run", c.runId],
+      ["bff_agui_stream", "consumer_state", "blocked", "active"],
+    ]) {
+      const id = table === "bff_agui_stream" ? "session_id" : "conversation_id"
+      await c.pool.query(`UPDATE ${table} SET ${column}=$3 WHERE tenant_id=$1 AND ${id}=$2`, [c.tenantId, c.sessionId, value])
+      const before = await c.fingerprint()
+      await assert.rejects(c.ingest([preflightSource(c, 1, "resolving")]))
+      assert.deepEqual(await c.fingerprint(), before)
+      await c.pool.query(`UPDATE ${table} SET ${column}=$3 WHERE tenant_id=$1 AND ${id}=$2`, [c.tenantId, c.sessionId, restore])
+    }
+    const pending = await r57ProjectionContext(context, { started: false, dispatchState: "pending" })
+    const before = await pending.fingerprint()
+    await assert.rejects(pending.ingest([preflightSource(pending, 1, "resolving")]))
+    assert.deepEqual(await pending.fingerprint(), before)
+  },
+)
+
+integrationTest(
+  "preflight-first queued snapshot rejects terminal compact frame or source drift instead of authorizing actions",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context, { started: false })
+    await c.ingest([c.source(1, initialTerminal())])
+    const before = await c.fingerprint()
+    assert.deepEqual((await c.snapshot()).execution_head, r57ExpectedHead(c.runId, "queued"))
+    for (const [table, column, value, restore] of [
+      ["bff_agui_run_interaction", "subject_id", "foreign_subject", c.ownerId],
+      ["bff_agui_run_interaction", "source_digest", "f".repeat(64), before.bff_agui_run_interaction[0].source_digest],
+      ["bff_agui_event", "cursor", "agui_" + "f".repeat(32), before.bff_agui_run_interaction[0].public_cursor],
+    ]) {
+      await c.pool.query(
+        `UPDATE ${table} SET ${column}=$3 WHERE tenant_id=$1 AND session_id=$2` +
+          (table === "bff_agui_event" ? " AND event_type='CUSTOM' AND event_payload->>'name'='kokoro.interaction.state'" : ""),
+        [c.tenantId, c.sessionId, value],
+      )
+      await assert.rejects(c.snapshot())
+      await c.pool.query(
+        `UPDATE ${table} SET ${column}=$3 WHERE tenant_id=$1 AND session_id=$2` +
+          (table === "bff_agui_event" ? " AND event_type='CUSTOM' AND event_payload->>'name'='kokoro.interaction.state'" : ""),
+        [c.tenantId, c.sessionId, restore],
+      )
+    }
+    assert.deepEqual((await c.snapshot()).execution_head, r57ExpectedHead(c.runId, "queued"))
+  },
+)
+
+integrationTest(
+  "preflight-first startless successor preserves the old real selected process and exact terminal provenance across restart",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context)
+    await c.ingest([preflightSource(c, 2, "ready"), c.source(3, { status: "completed" }, "run.completed")])
+    const selected = (await c.snapshot()).execution_process
+    const nextRun = await submitAndAdmit(c.store, c.pool, {
+      tenantId: c.tenantId,
+      sessionId: c.sessionId,
+      ownerId: c.ownerId,
+      suffix: "preflight_history_" + c.suffix,
+    })
+    await c.ingest([c.source(4, initialTerminal(), "interaction.state", nextRun)])
+    const before = await c.fingerprint()
+    const restarted = new PostgresBffRepositories(postgresUrl, redisUrl)
+    try {
+      await restarted.ready()
+      const stream = await new PostgresAgUiProjectionRepository({ pool: c.pool }).readStream(c.tenantId, c.sessionId)
+      assert.equal(stream.interaction.runId, nextRun)
+      const snapshot = await restarted.services.chat.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+      assert.deepEqual(snapshot.execution_head, r57ExpectedHead(nextRun, "queued"))
+      assert.deepEqual(snapshot.execution_process, selected)
+      const repeated = await restarted.agUi.ingest(c.tenantId, c.sessionId, [c.source(5, initialTerminal(), "interaction.state", nextRun)])
+      assert.equal(repeated.sourceHighWatermark, 5)
+      assert.equal(repeated.insertedSources, 1)
+      assert.equal(repeated.insertedFrames, 0)
+      const repeatedFacts = await c.fingerprint()
+      assert.deepEqual(repeatedFacts.bff_agui_run_interaction, before.bff_agui_run_interaction)
+      assert.deepEqual(repeatedFacts.bff_agui_event, before.bff_agui_event)
+      await assert.rejects(
+        restarted.agUi.ingest(c.tenantId, c.sessionId, [c.source(6, { ...initialTerminal(), phase: "active" }, "interaction.state", nextRun)]),
+      )
+      await assert.rejects(restarted.agUi.ingest(c.tenantId, c.sessionId, [c.source(6, { run_id: nextRun }, "run.created", nextRun)]))
+      assert.deepEqual(await c.fingerprint(), repeatedFacts)
+      await restarted.agUi.ingest(c.tenantId, c.sessionId, [failedSource(c, 6, nextRun)])
+    } finally {
+      await restarted.close()
+    }
+    assert.deepEqual((await c.snapshot()).execution_process, selected)
+    await c.pool.query("UPDATE bff_agui_event SET recorded_at=CURRENT_TIMESTAMP(3)-INTERVAL '40 days' WHERE tenant_id=$1 AND session_id=$2", [
+      c.tenantId,
+      c.sessionId,
+    ])
+    await c.store.agUiConsumers.collectGarbage({ now: new Date().toISOString(), retentionMs: 1, tombstoneRetentionMs: 86400000, batchSize: 100 })
+    assert.deepEqual((await c.snapshot()).execution_process, selected)
+    assert.equal((await c.fingerprint()).bff_agui_run_process.length, 1)
+  },
+)

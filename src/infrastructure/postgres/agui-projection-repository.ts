@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto"
-import { interactionFromRow, readRunInteraction, writeRunInteraction } from "./agui-interaction-projection.js"
+import {
+  interactionFromRow,
+  isCurrentStartlessRun,
+  isInitialTerminalInteraction,
+  readRunInteraction,
+  writeRunInteraction,
+} from "./agui-interaction-projection.js"
 import { interactionDigest, replaceInteraction } from "../../application/agui/interaction-state.js"
 import { parseAgentInteractionState } from "../clients/agent/interaction-state.js"
 import type { PoolClient } from "pg"
@@ -222,7 +228,8 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
       `SELECT ${streamColumns()},
               (SELECT to_jsonb(interaction) FROM bff_agui_run_interaction AS interaction
                 WHERE interaction.tenant_id=bff_agui_stream.tenant_id AND interaction.session_id=bff_agui_stream.session_id
-                  AND interaction.run_id=bff_agui_stream.latest_run_id) AS interaction_row
+                  AND (interaction.run_id=bff_agui_stream.expected_run_id OR interaction.run_id=bff_agui_stream.latest_run_id)
+                ORDER BY (interaction.run_id=bff_agui_stream.expected_run_id) DESC NULLS LAST LIMIT 1) AS interaction_row
          FROM bff_agui_stream
         WHERE tenant_id = $1 AND session_id = $2`,
       [tenantId, sessionId],
@@ -240,8 +247,8 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
       }
     }
     return {
-      ...(isRecord(row.interaction_row) && row.latest_run_id !== null
-        ? { interaction: { runId: row.latest_run_id, state: interactionFromRow(row.interaction_row) } }
+      ...(isRecord(row.interaction_row) && typeof row.interaction_row.run_id === "string"
+        ? { interaction: { runId: row.interaction_row.run_id, state: interactionFromRow(row.interaction_row) } }
         : {}),
       version: safeInteger(row.version, "stream version"),
       sourceHighWatermark: safeInteger(row.source_high_watermark, "source high watermark"),
@@ -347,13 +354,20 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
       let latestRunStartSequence = stream.latest_run_start_sequence === null ? null : safeInteger(stream.latest_run_start_sequence, "latest run start sequence")
       let startedRunId = stream.latest_run_id
       for (const source of command.sources) {
+        const hasCurrentStart = source.sourceRunId === startedRunId && latestRunStartSequence !== null
+        const startlessRun =
+          !hasCurrentStart &&
+          source.sourceOwner === "kokoro-agent" &&
+          source.sourceRunId !== null &&
+          stream.consumer_subject_id !== null &&
+          (source.interactionState !== undefined || source.frames.some((frame) => frame.type === "CUSTOM" && frame.name === "kokoro.activity.updated")) &&
+          (await isCurrentStartlessRun(client, command.tenantId, command.sessionId, source.sourceRunId, stream.consumer_subject_id))
         let interactionChanged = false
         if (source.interactionState !== undefined) {
           if (
             source.sourceRunId === null ||
             source.sourceRunId !== stream.expected_run_id ||
-            source.sourceRunId !== startedRunId ||
-            latestRunStartSequence === null ||
+            (!hasCurrentStart && !startlessRun) ||
             stream.consumer_subject_id === null
           )
             throw new Error("AGUI_INTERACTION_RUN_INVALID")
@@ -379,11 +393,13 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
             command.sessionId,
             source.sourceRunId,
             stream.consumer_subject_id,
-            latestRunStartSequence,
+            hasCurrentStart ? latestRunStartSequence : null,
             nextPublicSequence - 1,
             source.sourceSequence - 1,
           )
-          interactionChanged = replaceInteraction(previous, parseAgentInteractionState(source.interactionState))
+          const next = parseAgentInteractionState(source.interactionState)
+          if (!hasCurrentStart && !isInitialTerminalInteraction(next)) throw new Error("AGUI_INTERACTION_RUN_INVALID")
+          interactionChanged = replaceInteraction(previous, next)
           if (
             source.frames.length !== (interactionChanged ? 1 : 0) ||
             (interactionChanged &&
@@ -530,6 +546,11 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
               frame,
               nextPublicSequence,
               frameCursor,
+              startlessRun &&
+                source.interactionState === undefined &&
+                source.assistantUpdate === undefined &&
+                source.artifactDelivery === undefined &&
+                source.frames.length === 1,
             )
           }
           if (interactionChanged && source.interactionState !== undefined) {

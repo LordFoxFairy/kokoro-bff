@@ -1,3 +1,7 @@
+## 2026-10-25 preflight compact 与 provenance retention（候选）
+
+canonical database/schema.sql 不变。合法 current trusted Skill prelude 只写现 source/event/activity；不造 bff_agui_run_process、start_source_* 或 latest START。initial terminal prelude 使用原 interaction compact，完整 source/frame/digest/主体/水位绑定保持；中间页不结算 dispatch，真正 Run terminal 才更新 Message/head。GC 的共享 retain-from 额外保护由当前真实 selected START 绑定 Run 的最早 activity.first_public_sequence，不按可能指向无 START 终态 Run 的 latest_run_id 选 process，也不永久保所有历史；后继真 START 释放旧 Run 的原回收边界。无 START 的保守跳过行为保持。
+
 ## 2026-10-25 URL MCP 项目发布消费者（无新增 BFF 数据）
 
 错误profile与consumer向量仅为传输/恢复约束，不保存命令结果或新增BFF状态。已有unknown锁由消费者保留，任何缺回执或当前权限失败不证明原事务未提交；共享receipt事实仍只归Platform。

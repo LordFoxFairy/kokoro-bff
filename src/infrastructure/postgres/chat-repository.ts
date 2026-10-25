@@ -315,12 +315,11 @@ export class PostgresChatRepository implements ChatRepository {
         if (state?.phase === "waiting" || state?.phase === "resuming")
           executionHead = { runId: executionHead.runId, state: state.phase, pendingPauses: [state] }
       } else if (executionHead !== undefined) {
-        const unexpected = await client.query(`SELECT 1 FROM bff_agui_run_interaction WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3`, [
-          tenantId,
-          conversationId,
-          executionHead.runId,
-        ])
-        if (unexpected.rows.length !== 0) throw new Error("CHAT_QUEUED_INTERACTION_INVALID")
+        const publicWatermark = Number(cursor.rows[0]?.public_sequence ?? 0),
+          sourceWatermark = Number(activeRunResult.rows[0]?.source_high_watermark)
+        if (!Number.isSafeInteger(publicWatermark) || !Number.isSafeInteger(sourceWatermark)) throw new Error("CHAT_EXECUTION_HEAD_WATERMARK_INVALID")
+        // A strict initial terminal is a non-actionable prelude, not an active process.
+        await readRunInteraction(client, tenantId, conversationId, executionHead.runId, subjectId, null, publicWatermark, sourceWatermark)
       }
       await client.query("COMMIT")
       return {

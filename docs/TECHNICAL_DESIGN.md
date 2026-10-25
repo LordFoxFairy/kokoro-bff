@@ -1,3 +1,11 @@
+## 2026-10-25 preflight-first AG-UI 投影（Root 已裁决，候选）
+
+BFF 承接固定 Agent 的 Skill preflight-first 顺序，不前移或伪造 START。沿 Conversation→stream 原锁序、source identity/version/lease fence，仅当前 expected 与 FIFO 接受头、active Conversation owner/consumer/dispatch subject 全等且 dispatch 为 leased/retryable/admitted 时，允许已解码 closed Skill activity 在无该 Run 真 START/process 时原序写 source、CUSTOM 与 activity compact。Todo/tool/subagent、unknown/foreign/stale/retired scope 不获得此豁免；真实 START 才创建 process/start provenance，既有 ACK race 不收窄。
+
+无 START 的 assembly failure 仅允许 initial terminal interaction（revision1、pause0、null ref、空 groups、null action）。writer 与 queued snapshot reader 共用严格资格与完整 source/frame/compact 绑定；分页/重启后仍 queued、无 pending pause/操作，只有真实 Run terminal 结算 FIFO。GC 在 discovery、locked requery、delete 共用的 retention expression 中保护当前真实 selected START 所绑定 Run 的最早 activity first provenance；新真 START 后旧 Run 按原规则回收。无 START 时保持既有保守 GC，不声称精细回收。
+
+无新 owner、API、Schema、wire/public25/generated、依赖或重试框架。正常激活与原 Run 自然 replay 由 Root 另验，不以隔离测试冒充正常追平，也不重发付费 Run。
+
 ## 2026-10-25 GetSkill 展示与显式下载分离（Root 已裁决，源码候选）
 
 沿同一 browser-private beta GetSkill，不增 endpoint、owner、表或依赖。旧 GetSkill 与 DownloadSkill 共用 package prepare 的耦合使已成功读取的 metadata 因 Storage 下载超时整页失败；Root 裁决 GetSkill 只读取当前授权的 publication metadata，严格返回 `{skill}`，不调用包/Storage、不签发下载 handle。复用现 `SkillSpecificationService.detail/current`，保当前主体、tenant、exact UID/series、生命周期、预算与取消绑定。GetSkill 的成功不是文件存在或可下载证明。
