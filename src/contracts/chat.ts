@@ -35,6 +35,57 @@ export type ChatMessage = {
   failure?: ChatFailure
 }
 
+/** Private read-only representation; historical Message/command/share bodies stay unchanged. */
+export type OrderedMessageRendering = {
+  mode: "ordered"
+  format_version: 1
+  revision: string
+  event_watermark: string | null
+  parts_cursor: string
+}
+
+export type ChatMessageRead =
+  | ChatMessage
+  | (Omit<ChatMessage, "role" | "content" | "run_id"> & {
+      role: "assistant"
+      content: null
+      run_id: string
+      rendering: OrderedMessageRendering
+    })
+
+export type MessageTextPartSlice = {
+  kind: "text"
+  part_id: string
+  segment_id: string
+  first_sequence: string
+  latest_sequence: string
+  text: string
+  offset: string
+  end: string
+  total_scalars: string
+  completed: boolean
+}
+
+export type MessageActivityPart = {
+  kind: "activity"
+  part_id: string
+  first_sequence: string
+  latest_sequence: string
+  /** Validated by the existing strict owner activity decoder, not raw tool payload. */
+  activity: Record<string, unknown>
+}
+
+export type MessagePartsPage = {
+  session_id: string
+  message_id: string
+  run_id: string
+  format_version: 1
+  revision: string
+  event_watermark: string | null
+  items: Array<MessageTextPartSlice | MessageActivityPart>
+  next_cursor: string | null
+}
+
 export type ChatEvent = {
   event_id: string
   seq: number
@@ -96,6 +147,8 @@ export type ChatSessionDetail = {
     next_cursor: string | null
   } | null
 }
+
+export type PrivateChatSessionDetail = Omit<ChatSessionDetail, "messages"> & { messages?: ChatMessageRead[] }
 
 /** Public read projection of the published owner full state; no private decision values. */
 export type InteractionState = {

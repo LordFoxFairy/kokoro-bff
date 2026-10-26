@@ -4,6 +4,10 @@ import { listOwnedSharedTasks } from "./shared-tasks.js"
 import type { SharedTasksPosition, SharedTasksRead } from "../../application/ports/chat-repository.js"
 import { readRunInteraction } from "./agui-interaction-projection.js"
 import { randomUUID } from "node:crypto"
+import type { PoolClient } from "pg"
+import type { MessagePartsPage } from "../../contracts/chat.js"
+import type { MessagePartsQuery, PrivateMessageReadContext, PrivateMessagePage } from "../../application/ports/chat-repository.js"
+import { withMessageReadClient, messageReadLifetime, privateMessagesFromRows, readMessageParts, type PrivateMessageRow } from "./message-parts-read.js"
 
 import type {
   ChatExecutionHead,
@@ -12,7 +16,6 @@ import type {
   ChatSnapshot,
   ConversationCollectionFilter,
   ConversationPage,
-  MessagePage,
   MoveConversationCommand,
   MoveConversationResult,
   RunProcessPage,
@@ -27,11 +30,9 @@ import {
   decodeCursor,
   encodeCursor,
   instant,
-  messageFromRow,
   shareColumns,
   shareFromRow,
   type ConversationRow,
-  type MessageRow,
   type ShareRow,
 } from "./chat-repository-mappers.js"
 import { readRunProcessPage } from "./agui-process-page.js"
@@ -195,8 +196,18 @@ export class PostgresChatRepository implements ChatRepository {
     return row === undefined ? null : conversationFromRow(row)
   }
 
-  public async readSnapshot(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSnapshot | null> {
-    return this.readSnapshotState(tenantId, subjectId, conversationId, projectRef, true)
+  public async readSnapshot(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    projectRef: string | undefined,
+    context?: PrivateMessageReadContext,
+  ): Promise<ChatSnapshot | null> {
+    return this.readSnapshotState(tenantId, subjectId, conversationId, projectRef, true, context ?? { ...messageReadLifetime(), scope: "all" })
+  }
+
+  public readMessageParts(query: MessagePartsQuery): Promise<MessagePartsPage | null> {
+    return readMessageParts(this.database.pool, query)
   }
 
   public async readRunControlState(
@@ -215,11 +226,10 @@ export class PostgresChatRepository implements ChatRepository {
     conversationId: string,
     projectRef: string | undefined,
     includeHistory: boolean,
+    context?: PrivateMessageReadContext,
   ): Promise<ChatSnapshot | null> {
-    const client = await this.database.pool.connect()
-    try {
-      // Every read, including the cursor, observes one committed projection boundary.
-      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+    if (context?.scope === "direct" && projectRef !== undefined) throw new Error("MESSAGE_PARTS_SCOPE_INVALID")
+    const read = async (client: PoolClient): Promise<ChatSnapshot | null> => {
       const conversation = await client.query<ConversationRow>(
         `SELECT ${conversationColumns}
            FROM bff_conversation
@@ -234,21 +244,23 @@ export class PostgresChatRepository implements ChatRepository {
               )
             )
             AND ($4::text IS NULL OR project_ref = $4)
+            AND ($5::boolean=FALSE OR project_ref IS NULL)
           LIMIT 1`,
-        [tenantId, subjectId, conversationId, projectRef ?? null],
+        [tenantId, subjectId, conversationId, projectRef ?? null, context?.scope === "direct"],
       )
       const row = conversation.rows[0]
       if (row === undefined) {
-        await client.query("COMMIT")
         return null
       }
       const messages = includeHistory
-        ? await client.query<MessageRow>(
+        ? await client.query<PrivateMessageRow>(
             `SELECT latest.message_id, latest.tenant_id, latest.conversation_id, latest.run_id,
-                latest.role, latest.selected_skill_source_refs, latest.content, latest.status, latest.agent_failure_code, latest.agent_failure_retryable, latest.message_seq,
+                latest.role, latest.selected_skill_source_refs, latest.content, latest.parts_format_version, latest.parts_public_sequence, latest.parts_count, latest.status, latest.agent_failure_code, latest.agent_failure_retryable, latest.message_seq,
                 latest.created_at, latest.updated_at
            FROM (
-             SELECT message_id, tenant_id, conversation_id, run_id, role, selected_skill_source_refs, content, status, agent_failure_code, agent_failure_retryable,
+             SELECT message_id, tenant_id, conversation_id, run_id, role, selected_skill_source_refs,
+                    CASE WHEN ordered_parts IS NULL THEN content ELSE NULL END AS content, parts_format_version, parts_public_sequence,
+                    CASE WHEN ordered_parts IS NOT NULL THEN jsonb_array_length(ordered_parts) END AS parts_count, status, agent_failure_code, agent_failure_retryable,
                     message_seq, created_at, updated_at
                FROM bff_message
               WHERE tenant_id = $1 AND conversation_id = $2
@@ -321,10 +333,16 @@ export class PostgresChatRepository implements ChatRepository {
         // A strict initial terminal is a non-actionable prelude, not an active process.
         await readRunInteraction(client, tenantId, conversationId, executionHead.runId, subjectId, null, publicWatermark, sourceWatermark)
       }
-      await client.query("COMMIT")
       return {
         conversation: conversationFromRow(row),
-        messages: messages.rows.map(messageFromRow),
+        messages: await privateMessagesFromRows(
+          client,
+          messages.rows,
+          { tenantId, subjectId, conversationId, projectRef: row.project_ref, requestedProjectRef: projectRef ?? null, scope: context?.scope ?? "all" },
+          watermark,
+          processPage?.run_id ?? null,
+          [...messages.rows].reverse().find((message) => message.role === "assistant")?.message_id ?? null,
+        ),
         deliveries: deliveries.rows.slice(0, 100).map(artifactDeliveryFromRow),
         deliveriesHasMore: deliveries.rows.length > 100,
         eventWatermark: watermark,
@@ -339,6 +357,14 @@ export class PostgresChatRepository implements ChatRepository {
               },
         ...(executionHead === undefined ? {} : { executionHead }),
       }
+    }
+    if (context) return withMessageReadClient(this.database.pool, messageReadLifetime(context), read)
+    const client = await this.database.pool.connect()
+    try {
+      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+      const result = await read(client)
+      await client.query("COMMIT")
+      return result
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined)
       throw error
@@ -391,11 +417,14 @@ export class PostgresChatRepository implements ChatRepository {
     limit: number,
     cursor: string | null,
     projectRef?: string,
-  ): Promise<MessagePage | null> {
+    context?: PrivateMessageReadContext,
+  ): Promise<PrivateMessagePage | null> {
+    if (context?.scope === "direct" && projectRef !== undefined) throw new Error("MESSAGE_PARTS_SCOPE_INVALID")
     const position = decodeCursor(cursor, "msg")
     if (position !== null && !("sequence" in position)) throw new Error("CHAT_CURSOR_INVALID")
-    const exists = await this.database.pool.query<{ conversation_id: string }>(
-      `SELECT conversation_id FROM bff_conversation
+    return withMessageReadClient(this.database.pool, messageReadLifetime(context), async (client) => {
+      const exists = await client.query<{ conversation_id: string; project_ref: string | null }>(
+        `SELECT conversation_id,project_ref FROM bff_conversation
         WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
           AND (
             project_ref IS NULL
@@ -406,13 +435,14 @@ export class PostgresChatRepository implements ChatRepository {
                  AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
             )
           )
-          AND ($4::text IS NULL OR project_ref = $4) LIMIT 1`,
-      [tenantId, subjectId, conversationId, projectRef ?? null],
-    )
-    if (exists.rows[0] === undefined) return null
-    const result = await this.database.pool.query<MessageRow>(
-      `SELECT message.message_id, message.tenant_id, message.conversation_id, message.run_id,
-              message.role, message.selected_skill_source_refs, message.content, message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
+          AND ($4::text IS NULL OR project_ref = $4) AND ($5::boolean=FALSE OR project_ref IS NULL) LIMIT 1`,
+        [tenantId, subjectId, conversationId, projectRef ?? null, context?.scope === "direct"],
+      )
+      if (exists.rows[0] === undefined) return null
+      const result = await client.query<PrivateMessageRow>(
+        `SELECT message.message_id, message.tenant_id, message.conversation_id, message.run_id,
+              message.role, message.selected_skill_source_refs, CASE WHEN message.ordered_parts IS NULL THEN message.content ELSE NULL END AS content,
+              message.parts_format_version,message.parts_public_sequence,CASE WHEN message.ordered_parts IS NOT NULL THEN jsonb_array_length(message.ordered_parts) END AS parts_count,message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
               message.created_at, message.updated_at
          FROM bff_message AS message
         WHERE message.tenant_id = $1 AND message.conversation_id = $3
@@ -436,14 +466,42 @@ export class PostgresChatRepository implements ChatRepository {
           AND ($5::bigint IS NULL OR (message.message_seq, message.message_id) > ($5, $6))
         ORDER BY message.message_seq ASC, message.message_id ASC
         LIMIT $7`,
-      [tenantId, subjectId, conversationId, projectRef ?? null, position?.sequence ?? null, position?.id ?? null, limit + 1],
-    )
-    const rows = result.rows.slice(0, limit)
-    const last = result.rows.length > limit ? rows.at(-1) : undefined
-    return {
-      messages: rows.map(messageFromRow),
-      next_cursor: last === undefined ? null : encodeCursor({ sequence: String(last.message_seq), id: last.message_id }, "msg"),
-    }
+        [tenantId, subjectId, conversationId, projectRef ?? null, position?.sequence ?? null, position?.id ?? null, limit + 1],
+      )
+      const rows = result.rows.slice(0, limit)
+      const last = result.rows.length > limit ? rows.at(-1) : undefined
+      const head =
+        (
+          await client.query<{ cursor: string }>(
+            "SELECT cursor FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 ORDER BY public_sequence DESC LIMIT 1",
+            [tenantId, conversationId],
+          )
+        ).rows[0]?.cursor ?? null
+      const selected = (
+        await client.query<{ run_id: string | null; message_id: string | null }>(
+          `SELECT stream.latest_run_id AS run_id,(SELECT message_id FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant' ORDER BY message_seq DESC,message_id DESC LIMIT 1) AS message_id FROM bff_agui_stream stream WHERE stream.tenant_id=$1 AND stream.session_id=$2 AND stream.consumer_subject_id=$3`,
+          [tenantId, conversationId, subjectId],
+        )
+      ).rows[0]
+      return {
+        messages: await privateMessagesFromRows(
+          client,
+          rows,
+          {
+            tenantId,
+            subjectId,
+            conversationId,
+            projectRef: exists.rows[0].project_ref,
+            requestedProjectRef: projectRef ?? null,
+            scope: context?.scope ?? "all",
+          },
+          head,
+          selected?.run_id ?? null,
+          selected?.message_id ?? null,
+        ),
+        next_cursor: last === undefined ? null : encodeCursor({ sequence: String(last.message_seq), id: last.message_id }, "msg"),
+      }
+    })
   }
 
   public async renameConversation(

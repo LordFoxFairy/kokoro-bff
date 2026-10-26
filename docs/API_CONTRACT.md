@@ -1,3 +1,25 @@
+## CHAT-ORDER-1：同 Message 有序 parts 与有界读取（2026-10-25 定案；2026-10-26 候选，正常未切）
+
+**D1D 公共坐标补充（2026-10-26，候选未正常生效）：** 原 `metadata.kokoro.seq` 是 Agent/BFF 各自源序号，不等于 durable public ledger 的 `public_sequence`；一次源事件可展开多个 frame，BFF admission 也占公开位置。每个 durable AG-UI data frame 的读取／replay 投影须从 PG 原十进制列暴露 required `metadata.kokoro.public_sequence`，保持原 seq 类型／source_owner、opaque cursor、source digest 与存储 payload/xmin 不变；不回填旧事件或改变 source 协议。完整 replay 字节预算计入新增字段，损坏位置／元数据不伪造。App 仅用该公开坐标与 parts revision 合并，绝不拿旧 seq/cursor 猜坐标；parts 领先 SSE 不推进全局 stream cursor，确认版本不因迟到 snapshot 降级。同段多页 confirmed baseline 与 live overlay 分开，避免重复 replay 后缀。Public27 尚未发布，追加固定 commit/digest 后消费者正规生成；完整 Public26 逆证与全部历史 hash 保持。
+
+**D0已批准；Public27机器契约已本地9f46a8e固定（正常仍Public26）。** 原Session/Conversation/Project当前授权与AG-UI live协议保持。新增只服务private assistant的ordered read描述与一个Message continuation；user/legacy正文、shared DTO/原可读body/权限、MessageCreate与全部历史幂等ACK原形不变，不建公共parts续读或让匿名读过程。
+
+private assistant具备完整ordered证明时，独立read形状保原message_id/role/status/run/failure等身份，content:null仅表示未内联，新增strict rendering：{mode:ordered,format_version:1,revision,event_watermark,parts_cursor}。snapshot先只ref，不重复塞聚合全文；event_watermark沿原EventWatermark的opaque AG-UI cursor或null，不是public_sequence；原shared复用的SessionSnapshotResponse保原字节，private另用PrivateSessionSnapshotResponse；可有很小首屏但非本片前置。无ordered证明的旧assistant维持原legacy正文，绝不把NULL变[]或发明序号。不得由缺rendering认定已确认写未执行并重派。
+
+唯一新读取 GET /v1/sessions/{id}/messages/{messageId}/parts?cursor=...&limit=1..32，默认16逻辑slot；无body/幂等写key，不新事件流。每页核当前Session、tenant/subject、Conversation/Project及exact Message/run；no-store/request-id/JSON、取消及原10秒绝对预算保持。成功data绑定session_id/message_id/run_id、format_version/revision/event_watermark、items与next_cursor，封闭字段由唯一canonical后继定义。
+
+items是text|activity判别片段。text含part_id、segment_id、first_sequence/latest_sequence、text、offset/end/total_scalars、completed；segment_id显式承接现已公开AG-UI messageId，part_id仍opaque，不靠拆ID匹配live。activity含part_id、first_sequence/latest_sequence、原strict safe activity。序号/版本/offset用canonical非负十进制string；first不随status修正移动。Unicode scalar左闭右开[offset,end)，不按UTF-16 code unit或UTF-8 byte拆断。同part多片不是多消息/多工具slot；不公开raw args/result、summary/checkpoint或秘密。
+
+每text片段最多4096scalar；完整最终UTF-8 JSON含envelope/metadata≤1MiB，每页至多32逻辑slot；巨大text由同part下一offset续读，末片才转slot，不截正文冒完整。snapshot/messages沿现总1MiB出口只放有界描述，不引入64KiB全snapshotpacker，不为user/legacy/shared追加通用分片。候选有限PG投影，Node仅装箱有限片段，不先载整巨JSONB；单metadata超限明确503 message_parts_budget_exceeded。
+
+opaque cursor绑定当前身份/Conversation/Project scope、Message/run、format与parts版本水位、ordinal/scalar offset，不授身份。非法/错scope400，真实401/403/不可见404，版本变化409 message_parts_changed，legacy有证恢复源已GC为410，依赖/投影不可证503；不透SQL/正文/凭据/异常原文。409先保已确认partial/live，只有显式重读，不新增自动episode/无限重试/Send或模型重派。next_cursor=null仅证明此版本序列已读完，非Run终态或HITL授权。
+
+旧R6仅在exact source/dispatch/Message与完整89帧range、合法prelude、唯一START42和delta==持久content均可验时，请求内RR局部恢复ordered；≤512帧/4MiB/10秒，不写旧行/xmin。缺源、旧多段completed正文无证保原legacy，不批量backfill、拼造正文或假序号；恢复预算超限明确503，不截前512帧冒完整。新parts持久后不依赖ledger永久保留。
+
+DB content继续全部text slots原序原字节拼接；private ordered reader用parts，不以聚合字符串猜交错。completed只修同segment，TEXT_END无全文且不等final；live必要时只作该Message的有界fresh读回，不全会话重播。所有public text原位可见、连续activity不跨正文；当前无commentary/final phase，不发布lasttext猜出的final、伪浏览分组/时长或每Run固定panel。
+
+后继机器契约仅变private assistant读取及新operation；独立read DTO与原user/legacy/shared/command ACK严格分开，须正式版本/唯一OpenAPI/固定commit-digest生成与准确Public26全文inverse，再配对App。D1A三列/fold及Public27机器事实已有候选和隔离证据；private route/App消费与非空演进尚未正常配对，BFF/App/PG验证绑定实际停写候选，不能以契约提交冒真实UI完成。
+
 ## 2026-10-25 personal SSE 后继表示与 Public26（Root 已裁决，设计门）
 
 本片消费者源码候选固定正式 Platform `8cfead647856ef54ec851a3bebe169a3ca14d212`；唯一当前机器源为 Public26.0.0，正常与 App/Agent 成套激活另验。正式后继 Public26.0.0 仅 version 与既有 `McpConnectionProjection.transport` 增 `sse_compat`，其它路径、operation、shape、metadata/download 与权限不变；准确恢复完整 Public25 原件 SHA256 `7261ac9ce2140555ba97ebff2bf0359533cc49dda014b08dcd6a6054a8d38b1c` 后，再调用原25→24完整 inverse，旧 hash/断言不改。personal browser-private 成功校验继续在现 client 边界维护，不新增另一份 public 机器事实源。

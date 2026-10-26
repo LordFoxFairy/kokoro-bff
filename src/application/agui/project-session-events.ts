@@ -167,6 +167,8 @@ function projectSources(
         frames,
         assistantUpdate: {
           runId,
+          segmentId: typeof event.payload.segment_id === "string" ? event.payload.segment_id : event.event_id,
+          completed: false,
           kind: frames.some((frame) => frame.type === "TEXT_MESSAGE_START") ? "replace" : "append",
           content,
         },
@@ -175,7 +177,17 @@ function projectSources(
     if (event.kind === "message.completed") {
       const content = event.payload.content
       if (typeof content !== "string") throw new AgUiSourceContractError()
-      return { ...sourceIdentity(source), frames, assistantUpdate: { runId, kind: "replace" as const, content } }
+      return {
+        ...sourceIdentity(source),
+        frames,
+        assistantUpdate: {
+          runId,
+          segmentId: typeof event.payload.segment_id === "string" ? event.payload.segment_id : event.event_id,
+          completed: true,
+          kind: "replace" as const,
+          content,
+        },
+      }
     }
     if (event.kind === "run.completed") {
       if (event.payload.status !== "completed" && event.payload.status !== "cancelled") throw new AgUiSourceContractError()

@@ -243,6 +243,7 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 - Agent Chat：`src/http/routes/agent.ts` 只承接 durable AG-UI 读取和 run control；Agent launch 由后台 outbox dispatcher 投递；`src/application/agui/` 投影；
   `src/application/agui/projector.ts` 独立消费 Agent source；`agui-projection-repository.ts` 在公开发送前持久化并分配 cursor，
   `agui-consumer-repository.ts` 维护 lease/fence、重试、保留水位与 tombstone GC
+  D1A候选：`src/infrastructure/postgres/message-parts.ts`复用既有safe activity decoder，按真实public位置折叠同Message有序slot；projection事务同时保存parts/聚合正文，新assistant显式空文档，旧NULL不补造。当前未扩read wire或实现非空库演进，不能正常激活。
 - Scheduler：当前由 `src/http/routes/scheduler.ts` 注册、对账和处理 dispatch
 - Mori：当前由 `src/infrastructure/clients/mori/owner-route.ts` 投影独立 Music owner
 
@@ -274,3 +275,7 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 ### Connector command 恢复错误
 
 Platform Connect 固定消费 receipt metadata profile；`src/infrastructure/clients/platform/connector-command-fault.ts` 是MCP/Custom API两边界的唯一窄错误映射与code-first恢复policy，独立于资源投影。`scripts/generate-connector-command-errors.mjs` 正规发布只读 `contract/connector-command-errors-v1.json`，后继App固定commit/digest消费。unknown/expired/lost不自动重放或授权新key；MCP原生OAuth的三项typed原因独立可辨，缺detail的原生CAS与URL typed约束不混淆。真实HTTP/Connect组合与未知/错码/重复/混合/read负控位于现MCP/Custom API测试，非正常IAM/DB/OAuth验收。
+
+## 私有 Message 有序读取候选（2026-10-26）
+
+`src/infrastructure/postgres/message-parts-read.ts` 负责 private snapshot/list 的只读 ref 与独立 parts GET：同一受界 RR 租约、当前本人/direct/Project 与原 scope 绑定、decimal revision、公有 opaque watermark、409 显式重读、4096 Unicode scalar 分页和完整 envelope 1 MiB。唯一 legacy 候选须同 Run/latest assistant、dispatch 与完整 retained public/source ledger 证明，取消/GC 不伪造正文或写旧行。`src/http/chat-message-parts-input.ts` 只解具名 GET query；路由与 service 复用原 Chat owner，Shared/command ACK 保持原 DTO。`test/chat-message-parts-read.test.ts` 静态导入现 default Chat suite；`test/message-parts-read.integration.mjs` 仅接受 Root 的具名空临时库，真实 PostgreSQL 验收与正常组合由 Root 执行。

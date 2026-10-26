@@ -56,7 +56,11 @@
     "contract:generate:project-execution": "node --import tsx scripts/generate-project-execution-contract.mjs --write",
     "contract:check:project-execution": "node --import tsx scripts/generate-project-execution-contract.mjs",
     "db:evolve-agent-failure": "node scripts/evolve-agent-failure-schema.mjs",
-    "test:agent-failure-evolution": "node --test test/agent-failure-schema-evolution.integration.mjs"
+    "test:agent-failure-evolution": "node --test test/agent-failure-schema-evolution.integration.mjs",
+    "db:evolve-message-parts": "node scripts/evolve-message-parts-schema.mjs",
+    "test:message-parts-read:integration": "pnpm build && node --test --test-concurrency=1 test/message-parts-read.integration.mjs",
+    "test:agui-public-position:integration": "pnpm build && node --test --test-concurrency=1 test/agui-public-position.integration.mjs",
+    "test:message-parts-evolution": "node --test test/message-parts-schema-evolution.integration.mjs"
   },
   "devDependencies": {
     "@bufbuild/buf": "1.72.0",

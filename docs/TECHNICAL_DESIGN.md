@@ -1,3 +1,25 @@
+## CHAT-ORDER-1：同 Message 有序 parts 与有界读取（2026-10-25 定案；2026-10-26 候选，正常未切）
+
+**D1D 公共坐标补充（2026-10-26，候选未正常生效）：** 原 `metadata.kokoro.seq` 是 Agent/BFF 各自源序号，不等于 durable public ledger 的 `public_sequence`；一次源事件可展开多个 frame，BFF admission 也占公开位置。每个 durable AG-UI data frame 的读取／replay 投影须从 PG 原十进制列暴露 required `metadata.kokoro.public_sequence`，保持原 seq 类型／source_owner、opaque cursor、source digest 与存储 payload/xmin 不变；不回填旧事件或改变 source 协议。完整 replay 字节预算计入新增字段，损坏位置／元数据不伪造。App 仅用该公开坐标与 parts revision 合并，绝不拿旧 seq/cursor 猜坐标；parts 领先 SSE 不推进全局 stream cursor，确认版本不因迟到 snapshot 降级。同段多页 confirmed baseline 与 live overlay 分开，避免重复 replay 后缀。Public27 尚未发布，追加固定 commit/digest 后消费者正规生成；完整 Public26 逆证与全部历史 hash 保持。
+
+**最小目标／边界。** 基线 BFF `2a819c3acdb82852516993d6030875ebb8d019eb`。保一 Run 一 assistant Message／原 outbox，在本仓同 Message 保存 ordered parts；只补 private assistant 有序读取与单 Message 有界 continuation，不重构 user/legacy 正文、shared DTO 或 MessageCreate/幂等 ACK。不加 owner、第二流协议、通用快照缓存或全历史冷重播；D0已批准；D1A同事务持久化/canonical三列候选已冻结并由Root隔离PG59项验证，Public27契约已本地9f46a8e固定；private读取/App及非空正常装配未验，normal仍原26组合。
+
+**同事务 fold。** 新 assistant admission 显式 ordered_parts=[]、format=1、public_sequence=0；旧/user 三列全NULL。原 source/frame 已验证并分配真实 BFF public_sequence 后，按 first 位置建 text/activity slot；后续 delta/completed/status 只更新该 slot/latest，first 不移。合法 Skill prelude、expected/FIFO、主体/lease、outbox/Message精确绑定不变；source、frame、parts、content、水位同事务提交/回滚，重投不生第二 slot。
+
+text START 建 slot，delta 追加；完成全文只修该 segment，不覆盖整 Run。TEXT_END 无全文，fold须承接同一已验证 source 的完成内容；无delta完成及完成正文修正由既有公开帧或单 Message 有界fresh读回承接，不让live/history失配。DB content为所有text slots原序原字节拼接，不补连接句；只保公开文字/strict safe activity，不泄summary、checkpoint、raw args/results或秘密。
+
+**专用 read。** 仅private assistant有ordered证明时使用独立有序描述，content:null明确未内联，不等正文为空；snapshot先只给format/revision/水位/初始cursor引用，不强制内联首屏。单 Message GET读取有界parts页，原snapshot/messages总1MiB出口不扩，不在100条Message各塞1MiB。user/不可证legacy正文、shared DTO/权限、历史写ACK原形保持；删除64KiB全snapshot通用packer及通用legacy/user分片前置。
+
+**有界 continuation。** GET /v1/sessions/{id}/messages/{messageId}/parts，limit默认16、范围1–32逻辑slot；text每片至多4096 Unicode scalar，最终UTF-8 JSON含envelope/metadata≤1MiB。同part按scalar offset续读，末片才转下一slot；不改字节、不补省略号。PG按有限ordinal/substring取候选，不把巨JSONB全传Node后切；本slice验长text/写放大与出口边界，不扩全域容量/EXPLAIN工程。
+
+cursor绑定当前tenant/subject、Conversation/Project scope、exact Message/run、format/parts版本水位、slot ordinal/scalar offset；每页fresh授权，cursor不授身份。版本变化409，先保已确认partial/live，仅显式重读，不加自动episode/调度或命令重派；取消/迟到/撤权沿原围栏。未读完保next_cursor，不以空页/null冒完整；metadata本身超预算明确read-budget错误。source.seq与public_sequence不数值混排，App按真实AG-UI顺序/同slot去重续接。
+
+**旧R6／GC。** NULL不伪[]；exact scope/dispatch/Message、完整89帧range/合法prelude、唯一TEXT_START42、delta拼接==持久content可在RR内局部只读恢复。source只有digest、END无全文，旧多段无证保持legacy，不按createdAt/opaque ID/数组猜序。恢复最多512帧/4MiB/原10秒，缺源/超限不冒完整、不UPDATE旧行/xmin或批量backfill。新持久parts独立于旧ledger GC；旧恢复源被收走明确410，不永久pin所有历史。
+
+**装配／资格。** 后继canonical三列/CHECK与具名additive check/apply沿精确旧/目标catalog、owner advisory/有限表锁、20秒总预算、取消及COMMIT后unknown/postcatalog；fresh installer只空schema，不冒normal升级。Root独占备份/隔离恢复、排空旧content writer、固定BFF/App配对和同R6只读重开；不重派旧Run/模型/财务。BFF先交正式private read契约/固定生成和完整Public26父逆证，App再按固定artifact消费；真实PG覆盖重复/回滚/重启、legacy/GC、Unicode/1MiB/409、权限与ACK保护。
+
+**展示不写死。** Root参考实测显示Manus轻量duration披露内公开文字→浏览组→文字，final外置；Codex仅核官方typed items/phase，未观桌面UI。现Agent全链无commentary/final phase：所有public text先保原位可见，连续activity组不跨正文，不以lasttext/TEXT_END猜final，不造浏览语义/网页数/时长，也不承诺每Run一个panel吞所有文字。精确Manus分流待后继明确typed事实，不改变本片顺序事实。
+
 ## 2026-10-25 personal HTTP/SSE 消费与 Public26（Root 已裁决，设计门）
 
 本片源码候选已从 Root 正式 Platform `8cfead647856ef54ec851a3bebe169a3ca14d212` 固定原件并沿现链生成，不表示正常激活或完整旅程已验。基线为 Root 已核 clean `fd4cd3f4f7821d6921bc33c62eee8a7595112369`；Platform 已批准的 `mcp-personal-sse-v1` 及其完整父证明沿既有 owner 发行承接，不新建传输 owner。BFF 仍用原 unary Connect；外部 GET/endpoint/POST/SSE 协议、DNS/IP pin/TLS 与发现预算归 Platform，不由 BFF 打开外部流。

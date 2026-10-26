@@ -420,8 +420,10 @@ export async function commitChatTurn(
       )
       if (outbox.rowCount !== 1) throw new Error("AGENT_DISPATCH_INSERT_FAILED")
       const inserted = await query(
-        `INSERT INTO bff_message (message_id,tenant_id,conversation_id,run_id,role,content,status,message_seq,selected_skill_source_refs)
-         VALUES ($1,$2,$3,$4,'user',$5,'completed',$6::bigint,$8::jsonb),($7,$2,$3,$4,'assistant','','pending',$6::bigint+1,'[]'::jsonb)`,
+        `INSERT INTO bff_message (message_id,tenant_id,conversation_id,run_id,role,content,status,message_seq,selected_skill_source_refs,
+            ordered_parts,parts_format_version,parts_public_sequence)
+         VALUES ($1,$2,$3,$4,'user',$5,'completed',$6::bigint,$8::jsonb,NULL,NULL,NULL),
+                ($7,$2,$3,$4,'assistant','','pending',$6::bigint+1,'[]'::jsonb,'[]'::jsonb,1,0)`,
         [
           command.userMessageId,
           command.tenantId,

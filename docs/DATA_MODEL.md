@@ -1,3 +1,25 @@
+## CHAT-ORDER-1：同 Message 有序 parts 与有界读取（2026-10-25 定案；2026-10-26 候选，正常未切）
+
+**D1D 公共坐标补充（2026-10-26，候选未正常生效）：** 原 `metadata.kokoro.seq` 是 Agent/BFF 各自源序号，不等于 durable public ledger 的 `public_sequence`；一次源事件可展开多个 frame，BFF admission 也占公开位置。每个 durable AG-UI data frame 的读取／replay 投影须从 PG 原十进制列暴露 required `metadata.kokoro.public_sequence`，保持原 seq 类型／source_owner、opaque cursor、source digest 与存储 payload/xmin 不变；不回填旧事件或改变 source 协议。完整 replay 字节预算计入新增字段，损坏位置／元数据不伪造。App 仅用该公开坐标与 parts revision 合并，绝不拿旧 seq/cursor 猜坐标；parts 领先 SSE 不推进全局 stream cursor，确认版本不因迟到 snapshot 降级。同段多页 confirmed baseline 与 live overlay 分开，避免重复 replay 后缀。Public27 尚未发布，追加固定 commit/digest 后消费者正规生成；完整 Public26 逆证与全部历史 hash 保持。
+
+**D0已批准；canonical三列/CHECK与fold为D1A源码候选，正常库未DDL。** BFF Chat唯一owner；保一Run一assistant Message、tenant/conversation/message/run普通列与dispatch/outbox守卫。在同row保存版本化呈现文档，不建parts表、owner、缓存、migration/版本历史体系，无跨Message parts搜索/JOIN职责；JSONB代价为写放大/detoast，本slice测代表性长Message，不扩成全域容量/EXPLAIN前置工程。
+
+拟在bff_message具名增加nullable ordered_parts JSONB、parts_format_version SMALLINT、parts_public_sequence BIGINT，无DEFAULT[]、无批量UPDATE旧行。新assistant原admission显式[]/1/0（0仅尚无公开frame），user/旧行三列全NULL表示不适用/legacy，不假装有完整空历史。
+
+具名CHECK只接三列全NULL，或role=assistant、ordered_parts显式非NULL且array、format/public_sequence均显式IS NOT NULL、format=1/public_sequence≥0，防SQL UNKNOWN吞半NULL。内部text/activity slot闭集、唯一identity和first≤latest由strict codec校验；身份/定位沿普通列/原索引，无新GIN或外键。
+
+原source/frame验证并分配BFF public_sequence后同事务fold：text START建精确segment slot、delta追加、同一已验证source的completed只替本slot；activity只替原slot safe payload/latest，first固定。ordered_parts、DB content原序原字节聚合、ledger与水位全成或全回滚；原expected/FIFO/subject/lease/outbox绑定和prelude守卫不改，重投不新增slot、身份/首位置漂移沿原冲突。
+
+parts只存已有public text及strict safe activity，不存summary/checkpoint/raw args/results/凭据/审批秘密。TEXT_END无完成全文且不提供phase；不能从lasttext、END、opaque ID或createdAt造final或语义分组。失败/取消不删已发生文字/过程；当前布局偏好不进入row/wire。
+
+private assistant read只返回ordered描述/content:null（未内联）及单Message有界continuation；user/legacy正文/shared/command ACK原形保持。每页≤32逻辑slot/每text≤4096scalar/最终envelope≤1MiB，snapshot先ref且沿现总出口，不做64KiB全snapshot或通用legacy/user分片。PG有限ordinal/substring投影，不先传巨JSONB到Node；读cap不截写侧已合法接纳Run。
+
+parts_public_sequence为此Message最近已fold公开frame版本，Agent source.seq不可混为同序域。opaque cursor绑定format/版本水位、当前主体scope、Message/run、ordinal/scalar offset；每页授权/RR，变动409保partial/live等显式重读，无自动episode/版本历史副本。旧content仅兼容派生值，不由其聚合字符串推断顺序。
+
+NULL旧行只在exact scope/run/dispatch/assistant、完整source/frame range及完成正文可验时请求内RR恢复；R6原89帧/合法prelude/唯一START42须delta拼接==持久content。最多512帧/4MiB/10秒，旧多段无证/缺源保legacy，不UPDATE旧row/xmin或批量backfill；GC竞争致后页缺源410，不猜补。新持久parts独立于ledger GC；原selected START/prelude/未决interaction pin与删除生命周期保持，无永久全历史pin/新清理器。
+
+fresh db:apply-schema仍只空kokoro_bff；正常非空后继具名additive check/apply从唯一canonical抽取目标，精确旧/目标catalog/validated CHECK、本地relation、owner advisory及有限表锁、20秒总预算/取消、COMMIT已发丢ACK=unknown后只check确认。Root后继备份/隔离恢复、排空旧content writer、升级并固定BFF/App配对；不重建/清库/改旧行，不并行旧新writer。真实PG须证原数据/xmin、半NULL/drift、重复/回滚、GC/legacy、Unicode分页/1MiB/409和原ACK保护；D1A已在Root唯一临时库通过59项AG-UI真实回归且回收；具名演进基本PG已过、lost-ACK夹具待修，无正常装配或模型/财务动作。
+
 ## 2026-10-25 preflight compact 与 provenance retention（候选）
 
 canonical database/schema.sql 不变。合法 current trusted Skill prelude 只写现 source/event/activity；不造 bff_agui_run_process、start_source_* 或 latest START。initial terminal prelude 使用原 interaction compact，完整 source/frame/digest/主体/水位绑定保持；中间页不结算 dispatch，真正 Run terminal 才更新 Message/head。GC 的共享 retain-from 额外保护由当前真实 selected START 绑定 Run 的最早 activity.first_public_sequence，不按可能指向无 START 终态 Run 的 latest_run_id 选 process，也不永久保所有历史；后继真 START 释放旧 Run 的原回收边界。无 START 的保守跳过行为保持。

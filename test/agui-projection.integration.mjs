@@ -43,6 +43,55 @@ const TABLES = [
   "bff_project",
 ]
 
+function assertOrderedReadReference(message, revision, watermark) {
+  assert.equal(message.content, null)
+  assert.equal(typeof message.rendering.parts_cursor, "string")
+  assert.match(message.rendering.parts_cursor, /^mparts_[A-Za-z0-9_-]+$/u)
+  assert.deepEqual(message.rendering, {
+    mode: "ordered",
+    format_version: 1,
+    revision,
+    event_watermark: watermark,
+    parts_cursor: message.rendering.parts_cursor,
+  })
+}
+
+function orderedPartsQuery(tenantId, subjectId, conversationId, message) {
+  return {
+    tenantId,
+    subjectId,
+    conversationId,
+    messageId: message.message_id,
+    projectRef: undefined,
+    scope: "all",
+    cursor: message.rendering.parts_cursor,
+    limit: 32,
+    signal: new AbortController().signal,
+    deadlineAt: performance.now() + 10000,
+  }
+}
+
+async function assertOrderedReadBody(chat, tenantId, subjectId, conversationId, message, revision, watermark, expectedBody) {
+  assertOrderedReadReference(message, revision, watermark)
+  const page = await chat.readMessageParts(orderedPartsQuery(tenantId, subjectId, conversationId, message))
+  assert.ok(page)
+  assert.equal(page.session_id, conversationId)
+  assert.equal(page.message_id, message.message_id)
+  assert.equal(page.run_id, message.run_id)
+  assert.equal(page.format_version, 1)
+  assert.equal(page.revision, revision)
+  assert.equal(page.event_watermark, watermark)
+  assert.equal(page.next_cursor, null)
+  assert.equal(
+    page.items
+      .filter((item) => item.kind === "text")
+      .map((item) => item.text)
+      .join(""),
+    expectedBody,
+  )
+  return page
+}
+
 function agentSource({ id, sequence, kind, payload, sessionId = "session_shared", runId = "run_1" }) {
   const occurredAt = new Date(sequence * 1000).toISOString()
   return {
@@ -454,6 +503,8 @@ integrationTest("reads Artifact deliveries and public watermark from one repeata
     const gated = new PostgresChatRepository({
       pool: {
         connect: async () => ({
+          on: reader.on.bind(reader),
+          removeListener: reader.removeListener.bind(reader),
           query: async (sql, values) => {
             const result = await reader.query(sql, values)
             if (sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1")) {
@@ -462,7 +513,7 @@ integrationTest("reads Artifact deliveries and public watermark from one repeata
             }
             return result
           },
-          release: () => reader.release(),
+          release: (destroy) => reader.release(destroy),
         }),
       },
     })
@@ -791,13 +842,30 @@ for (const failure of [
           content: "Final answer.",
         }),
       ])
+      const retainedBody = "Draft finalFinal answer."
       assert.deepEqual(await assistant(), {
-        content: "Final answer.",
+        content: retainedBody,
         status: "streaming",
       })
+      const retainedParts = (await pool.query("SELECT ordered_parts FROM bff_message WHERE message_id=$1", [receipt.assistant_message_id])).rows[0]
+        .ordered_parts
+      // Admission records kokoro.run.queued at public position 1 before Agent sources;
+      // these are BFF public positions, not the Agent's source sequence numbers.
+      assert.deepEqual(
+        retainedParts.map((part) => [part.kind, part.part_id, part.first_sequence, part.latest_sequence]),
+        [
+          ["text", "text:agent_seg_a", "3", "5"],
+          ["activity", "activity:act_" + "4".repeat(64), "6", "7"],
+          ["text", "text:agent_seg_b", "8", "11"],
+        ],
+      )
+      assert.equal(retainedParts[0].segment_id, "agent_seg_a")
+      assert.equal(retainedParts[0].text, "Draft final")
+      assert.equal(retainedParts[2].segment_id, "agent_seg_b")
+      assert.equal(retainedParts[2].text, "Final answer.")
       await store.agUi.ingest("tenant_reconcile", sessionId, [source(9, "run.completed", { status: "completed" })])
       assert.deepEqual(await assistant(), {
-        content: "Final answer.",
+        content: retainedBody,
         status: "completed",
       })
       assert.deepEqual(
@@ -832,8 +900,18 @@ for (const failure of [
         })),
         [
           { role: "user", content: "Answer the question", status: "completed" },
-          { role: "assistant", content: "Final answer.", status: "completed" },
+          { role: "assistant", content: null, status: "completed" },
         ],
+      )
+      await assertOrderedReadBody(
+        store.services.chat,
+        "tenant_reconcile",
+        "owner_reconcile",
+        sessionId,
+        snapshot.messages.find((message) => message.message_id === receipt.assistant_message_id),
+        "12",
+        current.currentCursor,
+        retainedBody,
       )
       assert.equal(await store.services.chat.snapshot("tenant_reconcile", "foreign_owner", sessionId, undefined), null)
       const duplicate = await store.agUi.ingest("tenant_reconcile", sessionId, [
@@ -844,7 +922,7 @@ for (const failure of [
       ])
       assert.equal(duplicate.insertedSources, 0)
       assert.deepEqual(await assistant(), {
-        content: "Final answer.",
+        content: retainedBody,
         status: "completed",
       })
 
@@ -874,7 +952,7 @@ for (const failure of [
       )
       assert.equal((await store.agUi.status("tenant_reconcile", sessionId)).sourceHighWatermark, 9)
       assert.deepEqual(await assistant(), {
-        content: "Final answer.",
+        content: retainedBody,
         status: "completed",
       })
       const failedAssistant = async () => {
@@ -913,6 +991,16 @@ for (const failure of [
         content: "Partial",
         status: "failed",
       })
+      assert.deepEqual(await assistant(), {
+        content: retainedBody,
+        status: "completed",
+      })
+      const failedParts = (await pool.query("SELECT ordered_parts FROM bff_message WHERE message_id=$1", [failedTurn.assistant_message_id])).rows[0]
+        .ordered_parts
+      assert.deepEqual(
+        failedParts.map(({ kind, part_id, segment_id, text, completed }) => ({ kind, part_id, segment_id, text, completed })),
+        [{ kind: "text", part_id: "text:failed_seg", segment_id: "failed_seg", text: "Partial", completed: false }],
+      )
       assert.deepEqual(
         (
           await pool.query(
@@ -928,7 +1016,16 @@ for (const failure of [
       )
       const failedSnapshot = await store.services.chat.snapshot("tenant_reconcile", "owner_reconcile", sessionId, undefined)
       const failedMessage = failedSnapshot.messages.find(({ message_id }) => message_id === failedTurn.assistant_message_id)
-      assert.equal(failedMessage.content, "Partial")
+      await assertOrderedReadBody(
+        store.services.chat,
+        "tenant_reconcile",
+        "owner_reconcile",
+        sessionId,
+        failedMessage,
+        "16",
+        failedSnapshot.event_watermark,
+        "Partial",
+      )
       assert.equal(failedMessage.status, "failed")
       assert.deepEqual(failedMessage.failure, { source: "agent", ...failure })
       const failedReplay = await store.agUi.replay("tenant_reconcile", sessionId, null, 100)
@@ -1105,7 +1202,7 @@ for (const failure of [
   })
 }
 
-integrationTest("replays an Agent draft, tool, and empty final completion into the durable BFF assistant snapshot", async () => {
+integrationTest("CHAT-ORDER persists public text/activity slots without erasing earlier text on an empty completion", async () => {
   const pool = new Pool({
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
@@ -1135,6 +1232,15 @@ integrationTest("replays an Agent draft, tool, and empty final completion into t
       content: "Use the tool",
     })
     assert.ok(turn)
+    const initialized = await pool.query(
+      "SELECT role,ordered_parts,parts_format_version,parts_public_sequence FROM bff_message WHERE conversation_id=$1 ORDER BY message_seq",
+      [sessionId],
+    )
+    assert.deepEqual(initialized.rows, [
+      { role: "user", ordered_parts: null, parts_format_version: null, parts_public_sequence: null },
+      { role: "assistant", ordered_parts: [], parts_format_version: 1, parts_public_sequence: "0" },
+    ])
+    await assert.rejects(pool.query("UPDATE bff_message SET parts_format_version=NULL WHERE message_id=$1", [turn.assistant_message_id]), { code: "23514" })
     const [claim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_empty_final",
       limit: 1,
@@ -1155,7 +1261,7 @@ integrationTest("replays an Agent draft, tool, and empty final completion into t
       chat_message_id: chatMessageId,
     })
     // This is the Agent owner's published v1 replay shape, including a completed
-    // final segment with no preceding delta and authoritative content="".
+    // separate segment with no preceding delta and authoritative content=""; no final-phase inference.
     const page = agentEventPage(
       {
         events: [
@@ -1208,9 +1314,35 @@ integrationTest("replays an Agent draft, tool, and empty final completion into t
       status: "streaming",
     })
     await store.agUi.ingest(tenantId, sessionId, sources.slice(3, 6))
-    assert.deepEqual(await assistant(), { content: "", status: "streaming" })
+    assert.deepEqual(await assistant(), { content: "draft", status: "streaming" })
+    const beforeRejected = await pool.query("SELECT ordered_parts,parts_public_sequence FROM bff_message WHERE message_id=$1", [turn.assistant_message_id])
+    const forbidden = [
+      wire(7, "assistant.delta", { delta: "rolled back" }, "third-segment"),
+      wire(8, "assistant.delta", { delta: "reopened" }, "draft-segment"),
+    ].map((event) => ({
+      sourceRunId: event.run_id,
+      sourceEventId: event.chat_event_id,
+      sourceSequence: event.seq,
+      sourceOccurredAt: new Date(event.created_at).toISOString(),
+      sourcePayload: event,
+      event: mapAgentEvent(event),
+    }))
+    await assert.rejects(store.agUi.ingest(tenantId, sessionId, forbidden), /AGUI_MESSAGE_PARTS_INVALID/u)
+    assert.deepEqual(
+      (await pool.query("SELECT ordered_parts,parts_public_sequence FROM bff_message WHERE message_id=$1", [turn.assistant_message_id])).rows,
+      beforeRejected.rows,
+    )
+    assert.equal(
+      (
+        await pool.query("SELECT count(*)::int AS count FROM bff_agui_source_event WHERE tenant_id=$1 AND session_id=$2 AND source_sequence>=7", [
+          tenantId,
+          sessionId,
+        ])
+      ).rows[0].count,
+      0,
+    )
     await store.agUi.ingest(tenantId, sessionId, sources.slice(6))
-    assert.deepEqual(await assistant(), { content: "", status: "completed" })
+    assert.deepEqual(await assistant(), { content: "draft", status: "completed" })
 
     await store.close()
     store = null
@@ -1237,14 +1369,44 @@ integrationTest("replays an Agent draft, tool, and empty final completion into t
     assert.deepEqual(snapshot.messages.at(-1), {
       message_id: turn.assistant_message_id,
       role: "assistant",
-      content: "",
+      content: null,
       status: "completed",
       created_at: snapshot.messages.at(-1).created_at,
       run_id: turn.run_id,
+      rendering: snapshot.messages.at(-1).rendering,
     })
+    const readParts = await assertOrderedReadBody(reopened.services.chat, tenantId, subjectId, sessionId, snapshot.messages.at(-1), "9", watermark, "draft")
+    assert.deepEqual(
+      readParts.items.filter((part) => part.kind === "text").map((part) => [part.segment_id, part.text]),
+      [
+        ["draft-segment", "draft"],
+        ["final-segment", ""],
+      ],
+    )
+    const persisted = await pool.query(
+      "SELECT ordered_parts,parts_format_version,parts_public_sequence,xmin::text AS xmin FROM bff_message WHERE message_id=$1",
+      [turn.assistant_message_id],
+    )
+    assert.equal(persisted.rows[0].parts_format_version, 1)
+    assert.equal(persisted.rows[0].parts_public_sequence, "9")
+    assert.deepEqual(
+      persisted.rows[0].ordered_parts.map((part) => [part.kind, part.first_sequence, part.latest_sequence]),
+      [
+        ["text", "3", "5"],
+        ["activity", "6", "7"],
+        ["text", "8", "8"],
+      ],
+    )
+    assert.equal(persisted.rows[0].ordered_parts[0].text, "draft")
+    assert.equal(persisted.rows[0].ordered_parts[1].activity.status, "completed")
+    assert.equal(persisted.rows[0].ordered_parts[2].text, "")
     const duplicate = await reopened.agUi.ingest(tenantId, sessionId, sources)
     assert.equal(duplicate.insertedSources, 0)
-    assert.deepEqual(await assistant(), { content: "", status: "completed" })
+    assert.equal(
+      (await pool.query("SELECT xmin::text AS xmin FROM bff_message WHERE message_id=$1", [turn.assistant_message_id])).rows[0].xmin,
+      persisted.rows[0].xmin,
+    )
+    assert.deepEqual(await assistant(), { content: "draft", status: "completed" })
     assert.equal((await reopened.services.chat.snapshot(tenantId, subjectId, sessionId, undefined)).event_watermark, watermark)
   } finally {
     if (store !== null) await store.close()
@@ -3351,6 +3513,8 @@ integrationTest(
       const gated = new PostgresChatRepository({
         pool: {
           connect: async () => ({
+            on: reader.on.bind(reader),
+            removeListener: reader.removeListener.bind(reader),
             query: async (sql, values) => {
               const result = await reader.query(sql, values)
               if (sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1") && authorizationCount++ === 0) {
@@ -3362,9 +3526,9 @@ integrationTest(
               }
               return result
             },
-            release: () => {
+            release: (destroy) => {
               readerReleased = true
-              reader.release()
+              reader.release(destroy)
             },
           }),
         },
@@ -4532,6 +4696,8 @@ integrationTest(
       const repository = new PostgresChatRepository({
         pool: {
           connect: async () => ({
+            on: reader.on.bind(reader),
+            removeListener: reader.removeListener.bind(reader),
             query: async (sql, values) => {
               const result = await reader.query(sql, values)
               if (!gatedOnce && sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1")) {
@@ -4543,9 +4709,9 @@ integrationTest(
               }
               return result
             },
-            release: () => {
+            release: (destroy) => {
               returned = true
-              reader.release()
+              reader.release(destroy)
             },
           }),
         },
@@ -4706,10 +4872,11 @@ integrationTest(
       {
         message_id: beforeAssistant.message_id,
         run_id: c.runId,
-        content: "R118 old partial",
+        content: null,
         status: "streaming",
       },
     )
+    await assertOrderedReadBody(c.store.services.chat, c.tenantId, c.ownerId, c.sessionId, beforeAssistant, "5", before.event_watermark, "R118 old partial")
     assert.deepEqual(before.execution_head, r57ExpectedHead(c.runId, "waiting", waiting))
     assert.match(before.event_watermark, /^agui_[0-9a-f]{32}$/u)
 
@@ -4729,6 +4896,8 @@ integrationTest(
       const repository = new PostgresChatRepository({
         pool: {
           connect: async () => ({
+            on: reader.on.bind(reader),
+            removeListener: reader.removeListener.bind(reader),
             query: async (sql, values) => {
               const result = await reader.query(sql, values)
               if (!gatedOnce && sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1")) {
@@ -4740,9 +4909,9 @@ integrationTest(
               }
               return result
             },
-            release: () => {
+            release: (destroy) => {
               returned = true
-              reader.release()
+              reader.release(destroy)
             },
           }),
         },
@@ -4800,7 +4969,7 @@ integrationTest(
         {
           message_id: beforeAssistant.message_id,
           run_id: c.runId,
-          content: "R118 old partial",
+          content: null,
           status: "streaming",
           execution_head: r57ExpectedHead(c.runId, "waiting", waiting),
           event_watermark: before.event_watermark,
@@ -4818,11 +4987,27 @@ integrationTest(
         {
           message_id: beforeAssistant.message_id,
           run_id: c.runId,
-          content: "R118 old partial + committed",
+          content: null,
           status: "streaming",
           execution_head: r57ExpectedHead(c.runId, "resuming", accepted),
           event_watermark: committedStatus.currentCursor,
         },
+      )
+      assert.deepEqual(oldAssistant.rendering, beforeAssistant.rendering)
+      assertOrderedReadReference(oldAssistant, "5", before.event_watermark)
+      await assert.rejects(
+        c.store.services.chat.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, oldAssistant)),
+        /MESSAGE_PARTS_CHANGED/u,
+      )
+      await assertOrderedReadBody(
+        c.store.services.chat,
+        c.tenantId,
+        c.ownerId,
+        c.sessionId,
+        freshAssistant,
+        "7",
+        committedStatus.currentCursor,
+        "R118 old partial + committed",
       )
       assert.match(fresh.event_watermark, /^agui_[0-9a-f]{32}$/u)
       assert.notEqual(fresh.event_watermark, before.event_watermark)
@@ -4840,6 +5025,7 @@ integrationTest(
               metadata: {
                 kokoro: {
                   seq: 4,
+                  public_sequence: "6",
                   run_id: c.runId,
                   event_id: "r57_source_" + c.suffix + "_4",
                   timestamp: "1970-01-01T00:00:04.000Z",
@@ -4859,6 +5045,7 @@ integrationTest(
               metadata: {
                 kokoro: {
                   seq: 5,
+                  public_sequence: "7",
                   run_id: c.runId,
                   event_id: "r57_source_" + c.suffix + "_5",
                   timestamp: "1970-01-01T00:00:05.000Z",
@@ -4976,6 +5163,8 @@ integrationTest("R124 one authorized RR snapshot binds Message head process HITL
     c.source(6, delivery("a"), "delivery.created"),
   ])
   const before = await c.snapshot()
+  const beforeAssistant = before.messages.find((message) => message.role === "assistant" && message.run_id === c.runId)
+  await assertOrderedReadBody(c.store.services.chat, c.tenantId, c.ownerId, c.sessionId, beforeAssistant, "8", before.event_watermark, "old")
   assert.equal(Object.hasOwn(before, "execution_process"), true)
   assert.notEqual(before.execution_process, null)
   let markAuthorized, releaseRead
@@ -4993,6 +5182,8 @@ integrationTest("R124 one authorized RR snapshot binds Message head process HITL
     const repository = new PostgresChatRepository({
       pool: {
         connect: async () => ({
+          on: reader.on.bind(reader),
+          removeListener: reader.removeListener.bind(reader),
           query: async (sql, values) => {
             const result = await reader.query(sql, values)
             if (!gated && sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1")) {
@@ -5004,9 +5195,9 @@ integrationTest("R124 one authorized RR snapshot binds Message head process HITL
             }
             return result
           },
-          release: () => {
+          release: (destroy) => {
             returned = true
-            reader.release()
+            reader.release(destroy)
           },
         }),
       },
@@ -5060,7 +5251,12 @@ integrationTest("R124 one authorized RR snapshot binds Message head process HITL
     assert.deepEqual(fresh.execution_process.todos, [{ content: "inspect", status: "completed" }])
     assert.deepEqual(fresh.execution_process.activities, [newSkill])
     assert.deepEqual(fresh.execution_head, r57ExpectedHead(c.runId, "resuming", newInteraction))
-    assert.equal(fresh.messages.at(-1).content, "old-new")
+    const oldAssistant = old.messages.find((message) => message.message_id === beforeAssistant.message_id)
+    const freshAssistant = fresh.messages.find((message) => message.message_id === beforeAssistant.message_id)
+    assert.deepEqual(oldAssistant.rendering, beforeAssistant.rendering)
+    assertOrderedReadReference(oldAssistant, "8", before.event_watermark)
+    await assert.rejects(c.store.services.chat.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, oldAssistant)), /MESSAGE_PARTS_CHANGED/u)
+    await assertOrderedReadBody(c.store.services.chat, c.tenantId, c.ownerId, c.sessionId, freshAssistant, "13", fresh.event_watermark, "old-new")
     assert.deepEqual(fresh.deliveries.map(({ artifact_id }) => artifact_id).sort(), ["artifact_r124_a", "artifact_r124_b"])
     const replay = await c.store.agUi.replay(c.tenantId, c.sessionId, before.event_watermark, 100)
     assert.equal(replay.kind, "page")
@@ -5875,3 +6071,54 @@ integrationTest(
     assert.equal((await c.fingerprint()).bff_agui_run_process.length, 1)
   },
 )
+
+integrationTest("CHAT-ORDER leaves unproven legacy Message parts NULL and does not rewrite it for activity-only frames", async () => {
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let store = null
+  try {
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const tenantId = "tenant_ordered_legacy",
+      sessionId = "session_ordered_legacy",
+      ownerId = "owner_ordered_legacy"
+    const runId = await submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix: "ordered_legacy" })
+    await pool.query(
+      "UPDATE bff_message SET ordered_parts=NULL,parts_format_version=NULL,parts_public_sequence=NULL WHERE tenant_id=$1 AND run_id=$2 AND role='assistant'",
+      [tenantId, runId],
+    )
+    const read = async () =>
+      (
+        await pool.query(
+          "SELECT content,ordered_parts,parts_format_version,parts_public_sequence,xmin::text AS xmin FROM bff_message WHERE tenant_id=$1 AND run_id=$2 AND role='assistant'",
+          [tenantId, runId],
+        )
+      ).rows[0]
+    const before = await read()
+    const source = (sequence, kind, payload) => agentSource({ id: `legacy_ordered_${sequence}`, sequence, kind, payload, sessionId, runId })
+    await store.agUi.ingest(tenantId, sessionId, [
+      source(1, "run.created", { run_id: runId }),
+      source(2, "activity.updated", {
+        activity: "tool",
+        activity_id: `act_${"d".repeat(64)}`,
+        segment_id: `seg_${"e".repeat(64)}`,
+        status: "running",
+        display_code: "tool.execution",
+      }),
+    ])
+    assert.deepEqual(await read(), before)
+    await store.agUi.ingest(tenantId, sessionId, [
+      source(3, "message.delta", { segment_id: "legacy_text", delta: "legacy public" }),
+      source(4, "message.completed", { segment_id: "legacy_text", content: "legacy corrected" }),
+    ])
+    const after = await read()
+    assert.equal(after.content, "legacy corrected")
+    assert.equal(after.ordered_parts, null)
+    assert.equal(after.parts_format_version, null)
+    assert.equal(after.parts_public_sequence, null)
+  } finally {
+    await store?.close()
+    await pool.end()
+  }
+})

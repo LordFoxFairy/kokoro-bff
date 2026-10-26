@@ -234,6 +234,9 @@ CREATE TABLE IF NOT EXISTS bff_message (
   run_id TEXT,
   role TEXT NOT NULL CONSTRAINT ck_bff_message_role CHECK (role IN ('user', 'assistant')),
   content TEXT NOT NULL,
+  ordered_parts JSONB,
+  parts_format_version SMALLINT,
+  parts_public_sequence BIGINT,
   selected_skill_source_refs JSONB NOT NULL DEFAULT '[]'::jsonb CONSTRAINT ck_bff_message_skill_selection CHECK (jsonb_typeof(selected_skill_source_refs) = 'array' AND jsonb_array_length(selected_skill_source_refs) <= 16),
   status TEXT NOT NULL CONSTRAINT ck_bff_message_status CHECK (status IN ('pending', 'streaming', 'completed', 'failed')),
   agent_failure_code TEXT,
@@ -244,6 +247,15 @@ CREATE TABLE IF NOT EXISTS bff_message (
   CONSTRAINT uq_bff_message_conversation_sequence UNIQUE (tenant_id, conversation_id, message_seq),
   CONSTRAINT ck_bff_message_identity CHECK (length(btrim(tenant_id)) > 0 AND length(btrim(conversation_id)) > 0),
   CONSTRAINT ck_bff_message_sequence CHECK (message_seq >= 1),
+  CONSTRAINT ck_bff_message_ordered_parts CHECK (
+    (ordered_parts IS NULL AND parts_format_version IS NULL AND parts_public_sequence IS NULL)
+    OR (
+      role = 'assistant' AND ordered_parts IS NOT NULL
+      AND jsonb_typeof(ordered_parts) = 'array'
+      AND parts_format_version IS NOT NULL AND parts_public_sequence IS NOT NULL
+      AND parts_format_version = 1 AND parts_public_sequence >= 0
+    )
+  ),
   CONSTRAINT ck_bff_message_agent_failure CHECK (
     (agent_failure_code IS NULL AND agent_failure_retryable IS NULL)
     OR (

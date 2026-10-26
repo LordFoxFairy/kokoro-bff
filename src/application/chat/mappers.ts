@@ -1,4 +1,5 @@
-import type { ChatMessage, ChatSessionSummary } from "../../contracts/index.js"
+import type { ChatMessage, ChatMessageRead, ChatSessionSummary } from "../../contracts/index.js"
+import type { PrivateMessageRead } from "../ports/chat-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Message } from "../../domain/chat/message.js"
 
@@ -23,6 +24,20 @@ export function chatMessage(message: Message): ChatMessage {
     status: message.status,
     created_at: iso(message.createdAt),
     ...(message.runId === null ? {} : { run_id: message.runId }),
+    ...(message.failure === null ? {} : { failure: message.failure }),
+  }
+}
+
+export function privateChatMessage(message: PrivateMessageRead): ChatMessageRead {
+  if (message.content !== null) return chatMessage(message)
+  return {
+    message_id: message.messageId,
+    role: "assistant",
+    content: null,
+    status: message.status,
+    created_at: iso(message.createdAt),
+    run_id: message.runId,
+    rendering: message.rendering,
     ...(message.failure === null ? {} : { failure: message.failure }),
   }
 }

@@ -597,3 +597,39 @@ it("R353 carries strict Skill ready and terminal facts into the same source comm
     ],
   )
 })
+
+it("CHAT-ORDER retains exact text segment identity and distinguishes completed content from a new-segment delta", async () => {
+  const commits = []
+  const service = new AgUiProjectionService({
+    readStream: async () => ({ version: 0, sourceHighWatermark: 0, projectionState: { textMessageIds: [] }, expectedRunId: "run_1" }),
+    assertPersistedSources: async () => {},
+    commitProjection: async (command) => {
+      commits.push(command)
+      return { kind: "committed", insertedFrames: 3 }
+    },
+  })
+  const source = (seq, kind, payload) => ({
+    sourceRunId: "run_1",
+    sourceEventId: `ordered_${seq}`,
+    sourceSequence: seq,
+    sourceOccurredAt: new Date(seq * 1000).toISOString(),
+    sourcePayload: { kind, payload },
+    event: { event_id: `ordered_${seq}`, seq, session_id: "session_1", run_id: "run_1", timestamp: new Date(seq * 1000).toISOString(), kind, payload },
+  })
+  await service.ingest("tenant_1", "session_1", [
+    source(1, "message.delta", { segment_id: "first", delta: "Hello" }),
+    source(2, "message.completed", { segment_id: "first", content: "Hello corrected" }),
+    source(3, "message.completed", { segment_id: "second", content: "Final" }),
+  ])
+  assert.equal(commits.length, 1)
+  assert.deepEqual(
+    commits[0].sources.map((source) => source.assistantUpdate),
+    [
+      { runId: "run_1", segmentId: "first", completed: false, kind: "replace", content: "Hello" },
+      { runId: "run_1", segmentId: "first", completed: true, kind: "replace", content: "Hello corrected" },
+      { runId: "run_1", segmentId: "second", completed: true, kind: "replace", content: "Final" },
+    ],
+  )
+})
+
+import "./agui-message-parts.test.ts"

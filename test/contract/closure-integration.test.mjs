@@ -89,7 +89,7 @@ test("integration proof rejects permissions, aliases, extra blocks and unrelated
     assert.ok(inspectClosureIntegrationContract(source, changed).length > 0)
 })
 
-test("merged canonical SQL adds only archive, execution binding and the approved non-retryable settlement failure", async () => {
+test("merged canonical SQL adds only archive, execution binding, ordered Message parts and the approved non-retryable settlement failure", async () => {
   const schema = await readFile(new URL("../../database/schema.sql", import.meta.url), "utf8")
   const parent = await readFile(new URL("../../contract/tests/closure-local.schema.sql.snapshot", import.meta.url), "utf8")
   const settings = await readFile(new URL("../../contract/tests/settings-main.schema.sql.snapshot", import.meta.url), "utf8")
@@ -98,7 +98,28 @@ test("merged canonical SQL adds only archive, execution binding and the approved
   const archiveIndexes = settings.match(/-- SET47: organization state[^]*?(?=CREATE TABLE IF NOT EXISTS bff_message \()/u)?.[0]
   assert.ok(archiveIndexes)
   const bindingColumns = "  execution_project_ref TEXT,\n  execution_context_retired_at TIMESTAMPTZ(3),\n"
+  const partsColumns = "  ordered_parts JSONB,\n  parts_format_version SMALLINT,\n  parts_public_sequence BIGINT,\n"
+  const partsCheck = `  CONSTRAINT ck_bff_message_ordered_parts CHECK (
+    (ordered_parts IS NULL AND parts_format_version IS NULL AND parts_public_sequence IS NULL)
+    OR (
+      role = 'assistant' AND ordered_parts IS NOT NULL
+      AND jsonb_typeof(ordered_parts) = 'array'
+      AND parts_format_version IS NOT NULL AND parts_public_sequence IS NOT NULL
+      AND parts_format_version = 1 AND parts_public_sequence >= 0
+    )
+  ),
+`
   const verify = (value) => {
+    assert.equal(value.split(partsColumns).length, 2, "the exact approved Message parts columns must remain present once")
+    assert.equal(value.split(partsCheck).length, 2, "the exact approved Message parts CHECK must remain present once")
+    const message = value.match(/CREATE TABLE IF NOT EXISTS bff_message \([^]*?\n\);/u)?.[0]
+    assert.ok(message)
+    assert.equal(message.split(`  content TEXT NOT NULL,\n${partsColumns}`).length, 2)
+    assert.equal(
+      message.split(`  CONSTRAINT ck_bff_message_sequence CHECK (message_seq >= 1),\n${partsCheck}  CONSTRAINT ck_bff_message_agent_failure CHECK (\n`).length,
+      2,
+    )
+    value = value.replace(partsColumns, "").replace(partsCheck, "")
     const approvedFailure = "'model_access_denied', 'model_settlement_pending'"
     assert.equal(value.split(approvedFailure).length, 2, "pending must be added only to the exact failure-code enum")
     value = value.replace(approvedFailure, "'model_access_denied'")
@@ -123,6 +144,22 @@ test("merged canonical SQL adds only archive, execution binding and the approved
     schema.replace("execution_project_ref TEXT,", "execution_project_ref TEXT NOT NULL,"),
     schema.replace("execution_context_retired_at TIMESTAMPTZ(3),", "execution_context_retired_at TIMESTAMP(3),"),
     schema.replace(bindingColumns, "").replace("CREATE TABLE IF NOT EXISTS bff_message (\n", `CREATE TABLE IF NOT EXISTS bff_message (\n${bindingColumns}`),
+    ...["  ordered_parts JSONB,\n", "  parts_format_version SMALLINT,\n", "  parts_public_sequence BIGINT,\n"].map((column) => schema.replace(column, "")),
+    schema.replace("  ordered_parts JSONB,", "  ordered_parts JSONB DEFAULT '[]'::jsonb,"),
+    schema.replace("  parts_format_version SMALLINT,", "  parts_format_version INTEGER,"),
+    schema.replace("  parts_public_sequence BIGINT,", "  parts_public_sequence TEXT,"),
+    schema.replace(partsColumns, partsColumns + partsColumns),
+    schema.replace(partsColumns, "").replace("  content TEXT NOT NULL,\n", `${partsColumns}  content TEXT NOT NULL,\n`),
+    schema.replace(partsCheck, ""),
+    schema.replace(partsCheck, partsCheck + partsCheck),
+    schema
+      .replace(partsCheck, "")
+      .replace(
+        "  CONSTRAINT ck_bff_message_sequence CHECK (message_seq >= 1),\n",
+        `${partsCheck}  CONSTRAINT ck_bff_message_sequence CHECK (message_seq >= 1),\n`,
+      ),
+    schema.replace("      AND parts_format_version IS NOT NULL AND parts_public_sequence IS NOT NULL\n", ""),
+    schema.replace("      AND parts_format_version = 1 AND parts_public_sequence >= 0", "      AND parts_format_version = 1 AND parts_public_sequence >= -1"),
   ]) {
     assert.notEqual(drift, schema)
     assert.throws(() => verify(drift))

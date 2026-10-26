@@ -355,7 +355,10 @@ for (const fault of ["series", "source", "status"])
 test("metadata detail Public25 separates the closed GetSkill response from unchanged download information", async () => {
   const { readFile } = await import("node:fs/promises")
   const { load } = await import("js-yaml")
-  const document = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  const { restorePublic26MessagePartsContract } = await import("../../scripts/message-parts-public-contract.mjs")
+  const public26 = restorePublic26MessagePartsContract(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  assert.equal(createHash("sha256").update(public26).digest("hex"), "20d26736cf23da32c242c2c7cf75c45affb62c5d27696dcecb0bc6193bc39a09")
+  const document = load(public26)
   assert.equal(document.info.version, "26.0.0")
   assert.equal(
     document.paths[website + "GetSkill"].post.responses["200"].content["application/json"].schema.$ref,
@@ -372,7 +375,7 @@ test("metadata detail Public25 separates the closed GetSkill response from uncha
   assert.deepEqual(document.components.schemas.SpecificationDownloadInfo.required, ["skill", "downloadInfo"])
   const { restorePublic24SkillDetailContract } = await import("../../scripts/skill-detail-public-contract.mjs")
   const { restorePublic25McpPersonalSseContract } = await import("../../scripts/mcp-personal-sse-public-contract.mjs")
-  const raw = restorePublic25McpPersonalSseContract(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  const raw = restorePublic25McpPersonalSseContract(public26)
   assert.equal(
     createHash("sha256").update(restorePublic24SkillDetailContract(raw)).digest("hex"),
     "f4caf11f3cd9255d2cd9daf69b74ff9988505d640e31c686ce495e6d8a578b2c",

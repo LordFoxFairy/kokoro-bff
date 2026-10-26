@@ -1,10 +1,11 @@
 import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "./ports/chat-repository.js"
-import type { ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../contracts/index.js"
+import type { ChatMessageRead, ChatSessionDetail, PrivateChatSessionDetail, ChatSessionSummary } from "../contracts/index.js"
+import type { PrivateMessageReadContext, MessagePartsQuery } from "./ports/chat-repository.js"
 import type { ChatRepository, ConversationCollectionFilter, SharedTasksPosition, SharedTasksRead } from "./ports/chat-repository.js"
 import { createHash } from "node:crypto"
 import { mutationScope } from "./idempotency.js"
 import type { RequestContext } from "../domain/request-context.js"
-import { chatMessage, conversationSummary } from "./chat/mappers.js"
+import { privateChatMessage, conversationSummary } from "./chat/mappers.js"
 
 export class ChatApplicationService {
   private readonly repository: ChatRepository
@@ -62,8 +63,16 @@ export class ChatApplicationService {
     }
   }
 
-  public async snapshot(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSessionDetail | null> {
-    const snapshot = await this.repository.readSnapshot(tenantId, subjectId, conversationId, projectRef)
+  public async snapshot(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    projectRef: string | undefined,
+    context?: PrivateMessageReadContext,
+  ): Promise<PrivateChatSessionDetail | null> {
+    const snapshot = await (context === undefined
+      ? this.repository.readSnapshot(tenantId, subjectId, conversationId, projectRef)
+      : this.repository.readSnapshot(tenantId, subjectId, conversationId, projectRef, context))
     if (snapshot === null) return null
     const { conversation, messages, deliveries, deliveriesHasMore, eventWatermark, executionHead, executionProcess } = snapshot
     return {
@@ -74,7 +83,7 @@ export class ChatApplicationService {
         created_at: conversation.createdAt.toISOString(),
         updated_at: conversation.updatedAt.toISOString(),
       },
-      ...(messages.length === 0 ? {} : { messages: messages.map(chatMessage) }),
+      ...(messages.length === 0 ? {} : { messages: messages.map(privateChatMessage) }),
       files: [],
       deliveries: deliveries.map((delivery) => ({
         conversation_id: delivery.conversationId,
@@ -125,9 +134,16 @@ export class ChatApplicationService {
     limit: number,
     cursor: string | null,
     projectRef?: string,
-  ): Promise<{ messages: ChatMessage[]; next_cursor: string | null } | null> {
-    const page = await this.repository.listMessages(tenantId, subjectId, conversationId, limit, cursor, projectRef)
-    return page === null ? null : { messages: page.messages.map(chatMessage), next_cursor: page.next_cursor }
+    context?: PrivateMessageReadContext,
+  ): Promise<{ messages: ChatMessageRead[]; next_cursor: string | null } | null> {
+    const page = await (context === undefined
+      ? this.repository.listMessages(tenantId, subjectId, conversationId, limit, cursor, projectRef)
+      : this.repository.listMessages(tenantId, subjectId, conversationId, limit, cursor, projectRef, context))
+    return page === null ? null : { messages: page.messages.map(privateChatMessage), next_cursor: page.next_cursor }
+  }
+
+  public readMessageParts(query: MessagePartsQuery): ReturnType<ChatRepository["readMessageParts"]> {
+    return this.repository.readMessageParts(query)
   }
 
   public renameConversation(

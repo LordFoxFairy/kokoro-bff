@@ -60,7 +60,12 @@ function importsCanonicalSchemaInstaller(relativePath: string, source: string): 
 
 // Named owner evolutions may read these two helpers, never execute the fresh-only installer.
 function isNamedSchemaEvolutionReader(relativePath: string, source: string): boolean {
-  if (!["scripts/personalization-schema-evolution.mjs", "scripts/evolve-agent-failure-schema.mjs"].includes(relativePath)) return false
+  if (
+    !["scripts/personalization-schema-evolution.mjs", "scripts/evolve-agent-failure-schema.mjs", "scripts/evolve-message-parts-schema.mjs"].includes(
+      relativePath,
+    )
+  )
+    return false
   const imports = [...source.matchAll(/^import\s+\{([^}]+)\}\s+from\s+["']\.\/apply-schema\.mjs["'];?[ \t]*$/gmu)]
   if (imports.length !== 1) return false
   const declaration = imports[0]
@@ -929,7 +934,11 @@ test("R257 personalization stays caller-owned and bypasses generic receipt dispa
 })
 
 test("R257 named evolution may import exactly the two approved canonical read helpers", () => {
-  for (const relativePath of ["scripts/personalization-schema-evolution.mjs", "scripts/evolve-agent-failure-schema.mjs"]) {
+  for (const relativePath of [
+    "scripts/personalization-schema-evolution.mjs",
+    "scripts/evolve-agent-failure-schema.mjs",
+    "scripts/evolve-message-parts-schema.mjs",
+  ]) {
     const namedReader: SourceFile = {
       relativePath,
       source: 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"',
@@ -940,7 +949,11 @@ test("R257 named evolution may import exactly the two approved canonical read he
 
 test("R257 named evolution exception rejects installer execution exports and alternate import forms", () => {
   const approved = 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"'
-  for (const relativePath of ["scripts/personalization-schema-evolution.mjs", "scripts/evolve-agent-failure-schema.mjs"]) {
+  for (const relativePath of [
+    "scripts/personalization-schema-evolution.mjs",
+    "scripts/evolve-agent-failure-schema.mjs",
+    "scripts/evolve-message-parts-schema.mjs",
+  ]) {
     for (const source of [
       'import { applyCanonicalSchema } from "./apply-schema.mjs"',
       'import { assertBffSchemaUrl, loadCanonicalSchema, applyCanonicalSchema } from "./apply-schema.mjs"',
