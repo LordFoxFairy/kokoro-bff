@@ -1,5 +1,7 @@
 ## CHAT-ORDER-1：同 Message 有序 parts 与有界读取（2026-10-25 定案；2026-10-26 候选，正常未切）
 
+**2026-10-26 实测后的 legacy 空完成充分证明（批准的窄后继）：** 正常R6存在12个不同ID的END-only及一个delivery帧；缺START不证明空，旧正文/ledger保持原样。允许仅用已保留BFF行构造固定Agent已发布wire形状的空完成候选，并复用原source payload canonicalJson/SHA256唯一算法；完整候选与原source_digest逐字精确匹配才承接该空槽。`source_index = source_sequence - first_retained_source_sequence` 只作有界候选，不是Agent不变量或公开坐标；任一身份、索引、时间、optional字段presence、event_type、payload_json原字节差异都保持legacy，不搜索／兼容序列化或新增网络依赖。所有原当前scope／dispatch／source／range／GC／512帧／4MiB／10秒门保持；仍要求唯一可见START与delta等持久正文、合法terminal。已证空ID不得后续重开，fold该槽只用真实空串，绝不把最终全文灌入；delivery仅具名非parts承接并推进原公开位置。无机器契约、Schema、权限或旧行/xmin写入；原Agent真实GET仅作为Root诊断证据，不进入运行读路径。
+
 **D1D 公共坐标补充（2026-10-26，候选未正常生效）：** 原 `metadata.kokoro.seq` 是 Agent/BFF 各自源序号，不等于 durable public ledger 的 `public_sequence`；一次源事件可展开多个 frame，BFF admission 也占公开位置。每个 durable AG-UI data frame 的读取／replay 投影须从 PG 原十进制列暴露 required `metadata.kokoro.public_sequence`，保持原 seq 类型／source_owner、opaque cursor、source digest 与存储 payload/xmin 不变；不回填旧事件或改变 source 协议。完整 replay 字节预算计入新增字段，损坏位置／元数据不伪造。App 仅用该公开坐标与 parts revision 合并，绝不拿旧 seq/cursor 猜坐标；parts 领先 SSE 不推进全局 stream cursor，确认版本不因迟到 snapshot 降级。同段多页 confirmed baseline 与 live overlay 分开，避免重复 replay 后缀。Public27 尚未发布，追加固定 commit/digest 后消费者正规生成；完整 Public26 逆证与全部历史 hash 保持。
 
 **D0已批准；canonical三列/CHECK与fold为D1A源码候选，正常库未DDL。** BFF Chat唯一owner；保一Run一assistant Message、tenant/conversation/message/run普通列与dispatch/outbox守卫。在同row保存版本化呈现文档，不建parts表、owner、缓存、migration/版本历史体系，无跨Message parts搜索/JOIN职责；JSONB代价为写放大/detoast，本slice测代表性长Message，不扩成全域容量/EXPLAIN前置工程。

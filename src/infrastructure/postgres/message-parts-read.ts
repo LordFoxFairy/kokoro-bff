@@ -3,6 +3,7 @@ import type { Pool, PoolClient, QueryResultRow } from "pg"
 import { EventSchemas } from "@ag-ui/core"
 
 import type { AgUiEvent } from "../../application/agui/project-chat-event.js"
+import { agUiSourcePayloadDigest } from "../../application/agui/project-session-events.js"
 import type { AgUiAssistantUpdate } from "../../application/agui/ports/agui-projection-repository.js"
 import type { MessagePartsQuery, MessageReadLifetime, PrivateMessageRead } from "../../application/ports/chat-repository.js"
 import type { MessagePartsPage, OrderedMessageRendering } from "../../contracts/chat.js"
@@ -391,7 +392,30 @@ type LegacyFrameRow = QueryResultRow & {
   source_valid: boolean
 }
 
-/** Only a complete retained single-segment transcript can prove an old overwritten-body row. */
+/** The index is only a candidate: exact full-wire digest equality is the proof.
+ * Different presence/serialization or a filtered execution index stays legacy.
+ */
+function provesEmptyCompletion(scope: MessagePartsScope, row: LegacyFrameRow, frame: AgUiEvent, firstSource: bigint): boolean {
+  const sequence = Number(BigInt(row.source_sequence)),
+    sourceIndex = Number(BigInt(row.source_sequence) - firstSource),
+    createdAt = Date.parse(frame.metadata.kokoro.timestamp)
+  if (![sequence, sourceIndex, createdAt].every((value) => Number.isSafeInteger(value) && value >= 0)) return false
+  return (
+    agUiSourcePayloadDigest({
+      chat_event_id: row.source_event_id,
+      session_id: scope.conversationId,
+      run_id: scope.runId,
+      source_index: sourceIndex,
+      event_type: "assistant.completed",
+      payload_json: '{"content":""}',
+      seq: sequence,
+      created_at: createdAt,
+      chat_message_id: identity(frame.messageId),
+    }) === row.source_digest
+  )
+}
+
+/** Only a complete retained single-visible-segment transcript can prove an old overwritten-body row. */
 export async function recoverLegacyMessageParts(
   client: PoolClient,
   scope: MessagePartsScope,
@@ -463,6 +487,9 @@ export function recoverLegacyFrames(
   try {
     if (rows.length === 0 || rows.length > MAX_LEGACY_FRAMES || Buffer.byteLength(body) > MAX_LEGACY_BYTES) return null
     const groups: Array<{ sequence: string; id: string; frames: Array<{ publicSequence: number; frame: AgUiEvent }> }> = []
+    const emptySources = new Set<string>(),
+      emptySegments = new Set<string>(),
+      firstSource = BigInt(decimal(rows[0]!.source_sequence, true))
     let textId: string | undefined,
       text = "",
       ends = 0,
@@ -496,17 +523,27 @@ export function recoverLegacyFrames(
         groups.push({ sequence: row.source_sequence, id: row.source_event_id, frames: [{ publicSequence: Number(position), frame: parsed }] })
       }
       if (parsed.type === "TEXT_MESSAGE_START") {
-        if (++starts !== 1 || parsed.role !== "assistant" || runStarts !== 1) return null
+        if (++starts !== 1 || parsed.role !== "assistant" || runStarts !== 1 || emptySegments.has(identity(parsed.messageId))) return null
         textId = identity(parsed.messageId)
       } else if (parsed.type === "TEXT_MESSAGE_CONTENT") {
         if (parsed.messageId !== textId || typeof parsed.delta !== "string" || ends > 0) return null
         text += parsed.delta
       } else if (parsed.type === "TEXT_MESSAGE_END") {
-        if (parsed.messageId !== textId || ++ends !== 1) return null
+        if (parsed.messageId === textId) {
+          if (++ends !== 1) return null
+        } else {
+          const segmentId = identity(parsed.messageId)
+          if (runStarts !== 1 || emptySegments.has(segmentId) || row.frame_index !== 0 || !provesEmptyCompletion(scope, row, parsed, firstSource)) return null
+          emptySources.add(row.source_event_id)
+          emptySegments.add(segmentId)
+        }
       } else if (parsed.type === "RUN_STARTED") {
         if (++runStarts !== 1 || row.public_sequence !== start) return null
       } else if (parsed.type === "RUN_FINISHED" || parsed.type === "RUN_ERROR") terminals += 1
-      else if (parsed.type !== "CUSTOM" || !["kokoro.activity.updated", "kokoro.todo.updated", "kokoro.interaction.state"].includes(parsed.name ?? ""))
+      else if (
+        parsed.type !== "CUSTOM" ||
+        !["kokoro.activity.updated", "kokoro.todo.updated", "kokoro.interaction.state", "kokoro.delivery.created"].includes(parsed.name ?? "")
+      )
         return null
     }
     const terminal = groups.at(-1)?.frames.at(-1)?.frame
@@ -524,6 +561,7 @@ export function recoverLegacyFrames(
       return null
     let state: MessageParts | null = { parts: [], formatVersion: 1, publicSequence: "0" }
     for (const group of groups) {
+      if (emptySources.has(group.id) && (group.frames.length !== 1 || group.frames[0]?.frame.type !== "TEXT_MESSAGE_END")) return null
       const content = group.frames.find(({ frame }) => frame.type === "TEXT_MESSAGE_CONTENT")?.frame
       const end = group.frames.find(({ frame }) => frame.type === "TEXT_MESSAGE_END")?.frame
       const update: AgUiAssistantUpdate | undefined = content
@@ -535,7 +573,7 @@ export function recoverLegacyFrames(
             content: content.delta ?? "",
           }
         : end
-          ? { runId: scope.runId, kind: "replace", segmentId: identity(end.messageId), completed: true, content: text }
+          ? { runId: scope.runId, kind: "replace", segmentId: identity(end.messageId), completed: true, content: emptySources.has(group.id) ? "" : text }
           : undefined
       state = foldMessageParts(state, scope.runId, group.frames, update)
     }

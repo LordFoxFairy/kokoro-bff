@@ -279,3 +279,5 @@ Platform Connect 固定消费 receipt metadata profile；`src/infrastructure/cli
 ## 私有 Message 有序读取候选（2026-10-26）
 
 `src/infrastructure/postgres/message-parts-read.ts` 负责 private snapshot/list 的只读 ref 与独立 parts GET：同一受界 RR 租约、当前本人/direct/Project 与原 scope 绑定、decimal revision、公有 opaque watermark、409 显式重读、4096 Unicode scalar 分页和完整 envelope 1 MiB。唯一 legacy 候选须同 Run/latest assistant、dispatch 与完整 retained public/source ledger 证明，取消/GC 不伪造正文或写旧行。`src/http/chat-message-parts-input.ts` 只解具名 GET query；路由与 service 复用原 Chat owner，Shared/command ACK 保持原 DTO。`test/chat-message-parts-read.test.ts` 静态导入现 default Chat suite；`test/message-parts-read.integration.mjs` 仅接受 Root 的具名空临时库，真实 PostgreSQL 验收与正常组合由 Root 执行。
+
+Legacy 空完成恢复仅重建固定 raw Agent empty-wire 候选并复用原 canonical source digest；完整 SHA 精确匹配才折叠空串，索引差只作候选而非源序号不变量。空 ID 后续重开拒绝，delivery 仅具名非 parts 事件；所有原只读、scope、retention 与总预算守卫保持。

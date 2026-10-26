@@ -61,7 +61,7 @@ function canonicalJson(value: unknown): string {
     .join(",")}}`
 }
 
-function digestOf(value: unknown): string {
+export function agUiSourcePayloadDigest(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex")
 }
 
@@ -273,7 +273,7 @@ function sourceIdentity(source: AgentProjectionSource): AgUiSourceIdentity {
     sourceOwner: "kokoro-agent",
     sourceEventId: source.sourceEventId,
     sourceSequence: source.sourceSequence,
-    sourceDigest: digestOf(source.sourcePayload),
+    sourceDigest: agUiSourcePayloadDigest(source.sourcePayload),
     sourceOccurredAt: source.sourceOccurredAt,
   }
 }

@@ -6,6 +6,7 @@ import { Pool } from "pg"
 import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
 import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
 import { decodeMessagePartsCursor } from "../dist/infrastructure/postgres/message-parts-read.js"
+import { agentEventPage, mapAgentEvent } from "../dist/infrastructure/clients/agent/projection.js"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const redisUrl = process.env.KOKORO_TEST_REDIS_URL
@@ -32,7 +33,16 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
     const reader = new PostgresChatRepository({ pool })
-    async function create({ legacy = false, long = "A", twoSegments = false, prelude = false } = {}) {
+    async function create({
+      legacy = false,
+      long = "A",
+      twoSegments = false,
+      prelude = false,
+      emptyWire = false,
+      hiddenCompletion = "",
+      indexShift = 0,
+      emptySerialization = false,
+    } = {}) {
       const suffix = randomUUID().replaceAll("-", ""),
         tenantId = `parts_t_${suffix}`,
         conversationId = `parts_s_${suffix}`,
@@ -75,7 +85,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
           event: { event_id: id, seq: sequence, session_id: conversationId, run_id: runId, kind, timestamp: occurredAt, payload },
         }
       }
-      const events = [
+      let events = [
         ...(prelude ? [source("activity.updated", skill)] : []),
         source("run.created", { run_id: runId }),
         source("message.delta", { segment_id: "public-a", delta: long }),
@@ -90,6 +100,55 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
           : []),
         source("run.completed", { status: "completed" }),
       ]
+      if (emptyWire) {
+        // Exercise the pinned raw Agent decoder and original source digest producer,
+        // not the older hand-mapped fixtures above. Public 1 remains BFF admission.
+        let rawSequence = 0
+        function wire(eventType, payload, messageId = null) {
+          rawSequence += 1
+          return {
+            chat_event_id: `raw_${suffix}_${rawSequence}`,
+            session_id: conversationId,
+            run_id: runId,
+            source_index: rawSequence - 1 + indexShift,
+            event_type: eventType,
+            payload_json: emptySerialization && eventType === "assistant.completed" && payload.content === "" ? '{ "content": "" }' : JSON.stringify(payload),
+            seq: rawSequence,
+            created_at: rawSequence * 1000,
+            chat_message_id: messageId,
+          }
+        }
+        const wires = [
+          wire("activity", skill),
+          wire("run.started", { status: "running" }),
+          ...Array.from({ length: 12 }, (_, index) => wire("assistant.completed", { content: index === 0 ? hiddenCompletion : "" }, `raw-empty-${index}`)),
+          wire("activity", { ...tool, activity_id: "act_" + "e".repeat(64) }),
+          wire("assistant.delta", { delta: long }, "raw-visible"),
+          wire("delivery", {
+            tool_call_id: "tool",
+            artifact_id: `artifact_${suffix}`,
+            asset_id: `asset_${suffix}`,
+            artifact_kind: "document",
+            path: "/report.md",
+            title: "Report",
+            mime: "text/markdown",
+            size: 1,
+            content_hash: "d".repeat(64),
+          }),
+          wire("assistant.completed", { content: long }, "raw-visible"),
+          wire("run.completed", { status: "completed", token_usage: null }),
+        ]
+        const parsed = agentEventPage({ events: wires, next_seq: rawSequence, watermark: rawSequence }, conversationId, 0, 1000)
+        assert.ok(parsed, "requires the fixed Agent raw ChatEvent shape")
+        events = parsed.events.map((event) => ({
+          sourceRunId: runId,
+          sourceEventId: event.chat_event_id,
+          sourceSequence: event.seq,
+          sourceOccurredAt: new Date(event.created_at).toISOString(),
+          sourcePayload: event,
+          event: mapAgentEvent(event),
+        }))
+      }
       await store.agUi.ingest(tenantId, conversationId, events)
       const query = (cursor = null, extra = {}) => ({
         ...lifetime(),
@@ -276,6 +335,91 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       // A previously issued proved cursor still continues without rewriting old content.
       assert.ok(await reader.readMessageParts(c.query(textPage.next_cursor)))
       assert.deepEqual(await raw(c), before)
+    })
+    await suite.test(
+      "full raw-wire empty witnesses recover twelve completed zero-scalar slots without changing original Message/source/frame rows",
+      async () => {
+        const c = await create({ legacy: true, emptyWire: true, long: "visible😀" }),
+          before = await raw(c)
+        const ledger = async () => ({
+          sources: (
+            await pool.query(
+              "SELECT source_event_id,source_sequence,source_digest,xmin::text AS xmin FROM bff_agui_source_event WHERE tenant_id=$1 AND session_id=$2 ORDER BY source_sequence",
+              [c.tenantId, c.conversationId],
+            )
+          ).rows,
+          frames: (
+            await pool.query(
+              "SELECT public_sequence,event_payload,xmin::text AS xmin FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 ORDER BY public_sequence",
+              [c.tenantId, c.conversationId],
+            )
+          ).rows,
+        })
+        const originalLedger = await ledger(),
+          snapshot = await c.snapshot(),
+          selected = assistant(snapshot)
+        assert.equal(before.ordered_parts, null)
+        assert.equal(before.content, "visible😀")
+        assert.equal(selected.content, null)
+        assert.equal(selected.rendering.revision, "21")
+        assert.equal(decodeMessagePartsCursor(selected.rendering.parts_cursor).source, "ledger")
+        assert.deepEqual(assistant(await reader.listMessages(c.tenantId, c.subjectId, c.conversationId, 100, null)).rendering, selected.rendering)
+        let cursor = selected.rendering.parts_cursor,
+          pages = 0
+        const items = []
+        while (cursor !== null) {
+          const page = await reader.readMessageParts(c.query(cursor, { limit: 3 }))
+          assert.equal(page.revision, "21")
+          assert.equal(page.event_watermark, snapshot.eventWatermark)
+          assert.ok(page.items.length <= 3)
+          items.push(...page.items)
+          cursor = page.next_cursor
+          assert.ok(++pages <= 5)
+        }
+        assert.equal(pages, 5)
+        assert.equal(items.length, 15)
+        assert.deepEqual(
+          items
+            .filter((item) => item.kind === "text" && item.segment_id.startsWith("raw-empty-"))
+            .map((item) => [item.segment_id, item.text, item.offset, item.end, item.total_scalars, item.completed, item.first_sequence, item.latest_sequence]),
+          Array.from({ length: 12 }, (_, index) => [`raw-empty-${index}`, "", "0", "0", "0", true, String(4 + index), String(4 + index)]),
+        )
+        assert.equal(
+          items
+            .filter((item) => item.kind === "text")
+            .map((item) => item.text)
+            .join(""),
+          before.content,
+        )
+        assert.deepEqual(items.at(-1), {
+          kind: "text",
+          part_id: "text:raw-visible",
+          segment_id: "raw-visible",
+          text: "visible😀",
+          offset: "0",
+          end: "8",
+          total_scalars: "8",
+          completed: true,
+          first_sequence: "17",
+          latest_sequence: "20",
+        })
+        assert.equal(originalLedger.frames.filter((frame) => frame.event_payload.name === "kokoro.delivery.created").length, 1)
+        assert.equal(items.filter((item) => item.kind === "activity").length, 2)
+        assert.deepEqual(await raw(c), before)
+        assert.deepEqual(await ledger(), originalLedger)
+      },
+    )
+    await suite.test("raw nonempty, source-index and serialization negatives retain legacy rather than guessing missing START is empty", async () => {
+      for (const variant of [{ hiddenCompletion: "not in retained delta" }, { indexShift: 1 }, { emptySerialization: true }]) {
+        const c = await create({ legacy: true, emptyWire: true, long: "visible😀", ...variant }),
+          before = await raw(c),
+          selected = assistant(await c.snapshot())
+        assert.equal(before.content, "visible😀", "later completion retains the original overwritten-body compatibility behavior")
+        assert.equal(selected.content, before.content)
+        assert.equal(Object.hasOwn(selected, "rendering"), false)
+        await assert.rejects(reader.readMessageParts(c.query()), /MESSAGE_PARTS_UNAVAILABLE/u)
+        assert.deepEqual(await raw(c), before)
+      }
     })
     await suite.test("legacy public delta/body disagreement preserves original body rather than fabricating ordered success", async () => {
       const c = await create({ legacy: true })

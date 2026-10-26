@@ -581,3 +581,211 @@ test("legacy recovery refuses more than 512 frames or 4 MiB instead of expanding
   )
   assert.equal(recoverLegacyFrames(scope, "x".repeat(4194305), "completed", "3", legacyRows()), null)
 })
+
+import { createHash } from "node:crypto"
+
+// Flat pinned Agent ChatEvent wire: this test's independent oracle hashes its
+// exact canonical field order, not a presumed meaning of the public END frame.
+function rawWireDigest(wire: Record<string, unknown>): string {
+  return createHash("sha256")
+    .update(JSON.stringify(Object.fromEntries(Object.entries(wire).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))))
+    .digest("hex")
+}
+function emptyWitnessFixture() {
+  const rows: ReturnType<typeof legacyRows> = []
+  const wires = new Map<number, Record<string, unknown>>()
+  function add(
+    position: number,
+    sequence: number,
+    eventType: string,
+    payload: unknown,
+    event: Record<string, unknown>,
+    messageId: string | null = null,
+    frameIndex = 0,
+  ) {
+    const id = `witness-source-${sequence}`,
+      createdAt = sequence * 1000
+    const wire = {
+      chat_event_id: id,
+      session_id: "session",
+      run_id: "run",
+      source_index: sequence - 30,
+      event_type: eventType,
+      payload_json: JSON.stringify(payload),
+      seq: sequence,
+      created_at: createdAt,
+      chat_message_id: messageId,
+    }
+    wires.set(sequence, wire)
+    rows.push({
+      public_sequence: String(position),
+      source_sequence: String(sequence),
+      frame_index: frameIndex,
+      source_event_id: id,
+      source_digest: rawWireDigest(wire),
+      source_valid: true,
+      event_payload: {
+        ...event,
+        timestamp: createdAt,
+        metadata: { kokoro: { event_id: id, seq: sequence, session_id: "session", run_id: "run", timestamp: new Date(createdAt).toISOString() } },
+      },
+    })
+  }
+  const skill = {
+    activity: "skill",
+    activity_id: "act_" + "c".repeat(64),
+    preflight_id: "spf_" + "d".repeat(64),
+    source_refs: ["skill:fixture"],
+    phase: "ready",
+  }
+  // BFF queue is public 1. The first retained Agent source is 30, not public 2.
+  add(2, 30, "activity", skill, { type: "CUSTOM", name: "kokoro.activity.updated", value: skill })
+  add(3, 31, "run.started", { status: "running" }, { type: "RUN_STARTED", threadId: "session", runId: "run" })
+  for (let index = 0; index < 12; index += 1)
+    add(4 + index, 32 + index, "assistant.completed", { content: "" }, { type: "TEXT_MESSAGE_END", messageId: `empty-${index}` }, `empty-${index}`)
+  const nextTool = { ...tool, activity_id: "act_" + "b".repeat(64) }
+  add(16, 44, "activity", nextTool, { type: "CUSTOM", name: "kokoro.activity.updated", value: nextTool })
+  add(17, 45, "assistant.delta", { delta: "visible😀" }, { type: "TEXT_MESSAGE_START", role: "assistant", messageId: "visible-stream" }, "visible-stream")
+  add(18, 45, "assistant.delta", { delta: "visible😀" }, { type: "TEXT_MESSAGE_CONTENT", delta: "visible😀", messageId: "visible-stream" }, "visible-stream", 1)
+  const delivery = {
+    tool_call_id: "tool",
+    artifact_id: "artifact",
+    asset_id: "asset",
+    artifact_kind: "document",
+    path: "/report.md",
+    title: "Report",
+    mime: "text/markdown",
+    size: 1,
+    content_hash: "d".repeat(64),
+  }
+  add(19, 46, "delivery", delivery, { type: "CUSTOM", name: "kokoro.delivery.created", value: delivery })
+  add(20, 47, "assistant.completed", { content: "visible😀" }, { type: "TEXT_MESSAGE_END", messageId: "visible-stream" }, "visible-stream")
+  add(
+    21,
+    48,
+    "run.completed",
+    { status: "completed", token_usage: null },
+    { type: "RUN_FINISHED", threadId: "session", runId: "run", status: "completed", outcome: { type: "success" } },
+  )
+  return { rows, wires }
+}
+test("retained END-only slots require full empty-wire digest proof, preserve public positions and accept a non-parts delivery", () => {
+  const { rows } = emptyWitnessFixture()
+  const recovered = recoverLegacyFrames(scope, "visible😀", "completed", "3", rows)
+  assert.ok(recovered)
+  assert.equal(recovered.publicSequence, "21")
+  assert.equal(recovered.parts.length, 15)
+  assert.deepEqual(
+    recovered.parts
+      .filter((part) => part.kind === "text" && part.segment_id.startsWith("empty-"))
+      .map((part) => [part.segment_id, part.text, part.completed, part.first_sequence, part.latest_sequence]),
+    Array.from({ length: 12 }, (_, index) => [`empty-${index}`, "", true, String(4 + index), String(4 + index)]),
+  )
+  assert.deepEqual(
+    recovered.parts
+      .filter((part) => part.kind === "text")
+      .map((part) => part.text)
+      .join(""),
+    "visible😀",
+  )
+  assert.equal(
+    recovered.parts.some((part) => part.part_id.includes("artifact")),
+    false,
+  )
+})
+for (const [name, patch] of [
+  ["nonempty completion", { payload_json: '{"content":"nonempty private completion"}' }],
+  ["wire event identity", { chat_event_id: "other-source" }],
+  ["wire session identity", { session_id: "other-session" }],
+  ["wire Run identity", { run_id: "other-run" }],
+  ["raw execution index", { source_index: 9 }],
+  ["source timestamp", { created_at: 32001 }],
+  ["serialization", { payload_json: '{ "content": "" }' }],
+  ["extra field", { extra: true }],
+  ["event profile", { event_type: "assistant.delta" }],
+] as const)
+  test(`legacy empty witness refuses ${name} drift without weakening original-body protection`, () => {
+    const { rows, wires } = emptyWitnessFixture()
+    rows.find((row) => row.source_sequence === "32")!.source_digest = rawWireDigest({ ...wires.get(32), ...patch })
+    assert.equal(recoverLegacyFrames(scope, "visible😀", "completed", "3", rows), null)
+  })
+test("legacy empty witness does not normalize absent or null chat_message_id", () => {
+  for (const absent of [true, false]) {
+    const { rows, wires } = emptyWitnessFixture(),
+      wire = { ...wires.get(32) }
+    if (absent) delete wire.chat_message_id
+    else wire.chat_message_id = null
+    rows.find((row) => row.source_sequence === "32")!.source_digest = rawWireDigest(wire)
+    assert.equal(recoverLegacyFrames(scope, "visible😀", "completed", "3", rows), null)
+  }
+})
+test("a digest-proven empty segment cannot subsequently reopen as the visible stream", () => {
+  const { rows } = emptyWitnessFixture()
+  for (const row of rows) if (["17", "18", "20"].includes(row.public_sequence)) row.event_payload = { ...row.event_payload, messageId: "empty-0" }
+  assert.equal(recoverLegacyFrames(scope, "visible😀", "completed", "3", rows), null)
+})
+test("two independently hashed completions cannot duplicate the same empty segment identity", () => {
+  const { rows, wires } = emptyWitnessFixture(),
+    row = rows.find((item) => item.source_sequence === "33")!
+  row.event_payload = { ...row.event_payload, messageId: "empty-0" }
+  row.source_digest = rawWireDigest({ ...wires.get(33), chat_message_id: "empty-0" })
+  assert.equal(recoverLegacyFrames(scope, "visible😀", "completed", "3", rows), null)
+})
+test("the extra delivery allowance is not an open-ended CUSTOM escape hatch", () => {
+  const { rows } = emptyWitnessFixture(),
+    row = rows.find((item) => item.public_sequence === "19")!
+  row.event_payload = { ...row.event_payload, name: "kokoro.unknown" }
+  assert.equal(recoverLegacyFrames(scope, "visible😀", "completed", "3", rows), null)
+})
+
+test("an exact empty completion witness cannot excuse a second public frame from that source", () => {
+  const { rows } = emptyWitnessFixture(),
+    original = rows.find((row) => row.public_sequence === "4")!
+  for (const row of rows) if (BigInt(row.public_sequence) > 4n) row.public_sequence = String(BigInt(row.public_sequence) + 1n)
+  rows.splice(3, 0, {
+    ...original,
+    public_sequence: "5",
+    frame_index: 1,
+    event_payload: { ...original.event_payload, type: "CUSTOM", name: "kokoro.todo.updated", value: {} },
+  })
+  assert.equal(recoverLegacyFrames(scope, "visible😀", "completed", "3", rows), null)
+})
+
+import { agentEventPage, mapAgentEvent } from "../src/infrastructure/clients/agent/projection.ts"
+import { createAgUiProjectionState, projectChatEvent } from "../src/application/agui/project-chat-event.ts"
+import { agUiSourcePayloadDigest, validateAgUiFrames } from "../src/application/agui/project-session-events.ts"
+
+test("the pinned raw Agent decoder and original digest producer supply the same empty-witness proof", () => {
+  const { wires } = emptyWitnessFixture()
+  const page = agentEventPage({ events: [...wires.values()], next_seq: 48, watermark: 48 }, "session", 29, 1000)
+  assert.ok(page)
+  const projection = createAgUiProjectionState(),
+    rows: ReturnType<typeof legacyRows> = []
+  let position = 1
+  for (const wire of page.events) {
+    const sourceDigest = agUiSourcePayloadDigest(wire)
+    assert.equal(sourceDigest, rawWireDigest(wire))
+    const frames = validateAgUiFrames(projectChatEvent(mapAgentEvent(wire), projection))
+    for (const [index, frame] of frames.entries())
+      rows.push({
+        public_sequence: String(++position),
+        source_sequence: String(wire.seq),
+        frame_index: index,
+        source_event_id: wire.chat_event_id,
+        source_digest: sourceDigest,
+        source_valid: true,
+        event_payload: frame as never,
+      })
+  }
+  const recovered = recoverLegacyFrames(scope, "visible😀", "completed", "3", rows)
+  assert.ok(recovered)
+  assert.equal(recovered.publicSequence, "21")
+  assert.equal(recovered.parts.filter((part) => part.kind === "text" && part.text === "").length, 12)
+  assert.equal(
+    recovered.parts
+      .filter((part) => part.kind === "text")
+      .map((part) => part.text)
+      .join(""),
+    "visible😀",
+  )
+})
