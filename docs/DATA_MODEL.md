@@ -1,3 +1,7 @@
+## 2026-10-26 MCP 已绑定图标读取（无数据模型变更）
+
+独立 Server icon GET 仅在请求内鲜读 Platform 已授权绑定／短引用并从现 Storage origin 验证≤1 MiB字节；无 BFF 表、缓存、镜像、签名URL持久化或新配置。绑定／回收/receipt仍归 Platform，字节与扫描归 Storage；canonical schema 原字节保持。
+
 ## CHAT-ORDER-1：同 Message 有序 parts 与有界读取（2026-10-25 定案；2026-10-26 候选，正常未切）
 
 **2026-10-26 实测后的 legacy 空完成充分证明（批准的窄后继）：** 正常R6存在12个不同ID的END-only及一个delivery帧；缺START不证明空，旧正文/ledger保持原样。允许仅用已保留BFF行构造固定Agent已发布wire形状的空完成候选，并复用原source payload canonicalJson/SHA256唯一算法；完整候选与原source_digest逐字精确匹配才承接该空槽。`source_index = source_sequence - first_retained_source_sequence` 只作有界候选，不是Agent不变量或公开坐标；任一身份、索引、时间、optional字段presence、event_type、payload_json原字节差异都保持legacy，不搜索／兼容序列化或新增网络依赖。所有原当前scope／dispatch／source／range／GC／512帧／4MiB／10秒门保持；仍要求唯一可见START与delta等持久正文、合法terminal。已证空ID不得后续重开，fold该槽只用真实空串，绝不把最终全文灌入；delivery仅具名非parts承接并推进原公开位置。无机器契约、Schema、权限或旧行/xmin写入；原Agent真实GET仅作为Root诊断证据，不进入运行读路径。

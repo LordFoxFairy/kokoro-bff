@@ -1,3 +1,11 @@
+## 2026-10-26 MCP 已绑定图标独立媒体读取（既有设计内扩展）
+
+BFF 在现 mcp-personal 路由增加 browser-private `GET /browser/v1/mcp/servers/{server_id}/icon`，列表继续纯 metadata，不做逐 Server／Storage 读取。媒体请求沿原可信 Session、MCP read、10 秒绝对总预算与取消，复用正式 `client.server("server", exact subject/id)` 获取当前绑定及短时 Storage GET 引用；不新增 RPC、owner、配置、表或 Schema。
+
+仅允许现配置 Storage objectOrigin 的 HTTPS 或精确开发 loopback、无 userinfo/hash/required headers、原 TTL≤301 秒引用；redirect:error、有界内存≤1 MiB，完整 EOF、声明长度、绑定 size/SHA256/MIME 均相符后才准备发送。出口再次鲜读 owner exact binding，核 intent/digest/size/dimensions/MIME，重新验证当前 Session subject 和 MCP read；撤权、换图／清除、取消及依赖失败均无图像字节输出。200 仅 PNG/JPEG、精确长度、no-store/nosniff/no-referrer；无绑定404，坏引用／字节502，依赖503，沿现私有错误 profile，不改变命令/CAS/receipt/Prepare 或 Public27/AG-UI。独立 code-first 媒体 OpenAPI 由现 private generator 生成；旧父 artifact 原字节不改。
+
+验证为生产 bootstrap + 真实 loopback HTTP（Storage transport），owner/Session 授权替身只作边界测试，不称真实 owner 业务联调。覆盖列表无 Storage、exact 路由、无图、正常 PNG、坏 digest/超限/重定向/取消、权限与绑定变化。正常组合和浏览器由 Root 验收。
+
 ## CHAT-ORDER-1：同 Message 有序 parts 与有界读取（2026-10-25 定案；2026-10-26 候选，正常未切）
 
 **2026-10-26 实测后的 legacy 空完成充分证明（批准的窄后继）：** 正常R6存在12个不同ID的END-only及一个delivery帧；缺START不证明空，旧正文/ledger保持原样。允许仅用已保留BFF行构造固定Agent已发布wire形状的空完成候选，并复用原source payload canonicalJson/SHA256唯一算法；完整候选与原source_digest逐字精确匹配才承接该空槽。`source_index = source_sequence - first_retained_source_sequence` 只作有界候选，不是Agent不变量或公开坐标；任一身份、索引、时间、optional字段presence、event_type、payload_json原字节差异都保持legacy，不搜索／兼容序列化或新增网络依赖。所有原当前scope／dispatch／source／range／GC／512帧／4MiB／10秒门保持；仍要求唯一可见START与delta等持久正文、合法terminal。已证空ID不得后续重开，fold该槽只用真实空串，绝不把最终全文灌入；delivery仅具名非parts承接并推进原公开位置。无机器契约、Schema、权限或旧行/xmin写入；原Agent真实GET仅作为Root诊断证据，不进入运行读路径。

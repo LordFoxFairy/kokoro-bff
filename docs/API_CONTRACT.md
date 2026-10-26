@@ -1,3 +1,9 @@
+## 2026-10-26 browser-private MCP Server 图标 GET
+
+`GET /browser/v1/mcp/servers/{server_id}/icon` 是独立媒体资源；无 query/body/Idempotency-Key，精确 canonical ID 路径。成功200为原始 `image/png` 或 `image/jpeg`、精确 `content-length`，`cache-control:no-store`、`x-content-type-options:nosniff`、`referrer-policy:no-referrer`、原 `x-request-id`；绝不将 signed URL 增加为列表持久字段。metadata 列表不读取 Storage、不逐 server 补全。
+
+沿现可信 service envelope + 人类 Session + 当前 MCP read 与10秒绝对预算。404 `mcp_personal_not_found`（无绑定/绑定改变），400 `invalid_mcp_personal_request`，502 `mcp_personal_response_invalid`，503 `mcp_personal_dependency_unavailable`（retryable=true）；其余当前 Session/action 准入 tuple 保持，所有失败是原 JSON error envelope，不输出部分图像。签名引用仅配置 origin／短时GET／无required headers，完整有界字节验证后，出口鲜读同绑定并重核主体/权限。无自动重试、命令恢复资格、RPC/Schema/Public27 改动；唯一新 HTTP 机器源 `src/application/mcp-server-icon.contract.ts`，正规生成 `contract/openapi/browser/v1/mcp-server-icon.json`。
+
 ## CHAT-ORDER-1：同 Message 有序 parts 与有界读取（2026-10-25 定案；2026-10-26 候选，正常未切）
 
 **2026-10-26 实测后的 legacy 空完成充分证明（批准的窄后继）：** 正常R6存在12个不同ID的END-only及一个delivery帧；缺START不证明空，旧正文/ledger保持原样。允许仅用已保留BFF行构造固定Agent已发布wire形状的空完成候选，并复用原source payload canonicalJson/SHA256唯一算法；完整候选与原source_digest逐字精确匹配才承接该空槽。`source_index = source_sequence - first_retained_source_sequence` 只作有界候选，不是Agent不变量或公开坐标；任一身份、索引、时间、optional字段presence、event_type、payload_json原字节差异都保持legacy，不搜索／兼容序列化或新增网络依赖。所有原当前scope／dispatch／source／range／GC／512帧／4MiB／10秒门保持；仍要求唯一可见START与delta等持久正文、合法terminal。已证空ID不得后续重开，fold该槽只用真实空串，绝不把最终全文灌入；delivery仅具名非parts承接并推进原公开位置。无机器契约、Schema、权限或旧行/xmin写入；原Agent真实GET仅作为Root诊断证据，不进入运行读路径。

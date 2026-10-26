@@ -139,3 +139,93 @@ if (process.argv.slice(2).join(" ") === "--write") {
   await mkdir(new URL("./", publicationTarget), { recursive: true })
   await writeFile(publicationTarget, publicationBytes)
 } else if ((await readFile(publicationTarget, "utf8")) !== publicationBytes) throw new Error("MCP project publication private contract drifted")
+
+// Independent read-only media publication. Existing command/publication parent bytes stay unchanged.
+const { MCP_SERVER_ICON_CONTRACT: icon, mcpServerIconId } = await import("../src/application/mcp-server-icon.contract.ts")
+const iconTarget = new URL("../contract/openapi/browser/v1/mcp-server-icon.json", import.meta.url)
+const iconHeaders = {
+  "cache-control": { required: true, schema: { const: "no-store" } },
+  "x-request-id": { required: true, schema: { type: "string" } },
+}
+const iconErrors = (status) => ({
+  "application/json": {
+    schema: {
+      oneOf: icon.errors
+        .filter((fault) => fault.status === status)
+        .map((fault) => ({
+          type: "object",
+          required: ["error"],
+          additionalProperties: false,
+          properties: {
+            error: {
+              type: "object",
+              required: ["code", "message", "retryable"],
+              additionalProperties: false,
+              properties: { code: { const: fault.code }, message: { type: "string" }, retryable: { const: fault.retryable } },
+            },
+          },
+        })),
+    },
+  },
+})
+const iconDocument = {
+  openapi: "3.1.0",
+  info: { title: "Kokoro BFF browser-private MCP Server icon", version: icon.version },
+  "x-kokoro-media-policy": icon,
+  paths: {
+    [icon.path]: {
+      get: {
+        operationId: icon.operation_id,
+        "x-kokoro-owner": icon.owner,
+        "x-kokoro-visibility": icon.visibility,
+        "x-kokoro-stability": "beta",
+        "x-kokoro-idempotency": "none",
+        "x-kokoro-permission": icon.permission,
+        description:
+          "No query, body or command headers. Independently verifies the complete bounded object, current exact binding and fresh human Session/MCP read before any image bytes. No signed URL is exposed.",
+        security: [{ ProductSession: [] }],
+        parameters: [{ in: "path", name: "server_id", required: true, schema: json(mcpServerIconId) }],
+        responses: {
+          200: {
+            description: "Complete verified PNG or JPEG bytes, never a JSON envelope or URL",
+            headers: {
+              ...iconHeaders,
+              "content-length": {
+                required: true,
+                schema: { type: "string", pattern: "^[1-9][0-9]*$" },
+                description: "Exact verified binary length, at most 1048576",
+              },
+              "x-content-type-options": { required: true, schema: { const: "nosniff" } },
+              "referrer-policy": { required: true, schema: { const: "no-referrer" } },
+            },
+            content: Object.fromEntries(icon.success.content_types.map((mime) => [mime, { schema: { type: "string", format: "binary" } }])),
+          },
+          ...Object.fromEntries(
+            [...new Set(icon.errors.map((fault) => fault.status))].map((status) => [
+              status,
+              {
+                description: "Closed existing private MCP read/admission failure; no partial image output or command authorization",
+                headers: { ...iconHeaders, ...(status === 429 ? { "Retry-After": { schema: { type: "string", pattern: "^[1-9][0-9]{0,4}$" } } } : {}) },
+                content: iconErrors(status),
+              },
+            ]),
+          ),
+        },
+      },
+    },
+  },
+  components: {
+    securitySchemes: {
+      ProductSession: {
+        type: "http",
+        scheme: "bearer",
+        description: "Existing trusted browser service envelope and current human Product Session, never an owner service credential.",
+      },
+    },
+  },
+}
+const iconBytes = JSON.stringify(iconDocument, null, 2) + "\n"
+if (process.argv.slice(2).join(" ") === "--write") {
+  await mkdir(new URL("./", iconTarget), { recursive: true })
+  await writeFile(iconTarget, iconBytes)
+} else if ((await readFile(iconTarget, "utf8")) !== iconBytes) throw new Error("MCP Server icon private contract drifted")

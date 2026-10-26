@@ -1,3 +1,7 @@
+## 2026-10-26 独立 MCP Server icon 私有媒体契约
+
+`src/application/mcp-server-icon.contract.ts` 是唯一可编辑媒体政策/ID事实源，现 `pnpm contract:generate:connector-command-errors` 正规生成 [`openapi/browser/v1/mcp-server-icon.json`](openapi/browser/v1/mcp-server-icon.json)，独立profile `mcp-server-icon-browser/1.0.0`。只含一个binary GET及现有read/Session的status/code/retryable闭集，无新命令恢复资格或owner RPC。Public27、现connector-command-errors-v1和项目发布私有OpenAPI原件及canonical Schema以完整父SHA测试保护，不重签父artifact。消费者应固定正式提交与此原件SHA后生成，不直接依赖工作树；正常配对另行验收。
+
 ## 2026-10-26 Public27 / durable AG-UI public position（同一未发行候选的跟进）
 
 前候选 `9f46a8ea32357631424d062cbabf93bc53299cad` 保留，不 amend。唯一 canonical 在原 SessionEventStream 补 required `metadata.kokoro.public_sequence` 正十进制字符串及两种既有 source metadata：Agent `seq:number`、BFF `seq:string + source_owner` 均不改变。坐标来自真实 BFF ledger，不解析 opaque cursor，不用 Agent seq 代替；heartbeat comment 不涉。Read projection 附加后计入 byte budget，不 UPDATE 旧 ledger、source digest 或 Message parts。187 operations、完整 Public26 父 SHA 与原 shared/ACK 原件保持；App 固定 artifact 与 normal 激活仍由 Root 验收。

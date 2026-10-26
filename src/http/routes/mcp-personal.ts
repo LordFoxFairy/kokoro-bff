@@ -1,3 +1,4 @@
+import { mcpServerIconRoute } from "./mcp-server-icon.js"
 import { mcpIconId, parseMcpIcon, type McpIconInput, type McpIconOperation } from "../../infrastructure/clients/platform/mcp-icon.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
@@ -33,7 +34,14 @@ export function mcpPersonalOperation(
   path: string[],
   method: string,
 ):
-  McpPersonalOperation | McpPersonalCommandOperation | McpPersonalAuthorizationOperation | McpPersonalServerOperation | "importJson" | McpIconOperation | null {
+  | McpPersonalOperation
+  | McpPersonalCommandOperation
+  | McpPersonalAuthorizationOperation
+  | McpPersonalServerOperation
+  | "importJson"
+  | "serverIcon"
+  | McpIconOperation
+  | null {
   if (path[0] !== "mcp") return null
   if (path[1] === "icons") {
     if (path.length === 3 && path[2] === "uploads" && method === "POST") return "beginIcon"
@@ -59,6 +67,7 @@ export function mcpPersonalOperation(
   if (path.length === 3 && path[1] === "servers" && method === "DELETE") return "deleteServer"
   if (path.length === 4 && path[1] === "servers" && path[3] === "prepare" && method === "POST") return "prepareServer"
   if (method !== "GET") return null
+  if (path.length === 4 && path[1] === "servers" && path[3] === "icon") return "serverIcon"
   if (path.length === 2 && path[1] === "providers") return "providers"
   if (path.length === 3 && path[1] === "providers") return "provider"
   if (path.length === 2 && path[1] === "connectors") return "connectors"
@@ -78,6 +87,10 @@ export async function mcpPersonalRoute(
 ): Promise<void> {
   const context = initialAdmission.context
   const operation = mcpPersonalOperation(path, request.method ?? "GET")!
+  if (operation === "serverIcon") {
+    await mcpServerIconRoute(request, response, config, composition, initialAdmission, path[2] ?? "")
+    return
+  }
   const iconOperation = ["beginIcon", "completeIcon", "getIcon", "cancelIcon", "importIcon"].includes(operation)
   const authorization = ["begin", "reconnect", "complete", "createConnection"].includes(operation)
   const serverOperation = ["registerServer", "server", "prepareServer", "updateServer", "deleteServer"].includes(operation)

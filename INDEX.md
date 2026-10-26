@@ -1,3 +1,7 @@
+## MCP 已绑定图标独立媒体读取（2026-10-26）
+
+现 `routes/mcp-personal.ts` 仅增 exact Server icon GET 分支，具名 `routes/mcp-server-icon.ts` 沿当前 Session/MCP read、原绝对预算/取消，调用正式 Server getter并在完整字节后鲜核绑定及准入；`storage/mcp-icon-transfer.ts` 使用每请求≤1MiB内存，不耦合artifact spool。唯一新code-first源 `src/application/mcp-server-icon.contract.ts` 由现private generator生成独立媒体OpenAPI；原Public27/命令profile/Schema保持。`test/mcp-server-icon-{http,contract}` 覆盖真实bootstrap/Storage loopback及完整父字节保护；非正常owner业务联调，正常配对归Root。
+
 ## preflight-first AG-UI 投影（2026-10-25，候选）
 
 现 postgres agui-projection/process/interaction-projection 在原锁、source、lease 和 FIFO 边界承接 current trusted Skill prelude，不造 START/process；chat-repository 仅容严格 initial terminal 的 queued 中间页，agui-consumer-repository 共享 GC 边界保 selected 真 START 的 activity 首 provenance。回归在现 test/agui-projection.integration.mjs；Schema、Public25、Agent 和正常资源不在本片写区。
