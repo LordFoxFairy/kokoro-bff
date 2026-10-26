@@ -9,11 +9,18 @@ export type AgentTodo = Readonly<{
 
 export type AgentActivity =
   | Readonly<{
-      activity: "tool" | "subagent"
+      activity: "tool"
       activity_id: string
       segment_id: string
       status: "running" | "completed" | "failed"
-      display_code: "tool.execution" | "subagent.execution"
+      display_code: Extract<ReturnType<typeof zChatActivity.parse>, { activity: "tool" }>["display_code"]
+    }>
+  | Readonly<{
+      activity: "subagent"
+      activity_id: string
+      segment_id: string
+      status: "running" | "completed" | "failed"
+      display_code: "subagent.execution"
     }>
   | Readonly<{
       activity: "skill"

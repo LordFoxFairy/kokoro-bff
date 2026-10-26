@@ -282,7 +282,15 @@ export const zChatActivity = z.union([
       activity_id: z.string().min(68),
       segment_id: z.string().min(68),
       status: z.enum(["running", "completed", "failed"]),
-      display_code: z.literal("tool.execution"),
+      display_code: z.enum([
+        "tool.execution",
+        "tool.file.read",
+        "tool.mcp.discover",
+        "tool.mcp.describe",
+        "tool.mcp.call",
+        "tool.web.search",
+        "tool.web.fetch",
+      ]),
     })
     .strict(),
   z

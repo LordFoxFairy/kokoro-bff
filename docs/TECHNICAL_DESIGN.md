@@ -1,3 +1,20 @@
+## 2026-10-26 Agent8 工具展示闭集 / Public28（设计门已过，源码候选未正常激活）
+
+**目标与前置。** 本片基线 BFF `7a94139b607ca4e51feb1f5480b35f46c4afa53c`。Agent 独占工具实际分类，BFF 只消费固定 HTTP8.0.0 原件并承接既有公开过程；已从 Root 审查的正式 Agent commit `ff36759214ff5d1e015cd9e288abbcb2d8e0c46d` Git blob 提取 OpenAPI/provenance 并沿现生成器消费，不消费候选工作树、浮动源码或新的实时依赖。目标 OpenAPI SHA256 `93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff`、provenance SHA256 `4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f`；固定输入与机器／源码为本地候选，不表示正常服务已升级。
+
+**既有边界内的唯一 delta。** Agent tool activity 的 `display_code` 接受七值闭集：`tool.execution`、`tool.file.read`、`tool.mcp.discover`、`tool.mcp.describe`、`tool.mcp.call`、`tool.web.search`、`tool.web.fetch`。保旧 generic 的含义和原值；subagent 仍只为 `subagent.execution`，Skill/Todo 不变。现生成器已支持 enum，补 exact closed-schema 资格并按原三 operation allowlist／18 文件生成链升级，不新增 decoder、registry 或 fallback。现 `AgentActivity` 收紧为对应判别分支；既有 Agent decode → CUSTOM → compact → ordered parts/read/replay 原值透传，不从工具名／raw args/results／文案推断分类，不改既有 source digest、activity/segment identity、first/latest 位置、状态或授权。
+
+**机器与父保护。** 唯一 canonical `contract/openapi/v1/openapi.yaml` 发行 Public28.0.0，只改 version 与 `RunToolActivity.display_code` 的 const→七值 enum；仍187 operations，无新 endpoint、数据库列／Schema、权限或 owner。新增具名 build/test-only 28→27 inverse，仅逆该字段和 version，完整输出必须精确等于原 Public27 SHA256 `d2b3d546164cadc9655616fc44daf1511a6f7d4a2e5d172f1415552af8942ed1`，再沿现 message-parts 27→26 与全部旧父链。不修改旧 digest、旧 delta 原件或重签父证明。旧 ledger/compact/parts 不回写；新值进入持久事实后不盲降旧 reader，正常切换／恢复由 Root 固定 Agent/BFF/App 配对，不自动重发旧 Run 或付费模型。
+
+**批准的精确实施写区（Root 已授机器／业务，Git／资源另行串行）。**
+
+- 固定输入与生成：`scripts/generate-agent-http-client.mjs`、`openapi-ts.agent.config.ts`、`contract/dependencies/agent-http.json`，现 Agent current vendor 两原件从 `contract/vendor/kokoro-agent/4c46ec681ee569e42808acb9409248acddd8ae41/{openapi.json,provenance.json}` 原子替换为正式新 commit 同两路径；`src/generated/agent-http/` 只限当前 manifest 的18个既有输出，不手改 generated。
+- 公共 contract：`contract/openapi/v1/openapi.yaml`、新增 `scripts/tool-display-public-contract.mjs`；现 `scripts/message-parts-public-contract.mjs` 仅在旧 inverse 前接新 inverse，原 delta/hash 全保；`test/message-parts-contract.test.mjs` 承接新版本／完整父及篡改负控。`contract/tests/v1-operations.json` inventory 原字节不改。
+- 唯一运行写区：`src/infrastructure/clients/agent/process-state.ts`；不重写 `projection`、`project-chat-event`、compact、parts／HTTP透传或 SQL。按证据需要，复用现 `test/agent-http-wire.test.mjs`、`test/agui-projector.test.mjs`、`test/agui-source-page.test.mjs`、`test/agui-message-parts.test.ts`、`test/chat-message-parts-read.test.ts` 的最低充分回归，不按每入口重复新套件。
+- 必要交付事实：本两设计文档、`docs/CURRENT.md`、`contract/README.md`；不更动其它 owner、lockfile、tmp/、App 或正常源码／资源。
+
+**验收。** 先 RED 七值及 unknown/错分支拒绝、旧 generic 原样，再正规两次生成 byte-identical、固定 commit/digest/provenance、完整28→27→旧父逆证、CUSTOM/compact/ordered parts 全值保持与迟到／取消原围栏。相关格式、lint/types、contract/architecture/default/build 门按 owner 入口执行；真实 PG 的持久／重启／replay 复用现 `test/agui-projection.integration.mjs` 与 `test/message-parts-read.integration.mjs`，仅 Root 授资源后运行。本片不启动正常服务／浏览器、写 DB 或消费未提交 owner candidate；没有资源证据不称真实持久整链验收。
+
 ## 2026-10-26 MCP 已绑定图标独立媒体读取（既有设计内扩展）
 
 BFF 在现 mcp-personal 路由增加 browser-private `GET /browser/v1/mcp/servers/{server_id}/icon`，列表继续纯 metadata，不做逐 Server／Storage 读取。媒体请求沿原可信 Session、MCP read、10 秒绝对总预算与取消，复用正式 `client.server("server", exact subject/id)` 获取当前绑定及短时 Storage GET 引用；不新增 RPC、owner、配置、表或 Schema。

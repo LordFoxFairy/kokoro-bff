@@ -789,3 +789,20 @@ test("the pinned raw Agent decoder and original digest producer supply the same 
     "visible😀",
   )
 })
+
+for (const display_code of [
+  "tool.execution",
+  "tool.file.read",
+  "tool.mcp.discover",
+  "tool.mcp.describe",
+  "tool.mcp.call",
+  "tool.web.search",
+  "tool.web.fetch",
+]) {
+  test(`Agent8 bounded parts output preserves ${display_code} and its original ordering coordinates`, () => {
+    const item = { ...activityItem, activity: { ...tool, display_code } }
+    const page = messagePartsPageFromSlices(initial, 1, [{ ordinal: "0", item, text_slice: null, total_scalars: null }], 16)
+    assert.deepEqual(page.items, [item])
+    assert.equal(page.next_cursor, null)
+  })
+}

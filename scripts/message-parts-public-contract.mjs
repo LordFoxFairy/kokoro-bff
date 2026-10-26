@@ -1,5 +1,6 @@
 // Build/test-only exact Public27→26 inverse. Never imported by production runtime.
 import { createHash } from "node:crypto";
+import { restorePublic27ToolDisplayContract } from "./tool-display-public-contract.mjs";
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 export const messagePartsParentSha256 =
   "20d26736cf23da32c242c2c7cf75c45affb62c5d27696dcecb0bc6193bc39a09";
@@ -122,6 +123,7 @@ function namedBlock(source, kind, name) {
   );
 }
 export function restorePublic26MessagePartsContract(source) {
+  source = restorePublic27ToolDisplayContract(source);
   if (!/^  version: 27\.0\.0$/mu.test(source)) return source;
   let parent = source;
   for (const entry of delta) {

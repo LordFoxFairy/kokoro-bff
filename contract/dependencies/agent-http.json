@@ -3,18 +3,18 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-agent",
-    "repository_commit": "4c46ec681ee569e42808acb9409248acddd8ae41",
-    "contract_version": "7.4.0",
+    "repository_commit": "ff36759214ff5d1e015cd9e288abbcb2d8e0c46d",
+    "contract_version": "8.0.0",
     "contract_path": "contract/openapi/v1/openapi.json",
-    "contract_sha256": "7637757f2f8b1fc1556e62c6566db5de5eb2ae883cf6e24e918b53081cc664ad",
+    "contract_sha256": "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
     "provenance_path": "contract/provenance.json",
-    "provenance_sha256": "0899cc6a16622933ff95347e9e33c8f6b271ac34df359ab277ce2cf066f8c46f"
+    "provenance_sha256": "4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.agent.config.ts",
-    "config_sha256": "a474f379bf1ed900a30826dfd30f60457182b41ed9cb26d3b29f3c491e6cdbf1"
+    "config_sha256": "262976d37b7964cb91b68835d75df76b5a6d0e9ab33a703815e05778882c7294"
   },
   "runtime": {
     "node": "22.22.2",
@@ -77,12 +77,12 @@
     },
     {
       "path": "failure-profile.gen.ts",
-      "source_sha256": "7637757f2f8b1fc1556e62c6566db5de5eb2ae883cf6e24e918b53081cc664ad",
+      "source_sha256": "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
       "sha256": "ef52afa8b45062d35500a9fc12248fecd4edf17b320aac287ac3b7d406d777c1"
     },
     {
       "path": "process-profile.gen.ts",
-      "source_sha256": "7637757f2f8b1fc1556e62c6566db5de5eb2ae883cf6e24e918b53081cc664ad",
+      "source_sha256": "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
       "sha256": "3515c8cd25a1b6ed489bf7ec847b2b3ade7b224617b9d2cf69f4aa55ea7c6493"
     },
     {
@@ -95,7 +95,7 @@
     },
     {
       "path": "zod.gen.ts",
-      "sha256": "e680b765b525f81160ceeb065bc42c66bde1fb3b23b0aaed3a180a86b56b8529"
+      "sha256": "4d3c12628b8172020ef3128b44d500fb11e1165fd2a8b44d145931b61a37134a"
     }
   ]
 }

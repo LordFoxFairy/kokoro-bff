@@ -174,3 +174,31 @@ describe("CHAT-ORDER Message parts codec/fold", () => {
     assert.equal(state.publicSequence, "4")
   })
 })
+
+for (const display_code of [
+  "tool.execution",
+  "tool.file.read",
+  "tool.mcp.discover",
+  "tool.mcp.describe",
+  "tool.mcp.call",
+  "tool.web.search",
+  "tool.web.fetch",
+]) {
+  it(`Agent8 ordered parts retain ${display_code} across fold and strict persisted-document decode`, () => {
+    const payload = { ...tool, display_code }
+    const state = foldMessageParts(fresh(), runId, [frame(4, "CUSTOM", { name: "kokoro.activity.updated", value: payload })])
+    const restored = parseMessageParts(JSON.parse(JSON.stringify(state.parts)), 1, state.publicSequence)
+    assert.deepEqual(restored.parts, [
+      { kind: "activity", part_id: `activity:${tool.activity_id}`, first_sequence: "4", latest_sequence: "4", activity: payload },
+    ])
+  })
+}
+for (const [activity, display_code] of [
+  ["tool", "tool.file.write"],
+  ["tool", "subagent.execution"],
+  ["subagent", "tool.web.search"],
+]) {
+  it(`ordered parts reject ${activity}/${display_code} rather than replace it with generic execution`, () => {
+    assert.throws(() => foldMessageParts(fresh(), runId, [frame(4, "CUSTOM", { name: "kokoro.activity.updated", value: { ...tool, activity, display_code } })]))
+  })
+}

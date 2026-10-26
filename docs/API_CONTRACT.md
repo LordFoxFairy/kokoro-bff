@@ -1,3 +1,13 @@
+## 2026-10-26 Public28 / Agent8 工具展示闭集（源码候选，未正常激活）
+
+正式目标为唯一 canonical Public28.0.0／187 operations，不新增 HTTP endpoint 或数据 Schema；Root 已授固定正式 Agent8 `ff36759214ff5d1e015cd9e288abbcb2d8e0c46d` 的 Git 原件消费与正规生成。Agent HTTP8.0.0 OpenAPI SHA256 `93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff`、provenance SHA256 `4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f`，本地 BFF 候选已固定此 HTTP8 pin；正常组合未因本片切换，不将候选路径或浮动源码当正式依赖。
+
+`RunToolActivity.display_code` 唯一变化为 required string enum：`tool.execution`、`tool.file.read`、`tool.mcp.discover`、`tool.mcp.describe`、`tool.mcp.call`、`tool.web.search`、`tool.web.fetch`。字段／分支仍 closed，unknown、错类型、额外成员及用 subagent code 充 tool 均拒绝；subagent 只接受既有 `subagent.execution`。旧 generic 是合法历史事实，保持原值，不改写／升级成具体能力。
+
+值由 Agent 正式 activity 提供，经现 HTTP decoder、`kokoro.activity.updated` CUSTOM、compact 与 ordered activity part 原样承接；保持 activity_id／segment_id、状态、first/latest/public_sequence 与原 source digest／范围绑定。它仅是安全展示类别，不是工具参数／结果、外部来源、浏览页数／耗时、审批或执行授权；不推测 final/commentary，不从工具名称或文案再分类。原准入、scope/actor、取消／迟到、unknown 管理命令、ledger／cursor／Message ACK 均不改变，无历史回写或新重试机制。
+
+Public28 仅 version 与该 const→enum delta；具名 build/test-only inverse 必须恢复完整原 Public27 SHA256 `d2b3d546164cadc9655616fc44daf1511a6f7d4a2e5d172f1415552af8942ed1` 再进入原27→26及以下链，旧 hash／原件不修改。消费者等正式提交后固定 artifact 生成。新 code 落库后旧 reader 不具备可安全降级保证，正常激活／恢复须由 Root 固定完整配对；不因未知类别换 generic、漏掉过程或重发 Run。
+
 ## 2026-10-26 browser-private MCP Server 图标 GET
 
 `GET /browser/v1/mcp/servers/{server_id}/icon` 是独立媒体资源；无 query/body/Idempotency-Key，精确 canonical ID 路径。成功200为原始 `image/png` 或 `image/jpeg`、精确 `content-length`，`cache-control:no-store`、`x-content-type-options:nosniff`、`referrer-policy:no-referrer`、原 `x-request-id`；绝不将 signed URL 增加为列表持久字段。metadata 列表不读取 Storage、不逐 server 补全。

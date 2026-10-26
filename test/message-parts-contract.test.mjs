@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { load } from "js-yaml";
+import { restorePublic27ToolDisplayContract, toolDisplayParentSha256 } from "../scripts/tool-display-public-contract.mjs";
 
 const contractUrl = new URL(
   "../contract/openapi/v1/openapi.yaml",
@@ -12,7 +13,7 @@ const read = async () => load(await readFile(contractUrl, "utf8"));
 
 test("ordered assistant read is separate from the original Message command and shared representation", async () => {
   const api = await read();
-  assert.equal(api.info.version, "27.0.0");
+  assert.equal(api.info.version, "28.0.0");
   for (const name of [
     "PrivateSessionSnapshotResponse",
     "SessionMessageListResponse",
@@ -148,7 +149,7 @@ test("Public27 restores the complete exact Public26 parent and rejects new or un
     await import("../scripts/message-parts-public-contract.mjs");
   const { restorePublic25McpPersonalSseContract } =
     await import("../scripts/mcp-personal-sse-public-contract.mjs");
-  const source = await readFile(contractUrl, "utf8");
+  const source = restorePublic27ToolDisplayContract(await readFile(contractUrl, "utf8"));
   const parent = restorePublic26MessagePartsContract(source);
   assert.equal(
     createHash("sha256").update(parent).digest("hex"),
@@ -260,7 +261,7 @@ test("all durable AG-UI replay metadata requires a separate positive decimal pub
   );
   const { restorePublic26MessagePartsContract } =
     await import("../scripts/message-parts-public-contract.mjs");
-  const source = await readFile(contractUrl, "utf8");
+  const source = restorePublic27ToolDisplayContract(await readFile(contractUrl, "utf8"));
   for (const changed of [
     source.replace("timestamp, public_sequence]", "timestamp]"),
     source.replace(
@@ -274,5 +275,31 @@ test("all durable AG-UI replay metadata requires a separate positive decimal pub
       () => restorePublic26MessagePartsContract(changed),
       /Message parts .*drift/u,
     );
+  }
+});
+
+test("Public28 publishes only the seven Agent tool display classes and preserves the separate subagent branch", async () => {
+  const api = await read();
+  assert.equal(api.info.version, "28.0.0");
+  assert.deepEqual(api.components.schemas.RunToolActivity.properties.display_code, {
+    type: "string", enum: ["tool.execution", "tool.file.read", "tool.mcp.discover", "tool.mcp.describe", "tool.mcp.call", "tool.web.search", "tool.web.fetch"],
+  });
+  assert.deepEqual(api.components.schemas.RunSubagentActivity.properties.display_code, { const: "subagent.execution" });
+});
+
+test("Public28 restores the full frozen Public27 before every unchanged historical parent and rejects unrelated drift", async () => {
+  const source = await readFile(contractUrl, "utf8");
+  const parent = restorePublic27ToolDisplayContract(source);
+  assert.equal(createHash("sha256").update(parent).digest("hex"), toolDisplayParentSha256);
+  assert.equal(toolDisplayParentSha256, "d2b3d546164cadc9655616fc44daf1511a6f7d4a2e5d172f1415552af8942ed1");
+  for (const changed of [
+    source + "\n",
+    source.replace("tool.web.fetch]", "tool.web.fetch, tool.file.write]"),
+    source.replace("tool.web.search, ", ""),
+    source.replace("const: subagent.execution", "const: tool.execution"),
+    source.replace("Opaque chat session identifier.", "tampered unrelated identifier"),
+  ]) {
+    assert.notEqual(changed, source);
+    assert.throws(() => restorePublic27ToolDisplayContract(changed), /Tool display .*drift/u);
   }
 });

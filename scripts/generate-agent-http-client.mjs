@@ -11,12 +11,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "4c46ec681ee569e42808acb9409248acddd8ae41"
+const ownerCommit = "ff36759214ff5d1e015cd9e288abbcb2d8e0c46d"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "7637757f2f8b1fc1556e62c6566db5de5eb2ae883cf6e24e918b53081cc664ad"
-const provenanceDigest = "0899cc6a16622933ff95347e9e33c8f6b271ac34df359ab277ce2cf066f8c46f"
-const ownerContractVersion = "7.4.0"
+const ownerDigest = "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff"
+const provenanceDigest = "4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f"
+const ownerContractVersion = "8.0.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -164,6 +164,19 @@ export function assertInteractionContractSchema(document) {
     ["tool", "subagent", "skill"],
   )
   for (const branch of schemas.ChatActivity.oneOf) assert.equal(branch.additionalProperties, false)
+  assert.deepEqual(
+    schemas.ChatActivity.oneOf[0].properties.display_code,
+    {
+      type: "string",
+      enum: ["tool.execution", "tool.file.read", "tool.mcp.discover", "tool.mcp.describe", "tool.mcp.call", "tool.web.search", "tool.web.fetch"],
+    },
+    "Agent tool display closed set drifted",
+  )
+  assert.deepEqual(
+    schemas.ChatActivity.oneOf[1].properties.display_code,
+    { type: "string", const: "subagent.execution" },
+    "Agent subagent display branch drifted",
+  )
   const skill = schemas.ChatActivity.oneOf[2]
   assert.equal(skill.properties.source_refs.minItems, 1)
   assert.equal(skill.properties.source_refs.maxItems, 16)

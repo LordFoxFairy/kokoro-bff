@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { execFileSync } from "node:child_process"
 import test from "node:test"
+import { restorePublic27ToolDisplayContract } from "../scripts/tool-display-public-contract.mjs"
 import { MCP_SERVER_ICON_CONTRACT } from "../src/application/mcp-server-icon.contract.js"
 
 const document = JSON.parse(readFileSync(new URL("../contract/openapi/browser/v1/mcp-server-icon.json", import.meta.url), "utf8"))
@@ -43,7 +44,8 @@ test("the independent media publication leaves the full existing public, command
     "database/schema.sql",
   ]) {
     const parent = execFileSync("git", ["show", `6f7474ae97edbded5d43a5e9d76eaa3b2f4b3a01:${path}`])
-    const current = readFileSync(new URL(`../${path}`, import.meta.url))
+    const bytes = readFileSync(new URL(`../${path}`, import.meta.url))
+    const current = path === "contract/openapi/v1/openapi.yaml" ? restorePublic27ToolDisplayContract(bytes.toString("utf8")) : bytes
     assert.equal(createHash("sha256").update(current).digest("hex"), createHash("sha256").update(parent).digest("hex"), path)
   }
 })

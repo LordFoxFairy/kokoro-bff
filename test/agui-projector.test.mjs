@@ -463,11 +463,14 @@ it("a new START identity after a full interaction is rejected before committing 
 })
 
 for (const [activity, displayCode] of [
-  ["tool", "tool.execution"],
+  ...["tool.execution", "tool.file.read", "tool.mcp.discover", "tool.mcp.describe", "tool.mcp.call", "tool.web.search", "tool.web.fetch"].map((code) => [
+    "tool",
+    code,
+  ]),
   ["subagent", "subagent.execution"],
 ]) {
   for (const status of ["running", "completed", "failed"]) {
-    it(`R123 maps ${activity}/${status} through the actual mapper and projector as one safe activity CUSTOM`, () => {
+    it(`R123 maps ${activity}/${displayCode}/${status} through the actual mapper and projector as one safe activity CUSTOM`, () => {
       const payload = {
         activity,
         activity_id: `act_${activity === "tool" ? "a".repeat(64) : "b".repeat(64)}`,
@@ -633,3 +636,46 @@ it("CHAT-ORDER retains exact text segment identity and distinguishes completed c
 })
 
 import "./agui-message-parts.test.ts"
+
+it("Agent8 safe tool classes remain exact when the existing projector prepares compact SQL payloads", async () => {
+  const { projectRunProcessFrame } = await import("../dist/infrastructure/postgres/agui-process-projection.js")
+  for (const display_code of [
+    "tool.execution",
+    "tool.file.read",
+    "tool.mcp.discover",
+    "tool.mcp.describe",
+    "tool.mcp.call",
+    "tool.web.search",
+    "tool.web.fetch",
+  ]) {
+    const payload = { activity: "tool", activity_id: `act_${"a".repeat(64)}`, segment_id: `seg_${"b".repeat(64)}`, status: "completed", display_code }
+    const mapped = mapAgentEvent({
+      chat_event_id: "source",
+      session_id: "session_1",
+      run_id: "run_1",
+      source_index: 0,
+      event_type: "activity",
+      payload_json: JSON.stringify(payload),
+      seq: 1,
+      created_at: 0,
+    })
+    const [frame] = projectChatEvent(mapped, createAgUiProjectionState())
+    const calls = []
+    await projectRunProcessFrame(
+      {
+        query: async (_sql, values) => {
+          calls.push(values)
+          return { rowCount: 1 }
+        },
+      },
+      { tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" },
+      { sourceOwner: "kokoro-agent", sourceEventId: "source", sourceSequence: 1, sourceDigest: "a".repeat(64), sourceOccurredAt: new Date(0).toISOString() },
+      frame,
+      2,
+      "cursor",
+    )
+    assert.equal(calls.length, 1)
+    assert.deepEqual(JSON.parse(calls[0][6]), payload)
+    assert.equal(calls[0].at(-1), false, "tool classification must not gain the Skill pre-START exemption")
+  }
+})

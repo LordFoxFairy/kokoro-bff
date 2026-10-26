@@ -31,41 +31,45 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "4c46ec681ee569e42808acb9409248acddd8ae41",
-        contract_version: "7.4.0",
+        repository_commit: "ff36759214ff5d1e015cd9e288abbcb2d8e0c46d",
+        contract_version: "8.0.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "7637757f2f8b1fc1556e62c6566db5de5eb2ae883cf6e24e918b53081cc664ad",
+        contract_sha256: "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "0899cc6a16622933ff95347e9e33c8f6b271ac34df359ab277ce2cf066f8c46f",
+        provenance_sha256: "4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "7637757f2f8b1fc1556e62c6566db5de5eb2ae883cf6e24e918b53081cc664ad",
+        source_sha256: "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
     assert.match(manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256 ?? "", /^[0-9a-f]{64}$/u)
   })
 
-  it("uses one HTTP7 publication for process, delivery and interaction with no split source pin", async () => {
+  it("uses one HTTP8 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "4c46ec681ee569e42808acb9409248acddd8ae41")
+    assert.equal(manifest.owner.repository_commit, "ff36759214ff5d1e015cd9e288abbcb2d8e0c46d")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "7637757f2f8b1fc1556e62c6566db5de5eb2ae883cf6e24e918b53081cc664ad",
+      "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/4c46ec681ee569e42808acb9409248acddd8ae41/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/ff36759214ff5d1e015cd9e288abbcb2d8e0c46d/openapi.json", import.meta.url), "utf8"),
     )
+    assert.deepEqual(owner.components.schemas.ChatActivity.oneOf[0].properties.display_code, {
+      type: "string",
+      enum: ["tool.execution", "tool.file.read", "tool.mcp.discover", "tool.mcp.describe", "tool.mcp.call", "tool.web.search", "tool.web.fetch"],
+    })
     assert.doesNotThrow(() => assertInteractionContractSchema(owner))
     for (const change of [
       (s) => {
@@ -97,6 +101,18 @@ describe("Agent event-protocol provenance", () => {
       },
       (s) => {
         s.ResumeDecision.oneOf[1].properties.type.const = "approve"
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_code = { type: "string" }
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_code.enum.push("tool.file.write")
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_code.enum.pop()
+      },
+      (s) => {
+        s.ChatActivity.oneOf[1].properties.display_code = { const: "tool.execution" }
       },
       (s) => {
         s.ChatActivity.oneOf[0].additionalProperties = true
@@ -491,3 +507,27 @@ it("consumes only the exact optional MCP execution selection from HTTP7.4 and Pu
     assert.equal(zLaunchRequest.strict().safeParse({ ...base, selected_mcp_connection_ids: value }).success, false, JSON.stringify(value))
   }
 })
+
+for (const [activity, display_code] of [
+  ["tool", "tool.file.write"],
+  ["tool", "subagent.execution"],
+  ["subagent", "tool.web.search"],
+  ["tool", null],
+  ["tool", 42],
+]) {
+  it(`Agent8 rejects unknown or cross-branch display code ${activity}/${display_code} without a generic fallback`, () => {
+    assert.throws(() =>
+      mapAgentEvent({
+        ...event,
+        event_type: "activity",
+        payload_json: JSON.stringify({
+          activity,
+          activity_id: `act_${"a".repeat(64)}`,
+          segment_id: `seg_${"b".repeat(64)}`,
+          status: "running",
+          display_code,
+        }),
+      }),
+    )
+  })
+}

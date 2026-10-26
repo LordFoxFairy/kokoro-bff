@@ -1,3 +1,9 @@
+## 2026-10-26 Public28 / Agent HTTP8 工具展示闭集候选
+
+唯一canonical `openapi/v1/openapi.yaml` 为Public28.0.0／187operations，仅原RunToolActivity.display_code const→七值enum与version变化；unknown／错分支拒绝，旧tool.execution仍原样。固定正式Agent `ff36759214ff5d1e015cd9e288abbcb2d8e0c46d` 的HTTP8.0.0 OpenAPI/provenance（SHA256分别93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff／4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f），只经现Agent generator与三operation allowlist更新18既有输出，不读取浮动owner源码。
+
+具名build/test-only `scripts/tool-display-public-contract.mjs` 只逆本字段与version，完整恢复Public27 SHA256 d2b3d546164cadc9655616fc44daf1511a6f7d4a2e5d172f1415552af8942ed1，再进入旧message-parts／SSE及全部历史链；旧hash／delta原件与187operation inventory不改。CUSTOM、compact、ordered parts只承接安全类别，不公开raw参数／结果或授执行资格。正常组合未切换；App等Root正式提交后固定artifact生成，新code落库后不盲降reader。
+
 ## 2026-10-26 独立 MCP Server icon 私有媒体契约
 
 `src/application/mcp-server-icon.contract.ts` 是唯一可编辑媒体政策/ID事实源，现 `pnpm contract:generate:connector-command-errors` 正规生成 [`openapi/browser/v1/mcp-server-icon.json`](openapi/browser/v1/mcp-server-icon.json)，独立profile `mcp-server-icon-browser/1.0.0`。只含一个binary GET及现有read/Session的status/code/retryable闭集，无新命令恢复资格或owner RPC。Public27、现connector-command-errors-v1和项目发布私有OpenAPI原件及canonical Schema以完整父SHA测试保护，不重签父artifact。消费者应固定正式提交与此原件SHA后生成，不直接依赖工作树；正常配对另行验收。

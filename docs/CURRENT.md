@@ -1,3 +1,9 @@
+## 2026-10-26 Agent8 / Public28 工具展示消费者（本地候选，未正常激活）
+
+基线7a94139；固定 Root 已审正式 Agent `ff36759214ff5d1e015cd9e288abbcb2d8e0c46d` / HTTP8.0.0（OpenAPI93103b5f／provenance4333d87e），沿原三操作allowlist／18输出链生成。唯一 canonical Public28.0.0／187operations，仅 version 与 RunToolActivity.display_code 的七值闭集变化；tool/subagent 判别类型与现 strict decoder 对齐，CUSTOM／compact／ordered parts 保原值，不重写透传／SQL或旧行。28→完整Public27原件→全部旧父链保留，不改旧hash；独立媒体、其它dependency pins与operation inventory原件保持。
+
+7定向文件298 PASS／0SKIP，覆盖新class、旧generic、unknown／错分支、原值投影与有界parts、完整父逆证。最终Node22：lint／typecheck／build均0、contract1162 PASS／0SKIP（含18输出双生成byte-identical）、architecture36 PASS、default1991 PASS／3原资源SKIP／0FAIL。完整Public28 SHA256 `34ca44c01ebc73f7ff76a4a06be33696b96ba1636e8818f02c38d57b1f539809`；完整逆回Public27与7a原Git blob逐字相同，去两条新接线后原27→26 helper全文也逐字相同。compact与parts codec替身不冒真实PG／重启证据。本片无正常服务、浏览器、真实PG/Redis、旧Run重派或付费模型动作；正常配对与Git/资源由Root独占，新code持久化后不盲降旧reader。
+
 ## 2026-10-25 GetSkill 展示元数据与显式下载分离（候选，未正常激活）
 
 Root 已裁决现 browser-private beta GetSkill 只读当前授权 metadata、strict `{skill}`；不先准备 package/Storage 或创建 handle。Public25.0.0 明确替换原 required downloadInfo 耦合，DownloadSkill strict `{skill,downloadInfo}` 与独立 fresh 准入/确认/字节验证不变；无新 endpoint、owner、表、依赖或生成物手改。精确 inverse 保完整 Public24 原件后再过旧历史检查，旧断言/hash保持。本 worker 不提交、切服务或改正常资源；工程门及冻结证据交 Root，App 正式 artifact 固定与浏览器验收后继。
