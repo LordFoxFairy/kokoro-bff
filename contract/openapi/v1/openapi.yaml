@@ -21383,16 +21383,54 @@ components:
           request_id: req_01JASYNC000000000000000000
     SessionEventStream:
       type: string
-      description: AG-UI server-sent event frames read from the BFF PostgreSQL ledger. Each id is a distinct opaque resume cursor. CUSTOM kokoro.interaction.state carries one complete ChatInteractionState in value; HTTP control admission does not resolve it.
+      description: AG-UI server-sent event frames read from the BFF PostgreSQL ledger. Each id is a distinct opaque resume cursor. Every durable data frame requires owner metadata described by x-kokoro-owner-metadata; public_sequence is the positive decimal BFF ledger position, distinct from unchanged source seq. Never decode an opaque cursor as a sequence. Heartbeat comments have no owner metadata. CUSTOM kokoro.interaction.state carries one complete ChatInteractionState in value; HTTP control admission does not resolve it.
+      x-kokoro-owner-metadata:
+        $ref: '#/components/schemas/KokoroAgUiReplayMetadata'
       x-kokoro-custom-event-values:
         kokoro.interaction.state:
           $ref: '#/components/schemas/ChatInteractionState'
       example: |-
         id: agui_0123456789abcdef0123456789abcdef
-        data: {"type":"CUSTOM","name":"kokoro.interaction.state","timestamp":1767225604000,"value":{"interaction_revision":1,"pause_revision":1,"pause_ref":"pause_01J","phase":"waiting","groups":[{"group_id":"group_01J","items":[{"item_id":"item_01J","request_id":"request_01J","kind":"tool_approval","allowed_decisions":["approve","reject"],"display":{"name":"Review","description":"Approve this action","editable":false,"input_schema":{"type":"object"}}}]}],"action_result":null},"metadata":{"kokoro":{"event_id":"agent_event_4","seq":4,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:04.000Z"}}}
+        data: {"type":"CUSTOM","name":"kokoro.interaction.state","timestamp":1767225604000,"value":{"interaction_revision":1,"pause_revision":1,"pause_ref":"pause_01J","phase":"waiting","groups":[{"group_id":"group_01J","items":[{"item_id":"item_01J","request_id":"request_01J","kind":"tool_approval","allowed_decisions":["approve","reject"],"display":{"name":"Review","description":"Approve this action","editable":false,"input_schema":{"type":"object"}}}]}],"action_result":null},"metadata":{"kokoro":{"event_id":"agent_event_4","seq":4,"public_sequence":"7","session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:04.000Z"}}}
 
         id: agui_abcdef0123456789abcdef0123456789ab
-        data: {"type":"RUN_FINISHED","timestamp":1767225605000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_5","seq":5,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:05.000Z"}}}
+        data: {"type":"RUN_FINISHED","timestamp":1767225605000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_5","seq":5,"public_sequence":"8","session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:05.000Z"}}}
+    KokoroAgUiReplayMetadata:
+      type: object
+      description: Owner metadata on every durable AG-UI data frame. The public_sequence is assigned per emitted frame by the BFF ledger; one Agent source seq can produce several frames. Preserve source seq and source_owner without coercion or fallback.
+      required: [kokoro]
+      additionalProperties: false
+      properties:
+        kokoro:
+          oneOf:
+            - type: object
+              required: [event_id, seq, session_id, run_id, timestamp, public_sequence]
+              additionalProperties: false
+              properties:
+                event_id: { type: string, minLength: 1 }
+                seq: { type: integer, minimum: 0, maximum: 9007199254740991 }
+                session_id: { type: string, minLength: 1 }
+                run_id: { type: [string, 'null'], minLength: 1 }
+                timestamp: { type: string, format: date-time }
+                public_sequence:
+                  $ref: '#/components/schemas/MessagePartsDecimal'
+                  not: { const: '0' }
+                failure: { $ref: '#/components/schemas/ChatMessage/properties/failure' }
+            - type: object
+              required: [event_id, seq, session_id, run_id, timestamp, source_owner, public_sequence]
+              additionalProperties: false
+              properties:
+                event_id: { type: string, minLength: 1 }
+                seq:
+                  $ref: '#/components/schemas/MessagePartsDecimal'
+                  not: { const: '0' }
+                session_id: { type: string, minLength: 1 }
+                run_id: { type: string, minLength: 1 }
+                timestamp: { type: string, format: date-time }
+                source_owner: { type: string, const: kokoro-bff }
+                public_sequence:
+                  $ref: '#/components/schemas/MessagePartsDecimal'
+                  not: { const: '0' }
     RenameProjectRequest:
       type: object
       required: [name]

@@ -90,6 +90,21 @@ const delta = [
     after_sha256:
       "6059c4f16d1e3f194ce41d8d632a050e009258c99994554d91d85b5238e412af",
   },
+  {
+    kind: "schema",
+    name: "SessionEventStream",
+    before:
+      '    SessionEventStream:\n      type: string\n      description: AG-UI server-sent event frames read from the BFF PostgreSQL ledger. Each id is a distinct opaque resume cursor. CUSTOM kokoro.interaction.state carries one complete ChatInteractionState in value; HTTP control admission does not resolve it.\n      x-kokoro-custom-event-values:\n        kokoro.interaction.state:\n          $ref: \'#/components/schemas/ChatInteractionState\'\n      example: |-\n        id: agui_0123456789abcdef0123456789abcdef\n        data: {"type":"CUSTOM","name":"kokoro.interaction.state","timestamp":1767225604000,"value":{"interaction_revision":1,"pause_revision":1,"pause_ref":"pause_01J","phase":"waiting","groups":[{"group_id":"group_01J","items":[{"item_id":"item_01J","request_id":"request_01J","kind":"tool_approval","allowed_decisions":["approve","reject"],"display":{"name":"Review","description":"Approve this action","editable":false,"input_schema":{"type":"object"}}}]}],"action_result":null},"metadata":{"kokoro":{"event_id":"agent_event_4","seq":4,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:04.000Z"}}}\n\n        id: agui_abcdef0123456789abcdef0123456789ab\n        data: {"type":"RUN_FINISHED","timestamp":1767225605000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_5","seq":5,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:05.000Z"}}}\n',
+    after_sha256:
+      "431a0c857d7470bc9a0a33363665a630b340ab1de5d63594193bf9100a9b21d9",
+  },
+  {
+    kind: "schema",
+    name: "KokoroAgUiReplayMetadata",
+    before: "",
+    after_sha256:
+      "a914e53aee60217f884be6e14fd1375fd9d6cf4b2fd49c83c1d8b34a9a5cf7ba",
+  },
 ];
 function namedBlock(source, kind, name) {
   const indent = kind === "path" ? "  " : "    ";

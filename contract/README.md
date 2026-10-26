@@ -1,3 +1,7 @@
+## 2026-10-26 Public27 / durable AG-UI public position（同一未发行候选的跟进）
+
+前候选 `9f46a8ea32357631424d062cbabf93bc53299cad` 保留，不 amend。唯一 canonical 在原 SessionEventStream 补 required `metadata.kokoro.public_sequence` 正十进制字符串及两种既有 source metadata：Agent `seq:number`、BFF `seq:string + source_owner` 均不改变。坐标来自真实 BFF ledger，不解析 opaque cursor，不用 Agent seq 代替；heartbeat comment 不涉。Read projection 附加后计入 byte budget，不 UPDATE 旧 ledger、source digest 或 Message parts。187 operations、完整 Public26 父 SHA 与原 shared/ACK 原件保持；App 固定 artifact 与 normal 激活仍由 Root 验收。
+
 ## 2026-10-25 Public27 / private ordered assistant read（候选，未正常激活）
 
 canonical新增一个 `getSessionMessageParts` GET及独立private read DTO，187 operations。原 `ChatMessage`、`SessionSnapshotResponse`（匿名shared使用）、Shared权限和命令三ID ACK原件保持；仅private GET指向 `PrivateSessionSnapshotResponse`，消息列表使用 `ChatMessageRead`。有序assistant `content:null`表示未内联，`rendering`提供格式、版本、原AG-UI opaque水位及parts初始cursor；user/不可证旧消息仍原正文，不伪造顺序或final phase。

@@ -213,3 +213,66 @@ test("the sole new read operation restores the exact frozen Public26 operation i
     );
   }
 });
+
+test("all durable AG-UI replay metadata requires a separate positive decimal public position without changing either source shape", async () => {
+  const api = await read();
+  const schemas = api.components.schemas;
+  assert.deepEqual(schemas.SessionEventStream["x-kokoro-owner-metadata"], {
+    $ref: "#/components/schemas/KokoroAgUiReplayMetadata",
+  });
+  const metadata = schemas.KokoroAgUiReplayMetadata;
+  assert.deepEqual(metadata.required, ["kokoro"]);
+  assert.equal(metadata.additionalProperties, false);
+  const [agent, bff] = metadata.properties.kokoro.oneOf;
+  for (const shape of [agent, bff]) {
+    assert.ok(shape.required.includes("public_sequence"));
+    assert.equal(shape.additionalProperties, false);
+    assert.equal(
+      shape.properties.public_sequence.$ref,
+      "#/components/schemas/MessagePartsDecimal",
+    );
+    assert.deepEqual(shape.properties.public_sequence.not, { const: "0" });
+  }
+  assert.equal(agent.properties.seq.type, "integer");
+  assert.equal(agent.properties.seq.maximum, Number.MAX_SAFE_INTEGER);
+  assert.deepEqual(agent.properties.failure, {
+    $ref: "#/components/schemas/ChatMessage/properties/failure",
+  });
+  assert.equal(Object.hasOwn(agent.properties, "source_owner"), false);
+  assert.equal(bff.properties.source_owner.const, "kokoro-bff");
+  assert.ok(bff.required.includes("source_owner"));
+  assert.equal(
+    bff.properties.seq.$ref,
+    "#/components/schemas/MessagePartsDecimal",
+  );
+  assert.equal(Object.hasOwn(bff.properties, "failure"), false);
+  const frames = schemas.SessionEventStream.example
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => JSON.parse(line.slice(6)));
+  assert.deepEqual(
+    frames.map((frame) => frame.metadata.kokoro.seq),
+    [4, 5],
+  );
+  assert.deepEqual(
+    frames.map((frame) => frame.metadata.kokoro.public_sequence),
+    ["7", "8"],
+  );
+  const { restorePublic26MessagePartsContract } =
+    await import("../scripts/message-parts-public-contract.mjs");
+  const source = await readFile(contractUrl, "utf8");
+  for (const changed of [
+    source.replace("timestamp, public_sequence]", "timestamp]"),
+    source.replace(
+      "x-kokoro-owner-metadata:",
+      "x-kokoro-owner-metadata-forged:",
+    ),
+    source.replace('"public_sequence":"7"', '"public_sequence":"4"'),
+  ]) {
+    assert.notEqual(changed, source);
+    assert.throws(
+      () => restorePublic26MessagePartsContract(changed),
+      /Message parts .*drift/u,
+    );
+  }
+});
