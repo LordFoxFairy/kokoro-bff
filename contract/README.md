@@ -1,3 +1,9 @@
+## 2026-10-25 Public27 / private ordered assistant read（候选，未正常激活）
+
+canonical新增一个 `getSessionMessageParts` GET及独立private read DTO，187 operations。原 `ChatMessage`、`SessionSnapshotResponse`（匿名shared使用）、Shared权限和命令三ID ACK原件保持；仅private GET指向 `PrivateSessionSnapshotResponse`，消息列表使用 `ChatMessageRead`。有序assistant `content:null`表示未内联，`rendering`提供格式、版本、原AG-UI opaque水位及parts初始cursor；user/不可证旧消息仍原正文，不伪造顺序或final phase。
+
+parts按真实first序号/稳定part_id承接安全text/activity，text显式保原公开AG-UI `segment_id`以合并live更新，cursor不解码part_id；Unicode scalar分片4096、默认16/最大32逻辑slot，完整JSON≤1MiB。每页当前身份/项目/Message授权与版本绑定，409仅显式重读，不重派模型或命令。`scripts/message-parts-public-contract.mjs`精确恢复完整Public26 SHA `20d26736cf23da32c242c2c7cf75c45affb62c5d27696dcecb0bc6193bc39a09`及186操作父清单，再沿原26→25历史链，旧hash/断言不重签。新回归由原platform-http契约入口明确导入；本片未实施HTTP/runtime、App消费者或正常Schema/服务装配，不冒产品闭环。
+
 ## 2026-10-25 Public26 / personal SSE 消费者候选
 
 唯一 canonical Public26.0.0 SHA256 `20d26736cf23da32c242c2c7cf75c45affb62c5d27696dcecb0bc6193bc39a09`，仅 version 与 McpConnectionProjection.transport 增 sse_compat。`scripts/mcp-personal-sse-public-contract.mjs` 只在 build/test 完整恢复 Public25 SHA7261ac9ce2140555ba97ebff2bf0359533cc49dda014b08dcd6a6054a8d38b1c，再沿原25→24完整历史链；旧 hash/断言与所有其它 API 不变。Platform Connect/HTTP7.0 固定正式 `8cfead647856ef54ec851a3bebe169a3ca14d212` 原件、closed allowlist 与现正规生成器；独立项目发布 dd8d536 原 pin/产物保持。

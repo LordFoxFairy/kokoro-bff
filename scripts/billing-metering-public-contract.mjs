@@ -1,3 +1,4 @@
+import { messagePartsParentBaseline } from "./message-parts-public-contract.mjs"
 import { restorePublic25McpPersonalSseContract } from "./mcp-personal-sse-public-contract.mjs"
 import { restorePublic24SkillDetailContract } from "./skill-detail-public-contract.mjs"
 // Build/test-only exact inverse; never imported by runtime.
@@ -44,6 +45,7 @@ export function restoreMeteringContract(source) {
   return parent
 }
 export function meteringParentBaseline(inventory) {
+  inventory = messagePartsParentBaseline(inventory)
   if (inventory.length !== 186) return inventory
   if (hash(JSON.stringify(inventory)) !== proof.current_inventory_sha256) throw Error("Metering inventory drift")
   const parent = inventory.filter((item) => !["getAdminMeteringPricing", "publishAdminMeteringRate", "publishAdminMeteringPolicy"].includes(item.operation_id))

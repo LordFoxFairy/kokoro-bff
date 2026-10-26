@@ -1,6 +1,8 @@
 // Build/test-only exact Public26→25 inverse; never imported by production.
 import { createHash } from "node:crypto"
+import { restorePublic26MessagePartsContract } from "./message-parts-public-contract.mjs"
 export function restorePublic25McpPersonalSseContract(source) {
+  source = restorePublic26MessagePartsContract(source)
   if (!/^  version: 26\.0\.0$/mu.test(source)) return source
   const field = "        transport: { type: string, enum: [streamable_http, sse_compat] }\n"
   const block = source.match(/^    McpConnectionProjection:\n[\s\S]*?(?=^    [A-Za-z])/mu)?.[0]

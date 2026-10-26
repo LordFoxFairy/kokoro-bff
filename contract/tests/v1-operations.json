@@ -223,6 +223,11 @@
     },
     {
       "method": "GET",
+      "path": "/v1/sessions/{id}/messages/{messageId}/parts",
+      "operation_id": "getSessionMessageParts"
+    },
+    {
+      "method": "GET",
       "path": "/v1/sessions/{id}/messages",
       "operation_id": "listSessionMessages"
     },

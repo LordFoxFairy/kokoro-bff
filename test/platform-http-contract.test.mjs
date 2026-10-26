@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
+import "./message-parts-contract.test.mjs"
 
 const root = new URL("../", import.meta.url)
 const ownerCommit = "8cfead647856ef54ec851a3bebe169a3ca14d212"
@@ -101,7 +102,8 @@ test("SSE successor: current generated Connection and Public26 both keep the clo
   for (const transport of ["stdio", "unknown", 3, null]) assert.equal(zMcpConnection.safeParse({ ...connection, transport }).success, false)
   const { load } = await import("js-yaml")
   const source = await readFile(new URL("contract/openapi/v1/openapi.yaml", root), "utf8")
-  const doc = load(source)
+  const { restorePublic26MessagePartsContract } = await import("../scripts/message-parts-public-contract.mjs")
+  const doc = load(restorePublic26MessagePartsContract(source))
   assert.equal(doc.info.version, "26.0.0")
   assert.deepEqual(doc.components.schemas.McpConnectionProjection.properties.transport.enum, ["streamable_http", "sse_compat"])
   const { restorePublic25McpPersonalSseContract } = await import("../scripts/mcp-personal-sse-public-contract.mjs")

@@ -1,5 +1,6 @@
 import { restorePublic24SkillDetailContract } from "../scripts/skill-detail-public-contract.mjs"
 import { restorePublic25McpPersonalSseContract } from "../scripts/mcp-personal-sse-public-contract.mjs"
+import { messagePartsParentBaseline } from "../scripts/message-parts-public-contract.mjs"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
@@ -29,7 +30,7 @@ test("the entire preceding public contract and all 183 ordered operations are pr
   const raw = await source(),
     parent = restoreMeteringContract(raw)
   assert.equal(createHash("sha256").update(parent).digest("hex"), "f6b8f3bd250c144a2d648af94c9fd5fe068db33991a4289b849a077eef009f32")
-  const current = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+  const current = messagePartsParentBaseline(JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations)
   assert.equal(current.length, 186)
   assert.equal(meteringParentBaseline(current).length, 183)
   assert.throws(() => restoreMeteringContract(raw.replace("admin.billing.metering.manage", "billing.self.write")))

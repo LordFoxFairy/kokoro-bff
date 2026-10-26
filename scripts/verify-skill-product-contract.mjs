@@ -1,4 +1,5 @@
 import { restorePublic25McpPersonalSseContract } from "./mcp-personal-sse-public-contract.mjs"
+import { restorePublic26MessagePartsContract } from "./message-parts-public-contract.mjs"
 import { restorePublic16KnowledgeContract } from "./verify-personal-knowledge-contract.mjs"
 import { readFileSync } from "node:fs"
 import { createHash } from "node:crypto"
@@ -132,6 +133,7 @@ export function inspectSkillProductContract(source, baseline = OPERATIONS) {
 
 /** Current specification gate; historical Public11 proofs are not the active publication protocol. */
 function inspectSkillsSpecificationSurface(source, expectedVersion) {
+  source = restorePublic26MessagePartsContract(source)
   const errors = []
   let document
   try {
