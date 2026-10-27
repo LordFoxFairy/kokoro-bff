@@ -1,3 +1,9 @@
+## S10 GitHub 目录发现容量（2026-10-27，Root D0 已批准；候选未激活）
+
+同一 BFF GitHub preview/read owner：`readGithubArchive` 仅在 `subdirectory === undefined` 的目录发现阶段允许最多512个 SKILL.md；精选子目录（含空串根目录）仍最多128文件。真实公开仓252合法候选被旧共享128上限拒绝的反例已捕获并用正式未改 client 回放定位；不将其冒称旧 request-id 的同次异常 trace。超过512明确失败，不分页、不静默截断。
+
+原 ZIP4096项／32MiB压缩／128MiB累计展开／单16MiB／相对路径256 UTF8字节／CRC、固定公开 provider、取消与总10秒预算均保留；不加凭据或隐式重试。Public28.7 的严格 reader 先于 producer 激活；正常切换只由 Root 执行。机器范围与上界见[API设计](API_CONTRACT.md)首节；无数据变化见[数据设计](DATA_MODEL.md)首节。
+
 ## MCP-PREPARE-OUTCOME：正式 owner 原件的具名消费（2026-10-27，Root D0 已通过；BFF 候选未正常启用）
 
 本片沿现 Browser→App same-origin→BFF→Platform Native。Platform 正式提交 `f29428f6e6d23e9f35642fe3de5463472bc1f873` 已由 Root git archive 导出；只消费该正式原件，不导入 sibling 源码，正常 producer 仍为旧688bc，不将正式提交误称正常激活。主 Native pin、descriptor、Proto、provenance、父输入及 generated client 一并正规迁移；独立 HTTP7／dd8 项目发布、private-server1.5／原查询1.0和 Runtime/SSE/Public28.5 原字节保持。owner 全默认 R352 子进程15秒超时仍开放；Root真实PG28及静态八门通过不替代此项。

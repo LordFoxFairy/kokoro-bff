@@ -1,3 +1,9 @@
+## S10 Public28.7 GitHub 目录容量（2026-10-27，Root D0 已批准）
+
+canonical 仍唯一 `contract/openapi/v1/openapi.yaml`：本次仅 `info.version` 28.6.0→28.7.0 与 `GithubSkillResponse` 中 `selection_required=true` 的 `paths.maxItems` 128→512。路径、选择、immutable commit、错误类型及其它 wire 全部保持；原精确父逆证先逐字恢复完整28.6，再运行原28.6→28.5严格门，不放宽旧 hash。
+
+同一响应不新增分页／endpoint／角色；超过512不截断。现 path 最大256 UTF16单元，以每单元最保守6字节JSON escaping计，512项分隔／引号、repository_url最大2048单元、commit64和固定结构256字节合计上界 `512*(6*256+3)+6*2048+64+256=800576` 字节，小于现 adapter1MiB，故不提高读限或 timeout。App 仅消费正式28.7原件更新同一严格 paths schema，先 reader 后 producer；本 owner 不编辑 App。[实现边界](TECHNICAL_DESIGN.md)首节。
+
 ## MCP-PREPARE-OUTCOME：独立错误政策1.0／lookup1.1（2026-10-27，Root 已固定；候选未正常配对）
 
 保现Prepare POST及原 `GET /browser/v1/mcp/servers/{id}/prepare-receipt?expected_state_version=<原CAS>` 请求、header、completed response、身份／期限／no-store。唯一code-first `PREPARE_OUTCOME_FAULT_POLICY` 经原generator发布 `contract/mcp-prepare-outcomes-v1.json`；owner_feature仅由正式Native pin manifest派生，指向Platform f294正式feature。共享connector错误1.1、Public28.5和普通GET不扩。

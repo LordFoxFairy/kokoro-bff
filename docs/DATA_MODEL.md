@@ -1,3 +1,7 @@
+## S10 GitHub 目录发现（2026-10-27，Root D0 已批准）
+
+无 Schema、数据库 enum／表／role、receipt 或存储写入变化。preview 仍只读固定 GitHub provider，内存扫描最多512个 SKILL.md 后最终重验当前 Session；实际导入依旧既有 owner 路径，单精选包128文件原限保持。只扩大目录响应候选容量，不创建持久缓存或新 owner；[API边界](API_CONTRACT.md)与[实现边界](TECHNICAL_DESIGN.md)首节为准。
+
 ## MCP-PREPARE-OUTCOME：只消费 owner 事实，无新增 BFF 数据（2026-10-27，正式原件候选消费）
 
 本片不改BFF Schema／SQL／缓存／receipt／outbox，不访问Platform数据库。正式owner f294输出4确定拒绝与5旧本地执行fenced；5历史效果仍unknown，不回写为失败或成功，不改原K/CAS或独立OAuth refresh marker。原ACK仍历史ACK，仅availability沿owner本人同RR安全投影；下一写独立fresh/manage准入。机器tuple／方法范围与停止线见[API设计](API_CONTRACT.md)及[技术设计](TECHNICAL_DESIGN.md)首节。

@@ -660,3 +660,65 @@ for (const provenanceKind of ["github", "ai"])
       assert.ok(begins.every((value) => value.commandId === "intent.begin"))
       assert.ok(begins.every((value) => JSON.stringify(value.body) === JSON.stringify(begins[0].body)))
     })
+
+// Discovery counts Skills across a repository; packaging counts files in one selected Skill.
+for (const count of [129, 252, 512, 513])
+  test(`GitHub repository discovery keeps every valid choice up to512 (documents=${count})`, async () => {
+    const { GithubSkillImportClient } = await import("../src/infrastructure/clients/github-skill-import.ts")
+    const body = "---\nname: Actual\ndescription: Actual\n---\n",
+      paths = Array.from({ length: count }, (_, i) => `skills/skill-${String(i).padStart(3, "0")}`),
+      zip = archive(paths.map((path) => [`root/${path}/SKILL.md`, body])),
+      commit = "b".repeat(40)
+    let calls = 0
+    const client = new GithubSkillImportClient(async (url, options) => {
+      calls++
+      assert.equal(options.redirect, "error")
+      assert.equal(options.credentials, "omit")
+      if (String(url).includes("codeload"))
+        return new Response(zip, {
+          headers: { "content-type": "application/zip" },
+        })
+      if (String(url).includes("/commits/")) return Response.json({ sha: commit })
+      return Response.json({
+        id: 1,
+        private: false,
+        full_name: "owner/repo",
+        html_url: "https://github.com/owner/repo",
+        owner: { login: "owner", html_url: "https://github.com/owner" },
+        stargazers_count: 0,
+        forks_count: 0,
+        default_branch: "main",
+      })
+    })
+    const result = client.preview({ repository_url: "https://github.com/owner/repo" }, AbortSignal.timeout(10000))
+    if (count > 512) await assert.rejects(result, { message: "github_package_invalid" })
+    else
+      assert.deepEqual(await result, {
+        selection_required: true,
+        repository_url: "https://github.com/owner/repo",
+        commit,
+        paths,
+      })
+    assert.equal(calls, 3)
+  })
+for (const path of ["", "selected"])
+  for (const count of [128, 129])
+    test(`GitHub selected Skill keeps128-file package bound (root=${path === ""},files=${count})`, async () => {
+      const { githubSkillPackage } = await import("../src/infrastructure/clients/github-skill-import.ts")
+      const prefix = `root/${path ? `${path}/` : ""}`,
+        zip = archive([
+          [`${prefix}SKILL.md`, "---\nname: Actual\ndescription: Actual\n---\n"],
+          ...Array.from({ length: count - 1 }, (_, i) => [`${prefix}references/${i}.md`, "reference"]),
+        ])
+      if (count > 128)
+        assert.throws(() => githubSkillPackage(zip, path), {
+          message: "github_package_invalid",
+        })
+      else assert.ok(githubSkillPackage(zip, path).length > 0)
+    })
+test("GitHub512-choice response stays below existing1MiB even at conservative JSON escaping ceiling", () => {
+  // At most6 JSON bytes per UTF16 code unit, even allowing controls the producer rejects.
+  const upperBound = 512 * (6 * 256 + 3) + 6 * 2048 + 64 + 256
+  assert.equal(upperBound, 800576)
+  assert.ok(upperBound < 1048576)
+})

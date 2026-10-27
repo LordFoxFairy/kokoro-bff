@@ -12,7 +12,22 @@ const blocks = {
 export const hubPublisherCurrentSha256 = "a020e849f740165fa20099f5ab041b76bc480c70a9bbc067955e57f5ec22ae02"
 const hubPublisherDelta =
   '              product:\n                $ref: "#/components/schemas/Public9SkillProductFacts"\n                description: Same authorized current version owner product; absence is only the coordinated predecessor-reader transition, not an inferred publisher.\n              publisher_profile:\n                $ref: "#/components/schemas/SkillPublisherProfile"\n                description: Required exactly when product.publisher.kind is iam; kind and id match its iam ref. Omitted for unknown or verified GitHub publisher. Missing never substitutes a creator or default name.\n'
+// S10 build/test-only inverse: exactly the discovery paths bound and version.
+export const githubDiscoveryCurrentSha256 = "818dfe54d5eb50a72725983be136211c63bb17fa7392f94c5c1d46234db3ebd1"
+const githubDiscoveryDelta = "                paths:\n                  type: array\n                  maxItems: 512\n"
+export function restorePublic286GithubDiscoveryContract(source) {
+  if (!/^  version: 28\.7\.0$/mu.test(source)) {
+    if (source.includes(githubDiscoveryDelta)) throw Error("GitHub discovery version drift")
+    return source
+  }
+  if (hash(source) !== githubDiscoveryCurrentSha256 || source.split(githubDiscoveryDelta).length !== 2) throw Error("GitHub discovery exact current drift")
+  const restored = source.replace(githubDiscoveryDelta, githubDiscoveryDelta.replace("512", "128")).replace(/^  version: 28\.7\.0$/mu, "  version: 28.6.0")
+  if (hash(restored) !== hubPublisherCurrentSha256) throw Error("GitHub discovery complete Public28.6 drift")
+  return restored
+}
+
 export function restorePublic285HubPublisherContract(source) {
+  source = restorePublic286GithubDiscoveryContract(source)
   if (!/^  version: 28\.6\.0$/mu.test(source)) {
     if (source.includes(hubPublisherDelta)) throw Error("Hub publisher version drift")
     return source

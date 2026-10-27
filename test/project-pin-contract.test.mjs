@@ -38,7 +38,8 @@ test("Project pin adds exactly two personal preference operations without alteri
 })
 
 test("S13 Hub publisher changes only two Hub fields and version; exact Public28.5 remains the parent", async () => {
-  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"),
+  const { restorePublic286GithubDiscoveryContract } = await import("../scripts/project-pin-public-contract.mjs")
+  const raw = restorePublic286GithubDiscoveryContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
     spec = load(raw)
   assert.equal(spec.info.version, "28.6.0")
   const { restorePublic285HubPublisherContract } = await import("../scripts/project-pin-public-contract.mjs")
@@ -62,4 +63,29 @@ test("S13 Hub publisher changes only two Hub fields and version; exact Public28.
     raw.replace("version: 28.6.0", "version: 28.7.0"),
   ])
     assert.throws(() => restorePublic285HubPublisherContract(invalid), "not a generic stripping exception")
+})
+
+test("S10 GitHub discovery changes only512 choices and version, preserving exact Public28.6", async () => {
+  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"),
+    spec = load(raw)
+  assert.equal(spec.info.version, "28.7.0")
+  const { restorePublic286GithubDiscoveryContract } = await import("../scripts/project-pin-public-contract.mjs")
+  const oldRaw = restorePublic286GithubDiscoveryContract(raw),
+    old = load(oldRaw)
+  assert.equal(createHash("sha256").update(oldRaw).digest("hex"), "a020e849f740165fa20099f5ab041b76bc480c70a9bbc067955e57f5ec22ae02")
+  const branches = spec.components.schemas.GithubSkillResponse.properties.data.oneOf
+  assert.equal(branches[1].properties.paths.maxItems, 512)
+  const normalized = structuredClone(spec)
+  normalized.info.version = "28.6.0"
+  normalized.components.schemas.GithubSkillResponse.properties.data.oneOf[1].properties.paths.maxItems = 128
+  assert.deepEqual(normalized, old)
+  assert.deepEqual(operationBaseline(raw), operationBaseline(oldRaw))
+  for (const invalid of [
+    raw + "\n",
+    raw.replace("maxItems: 512", "maxItems: 513"),
+    raw.replace("listProjects", "otherOperation"),
+    raw.replace("project.read", "project.update"),
+    raw.replace("version: 28.7.0", "version: 28.8.0"),
+  ])
+    assert.throws(() => restorePublic286GithubDiscoveryContract(invalid))
 })
