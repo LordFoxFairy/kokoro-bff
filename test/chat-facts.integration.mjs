@@ -2135,15 +2135,19 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     assert.equal(listed.status, 200)
     assert.equal((await listed.json()).data.sessions[0].session_id, conversationId)
 
-    let directSnapshotBody
-    for (const query of ["scope=direct", "scope="]) {
-      const scoped = await fetch(`${base}/v1/sessions/${conversationId}?${query}`, { headers: auth(tenant, "chat_user") })
+    let ownedSnapshotBody
+    for (const query of ["", "scope="]) {
+      const scoped = await fetch(`${base}/v1/sessions/${conversationId}${query === "" ? "" : `?${query}`}`, { headers: auth(tenant, "chat_user") })
       assert.equal(scoped.status, 200)
       const body = await scoped.json()
-      if (query === "scope=direct") directSnapshotBody = body
+      if (query === "") ownedSnapshotBody = body
     }
-    assert.deepEqual(directSnapshotBody.data.messages.at(-1).failure, { source: "agent", code: "model_unavailable", retryable: true })
-    assert.equal(Object.hasOwn(directSnapshotBody.data.messages[0], "failure"), false)
+    assert.deepEqual(ownedSnapshotBody.data.messages.at(-1).failure, { source: "agent", code: "model_unavailable", retryable: true })
+    assert.equal(Object.hasOwn(ownedSnapshotBody.data.messages[0], "failure"), false)
+    // This fixture belongs to a Project, so direct-only reads must not expose it.
+    const direct = await fetch(`${base}/v1/sessions/${conversationId}?scope=direct`, { headers: auth(tenant, "chat_user") })
+    assert.equal(direct.status, 404)
+    assert.equal((await direct.json()).error.code, "session_not_found")
     const invalidScope = await fetch(`${base}/v1/sessions/${conversationId}?scope=team`, { headers: auth(tenant, "chat_user") })
     assert.equal(invalidScope.status, 400)
     assert.equal((await invalidScope.json()).error.code, "invalid_scope")
@@ -2187,12 +2191,22 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     // Public Share must keep the persisted answer even when the same Message has private tool parts.
     const shareCanary = "PRIVATE_SHARE_TOOL_DETAIL_CANARY"
     const privateActivity = {
-      activity: "tool", activity_id: "act_" + "a".repeat(64), segment_id: "seg_" + "b".repeat(64),
-      status: "completed", display_code: "tool.file.read", display_detail: { kind: "file", name: shareCanary },
+      activity: "tool",
+      activity_id: "act_" + "a".repeat(64),
+      segment_id: "seg_" + "b".repeat(64),
+      status: "completed",
+      display_code: "tool.file.read",
+      display_detail: { kind: "file", name: shareCanary },
     }
     await pool.query(
       "UPDATE bff_message SET ordered_parts=$3::jsonb,parts_format_version=1,parts_public_sequence=1 WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant'",
-      [tenant, conversationId, JSON.stringify([{ kind: "activity", part_id: `activity:${privateActivity.activity_id}`, first_sequence: "1", latest_sequence: "1", activity: privateActivity }])],
+      [
+        tenant,
+        conversationId,
+        JSON.stringify([
+          { kind: "activity", part_id: `activity:${privateActivity.activity_id}`, first_sequence: "1", latest_sequence: "1", activity: privateActivity },
+        ]),
+      ],
     )
     const publicShare = await fetch(`${base}/v1/shared/${shareId}`, {
       headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret" },
@@ -2204,10 +2218,15 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     assert.equal(publicShareBody.data.execution_process, null)
     assert.equal(publicShareBody.data.messages.at(-1).content, "Second high sequence")
     assert.equal(JSON.stringify(publicShareBody).includes(shareCanary), false)
-    assert.equal(publicShareBody.data.messages.some((message) => Object.hasOwn(message, "rendering") || Object.hasOwn(message, "ordered_parts")), false)
+    assert.equal(
+      publicShareBody.data.messages.some((message) => Object.hasOwn(message, "rendering") || Object.hasOwn(message, "ordered_parts")),
+      false,
+    )
     assert.equal(Object.hasOwn(publicShareBody.data, "execution_head"), false)
-    await pool.query("UPDATE bff_message SET ordered_parts=NULL,parts_format_version=NULL,parts_public_sequence=NULL WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant'", [tenant, conversationId])
-
+    await pool.query(
+      "UPDATE bff_message SET ordered_parts=NULL,parts_format_version=NULL,parts_public_sequence=NULL WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant'",
+      [tenant, conversationId],
+    )
 
     const otherSubject = "other_chat_user"
     const factsBeforeDeniedAccess = await pool.query(

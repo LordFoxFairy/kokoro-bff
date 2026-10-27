@@ -178,7 +178,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       const c = await create({ twoSegments: true, activity: detail })
       const freshReader = new PostgresChatRepository({ pool })
       const snapshot = await freshReader.readSnapshot(c.tenantId, c.subjectId, c.conversationId, undefined, lifetime())
-      assert.deepEqual(snapshot.execution_process.activities, [detail])
+      assert.deepEqual(snapshot.executionProcess.activities, [detail])
       const message = assistant(snapshot)
       const page = await freshReader.readMessageParts(c.query(message.rendering.parts_cursor))
       const part = page.items.find((item) => item.kind === "activity")
