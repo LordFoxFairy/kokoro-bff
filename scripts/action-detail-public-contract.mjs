@@ -1,4 +1,5 @@
 // Build/test-only exact Public28.4→28.3 inverse. Never imported by production.
+import { restorePublic284ProjectPinContract } from "./project-pin-public-contract.mjs"
 import { createHash } from "node:crypto"
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 export const actionDetailCurrentSha256 = "48aa9638d133223c9f78655e9398ddbb44159963f92a2db891a09212f3aa2726"
@@ -15,6 +16,7 @@ const toolDetailDelta =
   "        display_detail:\n          type: object\n          required: [kind, name]\n          additionalProperties: false\n          properties:\n            kind: { type: string, enum: [file, mcp_tool] }\n            name:\n              type: string\n              minLength: 1\n              maxLength: 120\n              x-kokoro-utf8-byte-limit: 480\n              x-kokoro-unicode-domain: 'NFC Unicode scalars; no Cc, Cf or Cs'\n      allOf:\n        - if:\n            required: [display_detail]\n            properties:\n              display_detail:\n                properties: { kind: { const: file } }\n          then:\n            properties:\n              display_code: { enum: [tool.file.read, tool.file.write, tool.file.deliver] }\n              display_detail:\n                properties:\n                  name:\n                    pattern: '^(?!\\.{1,2}$)[^/\\\\:]+$'\n        - if:\n            required: [display_detail]\n            properties:\n              display_detail:\n                properties: { kind: { const: mcp_tool } }\n          then:\n            properties:\n              display_code: { enum: [tool.mcp.describe, tool.mcp.call] }\n"
 
 export function restorePublic283ActionDetailContract(source) {
+  source = restorePublic284ProjectPinContract(source)
   if (!/^  version: 28\.4\.0$/mu.test(source)) {
     if (source.includes(sharedField)) throw Error("Action detail public version drift")
     return source

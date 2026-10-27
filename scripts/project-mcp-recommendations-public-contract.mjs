@@ -1,5 +1,6 @@
 import { restorePublic282FileToolDisplayContract } from "./file-tool-display-public-contract.mjs"
 // Build/test-only exact Public28.2→28.1 inverse. Never imported by production.
+import { projectPinParentInventory, restoreProjectPinSchema } from "./project-pin-public-contract.mjs"
 import { createHash } from "node:crypto"
 const hash = (value) => createHash("sha256").update(value).digest("hex")
 export const recommendationsParentSha256 = "07e98d803ac3c7342c2e322b507e8760d89e63bc5ecdab3cdf447b68bf3c904c"
@@ -27,6 +28,7 @@ export function restorePublic281McpRecommendationsContract(source) {
   return parent
 }
 export function recommendationsParentBaseline(inventory) {
+  inventory = projectPinParentInventory(inventory)
   if (inventory.length !== 192) {
     if (inventory.some((item) => ["getProjectMcpRecommendations", "replaceProjectMcpRecommendations"].includes(item.operation_id)))
       throw Error("Project MCP recommendations census drift")
@@ -42,6 +44,7 @@ export function recommendationsParentBaseline(inventory) {
 
 // Exact additive SQL proof for historical tests; no runtime/schema execution.
 export function restoreProjectMcpRecommendationsSchema(source) {
+  source = restoreProjectPinSchema(source)
   if (hash(source) !== "70f6933f3bf0542d4c8babc6ced7ab7f4c128c0cc0a570ab195309850373e993") throw Error("Project MCP recommendations current SQL drift")
   let parent = source
   for (const line of [

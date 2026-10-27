@@ -1,3 +1,18 @@
+## PROJECT-PIN-D0：个人固定读取与状态 PUT（2026-10-27，Root 已核 D0，Public28.5 本地候选）
+
+固定偏好归 BFF Project owner，不修改原 Project closed 表示；后继只新增两条 public／beta operation，正式 canonical 仍 `contract/openapi/v1/openapi.yaml`，本节不是第二份机器 schema。身份沿当前 Session 和受信 tenant／subject，Root 已裁决 operation permission 均为 project.read＋现 owner-only、未删除 Project 可见性；这是 own preference write，不授 Project 共享写权限；完整 Session、服务身份方法边界和同源 CSRF 保持，body 不含 tenant／actor／subject，不新增 IAM action／协作 ACL。具体 owner／并发／部署门见 [技术设计](TECHNICAL_DESIGN.md) 同名 D0，数据见 [数据模型](DATA_MODEL.md)。
+
+| 候选 operation | 闭合输入 | 200 当前表示 |
+| --- | --- | --- |
+| GET `/v1/self/project-pins`，listSelfProjectPins，idempotency none | 默认 limit=50，1..100；optional opaque cursor≤2048字节。或仅传单个 canonical project_id 作精确过滤，不能混用 limit／cursor；无正文／命令头，其余 query 拒绝 | `{data:{items:[{project_id,pinned_at}],next_cursor}}`；只列当前本人可见且已固定项目，空数组非失败。精确过滤先核可见性，未 pin 为200空 items／null cursor，不可见404 |
+| PUT `/v1/projects/{projectId}/pin`，setProjectPin，idempotency natural | canonical ID、无 slug／query；strict JSON `{is_pinned:boolean}` ≤1KiB；拒 null／extra／主体／timestamp／rank／版本字段，拒 Idempotency-Key／If-Match | `{data:{project_id,is_pinned,pinned_at}}`；true 时 pinned_at 为已存 RFC3339 UTC，false 时为 null，重复 true 保原值、false 清除偏好而非删除 Project |
+
+GET keyset 为 pinned_at DESC／project_id C 字节序 ASC，cursor 绑定当前 tenant／subject／limit／固定排序和位置；每页当前授权，不是全程快照，query 变化弃旧 cursor。单精确过滤不需要耗尽全列表；普通未耗尽分页不可证明缺席项目未 pin。每页≤64KiB、同一请求 admission／正文／SQL／出口共10秒绝对预算，AbortSignal 与迟到围栏贯穿；不暴露其他 subject、Project 内容、SQL 或凭据，不把 cursor 当权限。
+
+沿既有 service／Session 准入401／403／429（限流头）／503；本操作400 project_pin_request_invalid（含坏／跨 scope cursor、闭集或 framing），404 project_not_found（不存在／非本人可见／删除，一致隐藏存在性），503 project_pin_unavailable（存储／期限／结果未知，retryable=true）；400／404 retryable=false，无新的409／412／receipt 查询。成功 no-store 与 x-request-id 沿本仓原 envelope，message 不作分支。503 的 bit 不授权自动 PUT，失败时不发假状态 ACK。
+
+同 client 每 subject／project pending 串行，未知仅显式精确 GET 观察当前状态；相同值可收敛当前展示但不是原请求 receipt，不同值需用户明确下一次 PUT，跨设备／迟到写 LWW 不保证点击顺序。列表／精确读不写偏好；GET403／404不当作未固定。BFF schema／正式后继 artifact 先交付，App 再正规生成和同源接线；原192操作、Project wire、MCP definition pin／其回执及模型执行链保持，不先安装假入口或消费 dirty 契约。
+
 ## TOOL-ACTION-DETAIL-D0：Public28.4 候选动作详情与 Share null（2026-10-27，源码候选）
 
 本地 canonical 候选 Public28.4.0／192操作已固定正式 Agent HTTP8.2.0 `fc8b0f09f3cfd96211b33d863d5e629bbed13e46`；OpenAPI／provenance 两原件经 Git blob／直接 SHA 校验与原18输出 generator 消费，不从 dirty 源码或浮动分支生成。完整 Public28.4 SHA256 `48aa9638d133223c9f78655e9398ddbb44159963f92a2db891a09212f3aa2726`，尚未发布或正常激活；无新 operation、URL、权限或协议。

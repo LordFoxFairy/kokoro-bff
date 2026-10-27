@@ -349,7 +349,7 @@ test("Public28.3 restores complete frozen Public28.2 before the original inverse
 });
 
 test("Share snapshot publication fixes the process to null without changing private snapshots or the complete Public28.3 parent", async () => {
-  const source = await readFile(contractUrl, "utf8"),
+  const source = (await import("../scripts/project-pin-public-contract.mjs")).restorePublic284ProjectPinContract(await readFile(contractUrl, "utf8")),
     api = load(source)
   assert.equal(api.info.version, "28.4.0")
   const shared = api.components.schemas.SessionSnapshotResponse.properties.data

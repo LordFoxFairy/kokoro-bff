@@ -1,3 +1,7 @@
+## 个人 Project pin（2026-10-27，本地候选，未应用库）
+
+`domain/project/pin.ts`／`http/project-pin-input.ts`／`routes/project-pin.ts` 只接 self 列表与 exact canonical Project 状态 PUT；Session／subject 生命周期、限时／闭集和自然幂等沿本次三面 D0。`postgres/project-pin.ts` 复用具名 Project 端口与 parent 锁，原 `project-delete.ts` 同墓碑事务清个人关联；原 Project wire／updated_at 不变。canonical 新关系表／两索引、ready／fresh 和 `project-pin-schema-catalog.mjs` 的 exact target／实际 catalog 比对闭合，具名 evolution 仅供 Root 显式操作，不是启动安装或迁移框架。`pnpm test:project-pin` 为纯／自有 loopback 入口，`test:project-pin:integration` 仅 Root 指定独占临时 PG，未运行资源测试不称通过。Public28.5／194 的完整28.4父字节和旧192 inventory保持；正式交付／正常配对归 Root。
+
 ## Project MCP 推荐配置（2026-10-27，本地候选）
 
 `src/domain/project/mcp-recommendations.ts`定义三种strict稳定ref和canonical集合；`src/http/routes/project-mcp-recommendations.ts`仅接exact `/v1/projects/{projectId}/mcp-recommendations` GET/PUT。metadata candidate reader复用现provider/本人connector/Custom API安全GET，最多4并发、只校新增项；`src/infrastructure/postgres/project-mcp-recommendations.ts`提供有界当前读与parent锁CAS/no-op，不建receipt/journal/outbox。bootstrap当前Project准入同样走此有界reader，不走旧finder。

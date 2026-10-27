@@ -1,3 +1,4 @@
+import { projectPinDefinitions, expectedProjectPinCatalog, inspectProjectPinCatalog } from "./project-pin-schema-catalog.mjs"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -23,10 +24,12 @@ export function assertBffSchemaUrl(databaseUrl) {
   const targets = url.searchParams.getAll("schema")
   if (
     !["postgres:", "postgresql:"].includes(url.protocol) ||
-    targets.length !== 1 || targets[0] !== OWNER_SCHEMA ||
+    targets.length !== 1 ||
+    targets[0] !== OWNER_SCHEMA ||
     [...url.searchParams.keys()].some((key) => ["options", "search_path"].includes(key.toLowerCase())) ||
     url.hash !== ""
-  ) throw new Error("KOKORO_BFF_POSTGRES_URL must target the kokoro_bff schema without connection options")
+  )
+    throw new Error("KOKORO_BFF_POSTGRES_URL must target the kokoro_bff schema without connection options")
 }
 
 export async function applyCanonicalSchema(databaseUrl, schema) {
@@ -53,14 +56,28 @@ export async function applyCanonicalSchema(databaseUrl, schema) {
     await client.query(schema)
     const installed = await client.query(
       `SELECT to_regclass('kokoro_bff.bff_project') IS NOT NULL AS project,
+              to_regclass('kokoro_bff.bff_project_pin') IS NOT NULL AS project_pin,
+              to_regclass('kokoro_bff.ix_bff_project_pin_subject_list') IS NOT NULL AS pin_list_index,
+              to_regclass('kokoro_bff.ix_bff_project_pin_parent_cleanup') IS NOT NULL AS pin_cleanup_index,
               to_regclass('kokoro_bff.bff_project_deletion') IS NOT NULL AS project_deletion,
               to_regclass('kokoro_bff.bff_project_scope_release_outbox') IS NOT NULL AS project_release_outbox,
               to_regclass('kokoro_bff.bff_agui_event') IS NOT NULL AS agui,
               to_regclass('kokoro_bff.ix_bff_project_owner_list') IS NOT NULL AS project_index`,
     )
-    if (!installed.rows[0]?.project || !installed.rows[0]?.project_deletion || !installed.rows[0]?.project_release_outbox || !installed.rows[0]?.agui || !installed.rows[0]?.project_index) {
+    if (
+      !installed.rows[0]?.project_pin ||
+      !installed.rows[0]?.pin_list_index ||
+      !installed.rows[0]?.pin_cleanup_index ||
+      !installed.rows[0]?.project ||
+      !installed.rows[0]?.project_deletion ||
+      !installed.rows[0]?.project_release_outbox ||
+      !installed.rows[0]?.agui ||
+      !installed.rows[0]?.project_index
+    ) {
       throw new Error("BFF canonical schema installation is incomplete")
     }
+    const pinExpected = await expectedProjectPinCatalog((sql, values) => client.query(sql, values), projectPinDefinitions(schema))
+    if ((await inspectProjectPinCatalog((sql, values) => client.query(sql, values), pinExpected)) !== "current") throw new Error("BFF pin schema drift")
     await client.query("COMMIT")
   } catch (error) {
     await client?.query("ROLLBACK").catch(() => undefined)

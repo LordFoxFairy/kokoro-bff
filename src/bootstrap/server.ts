@@ -1,3 +1,4 @@
+import { projectPinRoute, ProjectPinAdmissionError } from "../http/routes/project-pin.js"
 import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
 import { projectResourceReadRoute } from "../http/routes/project-resource-read.js"
 import { projectResourceDeleteRoute } from "../http/routes/project-resource-delete.js"
@@ -310,6 +311,11 @@ async function handle(
     return
   }
   const isConnectorList = !browserPrivateMcp && isConnectorListRequest(businessPath, request.method ?? "GET")
+  const isProjectPinPath =
+    !browserPrivateMcp &&
+    ((businessPath.length === 2 && businessPath[0] === "self" && businessPath[1] === "project-pins") ||
+      (businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "pin"))
+  const projectPinDeadline = isProjectPinPath ? performance.now() + 10_000 : null
   const isProjectMcpRecommendationsPath =
     !browserPrivateMcp && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "mcp-recommendations"
   const isProjectSkillSelectionPath =
@@ -448,13 +454,15 @@ async function handle(
   const admissionAbort = new AbortController()
   const admissionTimer = setTimeout(
     () => admissionAbort.abort(new Error("skill_admission_deadline")),
-    adminOperationDeadline === undefined
-      ? hasMcpBudget
-        ? mcpRequestRemaining(request)
-        : hasSkillsBudget
-          ? skillRequestRemaining(request)
-          : 10_000
-      : Math.max(0, adminOperationDeadline - Date.now()),
+    projectPinDeadline !== null
+      ? Math.max(0, projectPinDeadline - performance.now())
+      : adminOperationDeadline === undefined
+        ? hasMcpBudget
+          ? mcpRequestRemaining(request)
+          : hasSkillsBudget
+            ? skillRequestRemaining(request)
+            : 10_000
+        : Math.max(0, adminOperationDeadline - Date.now()),
   )
   const onRequestAborted = (): void => {
     admissionAbort.abort()
@@ -529,6 +537,7 @@ async function handle(
         isProjectRenamePath ||
         isProjectDeletePath ||
         isProjectDeletionStatusPath ||
+        isProjectPinPath ||
         isPersonalizationPath ||
         isPersonalKnowledgePath
       ) {
@@ -588,6 +597,15 @@ async function handle(
     return
   }
   const context = admission.context
+  if (isProjectPinPath && projectPinDeadline !== null) {
+    await projectPinRoute(request, response, context, businessPath, composition.businessStore, projectPinDeadline, async (signal) => {
+      const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+      if (!fresh.ok) throw new ProjectPinAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
+      if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+        throw new ProjectPinAdmissionError(404, "project_not_found")
+    })
+    return
+  }
   if (composition.routeHandler === undefined && request.method === "GET" && businessPath[0] === "scheduled-tasks" && businessPath.length <= 2) {
     await scheduledTaskReadRoute(
       request,

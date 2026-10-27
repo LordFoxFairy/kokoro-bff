@@ -1,3 +1,20 @@
+## PROJECT-PIN-D0：BFF Project 内的个人固定关联（2026-10-27，Root 已核 D0，Public28.5 本地候选）
+
+当前基线 `020b4016afbb4b3f5f2b43355a987bfbbf6300a6` 的 canonical schema 无 Project pin。本片选择独立 `bff_project_pin`，不是 `bff_project.pinned_at`、Personalization JSON 或 localStorage；唯一 owner／writer 为现 BFF Project，用同一个应用数据库的 kokoro_bff owner schema，不访问 sibling SQL。
+
+| 候选列／约束 | 类型／必要性 |
+| --- | --- |
+| tenant_id／subject_id／project_id | TEXT NOT NULL；前两项来自受信上下文，project_id 为本仓 canonical parent 引用；按现关联表惯例复合 PRIMARY KEY (tenant_id,subject_id,project_id)，无独立资源 ID／UUID |
+| pinned_at | TIMESTAMPTZ(3) NOT NULL，首次 true 由数据库服务端时间赋值；复合键存在即已固定，重复 true 不更新，false 物理删除偏好关联，再 true 分配新的时间 |
+| 读序索引 | (tenant_id,subject_id,pinned_at DESC,project_id ASC)，project_id 比较／排序显式 C 字节序；服务当前个人 keyset 列表 |
+| parent 清理索引 | (tenant_id,project_id)，服务现 Project 删除事务清所有 subject 关联，不以个人查询索引假称覆盖该路径 |
+
+这是可逆设置的存在性关联，无独立历史／软删除恢复窗口；不加 is_pinned、updated_at、deleted_at、version、CAS、receipt、outbox、rank、扩展 JSON 或 pin 总 quota，不引 FOREIGN KEY／REFERENCES。应用层按同一 Project parent 锁维护引用：写入先核 tenant／当前 subject 的可见 owner-only、未删除 parent，删除墓碑的同一事务内清所有关联；回滚同时恢复墓碑／pin／原删除事实，不改原 release outbox 语义。当前读以本 owner 同库 join 过滤 parent，孤儿或不可见关联不返回；GET 不承担清理。关联偏好不授 Project 权限，不把表预留 subject 维度冒现有共享 ACL。
+
+并发以 parent 锁顺序串行、已提交状态 LWW；重复 true 采用冲突 no-op 并返回原 timestamp，不写 Project.updated_at，不伪造时间排序；false 的删除无历史命令回执。Project 墓碑先赢后续 pin／unpin404，pin先赢由后续删除清掉，取消／COMMIT未知交由当前状态只读确认，不能假称回滚。时间只用于稳定显示顺序，等毫秒用 project_id C 序消歧，不是跨设备逻辑时钟。
+
+Root 已核 D0，本地候选在唯一 `database/schema.sql` 增此关联及两个索引，并由具名 catalog 比对服务 fresh／drift 验证；尚未应用任何真实数据库、回填数据或安装迁移框架；现有非空应用 schema 的显式加表需 Root 单独授权，采用本仓具名 evolution 方式、锁／事务／精确 catalog 检查并保旧事实，不运行只适用于空 schema 的 db:apply-schema。新表初始为空、不从浏览器或 Project 顺序回填；正常启用前核旧源码在扩展 schema 上仍可用。回退保表和偏好行，停新写而不 DROP。实现需真实隔离 PG 证明唯一／重复 no-op、LWW、pin/delete 两顺序、跨 tenant／subject／orphan、时间并列／分页、取消／unknown 与整事务回滚；HTTP／App与正常跨设备证据分别验收。
+
 ## TOOL-ACTION-DETAIL-D0：沿现 JSONB 的详情与不变绑定（2026-10-27，源码候选，无 DDL）
 
 本片基线 BFF `b2b9eb1eac4a3f0b0cd4099ed59cbf756f14124c`；已固定正式 Agent HTTP8.2.0 `fc8b0f09f3cfd96211b33d863d5e629bbed13e46`，本地 Public28.4 源码候选尚未发布／正常激活。唯一 Schema 仍 `database/schema.sql`，本片不编辑 Schema、DDL、migration／evolution、表／列／索引／版本或正常数据，不新建 action owner／registry／receipt／日志／传输。

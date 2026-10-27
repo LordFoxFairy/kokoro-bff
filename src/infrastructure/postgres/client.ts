@@ -42,6 +42,9 @@ export class PostgresBffDatabase {
     const result = await this.pool.query(
       `SELECT current_schema() AS schema,
               to_regclass('kokoro_bff.bff_project') IS NOT NULL
+              AND to_regclass('kokoro_bff.bff_project_pin') IS NOT NULL
+              AND to_regclass('kokoro_bff.ix_bff_project_pin_subject_list') IS NOT NULL
+              AND to_regclass('kokoro_bff.ix_bff_project_pin_parent_cleanup') IS NOT NULL
               AND to_regclass('kokoro_bff.bff_conversation') IS NOT NULL
               AND to_regclass('kokoro_bff.bff_scheduled_task') IS NOT NULL
               AND to_regclass('kokoro_bff.bff_idempotency_receipt') IS NOT NULL

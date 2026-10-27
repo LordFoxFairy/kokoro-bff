@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.4.0
+  version: 28.5.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -4241,6 +4241,74 @@ paths:
                 $ref: '#/components/schemas/SessionSnapshotResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+  # PROJECT-PIN-PATHS-BEGIN
+  /v1/self/project-pins:
+    get:
+      tags: [Projects]
+      operationId: listSelfProjectPins
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.read
+      summary: List the current subject's pinned Projects
+      description: Personal preferences only. Current owned active Projects are rechecked on every page. Exact project_id is mutually exclusive with limit and cursor; an accessible unpinned Project returns empty items, while an invisible Project returns404. Pagination is not a snapshot or authorization. Never infer unpinned state from an incomplete page.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+        - name: project_id
+          in: query
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+      responses:
+        '200':
+          description: Current personal pins ordered by pinned_at descending and canonical project_id C byte order ascending
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectPinListResponse' }
+        '400': { $ref: '#/components/responses/ProjectPinInvalid' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/ProjectPinNotFound' }
+        '429': { $ref: '#/components/responses/ProjectPinRateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/projects/{projectId}/pin:
+    put:
+      tags: [Projects]
+      operationId: setProjectPin
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: project.read
+      summary: Set a personal Project pin
+      description: Own preference write, not Project mutation or sharing authorization. No query, Idempotency-Key or If-Match. Repeated true preserves the original timestamp; false removes only this subject's association. Last serialized committed state wins. Unknown outcomes require an explicit exact current GET, not automatic PUT or a claimed command receipt.
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetProjectPinRequest' }
+      responses:
+        '200':
+          description: Committed current personal state; true has its persisted timestamp and false has null
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectPinResponse' }
+        '400': { $ref: '#/components/responses/ProjectPinInvalid' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/ProjectPinNotFound' }
+        '429': { $ref: '#/components/responses/ProjectPinRateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  # PROJECT-PIN-PATHS-END
   /v1/projects:
     get:
       tags: [Projects]
@@ -22063,6 +22131,62 @@ components:
         instruction: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    # PROJECT-PIN-SCHEMAS-BEGIN
+    SetProjectPinRequest:
+      type: object
+      additionalProperties: false
+      required: [is_pinned]
+      properties:
+        is_pinned: { type: boolean }
+    ProjectPinItem:
+      type: object
+      additionalProperties: false
+      required: [project_id, pinned_at]
+      properties:
+        project_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        pinned_at: { type: string, format: date-time }
+    ProjectPinListResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, next_cursor]
+          properties:
+            items:
+              type: array
+              maxItems: 100
+              items: { $ref: '#/components/schemas/ProjectPinItem' }
+            next_cursor:
+              oneOf:
+                - { type: string, minLength: 1, maxLength: 2048 }
+                - { type: 'null' }
+    ProjectPinResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [project_id, is_pinned, pinned_at]
+          properties:
+            project_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+            is_pinned: { type: boolean }
+            pinned_at:
+              oneOf:
+                - { type: string, format: date-time }
+                - { type: 'null' }
+          allOf:
+            - if:
+                properties: { is_pinned: { const: true } }
+              then:
+                properties: { pinned_at: { type: string, format: date-time } }
+              else:
+                properties: { pinned_at: { type: 'null' } }
+    # PROJECT-PIN-SCHEMAS-END
     ProjectListResponse:
       type: object
       required: [data, meta]
@@ -23721,6 +23845,36 @@ components:
             retryable: { type: boolean }
 
   responses:
+    # PROJECT-PIN-RESPONSES-BEGIN
+    ProjectPinInvalid:
+      description: project_pin_request_invalid; retryable false
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/ErrorEnvelope' }
+              - properties:
+                  error:
+                    properties: { code: { const: project_pin_request_invalid }, retryable: { const: false } }
+    ProjectPinNotFound:
+      description: project_not_found; retryable false, including invisible or deleted Projects
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/ErrorEnvelope' }
+              - properties:
+                  error:
+                    properties: { code: { const: project_not_found }, retryable: { const: false } }
+    ProjectPinRateLimited:
+      description: Current IAM admission is rate limited
+      headers:
+        Retry-After:
+          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    # PROJECT-PIN-RESPONSES-END
     AdminMcpPackageBeginOk:
       description: Current owner result, not tool execution permission
       headers:

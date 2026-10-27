@@ -66,6 +66,7 @@ function isNamedSchemaEvolutionReader(relativePath: string, source: string): boo
       "scripts/evolve-agent-failure-schema.mjs",
       "scripts/evolve-message-parts-schema.mjs",
       "scripts/evolve-project-mcp-recommendations-schema.mjs",
+      "scripts/evolve-project-pin-schema.mjs",
     ].includes(relativePath)
   )
     return false

@@ -1,3 +1,5 @@
+import { listProjectPins, setProjectPin } from "./project-pin.js"
+import type { ProjectPinQuery, SetProjectPin } from "../../application/ports/project-repository.js"
 import { readProjectMcpRecommendations, replaceProjectMcpRecommendations } from "./project-mcp-recommendations.js"
 import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations } from "../../application/ports/project-repository.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
@@ -86,6 +88,13 @@ function revisionFromRow(row: RevisionRow): ProjectInstructionRevision {
 
 export class PostgresProjectRepository implements ProjectRepository {
   public constructor(private readonly database: PostgresBffDatabase) {}
+
+  public listProjectPins(input: ProjectPinQuery) {
+    return listProjectPins(this.database, input)
+  }
+  public setProjectPin(input: SetProjectPin) {
+    return setProjectPin(this.database, input)
+  }
 
   public projectMcpRecommendations(input: ProjectMcpRecommendationQuery) {
     return readProjectMcpRecommendations(this.database, input)

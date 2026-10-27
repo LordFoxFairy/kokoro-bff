@@ -22,6 +22,20 @@ CREATE INDEX IF NOT EXISTS ix_bff_project_owner_list
   ON bff_project (tenant_id, owner_id, created_at ASC, project_id ASC)
   WHERE deleted_at IS NULL;
 
+-- PROJECT-PIN-SQL-BEGIN
+CREATE TABLE IF NOT EXISTS bff_project_pin (
+  tenant_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  pinned_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, subject_id, project_id)
+);
+CREATE INDEX IF NOT EXISTS ix_bff_project_pin_subject_list
+  ON bff_project_pin (tenant_id, subject_id, pinned_at DESC, project_id COLLATE "C" ASC);
+CREATE INDEX IF NOT EXISTS ix_bff_project_pin_parent_cleanup
+  ON bff_project_pin (tenant_id, project_id);
+-- PROJECT-PIN-SQL-END
+
 CREATE TABLE IF NOT EXISTS bff_project_deletion (
   tenant_id TEXT NOT NULL,
   project_id TEXT NOT NULL,

@@ -1,3 +1,24 @@
+## PROJECT-PIN-D0：个人项目固定偏好（2026-10-27，Root 已核 D0，Public28.5 本地候选）
+
+**基线／当前事实／边界。** BFF `020b4016afbb4b3f5f2b43355a987bfbbf6300a6`。现 `ProjectService`／`ProjectRepository` 和 `project-repository.ts` 的 list/find 只准当前 tenant＋subject 的 owner-only、未删除 Project；列表为 created_at ASC／project_id ASC，Project wire／canonical row 无 pin。`project-delete.ts` 已在同一事务中先锁 parent 再墓碑、处理原 release outbox。此 D0 只增加“该 subject 固定哪个当前可访问 Project”的跨设备偏好；不改 Project 共享属性、原列表顺序、description／instruction／updated_at，不扩 ACL、任意排序、自定义分区、Personalization 或通用配置中心。侧栏留白及菜单四项既有动作由其他 App writer 独立推进，不等待本设计、不先造可点击假 pin。
+
+| 位置比较 | 收益与代价 | 本片结论 |
+| --- | --- | --- |
+| ① owner-only `bff_project.pinned_at` | 少一张关联表；但将个人偏好混成 Project 行属性／更新原因，无法表达同一可见项目的不同 subject 偏好，若加原 Project 响应字段还会破旧 closed readers | 不采用；当前 owner-only 不等于 pin 本质是共享事实 |
+| ② BFF Project owner 内 `bff_project_pin` 个人关联 | 一张具名轻量关联表，subject 隔离、Project 生命周期同库闭包；独立读写表示不污染原 Project wire，旧 reader 可继续运行 | 推荐并按 Root 已选方向收敛；不是新业务 owner 或任意设置 JSON |
+
+**typed 最小闭包。** 内部只需 ProjectPin（projectId、pinnedAt instant）与目标状态（projectId、isPinned、pinnedAt nullable），可信 tenantId／subjectId 沿现 ProjectOwnerScope；wire／row 在既有边界映射，不复制完整 Project。实现后写区预期为具名 `domain/project/pin.ts`、`http/project-pin-input.ts`／`routes/project-pin.ts`、`infrastructure/postgres/project-pin.ts`，现 ProjectService／ProjectRepository／PostgresProjectRepository 只新增具名委派，bootstrap 只接两条 exact route；删除仅在原事务加关联清理。无新 module／BaseRepository／generic config 层。机器接口和数据字段分别以本仓 API／DATA_MODEL 的本 D0 约束；设计门已由 Root 核准；本阶段仅按此闭包实施，不自动激活资源。
+
+**准入与自然幂等。** GET `/v1/self/project-pins`；PUT `/v1/projects/{projectId}/pin` strict `{is_pinned:boolean}`。两者按 Root 裁决复用现 project.read 与当前 owner-only 可见谓词：个人偏好写不更改 Project，不新增 IAM action 或给非 owner 授可见性；这是 own preference write，不授 Project 共享写权限。完整 Session／服务身份的方法边界、tenant／subject 当前 admission、同源 CSRF 写防护及取消保持，body 不含 tenant／actor／subject。PUT 在原有界数据库 client／10 秒绝对总预算内，先按可信 tenant＋subject＋canonical project_id 锁未删除 parent，再插入／删除本人关联；不接受 slug。true 首次插入服务端 pinned_at，重复 true 业务值／timestamp 不变；false 删除关联，已未固定也是成功。无 Idempotency-Key、CAS／revision／receipt／outbox；没有外部副作用或跨库事务。
+
+**并发／Project 删除。** 同 Project 的 pin/unpin 与现删除都先取同一 parent 行锁；最后序列化的已提交设置决定当前值（LWW，不是客户端点击时间或跨设备因果顺序）。删除在已持 parent 锁的原墓碑事务内清该 tenant／project 的所有 subject 关联，与墓碑／原 release 事实原子提交／回滚，不增加新的发布 outbox。pin 先赢则删除随后清掉；删除先赢则后续 true／false 都404，不复活 Project。GET 始终 join 当前可见、未删除 parent，脏 orphan／不可见关联不泄漏，读取不创建或清理偏好。跨 subject 的固定偏好彼此不可读取／修改；当前 owner-only 模型不因关联表预留而冒称已有协作 ACL。
+
+**读取／排序／恢复。** keyset 按 pinned_at DESC／canonical project_id 的 C 字节序 ASC；页有明确预算，cursor 绑定当前 tenant／subject、limit／排序与位置，不授可见权，不承诺多页快照。重复 true 不重排，false 后重新 true 是新的固定时间；无自定义 rank／拖拽重排／pin 总 quota。单个 canonical project_id 过滤同 GET、不可与分页参数组合：先核可见 Project，可见未 pin 返回空 items，不可见404，供未知写入后的精确当前读。App 不用未耗尽页面推断其余未固定；已读 pinned 项按服务器顺序投影，未固定项目保原 Project 列表顺序，不持久化另一套业务事实。错误／未知时保已读视图和明确未知反馈，不能显示假 unpinned／假成功。
+
+**客户端最小恢复。** 同一 client 的 subject＋project 有一个 pending 设置，期间禁用相反写，不自动 PUT／轮询重放；超时／断连／取消／丢 ACK 不推断提交结果。显式精确 GET 相同值只能确认“当前设置已是该值”，不称原 PUT 历史 ACK；不同则展示当前值、保用户目标，下一次明确操作才设新值。GET 失败不释放为假成功；404／撤权退休该呈现并刷新当前 Project，不猜 false。当前读不证明旧 PUT 已结束，其他窗口或迟到 commit 仍按 LWW 收敛，不许诺最后一次点击必胜。reload 后只读服务器当前值，不建 localStorage／receipt journal 冒跨设备保证；tenant＋subject 全局 pin collection 不因同主体普通会话 route 变化而清空已证偏好；仅旧 menu target 呈现、跨主体或失去 Project 可见性退休迟到 UI，不以 abort 称服务端回滚。
+
+**实施顺序／验收门。** Root 审三面 D0 → BFF 唯一 canonical 增两操作和具名 typed schema、保持原 Project wire 与192旧 operation，完整父字节／inventory 证明 → canonical 增唯一关联表并在隔离 PG 实现、核 fresh／drift、重复 true、true/false 并发、tenant／subject／orphan、同时间稳定排序、分页／精确过滤、取消／unknown COMMIT、pin/delete 竞争及全事务回滚 → 正式 BFF commit／digest → App 正规固定新 artifact、同源窄 adapter／当前 scope 状态／真实菜单 → Root 显式授权的 schema 扩展、旧源码兼容验证及正常配对／跨设备／重开／键盘390验收。普通 pin 不触模型／Agent；不因本设计自动应用库或改正常服务。旧 App 不调用新路径且旧 Project 表示不变，可先部署 BFF；有数据环境只能经 Root 审准的具名加表步骤，不对非空库跑 fresh installer。回退先停新 writer、保新表与偏好事实，不 DROP／回填旧行或清用户数据；版本号由 Root 在实际冻结组合上发行，不抢占并发版本。
+
 ## TOOL-ACTION-DETAIL-D0：受信动作详情与共享隔离（2026-10-27，Root 已裁决，源码候选）
 
 **基线／范围。** 基于 BFF `b2b9eb1eac4a3f0b0cd4099ed59cbf756f14124c`，本地候选 Public28.4.0／192操作已消费正式 Agent HTTP8.2.0 `fc8b0f09f3cfd96211b33d863d5e629bbed13e46` 的 Git blob；OpenAPI SHA256 `8a0b9973661205b8e29020934c39e5c7ab629b4c42db4e79c845a410d96efa2a`、provenance SHA256 `7a8b442633e08d984a5381389359e5a03d59a0503a1a9d6fb09ea54fad003bd3`。18输出与 manifest 经原 generator 正规生成；本片只实现 optional tool `display_detail` 与必要 Share null 收口，无 Schema／正常资源变化，候选尚未发布或正常配对激活。本节仅替代下文“工具活动绝不含具体详情”的对应目标限制，不追溯改写旧发行事实。

@@ -1,3 +1,7 @@
+## 当前 Public28.5 Project pin 消费候选（2026-10-27）
+
+只增加 `listSelfProjectPins`／`setProjectPin` 两个 personal-preference operation，总计194；原192有序 inventory 保持后追加新项，Project 原 closed wire 不加字段。当前完整原件与完整28.4 SHA48aa9638d133223c9f78655e9398ddbb44159963f92a2db891a09212f3aa2726的逆证由 `scripts/project-pin-public-contract.mjs` 固定，后续旧父 hash 原样。自然状态 PUT 不要 key／CAS／receipt，project.read不授 Project 共享写权限；正常 DB／运行配对未由源码候选代证。
+
 ## 2026-10-26 Public28 / Agent HTTP8 工具展示闭集候选
 
 唯一canonical `openapi/v1/openapi.yaml` 为Public28.0.0／187operations，仅原RunToolActivity.display_code const→七值enum与version变化；unknown／错分支拒绝，旧tool.execution仍原样。固定正式Agent `ff36759214ff5d1e015cd9e288abbcb2d8e0c46d` 的HTTP8.0.0 OpenAPI/provenance（SHA256分别93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff／4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f），只经现Agent generator与三operation allowlist更新18既有输出，不读取浮动owner源码。
