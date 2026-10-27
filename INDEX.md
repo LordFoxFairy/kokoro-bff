@@ -1,3 +1,7 @@
+## MCP Prepare 历史回执 lookup-only 候选（2026-10-27）
+
+仅新增 browser-private GET `mcp/servers/{server_id}/prepare-receipt` 的候选 route、原 CAS/key 绑定、completed 历史ACK严格包装与独立 lookup-only code-first profile；同 key 仅重读 GET，不授 Prepare POST／新 key。普通 GET 继续拒命令头及 receipt marker。现已固定 Platform 正式688bc1e3／private-server1.5／query1.0，原生Get方法及严格completed包装实际接线；独立binary协议peer通过，不等于正常终态恢复。三设计面已获 Root 批准；当前 peer/HTTP 及生成检查不替代实际 owner／正常验收。
+
 ## 个人 Project pin（2026-10-27，本地候选，未应用库）
 
 `domain/project/pin.ts`／`http/project-pin-input.ts`／`routes/project-pin.ts` 只接 self 列表与 exact canonical Project 状态 PUT；Session／subject 生命周期、限时／闭集和自然幂等沿本次三面 D0。`postgres/project-pin.ts` 复用具名 Project 端口与 parent 锁，原 `project-delete.ts` 同墓碑事务清个人关联；原 Project wire／updated_at 不变。canonical 新关系表／两索引、ready／fresh 和 `project-pin-schema-catalog.mjs` 的 exact target／实际 catalog 比对闭合，具名 evolution 仅供 Root 显式操作，不是启动安装或迁移框架。`pnpm test:project-pin` 为纯／自有 loopback 入口，`test:project-pin:integration` 仅 Root 指定独占临时 PG，未运行资源测试不称通过。Public28.5／194 的完整28.4父字节和旧192 inventory保持；正式交付／正常配对归 Root。

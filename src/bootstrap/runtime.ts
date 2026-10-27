@@ -85,7 +85,7 @@ export type BffServerComposition = {
   mcpProjectPublicationClient: McpProjectPublicationClient | null
   mcpPersonalClient:
     | (Pick<McpPersonalConnectClient, "read"> &
-        Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon">>)
+        Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon" | "prepareReceipt">>)
     | null
   mcpPackageAdminClient: (Pick<McpPackageAdminConnectClient, "execute"> & Partial<Pick<McpPackageAdminConnectClient, "close">>) | null
   mcpProviderAdminClient: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
@@ -129,7 +129,7 @@ export type BffCompositionOptions = {
   mcpProjectPublicationClient?: McpProjectPublicationClient | null
   mcpPersonalClient?:
     | (Pick<McpPersonalConnectClient, "read"> &
-        Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon">>)
+        Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon" | "prepareReceipt">>)
     | null
   mcpPackageAdminClient?: (Pick<McpPackageAdminConnectClient, "execute"> & Partial<Pick<McpPackageAdminConnectClient, "close">>) | null
   mcpProviderAdminClient?: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null

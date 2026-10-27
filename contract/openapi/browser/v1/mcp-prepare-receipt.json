@@ -1,0 +1,1445 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kokoro BFF browser-private Prepare receipt lookup",
+    "version": "1.0.0"
+  },
+  "x-kokoro-lookup-policy": {
+    "profile": "mcp-prepare-receipt-lookup",
+    "version": "1.0.0",
+    "visibility": "browser-private",
+    "path": "/browser/v1/mcp/servers/{server_id}/prepare-receipt",
+    "operation_id": "getMcpPrepareReceipt",
+    "permission": "mcp_personal.read",
+    "lookup_only": true,
+    "completed_only": true,
+    "negative_ack": false,
+    "automatic_retries": false,
+    "new_command_authorized": false,
+    "prepare_authorized": false,
+    "supersedes_prepare_inspection_recovery": true,
+    "same_command": {
+      "method": "GET",
+      "target": "original_lookup"
+    },
+    "errors": [
+      {
+        "status": 400,
+        "code": "invalid_mcp_personal_request",
+        "retryable": false
+      },
+      {
+        "status": 404,
+        "code": "mcp_personal_not_found",
+        "retryable": false
+      },
+      {
+        "status": 502,
+        "code": "mcp_personal_response_invalid",
+        "retryable": false
+      },
+      {
+        "status": 503,
+        "code": "mcp_personal_dependency_unavailable",
+        "retryable": true
+      },
+      {
+        "status": 401,
+        "code": "session_authentication_required",
+        "retryable": false
+      },
+      {
+        "status": 401,
+        "code": "session_invalid",
+        "retryable": false
+      },
+      {
+        "status": 403,
+        "code": "service_auth_failed",
+        "retryable": false
+      },
+      {
+        "status": 403,
+        "code": "product_tenant_forbidden",
+        "retryable": false
+      },
+      {
+        "status": 403,
+        "code": "session_forbidden",
+        "retryable": false
+      },
+      {
+        "status": 429,
+        "code": "session_rate_limited",
+        "retryable": true
+      },
+      {
+        "status": 503,
+        "code": "product_tenant_not_configured",
+        "retryable": true
+      },
+      {
+        "status": 503,
+        "code": "iam_admission_unavailable",
+        "retryable": true
+      },
+      {
+        "status": 409,
+        "code": "mcp_personal_command_in_progress",
+        "retryable": true
+      },
+      {
+        "status": 503,
+        "code": "mcp_personal_command_outcome_unknown",
+        "retryable": false
+      },
+      {
+        "status": 412,
+        "code": "mcp_personal_command_replay_expired",
+        "retryable": false
+      },
+      {
+        "status": 409,
+        "code": "mcp_personal_idempotency_conflict",
+        "retryable": false
+      },
+      {
+        "status": 409,
+        "code": "mcp_personal_command_ownership_lost",
+        "retryable": false
+      }
+    ]
+  },
+  "paths": {
+    "/browser/v1/mcp/servers/{server_id}/prepare-receipt": {
+      "get": {
+        "operationId": "getMcpPrepareReceipt",
+        "x-kokoro-owner": "kokoro-bff",
+        "x-kokoro-visibility": "browser-private",
+        "x-kokoro-stability": "beta",
+        "x-kokoro-idempotency": "lookup_only",
+        "x-kokoro-permission": "mcp_personal.read",
+        "security": [
+          {
+            "ProductSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_state_version",
+            "required": true,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,9}(?![\\s\\S])"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "pattern": "^[\\x21-\\x7e]{1,191}(?![\\s\\S])"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Historical completed ACK, never Current or negative execution proof",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "completed": {
+                          "type": "object",
+                          "properties": {
+                            "server": {
+                              "type": "object",
+                              "properties": {
+                                "transport": {
+                                  "type": "string",
+                                  "enum": [
+                                    "streamable_http",
+                                    "sse_compat"
+                                  ]
+                                },
+                                "icon": {
+                                  "type": "object",
+                                  "properties": {
+                                    "intent_id": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+                                    },
+                                    "content_sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    },
+                                    "mime_type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "image/png",
+                                        "image/jpeg"
+                                      ]
+                                    },
+                                    "size_bytes": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]{0,9}$"
+                                    },
+                                    "width": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 4096
+                                    },
+                                    "height": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 4096
+                                    },
+                                    "preview_reference": {
+                                      "type": "object",
+                                      "properties": {
+                                        "url": {
+                                          "type": "string"
+                                        },
+                                        "method": {
+                                          "type": "string",
+                                          "enum": [
+                                            "GET",
+                                            "PUT"
+                                          ]
+                                        },
+                                        "required_headers": {
+                                          "type": "object",
+                                          "propertyNames": {
+                                            "type": "string"
+                                          },
+                                          "additionalProperties": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "expires_at": {
+                                          "type": "string",
+                                          "format": "date-time",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                        }
+                                      },
+                                      "required": [
+                                        "url",
+                                        "method",
+                                        "required_headers",
+                                        "expires_at"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "intent_id",
+                                    "content_sha256",
+                                    "mime_type",
+                                    "size_bytes",
+                                    "width",
+                                    "height"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "server_id": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+                                },
+                                "availability": {
+                                  "type": "string",
+                                  "enum": [
+                                    "available",
+                                    "refresh_required",
+                                    "refreshing",
+                                    "reauthorization_required",
+                                    "unavailable"
+                                  ]
+                                },
+                                "display_name": {
+                                  "type": "string"
+                                },
+                                "server_url": {
+                                  "type": "string",
+                                  "maxLength": 255
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "registered",
+                                    "disabled"
+                                  ]
+                                },
+                                "state_version": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]{0,9}(?![\\s\\S])"
+                                },
+                                "notes": {
+                                  "type": "string"
+                                },
+                                "headers": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string",
+                                        "pattern": "^[!#$%&'*+.^_`|~0-9a-z-]{1,128}$"
+                                      },
+                                      "configured": {
+                                        "type": "boolean"
+                                      },
+                                      "state_version": {
+                                        "type": "string",
+                                        "pattern": "^[1-9][0-9]{0,9}(?![\\s\\S])"
+                                      },
+                                      "status": {
+                                        "type": "string",
+                                        "enum": [
+                                          "active",
+                                          "revoked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "configured",
+                                      "state_version",
+                                      "status"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "oauth_client": {
+                                  "type": "object",
+                                  "properties": {
+                                    "client_id": {
+                                      "type": "string"
+                                    },
+                                    "configured": {
+                                      "type": "boolean"
+                                    },
+                                    "origin": {
+                                      "type": "string",
+                                      "enum": [
+                                        "byo",
+                                        "dcr"
+                                      ]
+                                    },
+                                    "status": {
+                                      "type": "string",
+                                      "enum": [
+                                        "configured",
+                                        "revoked"
+                                      ]
+                                    },
+                                    "state_version": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]{0,9}(?![\\s\\S])"
+                                    }
+                                  },
+                                  "required": [
+                                    "client_id",
+                                    "configured",
+                                    "origin",
+                                    "status",
+                                    "state_version"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "prepare_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "ready",
+                                    "needs_oauth"
+                                  ]
+                                },
+                                "authorization_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "approved",
+                                    "revoked",
+                                    "failed"
+                                  ]
+                                },
+                                "declarations": {
+                                  "maxItems": 2000,
+                                  "type": "array",
+                                  "items": {
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "const": "tool"
+                                          },
+                                          "selector": {
+                                            "type": "string"
+                                          },
+                                          "display_name": {
+                                            "type": "string"
+                                          },
+                                          "input_schema_digest": {
+                                            "type": "string",
+                                            "pattern": "^[a-f0-9]{64}$"
+                                          },
+                                          "output_schema_digest": {
+                                            "type": "string",
+                                            "pattern": "^[a-f0-9]{64}$"
+                                          },
+                                          "required_scopes": {
+                                            "maxItems": 2000,
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string"
+                                            }
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "selector",
+                                          "display_name",
+                                          "input_schema_digest",
+                                          "required_scopes"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "const": "resource"
+                                          },
+                                          "selector": {
+                                            "type": "string"
+                                          },
+                                          "display_name": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "selector",
+                                          "display_name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "const": "prompt"
+                                          },
+                                          "selector": {
+                                            "type": "string"
+                                          },
+                                          "display_name": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "selector",
+                                          "display_name"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
+                                  }
+                                },
+                                "declaration_digest": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "connection_id": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+                                },
+                                "declarations_available": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "server_id",
+                                "availability",
+                                "display_name",
+                                "server_url",
+                                "status",
+                                "state_version",
+                                "headers",
+                                "prepare_status",
+                                "declarations",
+                                "declarations_available"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "connector": {
+                              "type": "object",
+                              "properties": {
+                                "connector_id": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+                                },
+                                "availability": {
+                                  "type": "string",
+                                  "enum": [
+                                    "available",
+                                    "refresh_required",
+                                    "refreshing",
+                                    "reauthorization_required",
+                                    "unavailable"
+                                  ]
+                                },
+                                "connector_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "builtin",
+                                    "byok",
+                                    "mcp"
+                                  ]
+                                },
+                                "provider_key": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "active",
+                                    "error",
+                                    "revoked"
+                                  ]
+                                },
+                                "approved_scopes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  }
+                                },
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "state_version": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]{0,15}(?![\\s\\S])"
+                                },
+                                "display_name": {
+                                  "type": "string"
+                                },
+                                "description": {
+                                  "type": "string"
+                                },
+                                "created_at": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                },
+                                "updated_at": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                },
+                                "server_id": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+                                }
+                              },
+                              "required": [
+                                "connector_id",
+                                "availability",
+                                "connector_type",
+                                "provider_key",
+                                "status",
+                                "approved_scopes",
+                                "enabled",
+                                "state_version"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "declarations": {
+                              "maxItems": 2000,
+                              "type": "array",
+                              "items": {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "tool"
+                                      },
+                                      "selector": {
+                                        "type": "string"
+                                      },
+                                      "display_name": {
+                                        "type": "string"
+                                      },
+                                      "input_schema_digest": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "output_schema_digest": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "required_scopes": {
+                                        "maxItems": 2000,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "selector",
+                                      "display_name",
+                                      "input_schema_digest",
+                                      "required_scopes"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "resource"
+                                      },
+                                      "selector": {
+                                        "type": "string"
+                                      },
+                                      "display_name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "selector",
+                                      "display_name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "prompt"
+                                      },
+                                      "selector": {
+                                        "type": "string"
+                                      },
+                                      "display_name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "selector",
+                                      "display_name"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            },
+                            "replayed": {
+                              "type": "boolean",
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "server",
+                            "connector",
+                            "declarations",
+                            "replayed"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "completed"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "invalid_mcp_personal_request"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "session_authentication_required"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "session_invalid"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "service_auth_failed"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "product_tenant_forbidden"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "session_forbidden"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_not_found"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_command_in_progress"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_idempotency_conflict"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_command_ownership_lost"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_command_replay_expired"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "session_rate_limited"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": true
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_response_invalid"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_dependency_unavailable"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "product_tenant_not_configured"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "iam_admission_unavailable"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_command_outcome_unknown"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ProductSession": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

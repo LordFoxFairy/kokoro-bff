@@ -1,3 +1,20 @@
+## MCP-PREPARE-RECEIPT-D0：browser-private 原 Prepare 回执 GET（2026-10-27，Root 已批准；browser-private候选、未正式配对）
+
+仅设计`GET /browser/v1/mcp/servers/{id}/prepare-receipt?expected_state_version=<原CAS>`，不加入Public OpenAPI。沿现browser service envelope＋Product Session、`mcp_personal`资源的`read` action及可信tenant/subject，Browser只走App same-origin adapter。owner具名query已固定正式`688bc1e3d74c18c54ca85bc72d8e4ce242ac995a`并原生接线；本仓仍是未正常激活的候选，不把peer冒成正常历史收口。
+
+| 边界 | 约束 |
+| --- | --- |
+| path/query | 现Server ID闭集/canonical路径/精确GET；仅一个required `expected_state_version`，沿原Prepare十进制string CAS校验；不接body、current CAS别名、额外/重复query或fragment |
+| lookup header | 恰一个原`Idempotency-Key`，沿可见ASCII1..191字符闭集，拒空白/重复raw header；只定位旧命令，不创建命令。仅本exact GET例外，其它GET继续拒该头；不收浏览器digest/tenant/subject |
+| owner request | 独立request_id、command（原CommandIdentity）、server_id、expected_state_version。digest复用原Prepare method＋可信tenant/subject/exact server/原CAS，不按query method造新身份，不嵌套原request/双request_id |
+| 200 | `{data:{completed:<原Prepare安全ACK>}}`；复用现Server/Connector/declarations/replayed表示，strict closed、replayed=true、exact server、历史state_version=原expected+1及精确关联。无negative/status分支、新Server DTO或额外current projection |
+| 历史/current | owner重核当前本人可见性，但历史ACK不要求等于current CAS；原历史absent transport沿现replayed ACK规则，不补current transport/CAS；availability仅为owner当次本人同RR安全副本投影。下一写仍独立fresh current读取 |
+| 生命周期 | 原总deadline/AbortSignal/1MiB传输界、发送前及出口fresh同主体/read action；no-store/x-request-id。零自动重试、零Prepare/claim/refresh、新key或执行许可 |
+
+仅本具名query消费正式owner既有receipt marker：missing/foreign → `404/mcp_personal_not_found/false`，不是“未执行”证明；processing → 现`409/mcp_personal_command_in_progress/true`；expired → 现`412/mcp_personal_command_replay_expired/false`；旧不确定失败 → 现`503/mcp_personal_command_outcome_unknown/false`；key/digest/原CAS冲突 → 现`409/mcp_personal_idempotency_conflict/false`。未知/重复/错Connect code marker、混合detail、坏completed沿`502/mcp_personal_response_invalid/false`；身份拒绝先于owner I/O，依赖/取消/期限沿现有界依赖错误。其它普通GET继续拒receipt marker，不凭rawMessage分支或造negative枚举；marker精确规则以owner正式profile为准。
+
+所有非completed都保原unknown，不授新key/重建/重发Prepare；same_command在本query仅允许再读原lookup，不解释为POST许可。本节覆盖10-24 prepare_inspection_recovery本次恢复后继的旧重放策略，旧tuple和历史证据保留。后继本feature code-first schema/政策沿现generator生成browser-private artifact，App固定正式commit/digest后再接；Public28.5原件与其它业务接口不扩大。现已有route/strict wrapper/lookup-only code-first profile与peer候选；已固定正式owner并实际Native Get配对；尚不称正常恢复。
+
 ## PROJECT-PIN-D0：个人固定读取与状态 PUT（2026-10-27，Root 已核 D0，Public28.5 本地候选）
 
 固定偏好归 BFF Project owner，不修改原 Project closed 表示；后继只新增两条 public／beta operation，正式 canonical 仍 `contract/openapi/v1/openapi.yaml`，本节不是第二份机器 schema。身份沿当前 Session 和受信 tenant／subject，Root 已裁决 operation permission 均为 project.read＋现 owner-only、未删除 Project 可见性；这是 own preference write，不授 Project 共享写权限；完整 Session、服务身份方法边界和同源 CSRF 保持，body 不含 tenant／actor／subject，不新增 IAM action／协作 ACL。具体 owner／并发／部署门见 [技术设计](TECHNICAL_DESIGN.md) 同名 D0，数据见 [数据模型](DATA_MODEL.md)。

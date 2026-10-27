@@ -85,6 +85,20 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
       "descriptor/platform-mcp-personal-sse-source-delta.json",
       "execution-operations/mcp-personal-sse-request-vectors-v1.json",
       "execution-operations/mcp-personal-sse-v1.json",
+      "execution-operations/mcp-prepare-receipt-v1.json",
+      "execution-operations/mcp-prepare-receipt-v1.vectors.json",
+      "descriptor/platform-mcp-prepare-receipt-parent.platform_runtime.proto.snapshot",
+      "descriptor/platform-mcp-prepare-receipt-parent.platform-v1.binpb.snapshot",
+      "descriptor/platform-mcp-prepare-receipt-parent.platform_runtime_pb.ts.snapshot",
+      "descriptor/platform-mcp-prepare-receipt-parent.mcp-private-server-v1.json.snapshot",
+      "descriptor/platform-mcp-prepare-receipt-parent.provenance.json.snapshot",
+      "descriptor/platform-mcp-prepare-receipt-parent.mcp-runtime-v1.binpb.snapshot",
+      "descriptor/platform-mcp-prepare-receipt-parent.mcp-runtime-v1.json.snapshot",
+      "descriptor/platform-mcp-prepare-receipt-parent.mcp-personal-sse-v1.json.snapshot",
+      "descriptor/mcp-runtime-v1.binpb",
+      "execution-operations/mcp-runtime-v1.json",
+      "descriptor/platform-mcp-prepare-receipt-parents.json",
+      "descriptor/platform-mcp-prepare-receipt-delta.json",
     ].map((file) => ({
       path: `contract/${file}`,
       sha256: artifacts[file],
@@ -92,7 +106,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     provenance: { path: "contract/provenance.json", sha256: artifacts["provenance.json"], combined_sha256: combinedSha256 },
     generated: ownerGenerated,
   })
-  assert.equal(manifest.owner.repository_commit, "8cfead647856ef54ec851a3bebe169a3ca14d212")
+  assert.equal(manifest.owner.repository_commit, "688bc1e3d74c18c54ca85bc72d8e4ce242ac995a")
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.lockfile_sha256, sha256(await requiredFile("pnpm-lock.yaml")))
   for (const [file, bytes] of Object.entries(await sourceBytes())) assert.equal(sha256(bytes), sources[file])
@@ -363,7 +377,83 @@ test("SSE successor: generated native optional fields match the fixed descriptor
         "contract/execution-operations/mcp-availability-v1.json",
       ].includes(file)
     ) {
-      assert.equal(sha256(await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/${file.replace("contract/", "")}`)), sha.sha256)
+      assert.equal(sha256(await prePrepareQueryArtifact(file)), sha.sha256)
     }
   }
+})
+
+// Historical proof only: validate the complete current successor before supplying its pinned predecessor.
+async function prePrepareQueryArtifact(file) {
+  const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/`
+  const query = JSON.parse(await requiredFile(prefix + "execution-operations/mcp-prepare-receipt-v1.json"))
+  if (file !== "contract/execution-operations/mcp-private-server-v1.json") return requiredFile(prefix + file.replace("contract/", ""))
+  const pin = query.parents[file]
+  const parentBytes = await requiredFile(prefix + pin.path.replace("contract/", ""))
+  assert.equal(sha256(parentBytes), pin.sha256)
+  const parent = JSON.parse(parentBytes)
+  const current = JSON.parse(await requiredFile(prefix + file.replace("contract/", "")))
+  assert.deepEqual(current, {
+    ...parent,
+    version: "1.5.0",
+    methods: [...parent.methods, { name: "GetPersonalMcpPrepareReceipt", command: false }],
+    prepare_receipt: {
+      profile: "contract/execution-operations/mcp-prepare-receipt-v1.json",
+      original_operation: "PreparePersonalMcpServer",
+      completed_only: true,
+      automatic_retries: false,
+      new_command_authorized: false,
+    },
+  })
+  return parentBytes
+}
+
+test("Prepare query successor retains exact full source/descriptor parent and the unchanged Runtime/SSE inputs", async () => {
+  const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const { FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
+  const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/`
+  const query = JSON.parse(await requiredFile(prefix + "execution-operations/mcp-prepare-receipt-v1.json"))
+  assert.equal(query.completed_only, true)
+  assert.equal(query.negative_ack, false)
+  assert.equal(query.command, false)
+  const delta = JSON.parse(await requiredFile(prefix + "descriptor/platform-mcp-prepare-receipt-delta.json"))
+  const source = (await requiredFile(prefix + "proto/kokoro/platform/v1/platform_runtime.proto")).toString("utf8")
+  assert.equal(source.split(delta.method).length, 2)
+  assert.ok(source.endsWith(delta.suffix))
+  assert.equal(
+    sha256(source.slice(0, -delta.suffix.length).replace(delta.method, "")),
+    query.parents["contract/proto/kokoro/platform/v1/platform_runtime.proto"].sha256,
+  )
+  const graph = fromBinary(FileDescriptorSetSchema, await requiredFile(prefix + "descriptor/platform-v1.binpb"))
+  let methods = 0,
+    messages = 0
+  for (const file of graph.file) {
+    for (const service of file.service) {
+      const before = service.method.length
+      service.method = service.method.filter((method) => method.name !== "GetPersonalMcpPrepareReceipt")
+      methods += before - service.method.length
+    }
+    const before = file.messageType.length
+    file.messageType = file.messageType.filter(
+      (message) => !["GetPersonalMcpPrepareReceiptRequest", "GetPersonalMcpPrepareReceiptResponse"].includes(message.name),
+    )
+    messages += before - file.messageType.length
+  }
+  assert.equal(methods, 1)
+  assert.equal(messages, 2)
+  assert.equal(sha256(toBinary(FileDescriptorSetSchema, graph)), query.parents["contract/descriptor/platform-v1.binpb"].sha256)
+  for (const file of [
+    "contract/descriptor/mcp-runtime-v1.binpb",
+    "contract/execution-operations/mcp-runtime-v1.json",
+    "contract/execution-operations/mcp-personal-sse-v1.json",
+  ])
+    assert.equal(sha256(await requiredFile(prefix + file.replace("contract/", ""))), query.parents[file].sha256)
+})
+
+test("Native successor retains the independently pinned unchanged HTTP7 source", async () => {
+  const http = JSON.parse(await requiredFile("contract/dependencies/platform-http.json"))
+  assert.equal(http.owner.repository_commit, "8cfead647856ef54ec851a3bebe169a3ca14d212")
+  assert.equal(http.owner.contract_version, "7.0.0")
+  const bytes = await requiredFile(`contract/vendor/kokoro-platform/${http.owner.repository_commit}/openapi/platform-http.openapi.json`)
+  assert.equal(sha256(bytes), http.owner.contract_sha256)
+  assert.equal(sha256(bytes), "085e1367f69c34edc6b80cbfb448596f36039f9857cee3bd5a407befbc295361")
 })

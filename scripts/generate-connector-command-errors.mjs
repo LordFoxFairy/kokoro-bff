@@ -15,6 +15,12 @@ import {
   mcpProjectPublicationError,
 } from "../src/application/mcp-project-publication.contract.ts"
 import { CONNECTOR_COMMAND_FAULT_POLICY } from "../src/infrastructure/clients/platform/connector-command-fault.ts"
+import {
+  MCP_PREPARE_RECEIPT_POLICY,
+  mcpPrepareReceiptQuerySchema,
+  mcpPrepareReceiptKeySchema,
+  mcpPrepareReceiptResponseSchema,
+} from "../src/http/mcp-prepare-receipt.contract.ts"
 
 const target = new URL("../contract/connector-command-errors-v1.json", import.meta.url)
 const bytes = JSON.stringify(CONNECTOR_COMMAND_FAULT_POLICY, null, 2) + "\n"
@@ -229,3 +235,75 @@ if (process.argv.slice(2).join(" ") === "--write") {
   await mkdir(new URL("./", iconTarget), { recursive: true })
   await writeFile(iconTarget, iconBytes)
 } else if ((await readFile(iconTarget, "utf8")) !== iconBytes) throw new Error("MCP Server icon private contract drifted")
+
+// The named history query is not a public API or a generic receipt surface.
+const prepareReceiptTarget = new URL("../contract/openapi/browser/v1/mcp-prepare-receipt.json", import.meta.url)
+const prepareReceiptDocument = {
+  openapi: "3.1.0",
+  info: { title: "Kokoro BFF browser-private Prepare receipt lookup", version: MCP_PREPARE_RECEIPT_POLICY.version },
+  "x-kokoro-lookup-policy": MCP_PREPARE_RECEIPT_POLICY,
+  paths: {
+    [MCP_PREPARE_RECEIPT_POLICY.path]: {
+      get: {
+        operationId: MCP_PREPARE_RECEIPT_POLICY.operation_id,
+        "x-kokoro-owner": "kokoro-bff",
+        "x-kokoro-visibility": "browser-private",
+        "x-kokoro-stability": "beta",
+        "x-kokoro-idempotency": "lookup_only",
+        "x-kokoro-permission": MCP_PREPARE_RECEIPT_POLICY.permission,
+        security: [{ ProductSession: [] }],
+        parameters: [
+          { in: "path", name: "server_id", required: true, schema: json(mcpPrepareReceiptResponseSchema.shape.completed.shape.server.shape.server_id) },
+          { in: "query", name: "expected_state_version", required: true, schema: json(mcpPrepareReceiptQuerySchema.shape.expected_state_version) },
+          { in: "header", name: "Idempotency-Key", required: true, schema: json(mcpPrepareReceiptKeySchema) },
+        ],
+        responses: Object.fromEntries(
+          [200, 400, 401, 403, 404, 409, 412, 429, 502, 503].map((status) => [
+            status,
+            {
+              description:
+                status === 200
+                  ? "Historical completed ACK, never Current or negative execution proof"
+                  : "Retain original unknown; only a repeated GET lookup is permitted",
+              headers: { "cache-control": { required: true, schema: { const: "no-store" } }, "x-request-id": { required: true, schema: { type: "string" } } },
+              content:
+                status === 200
+                  ? content(z.object({ data: mcpPrepareReceiptResponseSchema }).strict())
+                  : {
+                      "application/json": {
+                        schema: {
+                          oneOf: MCP_PREPARE_RECEIPT_POLICY.errors
+                            .filter((fault) => fault.status === status)
+                            .map((fault) => ({
+                              type: "object",
+                              required: ["error"],
+                              additionalProperties: false,
+                              properties: {
+                                error: {
+                                  type: "object",
+                                  required: ["code", "message", "retryable"],
+                                  additionalProperties: false,
+                                  properties: {
+                                    code: { const: fault.code },
+                                    message: { type: "string" },
+                                    retryable: { const: fault.retryable },
+                                  },
+                                },
+                              },
+                            })),
+                        },
+                      },
+                    },
+            },
+          ]),
+        ),
+      },
+    },
+  },
+  components: { securitySchemes: { ProductSession: { type: "http", scheme: "bearer" } } },
+}
+const prepareReceiptBytes = JSON.stringify(prepareReceiptDocument, null, 2) + "\n"
+if (process.argv.slice(2).join(" ") === "--write") {
+  await mkdir(new URL("./", prepareReceiptTarget), { recursive: true })
+  await writeFile(prepareReceiptTarget, prepareReceiptBytes)
+} else if ((await readFile(prepareReceiptTarget, "utf8")) !== prepareReceiptBytes) throw new Error("MCP Prepare receipt private contract drifted")

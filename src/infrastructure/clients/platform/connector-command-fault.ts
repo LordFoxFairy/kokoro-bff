@@ -2,6 +2,7 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import { PLATFORM_COMMAND_RECEIPT_ERRORS } from "../../../generated/platform-connect/command-receipt-errors.js"
 
 import { PersonalMcpErrorDetailSchema, PersonalMcpErrorReason } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
+import { mcpPersonalFault } from "./mcp-personal-response.js"
 
 type ReceiptReason = keyof typeof PLATFORM_COMMAND_RECEIPT_ERRORS
 type Fault = Readonly<{ status: number; code: string; retryable: boolean }>
@@ -64,6 +65,17 @@ export function connectorCommandFault(error: unknown, surface: "mcp" | "custom_a
   const reason = (Object.keys(PLATFORM_COMMAND_RECEIPT_ERRORS) as ReceiptReason[]).find((key) => PLATFORM_COMMAND_RECEIPT_ERRORS[key].error_code === marker)
   if (reason === undefined || error.code !== PLATFORM_COMMAND_RECEIPT_ERRORS[reason].rpc_code) return invalid()
   return connectorPublicFault(policy[reason])
+}
+
+/** Only the named Prepare lookup may consume these existing receipt markers on a read. */
+export function mcpPrepareReceiptFault(error: unknown): Fault {
+  if (!(error instanceof ConnectError) || error.metadata.get("x-kokoro-error-code") === null) return mcpPersonalFault(error)
+  const invalid = () => connectorPublicFault(CONNECTOR_COMMAND_FAULT_POLICY.mcp.invalid)
+  if (error.details.length !== 0) return invalid()
+  const marker = error.metadata.get("x-kokoro-error-code")
+  const reason = (Object.keys(PLATFORM_COMMAND_RECEIPT_ERRORS) as ReceiptReason[]).find((key) => PLATFORM_COMMAND_RECEIPT_ERRORS[key].error_code === marker)
+  if (reason === undefined || error.code !== PLATFORM_COMMAND_RECEIPT_ERRORS[reason].rpc_code) return invalid()
+  return connectorPublicFault(CONNECTOR_COMMAND_FAULT_POLICY.mcp[reason])
 }
 
 export function mcpPersonalPreconditionFault(error: unknown): { status: number; code: string; retryable: boolean } | null {

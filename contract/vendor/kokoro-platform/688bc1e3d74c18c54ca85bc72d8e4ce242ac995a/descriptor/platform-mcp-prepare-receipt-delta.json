@@ -1,0 +1,4 @@
+{
+  "method": "  rpc GetPersonalMcpPrepareReceipt(kokoro.platform.v1.GetPersonalMcpPrepareReceiptRequest) returns (kokoro.platform.v1.GetPersonalMcpPrepareReceiptResponse);\n",
+  "suffix": "\n// Historical Prepare ACK lookup only. This method never executes Prepare.\nmessage GetPersonalMcpPrepareReceiptRequest {\n  reserved 100;\n  reserved \"tenant_id\", \"actor_id\", \"subject_id\", \"owner_scope\", \"target_owner_scope\", \"product_context\", \"execution_proof\", \"attestation\";\n  string request_id = 1;\n  kokoro.common.v1.CommandIdentity command = 2;\n  kokoro.platform.v1.McpServerId server_id = 3;\n  uint64 expected_state_version = 4;\n}\nmessage GetPersonalMcpPrepareReceiptResponse {\n  kokoro.platform.v1.PreparePersonalMcpServerResponse completed = 1;\n}\n"
+}

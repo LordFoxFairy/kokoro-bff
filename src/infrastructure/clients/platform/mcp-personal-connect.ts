@@ -23,6 +23,7 @@ import {
   RegisterPersonalMcpServerRequestSchema,
   ImportPersonalMcpJsonRequestSchema,
   GetPersonalMcpServerRequestSchema,
+  GetPersonalMcpPrepareReceiptRequestSchema,
   PreparePersonalMcpServerRequestSchema,
   UpdatePersonalMcpServerRequestSchema,
   DeletePersonalMcpServerRequestSchema,
@@ -32,7 +33,7 @@ import { bindMcpPersonalCommand, type McpPersonalCommandInput, type McpPersonalC
 import { bindMcpPersonalConnection, type McpPersonalAuthorizationInput, type McpPersonalAuthorizationOperation } from "./mcp-personal-authorization-binding.js"
 import { projectMcpPersonalAuthorization } from "./mcp-personal-authorization-response.js"
 import { bindMcpPersonalServerCommand, type McpPersonalServerInput, type McpPersonalServerOperation } from "./mcp-personal-server-binding.js"
-import { projectMcpPersonalServer } from "./mcp-personal-server-response.js"
+import { projectMcpPersonalServer, projectMcpPersonalPrepareReceipt } from "./mcp-personal-server-response.js"
 import { bindMcpPersonalJsonImport, type McpPersonalJsonImportInput } from "./mcp-personal-json-import-binding.js"
 import { projectMcpPersonalJsonImport } from "./mcp-personal-json-import-response.js"
 import type { PlatformServiceCredentialSource } from "./platform-service-credential.js"
@@ -238,6 +239,20 @@ export class McpPersonalConnectClient {
       },
       { allowMissingCorrelationHeader: true },
     )
+  }
+  async prepareReceipt(input: McpPersonalServerInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
+    return this.#call(input, outer, deadlineAt, async (options) => {
+      const value = await this.#client.getPersonalMcpPrepareReceipt(
+        create(GetPersonalMcpPrepareReceiptRequestSchema, {
+          requestId: input.requestId,
+          command: bindMcpPersonalServerCommand("prepareServer", input),
+          serverId: { value: input.id! },
+          expectedStateVersion: BigInt(input.expectedStateVersion!),
+        }),
+        options,
+      )
+      return projectMcpPersonalPrepareReceipt(value, input)
+    })
   }
   async server(operation: McpPersonalServerOperation, input: McpPersonalServerInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
     return this.#call(input, outer, deadlineAt, async (options) => {

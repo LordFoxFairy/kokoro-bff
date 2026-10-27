@@ -1124,3 +1124,250 @@ test("native OAuth exposes its typed needs-client failure without weakening an u
     await f.close()
   }
 })
+
+test("Prepare receipt GET binds only the original CAS/key, re-admits reads and never dispatches Prepare", async () => {
+  const calls = []
+  const actions = []
+  const completed = {
+    server: { ...privateServer, state_version: "2", prepare_status: "needs_oauth" },
+    connector: { ...connector, enabled: false, server_id: "server-one" },
+    declarations: [],
+    replayed: true,
+  }
+  const f = await fixture(true, {
+    check: async (value) => {
+      actions.push(value.action)
+      return { ok: true }
+    },
+    mcpPersonalClient: {
+      read: async () => {
+        throw Error("ordinary read unexpected")
+      },
+      server: async () => {
+        throw Error("Prepare/mutation dispatch forbidden")
+      },
+      prepareReceipt: async (input) => {
+        calls.push(input)
+        return { completed }
+      },
+    },
+  })
+  try {
+    const response = await fetch(`${f.origin}/browser/v1/mcp/servers/server-one/prepare-receipt?expected_state_version=1`, {
+      headers: { ...headers, "idempotency-key": "original-intent" },
+    })
+    assert.equal(response.status, 200)
+    assert.deepEqual((await response.json()).data, { completed })
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].expectedStateVersion, "1")
+    assert.equal(calls[0].commandId, "original-intent")
+    assert.equal(calls[0].id, "server-one")
+    assert.ok(actions.length >= 2)
+    assert.ok(actions.every((value) => value === "read"))
+    for (const [query, key] of [
+      ["", "original-intent"],
+      ["?expected_state_version=01", "original-intent"],
+      ["?expected_state_version=1&expected_state_version=1", "original-intent"],
+      ["?expected_state_version=1&extra=1", "original-intent"],
+      ["?expected_state_version=1", undefined],
+    ]) {
+      const invalid = await fetch(`${f.origin}/browser/v1/mcp/servers/server-one/prepare-receipt${query}`, {
+        headers: { ...headers, ...(key ? { "idempotency-key": key } : {}) },
+      })
+      assert.equal(invalid.status, 400)
+    }
+    assert.equal(calls.length, 1)
+    const ordinary = await fetch(`${f.origin}/browser/v1/mcp/servers/server-one`, { headers: { ...headers, "idempotency-key": "original-intent" } })
+    assert.equal(ordinary.status, 400)
+  } finally {
+    await f.close()
+  }
+})
+
+test("Prepare receipt lookup rejects read denial before owner I/O and retires changed identity at exit", async () => {
+  for (const changed of [false, true]) {
+    let calls = 0,
+      admissions = 0
+    const f = await fixture(true, {
+      check: async () => (changed ? { ok: true } : { ok: false, status: 403, code: "forbidden" }),
+      verify: async () => ({
+        ok: true,
+        identity: { namespace: "tenant-server", userId: ++admissions === 1 ? "human-one" : "human-other" },
+        platformAdmin: false,
+      }),
+      mcpPersonalClient: {
+        read: async () => ({}),
+        prepareReceipt: async () => {
+          calls++
+          return {
+            completed: {
+              server: { ...privateServer, state_version: "2", prepare_status: "needs_oauth" },
+              connector: { ...connector, server_id: "server-one", enabled: false },
+              declarations: [],
+              replayed: true,
+            },
+          }
+        },
+      },
+    })
+    try {
+      const response = await fetch(`${f.origin}/browser/v1/mcp/servers/server-one/prepare-receipt?expected_state_version=1`, {
+        headers: { ...headers, "idempotency-key": "original-intent" },
+      })
+      assert.equal(response.status, changed ? 404 : 403)
+      assert.equal(calls, changed ? 1 : 0)
+    } finally {
+      await f.close()
+    }
+  }
+})
+
+test("Prepare receipt lookup has one deadline, cancels its owner read and never settles late completed", async () => {
+  let ownerSignal, release
+  const pending = new Promise((resolve) => {
+    release = resolve
+  })
+  const f = await fixture(true, {
+    deadlineMs: 40,
+    check: async () => ({ ok: true }),
+    mcpPersonalClient: {
+      read: async () => ({}),
+      prepareReceipt: async (_input, signal) => {
+        ownerSignal = signal
+        await pending
+        return { completed: {} }
+      },
+    },
+  })
+  try {
+    const response = await fetch(`${f.origin}/browser/v1/mcp/servers/server-one/prepare-receipt?expected_state_version=1`, {
+      headers: { ...headers, "idempotency-key": "original-intent" },
+    })
+    assert.equal(response.status, 503)
+    assert.equal((await response.json()).error.code, "mcp_personal_dependency_unavailable")
+    assert.equal(ownerSignal.aborted, true)
+  } finally {
+    release()
+    await f.close()
+  }
+})
+
+test("Prepare receipt lookup forwards only closed existing receipt faults, not a mutation capability", async () => {
+  const { ConnectError, Code } = await import("@connectrpc/connect")
+  for (const [reason, rpcCode, status, code] of [
+    ["outcome_unknown", Code.Unavailable, 503, "mcp_personal_command_outcome_unknown"],
+    ["in_progress", Code.Aborted, 409, "mcp_personal_command_in_progress"],
+    ["replay_expired", Code.FailedPrecondition, 412, "mcp_personal_command_replay_expired"],
+    ["identity_conflict", Code.AlreadyExists, 409, "mcp_personal_idempotency_conflict"],
+  ]) {
+    const f = await fixture(true, {
+      check: async () => ({ ok: true }),
+      mcpPersonalClient: {
+        read: async () => ({}),
+        prepareReceipt: async () => {
+          throw new ConnectError("never parse me", rpcCode, { "x-kokoro-error-code": `command_receipt_${reason}` })
+        },
+      },
+    })
+    try {
+      const response = await fetch(`${f.origin}/browser/v1/mcp/servers/server-one/prepare-receipt?expected_state_version=1`, {
+        headers: { ...headers, "idempotency-key": "original-intent" },
+      })
+      assert.equal(response.status, status)
+      const body = await response.json()
+      assert.equal(body.error.code, code)
+      assert.equal(Object.hasOwn(body, "data"), false)
+      assert.equal(JSON.stringify(body).includes("never parse me"), false)
+    } finally {
+      await f.close()
+    }
+  }
+})
+
+test("Prepare receipt actual BFF HTTP to Native binary peer restores only the historical Get ACK and preserves expiry", async () => {
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { ConnectError, Code } = await import("@connectrpc/connect")
+  const { create } = await import("@bufbuild/protobuf")
+  const p = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { McpPersonalConnectClient } = await import("../dist/infrastructure/clients/platform/mcp-personal-connect.js")
+  let queries = 0,
+    prepares = 0,
+    expired = false
+  const native = createServer(
+    connectNodeAdapter({
+      routes: (router) =>
+        router.service(p.ProductMcpPersonalService, {
+          getPersonalMcpPrepareReceipt(request, context) {
+            queries++
+            assert.equal(request.expectedStateVersion, 1n)
+            assert.equal(request.command.commandId, "original-intent")
+            assert.equal(request.serverId.value, "server-one")
+            assert.equal(context.requestHeader.get("x-kokoro-tenant"), "tenant-server")
+            assert.equal(context.requestHeader.get("x-kokoro-subject"), "human-one")
+            context.responseHeader.set("cache-control", "no-store")
+            context.responseHeader.set("x-request-id", request.requestId)
+            if (expired) throw new ConnectError("not visible to browser", Code.FailedPrecondition, { "x-kokoro-error-code": "command_receipt_replay_expired" })
+            return {
+              completed: create(p.PreparePersonalMcpServerResponseSchema, {
+                server: {
+                  serverId: { value: "server-one" },
+                  displayName: "Historical name",
+                  serverUrl: "https://tools.example/mcp",
+                  status: "pending",
+                  stateVersion: 2n,
+                  prepareStatus: p.PersonalMcpPrepareStatus.NEEDS_OAUTH,
+                  declarations: [],
+                  declarationsAvailable: false,
+                  availability: p.McpAvailability.UNAVAILABLE,
+                },
+                connector: {
+                  connectorId: { value: "connector-one" },
+                  serverId: { value: "server-one" },
+                  connectorType: 3,
+                  providerKey: "private-server-one",
+                  status: 1,
+                  enabled: false,
+                  stateVersion: 2n,
+                  approvedScopes: [],
+                  availability: p.McpAvailability.UNAVAILABLE,
+                },
+                declarations: [],
+                replayed: true,
+              }),
+            }
+          },
+          preparePersonalMcpServer() {
+            prepares++
+            throw Error("forbidden mutation")
+          },
+        }),
+    }),
+  )
+  await new Promise((resolve) => native.listen(0, "127.0.0.1", resolve))
+  const client = new McpPersonalConnectClient(`http://127.0.0.1:${native.address().port}`, { get: async () => "fixture-only" })
+  const f = await fixture(true, { check: async () => ({ ok: true }), mcpPersonalClient: client })
+  try {
+    const request = () =>
+      fetch(`${f.origin}/browser/v1/mcp/servers/server-one/prepare-receipt?expected_state_version=1`, {
+        headers: { ...headers, "idempotency-key": "original-intent" },
+      })
+    const positive = await request()
+    assert.equal(positive.status, 200)
+    const body = await positive.json()
+    assert.equal(body.data.completed.server.display_name, "Historical name")
+    assert.equal(body.data.completed.server.state_version, "2")
+    assert.equal(Object.hasOwn(body.data.completed.server, "transport"), false)
+    assert.equal(body.data.completed.replayed, true)
+    expired = true
+    const negative = await request()
+    assert.equal(negative.status, 412)
+    assert.equal((await negative.json()).error.code, "mcp_personal_command_replay_expired")
+    assert.equal(queries, 2)
+    assert.equal(prepares, 0)
+  } finally {
+    await f.close()
+    client.close()
+    native.closeAllConnections()
+    await new Promise((resolve) => native.close(resolve))
+  }
+})

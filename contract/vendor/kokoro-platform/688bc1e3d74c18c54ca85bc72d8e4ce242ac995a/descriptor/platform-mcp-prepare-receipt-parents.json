@@ -1,0 +1,34 @@
+{
+  "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+    "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.platform_runtime.proto.snapshot",
+    "sha256": "fc454844d272afba4815d2cab471518049ee9edaec514b59bb9d3e3b54e93835"
+  },
+  "contract/descriptor/platform-v1.binpb": {
+    "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.platform-v1.binpb.snapshot",
+    "sha256": "a7c8a73925d004b0b18aef0e1a79813ceb589f7d702e6c6e695394f36bca3db3"
+  },
+  "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+    "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.platform_runtime_pb.ts.snapshot",
+    "sha256": "08f97b7762285c7d2234bcc707f275cf46eff7c0be3fd588aead4d91ccf89d05"
+  },
+  "contract/execution-operations/mcp-private-server-v1.json": {
+    "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.mcp-private-server-v1.json.snapshot",
+    "sha256": "c3246a5d88b79f1358205e67658570bf6ced4b805fb414b3016f816e88dbc92a"
+  },
+  "contract/provenance.json": {
+    "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.provenance.json.snapshot",
+    "sha256": "32988e4ea40eff84dbf2f341a78803f20c6cebbca76192e05588c749420b29aa"
+  },
+  "contract/descriptor/mcp-runtime-v1.binpb": {
+    "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.mcp-runtime-v1.binpb.snapshot",
+    "sha256": "56388f48b7d2f563a7aa9f56e0b9d15e73b2a453d640b3c8297502354fee6dc2"
+  },
+  "contract/execution-operations/mcp-runtime-v1.json": {
+    "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.mcp-runtime-v1.json.snapshot",
+    "sha256": "c35cc7adaeeca98f88449a3d51b08db73071cde6007bbe021030ec5328442b90"
+  },
+  "contract/execution-operations/mcp-personal-sse-v1.json": {
+    "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.mcp-personal-sse-v1.json.snapshot",
+    "sha256": "29ea698428bc7be7469d6582746015e9e18ccb8887f035e89626e1791dcef647"
+  }
+}

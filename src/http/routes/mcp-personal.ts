@@ -23,7 +23,9 @@ import type {
   McpPersonalServerMutation,
   McpPersonalServerOperation,
 } from "../../infrastructure/clients/platform/mcp-personal-server-binding.js"
-import { connectorCommandFault, mcpPersonalPreconditionFault } from "../../infrastructure/clients/platform/connector-command-fault.js"
+import { connectorCommandFault, mcpPersonalPreconditionFault, mcpPrepareReceiptFault } from "../../infrastructure/clients/platform/connector-command-fault.js"
+import { validateMcpPersonalPrepareReceipt } from "../../infrastructure/clients/platform/mcp-personal-server-response.js"
+import { mcpPrepareReceiptKeySchema, mcpPrepareReceiptQuerySchema } from "../mcp-prepare-receipt.contract.js"
 import { parseMcpPersonalServer } from "../mcp-personal-server-input.js"
 import type { McpPersonalJsonImportInput } from "../../infrastructure/clients/platform/mcp-personal-json-import-binding.js"
 import { parseMcpPersonalJsonImport } from "../mcp-personal-json-import-input.js"
@@ -41,6 +43,7 @@ export function mcpPersonalOperation(
   | "importJson"
   | "serverIcon"
   | McpIconOperation
+  | "prepareReceipt"
   | null {
   if (path[0] !== "mcp") return null
   if (path[1] === "icons") {
@@ -67,6 +70,7 @@ export function mcpPersonalOperation(
   if (path.length === 3 && path[1] === "servers" && method === "DELETE") return "deleteServer"
   if (path.length === 4 && path[1] === "servers" && path[3] === "prepare" && method === "POST") return "prepareServer"
   if (method !== "GET") return null
+  if (path.length === 4 && path[1] === "servers" && path[3] === "prepare-receipt") return "prepareReceipt"
   if (path.length === 4 && path[1] === "servers" && path[3] === "icon") return "serverIcon"
   if (path.length === 2 && path[1] === "providers") return "providers"
   if (path.length === 3 && path[1] === "providers") return "provider"
@@ -87,6 +91,7 @@ export async function mcpPersonalRoute(
 ): Promise<void> {
   const context = initialAdmission.context
   const operation = mcpPersonalOperation(path, request.method ?? "GET")!
+  const receiptLookup = operation === "prepareReceipt"
   if (operation === "serverIcon") {
     await mcpServerIconRoute(request, response, config, composition, initialAdmission, path[2] ?? "")
     return
@@ -123,8 +128,9 @@ export async function mcpPersonalRoute(
   }
   const url = new URL(request.url ?? "", "http://bff.invalid")
   const query = url.searchParams
-  const allowed =
-    operation === "connectors"
+  const allowed = receiptLookup
+    ? ["expected_state_version"]
+    : operation === "connectors"
       ? ["status", "limit", "cursor"]
       : operation === "connections"
         ? ["limit", "cursor"]
@@ -135,13 +141,31 @@ export async function mcpPersonalRoute(
   if (
     (mutation
       ? request.headers["transfer-encoding"] !== undefined || query.size > 0
-      : ["content-length", "transfer-encoding", "idempotency-key"].some((key) => request.headers[key] !== undefined)) ||
+      : ["content-length", "transfer-encoding", ...(receiptLookup ? ["content-type"] : ["idempotency-key"])].some(
+          (key) => request.headers[key] !== undefined,
+        )) ||
     url.pathname !== `/browser/v1/${path.map(encodeURIComponent).join("/")}` ||
     url.hash ||
     [...query.keys()].some((key) => !allowed.includes(key) || query.getAll(key).length !== 1)
   ) {
     invalid()
     return
+  }
+  let receiptInput: McpPersonalServerInput | undefined
+  if (receiptLookup) {
+    const key = request.headers["idempotency-key"]
+    const keyCount = request.rawHeaders.filter((_, index) => index % 2 === 0 && request.rawHeaders[index]!.toLowerCase() === "idempotency-key").length
+    if (!query.has("expected_state_version") || !mcpPrepareReceiptKeySchema.safeParse(key).success || keyCount !== 1) {
+      invalid()
+      return
+    }
+    try {
+      const selected = mcpPrepareReceiptQuerySchema.parse({ expected_state_version: query.get("expected_state_version") })
+      receiptInput = { ...input, expectedStateVersion: selected.expected_state_version, commandId: key as string }
+    } catch {
+      invalid()
+      return
+    }
   }
   if (iconOperation) {
     if (!["beginIcon", "importIcon"].includes(operation) && !mcpIconId.safeParse(path[2]).success) {
@@ -161,6 +185,7 @@ export async function mcpPersonalRoute(
     }
     input.id = path[2]!
   }
+  if (receiptInput) receiptInput.id = input.id!
   if (query.has("limit")) {
     if (!/^(?:[1-9]|[1-9][0-9]|100)$/u.test(query.get("limit")!)) {
       invalid()
@@ -211,6 +236,7 @@ export async function mcpPersonalRoute(
   const client = composition.mcpPersonalClient
   if (
     client === null ||
+    (receiptLookup && !client.prepareReceipt) ||
     (iconOperation && !client.icon) ||
     (authorization && !client.authorization) ||
     (serverOperation && !client.server) ||
@@ -238,6 +264,15 @@ export async function mcpPersonalRoute(
     })
   try {
     controller.signal.throwIfAborted()
+    if (receiptLookup) {
+      const action = await within(authorizeMcpAction(composition.mcpAuthorization, initialAdmission, "read", controller.signal))
+      if (!action.ok) {
+        fail(action.status, action.code, action.status === 429 || action.status === 503, action.status === 429 ? action.retryAfter : undefined)
+        return
+      }
+      controller.signal.throwIfAborted()
+      if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_personal_deadline")
+    }
     let commandInput: McpPersonalCommandInput | undefined
     let authorizationInput: McpPersonalAuthorizationInput | undefined
     let serverInput: McpPersonalServerInput | undefined
@@ -303,33 +338,37 @@ export async function mcpPersonalRoute(
         }
     }
     const result = await within(
-      iconOperation
-        ? client.icon!(operation as McpIconOperation, iconInput, controller.signal, deadlineAt)
-        : authorization
-          ? client.authorization!(operation as McpPersonalAuthorizationOperation, authorizationInput!, controller.signal, deadlineAt)
-          : serverOperation
-            ? client.server!(operation as McpPersonalServerOperation, serverInput ?? input, controller.signal, deadlineAt)
-            : importOperation
-              ? client.importJson!(importInput!, controller.signal, deadlineAt)
-              : mutation
-                ? client.command!(operation as McpPersonalCommandOperation, commandInput!, controller.signal, deadlineAt)
-                : client.read(operation as McpPersonalOperation, input, controller.signal, deadlineAt),
+      receiptLookup
+        ? client.prepareReceipt!(receiptInput!, controller.signal, deadlineAt)
+        : iconOperation
+          ? client.icon!(operation as McpIconOperation, iconInput, controller.signal, deadlineAt)
+          : authorization
+            ? client.authorization!(operation as McpPersonalAuthorizationOperation, authorizationInput!, controller.signal, deadlineAt)
+            : serverOperation
+              ? client.server!(operation as McpPersonalServerOperation, serverInput ?? input, controller.signal, deadlineAt)
+              : importOperation
+                ? client.importJson!(importInput!, controller.signal, deadlineAt)
+                : mutation
+                  ? client.command!(operation as McpPersonalCommandOperation, commandInput!, controller.signal, deadlineAt)
+                  : client.read(operation as McpPersonalOperation, input, controller.signal, deadlineAt),
     )
     controller.signal.throwIfAborted()
-    const data = iconOperation
-      ? result
-      : authorization
+    const data = receiptLookup
+      ? validateMcpPersonalPrepareReceipt(result, receiptInput!)
+      : iconOperation
         ? result
-        : serverOperation
+        : authorization
           ? result
-          : importOperation
+          : serverOperation
             ? result
-            : mutation
-              ? validateMcpPersonalCommand(operation as McpPersonalCommandOperation, result, commandInput!)
-              : validateMcpPersonalPublic(operation as McpPersonalOperation, result, input)
+            : importOperation
+              ? result
+              : mutation
+                ? validateMcpPersonalCommand(operation as McpPersonalCommandOperation, result, commandInput!)
+                : validateMcpPersonalPublic(operation as McpPersonalOperation, result, input)
     const [sessionOutcome, actionOutcome] = await within(
       Promise.allSettled([
-        mutation
+        mutation || receiptLookup
           ? authorizeUserRequest(request, config, composition.sessionAdmission, context.requestId, controller.signal)
           : Promise.resolve(initialAdmission),
         authorizeMcpAction(composition.mcpAuthorization, initialAdmission, mutation ? "manage" : "read", controller.signal),
@@ -371,10 +410,12 @@ export async function mcpPersonalRoute(
             code: "mcp_personal_dependency_unavailable",
             retryable: true,
           }
-        : (connectorCommandFault(error, "mcp", mutation) ??
-          (serverOperation || authorization
-            ? (mcpPersonalPreconditionFault(error) ?? mcpPersonalFault(error, false, mutation))
-            : mcpPersonalFault(error, input.cursor !== undefined, mutation)))
+        : receiptLookup
+          ? mcpPrepareReceiptFault(error)
+          : (connectorCommandFault(error, "mcp", mutation) ??
+            (serverOperation || authorization
+              ? (mcpPersonalPreconditionFault(error) ?? mcpPersonalFault(error, false, mutation))
+              : mcpPersonalFault(error, input.cursor !== undefined, mutation)))
       fail(fault.status, fault.code, fault.retryable)
     }
   } finally {

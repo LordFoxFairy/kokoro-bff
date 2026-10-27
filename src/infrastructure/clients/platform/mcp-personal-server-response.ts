@@ -6,6 +6,7 @@ import {
   projectMcpPersonalConnector,
   projectMcpPersonalAvailability,
   mcpPersonalAvailabilitySchema,
+  mcpPersonalConnectorSchema,
 } from "./mcp-personal-response.js"
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u)
@@ -122,6 +123,49 @@ const acknowledgementServer = z
 
 // Only current representations require transport; old completed ACKs remain historical facts.
 const currentServer = acknowledgementServer.safeExtend({ transport: z.enum(["streamable_http", "sse_compat"]) })
+
+/** The lookup returns an old ACK, never a current resource or negative outcome. */
+export const mcpPrepareReceiptResponseSchema = z
+  .object({
+    completed: z
+      .object({
+        server: acknowledgementServer.safeExtend({ prepare_status: z.enum(["ready", "needs_oauth"]) }),
+        connector: mcpPersonalConnectorSchema,
+        declarations: z.array(declaration).max(2000),
+        replayed: z.literal(true),
+      })
+      .strict(),
+  })
+  .strict()
+
+export function validateMcpPersonalPrepareReceipt(value: unknown, input: McpPersonalServerInput): z.infer<typeof mcpPrepareReceiptResponseSchema> {
+  const result = mcpPrepareReceiptResponseSchema.parse(value)
+  const { server, connector, declarations } = result.completed
+  if (
+    !input.commandId ||
+    !input.expectedStateVersion ||
+    server.server_id !== input.id ||
+    connector.server_id !== input.id ||
+    BigInt(server.state_version) !== BigInt(input.expectedStateVersion) + 1n ||
+    connector.enabled !== (server.prepare_status === "ready") ||
+    (server.status === "pending" && connector.status !== "pending") ||
+    (server.status === "registered" && connector.status !== "active") ||
+    JSON.stringify(declarations) !== JSON.stringify(server.declarations)
+  )
+    throw new Error("mcp_personal_response_invalid")
+  return result
+}
+
+export function projectMcpPersonalPrepareReceipt(raw: unknown, input: McpPersonalServerInput): z.infer<typeof mcpPrepareReceiptResponseSchema> {
+  assertMcpPersonalWireKnown(raw)
+  const value = object(raw)
+  if (Object.keys(value).some((key) => !["$typeName", "$unknown", "completed"].includes(key))) throw new Error("mcp_personal_response_invalid")
+  const completed = object(value.completed)
+  if (Object.keys(completed).some((key) => !["$typeName", "$unknown", "server", "connector", "declarations", "replayed"].includes(key)))
+    throw new Error("mcp_personal_response_invalid")
+  if (completed.replayed !== true) throw new Error("mcp_personal_response_invalid")
+  return validateMcpPersonalPrepareReceipt({ completed: projectMcpPersonalServer("prepareServer", completed, input) }, input)
+}
 
 function object(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("mcp_personal_response_invalid")

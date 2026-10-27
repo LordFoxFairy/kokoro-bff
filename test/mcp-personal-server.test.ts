@@ -1188,3 +1188,142 @@ test("SSE successor: mixed JSON ACK cannot hide a missing HTTP transport behind 
   delete (first.server as { transport?: unknown }).transport
   assert.throws(() => projectMcpPersonalJsonImport({ imports: [first, second], replayed: true }, request))
 })
+
+test("Prepare receipt lookup strictly wraps only the historical completed ACK without current CAS rebasing", async () => {
+  const module = await import("../src/infrastructure/clients/platform/mcp-personal-server-response.js")
+  const project = Reflect.get(module, "projectMcpPersonalPrepareReceipt")
+  assert.equal(typeof project, "function")
+  const raw = transportFixture()
+  raw.server.stateVersion = 2n
+  raw.server.prepareStatus = PersonalMcpPrepareStatus.NEEDS_OAUTH
+  const completed = { ...raw, declarations: [], replayed: true }
+  const original = { ...input, id: "server-one", expectedStateVersion: "1" }
+  const result = project({ completed }, original)
+  assert.equal(result.completed.server.state_version, "2")
+  assert.equal(result.completed.replayed, true)
+  assert.equal(Object.hasOwn(result.completed.server, "transport"), false)
+  for (const invalid of [
+    undefined,
+    {},
+    { completed, extra: true },
+    { completed: { ...completed, replayed: false } },
+    { completed: { ...completed, server: { ...raw.server, stateVersion: 3n } } },
+    { completed: { ...completed, $unknown: [{ no: 999, wireType: 0, data: new Uint8Array([1]) }] } },
+  ])
+    assert.throws(() => project(invalid, original))
+  assert.throws(() => project({ completed }, { ...original, id: "server-other" }))
+  assert.throws(() => project({ completed }, { ...original, expectedStateVersion: "2" }))
+})
+
+test("Prepare receipt lookup has its own lookup-only policy and narrow receipt error boundary", async () => {
+  const module = await import("../src/infrastructure/clients/platform/connector-command-fault.js")
+  const fault = Reflect.get(module, "mcpPrepareReceiptFault")
+  assert.equal(typeof fault, "function")
+  const { connectorCommandFault } = module
+  const error = new ConnectError("not a decision source", Code.Unavailable, { "x-kokoro-error-code": "command_receipt_outcome_unknown" })
+  assert.deepEqual(fault(error), { status: 503, code: "mcp_personal_command_outcome_unknown", retryable: false })
+  assert.deepEqual(connectorCommandFault(error, "mcp", false), { status: 502, code: "mcp_personal_response_invalid", retryable: false })
+  assert.deepEqual(fault(new ConnectError("safe", Code.NotFound)), { status: 404, code: "mcp_personal_not_found", retryable: false })
+  for (const bad of [
+    new ConnectError("safe", Code.Aborted, { "x-kokoro-error-code": "command_receipt_outcome_unknown" }),
+    new ConnectError("safe", Code.Unavailable, { "x-kokoro-error-code": "command_receipt_future" }),
+  ])
+    assert.deepEqual(fault(bad), { status: 502, code: "mcp_personal_response_invalid", retryable: false })
+})
+
+test("Prepare receipt publication binds same_command only to GET and never authorizes Prepare", async () => {
+  const { MCP_PREPARE_RECEIPT_POLICY: policy } = await import("../src/http/mcp-prepare-receipt.contract.js")
+  assert.equal(policy.lookup_only, true)
+  assert.equal(policy.negative_ack, false)
+  assert.equal(policy.automatic_retries, false)
+  assert.equal(policy.new_command_authorized, false)
+  assert.equal(policy.prepare_authorized, false)
+  assert.deepEqual(policy.same_command, { method: "GET", target: "original_lookup" })
+})
+
+test("Prepare receipt generated browser profile has closed distinct fault alternatives and lookup-only authority", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const document = JSON.parse(await readFile(new URL("../contract/openapi/browser/v1/mcp-prepare-receipt.json", import.meta.url), "utf8"))
+  assert.equal(document["x-kokoro-lookup-policy"].lookup_only, true)
+  assert.equal(document["x-kokoro-lookup-policy"].prepare_authorized, false)
+  assert.deepEqual(document["x-kokoro-lookup-policy"].same_command, { method: "GET", target: "original_lookup" })
+  const operation = document.paths["/browser/v1/mcp/servers/{server_id}/prepare-receipt"].get
+  assert.equal(Object.hasOwn(operation, "requestBody"), false)
+  assert.equal(operation.parameters.find((value) => value.name === "Idempotency-Key").required, true)
+  for (const [status, response] of Object.entries(operation.responses)) {
+    if (status === "200") continue
+    const alternatives = response.content["application/json"].schema.oneOf
+    assert.ok(alternatives.length > 0)
+    const tuples = alternatives.map((value) => JSON.stringify(value.properties.error.properties))
+    assert.equal(new Set(tuples).size, tuples.length)
+    assert.ok(alternatives.every((value) => value.additionalProperties === false && value.properties.error.additionalProperties === false))
+  }
+})
+
+test("Prepare receipt completed wrapper rejects a nonterminal preparation status", async () => {
+  const { projectMcpPersonalPrepareReceipt } = await import("../src/infrastructure/clients/platform/mcp-personal-server-response.js")
+  const raw = transportFixture()
+  raw.server.stateVersion = 2n
+  assert.throws(() =>
+    projectMcpPersonalPrepareReceipt({ completed: { ...raw, declarations: [], replayed: true } }, { ...input, id: "server-one", expectedStateVersion: "1" }),
+  )
+})
+
+test("Prepare receipt production Native client performs only Get with original digest and strict historical ACK", async () => {
+  const { createServer } = await import("node:http")
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { ProductMcpPersonalService } = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { McpPersonalConnectClient } = await import("../src/infrastructure/clients/platform/mcp-personal-connect.js")
+  const original = { ...input, id: "server-one", expectedStateVersion: "1" }
+  let queries = 0,
+    prepares = 0,
+    bad = false
+  const native = createServer(
+    connectNodeAdapter({
+      routes: (router) =>
+        router.service(ProductMcpPersonalService, {
+          getPersonalMcpPrepareReceipt(request, context) {
+            queries++
+            assert.equal(request.expectedStateVersion, 1n)
+            assert.equal(request.serverId?.value, original.id)
+            assert.deepEqual(
+              { commandId: request.command?.commandId, requestDigest: request.command?.requestDigest },
+              bindMcpPersonalServerCommand("prepareServer", original),
+            )
+            assert.equal(context.requestHeader.get("x-kokoro-tenant"), original.tenant)
+            assert.equal(context.requestHeader.get("x-kokoro-subject"), original.subject)
+            context.responseHeader.set("cache-control", "no-store")
+            context.responseHeader.set("x-request-id", original.requestId)
+            const raw = transportFixture()
+            raw.server.stateVersion = 2n
+            raw.server.prepareStatus = PersonalMcpPrepareStatus.NEEDS_OAUTH
+            return bad ? {} : { completed: { ...raw, declarations: [], replayed: true } }
+          },
+          preparePersonalMcpServer() {
+            prepares++
+            throw Error("mutation forbidden")
+          },
+        }),
+    }),
+  )
+  await new Promise<void>((resolve) => native.listen(0, "127.0.0.1", resolve))
+  const address = native.address()
+  assert.ok(address && typeof address === "object")
+  const client = new McpPersonalConnectClient(`http://127.0.0.1:${address.port}`, { get: async () => "fixture-only" })
+  try {
+    const lookup = Reflect.get(client, "prepareReceipt")
+    assert.equal(typeof lookup, "function")
+    const result = await lookup.call(client, original, new AbortController().signal, performance.now() + 2000)
+    assert.equal(result.completed.server.state_version, "2")
+    assert.equal(result.completed.replayed, true)
+    assert.equal(Object.hasOwn(result.completed.server, "transport"), false)
+    bad = true
+    await assert.rejects(() => lookup.call(client, original, new AbortController().signal, performance.now() + 2000), /mcp_personal_response_invalid/u)
+    assert.equal(queries, 2)
+    assert.equal(prepares, 0)
+  } finally {
+    client.close()
+    native.closeAllConnections()
+    await new Promise<void>((resolve) => native.close(() => resolve()))
+  }
+})

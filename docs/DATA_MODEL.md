@@ -1,3 +1,13 @@
+## MCP-PREPARE-RECEIPT-D0：历史 completed 查询无新增 BFF 事实（2026-10-27，Root 已批准；候选实施）
+
+BFF基线`a819855a45e9ddda3eb7318b9bed99c399374254`；Root已批准消费者候选；Platform正式query已固定688bc1e3并正规重出owner generated；Schema/SQL与正常资源不改。Prepare receipt、CommandIdentity/digest、fingerprint key version、结果/保留期限和当前本人Server/关联Connector可见性仍由Platform唯一拥有；BFF不直读/修写owner表、不保存回执副本/current镜像/授权快照或执行许可。
+
+GET的server、原expected_state_version、原Idempotency-Key仅在请求内定位原Prepare；身份来自当次可信tenant/subject，digest仍绑定Prepare而非query方法。completed是已持久化原ACK的安全投影，replayed=true、原expected+1和精确关联有效即可读取，不要求等于current CAS，仅availability由owner在同一RR按当前本人安全投影到返回副本，其余原ACK不改；不灌回current cache；下一写的CAS/授权仍独立fresh核验。
+
+无BFF业务表、receipt/journal/outbox、Redis key、恢复队列/定时器、通用receipt中心或跨owner事务；不创建/claim/续期receipt、不推进Server/Connector/CAS、不刷新discovery。missing、foreign、expired、processing和旧失败未知都不是negative ACK，不授权清unknown/新key/重建；取消及late completed不改变owner命令状态。保留期限到期也不复活旧key写许可。
+
+表示只在原有界请求内存在；key/digest/秘密/owner内部错误不新增日志或持久telemetry内容。Root后继实证原completed/current CAS前进、跨主体拒绝、取消/期限与unknown时，应核原receipt/Server/Connector行及原key状态不变，Prepare/claim/refresh调用为0；protocol peer不冒真实owner SQL证据。canonical `database/schema.sql`原字节保持，不因D0新增清理器或恢复事实。
+
 ## PROJECT-PIN-D0：BFF Project 内的个人固定关联（2026-10-27，Root 已核 D0，Public28.5 本地候选）
 
 当前基线 `020b4016afbb4b3f5f2b43355a987bfbbf6300a6` 的 canonical schema 无 Project pin。本片选择独立 `bff_project_pin`，不是 `bff_project.pinned_at`、Personalization JSON 或 localStorage；唯一 owner／writer 为现 BFF Project，用同一个应用数据库的 kokoro_bff owner schema，不访问 sibling SQL。
