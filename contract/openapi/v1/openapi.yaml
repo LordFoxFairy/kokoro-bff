@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.5.0
+  version: 28.6.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -17482,6 +17482,12 @@ components:
           items:
             type: object
             properties:
+              product:
+                $ref: "#/components/schemas/Public9SkillProductFacts"
+                description: Same authorized current version owner product; absence is only the coordinated predecessor-reader transition, not an inferred publisher.
+              publisher_profile:
+                $ref: "#/components/schemas/SkillPublisherProfile"
+                description: Required exactly when product.publisher.kind is iam; kind and id match its iam ref. Omitted for unknown or verified GitHub publisher. Missing never substitutes a creator or default name.
               skillId:
                 type: string
               originalName:

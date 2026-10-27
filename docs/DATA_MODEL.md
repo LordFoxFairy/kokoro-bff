@@ -546,6 +546,12 @@ BFF对自己的AI artifact/event关联与usage/share事实继续本仓查询，�
 
 <!-- T-K03.2-BFF-DATA-MODEL-END; complete original body follows -->
 
+### S13 目录发布方数据边界（Root 设计门已通过；实现候选未正常启用）
+
+正式/normal 基线 `394ae559cd2018206c32d5ca3014de248effa203`；本增量**无数据库 Schema、表、列、索引、状态机、receipt/outbox 或迁移变化**。Platform 继续唯一拥有当前 Skill/version 与 product.publisher ref、verified GitHub repository provenance；IAM 唯一拥有当前 user/organization display_name/image_url、Session/Member 与授权事实。BFF 仅在当前授权页请求内将同版本 product 与真实 publisher_profile 组合，不保存作者镜像、姓名缓存、任意用户目录或跨 owner SQL，也不把缺失旧 publisher 回填。
+
+同一 Hub 的可选展示事实 absence 仅为未知/不显示作者/不授权限，不保存 legacy 版本模式，不建立双 schema、迁移状态或28.7 required 后继；新 producer 的真实 current product/IAM 关联和错误严格失败义务不变。响应复用既有两个组件的 presence/三分支规则见 [API 的 S13 小节](API_CONTRACT.md)。IAM missing 是已授权查询的明确判别、非旧unknown；组织跨 tenant 的403及孤儿/损坏503不是“无作者”；这里403是 IAM 上游返回，当前 BFF client 将其作为依赖503，不新造浏览器403。GitHub owner_login 是 owner 已验证快照，与 IAM 实时显示名、creator/importer、资源 owner scope 分别保真；nullable image 不表示隐私开关。既有同 tenant publisher 读取隐私政策不变；跨 tenant/任意未成员真名或新增隐私事实须先由 IAM 另过设计门，本片不授此边界。App 只承接同一响应的展示事实，不借此改安装、发布、执行或其它 reader/cache 状态。
+
 ## R357-H1 当前人类 MCP 准入（2026-10-09）
 
 本切片归 BFF auth 与既有 MCP projection；IAM 唯一拥有身份/成员权限。只消费正式 IAM 55befe5092f96d617088549df3166e1d381e6b1c / 0.11.0 / SHA47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3。

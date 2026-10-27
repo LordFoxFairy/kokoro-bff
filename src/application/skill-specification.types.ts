@@ -4,7 +4,25 @@ import type { SkillDownloadBinding } from "./skill-download-handles.js"
 export type SkillSpecificationContext = RequestContext & Readonly<{ humanBearer: string }>
 export type PublicSkillListContext = RequestContext & Readonly<{ publicBearer: string; principal: SkillListPrincipal }>
 export type SkillSpecificationOperation = "skill.list" | "ListSkills" | "ListHubSkills" | "GetSkill" | "DownloadSkill"
-export type SkillProductFact = Readonly<{ source_kind?: string | undefined; creator_ref?: Readonly<{ kind: string; id: string }> | undefined; cover?: unknown }>
+export type SkillPublisherProfileFact = Readonly<{
+  kind: string
+  id: string
+  status: string
+  display_name?: string
+  image_url?: string | null
+}>
+export type SkillProductFact = Readonly<{
+  source_kind?: string | undefined
+  creator_ref?: Readonly<{ kind: string; id: string }> | undefined
+  cover?: unknown
+  publisher?:
+    | Readonly<{
+        kind: string
+        iam?: Readonly<{ kind: "user" | "organization"; id: string }>
+        github_repository?: unknown
+      }>
+    | undefined
+}>
 export type SkillInstallationFact = Readonly<{
   source_status: string
   acquisition_kind: "unknown" | "direct" | "hub"

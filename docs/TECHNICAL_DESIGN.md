@@ -1079,6 +1079,16 @@ opaque短期handle用小TTL/容量有界内存绑定当前tenant/subject、精�
 Web 同源新消费者一次切换目录→预览→详情文件树/正文→返回/关闭、Settings、草稿编辑/恢复/封面/创建导入/发布、分享下载、Admin；保旧列表/正文/焦点/滚动直到合法新投影原子提交，401/403清私有，身份/代际/abort拒迟到。
 写命令沿 owner真实 CAS/固定 key/body/digest/receipt；普通新版本仍 metadata-only，Admin版本及撤回/发布等保实际 CAS；unknown 只同意图重放，GET观察不当ACK、无自动升级/安装/回滚。网站未观察幂等/CAS字段不冒称参考定义。
 
+#### S13 Hub 真实发布方（Root 设计门已通过；实现候选未正常启用，2026-10-27）
+
+基线为正式/normal `394ae559cd2018206c32d5ca3014de248effa203`。本片只补既有网站 `ListHubSkills` 的发布方表示：唯一选择是在每项复用现 `product`（`Public9SkillProductFacts`）及 `publisher_profile`（`SkillPublisherProfile`），不另建 author/display DTO、接口、owner、表或依赖；具体 presence/关联规则见 [API 的 S13 小节](API_CONTRACT.md)。`publisherType` 仍是来源分类，不是真名；`creator_ref`/creator_info 是创建者，不能冒 publisher，尤其不能把 GitHub 导入者当仓库发布方。
+
+可信链保持 Browser→App 同源→BFF 当前 Product Session→Platform 固定 projection/current。tenant/subject 只取 `authorizeUserRequest` 的冻结 context，IAM 只接当前 human Bearer；不接浏览器自报 publisher refs/tenant，也不借 `resolvePublic` 的 APIKey/OpenApp 分支。现 Platform 当前 tenant/可见性、active publication、source_ref/revision 精确匹配通过后，BFF 从同一 `current.skill.product.publisher` 收集 refs，沿已注入的 `IamPublisherProfileClient.resolve` 去重、每批≤100、空集合不请求；保原总 deadline/AbortSignal、no-store、严格原始 JSON/响应大小与 exact-ref 校验，不加缓存、重试、成员列表或任意用户查询。可复用 IAM 既有安装 profile 政策（IAM `docs/TECHNICAL_DESIGN.md` §Publisher profile 最小边界），无 IAM/Platform 契约或权限扩张。
+
+IAM user/organization 分别用真实 found display_name；user missing 保其判别而无姓名，organization 仅当前 tenant。GitHub publisher 只沿 owner 已验证的 `github_repository.owner_login/owner_url` 快照，不调用 IAM 解析 importer、不查询 GitHub 当前个人资料。未知旧 publisher 保未知；Community/品牌只可继续作为已有来源类别，不得在作者位置顶替真值。Platform 安全404、用户准入401/403与 current 变化失败保原；IAM 上游外租户 organization 仍403，孤儿/损坏503；这不是新增浏览器403，现 BFF client 对 resolver 非200（含403/404）、坏响应/取消/依赖失败保请求失败，不降为 missing/空成功，见 API 小节。
+
+目标写面限现 `skill-specification.{ts,types.ts}`、`src/http/skill-specification-schema.ts`、canonical `contract/openapi/v1/openapi.yaml` 及其现合同门/直接测试。运行 `SkillProductFact` 只补其实际已解码的 publisher 等既有 owner shape，不复制另一份 owner schema；IAM/Platform pin 与 generated 客户端不变。App 后继只扩 `src/hub/schemas.ts` 的既有 product/profile 严格组件、Hub/card parser 与 `manus-skill-client.toCard`、作者展示；不碰另一个 writer 的 reader/缓存。先正式契约及 App 对同一 Hub 可选事实的严格 reader，再切新BFF；absence 只表示未知、不显示作者、不授任何权限，不建立 legacy394 parser、第二 schema 或版本模式。旧 App strict 会拒新字段，因此 reader-first 仍必要，不能把“additive”冒成可直接先启 producer。验收只覆盖真实 publisher user/org/GitHub、missing/旧unknown、错ref/跨主体/取消/坏响应、版本变化及 App 真值显示；不以此宣称全部 Skills 完成。
+
 ### 后继整片源码范围（此卡只写三设计，源码另授）
 
 入口/机器：src/bootstrap/server.ts、contract/openapi/v1/openapi.yaml；scripts/verify-openapi.ts、verify-skill-product-contract.mjs、verify-skill-package-inspection-contract.mjs、verify-skill-example-prompts-contract.mjs、verify-skill-updated-at-contract.mjs承接新当前闭集，新active合同按正式规范/语义验证，不继续叠历史20层hash逆向；保有效权限/tenant/CAS/取消/unknown阴性与非Skills字节。

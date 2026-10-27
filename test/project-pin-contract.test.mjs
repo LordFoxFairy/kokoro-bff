@@ -6,7 +6,9 @@ import { load } from "js-yaml"
 import { operationBaseline, inspectOpenApiGovernance } from "../scripts/check-contract.mjs"
 
 test("Project pin adds exactly two personal preference operations without altering old Project wire or Public28.4", async () => {
-  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const input = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const { restorePublic285HubPublisherContract } = await import("../scripts/project-pin-public-contract.mjs")
+  const raw = restorePublic285HubPublisherContract(input)
   const spec = load(raw)
   assert.equal(spec.info.version, "28.5.0")
   const { restorePublic284ProjectPinContract, projectPinParentInventory } = await import("../scripts/project-pin-public-contract.mjs")
@@ -33,4 +35,31 @@ test("Project pin adds exactly two personal preference operations without alteri
   assert.deepEqual(spec.components.schemas.SetProjectPinRequest.properties, { is_pinned: { type: "boolean" } })
   for (const changed of [raw + "\n", raw.replace("listProjects", "unrelatedMutation"), raw.replace("project.read", "project.update")])
     assert.throws(() => restorePublic284ProjectPinContract(changed))
+})
+
+test("S13 Hub publisher changes only two Hub fields and version; exact Public28.5 remains the parent", async () => {
+  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"),
+    spec = load(raw)
+  assert.equal(spec.info.version, "28.6.0")
+  const { restorePublic285HubPublisherContract } = await import("../scripts/project-pin-public-contract.mjs")
+  const oldRaw = restorePublic285HubPublisherContract(raw),
+    old = load(oldRaw)
+  assert.equal(createHash("sha256").update(oldRaw).digest("hex"), "109a2ae063b10699ae52776b09533c5622d906679c093d65730a289206043b1a")
+  const fields = spec.components.schemas.SpecificationHubResponse.properties.skills.items.properties
+  assert.equal(fields.product.$ref, "#/components/schemas/Public9SkillProductFacts")
+  assert.equal(fields.publisher_profile.$ref, "#/components/schemas/SkillPublisherProfile")
+  const normalized = structuredClone(spec)
+  delete normalized.components.schemas.SpecificationHubResponse.properties.skills.items.properties.product
+  delete normalized.components.schemas.SpecificationHubResponse.properties.skills.items.properties.publisher_profile
+  normalized.info.version = "28.5.0"
+  assert.deepEqual(normalized, old, "every non-Hub object, operation, existing profile and wire stays identical")
+  assert.deepEqual(operationBaseline(raw), operationBaseline(oldRaw))
+  for (const invalid of [
+    raw + "\n",
+    raw.replace("listProjects", "unrelatedOperation"),
+    raw.replace("project.read", "project.update"),
+    raw.replace('SkillPublisherProfile"\n                description', 'Public9SkillProductFacts"\n                description'),
+    raw.replace("version: 28.6.0", "version: 28.7.0"),
+  ])
+    assert.throws(() => restorePublic285HubPublisherContract(invalid), "not a generic stripping exception")
 })

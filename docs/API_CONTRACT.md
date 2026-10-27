@@ -809,6 +809,18 @@ Public12同/v1/skill.list及既定四网站POST/字节handle，optional project_
 ListHubSkills includeOfficialSkills→include_official_skills，首页shuffle→shuffle；pageToken原opaquecursor，后页显式shuffle（含false）400，保过滤绑定。
 ProductSkillInstallation.skill_created_at19/source_owner_scope20直接source facts，公开Unix秒/网站UTC字符串按原类型转换；creator_ref语义不变，无事实不伪造。既有installation管理wire不加字段或改未知ACK职责。
 
+### S13 Hub 发布方线协议（Root 设计门已通过；实现候选未正常启用）
+
+基线 `394ae559cd2018206c32d5ca3014de248effa203`，只扩现 browser-private `POST /skill.v1.SkillOptionalService/ListHubSkills` 的 `SpecificationHubResponse.skills[]`；请求、路径、cursor/shuffle、身份与原字段不变。唯一新 shape 为可选 `product: Public9SkillProductFacts` 与可选 `publisher_profile: SkillPublisherProfile`，均直接引用当前 canonical 组件，不新增重复作者 DTO。新 producer 每项必须投影已校验同一 current 版本的完整 product；property 的 optional 是同一 Hub wire 的 additive 展示事实语义：合法 absence 只表示未知、不显示作者、不授任何权限；不建立 legacy394 parser、第二 schema 或模式，也不借 absence 把上游拒绝/坏 wire 降为成功。关联闭集如下：
+
+- product.publisher.kind=iam：必有 exact kind/id 相等的 profile。user 的 found/missing 与 organization 的 found 直接保原判别；found 仅现 kind/id/status/display_name/image_url（nullable），missing 不带 display_name/image_url。organization ref 仅 current tenant；不允许组织 missing 或 foreign org alias。
+- product.publisher.kind=github_repository：不带 IAM profile；App 从该同版本 owner 已验证的 repository owner_login/owner_url 归因，称 GitHub 发布方快照，不称当前个人实名。creator_ref 可以是导入者，绝不用于替代这个 publisher。
+- product 无 publisher（旧事实）：不带 profile、保持未知；profile 单独出现、kind/id 不配、未知 union/额外字段、publisher/source_kind/provenance 不一致皆 invalid。`publisherType` 原来源类型不替代 product/publisher/profile；公开 `skill.list` 的 creator_info 与 revisionSummary.author 不在本片变更。
+
+IAM 正式 `POST /internal/v1/tenants/{tenant_id}/publisher-profiles/resolve` 沿原 `iam:publisher-profile.read` 与当前 user_delegated Session、Member/client/resource/binding；BFF 仅提交当前已获准 Skill 页 publisher IAM refs，去重分批≤100，保总预算与取消、不自动重试。IAM user 缺失/非本 tenant Member 是200 missing；外 tenant organization 是 IAM 上游403（不作为新增浏览器403透传），孤儿 Member/损坏/DB不确定503。Skill 不可见仍 owner404；网站准入401/403与原错误闭集保持。resolver 非200（即使404）、传输或严格响应不确定沿现 client/网站依赖失败503，不伪成 missing/Community；publisher union 坏 owner wire 沿现 InvalidResponse，拒绝把读失败映成成功页。
+
+机器唯一 editable source 是 `contract/openapi/v1/openapi.yaml` 的 `SpecificationHubResponse`，复用 `Public9SkillProductFacts`/`SkillPublisherProfile`；runtime validator 为 `src/http/skill-specification-schema.ts`。本片拟 canonical **28.6.0** 后继（不是给原28.5同identity换字节），正式 commit/SHA 待发行，公开 operation inventory 与非Hub wire不变；现 `scripts/check-contract.mjs`、`integration-public-contract.mjs` 及具名合同测试承接精确 Hub 两字段+version delta/旧父逆证，不放宽旧父hash或夹其它差异。此处没有现成 Hub 专属 generator，**不新造第二生成器/profile**：发布正式 canonical Git blob；App 复用现 full snapshot `src/generated/bff-public-openapi.yaml` 的 commit/SHA 固定方式及既有窄生成链正规重出，不能手改 generated。`scripts/generate-bff-public-skill-list.mjs` 只生成公开 `/v1/skill.list`，不是 Hub generator；原public wire应证明未改。App 的网站严格 `manuscriptHubSkillSchema`/`SkillCatalogCard`/`toCard` 就近复用已有 product/profile 组件并核上述关联，缺字段仅按同一关联闭集表示未知，不加 passthrough/假名字。reader-first 成套切换，本轮候选不等于正式契约发行或正常 producer 启用。本片不是 clean-slate 双协议，不要求再造28.7 required 迁移或退场机制；不增 flags/header/endpoint/二次迁移。新 producer 仍必须投真实 current product 及 IAM exact profile，现 extra/ref 关联闭集保持，不为署名新增隐式 fallback。
+
 <!-- T-K03.3-SUCCESSOR-END; complete previous body follows -->
 
 ## T-K03.2 Skills 正式 Product协议收敛（2026-10-09；目标待owner发行）

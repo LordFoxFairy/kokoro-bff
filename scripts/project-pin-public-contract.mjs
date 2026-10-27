@@ -8,7 +8,23 @@ const blocks = {
   SCHEMAS: "e87990d51977c1313ba84a81e7403b8a3facecddfb4adb6ff3aa4c1295f0e03a",
   RESPONSES: "d66d6252ac572eec3ae241aa433aa7810fd51e4f7e17d6f2325d4fb5081ca549",
 }
+// S13 build/test-only inverse; closed to this exact two-field/version delta.
+export const hubPublisherCurrentSha256 = "a020e849f740165fa20099f5ab041b76bc480c70a9bbc067955e57f5ec22ae02"
+const hubPublisherDelta =
+  '              product:\n                $ref: "#/components/schemas/Public9SkillProductFacts"\n                description: Same authorized current version owner product; absence is only the coordinated predecessor-reader transition, not an inferred publisher.\n              publisher_profile:\n                $ref: "#/components/schemas/SkillPublisherProfile"\n                description: Required exactly when product.publisher.kind is iam; kind and id match its iam ref. Omitted for unknown or verified GitHub publisher. Missing never substitutes a creator or default name.\n'
+export function restorePublic285HubPublisherContract(source) {
+  if (!/^  version: 28\.6\.0$/mu.test(source)) {
+    if (source.includes(hubPublisherDelta)) throw Error("Hub publisher version drift")
+    return source
+  }
+  if (hash(source) !== hubPublisherCurrentSha256 || source.split(hubPublisherDelta).length !== 2) throw Error("Hub publisher exact current drift")
+  const restored = source.replace(hubPublisherDelta, "").replace(/^  version: 28\.6\.0$/mu, "  version: 28.5.0")
+  if (hash(restored) !== current) throw Error("Hub publisher complete Public28.5 drift")
+  return restored
+}
+
 export function restorePublic284ProjectPinContract(source) {
+  source = restorePublic285HubPublisherContract(source)
   if (!/^  version: 28\.5\.0$/mu.test(source)) return source
   if (hash(source) !== current) throw Error("Project pin full current drift")
   let restored = source

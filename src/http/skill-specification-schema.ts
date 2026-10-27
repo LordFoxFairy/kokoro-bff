@@ -1,4 +1,7 @@
 import { z } from "zod"
+import { isDeepStrictEqual } from "node:util"
+import { projectSkillProductJson } from "../infrastructure/clients/platform/skill-product-response.js"
+import { skillPublisherProfileSchema } from "../infrastructure/clients/iam-publisher-profile.js"
 
 // Website observations define types, not default/enum/required rules for absent members.
 const string = z.string()
@@ -69,7 +72,25 @@ const version = optional({
   licenseSpdxId: string,
   licenseUrl: string,
 })
+const hubProduct = z.unknown().transform((raw, context) => {
+  try {
+    return projectSkillProductJson(raw)
+  } catch {
+    context.addIssue({ code: "custom", message: "invalid owner product" })
+    return z.NEVER
+  }
+})
+const hubPublisherProfile = z.unknown().transform((raw, context) => {
+  const parsed = skillPublisherProfileSchema.safeParse(raw)
+  if (!parsed.success || !isDeepStrictEqual(raw, parsed.data)) {
+    context.addIssue({ code: "custom", message: "invalid publisher profile" })
+    return z.NEVER
+  }
+  return parsed.data
+})
 const hubSkill = optional({
+  product: hubProduct,
+  publisher_profile: hubPublisherProfile,
   skillId: string,
   originalName: string,
   displayName: string,
@@ -89,6 +110,20 @@ const hubSkill = optional({
   source,
   syncStatus: string,
   cmsUpdatedAt: string,
+}).superRefine((value, context) => {
+  const publisher = value.product?.publisher,
+    profile = value.publisher_profile
+  if (publisher?.kind === "iam") {
+    if (!profile || profile.kind !== publisher.iam.kind || profile.id !== publisher.iam.id)
+      context.addIssue({
+        code: "custom",
+        message: "publisher profile must match the owner ref",
+      })
+  } else if (profile !== undefined)
+    context.addIssue({
+      code: "custom",
+      message: "publisher profile requires IAM publisher",
+    })
 })
 export const websiteHubResponseSchema = z
   .object({
