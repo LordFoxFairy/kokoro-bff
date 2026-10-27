@@ -1,3 +1,11 @@
+## 文件工具显示类别后继
+
+当前 canonical 为 Public28.3.0／192 操作，保全部路径／operationId／请求与响应结构，仅 `RunToolActivity.display_code` 在原七值之后追加 `tool.file.write`、`tool.file.deliver`。分支仍 strict `{activity:"tool",activity_id,segment_id,status,display_code}`，status 仍 running／completed／failed；subagent／skill 独立分支不扩值。未知 code／错分支及 filename、args、path、result、secret 等额外字段不发布、不回退为 generic，旧 `tool.execution` 合法且原样读取。
+
+Agent 依赖固定正式 HTTP8.1.0 `38c294d38cf05149c320622f52490f82fb1fff91`，完整 OpenAPI SHA256 `1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9`、provenance SHA256 `879695cfacd55014b9f6a28e3138d88bc009ba9d46acfac27497a26f0025acad`；vendor 取该 commit Git blob 并保留原8.0历史原件。沿原三操作 allowlist、generator 与 generated validators，不增加接口、认证、授权、执行或幂等行为。
+
+同一安全 activity 贯通 live CUSTOM、compact、ordered Message parts 与 reopen，不添加只对其中一路的字段或第二套协议。原 JSONB／格式版本不变，无 DDL。后继全文精确逆回原 Public28.2 SHA256 `e0bb74069c65fb8d414a6a3cb0d6f4c8d9bcb40bb693c2409a9cbe051b8bac53` 后才复用未改历史父证明；原192操作库存不变。消费者先固定新闭集，再协调生产者输出新类别，避免旧 reader 拒绝新值；正常激活不由本文或类别存在推断。
+
 ## PROJECT-MCP-RECOMMENDATIONS-D1：项目推荐配置 GET／PUT（2026-10-27，本地候选、未正常激活）
 
 Root已选BFF Project owner和完整三种ref，不再采用D0 provider-only协议。只管理现本人Project偏好，不是definition发布／grant／Connection创建；自然幂等配置PUT不要求Idempotency-Key，不增加receipt/journal/outbox。当前canonical源码候选Public28.2／192操作；固定28.1全文／190顺序parent与两列完整SQL父逆证，源码尚未提交／正常激活，不冒App消费者已接通。

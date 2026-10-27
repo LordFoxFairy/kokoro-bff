@@ -290,6 +290,8 @@ export const zChatActivity = z.union([
         "tool.mcp.call",
         "tool.web.search",
         "tool.web.fetch",
+        "tool.file.write",
+        "tool.file.deliver",
       ]),
     })
     .strict(),

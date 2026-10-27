@@ -463,10 +463,17 @@ it("a new START identity after a full interaction is rejected before committing 
 })
 
 for (const [activity, displayCode] of [
-  ...["tool.execution", "tool.file.read", "tool.mcp.discover", "tool.mcp.describe", "tool.mcp.call", "tool.web.search", "tool.web.fetch"].map((code) => [
-    "tool",
-    code,
-  ]),
+  ...[
+    "tool.execution",
+    "tool.file.read",
+    "tool.mcp.discover",
+    "tool.mcp.describe",
+    "tool.mcp.call",
+    "tool.web.search",
+    "tool.web.fetch",
+    "tool.file.write",
+    "tool.file.deliver",
+  ].map((code) => ["tool", code]),
   ["subagent", "subagent.execution"],
 ]) {
   for (const status of ["running", "completed", "failed"]) {
@@ -647,6 +654,8 @@ it("Agent8 safe tool classes remain exact when the existing projector prepares c
     "tool.mcp.call",
     "tool.web.search",
     "tool.web.fetch",
+    "tool.file.write",
+    "tool.file.deliver",
   ]) {
     const payload = { activity: "tool", activity_id: `act_${"a".repeat(64)}`, segment_id: `seg_${"b".repeat(64)}`, status: "completed", display_code }
     const mapped = mapAgentEvent({

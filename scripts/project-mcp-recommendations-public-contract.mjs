@@ -1,3 +1,4 @@
+import { restorePublic282FileToolDisplayContract } from "./file-tool-display-public-contract.mjs"
 // Build/test-only exact Public28.2→28.1 inverse. Never imported by production.
 import { createHash } from "node:crypto"
 const hash = (value) => createHash("sha256").update(value).digest("hex")
@@ -7,6 +8,7 @@ const blocks = [
   ["SCHEMAS", "3ddb3d479f7e2399f7dfb187ca2e19dcdb350c4e9009c274e4dac399a3911071"],
 ]
 export function restorePublic281McpRecommendationsContract(source) {
+  source = restorePublic282FileToolDisplayContract(source)
   if (!/^  version: 28\.2\.0$/mu.test(source)) {
     if (source.includes("PROJECT-MCP-RECOMMENDATIONS-")) throw Error("Project MCP recommendations version drift")
     return source

@@ -3,18 +3,18 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-agent",
-    "repository_commit": "ff36759214ff5d1e015cd9e288abbcb2d8e0c46d",
-    "contract_version": "8.0.0",
+    "repository_commit": "38c294d38cf05149c320622f52490f82fb1fff91",
+    "contract_version": "8.1.0",
     "contract_path": "contract/openapi/v1/openapi.json",
-    "contract_sha256": "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
+    "contract_sha256": "1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9",
     "provenance_path": "contract/provenance.json",
-    "provenance_sha256": "4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f"
+    "provenance_sha256": "879695cfacd55014b9f6a28e3138d88bc009ba9d46acfac27497a26f0025acad"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.agent.config.ts",
-    "config_sha256": "262976d37b7964cb91b68835d75df76b5a6d0e9ab33a703815e05778882c7294"
+    "config_sha256": "1f122aea64ec6bd19b374a8e7bff714317c5e611306eb45ad4951416ffddb06f"
   },
   "runtime": {
     "node": "22.22.2",
@@ -77,12 +77,12 @@
     },
     {
       "path": "failure-profile.gen.ts",
-      "source_sha256": "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
+      "source_sha256": "1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9",
       "sha256": "ef52afa8b45062d35500a9fc12248fecd4edf17b320aac287ac3b7d406d777c1"
     },
     {
       "path": "process-profile.gen.ts",
-      "source_sha256": "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
+      "source_sha256": "1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9",
       "sha256": "3515c8cd25a1b6ed489bf7ec847b2b3ade7b224617b9d2cf69f4aa55ea7c6493"
     },
     {
@@ -95,7 +95,7 @@
     },
     {
       "path": "zod.gen.ts",
-      "sha256": "4d3c12628b8172020ef3128b44d500fb11e1165fd2a8b44d145931b61a37134a"
+      "sha256": "1b1d9d99ec289f6dbd0029e579e3ea20f64ec578b774323e7fbc5ba7f4a89df2"
     }
   ]
 }

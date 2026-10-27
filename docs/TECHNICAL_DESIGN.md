@@ -1,3 +1,15 @@
+## 文件写入／交付工具的安全展示类别
+
+BFF Public28.3／192 操作固定 Agent HTTP8.1.0 `38c294d38cf05149c320622f52490f82fb1fff91`，仍只消费既有 launch／events／control 三操作。输入仅从该正式 commit 的 Git blob 取得：OpenAPI SHA256 `1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9`、provenance SHA256 `879695cfacd55014b9f6a28e3138d88bc009ba9d46acfac27497a26f0025acad`；沿现 `openapi-ts.agent.config.ts` 和 `scripts/generate-agent-http-client.mjs` 正规生成18文件及 dependency manifest，不导入候选源码或手改生成物。原 HTTP8.0 `ff36759214ff5d1e015cd9e288abbcb2d8e0c46d` vendor 原件保留。
+
+Public28.3／192 只在唯一 `RunToolActivity.display_code` 闭集追加 `tool.file.write`、`tool.file.deliver`，原七值（含 `tool.execution`）保持；不按名称／参数猜类别，不回填历史 generic。类别归 Agent，BFF 只经 generated `zChatActivity` 验证并投影。现 process-state、AG-UI CUSTOM、compact process、ordered Message parts／分页／reopen 复用同一闭合 activity decoder；unknown、错 activity 分支及 filename／path／args／result／secret 等额外字段仍拒绝，无 generic fallback。
+
+现 event payload／safe_payload／ordered_parts 均为 owner JSONB，数据库不枚举 display_code；不改 Schema、DDL、projection_schema_version、parts_format_version、identity、source digest、cursor、权限、执行或 receipt。纯新增显示类别不会把 native 写入／交付能力变成新授权。新类别落库后保留能解码它们的 reader，不盲降旧闭集；仍消费旧 generic，不改历史记录。
+
+build/test-only 后继逆证必须先验证正式新全文与具名 enum/version delta，再精确恢复完整 Public28.2 SHA256 `e0bb74069c65fb8d414a6a3cb0d6f4c8d9bcb40bb693c2409a9cbe051b8bac53`，进入原 28.2→28.1→28→27 父证明；旧 hash／192 库存／历史原件不重签。验证先覆盖新类别 running／completed／failed 的真实 mapper、ordered fold／严格持久解码和公开闭集 RED，再按正式 artifact 生成通过；补 durable transaction／reopen／顺序与隐私负控，不以 fixture 代正常业务旅程。
+
+依赖为 Agent 正式 artifact → BFF 正规固定消费与公开发行 → App 固定消费／标签 → Root 协调正常激活。App 当前同一完整 public snapshot 有十条生成链（原九条加 Project MCP 推荐），必须一起正规 repin／确定性检查，不能遗漏推荐或另建可编辑 wire。App 展示标签不拼接文件名／路径；本 BFF writer 不改 App、正常资源、SQL 或 Git。
+
 ## PROJECT-MCP-RECOMMENDATIONS-D1：项目推荐连接器配置（2026-10-27，Root 已选边界，源码候选已实现、正常未激活）
 
 **裁决／范围。** 静态基线 App `ea04903`、BFF `1177715`（Public28.1／190操作）、Platform `8cfead6`。按已观察的搜索／多选／取消／保存实现项目推荐偏好，不把 Platform immutable URL definition/project pin 当推荐。BFF Project 是唯一配置 owner；只用现 tenant/subject 的未删除本人 Project 权限，不声明成员协作或跨成员私有配置共享已实现。未来共享另过 Project ACL，个人引用始终不转移他人凭据。以下取代本轮 D0 provider-only 候选；源码／机器／隔离PG已实施，尚未提交和正常激活，不是App或运行旅程完成声明。

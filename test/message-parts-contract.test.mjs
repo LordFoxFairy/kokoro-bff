@@ -307,3 +307,42 @@ test("Public28 restores the full frozen Public27 before every unchanged historic
     assert.throws(() => restorePublic27ToolDisplayContract(changed), /Tool display .*drift/u);
   }
 });
+
+
+test("Public28.3 publishes exactly the two additional file display codes, no new fields or operations", async () => {
+  const api = load(await readFile(contractUrl, "utf8"));
+  assert.equal(api.info.version, "28.3.0");
+  assert.deepEqual(api.components.schemas.RunToolActivity.required, ["activity", "activity_id", "segment_id", "status", "display_code"]);
+  assert.deepEqual(Object.keys(api.components.schemas.RunToolActivity.properties), api.components.schemas.RunToolActivity.required);
+  assert.equal(api.components.schemas.RunToolActivity.additionalProperties, false);
+  assert.deepEqual(api.components.schemas.RunToolActivity.properties.display_code, { type: "string", enum: ["tool.execution", "tool.file.read", "tool.mcp.discover", "tool.mcp.describe", "tool.mcp.call", "tool.web.search", "tool.web.fetch", "tool.file.write", "tool.file.deliver"] });
+  assert.deepEqual(api.components.schemas.RunSubagentActivity.properties.display_code, { const: "subagent.execution" });
+  const methods = new Set(["get", "put", "post", "delete", "patch", "head", "options", "trace"]);
+  assert.equal(Object.values(api.paths).flatMap(item => Object.keys(item).filter(method => methods.has(method))).length, 192);
+});
+
+
+test("Public28.3 restores complete frozen Public28.2 before the original inverse chain and rejects either-side tampering", async () => {
+  const { restorePublic282FileToolDisplayContract, fileToolDisplayCurrentSha256, fileToolDisplayParentSha256 } = await import("../scripts/file-tool-display-public-contract.mjs");
+  const source = await readFile(contractUrl, "utf8");
+  assert.equal(createHash("sha256").update(source).digest("hex"), fileToolDisplayCurrentSha256);
+  const parent = restorePublic282FileToolDisplayContract(source);
+  assert.equal(createHash("sha256").update(parent).digest("hex"), fileToolDisplayParentSha256);
+  assert.equal(fileToolDisplayParentSha256, "e0bb74069c65fb8d414a6a3cb0d6f4c8d9bcb40bb693c2409a9cbe051b8bac53");
+  assert.equal(load(parent).info.version, "28.2.0");
+  for (const changed of [
+    source + "\n",
+    source.replace("tool.file.write, ", ""),
+    source.replace("tool.file.deliver]", "tool.file.unreviewed]"),
+    source.replace("version: 28.3.0", "version: 28.2.0"),
+    source.replace("const: subagent.execution", "const: tool.file.write"),
+    source.replace("Opaque chat session identifier.", "tampered unrelated identifier"),
+  ]) {
+    assert.notEqual(changed, source);
+    assert.throws(() => restorePublic282FileToolDisplayContract(changed), /Tool display file .*drift/u);
+  }
+  for (const changed of [parent + "\n", parent.replace("tool.web.search, ", ""), parent.replace("Opaque chat session identifier.", "tampered old identifier")]) {
+    assert.notEqual(changed, parent);
+    assert.throws(() => restorePublic28ProjectResourceContract(changed), /Project MCP recommendations .*drift/u);
+  }
+});

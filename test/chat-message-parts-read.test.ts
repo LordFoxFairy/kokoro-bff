@@ -798,6 +798,8 @@ for (const display_code of [
   "tool.mcp.call",
   "tool.web.search",
   "tool.web.fetch",
+  "tool.file.write",
+  "tool.file.deliver",
 ]) {
   test(`Agent8 bounded parts output preserves ${display_code} and its original ordering coordinates`, () => {
     const item = { ...activityItem, activity: { ...tool, display_code } }

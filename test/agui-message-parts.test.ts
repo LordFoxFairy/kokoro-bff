@@ -194,11 +194,31 @@ for (const display_code of [
   })
 }
 for (const [activity, display_code] of [
-  ["tool", "tool.file.write"],
+  ["tool", "tool.file.unreviewed"],
   ["tool", "subagent.execution"],
   ["subagent", "tool.web.search"],
 ]) {
   it(`ordered parts reject ${activity}/${display_code} rather than replace it with generic execution`, () => {
     assert.throws(() => foldMessageParts(fresh(), runId, [frame(4, "CUSTOM", { name: "kokoro.activity.updated", value: { ...tool, activity, display_code } })]))
   })
+}
+
+// Approved Agent8.1/Public28.3 consumer target. This must remain RED until the
+// formally frozen owner artifact is pinned and normally generated; no fixture SDK.
+for (const display_code of ["tool.file.write", "tool.file.deliver"]) {
+  for (const status of ["running", "completed", "failed"]) {
+    it(`Agent8.1 ordered parts retain ${display_code}/${status} without filename or generic rewriting`, () => {
+      const payload = { ...tool, display_code, status }
+      const state = foldMessageParts(fresh(), runId, [frame(4, "CUSTOM", { name: "kokoro.activity.updated", value: payload })])
+      const restored = parseMessageParts(JSON.parse(JSON.stringify(state.parts)), 1, state.publicSequence)
+      assert.deepEqual(restored.parts, [
+        { kind: "activity", part_id: `activity:${tool.activity_id}`, first_sequence: "4", latest_sequence: "4", activity: payload },
+      ])
+      for (const field of ["filename", "path", "args", "result", "secret"]) {
+        assert.throws(() =>
+          foldMessageParts(fresh(), runId, [frame(4, "CUSTOM", { name: "kokoro.activity.updated", value: { ...payload, [field]: "not-public" } })]),
+        )
+      }
+    })
+  }
 }

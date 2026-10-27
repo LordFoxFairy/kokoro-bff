@@ -31,19 +31,19 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "ff36759214ff5d1e015cd9e288abbcb2d8e0c46d",
-        contract_version: "8.0.0",
+        repository_commit: "38c294d38cf05149c320622f52490f82fb1fff91",
+        contract_version: "8.1.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
+        contract_sha256: "1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f",
+        provenance_sha256: "879695cfacd55014b9f6a28e3138d88bc009ba9d46acfac27497a26f0025acad",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
+        source_sha256: "1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
@@ -53,22 +53,32 @@ describe("Agent event-protocol provenance", () => {
   it("uses one HTTP8 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "ff36759214ff5d1e015cd9e288abbcb2d8e0c46d")
+    assert.equal(manifest.owner.repository_commit, "38c294d38cf05149c320622f52490f82fb1fff91")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff",
+      "1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/ff36759214ff5d1e015cd9e288abbcb2d8e0c46d/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/38c294d38cf05149c320622f52490f82fb1fff91/openapi.json", import.meta.url), "utf8"),
     )
     assert.deepEqual(owner.components.schemas.ChatActivity.oneOf[0].properties.display_code, {
       type: "string",
-      enum: ["tool.execution", "tool.file.read", "tool.mcp.discover", "tool.mcp.describe", "tool.mcp.call", "tool.web.search", "tool.web.fetch"],
+      enum: [
+        "tool.execution",
+        "tool.file.read",
+        "tool.mcp.discover",
+        "tool.mcp.describe",
+        "tool.mcp.call",
+        "tool.web.search",
+        "tool.web.fetch",
+        "tool.file.write",
+        "tool.file.deliver",
+      ],
     })
     assert.doesNotThrow(() => assertInteractionContractSchema(owner))
     for (const change of [
@@ -106,7 +116,7 @@ describe("Agent event-protocol provenance", () => {
         s.ChatActivity.oneOf[0].properties.display_code = { type: "string" }
       },
       (s) => {
-        s.ChatActivity.oneOf[0].properties.display_code.enum.push("tool.file.write")
+        s.ChatActivity.oneOf[0].properties.display_code.enum.push("tool.file.unreviewed")
       },
       (s) => {
         s.ChatActivity.oneOf[0].properties.display_code.enum.pop()
@@ -509,7 +519,7 @@ it("consumes only the exact optional MCP execution selection from HTTP7.4 and Pu
 })
 
 for (const [activity, display_code] of [
-  ["tool", "tool.file.write"],
+  ["tool", "tool.file.unreviewed"],
   ["tool", "subagent.execution"],
   ["subagent", "tool.web.search"],
   ["tool", null],

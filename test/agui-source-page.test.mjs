@@ -1104,7 +1104,16 @@ it("R123 real owner reader maps complete Todo replacement and every published sa
       status,
       display_code: "tool.execution",
     })),
-    ...["tool.file.read", "tool.mcp.discover", "tool.mcp.describe", "tool.mcp.call", "tool.web.search", "tool.web.fetch"].map((display_code, index) => ({
+    ...[
+      "tool.file.read",
+      "tool.mcp.discover",
+      "tool.mcp.describe",
+      "tool.mcp.call",
+      "tool.web.search",
+      "tool.web.fetch",
+      "tool.file.write",
+      "tool.file.deliver",
+    ].map((display_code, index) => ({
       activity: "tool",
       activity_id: r123ActivityId(String(index)),
       segment_id: r123SegmentId("b"),

@@ -11,12 +11,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "ff36759214ff5d1e015cd9e288abbcb2d8e0c46d"
+const ownerCommit = "38c294d38cf05149c320622f52490f82fb1fff91"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff"
-const provenanceDigest = "4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f"
-const ownerContractVersion = "8.0.0"
+const ownerDigest = "1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9"
+const provenanceDigest = "879695cfacd55014b9f6a28e3138d88bc009ba9d46acfac27497a26f0025acad"
+const ownerContractVersion = "8.1.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -168,7 +168,17 @@ export function assertInteractionContractSchema(document) {
     schemas.ChatActivity.oneOf[0].properties.display_code,
     {
       type: "string",
-      enum: ["tool.execution", "tool.file.read", "tool.mcp.discover", "tool.mcp.describe", "tool.mcp.call", "tool.web.search", "tool.web.fetch"],
+      enum: [
+        "tool.execution",
+        "tool.file.read",
+        "tool.mcp.discover",
+        "tool.mcp.describe",
+        "tool.mcp.call",
+        "tool.web.search",
+        "tool.web.fetch",
+        "tool.file.write",
+        "tool.file.deliver",
+      ],
     },
     "Agent tool display closed set drifted",
   )

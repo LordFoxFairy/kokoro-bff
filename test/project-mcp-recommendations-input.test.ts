@@ -89,7 +89,10 @@ test("new canonical SQL and both current/old wire surfaces are independently pin
   assert.equal(createHash("sha256").update(sql(schema)).digest("hex"), "38f1dcf6ffbdba1fcd459ff78f8be0d3e870405c5eccb2160d8a4961433f1e24")
   for (const bad of [schema.replace("recommended_mcp_refs JSONB NOT NULL", "recommended_mcp_refs JSONB"), schema.replace("name TEXT NOT NULL", "name TEXT")])
     assert.throws(() => sql(bad), /drift/)
-  const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const { restorePublic282FileToolDisplayContract } = await import("../scripts/file-tool-display-public-contract.mjs")
+  // Validate the new full publication before applying the unchanged Public28.2 negative oracle.
+  const source = restorePublic282FileToolDisplayContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  assert.match(source, /^  version: 28\.2\.0$/mu)
   assert.throws(() => wire(source.replace("version: 28.2.0", "version: 28.1.0")), /drift/)
   const operations = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
   assert.equal(census(operations).length, 190)

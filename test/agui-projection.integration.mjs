@@ -6122,3 +6122,54 @@ integrationTest("CHAT-ORDER leaves unproven legacy Message parts NULL and does n
     await pool.end()
   }
 })
+
+integrationTest(
+  "Agent8.1 file display classes survive durable compact and ordered reopen without widening safe payloads",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context)
+    const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+    const write = {
+      activity: "tool",
+      activity_id: `act_${"a".repeat(64)}`,
+      segment_id: `seg_${"b".repeat(64)}`,
+      status: "completed",
+      display_code: "tool.file.write",
+    }
+    const deliver = { ...write, activity_id: `act_${"c".repeat(64)}`, status: "failed", display_code: "tool.file.deliver" }
+    const generic = { ...write, activity_id: `act_${"d".repeat(64)}`, display_code: "tool.execution" }
+    const batch = [
+      c.source(2, { ...write, status: "running" }, "activity.updated"),
+      c.source(3, write, "activity.updated"),
+      c.source(4, { ...deliver, status: "running" }, "activity.updated"),
+      c.source(5, deliver, "activity.updated"),
+      c.source(6, generic, "activity.updated"),
+      c.source(7, { status: "completed" }, "run.completed"),
+    ]
+    await c.ingest(batch)
+    const committed = await c.fingerprint()
+    await c.ingest(batch)
+    assert.deepEqual(await c.fingerprint(), committed)
+    // A new reader reconstructs from committed JSONB, not projector memory or fixture output.
+    const reopened = new ChatApplicationService(new PostgresChatRepository({ pool: c.pool }))
+    assert.equal(await reopened.snapshot(c.tenantId, "other_subject", c.sessionId, undefined), null)
+    const snapshot = await reopened.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+    assert.ok(snapshot)
+    assert.deepEqual(snapshot.execution_process.activities, [write, deliver, generic])
+    const assistant = snapshot.messages.find((message) => message.role === "assistant" && message.run_id === c.runId)
+    assert.ok(assistant)
+    const page = await reopened.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, assistant))
+    assert.ok(page)
+    const parts = page.items.filter((item) => item.kind === "activity")
+    assert.deepEqual(
+      parts.map((item) => item.activity),
+      [write, deliver, generic],
+    )
+    assert.ok(BigInt(parts[0].first_sequence) < BigInt(parts[1].first_sequence))
+    assert.ok(BigInt(parts[1].first_sequence) < BigInt(parts[2].first_sequence))
+    assert.ok(BigInt(parts[0].first_sequence) < BigInt(parts[0].latest_sequence))
+    for (const activity of [...snapshot.execution_process.activities, ...parts.map((item) => item.activity)]) {
+      assert.deepEqual(Object.keys(activity).sort(), ["activity", "activity_id", "display_code", "segment_id", "status"])
+    }
+  },
+)
