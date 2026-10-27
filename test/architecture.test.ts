@@ -61,9 +61,12 @@ function importsCanonicalSchemaInstaller(relativePath: string, source: string): 
 // Named owner evolutions may read these two helpers, never execute the fresh-only installer.
 function isNamedSchemaEvolutionReader(relativePath: string, source: string): boolean {
   if (
-    !["scripts/personalization-schema-evolution.mjs", "scripts/evolve-agent-failure-schema.mjs", "scripts/evolve-message-parts-schema.mjs"].includes(
-      relativePath,
-    )
+    ![
+      "scripts/personalization-schema-evolution.mjs",
+      "scripts/evolve-agent-failure-schema.mjs",
+      "scripts/evolve-message-parts-schema.mjs",
+      "scripts/evolve-project-mcp-recommendations-schema.mjs",
+    ].includes(relativePath)
   )
     return false
   const imports = [...source.matchAll(/^import\s+\{([^}]+)\}\s+from\s+["']\.\/apply-schema\.mjs["'];?[ \t]*$/gmu)]
@@ -938,6 +941,7 @@ test("R257 named evolution may import exactly the two approved canonical read he
     "scripts/personalization-schema-evolution.mjs",
     "scripts/evolve-agent-failure-schema.mjs",
     "scripts/evolve-message-parts-schema.mjs",
+    "scripts/evolve-project-mcp-recommendations-schema.mjs",
   ]) {
     const namedReader: SourceFile = {
       relativePath,
@@ -953,6 +957,7 @@ test("R257 named evolution exception rejects installer execution exports and alt
     "scripts/personalization-schema-evolution.mjs",
     "scripts/evolve-agent-failure-schema.mjs",
     "scripts/evolve-message-parts-schema.mjs",
+    "scripts/evolve-project-mcp-recommendations-schema.mjs",
   ]) {
     for (const source of [
       'import { applyCanonicalSchema } from "./apply-schema.mjs"',

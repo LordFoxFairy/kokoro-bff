@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.1.0
+  version: 28.2.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -49,6 +49,129 @@ tags:
   - name: Administration
     description: Platform-administrator projections backed by their owning services.
 paths:
+  # PROJECT-MCP-RECOMMENDATIONS-PATHS-BEGIN
+  /v1/projects/{projectId}/mcp-recommendations:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      operationId: getProjectMcpRecommendations
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.read
+      summary: Read current project MCP recommendations
+      description: 'Current owned Project only. References are preferences, not execution grants. No query, untrusted identity, Idempotency-Key, receipt or automatic write retry. Stale CAS always fails; matching same values do not advance the version. Only newly added references require current owner metadata validation. Custom API runtime binding is not implemented.'
+      responses:
+        '200':
+          description: Authoritative current configuration, not an immutable historical command receipt
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-Request-Id: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendations' }
+        '400':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError400' }
+        '401':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError401' }
+        '403':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError403' }
+        '404':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError404' }
+        '429':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError429' }
+        '502':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError502' }
+        '503':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError503' }
+    put:
+      tags: [Projects]
+      operationId: replaceProjectMcpRecommendations
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: project.update
+      summary: Conditionally replace project MCP recommendations
+      description: 'Current owned Project only. References are preferences, not execution grants. No query, untrusted identity, Idempotency-Key, receipt or automatic write retry. Stale CAS always fails; matching same values do not advance the version. Only newly added references require current owner metadata validation. Custom API runtime binding is not implemented.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplaceProjectMcpRecommendationsRequest' }
+      responses:
+        '200':
+          description: Authoritative current configuration, not an immutable historical command receipt
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-Request-Id: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendations' }
+        '400':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError400' }
+        '401':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError401' }
+        '403':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError403' }
+        '404':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError404' }
+        '412':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError412' }
+        '429':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError429' }
+        '502':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError502' }
+        '503':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError503' }
+  # PROJECT-MCP-RECOMMENDATIONS-PATHS-END
   /v1/account/archived-tasks:
     get:
       tags:
@@ -15194,6 +15317,161 @@ components:
         not trim or normalize a non-NFC value.
       schema: { type: string, minLength: 1 }
   schemas:
+    # PROJECT-MCP-RECOMMENDATIONS-SCHEMAS-BEGIN
+    ProjectMcpRecommendationRef:
+      oneOf:
+        - type: object
+          required: [kind, provider_key]
+          additionalProperties: false
+          properties:
+            kind: { const: provider }
+            provider_key: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z0-9][a-z0-9._-]{0,63}(?![\s\S])' }
+        - type: object
+          required: [kind, connector_id]
+          additionalProperties: false
+          properties:
+            kind: { const: mcp_connector }
+            connector_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+        - type: object
+          required: [kind, profile_id]
+          additionalProperties: false
+          properties:
+            kind: { const: custom_api }
+            profile_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+    ProjectMcpRecommendations:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [project_id, recommendations, state_version]
+          additionalProperties: false
+          properties:
+            project_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+            recommendations:
+              type: array
+              maxItems: 16
+              uniqueItems: true
+              description: Sorted by kind then corresponding ID using ASCII order; failed old references are retained, never execution grants.
+              items: { $ref: '#/components/schemas/ProjectMcpRecommendationRef' }
+            state_version: { type: string, pattern: '^[1-9][0-9]{0,9}(?![\s\S])', description: 'Canonical integer in 1..2147483647; runtime enforces the upper bound.' }
+    ReplaceProjectMcpRecommendationsRequest:
+      type: object
+      required: [expected_state_version, recommendations]
+      additionalProperties: false
+      properties:
+        expected_state_version: { type: string, pattern: '^[1-9][0-9]{0,9}(?![\s\S])', description: 'Canonical integer in 1..2147483647; runtime enforces the upper bound.' }
+        recommendations:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ProjectMcpRecommendationRef' }
+    ProjectMcpRecommendationsError400:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [project_mcp_recommendations_request_invalid] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError401:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [session_authentication_required, session_invalid] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError403:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [service_auth_failed, product_tenant_forbidden, session_forbidden, permission_denied] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError404:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [project_not_found] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError412:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [project_mcp_recommendations_precondition_failed] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError429:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [session_rate_limited] }
+            message: { type: string }
+            retryable: { const: true }
+    ProjectMcpRecommendationsError502:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [project_mcp_recommendations_response_invalid] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError503:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [project_mcp_recommendations_dependency_unavailable, product_tenant_not_configured, iam_admission_unavailable] }
+            message: { type: string }
+            retryable: { const: true }
+    # PROJECT-MCP-RECOMMENDATIONS-SCHEMAS-END
     AdminModelProvider:
       type: object
       properties:

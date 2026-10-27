@@ -1,3 +1,9 @@
+## Project MCP 推荐配置（2026-10-27，本地候选）
+
+`src/domain/project/mcp-recommendations.ts`定义三种strict稳定ref和canonical集合；`src/http/routes/project-mcp-recommendations.ts`仅接exact `/v1/projects/{projectId}/mcp-recommendations` GET/PUT。metadata candidate reader复用现provider/本人connector/Custom API安全GET，最多4并发、只校新增项；`src/infrastructure/postgres/project-mcp-recommendations.ts`提供有界当前读与parent锁CAS/no-op，不建receipt/journal/outbox。bootstrap当前Project准入同样走此有界reader，不走旧finder。
+
+canonical两列及具名 `scripts/evolve-project-mcp-recommendations-schema.mjs`仅在本run独占临时PG验证；public28.2/192和 `scripts/project-mcp-recommendations-public-contract.mjs`保完整28.1/190及SQL父proof，旧oracle不更新。新增具名tests通过现package脚本接入；三面D1记录当前事实、失效引用与自然幂等恢复。未正常DDL/服务切换，App消费者与Custom API运行映射后继OPEN。
+
 ## MCP 已绑定图标独立媒体读取（2026-10-26）
 
 现 `routes/mcp-personal.ts` 仅增 exact Server icon GET 分支，具名 `routes/mcp-server-icon.ts` 沿当前 Session/MCP read、原绝对预算/取消，调用正式 Server getter并在完整字节后鲜核绑定及准入；`storage/mcp-icon-transfer.ts` 使用每请求≤1MiB内存，不耦合artifact spool。唯一新code-first源 `src/application/mcp-server-icon.contract.ts` 由现private generator生成独立媒体OpenAPI；原Public27/命令profile/Schema保持。`test/mcp-server-icon-{http,contract}` 覆盖真实bootstrap/Storage loopback及完整父字节保护；非正常owner业务联调，正常配对归Root。

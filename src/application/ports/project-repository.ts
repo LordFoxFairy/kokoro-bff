@@ -1,3 +1,4 @@
+import type { ProjectMcpRecommendation, ProjectMcpRecommendations } from "../../domain/project/mcp-recommendations.js"
 import type { Project, ProjectInstructionRevision, Task } from "../../contracts/index.js"
 
 export type ProjectOwnerScope = Readonly<{
@@ -32,6 +33,8 @@ export type DeleteProjectResult =
 
 /** Port consumed by the BFF application layer. It contains no SQL or driver types. */
 export interface ProjectRepository {
+  projectMcpRecommendations(input: ProjectMcpRecommendationQuery): Promise<ProjectMcpRecommendations | null>
+  replaceProjectMcpRecommendations(input: ReplaceProjectMcpRecommendations): Promise<ReplaceProjectMcpRecommendationsResult>
   deleteProject(
     scope: ProjectOwnerScope,
     projectId: string,
@@ -51,3 +54,8 @@ export interface ProjectRepository {
   replaceProjectSkillSelection(command: ReplaceProjectSkillSelectionCommand): Promise<ReplaceProjectSkillSelectionResult>
   listTasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null>
 }
+
+export type ProjectMcpRecommendationQuery = ProjectOwnerScope & Readonly<{ projectId: string; signal: AbortSignal; deadlineAt: number }>
+export type ReplaceProjectMcpRecommendations = ProjectMcpRecommendationQuery &
+  Readonly<{ expectedStateVersion: string; recommendations: ProjectMcpRecommendation[] }>
+export type ReplaceProjectMcpRecommendationsResult = { kind: "replaced"; data: ProjectMcpRecommendations } | { kind: "not_found" | "precondition_failed" }

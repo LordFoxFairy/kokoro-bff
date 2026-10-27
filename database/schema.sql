@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS bff_project (
   slug TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   instruction TEXT,
+  recommended_mcp_refs JSONB NOT NULL DEFAULT '[]'::jsonb CONSTRAINT ck_bff_project_mcp_refs CHECK (jsonb_typeof(recommended_mcp_refs) = 'array' AND jsonb_array_length(recommended_mcp_refs) <= 16),
+  mcp_recommendations_state_version INTEGER NOT NULL DEFAULT 1 CONSTRAINT ck_bff_project_mcp_version CHECK (mcp_recommendations_state_version >= 1),
   selected_skill_installation_ids TEXT[] NOT NULL DEFAULT '{}' CONSTRAINT ck_bff_project_skill_selection CHECK (cardinality(selected_skill_installation_ids) <= 16 AND array_position(selected_skill_installation_ids, NULL) IS NULL),
   deleted_at TIMESTAMPTZ(3),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),

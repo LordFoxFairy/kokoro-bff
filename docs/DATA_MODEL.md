@@ -1,3 +1,18 @@
+## PROJECT-MCP-RECOMMENDATIONS-D1：本人项目推荐配置模型／演进计划（2026-10-27，本地候选、未正常DDL）
+
+唯一owner为BFF Project，canonical为本仓`database/schema.sql`；不新增owner、推荐表、跨owner FK、外部元数据镜像、receipt/journal/outbox或成员权限事实。Root选定三种闭合refs：provider/provider_key、mcp_connector/connector_id、custom_api/profile_id；按kind+ID去重并ASCII排序，最多16，`[]`为明确空配置。私有ref只属于当前可信subject，未来共享另走Project ACL，不转移凭据。
+
+| 本地canonical新增至 `bff_project` 的列 | 约束／语义 |
+| --- | --- |
+| `recommended_mcp_refs JSONB NOT NULL DEFAULT '[]'::jsonb` | DB至少约束array且length≤16；strict领域codec校验每个closed kind/ID、唯一和canonical顺序，坏持久值fail closed，不返回空成功 |
+| `mcp_recommendations_state_version INTEGER NOT NULL DEFAULT 1` | CHECK≥1；wire为canonical十进制string，独立CAS，不借Project updated_at／Skills列／Platform pin版本 |
+
+与现tenant_id/owner_id/project_id/deleted_at同row，不加索引（无推荐项反向检索用例）。GET读原refs+version，不连owner表或解析可用性；已失效引用仍保留供本人查看/显式删除。PUT先读current/version，按差集只校新增ref的现Platform exact可见性，不持行锁调用owner；之后parent行`FOR UPDATE`重核tenant/owner/exactID/未删与expected版本。CAS不符拒绝412；相同canonical集合不UPDATE、不增版；真正变更才更新两列和updated_at、版本+1，MAX拒绝变化。与现Project删除共享parent锁，提交全成或回滚；没有推荐命令回执写。COMMIT丢ACK不重试写，通过后继GET显示当前配置（同值不是原命令ACK）。外部读取与本库提交不宣称跨库原子性，偏好不授运行权限。
+
+**具名schema演进，不在本轮执行。** `scripts/apply-schema.mjs`仍只空`kokoro_bff`，canonical加入两列后用于fresh安装；已有owner库另授 `scripts/evolve-project-mcp-recommendations-schema.mjs` 的check/apply。从唯一canonical提取目标两列／CHECK，冻结当前精确旧bff_project定义／相关catalog摘要；在owner schema与原advisory锁下仅接受旧→current或current noop，其他drift／shadow relation／错schema拒绝。只加列及具名CHECK，不手写第二canonical、不建migration ledger，不批量UPDATE旧row、不重建/清表；PG fast default旧事实语义为[]／1，但须实证旧row/xmin及其他owner/表/索引/触发器/约束未变。有限表锁/statement/20秒总预算、取消及exact连接退休沿现具名evolution策略；COMMIT发出丢ACK记unknown，后继仅check确认。
+
+演进代码和canonical已在Root业务写区实现，仅运行自有隔离PG；隔离PG验fresh安装、精确父expand、current noop、drift/半装/错schema拒绝、取消/锁超时/COMMIT未知、旧事实/xmin不动。业务PG验空/三种ref、同值no-op、CAS双写/删除竞争、保留失效ref不调用owner、新增差集验证后CAS漂移拒绝；不触碰正常库。Custom API推荐可持久化但当前无Run Acquire/tool映射，模型不伪造Connection或execution_ready。App/Agent运行选择和授权数据仍原owner，本片runtime缺口保留OPEN。
+
 ## 2026-10-26 MCP 已绑定图标读取（无数据模型变更）
 
 独立 Server icon GET 仅在请求内鲜读 Platform 已授权绑定／短引用并从现 Storage origin 验证≤1 MiB字节；无 BFF 表、缓存、镜像、签名URL持久化或新配置。绑定／回收/receipt仍归 Platform，字节与扫描归 Storage；canonical schema 原字节保持。

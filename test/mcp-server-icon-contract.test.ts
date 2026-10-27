@@ -1,3 +1,4 @@
+import { restoreProjectMcpRecommendationsSchema } from "../scripts/project-mcp-recommendations-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
@@ -45,7 +46,12 @@ test("the independent media publication leaves the full existing public, command
   ]) {
     const parent = execFileSync("git", ["show", `6f7474ae97edbded5d43a5e9d76eaa3b2f4b3a01:${path}`])
     const bytes = readFileSync(new URL(`../${path}`, import.meta.url))
-    const current = path === "contract/openapi/v1/openapi.yaml" ? restorePublic27ToolDisplayContract(bytes.toString("utf8")) : bytes
+    const current =
+      path === "contract/openapi/v1/openapi.yaml"
+        ? restorePublic27ToolDisplayContract(bytes.toString("utf8"))
+        : path === "database/schema.sql"
+          ? restoreProjectMcpRecommendationsSchema(bytes.toString("utf8"))
+          : bytes
     assert.equal(createHash("sha256").update(current).digest("hex"), createHash("sha256").update(parent).digest("hex"), path)
   }
 })

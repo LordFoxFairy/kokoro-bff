@@ -1,3 +1,4 @@
+import { restoreProjectMcpRecommendationsSchema } from "../../scripts/project-mcp-recommendations-public-contract.mjs"
 // The current project-list patch is checked against raw Public21.1.1 in system-http-contract.test.mjs.
 // This suite retains its exact historical Public19.0.0 normalization and parent oracles.
 import { restorePublic21ModelConfigurationContract, modelConfigurationParentBaseline } from "../../scripts/model-configuration-public-contract.mjs"
@@ -90,7 +91,7 @@ test("integration proof rejects permissions, aliases, extra blocks and unrelated
 })
 
 test("merged canonical SQL adds only archive, execution binding, ordered Message parts and the approved non-retryable settlement failure", async () => {
-  const schema = await readFile(new URL("../../database/schema.sql", import.meta.url), "utf8")
+  const schema = restoreProjectMcpRecommendationsSchema(await readFile(new URL("../../database/schema.sql", import.meta.url), "utf8"))
   const parent = await readFile(new URL("../../contract/tests/closure-local.schema.sql.snapshot", import.meta.url), "utf8")
   const settings = await readFile(new URL("../../contract/tests/settings-main.schema.sql.snapshot", import.meta.url), "utf8")
   assert.equal(digest(parent), "c292decc4e962caaed14f7b92ab139cc74b4c5d5a431584f6b1c45975d48296d")

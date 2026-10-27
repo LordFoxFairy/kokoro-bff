@@ -1,3 +1,20 @@
+## PROJECT-MCP-RECOMMENDATIONS-D1：项目推荐配置 GET／PUT（2026-10-27，本地候选、未正常激活）
+
+Root已选BFF Project owner和完整三种ref，不再采用D0 provider-only协议。只管理现本人Project偏好，不是definition发布／grant／Connection创建；自然幂等配置PUT不要求Idempotency-Key，不增加receipt/journal/outbox。当前canonical源码候选Public28.2／192操作；固定28.1全文／190顺序parent与两列完整SQL父逆证，源码尚未提交／正常激活，不冒App消费者已接通。
+
+| operation | 闭合输入／结果 | 语义 |
+| --- | --- | --- |
+| GET `/v1/projects/{projectId}/mcp-recommendations`，`getProjectMcpRecommendations` | 无query/body/Idempotency-Key；200 `{data:{project_id,recommendations,state_version}}` | current Session+exact本人未删除Project；返回已保存refs，即使已不可见，不解析成可用授权 |
+| PUT 同路径，`replaceProjectMcpRecommendations` | strict JSON `{expected_state_version,recommendations}`；无query/Idempotency-Key；200同GET形状 | current Session+exact本人Project条件替换；只对新增ref复用对应现owner读取资格验证，无部分写／自动重发 |
+
+`recommendations`是0..16个唯一闭合oneOf：`{kind:"provider",provider_key}`、`{kind:"mcp_connector",connector_id}`、`{kind:"custom_api",profile_id}`；对应ID必有且其他变体字段/额外键/null拒绝。provider key为`[a-z0-9][a-z0-9._-]{0,63}`；connector/profile ID为`[A-Za-z0-9][A-Za-z0-9._:-]{0,190}`。按kind ASCII再ID ASCII排序输出／保存；同kind+ID重复拒绝，不用display_name／URL／private key前缀猜kind。`[]`明确清空，缺字段不等于清空。state/expected均canonical十进制字符串`1..2147483647`、initial `1`。expected与锁中current不符412；相同canonical refs且CAS匹配时200原当前版、无写；真正变化才+1，MAX的变化拒绝412。不使用If-Match／ETag第二CAS。
+
+新增差集基于首次权威current refs/version计算；若expected不符先拒绝、零owner调用。provider通过现exact personal provider GET；mcp_connector通过现exact本人connector GET并要求type=mcp／非revoked；custom_api通过现exact本人Custom API GET。保留的旧ref不重新验证、不因失效被隐式删除；新增不可见/撤销ref拒绝，当前owner timeout/错误是依赖失败而非缺失。校验只读，不访问secret、创建连接或OAuth；owner I/O期间不持PG锁，末端parent锁必须重新校CAS／主体／删除状态，变化即412而非重算后覆盖。目录／connector的当前MCP read和Custom API原Session/owner read边界均保留；不新增Platform/IAM授权。实际可用与执行另验，GET/PUT不输出execution_ready、配置secret或运行承诺。
+
+成功200 data envelope、no-store/x-request-id；GET无body framing，PUT JSON≤16KiB，响应≤64KiB，原10秒总预算从admission/body至owner读取、SQL和出口重验，取消贯穿、无晚响应提交视图。规范permission为`project.read`／`project.update`且保持本人owner范围；idempotency metadata分别`none`／`natural`，不声明命令回执。当前Session/service/tenant/action准入错误沿既有边界；400 `project_mcp_recommendations_request_invalid`（闭集/请求头/格式）、404 `project_not_found`（不可见/删除/非exact Project）、412 `project_mcp_recommendations_precondition_failed`（CAS／新增ref不可见或撤销／版本耗尽）、502 `project_mcp_recommendations_response_invalid`（坏owner/表示）、503 `project_mcp_recommendations_dependency_unavailable`（依赖/期限/unknown）；503 retryable=true但不自动PUT，其他本操作自有错误retryable=false。不新增idempotency_conflict或永久receipt端点。正式machine须固化这些status/code/bit与原准入tuple，message不作分支。
+
+网络失败／取消后的提交结果不推测。用户显式GET核当前配置：等于目标只能说“当前配置已是该值”，不认定原保存ACK；不同保草稿与行内冲突，经用户基于fresh state_version明确再保存。GET失败保原草稿，不生成新命令／自动覆盖。后台不对MessageCreate缺省或空 `selected_mcp_connection_ids` 默认继承。App仅pristine新项目draft将provider/mcp_connector解析到当前本人available Connection；多匹配用户明确选择、显式空选优先、原16个/4096bytes限制不变。Custom API ref仅配置，当前无Run Acquire/tool映射、不视为可执行；runtime缺口仍OPEN。原Platform发布pin与其所有receipt政策原样保留。
+
 ## 2026-10-26 Public28 / Agent8 工具展示闭集（源码候选，未正常激活）
 
 正式目标为唯一 canonical Public28.0.0／187 operations，不新增 HTTP endpoint 或数据 Schema；Root 已授固定正式 Agent8 `ff36759214ff5d1e015cd9e288abbcb2d8e0c46d` 的 Git 原件消费与正规生成。Agent HTTP8.0.0 OpenAPI SHA256 `93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff`、provenance SHA256 `4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f`，本地 BFF 候选已固定此 HTTP8 pin；正常组合未因本片切换，不将候选路径或浮动源码当正式依赖。

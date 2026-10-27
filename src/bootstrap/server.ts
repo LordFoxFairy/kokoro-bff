@@ -1,3 +1,4 @@
+import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
 import { projectResourceReadRoute } from "../http/routes/project-resource-read.js"
 import { projectResourceDeleteRoute } from "../http/routes/project-resource-delete.js"
 import { mcpProjectPublicationOperation, mcpProjectPublicationRoute } from "../http/routes/mcp-project-publication.js"
@@ -310,6 +311,8 @@ async function handle(
     return
   }
   const isConnectorList = !browserPrivateMcp && isConnectorListRequest(businessPath, request.method ?? "GET")
+  const isProjectMcpRecommendationsPath =
+    !browserPrivateMcp && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "mcp-recommendations"
   const isProjectSkillSelectionPath =
     composition.routeHandler === undefined && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "skill-selection"
   const isProjectInstallationPath = businessPath[0] === "projects" && businessPath[2] === "skill-installations"
@@ -336,7 +339,13 @@ async function handle(
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
   }
-  const hasMcpBudget = mcpAction !== null || isMcpPersonalOperation || isMcpProviderAdminOperation || isMcpPackageAdminOperation || isCustomApiOperation
+  const hasMcpBudget =
+    isProjectMcpRecommendationsPath ||
+    mcpAction !== null ||
+    isMcpPersonalOperation ||
+    isMcpProviderAdminOperation ||
+    isMcpPackageAdminOperation ||
+    isCustomApiOperation
   if (hasMcpBudget) {
     startMcpRequestBudget(request, isMcpPackageAdminOperation ? 20_000 : 10_000)
     response.setHeader("cache-control", "no-store")
@@ -568,7 +577,13 @@ async function handle(
     await customApiRoute(request, response, composition, admission.context, id, businessPath)
     return
   }
-  if (hasMcpBudget && !isMcpPersonalOperation && !isMcpProjectPublication && (request.method !== "GET" || businessPath[0] === "self")) {
+  if (
+    hasMcpBudget &&
+    !isMcpPersonalOperation &&
+    !isMcpProjectPublication &&
+    !isProjectMcpRecommendationsPath &&
+    (request.method !== "GET" || businessPath[0] === "self")
+  ) {
     if (!response.destroyed && !response.writableEnded)
       send(response, 503, failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", id))
     return
@@ -751,6 +766,40 @@ async function handle(
     return
   }
 
+  if (isProjectMcpRecommendationsPath) {
+    await projectMcpRecommendationsRoute(
+      request,
+      response,
+      context,
+      businessPath,
+      composition.businessStore,
+      composition,
+      async (mcpRead, signal, deadlineAt) => {
+        const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+        if (!fresh.ok) throw new ProjectMcpRecommendationsAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
+        if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+          throw new ConnectError("Project not found", Code.NotFound)
+        if (mcpRead) {
+          const checked = await authorizeMcpAction(composition.mcpAuthorization, fresh, "read", signal)
+          if (!checked.ok) throw new ProjectMcpRecommendationsAdmissionError(checked.status, checked.code, checked.retryAfter)
+        }
+        signal.throwIfAborted()
+        if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+        const project = await composition.businessStore.services.projects.mcpRecommendations({
+          tenantId: context.identity.namespace,
+          subjectId: context.identity.userId,
+          projectId: businessPath[1] ?? "",
+          signal,
+          deadlineAt,
+        })
+        signal.throwIfAborted()
+        if (!project || project.project_id !== businessPath[1]) throw new ConnectError("Project not found", Code.NotFound)
+        return project.project_id
+      },
+    )
+    return
+  }
+
   if (isProjectSkillSelectionPath) {
     await projectSkillSelectionRoute(request, response, context, composition.businessStore, composition.installationClient, (signal) =>
       currentProjectAccess(businessPath[1] ?? "", signal),
@@ -768,8 +817,14 @@ async function handle(
     return
   }
 
-  if (composition.routeHandler === undefined && businessPath[0] === "projects" && businessPath[2] === "resources" && businessPath[1] !== undefined && businessPath[3] !== undefined) {
-    if (request.method === "GET" && (businessPath.length === 4 || businessPath.length === 5 && businessPath[4] === "download")) {
+  if (
+    composition.routeHandler === undefined &&
+    businessPath[0] === "projects" &&
+    businessPath[2] === "resources" &&
+    businessPath[1] !== undefined &&
+    businessPath[3] !== undefined
+  ) {
+    if (request.method === "GET" && (businessPath.length === 4 || (businessPath.length === 5 && businessPath[4] === "download"))) {
       await projectResourceReadRoute(request, response, config, context, businessPath[1], businessPath[3], businessPath.length === 5, composition.businessStore)
       return
     }

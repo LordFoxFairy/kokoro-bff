@@ -109,6 +109,12 @@ function expectedIdempotency(operation) {
   if (TEAM_OWNER_DELEGATED_MUTATIONS.has(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)) return "none"
   if (
     operation.method === "PUT" &&
+    operation.path === "/v1/projects/{projectId}/mcp-recommendations" &&
+    operation.fields.get("operationId") === "replaceProjectMcpRecommendations"
+  )
+    return "natural"
+  if (
+    operation.method === "PUT" &&
     operation.path === "/v1/preferences/personalization" &&
     operation.fields.get("operationId") === "replaceSelfPersonalization"
   )

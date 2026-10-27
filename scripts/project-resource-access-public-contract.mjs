@@ -1,3 +1,4 @@
+import { restorePublic281McpRecommendationsContract, recommendationsParentBaseline } from "./project-mcp-recommendations-public-contract.mjs"
 // Build/test-only strict additive Project-resource inverse; never imported by production.
 import { createHash } from "node:crypto"
 const hash = (value) => createHash("sha256").update(value).digest("hex")
@@ -7,6 +8,7 @@ const blocks = [
   ["SCHEMAS", "a23e8f4b6f4efcaad3b53c4bdd54544b9556c8a5798462748f13791526bebf6d"],
 ]
 export function restorePublic28ProjectResourceContract(source) {
+  source = restorePublic281McpRecommendationsContract(source)
   if (!/^  version: 28\.1\.0$/mu.test(source)) return source
   let parent = source
   for (const [kind, digest] of blocks) {
@@ -23,6 +25,7 @@ export function restorePublic28ProjectResourceContract(source) {
   return parent
 }
 export function projectResourceParentBaseline(inventory) {
+  inventory = recommendationsParentBaseline(inventory)
   if (inventory.length !== 190) return inventory
   if (hash(JSON.stringify(inventory)) !== "4f0a6670c897a6d5bae05fc3a5bd86b65327698f3252861e075bd25feeb27ae8")
     throw Error("Project resource current inventory drift")

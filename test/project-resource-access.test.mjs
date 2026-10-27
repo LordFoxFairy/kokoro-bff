@@ -1,3 +1,4 @@
+import { recommendationsParentBaseline } from "../scripts/project-mcp-recommendations-public-contract.mjs"
 import { AssetOrigin } from "../src/generated/storage-connect/kokoro/storage/v3/storage_pb.ts"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
@@ -208,7 +209,9 @@ test("Public28.1 restores the complete Public28 bytes and ordered census without
     await import("../scripts/project-resource-access-public-contract.mjs")
   const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
   assert.equal(createHash("sha256").update(restorePublic28ProjectResourceContract(source)).digest("hex"), projectResourcePublic28Sha256)
-  const inventory = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+  const inventory = recommendationsParentBaseline(
+    JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations,
+  )
   assert.equal(inventory.length, 190)
   assert.equal(projectResourceParentBaseline(inventory).length, 187)
   for (const tamper of [

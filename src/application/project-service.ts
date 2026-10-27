@@ -1,3 +1,4 @@
+import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations } from "./ports/project-repository.js"
 import { createHash } from "node:crypto"
 
 import type { Project, ProjectInstructionRevision, Task } from "../contracts/index.js"
@@ -6,6 +7,13 @@ import type { DeleteProjectResult, ProjectDeletionResource, ProjectOwnerScope, P
 /** Project use cases. HTTP handlers depend on this service, not on SQL adapters. */
 export class ProjectService {
   public constructor(private readonly repository: ProjectRepository) {}
+
+  public mcpRecommendations(input: ProjectMcpRecommendationQuery) {
+    return this.repository.projectMcpRecommendations(input)
+  }
+  public replaceMcpRecommendations(input: ReplaceProjectMcpRecommendations) {
+    return this.repository.replaceProjectMcpRecommendations(input)
+  }
 
   public rename(scope: ProjectOwnerScope, projectId: string, name: string, key: string, signal: AbortSignal): Promise<RenameProjectResult> {
     return this.repository.renameProject({
