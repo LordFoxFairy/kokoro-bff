@@ -5,6 +5,7 @@ import { projectPinId, projectPinInstant } from "../../domain/project/pin.js"
 import { parseProjectPinInput, parseProjectPinQuery, encodeProjectPinCursor } from "../project-pin-input.js"
 import { readBodyBeforeDeadline, rawHeaderCount } from "../request-body.js"
 import { send } from "../response.js"
+import { failure } from "../../contracts/index.js"
 
 export class ProjectPinAdmissionError extends Error {
   constructor(
@@ -50,8 +51,7 @@ export async function projectPinRoute(
         .finally(() => controller.signal.removeEventListener("abort", stop))
     })
   const fail = (status: number, code: string, retryAfter?: string) => {
-    if (!response.destroyed && !response.writableEnded)
-      send(response, status, { error: { code, message: "Project pin request failed", retryable: status === 503 || status === 429 } }, retryAfter)
+    if (!response.destroyed && !response.writableEnded) send(response, status, failure(code, "Project pin request failed", context.requestId), retryAfter)
   }
   const invalid = (): never => {
     throw new Error("project_pin_request_invalid")

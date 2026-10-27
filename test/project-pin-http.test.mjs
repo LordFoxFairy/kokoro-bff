@@ -1,8 +1,17 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { readFile } from "node:fs/promises"
+import { load } from "js-yaml"
+import { fromJSONSchema } from "zod"
 import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
+const spec = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+// Compile the published envelope graph; do not introduce a competing error DTO.
+const errorEnvelope = fromJSONSchema(
+  JSON.parse(JSON.stringify({ $ref: "#/components/schemas/ErrorEnvelope", $defs: spec.components.schemas }).replaceAll("#/components/schemas/", "#/$defs/")),
+)
+
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
@@ -51,13 +60,13 @@ async function fixture(t) {
     server.closeAllConnections()
     await new Promise((r) => server.close(r))
   })
-  const request = async (path, body, extra = {}) => {
+  const request = async (path, body, extra = {}, method) => {
     const r = await fetch(
       `http://127.0.0.1:${server.address().port}${path}`,
       body === undefined
-        ? { headers: { ...headers, ...extra } }
+        ? { method: method ?? "GET", headers: { ...headers, ...extra } }
         : {
-            method: "PUT",
+            method: method ?? "PUT",
             headers: { ...headers, "content-type": "application/json", ...extra },
             body: typeof body === "string" ? body : JSON.stringify(body),
           },
@@ -107,4 +116,48 @@ test("a post-write Session revocation never emits a false success ACK or retries
   assert.equal(result.status, 403)
   assert.equal(result.body.data, undefined)
   assert.equal(f.calls.filter(([kind]) => kind === "write").length, 1)
+})
+
+test("all pin failures and initial Session denials use the canonical error envelope", async (t) => {
+  const check = (result, status) => {
+    assert.equal(result.status, status)
+    const parsed = errorEnvelope.safeParse(result.body)
+    assert.equal(parsed.success, true, parsed.success ? undefined : JSON.stringify(parsed.error.issues))
+    assert.deepEqual(result.body.meta, { request_id: "pin-test" })
+    assert.equal(result.headers.get("x-request-id"), "pin-test")
+    assert.deepEqual(Object.keys(result.body.error).sort(), ["code", "message"])
+  }
+  assert.equal(errorEnvelope.safeParse({ error: { code: "project_pin_request_invalid", message: "old malformed error", retryable: false } }).success, false)
+  const invalid = await fixture(t)
+  check(await invalid.request("/v1/projects/project/pin", { is_pinned: null }), 400)
+  check(await invalid.request("/v1/self/project-pins?project_id=foreign"), 404)
+  check(await invalid.request("/v1/projects/project/pin"), 405)
+  check(await invalid.request("/v1/self/project-pins", undefined, { authorization: "Bearer wrong" }), 401)
+  for (const status of [401, 403, 429, 503]) {
+    const denied = await fixture(t)
+    denied.admission.deny("pin-session", { ok: false, status, code: "fixture_admission_denied", ...(status === 429 ? { retryAfter: "7" } : {}) })
+    const result = await denied.request("/v1/self/project-pins")
+    check(result, status)
+    if (status === 429) assert.equal(result.headers.get("retry-after"), "7")
+  }
+  for (const status of [403, 429, 503]) {
+    const f = await fixture(t)
+    const original = f.projects.listPins
+    f.projects.listPins = async (input) => {
+      const result = await original(input)
+      f.admission.deny("pin-session", { ok: false, status, code: "fixture_admission_denied", ...(status === 429 ? { retryAfter: "7" } : {}) })
+      return result
+    }
+    const result = await f.request("/v1/self/project-pins")
+    check(result, status)
+    if (status === 429) assert.equal(result.headers.get("retry-after"), "7")
+  }
+  const unavailable = await fixture(t)
+  unavailable.projects.listPins = async () => {
+    throw new Error("fixture private database failure")
+  }
+  const result = await unavailable.request("/v1/self/project-pins")
+  check(result, 503)
+  assert.equal(result.body.error.code, "project_pin_unavailable")
+  assert.doesNotMatch(JSON.stringify(result.body), /fixture private database failure/u)
 })

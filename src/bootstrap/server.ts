@@ -537,7 +537,6 @@ async function handle(
         isProjectRenamePath ||
         isProjectDeletePath ||
         isProjectDeletionStatusPath ||
-        isProjectPinPath ||
         isPersonalizationPath ||
         isPersonalKnowledgePath
       ) {
