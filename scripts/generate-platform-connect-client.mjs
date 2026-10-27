@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "688bc1e3d74c18c54ca85bc72d8e4ce242ac995a"
+const ownerCommit = "f29428f6e6d23e9f35642fe3de5463472bc1f873"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-connect"
@@ -15,7 +15,7 @@ const manifestPath = "contract/dependencies/platform-connect.json"
 
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "1081183bae7a8377fb9f245fbc31612c88421a801f0c454a2d27702695e88409",
+  "kokoro/platform/v1/platform_runtime.proto": "26bd1cc61f34e3de8b56359985896d48a1232363b44fd681084a7cd0f1543b2d",
   "kokoro/storage/v3/storage.proto": "b84a2fb1fd9c6e8c16e15a29cafbc33de670f40f703f3f33ef27652a0237a629",
   "kokoro/platform/v1/mcp_package_admin.proto": "60b6778cbb3024f09184bbfc1e06e124191a6583ad892e48e0bcb3c4d0667b31",
 }
@@ -47,10 +47,10 @@ const artifactDigests = {
   "errors/command-receipt-v1.json": "d82a4b30039adc0754fe1bcc43738fc68be2cd3cbef0e710d14089f55bc0ac68",
   "auth/bff-service-auth-v1.json": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef",
   "execution-operations/skill-installation-update-v1.json": "9b75d679665f42eb48d89e9c6fe99c39f2f019894db4a54de15e9f97622dd194",
-  "descriptor/platform-v1.binpb": "89d0f77d7f775231ad0fcb3b0987fbe0f303982c5271fd9cd689633eaafd53d8",
+  "descriptor/platform-v1.binpb": "e391c377d1c156caf855ab46d9baf2ff814a41c17fc9cccb7f85ace4f7b71b5c",
   "execution-operations/custom-api-v1.json": "eca45ebd0f3c31d48cc174256dc23bda22de288ded91aa12198b1a2a37516a38",
   "execution-operations/mcp-private-server-v1.json": "066505d4a13cb6fd7a5f625b07eaf5f784b215db2a8584041f14da8ffc98eda1",
-  "provenance.json": "659a77e9fcd5e9d6ff48429d3d7d831fcd000b6f3ebf737439fce77b309eae92",
+  "provenance.json": "dd31fbcbbda62bbfbf70f11d39ae0b34d2190cf1be97ae9cf098a84a78f0c0fa",
   "execution-operations/skill-acquisition-v1.json": "7c9cf9ed456199d4acd3d25f29154c8f098ed8866554476d37f058add0d78028",
   "openapi/platform-http.openapi.json": "085e1367f69c34edc6b80cbfb448596f36039f9857cee3bd5a407befbc295361",
   "mcp-package-admin/v1/profile.json": "d4b29dba0a5a6df8a0f36a654fcb81d5e95381568c0f5afd0bd104984366be75",
@@ -73,6 +73,11 @@ const artifactDigests = {
   "execution-operations/mcp-runtime-v1.json": "c35cc7adaeeca98f88449a3d51b08db73071cde6007bbe021030ec5328442b90",
   "descriptor/platform-mcp-prepare-receipt-parents.json": "77b59d34550b69703bcbf2c02afdf88ba9d86afd0938524a5ca722e9ed586406",
   "descriptor/platform-mcp-prepare-receipt-delta.json": "2edf9b9273e4d05a1aa9a69f0335e13e33b7a8abf24ec2f184892244436c6b4a",
+  "execution-operations/mcp-prepare-rejection-v1.json": "20ffcf5184ba4c14266eae73e27e0ca595ba3ba204418eb458e226afe5fae2b9",
+  "descriptor/platform-mcp-prepare-rejection-parents.json": "d0fa1865eadd1b976ae9872be046e5ead72410ed6613a34b3fa2703e573129a1",
+  "descriptor/platform-mcp-prepare-rejection-parent.platform_runtime.proto.snapshot": "1081183bae7a8377fb9f245fbc31612c88421a801f0c454a2d27702695e88409",
+  "descriptor/platform-mcp-prepare-rejection-parent.platform-v1.binpb.snapshot": "89d0f77d7f775231ad0fcb3b0987fbe0f303982c5271fd9cd689633eaafd53d8",
+  "descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot": "2814a928d324a529c3ad6d27c98be9e21d30584c6a0bc22795e40c98ab289fa0",
 }
 // Independently pinned committed publication profile; the existing broad bundle remains unchanged.
 const publicationOwnerCommit = "dd8d536a28059cbdbe0674debc47bf28d039fb47"
@@ -91,10 +96,10 @@ async function verifyPublication() {
     assert.equal(sha256(await readFile(path.join(root, publicationVendor, file))), digest, `publication artifact drifted: ${file}`)
 }
 
-const provenanceCombinedSha256 = "f8183f49aa82b8ee7079b02d55bedde5b1c7fbbd28789fe5fd2a96ea79b4cc9d"
+const provenanceCombinedSha256 = "8e07bbef6ae8bcedcbbfe37e4b543bccde7e4ba85815871796c30d4894affa5e"
 const ownerGenerated = {
   path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
-  sha256: "2814a928d324a529c3ad6d27c98be9e21d30584c6a0bc22795e40c98ab289fa0",
+  sha256: "d5b244938c9b5e0ef9043414954090649ed62497072768c6186c53407caf1e2c",
 }
 const generatedFiles = [
   "command-receipt-errors.ts",
@@ -390,6 +395,23 @@ async function manifestFor(directory) {
           sha256: artifactDigests["descriptor/platform-mcp-prepare-receipt-parents.json"],
         },
         { path: "contract/descriptor/platform-mcp-prepare-receipt-delta.json", sha256: artifactDigests["descriptor/platform-mcp-prepare-receipt-delta.json"] },
+        { path: "contract/execution-operations/mcp-prepare-rejection-v1.json", sha256: artifactDigests["execution-operations/mcp-prepare-rejection-v1.json"] },
+        {
+          path: "contract/descriptor/platform-mcp-prepare-rejection-parents.json",
+          sha256: artifactDigests["descriptor/platform-mcp-prepare-rejection-parents.json"],
+        },
+        {
+          path: "contract/descriptor/platform-mcp-prepare-rejection-parent.platform_runtime.proto.snapshot",
+          sha256: artifactDigests["descriptor/platform-mcp-prepare-rejection-parent.platform_runtime.proto.snapshot"],
+        },
+        {
+          path: "contract/descriptor/platform-mcp-prepare-rejection-parent.platform-v1.binpb.snapshot",
+          sha256: artifactDigests["descriptor/platform-mcp-prepare-rejection-parent.platform-v1.binpb.snapshot"],
+        },
+        {
+          path: "contract/descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot",
+          sha256: artifactDigests["descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot"],
+        },
       ],
       provenance: {
         path: "contract/provenance.json",

@@ -54,6 +54,73 @@ function connectorPublicFault(value: Fault): Fault {
   return { status: value.status, code: value.code, retryable: value.retryable }
 }
 
+/** Prepare-only outcome facts, never a grant to retry, create a key or prepare. */
+export const PREPARE_OUTCOME_FAULT_POLICY = {
+  profile: "mcp-prepare-outcomes",
+  version: "1.0.0",
+  owner: "kokoro-bff",
+  visibility: "browser-private",
+  operations: {
+    prepareServer: ["rejected"],
+    getMcpPrepareReceipt: ["rejected", "execution_fenced"],
+  },
+  automatic_retries: false,
+  new_command_authorized: false,
+  prepare_authorized: false,
+  faults: {
+    rejected: {
+      status: 412,
+      code: "mcp_personal_prepare_rejected",
+      retryable: false,
+      outcome: "definite_rejection",
+      retirement: "exact_failed",
+    },
+    execution_fenced: {
+      status: 409,
+      code: "mcp_personal_prepare_execution_fenced",
+      retryable: false,
+      outcome: "unknown",
+      local_execution: "fenced",
+      retirement: "explicit_stop_waiting",
+      automatic_intent_retirement_authorized: false,
+    },
+  },
+} as const
+
+/** A single closed typed detail and exact RPC code claim these operation-local facts. */
+export function mcpPrepareOutcomeFault(error: unknown, operation: "prepareServer" | "getMcpPrepareReceipt" | "other"): Fault | null {
+  if (!(error instanceof ConnectError) || error.details.length === 0) return null
+  const invalid = () => connectorPublicFault(CONNECTOR_COMMAND_FAULT_POLICY.mcp.invalid)
+  try {
+    const details = error.findDetails(PersonalMcpErrorDetailSchema)
+    // Unrelated/legacy details retain their existing mapping; this extension
+    // owns only a claim of one of the two newly published Prepare facts.
+    if (
+      !details.some(
+        (detail) => detail.reason === PersonalMcpErrorReason.PREPARE_CONNECTION_REJECTED || detail.reason === PersonalMcpErrorReason.PREPARE_EXECUTION_FENCED,
+      )
+    )
+      return null
+    const detail = details[0]
+    if (
+      error.code !== Code.FailedPrecondition ||
+      error.metadata.has("x-kokoro-error-code") ||
+      error.details.length !== 1 ||
+      details.length !== 1 ||
+      detail === undefined ||
+      detail.$unknown?.length
+    )
+      return invalid()
+    if (detail.reason === PersonalMcpErrorReason.PREPARE_CONNECTION_REJECTED)
+      return operation !== "other" ? connectorPublicFault(PREPARE_OUTCOME_FAULT_POLICY.faults.rejected) : invalid()
+    if (detail.reason === PersonalMcpErrorReason.PREPARE_EXECUTION_FENCED)
+      return operation === "getMcpPrepareReceipt" ? connectorPublicFault(PREPARE_OUTCOME_FAULT_POLICY.faults.execution_fenced) : invalid()
+    return invalid()
+  } catch {
+    return null
+  }
+}
+
 /** Only these two connector boundaries consume this profile; it is not an error registry. */
 export function connectorCommandFault(error: unknown, surface: "mcp" | "custom_api", mutation: boolean): Fault | null {
   if (!(error instanceof ConnectError)) return null
@@ -69,6 +136,8 @@ export function connectorCommandFault(error: unknown, surface: "mcp" | "custom_a
 
 /** Only the named Prepare lookup may consume these existing receipt markers on a read. */
 export function mcpPrepareReceiptFault(error: unknown): Fault {
+  const outcome = mcpPrepareOutcomeFault(error, "getMcpPrepareReceipt")
+  if (outcome !== null) return outcome
   if (!(error instanceof ConnectError) || error.metadata.get("x-kokoro-error-code") === null) return mcpPersonalFault(error)
   const invalid = () => connectorPublicFault(CONNECTOR_COMMAND_FAULT_POLICY.mcp.invalid)
   if (error.details.length !== 0) return invalid()

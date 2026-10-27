@@ -23,7 +23,12 @@ import type {
   McpPersonalServerMutation,
   McpPersonalServerOperation,
 } from "../../infrastructure/clients/platform/mcp-personal-server-binding.js"
-import { connectorCommandFault, mcpPersonalPreconditionFault, mcpPrepareReceiptFault } from "../../infrastructure/clients/platform/connector-command-fault.js"
+import {
+  connectorCommandFault,
+  mcpPersonalPreconditionFault,
+  mcpPrepareReceiptFault,
+  mcpPrepareOutcomeFault,
+} from "../../infrastructure/clients/platform/connector-command-fault.js"
 import { validateMcpPersonalPrepareReceipt } from "../../infrastructure/clients/platform/mcp-personal-server-response.js"
 import { mcpPrepareReceiptKeySchema, mcpPrepareReceiptQuerySchema } from "../mcp-prepare-receipt.contract.js"
 import { parseMcpPersonalServer } from "../mcp-personal-server-input.js"
@@ -412,7 +417,8 @@ export async function mcpPersonalRoute(
           }
         : receiptLookup
           ? mcpPrepareReceiptFault(error)
-          : (connectorCommandFault(error, "mcp", mutation) ??
+          : (mcpPrepareOutcomeFault(error, operation === "prepareServer" ? "prepareServer" : "other") ??
+            connectorCommandFault(error, "mcp", mutation) ??
             (serverOperation || authorization
               ? (mcpPersonalPreconditionFault(error) ?? mcpPersonalFault(error, false, mutation))
               : mcpPersonalFault(error, input.cursor !== undefined, mutation)))

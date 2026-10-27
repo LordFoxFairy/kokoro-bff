@@ -14,7 +14,7 @@ import {
   MCP_PROJECT_PUBLICATION_POLICY,
   mcpProjectPublicationError,
 } from "../src/application/mcp-project-publication.contract.ts"
-import { CONNECTOR_COMMAND_FAULT_POLICY } from "../src/infrastructure/clients/platform/connector-command-fault.ts"
+import { CONNECTOR_COMMAND_FAULT_POLICY, PREPARE_OUTCOME_FAULT_POLICY } from "../src/infrastructure/clients/platform/connector-command-fault.ts"
 import {
   MCP_PREPARE_RECEIPT_POLICY,
   mcpPrepareReceiptQuerySchema,
@@ -237,11 +237,48 @@ if (process.argv.slice(2).join(" ") === "--write") {
 } else if ((await readFile(iconTarget, "utf8")) !== iconBytes) throw new Error("MCP Server icon private contract drifted")
 
 // The named history query is not a public API or a generic receipt surface.
+const platformPin = JSON.parse(await readFile(new URL("../contract/dependencies/platform-connect.json", import.meta.url), "utf8"))
+const ownerFeaturePath = "contract/execution-operations/mcp-prepare-rejection-v1.json"
+const featurePin = platformPin.owner.artifacts.find((value) => value.path === ownerFeaturePath)
+if (!featurePin) throw new Error("missing formally pinned Prepare outcome feature")
+const featureBytes = await readFile(
+  new URL(`../contract/vendor/kokoro-platform/${platformPin.owner.repository_commit}/execution-operations/mcp-prepare-rejection-v1.json`, import.meta.url),
+)
+if (createHash("sha256").update(featureBytes).digest("hex") !== featurePin.sha256) throw new Error("Prepare outcome owner feature drifted")
+const ownerFeature = JSON.parse(featureBytes)
+if (
+  ownerFeature.profile !== "mcp-prepare-rejection-v1" ||
+  ownerFeature.version !== "1.0.0" ||
+  ownerFeature.rpc_code !== "failed_precondition" ||
+  JSON.stringify(ownerFeature.enum_reasons.map((value) => [value.number, value.methods])) !==
+    JSON.stringify([
+      [4, ["PreparePersonalMcpServer", "GetPersonalMcpPrepareReceipt"]],
+      [5, ["GetPersonalMcpPrepareReceipt"]],
+    ])
+)
+  throw new Error("Prepare outcome owner operation policy drifted")
+const prepareOutcomes = {
+  ...PREPARE_OUTCOME_FAULT_POLICY,
+  owner_feature: {
+    commit: platformPin.owner.repository_commit,
+    path: ownerFeaturePath,
+    profile: ownerFeature.profile,
+    version: ownerFeature.version,
+    sha256: featurePin.sha256,
+  },
+}
+const prepareOutcomesBytes = JSON.stringify(prepareOutcomes, null, 2) + "\n"
+const prepareOutcomesTarget = new URL("../contract/mcp-prepare-outcomes-v1.json", import.meta.url)
+if (process.argv.slice(2).join(" ") === "--write") await writeFile(prepareOutcomesTarget, prepareOutcomesBytes)
+else if ((await readFile(prepareOutcomesTarget, "utf8")) !== prepareOutcomesBytes) throw new Error("Prepare outcome private policy drifted")
 const prepareReceiptTarget = new URL("../contract/openapi/browser/v1/mcp-prepare-receipt.json", import.meta.url)
 const prepareReceiptDocument = {
   openapi: "3.1.0",
   info: { title: "Kokoro BFF browser-private Prepare receipt lookup", version: MCP_PREPARE_RECEIPT_POLICY.version },
-  "x-kokoro-lookup-policy": MCP_PREPARE_RECEIPT_POLICY,
+  "x-kokoro-lookup-policy": {
+    ...MCP_PREPARE_RECEIPT_POLICY,
+    outcomes_source: { path: "../../../mcp-prepare-outcomes-v1.json", sha256: createHash("sha256").update(prepareOutcomesBytes).digest("hex") },
+  },
   paths: {
     [MCP_PREPARE_RECEIPT_POLICY.path]: {
       get: {
@@ -264,7 +301,7 @@ const prepareReceiptDocument = {
               description:
                 status === 200
                   ? "Historical completed ACK, never Current or negative execution proof"
-                  : "Retain original unknown; only a repeated GET lookup is permitted",
+                  : "Exact typed rejection or fenced historical unknown only under the named outcome policy; no new command authority",
               headers: { "cache-control": { required: true, schema: { const: "no-store" } }, "x-request-id": { required: true, schema: { type: "string" } } },
               content:
                 status === 200

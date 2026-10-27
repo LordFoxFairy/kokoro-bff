@@ -2,18 +2,26 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kokoro BFF browser-private Prepare receipt lookup",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "x-kokoro-lookup-policy": {
     "profile": "mcp-prepare-receipt-lookup",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "visibility": "browser-private",
     "path": "/browser/v1/mcp/servers/{server_id}/prepare-receipt",
     "operation_id": "getMcpPrepareReceipt",
     "permission": "mcp_personal.read",
     "lookup_only": true,
     "completed_only": true,
-    "negative_ack": false,
+    "completed_only_scope": "success_wrapper",
+    "negative_ack": true,
+    "negative_ack_scope": "prepare_connection_rejected_typed_error_only",
+    "outcomes_profile": "mcp-prepare-outcomes",
+    "outcomes_version": "1.0.0",
+    "allowed_faults": [
+      "rejected",
+      "execution_fenced"
+    ],
     "automatic_retries": false,
     "new_command_authorized": false,
     "prepare_authorized": false,
@@ -107,8 +115,22 @@
         "status": 409,
         "code": "mcp_personal_command_ownership_lost",
         "retryable": false
+      },
+      {
+        "status": 412,
+        "code": "mcp_personal_prepare_rejected",
+        "retryable": false
+      },
+      {
+        "status": 409,
+        "code": "mcp_personal_prepare_execution_fenced",
+        "retryable": false
       }
-    ]
+    ],
+    "outcomes_source": {
+      "path": "../../../mcp-prepare-outcomes-v1.json",
+      "sha256": "5169cbf5e431cc71a23e2717bda9b51c77f08bed82cae149667532511b3afe72"
+    }
   },
   "paths": {
     "/browser/v1/mcp/servers/{server_id}/prepare-receipt": {
@@ -713,7 +735,7 @@
             }
           },
           "400": {
-            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "description": "Exact typed rejection or fenced historical unknown only under the named outcome policy; no new command authority",
             "headers": {
               "cache-control": {
                 "required": true,
@@ -767,7 +789,7 @@
             }
           },
           "401": {
-            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "description": "Exact typed rejection or fenced historical unknown only under the named outcome policy; no new command authority",
             "headers": {
               "cache-control": {
                 "required": true,
@@ -850,7 +872,7 @@
             }
           },
           "403": {
-            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "description": "Exact typed rejection or fenced historical unknown only under the named outcome policy; no new command authority",
             "headers": {
               "cache-control": {
                 "required": true,
@@ -962,7 +984,7 @@
             }
           },
           "404": {
-            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "description": "Exact typed rejection or fenced historical unknown only under the named outcome policy; no new command authority",
             "headers": {
               "cache-control": {
                 "required": true,
@@ -1016,7 +1038,7 @@
             }
           },
           "409": {
-            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "description": "Exact typed rejection or fenced historical unknown only under the named outcome policy; no new command authority",
             "headers": {
               "cache-control": {
                 "required": true,
@@ -1121,6 +1143,35 @@
                           }
                         }
                       }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_prepare_execution_fenced"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
                     }
                   ]
                 }
@@ -1128,7 +1179,7 @@
             }
           },
           "412": {
-            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "description": "Exact typed rejection or fenced historical unknown only under the named outcome policy; no new command authority",
             "headers": {
               "cache-control": {
                 "required": true,
@@ -1175,6 +1226,35 @@
                           }
                         }
                       }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_prepare_rejected"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
                     }
                   ]
                 }
@@ -1182,7 +1262,7 @@
             }
           },
           "429": {
-            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "description": "Exact typed rejection or fenced historical unknown only under the named outcome policy; no new command authority",
             "headers": {
               "cache-control": {
                 "required": true,
@@ -1236,7 +1316,7 @@
             }
           },
           "502": {
-            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "description": "Exact typed rejection or fenced historical unknown only under the named outcome policy; no new command authority",
             "headers": {
               "cache-control": {
                 "required": true,
@@ -1290,7 +1370,7 @@
             }
           },
           "503": {
-            "description": "Retain original unknown; only a repeated GET lookup is permitted",
+            "description": "Exact typed rejection or fenced historical unknown only under the named outcome policy; no new command authority",
             "headers": {
               "cache-control": {
                 "required": true,

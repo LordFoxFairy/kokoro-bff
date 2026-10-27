@@ -99,6 +99,11 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
       "execution-operations/mcp-runtime-v1.json",
       "descriptor/platform-mcp-prepare-receipt-parents.json",
       "descriptor/platform-mcp-prepare-receipt-delta.json",
+      "execution-operations/mcp-prepare-rejection-v1.json",
+      "descriptor/platform-mcp-prepare-rejection-parents.json",
+      "descriptor/platform-mcp-prepare-rejection-parent.platform_runtime.proto.snapshot",
+      "descriptor/platform-mcp-prepare-rejection-parent.platform-v1.binpb.snapshot",
+      "descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot",
     ].map((file) => ({
       path: `contract/${file}`,
       sha256: artifacts[file],
@@ -106,7 +111,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     provenance: { path: "contract/provenance.json", sha256: artifacts["provenance.json"], combined_sha256: combinedSha256 },
     generated: ownerGenerated,
   })
-  assert.equal(manifest.owner.repository_commit, "688bc1e3d74c18c54ca85bc72d8e4ce242ac995a")
+  assert.equal(manifest.owner.repository_commit, "f29428f6e6d23e9f35642fe3de5463472bc1f873")
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.lockfile_sha256, sha256(await requiredFile("pnpm-lock.yaml")))
   for (const [file, bytes] of Object.entries(await sourceBytes())) assert.equal(sha256(bytes), sources[file])
@@ -407,6 +412,56 @@ async function prePrepareQueryArtifact(file) {
   return parentBytes
 }
 
+// Exact test-only enum successor inverse; prove the entire 688bc parent before old query proofs.
+async function prePrepareOutcomeArtifact(file) {
+  const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const { FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
+  const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/`
+  const feature = JSON.parse(await requiredFile(prefix + "execution-operations/mcp-prepare-rejection-v1.json"))
+  assert.equal(feature.parents.commit, "688bc1e3d74c18c54ca85bc72d8e4ce242ac995a")
+  const pin = feature.parents.inputs[file]
+  const current = await requiredFile(prefix + file.replace("contract/", ""))
+  const parent = await requiredFile(prefix + pin.path.replace("contract/", ""))
+  assert.equal(sha256(parent), pin.sha256)
+  if (file.endsWith(".proto")) {
+    const delta = "  PERSONAL_MCP_ERROR_REASON_PREPARE_CONNECTION_REJECTED = 4;\n  PERSONAL_MCP_ERROR_REASON_PREPARE_EXECUTION_FENCED = 5;\n"
+    const source = current.toString("utf8")
+    assert.equal(source.split(delta).length, 2)
+    assert.deepEqual(Buffer.from(source.replace(delta, "")), parent)
+  } else {
+    const graph = fromBinary(FileDescriptorSetSchema, current)
+    const enums = graph.file.flatMap((value) => value.enumType).filter((value) => value.name === "PersonalMcpErrorReason")
+    assert.equal(enums.length, 1)
+    const exact = [
+      { $typeName: "google.protobuf.EnumValueDescriptorProto", name: "PERSONAL_MCP_ERROR_REASON_PREPARE_CONNECTION_REJECTED", number: 4 },
+      { $typeName: "google.protobuf.EnumValueDescriptorProto", name: "PERSONAL_MCP_ERROR_REASON_PREPARE_EXECUTION_FENCED", number: 5 },
+    ]
+    assert.deepEqual(enums[0].value.slice(-2), exact)
+    enums[0].value.splice(-2)
+    assert.deepEqual(Buffer.from(toBinary(FileDescriptorSetSchema, graph)), parent)
+  }
+  return parent
+}
+
+test("Prepare typed outcomes pin the exact operation scope and preserve their entire query1 parent", async () => {
+  const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/`
+  const feature = JSON.parse(await requiredFile(prefix + "execution-operations/mcp-prepare-rejection-v1.json"))
+  assert.equal(feature.rpc_code, "failed_precondition")
+  assert.deepEqual(
+    feature.enum_reasons.map((value) => [value.number, value.methods]),
+    [
+      [4, ["PreparePersonalMcpServer", "GetPersonalMcpPrepareReceipt"]],
+      [5, ["GetPersonalMcpPrepareReceipt"]],
+    ],
+  )
+  const { PersonalMcpErrorReason } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  assert.equal(PersonalMcpErrorReason.PREPARE_CONNECTION_REJECTED, 4)
+  assert.equal(PersonalMcpErrorReason.PREPARE_EXECUTION_FENCED, 5)
+  await prePrepareOutcomeArtifact("contract/proto/kokoro/platform/v1/platform_runtime.proto")
+  await prePrepareOutcomeArtifact("contract/descriptor/platform-v1.binpb")
+  for (const [file, hash] of Object.entries(feature.preserved)) assert.equal(sha256(await requiredFile(prefix + file.replace("contract/", ""))), hash)
+})
+
 test("Prepare query successor retains exact full source/descriptor parent and the unchanged Runtime/SSE inputs", async () => {
   const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
   const { FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
@@ -416,14 +471,14 @@ test("Prepare query successor retains exact full source/descriptor parent and th
   assert.equal(query.negative_ack, false)
   assert.equal(query.command, false)
   const delta = JSON.parse(await requiredFile(prefix + "descriptor/platform-mcp-prepare-receipt-delta.json"))
-  const source = (await requiredFile(prefix + "proto/kokoro/platform/v1/platform_runtime.proto")).toString("utf8")
+  const source = (await prePrepareOutcomeArtifact("contract/proto/kokoro/platform/v1/platform_runtime.proto")).toString("utf8")
   assert.equal(source.split(delta.method).length, 2)
   assert.ok(source.endsWith(delta.suffix))
   assert.equal(
     sha256(source.slice(0, -delta.suffix.length).replace(delta.method, "")),
     query.parents["contract/proto/kokoro/platform/v1/platform_runtime.proto"].sha256,
   )
-  const graph = fromBinary(FileDescriptorSetSchema, await requiredFile(prefix + "descriptor/platform-v1.binpb"))
+  const graph = fromBinary(FileDescriptorSetSchema, await prePrepareOutcomeArtifact("contract/descriptor/platform-v1.binpb"))
   let methods = 0,
     messages = 0
   for (const file of graph.file) {

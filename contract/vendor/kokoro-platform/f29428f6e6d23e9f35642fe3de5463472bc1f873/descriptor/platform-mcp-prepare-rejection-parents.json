@@ -1,0 +1,17 @@
+{
+  "commit": "688bc1e3d74c18c54ca85bc72d8e4ce242ac995a",
+  "inputs": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+      "path": "contract/descriptor/platform-mcp-prepare-rejection-parent.platform_runtime.proto.snapshot",
+      "sha256": "1081183bae7a8377fb9f245fbc31612c88421a801f0c454a2d27702695e88409"
+    },
+    "contract/descriptor/platform-v1.binpb": {
+      "path": "contract/descriptor/platform-mcp-prepare-rejection-parent.platform-v1.binpb.snapshot",
+      "sha256": "89d0f77d7f775231ad0fcb3b0987fbe0f303982c5271fd9cd689633eaafd53d8"
+    },
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+      "path": "contract/descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot",
+      "sha256": "2814a928d324a529c3ad6d27c98be9e21d30584c6a0bc22795e40c98ab289fa0"
+    }
+  }
+}

@@ -1,3 +1,9 @@
+## MCP-PREPARE-OUTCOME：只消费 owner 事实，无新增 BFF 数据（2026-10-27，正式原件候选消费）
+
+本片不改BFF Schema／SQL／缓存／receipt／outbox，不访问Platform数据库。正式owner f294输出4确定拒绝与5旧本地执行fenced；5历史效果仍unknown，不回写为失败或成功，不改原K/CAS或独立OAuth refresh marker。原ACK仍历史ACK，仅availability沿owner本人同RR安全投影；下一写独立fresh/manage准入。机器tuple／方法范围与停止线见[API设计](API_CONTRACT.md)及[技术设计](TECHNICAL_DESIGN.md)首节。
+
+App同feature journal v2的active保留、retired_intents精确双store归档／删除、旧client版本fence及不可变历史由App唯一实现，不在BFF镜像。reason4可exact_failed退休但不归成功；reason5仅用户显式停止等待后归档unknown_fenced，保原key/CAS查询定位。K2须另一次新点击、fresh Current／manage及不同crypto key；不得借旧complete missing或晚ACK复活历史／删除K2。未决refresh marker仅原正式重新授权，不复用cipher。本BFF候选不代表App完整UI/wire已接或正常激活。
+
 ## MCP-PREPARE-RECEIPT-D0：历史 completed 查询无新增 BFF 事实（2026-10-27，Root 已批准；候选实施）
 
 BFF基线`a819855a45e9ddda3eb7318b9bed99c399374254`；Root已批准消费者候选；Platform正式query已固定688bc1e3并正规重出owner generated；Schema/SQL与正常资源不改。Prepare receipt、CommandIdentity/digest、fingerprint key version、结果/保留期限和当前本人Server/关联Connector可见性仍由Platform唯一拥有；BFF不直读/修写owner表、不保存回执副本/current镜像/授权快照或执行许可。

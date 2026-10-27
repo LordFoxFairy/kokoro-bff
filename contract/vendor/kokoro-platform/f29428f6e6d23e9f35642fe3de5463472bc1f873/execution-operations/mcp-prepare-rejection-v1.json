@@ -1,0 +1,94 @@
+{
+  "profile": "mcp-prepare-rejection-v1",
+  "version": "1.0.0",
+  "owner": "Platform/MCP",
+  "status": "prepared-consumer-pairing-required",
+  "normal_activation": false,
+  "methods": [
+    "PreparePersonalMcpServer",
+    "GetPersonalMcpPrepareReceipt"
+  ],
+  "detail": "kokoro.platform.v1.PersonalMcpErrorDetail",
+  "enum_reasons": [
+    {
+      "name": "PERSONAL_MCP_ERROR_REASON_PREPARE_CONNECTION_REJECTED",
+      "number": 4,
+      "methods": [
+        "PreparePersonalMcpServer",
+        "GetPersonalMcpPrepareReceipt"
+      ],
+      "fact": "confirmed refusal of this Prepare; no claim of zero external effects or refresh rollback",
+      "persisted_terminal_reason": "prepare_connection_rejected_v1",
+      "eligibility": [
+        "credential.resolve returned completely, or no OAuth binding",
+        "actual declaration HTTP410 or valid exact-correlated JSON-RPC error",
+        "terminal receipt transaction committed or exact readback confirmed"
+      ]
+    },
+    {
+      "name": "PERSONAL_MCP_ERROR_REASON_PREPARE_EXECUTION_FENCED",
+      "number": 5,
+      "methods": [
+        "GetPersonalMcpPrepareReceipt"
+      ],
+      "fact": "strict committed failed receipt fences its parent execution; historical effects remain unknown",
+      "historical_outcome": "unknown",
+      "persisted": false,
+      "eligible_states": [
+        "strict_failed_retryable",
+        "strict_failed_terminal_without_new_rejection_reason"
+      ],
+      "automatic_intent_retirement_authorized": false
+    }
+  ],
+  "rpc_code": "failed_precondition",
+  "meaning": "Confirmed refusal and query-only parent-fenced historical-unknown facts are distinct.",
+  "legacy_effects_remain_unknown": true,
+  "strict_failed_parent_fence_query": true,
+  "optional_method_not_supported_remains_accepted": true,
+  "automatic_retries": false,
+  "new_command_authorized": false,
+  "completed_wrapper_unchanged": true,
+  "parents": {
+    "commit": "688bc1e3d74c18c54ca85bc72d8e4ce242ac995a",
+    "inputs": {
+      "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+        "path": "contract/descriptor/platform-mcp-prepare-rejection-parent.platform_runtime.proto.snapshot",
+        "sha256": "1081183bae7a8377fb9f245fbc31612c88421a801f0c454a2d27702695e88409"
+      },
+      "contract/descriptor/platform-v1.binpb": {
+        "path": "contract/descriptor/platform-mcp-prepare-rejection-parent.platform-v1.binpb.snapshot",
+        "sha256": "89d0f77d7f775231ad0fcb3b0987fbe0f303982c5271fd9cd689633eaafd53d8"
+      },
+      "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+        "path": "contract/descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot",
+        "sha256": "2814a928d324a529c3ad6d27c98be9e21d30584c6a0bc22795e40c98ab289fa0"
+      }
+    }
+  },
+  "preserved": {
+    "contract/execution-operations/mcp-prepare-receipt-v1.json": "5f1be186adafbabd5689b2ece19aa8a9734d726bb9770792bae2d9d06213d17c",
+    "contract/execution-operations/mcp-private-server-v1.json": "066505d4a13cb6fd7a5f625b07eaf5f784b215db2a8584041f14da8ffc98eda1",
+    "contract/execution-operations/mcp-runtime-v1.json": "c35cc7adaeeca98f88449a3d51b08db73071cde6007bbe021030ec5328442b90",
+    "contract/descriptor/mcp-runtime-v1.binpb": "56388f48b7d2f563a7aa9f56e0b9d15e73b2a453d640b3c8297502354fee6dc2",
+    "contract/execution-operations/mcp-personal-sse-v1.json": "29ea698428bc7be7469d6582746015e9e18ccb8887f035e89626e1791dcef647"
+  },
+  "inputs": [
+    {
+      "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
+      "sha256": "26bd1cc61f34e3de8b56359985896d48a1232363b44fd681084a7cd0f1543b2d"
+    },
+    {
+      "path": "contract/descriptor/platform-v1.binpb",
+      "sha256": "e391c377d1c156caf855ab46d9baf2ff814a41c17fc9cccb7f85ace4f7b71b5c"
+    },
+    {
+      "path": "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
+      "sha256": "d5b244938c9b5e0ef9043414954090649ed62497072768c6186c53407caf1e2c"
+    },
+    {
+      "path": "contract/descriptor/platform-mcp-prepare-rejection-parents.json",
+      "sha256": "d0fa1865eadd1b976ae9872be046e5ead72410ed6613a34b3fa2703e573129a1"
+    }
+  ]
+}

@@ -1,3 +1,14 @@
+## MCP-PREPARE-OUTCOME：独立错误政策1.0／lookup1.1（2026-10-27，Root 已固定；候选未正常配对）
+
+保现Prepare POST及原 `GET /browser/v1/mcp/servers/{id}/prepare-receipt?expected_state_version=<原CAS>` 请求、header、completed response、身份／期限／no-store。唯一code-first `PREPARE_OUTCOME_FAULT_POLICY` 经原generator发布 `contract/mcp-prepare-outcomes-v1.json`；owner_feature仅由正式Native pin manifest派生，指向Platform f294正式feature。共享connector错误1.1、Public28.5和普通GET不扩。
+
+| 单一closed typed reason＋Connect FailedPrecondition | 允许操作 | status／code／retryable | 事实及本地退休 |
+| --- | --- | --- | --- |
+| PREPARE_CONNECTION_REJECTED (4) | prepareServer、getMcpPrepareReceipt | 412／mcp_personal_prepare_rejected／false | definite_rejection／exact_failed，不归成功、不自动新命令 |
+| PREPARE_EXECUTION_FENCED (5) | **仅getMcpPrepareReceipt** | 409／mcp_personal_prepare_execution_fenced／false | historical unknown＋local_execution=fenced；仅explicit_stop_waiting，automatic_intent_retirement_authorized=false |
+
+lookup1.1 `completed_only=true` 明确仅success_wrapper；`negative_ack=true` 明确仅prepare_connection_rejected_typed_error_only，不增加negative DTO，reason5不纳negative。查询原件引用独立outcomes_source摘要及GET allowed_faults；same_command仍只GET原lookup，automatic_retries/new_command_authorized/prepare_authorized全false。POST政策不含5，也不由query政策授POST权限。缺/多/坏detail、错误code/type/字段/enum/operation或混合receipt marker均不授上述分类。旧generic409/412、processing含过期lease、missing/expired、当前prepare_failed均不冒确定拒绝或fenced。
+
 ## MCP-PREPARE-RECEIPT-D0：browser-private 原 Prepare 回执 GET（2026-10-27，Root 已批准；browser-private候选、未正式配对）
 
 仅设计`GET /browser/v1/mcp/servers/{id}/prepare-receipt?expected_state_version=<原CAS>`，不加入Public OpenAPI。沿现browser service envelope＋Product Session、`mcp_personal`资源的`read` action及可信tenant/subject，Browser只走App same-origin adapter。owner具名query已固定正式`688bc1e3d74c18c54ca85bc72d8e4ce242ac995a`并原生接线；本仓仍是未正常激活的候选，不把peer冒成正常历史收口。

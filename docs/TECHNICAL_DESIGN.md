@@ -1,3 +1,11 @@
+## MCP-PREPARE-OUTCOME：正式 owner 原件的具名消费（2026-10-27，Root D0 已通过；BFF 候选未正常启用）
+
+本片沿现 Browser→App same-origin→BFF→Platform Native。Platform 正式提交 `f29428f6e6d23e9f35642fe3de5463472bc1f873` 已由 Root git archive 导出；只消费该正式原件，不导入 sibling 源码，正常 producer 仍为旧688bc，不将正式提交误称正常激活。主 Native pin、descriptor、Proto、provenance、父输入及 generated client 一并正规迁移；独立 HTTP7／dd8 项目发布、private-server1.5／原查询1.0和 Runtime/SSE/Public28.5 原字节保持。owner 全默认 R352 子进程15秒超时仍开放；Root真实PG28及静态八门通过不替代此项。
+
+唯一可编辑 tuple／operation／本地退休分类在现 `connector-command-fault.ts` 的 `PREPARE_OUTCOME_FAULT_POLICY`。原 `generate-connector-command-errors.mjs` 发布独立 `contract/mcp-prepare-outcomes-v1.json` 1.0；owner_feature.commit／digest 从正式主 Native manifest 单一元数据派生，不手写第二 pin。现查询 code-first policy 及 browser-private 原件升lookup1.1并引用独立政策摘要，不扩通用错误1.1或Public API；精确政策见[API设计](API_CONTRACT.md)首节。
+
+生产只在原Prepare POST／具名query fault出口消费单一closed PersonalMcpErrorDetail＋exact FailedPrecondition＋无receipt marker歧义。4只准两具名操作，5仅query；普通GET、其它mutation、错误code/type/额外字段/enum/混合marker均拒。新增helper只接管可解出的4／5 claim；无关detail或旧1–3沿原错误链，保Unavailable等503／retryable及其它connector泛precondition412，不扩大旧分类。旧deadline、取消、可信身份、原K/CAS digest及当前本人read准入、严格历史completed不改。reason4独立失败，reason5保历史unknown；不写owner receipt、不重基CAS，不发送Prepare/claim/refresh、新key或OAuth。App journal v2及显式停止等待的完整consumer仍为后继，不因BFF分类而自动生效。
+
 ## MCP-PREPARE-RECEIPT-D0：只读原 Prepare 的 completed 历史回执（2026-10-27，Root 已批准；消费者候选实施、未正常生效）
 
 **基线／裁决。** BFF `a819855a45e9ddda3eb7318b9bed99c399374254`；Root已批准本D0与不依赖未发行artifact的消费者源码/peer候选；Native Get query已沿既有client接线并正规固定生成；尚未正常激活。Platform writer 正实现具名 `GetPersonalMcpPrepareReceipt`，现已固定Root正式提交`688bc1e3d74c18c54ca85bc72d8e4ce242ac995a`，private-server1.5.0／query1.0.0与正规descriptor/Proto/TS生成配对；仅消费已验证contract原件，不导入sibling实现。本节覆盖下方10-24“不新增receipt查询／核验后重放Prepare”的本次恢复后继：只查completed原ACK，绝不发Prepare、claim、refresh、discovery或新key命令，旧失败与验收证据保留。缺可达正常业务拒绝证据，本片不引negative outcome或额外reason/enum。

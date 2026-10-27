@@ -1234,7 +1234,11 @@ test("Prepare receipt lookup has its own lookup-only policy and narrow receipt e
 test("Prepare receipt publication binds same_command only to GET and never authorizes Prepare", async () => {
   const { MCP_PREPARE_RECEIPT_POLICY: policy } = await import("../src/http/mcp-prepare-receipt.contract.js")
   assert.equal(policy.lookup_only, true)
-  assert.equal(policy.negative_ack, false)
+  assert.equal(policy.negative_ack, true)
+  assert.equal(policy.negative_ack_scope, "prepare_connection_rejected_typed_error_only")
+  assert.equal(policy.completed_only, true)
+  assert.equal(policy.completed_only_scope, "success_wrapper")
+  assert.deepEqual(policy.allowed_faults, ["rejected", "execution_fenced"])
   assert.equal(policy.automatic_retries, false)
   assert.equal(policy.new_command_authorized, false)
   assert.equal(policy.prepare_authorized, false)
@@ -1326,4 +1330,35 @@ test("Prepare receipt production Native client performs only Get with original d
     native.closeAllConnections()
     await new Promise<void>((resolve) => native.close(() => resolve()))
   }
+})
+
+test("Prepare outcome publication derives its owner pin and links only method-specific closed faults", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const { createHash } = await import("node:crypto")
+  const { PREPARE_OUTCOME_FAULT_POLICY: source } = await import("../src/infrastructure/clients/platform/connector-command-fault.js")
+  const bytes = await readFile(new URL("../contract/mcp-prepare-outcomes-v1.json", import.meta.url))
+  const { owner_feature, ...published } = JSON.parse(bytes.toString("utf8"))
+  assert.deepEqual(published, source)
+  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/platform-connect.json", import.meta.url), "utf8"))
+  assert.equal(owner_feature.commit, manifest.owner.repository_commit)
+  assert.equal(owner_feature.sha256, manifest.owner.artifacts.find((item: { path: string }) => item.path === owner_feature.path).sha256)
+  assert.deepEqual(source.operations.prepareServer, ["rejected"])
+  assert.deepEqual(source.operations.getMcpPrepareReceipt, ["rejected", "execution_fenced"])
+  assert.equal(source.faults.rejected.outcome, "definite_rejection")
+  assert.equal(source.faults.execution_fenced.outcome, "unknown")
+  assert.equal(source.faults.execution_fenced.local_execution, "fenced")
+  assert.equal(source.faults.execution_fenced.retirement, "explicit_stop_waiting")
+  assert.equal(source.faults.execution_fenced.automatic_intent_retirement_authorized, false)
+  assert.equal(source.automatic_retries, false)
+  assert.equal(source.new_command_authorized, false)
+  assert.equal(source.prepare_authorized, false)
+  const lookup = JSON.parse(await readFile(new URL("../contract/openapi/browser/v1/mcp-prepare-receipt.json", import.meta.url), "utf8"))[
+    "x-kokoro-lookup-policy"
+  ]
+  assert.equal(lookup.version, "1.1.0")
+  assert.equal(lookup.outcomes_source.path, "../../../mcp-prepare-outcomes-v1.json")
+  assert.equal(lookup.outcomes_source.sha256, createHash("sha256").update(bytes).digest("hex"))
+  assert.equal(lookup.outcomes_profile, source.profile)
+  assert.equal(lookup.outcomes_version, source.version)
+  assert.deepEqual(lookup.allowed_faults, source.operations.getMcpPrepareReceipt)
 })

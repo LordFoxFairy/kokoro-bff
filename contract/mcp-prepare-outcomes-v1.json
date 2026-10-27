@@ -1,0 +1,43 @@
+{
+  "profile": "mcp-prepare-outcomes",
+  "version": "1.0.0",
+  "owner": "kokoro-bff",
+  "visibility": "browser-private",
+  "operations": {
+    "prepareServer": [
+      "rejected"
+    ],
+    "getMcpPrepareReceipt": [
+      "rejected",
+      "execution_fenced"
+    ]
+  },
+  "automatic_retries": false,
+  "new_command_authorized": false,
+  "prepare_authorized": false,
+  "faults": {
+    "rejected": {
+      "status": 412,
+      "code": "mcp_personal_prepare_rejected",
+      "retryable": false,
+      "outcome": "definite_rejection",
+      "retirement": "exact_failed"
+    },
+    "execution_fenced": {
+      "status": 409,
+      "code": "mcp_personal_prepare_execution_fenced",
+      "retryable": false,
+      "outcome": "unknown",
+      "local_execution": "fenced",
+      "retirement": "explicit_stop_waiting",
+      "automatic_intent_retirement_authorized": false
+    }
+  },
+  "owner_feature": {
+    "commit": "f29428f6e6d23e9f35642fe3de5463472bc1f873",
+    "path": "contract/execution-operations/mcp-prepare-rejection-v1.json",
+    "profile": "mcp-prepare-rejection-v1",
+    "version": "1.0.0",
+    "sha256": "20ffcf5184ba4c14266eae73e27e0ca595ba3ba204418eb458e226afe5fae2b9"
+  }
+}
