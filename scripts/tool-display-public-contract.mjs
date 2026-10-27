@@ -1,3 +1,4 @@
+import { restorePublic28ProjectResourceContract } from "./project-resource-access-public-contract.mjs"
 // Build/test-only exact Public28→27 inverse. Never imported by production.
 import { createHash } from "node:crypto"
 
@@ -6,6 +7,7 @@ const currentField =
   "        display_code: { type: string, enum: [tool.execution, tool.file.read, tool.mcp.discover, tool.mcp.describe, tool.mcp.call, tool.web.search, tool.web.fetch] }\n"
 
 export function restorePublic27ToolDisplayContract(source) {
+  source = restorePublic28ProjectResourceContract(source)
   if (!/^  version: 28\.0\.0$/mu.test(source)) return source
   const block = source.match(/^    RunToolActivity:\n[\s\S]*?(?=^    RunSubagentActivity:)/mu)?.[0]
   if (!block || block.split(currentField).length !== 2 || source.split(currentField).length !== 2) throw Error("Tool display Public28 exact field delta drift")

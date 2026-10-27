@@ -2447,3 +2447,6 @@ IAM remains the authoritative owner of tenant membership, invitations and roles.
 ## Connector command 恢复错误消费（2026-10-16，无数据变化）
 
 只消费已发布错误metadata并输出browser-private安全分类；canonical database/schema.sql、所有业务/receipt/AG-UI状态、Redis与权限不改。不存在BFF直读Platform DB、receipt副本或恢复写入；请求原文、secret、owner内部message/details不会进入生成profile、HTTP反馈或日志。所有未知结果继续原owner保障，错误分类不授权重建资源。
+
+
+Project resource item access/delete (2026-10-26) introduces no BFF or Storage DDL/table/association; Storage remains the sole Asset/Blob/deletion-receipt/cleanup owner, and BFF only derives a stable scoped command from the original public key.

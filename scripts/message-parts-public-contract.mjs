@@ -1,3 +1,4 @@
+import { projectResourceParentBaseline } from "./project-resource-access-public-contract.mjs";
 // Build/test-only exact Public27→26 inverse. Never imported by production runtime.
 import { createHash } from "node:crypto";
 import { restorePublic27ToolDisplayContract } from "./tool-display-public-contract.mjs";
@@ -139,6 +140,7 @@ export function restorePublic26MessagePartsContract(source) {
 }
 
 export function messagePartsParentBaseline(inventory) {
+  inventory = projectResourceParentBaseline(inventory);
   if (inventory.length !== 187) return inventory;
   if (
     hash(JSON.stringify(inventory)) !==

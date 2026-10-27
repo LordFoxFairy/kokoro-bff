@@ -1,3 +1,5 @@
+import { projectResourceReadRoute } from "../http/routes/project-resource-read.js"
+import { projectResourceDeleteRoute } from "../http/routes/project-resource-delete.js"
 import { mcpProjectPublicationOperation, mcpProjectPublicationRoute } from "../http/routes/mcp-project-publication.js"
 import { liveAdminMetering, matchMeteringAdmin } from "../http/routes/billing-metering-admin.js"
 import { liveAdminCreditGrant } from "../http/routes/billing-credit-grant-admin.js"
@@ -766,6 +768,16 @@ async function handle(
     return
   }
 
+  if (composition.routeHandler === undefined && businessPath[0] === "projects" && businessPath[2] === "resources" && businessPath[1] !== undefined && businessPath[3] !== undefined) {
+    if (request.method === "GET" && (businessPath.length === 4 || businessPath.length === 5 && businessPath[4] === "download")) {
+      await projectResourceReadRoute(request, response, config, context, businessPath[1], businessPath[3], businessPath.length === 5, composition.businessStore)
+      return
+    }
+    if (request.method === "DELETE" && businessPath.length === 4) {
+      await projectResourceDeleteRoute(request, response, config, context, businessPath[1], businessPath[3], composition.businessStore)
+      return
+    }
+  }
   if (isProjectRenamePath) {
     await projectRenameRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
     return

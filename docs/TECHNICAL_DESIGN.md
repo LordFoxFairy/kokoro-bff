@@ -4214,3 +4214,16 @@ The public read surface preserves the IAM owner’s closed filters, ordering, op
 沿各路既有分页循环保护和 1,000 条容量限制，合并后的公开结果也不得超过 1,000；超限或任一路失败不截断、不回半份成功。两路共用原 AbortSignal/绝对截止时间，合并后才解析真实作者，返回前再次核同 tenant/subject 下的项目资格。列表是展示，不授予项目执行权限，不改变消息冻结、项目默认或 Platform exact 安装校验。
 
 唯一 OpenAPI 只补现 GET 描述并以 Public19.0.1 发行修复；wire、165 operation inventory 和 owner pins 不变。现 closure 检查入口精确逆回原 Public19 全文再执行不变双父证明，无新增脚本层或运行兼容路径。修改限聚合、原回归、规范说明与此描述证明；无数据写入/正常服务重载。以多页并集、精确覆盖、空项目/失败、容量、重复和现有撤权/取消回归验收；真实正常 owner 链单独记录。
+
+
+## Project resource item access and permanent logical deletion (2026-10-26, approved implementation slice)
+
+Storage remains the only Asset/Blob/Scan/cleanup writer. Each request, including receipt recovery, uses fresh Product Session admission and BFF Projects.find with the trusted tenant/subject; only its canonical Project ID is asserted to Storage as web-bff/project. The current private owner check is the authorization boundary: GET reuses project.resource.read and DELETE reuses the existing project.update permission label, not a new unregistered IAM action. No personal-scope client, arbitrary scope/body identity, direct owner SQL, new service or Schema is introduced.
+
+The three additive item operations are metadata GET, attachment download GET, and keyed DELETE. A dedicated narrow Storage Project client validates ASSET/CLEAN identity and download-reference metadata. Downloads reuse the existing scope-neutral verified spool byte primitive and its 1GiB/two-slot/size/SHA/origin/redirect/cancel/deadline/cleanup budgets; they never use Artifact authorization. Complete verified bytes precede HTTP success. Outbound file transfer retains the existing bounded streaming/idle budget.
+
+DELETE means irreversible logical deletion of this project-scoped Asset, not unlinking a personal original. Storage owns the same-command receipt, tombstone, last-live-Asset Blob retirement and durable exact cleanup. Existing URLs can remain valid for their original maximum 300-second signature window; ACK does not claim physical cleanup. Action-time confirmation must name the exact Project/file and irreversible effect. No Trash/Restore or aggregate scope-release shortcut is added.
+
+The stable Storage command identity/digest derives from operation version, trusted tenant/subject, canonical Project, asset and the original public Idempotency-Key. Do not precondition recovery on GetAsset still being visible: an ACK may be lost after deletion. Unknown transport/invalid ACK/5xx preserves the same intent; valid owner ACK followed by failed list recovery only rereads. Same-key replay is checked under current project admission; a fresh key for an already deleted Asset remains owner NOT_FOUND. Storage caller/purpose/scope and exact replay behavior are consumed as implemented, without fabricated acknowledgements.
+
+The public source is the existing canonical OpenAPI, with a strict complete Public28 inverse. The pinned d13f33a Storage v3 generated client already includes these operations; current Storage adds connector_icon only, so no unrelated repin or new generator framework is needed. Existing Public28 and all older hashes/negative contracts remain protected. No App source/WIP or normal service is changed by this owner slice.

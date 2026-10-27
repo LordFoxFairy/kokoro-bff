@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.0.0
+  version: 28.1.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -4928,6 +4928,136 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  # PROJECT-RESOURCE-ACCESS-PATHS-BEGIN
+  /v1/projects/{projectId}/resources/{asset_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+    get:
+      tags: [Projects]
+      operationId: getProjectResource
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.resource.read
+      summary: Read one currently owned clean Project resource
+      description: Fresh Product Session and current private Project ownership are required on every request. Asset identity is scoped to the canonical Project, never personal scope. Metadata does not prove downloaded bytes. Query and request body are forbidden.
+      responses:
+        '200':
+          description: Current clean ordinary Asset metadata, without object locators or signed URLs
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectResourceItemResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: Current admission or resource capacity is rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Invalid Storage response, exact reference, or byte integrity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+    delete:
+      tags: [Projects]
+      operationId: deleteProjectResource
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: project.update
+      summary: Permanently logically delete one Project Asset
+      description: Irreversible Asset deletion, not unlinking or physical cleanup completion. Current Project ownership precedes each call, including replay. One original key derives a stable owner command; unknown results must use this exact key and empty body. The original command can replay after the Asset is invisible; a different key on a deleted Asset is 404. Existing signed URLs may remain usable for their original maximum 300 seconds. Never release the whole Project scope.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Storage logical deletion receipt confirmed; physical cleanup can remain pending
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectResourceDeletionResponse' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: Current admission or resource capacity is rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Invalid Storage response, exact reference, or byte integrity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/projects/{projectId}/resources/{asset_id}/download:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+    get:
+      tags: [Projects]
+      operationId: downloadProjectResource
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.resource.read
+      summary: Download a completely verified Project resource attachment
+      description: Fresh scoped Asset and download reference must agree on exact identity, SHA-256, size and MIME. Complete private spool size/SHA verification precedes success. Existing limits remain 1073741824 bytes and two shared spool slots, with bounded transfer and cleanup; no personal or Artifact authorization is reused. No query/body, redirects, signed URL or internal credential is exposed.
+      responses:
+        '200':
+          description: Complete verified private attachment
+          headers:
+            x-request-id: { schema: { type: string } }
+            Content-Length: { schema: { type: integer, minimum: 0, maximum: 1073741824 } }
+            Content-Disposition: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+            Referrer-Policy: { schema: { type: string, const: no-referrer } }
+            X-Content-Type-Options: { schema: { type: string, const: nosniff } }
+          content:
+            '*/*':
+              schema: { type: string, format: binary }
+        '413':
+          description: Declared resource exceeds the existing verified spool capacity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: Current admission or resource capacity is rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Invalid Storage response, exact reference, or byte integrity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  # PROJECT-RESOURCE-ACCESS-PATHS-END
   /v1/projects/{projectId}/resources:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -19590,6 +19720,45 @@ components:
             - $ref: '#/components/schemas/LibraryFilePage'
             - $ref: '#/components/schemas/LibraryArtifactPage'
         meta: { $ref: '#/components/schemas/RequestMeta' }
+    # PROJECT-RESOURCE-ACCESS-SCHEMAS-BEGIN
+    ProjectResourceItem:
+      type: object
+      additionalProperties: false
+      required: [asset_id, filename, mime_type, size_bytes, content_sha256, scan_state]
+      properties:
+        asset_id: { type: string, minLength: 1, maxLength: 191 }
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        mime_type: { type: string, minLength: 1, maxLength: 191 }
+        size_bytes: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+        content_sha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        scan_state: { type: string, const: clean }
+    ProjectResourceItemResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [resource]
+          properties:
+            resource: { $ref: '#/components/schemas/ProjectResourceItem' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    ProjectResourceDeletionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [asset_id, deleted_at, replayed]
+          properties:
+            asset_id: { type: string, minLength: 1, maxLength: 191 }
+            deleted_at: { type: string, format: date-time }
+            replayed: { type: boolean }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    # PROJECT-RESOURCE-ACCESS-SCHEMAS-END
     ProjectResourceListResponse:
       type: object
       additionalProperties: false
