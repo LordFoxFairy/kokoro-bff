@@ -14,6 +14,7 @@ export type AgentActivity =
       segment_id: string
       status: "running" | "completed" | "failed"
       display_code: Extract<ReturnType<typeof zChatActivity.parse>, { activity: "tool" }>["display_code"]
+      display_detail?: NonNullable<Extract<ReturnType<typeof zChatActivity.parse>, { activity: "tool" }>["display_detail"]>
     }>
   | Readonly<{
       activity: "subagent"
@@ -37,6 +38,8 @@ const ACTIVITY_ID = new RegExp(AGENT_PROCESS_CONSTRAINTS.activityId.pattern, "u"
 const SEGMENT_ID = new RegExp(AGENT_PROCESS_CONSTRAINTS.segmentId.pattern, "u")
 const PREFLIGHT_ID = new RegExp(AGENT_PROCESS_CONSTRAINTS.skill.preflightId.pattern, "u")
 const SKILL_SOURCE_REF = new RegExp(AGENT_PROCESS_CONSTRAINTS.skill.sourceRefs.pattern, "u")
+const FILE_DETAIL_NAME = new RegExp(AGENT_PROCESS_CONSTRAINTS.toolDetail.fileNamePattern, "u")
+const DETAIL_FORBIDDEN = new RegExp("[" + AGENT_PROCESS_CONSTRAINTS.toolDetail.forbiddenCategories.map((category) => `\\p{${category}}`).join("") + "]", "u")
 
 function jsonPayload(payloadJson: string): unknown {
   try {
@@ -78,6 +81,27 @@ function activityPayload(payloadJson: string): AgentActivity {
   if (!ACTIVITY_ID.test(activity.activity_id)) throw new Error("Agent activity identity is invalid")
   if (activity.activity === "tool" || activity.activity === "subagent") {
     if (!SEGMENT_ID.test(activity.segment_id)) throw new Error("Agent activity segment identity is invalid")
+    if (activity.activity === "tool" && activity.display_detail !== undefined) {
+      const { name, kind } = activity.display_detail
+      const domain = AGENT_PROCESS_CONSTRAINTS.toolDetail
+      const length = unicodeScalarLength(name)
+      const allowed: readonly string[] = domain.codesByKind[kind]
+      if (
+        length === null ||
+        length < domain.minScalars ||
+        length > domain.maxScalars ||
+        Buffer.byteLength(name, "utf8") > domain.utf8ByteLimit ||
+        name.normalize(domain.normalization) !== name ||
+        DETAIL_FORBIDDEN.test(name) ||
+        (kind === "file" && !FILE_DETAIL_NAME.test(name)) ||
+        !allowed.includes(activity.display_code)
+      )
+        throw new Error("Agent activity detail does not match its public domain")
+    }
+    if (activity.activity === "tool") {
+      const { display_detail, ...base } = activity
+      return { ...base, ...(display_detail === undefined ? {} : { display_detail }) }
+    }
     return activity
   }
   if (!PREFLIGHT_ID.test(activity.preflight_id)) throw new Error("Agent Skill preflight identity is invalid")
@@ -107,4 +131,17 @@ export function parseAgentProcessPayload(eventType: string, payloadJson: string)
   if (eventType === "todo.updated") return { kind: "todo.updated", value: todoPayload(payloadJson) }
   if (eventType === "activity") return { kind: "activity.updated", value: activityPayload(payloadJson) }
   return null
+}
+
+/** Compare immutable tool/subagent presentation; Skill lifecycle revisions retain their original rules. */
+export function sameAgentActivityIdentity(previous: AgentActivity, next: AgentActivity): boolean {
+  if (previous.activity !== next.activity || previous.activity_id !== next.activity_id) return false
+  if (previous.activity === "skill" || next.activity === "skill") return true
+  if (previous.segment_id !== next.segment_id || previous.display_code !== next.display_code) return false
+  if (previous.activity !== "tool" || next.activity !== "tool") return true
+  return (
+    Object.hasOwn(previous, "display_detail") === Object.hasOwn(next, "display_detail") &&
+    previous.display_detail?.kind === next.display_detail?.kind &&
+    previous.display_detail?.name === next.display_detail?.name
+  )
 }

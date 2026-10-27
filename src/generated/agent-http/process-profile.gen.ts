@@ -1,5 +1,17 @@
 // This file is generated from the fixed kokoro-agent ChatTodo and ChatActivity schemas. Do not edit.
 export const AGENT_PROCESS_CONSTRAINTS = {
+  toolDetail: {
+    minScalars: 1,
+    maxScalars: 120,
+    utf8ByteLimit: 480,
+    fileNamePattern: "^(?!\\.{1,2}$)[^/\\\\:]+$",
+    normalization: "NFC",
+    forbiddenCategories: ["Cc", "Cf", "Cs"],
+    codesByKind: {
+      file: ["tool.file.read", "tool.file.write", "tool.file.deliver"],
+      mcp_tool: ["tool.mcp.describe", "tool.mcp.call"],
+    },
+  },
   todo: {
     jsonByteLimit: 65536,
     maxItems: 100,

@@ -56,6 +56,7 @@ import {
 } from "../auth/user-admission.js"
 import { localSkillImportRoute } from "../http/routes/local-skill-import.js"
 import { failure, ok } from "../contracts/index.js"
+import { publicShareSnapshot } from "../application/public-share-service.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
 import {
   mutationFingerprint,
@@ -208,27 +209,21 @@ async function handle(
         send(response, 404, failure("share_not_found", "Share was not found", id))
         return
       }
-      send(
-        response,
-        200,
-        ok(
-          {
-            session: {
-              session_id: shared.conversation.conversationId,
-              title: shared.conversation.title,
-              owner_id: shared.conversation.ownerId,
-              created_at: shared.conversation.createdAt.toISOString(),
-              updated_at: shared.conversation.updatedAt.toISOString(),
-            },
-            ...(messages.messages.length === 0 ? {} : { messages: messages.messages }),
-            files: [],
-            deliveries: [],
-            deliveries_has_more: false,
-            event_watermark: null,
-          },
-          id,
-        ),
-      )
+      const snapshot = publicShareSnapshot({
+        session: {
+          session_id: shared.conversation.conversationId,
+          title: shared.conversation.title,
+          owner_id: shared.conversation.ownerId,
+          created_at: shared.conversation.createdAt.toISOString(),
+          updated_at: shared.conversation.updatedAt.toISOString(),
+        },
+        ...(messages.messages.length === 0 ? {} : { messages: messages.messages }),
+      })
+      if (snapshot === null) {
+        send(response, 503, failure("share_projection_invalid", "Share projection is invalid", id))
+        return
+      }
+      send(response, 200, ok(snapshot, id))
       return
     }
     if (composition.sharedSessionReader === undefined) {
@@ -245,8 +240,12 @@ async function handle(
       send(response, 404, failure("share_not_found", "Share was not found", id))
       return
     }
-    // A service-only Share snapshot does not grant private Artifact visibility.
-    send(response, 200, ok({ ...(detail as object), deliveries: [], deliveries_has_more: false }, id))
+    const snapshot = publicShareSnapshot(detail)
+    if (snapshot === null) {
+      send(response, 503, failure("share_projection_invalid", "Share projection is invalid", id))
+      return
+    }
+    send(response, 200, ok(snapshot, id))
     return
   }
 

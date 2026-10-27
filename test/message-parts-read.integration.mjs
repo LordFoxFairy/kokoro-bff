@@ -37,6 +37,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       legacy = false,
       long = "A",
       twoSegments = false,
+      activity = tool,
       prelude = false,
       emptyWire = false,
       hiddenCompletion = "",
@@ -92,8 +93,8 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
         source("message.completed", { segment_id: "public-a", content: long }),
         ...(twoSegments
           ? [
-              source("activity.updated", { ...tool, status: "running" }),
-              source("activity.updated", tool),
+              source("activity.updated", { ...activity, status: "running" }),
+              source("activity.updated", activity),
               source("message.delta", { segment_id: "public-b", delta: "B" }),
               source("message.completed", { segment_id: "public-b", content: "B" }),
             ]
@@ -171,6 +172,27 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
           c.messageId,
         ])
       ).rows[0]
+
+    await suite.test("Agent8.2 trusted detail survives a fresh private parts reader without widening Share", async () => {
+      const detail = { ...tool, display_code: "tool.mcp.call", display_detail: { kind: "mcp_tool", name: "public_lookup" } }
+      const c = await create({ twoSegments: true, activity: detail })
+      const freshReader = new PostgresChatRepository({ pool })
+      const snapshot = await freshReader.readSnapshot(c.tenantId, c.subjectId, c.conversationId, undefined, lifetime())
+      assert.deepEqual(snapshot.execution_process.activities, [detail])
+      const message = assistant(snapshot)
+      const page = await freshReader.readMessageParts(c.query(message.rendering.parts_cursor))
+      const part = page.items.find((item) => item.kind === "activity")
+      assert.deepEqual(part.activity, detail)
+      assert.ok(BigInt(part.first_sequence) < BigInt(part.latest_sequence))
+      const share = await freshReader.createShare(c.tenantId, c.subjectId, c.conversationId)
+      const { messages: publicMessages } = await store.services.publicShares.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
+      assert.equal(publicMessages.find((item) => item.role === "assistant").content, "AB")
+      assert.equal(JSON.stringify(publicMessages).includes("public_lookup"), false)
+      assert.equal(
+        publicMessages.some((item) => Object.hasOwn(item, "rendering") || Object.hasOwn(item, "execution_process")),
+        false,
+      )
+    })
 
     await suite.test("private snapshot/list reference exact text-tool-text parts; command receipt and public Share keep original shape", async () => {
       const c = await create({ twoSegments: true })

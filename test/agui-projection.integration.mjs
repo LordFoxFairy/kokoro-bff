@@ -6173,3 +6173,102 @@ integrationTest(
     }
   },
 )
+
+integrationTest("Agent8.2 detail is durable across reopen and identity drift rolls back the whole source transaction", { timeout: 30000 }, async (context) => {
+  const c = await r57ProjectionContext(context)
+  const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+  const running = {
+    activity: "tool",
+    activity_id: `act_${"a".repeat(64)}`,
+    segment_id: `seg_${"b".repeat(64)}`,
+    status: "running",
+    display_code: "tool.file.read",
+    display_detail: { kind: "file", name: "résumé😀.md" },
+  }
+  const { display_detail, ...absent } = { ...running, activity_id: `act_${"c".repeat(64)}` }
+  await c.ingest([c.source(2, running, "activity.updated"), c.source(3, absent, "activity.updated")])
+  const before = await c.fingerprint()
+  const { display_detail: ignored, ...removed } = running
+  for (const changed of [
+    removed,
+    { ...running, display_code: "tool.file.write" },
+    { ...running, segment_id: `seg_${"d".repeat(64)}` },
+    { ...running, display_detail: { kind: "file", name: "other.md" } },
+    { ...absent, display_detail },
+  ]) {
+    // A valid source prefix must not survive a later identity conflict in this batch.
+    await assert.rejects(
+      c.ingest([
+        c.source(4, { segment_id: "public-detail", delta: "rolled back" }, "message.delta"),
+        c.source(5, { ...changed, status: "completed" }, "activity.updated"),
+      ]),
+      /ACTIVITY_IDENTITY/u,
+    )
+    assert.deepEqual(await c.fingerprint(), before)
+  }
+  // Legacy Messages have no ordered document: the compact tuple must still reject drift.
+  const messageBefore = before.bff_message.find((message) => message.role === "assistant")
+  await c.pool.query(
+    "UPDATE bff_message SET ordered_parts=NULL,parts_format_version=NULL,parts_public_sequence=NULL WHERE tenant_id=$1 AND conversation_id=$2 AND message_id=$3",
+    [c.tenantId, c.sessionId, messageBefore.message_id],
+  )
+  const legacyBefore = await c.fingerprint()
+  await assert.rejects(c.ingest([c.source(4, { ...running, display_code: "tool.file.write" }, "activity.updated")]), /ACTIVITY_IDENTITY/u)
+  assert.deepEqual(await c.fingerprint(), legacyBefore)
+  await c.pool.query(
+    "UPDATE bff_message SET ordered_parts=$4::jsonb,parts_format_version=$5,parts_public_sequence=$6 WHERE tenant_id=$1 AND conversation_id=$2 AND message_id=$3",
+    [
+      c.tenantId,
+      c.sessionId,
+      messageBefore.message_id,
+      JSON.stringify(messageBefore.ordered_parts),
+      messageBefore.parts_format_version,
+      messageBefore.parts_public_sequence,
+    ],
+  )
+  // Independently exercise the fold guard: a divergent but well-formed compact tuple is not authority to replace the confirmed part.
+  const divergent = { ...running, display_detail: { kind: "file", name: "other.md" } }
+  await c.pool.query("UPDATE bff_agui_run_activity SET safe_payload=$5::jsonb WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3 AND activity_id=$4", [
+    c.tenantId,
+    c.sessionId,
+    c.runId,
+    running.activity_id,
+    JSON.stringify(divergent),
+  ])
+  const foldBefore = await c.fingerprint()
+  await assert.rejects(
+    c.ingest([
+      c.source(4, { segment_id: "public-detail", delta: "rolled back by fold" }, "message.delta"),
+      c.source(5, { ...divergent, status: "completed" }, "activity.updated"),
+    ]),
+    /AGUI_MESSAGE_PARTS_INVALID/u,
+  )
+  assert.deepEqual(await c.fingerprint(), foldBefore)
+  await c.pool.query("UPDATE bff_agui_run_activity SET safe_payload=$5::jsonb WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3 AND activity_id=$4", [
+    c.tenantId,
+    c.sessionId,
+    c.runId,
+    running.activity_id,
+    JSON.stringify(running),
+  ])
+  const completed = { ...running, status: "completed" },
+    historical = { ...absent, status: "failed" }
+  const batch = [c.source(4, completed, "activity.updated"), c.source(5, historical, "activity.updated"), c.source(6, { status: "completed" }, "run.completed")]
+  await c.ingest(batch)
+  const committed = await c.fingerprint()
+  await c.ingest(batch)
+  assert.deepEqual(await c.fingerprint(), committed)
+  const reopened = new ChatApplicationService(new PostgresChatRepository({ pool: c.pool }))
+  assert.equal(await reopened.snapshot(c.tenantId, "other_subject", c.sessionId, undefined), null)
+  const snapshot = await reopened.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+  assert.deepEqual(snapshot.execution_process.activities, [completed, historical])
+  const assistant = snapshot.messages.find((message) => message.role === "assistant" && message.run_id === c.runId)
+  const page = await reopened.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, assistant))
+  const parts = page.items.filter((item) => item.kind === "activity")
+  assert.deepEqual(
+    parts.map((part) => part.activity),
+    [completed, historical],
+  )
+  assert.equal(Object.hasOwn(parts[1].activity, "display_detail"), false)
+  assert.ok(parts.every((part) => BigInt(part.first_sequence) < BigInt(part.latest_sequence)))
+})

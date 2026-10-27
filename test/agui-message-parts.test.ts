@@ -222,3 +222,64 @@ for (const display_code of ["tool.file.write", "tool.file.deliver"]) {
     })
   }
 }
+
+it("Agent8.2 source fold preserves immutable detail and rejects same-slot identity, category, presence or value drift", async () => {
+  const { foldMessageParts: fold } = await import("../src/infrastructure/postgres/message-parts.ts")
+  const running = { ...tool, display_code: "tool.file.read", display_detail: { kind: "file", name: "report.md" } }
+  const initial = fold(fresh(), runId, [frame(4, "CUSTOM", { name: "kokoro.activity.updated", value: running })])
+  const done = fold(initial, runId, [frame(5, "CUSTOM", { name: "kokoro.activity.updated", value: { ...running, status: "completed" } })])
+  assert.equal(done.parts[0].first_sequence, "4")
+  assert.equal(done.parts[0].latest_sequence, "5")
+  assert.deepEqual(done.parts[0].activity.display_detail, running.display_detail)
+  const { display_detail, ...without } = running
+  for (const changed of [
+    without,
+    { ...running, segment_id: `seg_${"c".repeat(64)}` },
+    { ...running, display_code: "tool.file.write" },
+    { ...running, display_detail: { kind: "file", name: "other.md" } },
+  ]) {
+    assert.throws(() => fold(initial, runId, [frame(5, "CUSTOM", { name: "kokoro.activity.updated", value: { ...changed, status: "completed" } })]))
+  }
+  assert.deepEqual(initial.parts[0].activity, running)
+  const absent = fold(fresh(), runId, [frame(4, "CUSTOM", { name: "kokoro.activity.updated", value: without })])
+  assert.throws(() => fold(absent, runId, [frame(5, "CUSTOM", { name: "kokoro.activity.updated", value: running })]))
+})
+
+it("the compact writer checks the same immutable tool tuple before changing legacy or ordered activity rows", async () => {
+  const { projectRunProcessFrame } = await import("../src/infrastructure/postgres/agui-process-projection.ts")
+  const running = { ...tool, display_code: "tool.file.read", display_detail: { kind: "file", name: "report.md" } }
+  let writes = 0
+  const client = {
+    query: async (sql) => {
+      if (sql.includes("SELECT safe_payload")) return { rows: [{ safe_payload: running, subject_id: "owner" }], rowCount: 1 }
+      writes++
+      return { rows: [{ activity_id: running.activity_id }], rowCount: 1 }
+    },
+  }
+  const source = {
+    sourceOwner: "kokoro-agent",
+    sourceEventId: "source",
+    sourceSequence: 2,
+    sourceDigest: "a".repeat(64),
+    sourceOccurredAt: "2026-10-27T00:00:00.000Z",
+  }
+  for (const change of [
+    { display_code: "tool.file.write" },
+    { segment_id: `seg_${"e".repeat(64)}` },
+    { display_detail: undefined },
+    { display_detail: { kind: "file", name: "other.md" } },
+  ]) {
+    await assert.rejects(
+      projectRunProcessFrame(
+        client,
+        { tenantId: "tenant", sessionId: "session", subjectId: "owner" },
+        source,
+        frame(5, "CUSTOM", { name: "kokoro.activity.updated", value: { ...running, ...change, status: "completed" } }).frame,
+        5,
+        "agui_cursor",
+      ),
+      /ACTIVITY_IDENTITY/u,
+    )
+  }
+  assert.equal(writes, 0)
+})

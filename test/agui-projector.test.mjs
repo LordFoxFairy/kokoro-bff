@@ -672,9 +672,10 @@ it("Agent8 safe tool classes remain exact when the existing projector prepares c
     const calls = []
     await projectRunProcessFrame(
       {
-        query: async (_sql, values) => {
+        query: async (sql, values) => {
+          if (sql.startsWith("SELECT safe_payload")) return { rows: [], rowCount: 0 }
           calls.push(values)
-          return { rowCount: 1 }
+          return { rows: [], rowCount: 1 }
         },
       },
       { tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" },

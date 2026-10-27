@@ -1,3 +1,17 @@
+## TOOL-ACTION-DETAIL-D0：Public28.4 候选动作详情与 Share null（2026-10-27，源码候选）
+
+本地 canonical 候选 Public28.4.0／192操作已固定正式 Agent HTTP8.2.0 `fc8b0f09f3cfd96211b33d863d5e629bbed13e46`；OpenAPI／provenance 两原件经 Git blob／直接 SHA 校验与原18输出 generator 消费，不从 dirty 源码或浮动分支生成。完整 Public28.4 SHA256 `48aa9638d133223c9f78655e9398ddbb44159963f92a2db891a09212f3aa2726`，尚未发布或正常激活；无新 operation、URL、权限或协议。
+
+唯一 public canonical 仍 `contract/openapi/v1/openapi.yaml`。候选 Public28.4.0 仅在 strict `RunToolActivity` 增 optional `display_detail`，形状 closed `{kind:"file"|"mcp_tool",name}`；原五字段 required、九个 display_code、subagent／Skill 保持。name 非空 NFC，1..120 Unicode scalar 且 UTF-8≤480 bytes，无控制字符（Cc）／Cf／孤立代理；拒绝未知 kind、额外字段、坏 Unicode／非 NFC、超限及非法 code/detail 配对，不截断、静默 normalize 或 generic fallback。file name 另受 canonical basename pattern 约束（非 .／..、无 /／反斜杠／冒号），MCP 公有声明 name 不套用文件限制。file 仅配 read／write／deliver 三个文件 code；mcp_tool 仅配 describe／call 两个 MCP code，其它 code 必须 absent。absence 与 null／空对象不同；历史 absent 原样读取、不回填。不发布参数／结果／完整路径／答案等替代详情；来源由 Agent typed producer 明确给出。
+
+`RunProcessActivity` 仍为唯一 activity 图：同详情经原 CUSTOM `kokoro.activity.updated`、`RunExecutionProcess`／`RunProcessPage`、`MessageActivityPart.activity` 和 private ordered 重开同值承接。对同 activity_id，activity／segment_id／display_code／detail presence+值不可变，status 沿原语义；compact 与 Message fold 写前校验，漂移拒绝并原事务回滚。活动身份、首位置／latest、public_sequence、source seq/digest、opaque cursor、分页／重放、请求幂等和 actor 权限不变。
+
+**Share 只做必要闭包。** 当前 `SessionSnapshotResponse` 仅由 `getSharedSessionSnapshot` 使用，却允许非 null execution_process；正式 PG runtime 又省略该 required 字段。后继保该 response 和 ChatMessage 原形，只将 execution_process 固定 null、runtime 补显式 null。正式／备用 Share 出口均保公开 message 白名单与原文件／delivery redaction，不读 private activity／parts、不 spread head／rendering／parts_cursor。PrivateSessionSnapshotResponse 不变；Share capability／服务身份不授当前 subject 的私有读取权，不向匿名 recipient 新增任何工具对象。App 共享 decoder 拒非 null，私有 extend 显式 override 由 App 后继承担，不扩 ACL／Share 管理。
+
+固定生成闭包见 [本片技术设计](TECHNICAL_DESIGN.md#tool-action-detail-d0受信动作详情与共享隔离2026-10-27root-已裁决源码候选)：现 Agent config／generator 双 pin、vendor 两原件、dependency manifest及18输出；新边界参数从唯一 canonical 正规生成，运行校验补齐 compiler 尚未执行的 maxLength／pattern 语义。Public28.4 精确 inverse 恢复完整28.3 SHA256 `85a1b51cd151581b51d7ea7992d85e04462c03fafb36d0527e1df352dd85223a` 再走全部父链，不改旧证明／192 inventory；App 十个完整snapshot generator 统一固定正式 BFF commit/hash，独立 private pins 不动。
+
+验收复用现 owner wire／source／parts／contract 回归与真实 PG＋正式 HTTP入口：闭集及Unicode界限、开始／完成稳定值、compact/fold漂移原子回滚、重复／replay／重开、历史 absence、当前 actor／scope及 Share secret-canary／撤权 race。源码候选／focused 通过不等真实 PG、发行或正常配对通过；无额外日志／传输／数据库／owner。
+
 ## 文件工具显示类别后继
 
 当前 canonical 为 Public28.3.0／192 操作，保全部路径／operationId／请求与响应结构，仅 `RunToolActivity.display_code` 在原七值之后追加 `tool.file.write`、`tool.file.deliver`。分支仍 strict `{activity:"tool",activity_id,segment_id,status,display_code}`，status 仍 running／completed／failed；subagent／skill 独立分支不扩值。未知 code／错分支及 filename、args、path、result、secret 等额外字段不发布、不回退为 generic，旧 `tool.execution` 合法且原样读取。

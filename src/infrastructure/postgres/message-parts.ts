@@ -1,6 +1,6 @@
 import type { AgUiEvent } from "../../application/agui/project-chat-event.js"
 import type { AgUiAssistantUpdate } from "../../application/agui/ports/agui-projection-repository.js"
-import { parseAgentProcessPayload, type AgentActivity } from "../clients/agent/process-state.js"
+import { parseAgentProcessPayload, sameAgentActivityIdentity, type AgentActivity } from "../clients/agent/process-state.js"
 
 type Position = { part_id: string; first_sequence: string; latest_sequence: string }
 export type MessageTextPart = Position & { kind: "text"; segment_id: string; text: string; completed: boolean }
@@ -142,7 +142,7 @@ export function foldMessageParts(
       if (existing === undefined) {
         state.parts.push({ kind: "activity", part_id: `activity:${safe.activity_id}`, first_sequence: position, latest_sequence: position, activity: safe })
       } else {
-        if (existing.activity.activity !== safe.activity) return invalid()
+        if (!sameAgentActivityIdentity(existing.activity, safe)) return invalid()
         existing.activity = safe
         existing.latest_sequence = position
       }

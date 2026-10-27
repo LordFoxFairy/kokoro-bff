@@ -1,3 +1,4 @@
+import { restorePublic283ActionDetailContract } from "./action-detail-public-contract.mjs"
 // Build/test-only exact Public28.3→28.2 inverse. Never imported by production.
 import { createHash } from "node:crypto"
 
@@ -10,6 +11,7 @@ const parentField =
   "        display_code: { type: string, enum: [tool.execution, tool.file.read, tool.mcp.discover, tool.mcp.describe, tool.mcp.call, tool.web.search, tool.web.fetch] }\n"
 
 export function restorePublic282FileToolDisplayContract(source) {
+  source = restorePublic283ActionDetailContract(source)
   if (!/^  version: 28\.3\.0$/mu.test(source)) {
     if (source.includes("tool.file.write") || source.includes("tool.file.deliver")) throw Error("Tool display file version drift")
     return source

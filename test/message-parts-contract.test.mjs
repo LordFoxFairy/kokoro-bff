@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { load } from "js-yaml";
+import { restorePublic283ActionDetailContract } from "../scripts/action-detail-public-contract.mjs";
 import { projectResourceParentBaseline, restorePublic28ProjectResourceContract } from "../scripts/project-resource-access-public-contract.mjs";
 import { restorePublic27ToolDisplayContract, toolDisplayParentSha256 } from "../scripts/tool-display-public-contract.mjs";
 
@@ -310,7 +311,7 @@ test("Public28 restores the full frozen Public27 before every unchanged historic
 
 
 test("Public28.3 publishes exactly the two additional file display codes, no new fields or operations", async () => {
-  const api = load(await readFile(contractUrl, "utf8"));
+  const api = load(restorePublic283ActionDetailContract(await readFile(contractUrl, "utf8")));
   assert.equal(api.info.version, "28.3.0");
   assert.deepEqual(api.components.schemas.RunToolActivity.required, ["activity", "activity_id", "segment_id", "status", "display_code"]);
   assert.deepEqual(Object.keys(api.components.schemas.RunToolActivity.properties), api.components.schemas.RunToolActivity.required);
@@ -324,7 +325,7 @@ test("Public28.3 publishes exactly the two additional file display codes, no new
 
 test("Public28.3 restores complete frozen Public28.2 before the original inverse chain and rejects either-side tampering", async () => {
   const { restorePublic282FileToolDisplayContract, fileToolDisplayCurrentSha256, fileToolDisplayParentSha256 } = await import("../scripts/file-tool-display-public-contract.mjs");
-  const source = await readFile(contractUrl, "utf8");
+  const source = restorePublic283ActionDetailContract(await readFile(contractUrl, "utf8"));
   assert.equal(createHash("sha256").update(source).digest("hex"), fileToolDisplayCurrentSha256);
   const parent = restorePublic282FileToolDisplayContract(source);
   assert.equal(createHash("sha256").update(parent).digest("hex"), fileToolDisplayParentSha256);
@@ -346,3 +347,42 @@ test("Public28.3 restores complete frozen Public28.2 before the original inverse
     assert.throws(() => restorePublic28ProjectResourceContract(changed), /Project MCP recommendations .*drift/u);
   }
 });
+
+test("Share snapshot publication fixes the process to null without changing private snapshots or the complete Public28.3 parent", async () => {
+  const source = await readFile(contractUrl, "utf8"),
+    api = load(source)
+  assert.equal(api.info.version, "28.4.0")
+  const shared = api.components.schemas.SessionSnapshotResponse.properties.data
+  assert.equal(shared.required.includes("execution_process"), true)
+  assert.deepEqual(shared.properties.execution_process, { type: "null" })
+  assert.equal(api.components.schemas.SessionSnapshotResponse.example.data.execution_process, null)
+  assert.deepEqual(api.components.schemas.PrivateSessionSnapshotResponse.properties.data.properties.execution_process, {
+    oneOf: [{ $ref: "#/components/schemas/RunExecutionProcess" }, { type: "null" }],
+  })
+  assert.equal(api.paths["/v1/shared/{shareId}"].get.responses["200"].content["application/json"].schema.$ref, "#/components/schemas/SessionSnapshotResponse")
+  const { restorePublic283ActionDetailContract } = await import("../scripts/action-detail-public-contract.mjs")
+  const parent = restorePublic283ActionDetailContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "85a1b51cd151581b51d7ea7992d85e04462c03fafb36d0527e1df352dd85223a")
+  for (const changed of [
+    source + "\n",
+    source.replace("execution_process: { type: 'null' }", "execution_process: { type: object }"),
+    source.replace("operationId: getSessionSnapshot", "operationId: changedPrivateSnapshot"),
+  ]) {
+    assert.throws(() => restorePublic283ActionDetailContract(changed))
+  }
+})
+
+test("Public28.4 publishes the exact Agent8.2 optional detail graph on private activities only", async () => {
+  const api = load(await readFile(contractUrl, "utf8"))
+  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
+  const owner = JSON.parse(await readFile(new URL(`../contract/vendor/kokoro-agent/${manifest.owner.repository_commit}/openapi.json`, import.meta.url), "utf8"))
+  const tool = api.components.schemas.RunToolActivity,
+    producer = owner.components.schemas.ChatActivity.oneOf[0]
+  assert.deepEqual(tool.properties.display_detail, producer.properties.display_detail)
+  assert.deepEqual(tool.allOf, producer.allOf)
+  assert.deepEqual(tool.required, ["activity", "activity_id", "segment_id", "status", "display_code"])
+  assert.equal(tool.additionalProperties, false)
+  assert.equal(api.components.schemas.RunSubagentActivity.properties.display_detail, undefined)
+  assert.equal(api.components.schemas.RunSkillActivity.properties.display_detail, undefined)
+  assert.deepEqual(api.components.schemas.SessionSnapshotResponse.properties.data.properties.execution_process, { type: "null" })
+})

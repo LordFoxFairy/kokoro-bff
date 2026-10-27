@@ -293,6 +293,10 @@ export const zChatActivity = z.union([
         "tool.file.write",
         "tool.file.deliver",
       ]),
+      display_detail: z
+        .object({ kind: z.enum(["file", "mcp_tool"]), name: z.string().min(1) })
+        .strict()
+        .optional(),
     })
     .strict(),
   z

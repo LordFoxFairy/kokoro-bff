@@ -31,19 +31,19 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "38c294d38cf05149c320622f52490f82fb1fff91",
-        contract_version: "8.1.0",
+        repository_commit: "fc8b0f09f3cfd96211b33d863d5e629bbed13e46",
+        contract_version: "8.2.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9",
+        contract_sha256: "8a0b9973661205b8e29020934c39e5c7ab629b4c42db4e79c845a410d96efa2a",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "879695cfacd55014b9f6a28e3138d88bc009ba9d46acfac27497a26f0025acad",
+        provenance_sha256: "7a8b442633e08d984a5381389359e5a03d59a0503a1a9d6fb09ea54fad003bd3",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9",
+        source_sha256: "8a0b9973661205b8e29020934c39e5c7ab629b4c42db4e79c845a410d96efa2a",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
@@ -53,18 +53,18 @@ describe("Agent event-protocol provenance", () => {
   it("uses one HTTP8 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "38c294d38cf05149c320622f52490f82fb1fff91")
+    assert.equal(manifest.owner.repository_commit, "fc8b0f09f3cfd96211b33d863d5e629bbed13e46")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9",
+      "8a0b9973661205b8e29020934c39e5c7ab629b4c42db4e79c845a410d96efa2a",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/38c294d38cf05149c320622f52490f82fb1fff91/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/fc8b0f09f3cfd96211b33d863d5e629bbed13e46/openapi.json", import.meta.url), "utf8"),
     )
     assert.deepEqual(owner.components.schemas.ChatActivity.oneOf[0].properties.display_code, {
       type: "string",
@@ -82,6 +82,30 @@ describe("Agent event-protocol provenance", () => {
     })
     assert.doesNotThrow(() => assertInteractionContractSchema(owner))
     for (const change of [
+      (s) => {
+        delete s.ChatActivity.oneOf[0].allOf[0].then.properties.display_detail.properties.name.pattern
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].allOf[1].then.properties.display_detail = { properties: { name: { pattern: "no-slash" } } }
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_detail.properties.name.maxLength = 121
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_detail.properties.name["x-kokoro-utf8-byte-limit"] = 481
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_detail.properties.name["x-kokoro-unicode-domain"] = "NFC Unicode text"
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_detail.additionalProperties = true
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_detail.required.pop()
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].allOf[0].then.properties.display_code.enum.push("tool.execution")
+      },
       (s) => {
         delete s.ChatEvent["x-kokoro-decoded-payloads"].mapping["interaction.state"]
       },
@@ -541,3 +565,76 @@ for (const [activity, display_code] of [
     )
   })
 }
+
+it("Agent8.2 carries only the owner's bounded typed action detail, preserving scalar text and old absence", async () => {
+  const { parseAgentProcessPayload } = await import("../src/infrastructure/clients/agent/process-state.ts")
+  for (const [display_code, kind] of [
+    ["tool.file.read", "file"],
+    ["tool.file.write", "file"],
+    ["tool.file.deliver", "file"],
+    ["tool.mcp.describe", "mcp_tool"],
+    ["tool.mcp.call", "mcp_tool"],
+  ]) {
+    for (const name of ["report.md", "é😀", "😀".repeat(120)]) {
+      const payload = {
+        activity: "tool",
+        activity_id: `act_${"a".repeat(64)}`,
+        segment_id: `seg_${"b".repeat(64)}`,
+        status: "running",
+        display_code,
+        display_detail: { kind, name },
+      }
+      assert.deepEqual(parseAgentProcessPayload("activity", JSON.stringify(payload)), { kind: "activity.updated", value: payload })
+      const { display_detail, ...old } = payload
+      assert.deepEqual(parseAgentProcessPayload("activity", JSON.stringify(old)).value, old)
+    }
+  }
+})
+
+it("Agent8.2 rejects invalid detail domains or cross-category metadata rather than stripping or repairing them", async () => {
+  const { parseAgentProcessPayload } = await import("../src/infrastructure/clients/agent/process-state.ts")
+  const tool = {
+    activity: "tool",
+    activity_id: `act_${"a".repeat(64)}`,
+    segment_id: `seg_${"b".repeat(64)}`,
+    status: "completed",
+    display_code: "tool.file.read",
+  }
+  for (const display_detail of [
+    null,
+    {},
+    { kind: "unknown", name: "x" },
+    { kind: "file", name: "x", secret: "PRIVATE" },
+    ...["", "a".repeat(121), "😀".repeat(121), "e\u0301", "x\u0000", "x\n", "x\u007f", "x\u0085", "x\u200b", "x\u202e", "x\ud800"].map((name) => ({
+      kind: "file",
+      name,
+    })),
+  ]) {
+    assert.throws(() => parseAgentProcessPayload("activity", JSON.stringify({ ...tool, display_detail })))
+  }
+  for (const display_code of ["tool.execution", "tool.mcp.discover", "tool.web.search", "tool.web.fetch", "tool.mcp.call"]) {
+    assert.throws(() => parseAgentProcessPayload("activity", JSON.stringify({ ...tool, display_code, display_detail: { kind: "file", name: "report.md" } })))
+  }
+  assert.throws(() =>
+    parseAgentProcessPayload(
+      "activity",
+      JSON.stringify({ ...tool, activity: "subagent", display_code: "subagent.execution", display_detail: { kind: "file", name: "report.md" } }),
+    ),
+  )
+})
+
+it("Agent8.2 file detail obeys the producer basename domain while MCP public declaration names may contain slash", async () => {
+  const { parseAgentProcessPayload } = await import("../src/infrastructure/clients/agent/process-state.ts")
+  const base = {
+    activity: "tool",
+    activity_id: `act_${"a".repeat(64)}`,
+    segment_id: `seg_${"b".repeat(64)}`,
+    status: "running",
+    display_code: "tool.file.read",
+  }
+  for (const name of [".", "..", "/private/report.md", "a\\b", "C:secret"]) {
+    assert.throws(() => parseAgentProcessPayload("activity", JSON.stringify({ ...base, display_detail: { kind: "file", name } })), name)
+  }
+  const mcp = { ...base, display_code: "tool.mcp.call", display_detail: { kind: "mcp_tool", name: "namespace/public_tool" } }
+  assert.deepEqual(parseAgentProcessPayload("activity", JSON.stringify(mcp)).value, mcp)
+})

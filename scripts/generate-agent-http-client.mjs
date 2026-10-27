@@ -11,12 +11,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "38c294d38cf05149c320622f52490f82fb1fff91"
+const ownerCommit = "fc8b0f09f3cfd96211b33d863d5e629bbed13e46"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "1642829ccf5364692051e836938ef33b36cffeca25f2b7766ad95cd44a1542c9"
-const provenanceDigest = "879695cfacd55014b9f6a28e3138d88bc009ba9d46acfac27497a26f0025acad"
-const ownerContractVersion = "8.1.0"
+const ownerDigest = "8a0b9973661205b8e29020934c39e5c7ab629b4c42db4e79c845a410d96efa2a"
+const provenanceDigest = "7a8b442633e08d984a5381389359e5a03d59a0503a1a9d6fb09ea54fad003bd3"
+const ownerContractVersion = "8.2.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -187,6 +187,48 @@ export function assertInteractionContractSchema(document) {
     { type: "string", const: "subagent.execution" },
     "Agent subagent display branch drifted",
   )
+  const tool = schemas.ChatActivity.oneOf[0]
+  assert.deepEqual(tool.required, ["activity", "activity_id", "segment_id", "status", "display_code"])
+  assert.deepEqual(Object.keys(tool.properties), [...tool.required, "display_detail"])
+  assert.deepEqual(
+    tool.properties.display_detail,
+    {
+      type: "object",
+      required: ["kind", "name"],
+      properties: {
+        kind: { type: "string", enum: ["file", "mcp_tool"] },
+        name: {
+          type: "string",
+          minLength: 1,
+          maxLength: 120,
+          "x-kokoro-utf8-byte-limit": 480,
+          "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",
+        },
+      },
+      additionalProperties: false,
+    },
+    "Agent tool detail closed domain drifted",
+  )
+  assert.deepEqual(
+    tool.allOf,
+    [
+      {
+        if: { required: ["display_detail"], properties: { display_detail: { properties: { kind: { const: "file" } } } } },
+        then: {
+          properties: {
+            display_code: { enum: ["tool.file.read", "tool.file.write", "tool.file.deliver"] },
+            display_detail: { properties: { name: { pattern: "^(?!\\.{1,2}$)[^/\\\\:]+$" } } },
+          },
+        },
+      },
+      {
+        if: { required: ["display_detail"], properties: { display_detail: { properties: { kind: { const: "mcp_tool" } } } } },
+        then: { properties: { display_code: { enum: ["tool.mcp.describe", "tool.mcp.call"] } } },
+      },
+    ],
+    "Agent tool detail category conditions drifted",
+  )
+  assert.deepEqual(Object.keys(schemas.ChatActivity.oneOf[1].properties), ["activity", "activity_id", "segment_id", "status", "display_code"])
   const skill = schemas.ChatActivity.oneOf[2]
   assert.equal(skill.properties.source_refs.minItems, 1)
   assert.equal(skill.properties.source_refs.maxItems, 16)
@@ -299,7 +341,21 @@ function processProfileSource(document) {
   assert.deepEqual(tool.properties.activity_id, subagent.properties.activity_id)
   assert.deepEqual(tool.properties.activity_id, skill.properties.activity_id)
   assert.deepEqual(tool.properties.segment_id, subagent.properties.segment_id)
+  const detailName = tool.properties.display_detail.properties.name
+  const unicodeDomain = /^(NFC) Unicode scalars; no (Cc), (Cf) or (Cs)$/u.exec(detailName["x-kokoro-unicode-domain"])
+  assert.ok(unicodeDomain, "Agent tool detail Unicode domain is unsupported")
   const profile = {
+    toolDetail: {
+      minScalars: detailName.minLength,
+      maxScalars: detailName.maxLength,
+      utf8ByteLimit: detailName["x-kokoro-utf8-byte-limit"],
+      fileNamePattern: tool.allOf[0].then.properties.display_detail.properties.name.pattern,
+      normalization: unicodeDomain[1],
+      forbiddenCategories: unicodeDomain.slice(2),
+      codesByKind: Object.fromEntries(
+        tool.allOf.map((condition) => [condition.if.properties.display_detail.properties.kind.const, condition.then.properties.display_code.enum]),
+      ),
+    },
     todo: {
       jsonByteLimit: todo["x-kokoro-json-byte-limit"],
       maxItems: todoItems.maxItems,

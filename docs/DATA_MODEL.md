@@ -1,3 +1,17 @@
+## TOOL-ACTION-DETAIL-D0：沿现 JSONB 的详情与不变绑定（2026-10-27，源码候选，无 DDL）
+
+本片基线 BFF `b2b9eb1eac4a3f0b0cd4099ed59cbf756f14124c`；已固定正式 Agent HTTP8.2.0 `fc8b0f09f3cfd96211b33d863d5e629bbed13e46`，本地 Public28.4 源码候选尚未发布／正常激活。唯一 Schema 仍 `database/schema.sql`，本片不编辑 Schema、DDL、migration／evolution、表／列／索引／版本或正常数据，不新建 action owner／registry／receipt／日志／传输。
+
+Agent 是受信详情唯一 producer。tool optional `display_detail` 为 closed `{kind:"file"|"mcp_tool",name}`：name 非空 NFC、1..120 Unicode scalar／UTF-8≤480 bytes、无 Cc／Cf／孤立代理；file name 另受 canonical basename pattern 约束（非 .／..、无 /／反斜杠／冒号），MCP 公有声明 name 不套用文件限制；file仅 read/write/deliver，mcp_tool仅 describe/call，其它类别 absent。BFF 沿正式生成 codec 接受原值，不从参数／结果／答案或当前元数据补值；absence 不等 null，不回填历史。详细 wire／生成边界以 [本片 API 设计](API_CONTRACT.md#tool-action-detail-d0public284-候选动作详情与-share-null2026-10-27源码候选) 为准。
+
+现 `bff_agui_event.event_payload`、`bff_agui_run_activity.safe_payload` 与 `bff_message.ordered_parts` 已为 owner JSONB；容器 CHECK 不枚举内部 detail，故无需 DDL。严格新 shape 仍由生成 decoder／本 owner 校验负责，不把 JSONB 容量当字段已获准。保 `projection_schema_version=1`、`parts_format_version=1`、现 Message／Run／tenant／subject关联；不改 public_sequence/source seq、opaque cursor、首／末 provenance、source digest 算法、排序、保留与 GC。
+
+写入仍在原 Conversation→stream／source/frame事务：`agui-process-projection.ts` 原 conflict 与 `message-parts.ts` 原 fold，在同 activity_id 覆盖前都核 immutable activity／segment_id／display_code／detail 的 presence+完整值；status按原行为。漂移失败使 source／frame／compact／ordered_parts／content／水位全回滚，不合并旧detail伪造完成，也不让legacy无parts绕过compact校验。正常同值更新固定first、只按原语义更新latest；重投不新增slot。现snapshot/process/parts/reopen读同持久safe值，无第二份字段事实或请求内补全。
+
+Share继续从独立public repository读取原Message正文／公开白名单，不读private compact／ordered parts；同服务出口将execution_process明确null并排除private head／rendering／parts/cursor。仅收窄现Share专用response，不变private snapshot、不改ACL或共享事实。原canonical允许非null而正式runtime缺required null的既存不一致在本片窄修，不能借修表示扩匿名可见性。
+
+资源验收沿现 `agui-projection.integration.mjs`／`message-parts-read.integration.mjs`／`chat-facts.integration.mjs`：新详情运行／完成／失败同值、compact与fold漂移事务回滚、重复／重开／分页、旧absent／旧行不回写、原身份／游标保护、完整HTTP Share secret-canary不泄且null、撤权race。仅Root授权隔离资源后运行；新持久详情后不盲降旧closed reader，恢复只配对升级不重派Run。本片不执行 DB 操作；真实持久／回滚／HTTP 资源测试已补到原入口，由 Root 供隔离资源并验收。
+
 ## PROJECT-MCP-RECOMMENDATIONS-D1：本人项目推荐配置模型／演进计划（2026-10-27，本地候选、未正常DDL）
 
 唯一owner为BFF Project，canonical为本仓`database/schema.sql`；不新增owner、推荐表、跨owner FK、外部元数据镜像、receipt/journal/outbox或成员权限事实。Root选定三种闭合refs：provider/provider_key、mcp_connector/connector_id、custom_api/profile_id；按kind+ID去重并ASCII排序，最多16，`[]`为明确空配置。私有ref只属于当前可信subject，未来共享另走Project ACL，不转移凭据。
