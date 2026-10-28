@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.7.0
+  version: 28.8.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -6396,6 +6396,43 @@ paths:
         '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
         '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
         '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
+  /v1/projects/{projectId}/skill-installations/{installation_id}/package:
+    get:
+      tags: [Skills]
+      operationId: getProjectSkillInstallationPackage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.installation.read
+      summary: Inspect an exact Skill installation package in the currently visible Project
+      description: >-
+        Resolve the currently visible Project before and after the exact installed pin read.
+        Uses only InspectProjectSkillInstallationPackage with trusted Project transport, never personal or current catalog aliases.
+        Reject unknown or duplicate query keys, body, transfer-encoding and idempotency-key. The decoded identifier and optional
+        file_path are passed without trimming or a second decode. A single absolute ten-second budget covers admission, credentials,
+        OAuth HTTP, owner RPC, strict projection and final UTF-8 JSON encoding. The complete public JSON is at most 1,048,576 bytes;
+        responses are not truncated. For a file read, selected_file.path equals the requested file_path exactly.
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - name: installation_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - $ref: '#/components/parameters/SkillPackageInspectionFilePath'
+      responses:
+        '200': { $ref: '#/components/responses/SkillPackageInspectionOk' }
+        '400': { $ref: '#/components/responses/SkillPackageInspectionBadRequest' }
+        '401': { $ref: '#/components/responses/SkillPackageInspectionUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillPackageInspectionForbidden' }
+        '404': { $ref: '#/components/responses/SkillPackageInspectionNotFound' }
+        '412': { $ref: '#/components/responses/SkillPackageInspectionPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillPackageInspectionRateLimited' }
+        '502': { $ref: '#/components/responses/SkillPackageInspectionBadGateway' }
+        '503': { $ref: '#/components/responses/SkillPackageInspectionUnavailable' }
   /v1/skill-installations/{installation_id}/package:
     get:
       tags: [Skills]

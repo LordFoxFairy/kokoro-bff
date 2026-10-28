@@ -1,3 +1,7 @@
+## Project installation content successor（2026-10-27，候选）
+
+Canonical Public28.8新增唯一 `GET /v1/projects/{projectId}/skill-installations/{installation_id}/package`，复用原SkillPackageInspection响应；现 `project-pin-public-contract.mjs` 具名严格逆回完整28.7 SHA818dfe54…3ebd1，旧194 inventory按原顺序保留，只追加新operation。私有 `contract/skill-download-policy.json` 由原 `skill-download.policy.ts`／`generate-skill-download-policy.mjs` 唯一生成，version2增加Project双selector签发；success/errors/framing及原3操作全等原policy。主Native正规固定Platform94e574及新content profile，旧Runtime/SSE／独立HTTP7／publication字节保留；outcomes与query仅机械provenance级联，非语义升级。Root正式发行前不消费dirty或冒正常启用。
+
 ## 当前 Public28.5 Project pin 消费候选（2026-10-27）
 
 只增加 `listSelfProjectPins`／`setProjectPin` 两个 personal-preference operation，总计194；原192有序 inventory 保持后追加新项，Project 原 closed wire 不加字段。当前完整原件与完整28.4 SHA48aa9638d133223c9f78655e9398ddbb44159963f92a2db891a09212f3aa2726的逆证由 `scripts/project-pin-public-contract.mjs` 固定，后续旧父 hash 原样。自然状态 PUT 不要 key／CAS／receipt，project.read不授 Project 共享写权限；正常 DB／运行配对未由源码候选代证。

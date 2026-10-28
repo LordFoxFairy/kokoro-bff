@@ -3,7 +3,7 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "f29428f6e6d23e9f35642fe3de5463472bc1f873",
+    "repository_commit": "94e574c68d6c972078b661fa7d917dab90c71042",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -12,7 +12,7 @@
       },
       {
         "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
-        "sha256": "26bd1cc61f34e3de8b56359985896d48a1232363b44fd681084a7cd0f1543b2d"
+        "sha256": "26266d24fc1fcffb581662d5a404a97c485c09e3b2e597bb88df3a9cc482ed36"
       },
       {
         "path": "contract/proto/kokoro/storage/v3/storage.proto",
@@ -24,6 +24,10 @@
       }
     ],
     "artifacts": [
+      {
+        "path": "contract/execution-operations/project-skill-installation-content-v1.json",
+        "sha256": "e69a91b9ec1fdd78fc50a2780f231248057c851d5ac7b2ff0d21a51b25c8e876"
+      },
       {
         "path": "contract/execution-operations/mcp-icon-v1.json",
         "sha256": "a6dd6d0bfe134c3c46b8c5fd442a7a7d1715c22ce6cea272148c50192e04504c"
@@ -70,7 +74,7 @@
       },
       {
         "path": "contract/descriptor/platform-v1.binpb",
-        "sha256": "e391c377d1c156caf855ab46d9baf2ff814a41c17fc9cccb7f85ace4f7b71b5c"
+        "sha256": "6c7dadd8ccad5a5a1b56a4c9cf17acb7a1a3f41390e8e0c011fb120dd943483f"
       },
       {
         "path": "contract/execution-operations/skill-acquisition-v1.json",
@@ -255,12 +259,12 @@
     ],
     "provenance": {
       "path": "contract/provenance.json",
-      "sha256": "dd31fbcbbda62bbfbf70f11d39ae0b34d2190cf1be97ae9cf098a84a78f0c0fa",
-      "combined_sha256": "8e07bbef6ae8bcedcbbfe37e4b543bccde7e4ba85815871796c30d4894affa5e"
+      "sha256": "cd5ebc24ce786b3c57bf0f42ce48abde0d7556e1fb3e44c18187589f41cc5073",
+      "combined_sha256": "fe6643f9785fd92754d5b044c613ed63e4a44dfed57b0afdaf17b016b1d96e0a"
     },
     "generated": {
       "path": "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
-      "sha256": "d5b244938c9b5e0ef9043414954090649ed62497072768c6186c53407caf1e2c"
+      "sha256": "dfc1410f5cf18d18d449b35b7f92499e7b08c778d8f258b80f4abec0927c9d5d"
     }
   },
   "publication": {
@@ -292,14 +296,14 @@
     "configs": [
       {
         "path": "buf.platform.json",
-        "sha256": "a190aa5c0c07793fce26e57ff38830766dffb29da3ab77af5f63167908880b45"
+        "sha256": "e5ba884f44100b832e4c190ea76c08f10413d63f236fc81cd20daac03a6c5673"
       },
       {
         "path": "buf.platform.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "c59368e19263737e5a1fce3ddec17b6dc668ec54b2f3c087458654d3f9680952"
+    "script_sha256": "893c62d36166af66215263d37aa1fbfaa1e62da761107a789affbdb1969c9b20"
   },
   "generated": [
     {
@@ -320,7 +324,7 @@
     },
     {
       "path": "kokoro/platform/v1/platform_runtime_pb.ts",
-      "sha256": "3b6881edc871dc155ebd7b952f2c576dae95aaeab847a1730f7dd66792b8098c"
+      "sha256": "ffd7d225e10cd305b7467c6cf8bbafb737c465973e47ae70fc386f2304fa3d9f"
     },
     {
       "path": "kokoro/storage/v3/storage_pb.ts",

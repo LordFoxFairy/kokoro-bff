@@ -7,6 +7,7 @@ export type SkillDownloadBinding = Readonly<{
   qualifier:
     | Readonly<{ kind: "catalog_current"; seriesId: string }>
     | Readonly<{ kind: "installation"; installationId: string }>
+    | Readonly<{ kind: "project_installation"; projectId: string; installationId: string }>
     | Readonly<{ kind: "managed"; versionId: string }>
     | Readonly<{ kind: "share"; shareId: string }>
   sourceRef: string
@@ -129,6 +130,14 @@ function validQualifier(value: SkillDownloadBinding["qualifier"]): boolean {
   if (typeof value !== "object" || value === null) return false
   if (value.kind === "catalog_current") return ID.test(value.seriesId) && Object.keys(value).length === 2
   if (value.kind === "installation") return ID.test(value.installationId) && Object.keys(value).length === 2
+  if (value.kind === "project_installation")
+    return (
+      typeof value.projectId === "string" &&
+      typeof value.installationId === "string" &&
+      ID.test(value.projectId) &&
+      ID.test(value.installationId) &&
+      Object.keys(value).length === 3
+    )
   if (value.kind === "managed") return ID.test(value.versionId) && Object.keys(value).length === 2
   if (value.kind === "share") return ID.test(value.shareId) && Object.keys(value).length === 2
   return false

@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "f29428f6e6d23e9f35642fe3de5463472bc1f873"
+const ownerCommit = "94e574c68d6c972078b661fa7d917dab90c71042"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-connect"
@@ -15,11 +15,12 @@ const manifestPath = "contract/dependencies/platform-connect.json"
 
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "26bd1cc61f34e3de8b56359985896d48a1232363b44fd681084a7cd0f1543b2d",
+  "kokoro/platform/v1/platform_runtime.proto": "26266d24fc1fcffb581662d5a404a97c485c09e3b2e597bb88df3a9cc482ed36",
   "kokoro/storage/v3/storage.proto": "b84a2fb1fd9c6e8c16e15a29cafbc33de670f40f703f3f33ef27652a0237a629",
   "kokoro/platform/v1/mcp_package_admin.proto": "60b6778cbb3024f09184bbfc1e06e124191a6583ad892e48e0bcb3c4d0667b31",
 }
 const artifactDigests = {
+  "execution-operations/project-skill-installation-content-v1.json": "e69a91b9ec1fdd78fc50a2780f231248057c851d5ac7b2ff0d21a51b25c8e876",
   "execution-operations/mcp-personal-sse-v1.json": "29ea698428bc7be7469d6582746015e9e18ccb8887f035e89626e1791dcef647",
   "execution-operations/mcp-personal-sse-request-vectors-v1.json": "95545d2462ec0e3106545685e386b06a253c37b9fa5306419120aef9a35e9087",
   "descriptor/platform-mcp-personal-sse-source-delta.json": "66bae4f03801373df48e1b5129650fabbaf3e46b2e38e8520e3f7748f91bc24d",
@@ -47,10 +48,10 @@ const artifactDigests = {
   "errors/command-receipt-v1.json": "d82a4b30039adc0754fe1bcc43738fc68be2cd3cbef0e710d14089f55bc0ac68",
   "auth/bff-service-auth-v1.json": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef",
   "execution-operations/skill-installation-update-v1.json": "9b75d679665f42eb48d89e9c6fe99c39f2f019894db4a54de15e9f97622dd194",
-  "descriptor/platform-v1.binpb": "e391c377d1c156caf855ab46d9baf2ff814a41c17fc9cccb7f85ace4f7b71b5c",
+  "descriptor/platform-v1.binpb": "6c7dadd8ccad5a5a1b56a4c9cf17acb7a1a3f41390e8e0c011fb120dd943483f",
   "execution-operations/custom-api-v1.json": "eca45ebd0f3c31d48cc174256dc23bda22de288ded91aa12198b1a2a37516a38",
   "execution-operations/mcp-private-server-v1.json": "066505d4a13cb6fd7a5f625b07eaf5f784b215db2a8584041f14da8ffc98eda1",
-  "provenance.json": "dd31fbcbbda62bbfbf70f11d39ae0b34d2190cf1be97ae9cf098a84a78f0c0fa",
+  "provenance.json": "cd5ebc24ce786b3c57bf0f42ce48abde0d7556e1fb3e44c18187589f41cc5073",
   "execution-operations/skill-acquisition-v1.json": "7c9cf9ed456199d4acd3d25f29154c8f098ed8866554476d37f058add0d78028",
   "openapi/platform-http.openapi.json": "085e1367f69c34edc6b80cbfb448596f36039f9857cee3bd5a407befbc295361",
   "mcp-package-admin/v1/profile.json": "d4b29dba0a5a6df8a0f36a654fcb81d5e95381568c0f5afd0bd104984366be75",
@@ -96,10 +97,10 @@ async function verifyPublication() {
     assert.equal(sha256(await readFile(path.join(root, publicationVendor, file))), digest, `publication artifact drifted: ${file}`)
 }
 
-const provenanceCombinedSha256 = "8e07bbef6ae8bcedcbbfe37e4b543bccde7e4ba85815871796c30d4894affa5e"
+const provenanceCombinedSha256 = "fe6643f9785fd92754d5b044c613ed63e4a44dfed57b0afdaf17b016b1d96e0a"
 const ownerGenerated = {
   path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
-  sha256: "d5b244938c9b5e0ef9043414954090649ed62497072768c6186c53407caf1e2c",
+  sha256: "dfc1410f5cf18d18d449b35b7f92499e7b08c778d8f258b80f4abec0927c9d5d",
 }
 const generatedFiles = [
   "command-receipt-errors.ts",
@@ -249,6 +250,10 @@ async function manifestFor(directory) {
       package_name: "kokoro.platform.v1",
       sources: Object.entries(sourceDigests).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
       artifacts: [
+        {
+          path: "contract/execution-operations/project-skill-installation-content-v1.json",
+          sha256: artifactDigests["execution-operations/project-skill-installation-content-v1.json"],
+        },
         { path: "contract/execution-operations/mcp-icon-v1.json", sha256: artifactDigests["execution-operations/mcp-icon-v1.json"] },
         {
           path: "contract/execution-operations/mcp-icon-request-vectors-v1.json",

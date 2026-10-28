@@ -1,3 +1,7 @@
+## Project exact installation package／download（2026-10-27，候选未正常启用）
+
+原 `skill-package-inspection` route／Connect client 接正式94e574 Project具名inspection与grant；`exact-skill-download`／`skill-download` 贯穿canonical Project＋installation qualifier、fresh准入和pin，Storage spool后再核才发字节。无个人alias／新Schema。Public28.8仅1GET，原skill-download code-first policy2仅增1私有POST；固定Native与完整28.7／原policy父证明见原contract入口。`test/project-skill-content-http.test.mjs` 是自有binary Native／Storage／BFF HTTP回归（IAM/Project/owner facts为fixture），不替代Root正常配对。
+
 ## MCP Prepare 历史回执 lookup-only 候选（2026-10-27）
 
 仅新增 browser-private GET `mcp/servers/{server_id}/prepare-receipt` 的候选 route、原 CAS/key 绑定、completed 历史ACK严格包装与独立 lookup-only code-first profile；同 key 仅重读 GET，不授 Prepare POST／新 key。普通 GET 继续拒命令头及 receipt marker。现已固定 Platform 正式688bc1e3／private-server1.5／query1.0，原生Get方法及严格completed包装实际接线；独立binary协议peer通过，不等于正常终态恢复。三设计面已获 Root 批准；当前 peer/HTTP 及生成检查不替代实际 owner／正常验收。

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 import { load } from "js-yaml"
+import { restorePublic287ProjectContentContract, projectContentParentInventory } from "../scripts/project-pin-public-contract.mjs"
 import { operationBaseline, inspectOpenApiGovernance } from "../scripts/check-contract.mjs"
 
 test("Project pin adds exactly two personal preference operations without altering old Project wire or Public28.4", async () => {
@@ -14,7 +15,9 @@ test("Project pin adds exactly two personal preference operations without alteri
   const { restorePublic284ProjectPinContract, projectPinParentInventory } = await import("../scripts/project-pin-public-contract.mjs")
   const parent = restorePublic284ProjectPinContract(raw)
   assert.equal(createHash("sha256").update(parent).digest("hex"), "48aa9638d133223c9f78655e9398ddbb44159963f92a2db891a09212f3aa2726")
-  const inventory = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+  const inventory = projectContentParentInventory(
+    JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations,
+  )
   assert.equal(inventory.length, 194)
   assert.equal(
     createHash("sha256")
@@ -66,7 +69,7 @@ test("S13 Hub publisher changes only two Hub fields and version; exact Public28.
 })
 
 test("S10 GitHub discovery changes only512 choices and version, preserving exact Public28.6", async () => {
-  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"),
+  const raw = restorePublic287ProjectContentContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
     spec = load(raw)
   assert.equal(spec.info.version, "28.7.0")
   const { restorePublic286GithubDiscoveryContract } = await import("../scripts/project-pin-public-contract.mjs")
@@ -88,4 +91,31 @@ test("S10 GitHub discovery changes only512 choices and version, preserving exact
     raw.replace("version: 28.7.0", "version: 28.8.0"),
   ])
     assert.throws(() => restorePublic286GithubDiscoveryContract(invalid))
+})
+
+test("Project content Public28.8 adds exactly one Project installation package read over complete Public28.7", async () => {
+  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"),
+    spec = load(raw)
+  assert.equal(spec.info.version, "28.8.0")
+  const parent = restorePublic287ProjectContentContract(raw),
+    old = load(parent)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "818dfe54d5eb50a72725983be136211c63bb17fa7392f94c5c1d46234db3ebd1")
+  const path = "/v1/projects/{projectId}/skill-installations/{installation_id}/package"
+  assert.equal(spec.paths[path].get.operationId, "getProjectSkillInstallationPackage")
+  assert.equal(spec.paths[path].get.responses["200"].$ref, "#/components/responses/SkillPackageInspectionOk")
+  const normalized = structuredClone(spec)
+  delete normalized.paths[path]
+  normalized.info.version = "28.7.0"
+  assert.deepEqual(normalized, old)
+  assert.equal(operationBaseline(raw).length, 195)
+  const inventory = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+  assert.equal(projectContentParentInventory(inventory).length, 194)
+  for (const invalid of [
+    raw + "\n",
+    raw.replace("listProjects", "otherOperation"),
+    raw.replace("getProjectSkillInstallationPackage", "otherRead"),
+    raw.replace("28.8.0", "28.9.0"),
+  ])
+    assert.throws(() => restorePublic287ProjectContentContract(invalid), /drift/)
+  assert.throws(() => projectContentParentInventory(inventory.slice(1)), /drift/)
 })

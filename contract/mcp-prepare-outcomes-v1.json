@@ -34,7 +34,7 @@
     }
   },
   "owner_feature": {
-    "commit": "f29428f6e6d23e9f35642fe3de5463472bc1f873",
+    "commit": "94e574c68d6c972078b661fa7d917dab90c71042",
     "path": "contract/execution-operations/mcp-prepare-rejection-v1.json",
     "profile": "mcp-prepare-rejection-v1",
     "version": "1.0.0",

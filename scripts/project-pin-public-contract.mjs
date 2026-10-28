@@ -15,7 +15,23 @@ const hubPublisherDelta =
 // S10 build/test-only inverse: exactly the discovery paths bound and version.
 export const githubDiscoveryCurrentSha256 = "818dfe54d5eb50a72725983be136211c63bb17fa7392f94c5c1d46234db3ebd1"
 const githubDiscoveryDelta = "                paths:\n                  type: array\n                  maxItems: 512\n"
+// Project content build/test-only inverse: one exact path and the complete Public28.7 parent.
+export const projectContentCurrentSha256 = "6376e2d2a5fa9efd8e6ce4d9d4aa3686ad73dda8babffd9ac5b7097073538498"
+const projectContentDelta =
+  "  /v1/projects/{projectId}/skill-installations/{installation_id}/package:\n    get:\n      tags: [Skills]\n      operationId: getProjectSkillInstallationPackage\n      x-kokoro-owner: kokoro-bff\n      x-kokoro-visibility: public\n      x-kokoro-stability: beta\n      x-kokoro-idempotency: none\n      x-kokoro-permission: product.skill.installation.read\n      summary: Inspect an exact Skill installation package in the currently visible Project\n      description: >-\n        Resolve the currently visible Project before and after the exact installed pin read.\n        Uses only InspectProjectSkillInstallationPackage with trusted Project transport, never personal or current catalog aliases.\n        Reject unknown or duplicate query keys, body, transfer-encoding and idempotency-key. The decoded identifier and optional\n        file_path are passed without trimming or a second decode. A single absolute ten-second budget covers admission, credentials,\n        OAuth HTTP, owner RPC, strict projection and final UTF-8 JSON encoding. The complete public JSON is at most 1,048,576 bytes;\n        responses are not truncated. For a file read, selected_file.path equals the requested file_path exactly.\n      parameters:\n        - name: projectId\n          in: path\n          required: true\n          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }\n        - name: installation_id\n          in: path\n          required: true\n          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }\n        - $ref: '#/components/parameters/SkillPackageInspectionFilePath'\n      responses:\n        '200': { $ref: '#/components/responses/SkillPackageInspectionOk' }\n        '400': { $ref: '#/components/responses/SkillPackageInspectionBadRequest' }\n        '401': { $ref: '#/components/responses/SkillPackageInspectionUnauthorized' }\n        '403': { $ref: '#/components/responses/SkillPackageInspectionForbidden' }\n        '404': { $ref: '#/components/responses/SkillPackageInspectionNotFound' }\n        '412': { $ref: '#/components/responses/SkillPackageInspectionPreconditionFailed' }\n        '429': { $ref: '#/components/responses/SkillPackageInspectionRateLimited' }\n        '502': { $ref: '#/components/responses/SkillPackageInspectionBadGateway' }\n        '503': { $ref: '#/components/responses/SkillPackageInspectionUnavailable' }\n"
+export function restorePublic287ProjectContentContract(source) {
+  if (!/^  version: 28\.8\.0$/mu.test(source)) {
+    if (source.includes("  /v1/projects/{projectId}/skill-installations/{installation_id}/package:")) throw Error("Project content version drift")
+    return source
+  }
+  if (hash(source) !== projectContentCurrentSha256 || source.split(projectContentDelta).length !== 2) throw Error("Project content exact current drift")
+  const restored = source.replace(projectContentDelta, "").replace(/^  version: 28\.8\.0$/mu, "  version: 28.7.0")
+  if (hash(restored) !== githubDiscoveryCurrentSha256) throw Error("Project content complete Public28.7 drift")
+  return restored
+}
+
 export function restorePublic286GithubDiscoveryContract(source) {
+  source = restorePublic287ProjectContentContract(source)
   if (!/^  version: 28\.7\.0$/mu.test(source)) {
     if (source.includes(githubDiscoveryDelta)) throw Error("GitHub discovery version drift")
     return source
@@ -55,6 +71,7 @@ export function restorePublic284ProjectPinContract(source) {
   return restored
 }
 export function projectPinParentInventory(inventory) {
+  inventory = projectContentParentInventory(inventory)
   const hasPin = inventory.some((item) => ["listSelfProjectPins", "setProjectPin"].includes(item.operation_id))
   if (inventory.length !== 194) {
     if (hasPin) throw Error("Project pin inventory drift")
@@ -75,5 +92,19 @@ export function restoreProjectPinSchema(source) {
   if (!block || hash(block) !== "4e76d896282166ae587e3d443a8448d560b72aa926f23c50b0e66b5114ac5eae") throw Error("Project pin SQL exact delta drift")
   const restored = source.replace(block, "")
   if (hash(restored) !== "70f6933f3bf0542d4c8babc6ced7ab7f4c128c0cc0a570ab195309850373e993") throw Error("Project pin complete SQL parent drift")
+  return restored
+}
+
+export function projectContentParentInventory(inventory) {
+  const added = inventory.filter((item) => item.operation_id === "getProjectSkillInstallationPackage")
+  if (inventory.length !== 195) {
+    if (added.length) throw Error("Project content inventory drift")
+    return inventory
+  }
+  if (hash(JSON.stringify(inventory)) !== "c3d96610855b56fe8826f242e53eca4abb181317eec2df077b2f25c7a91246d4" || added.length !== 1)
+    throw Error("Project content complete current inventory drift")
+  const restored = inventory.filter((item) => item.operation_id !== "getProjectSkillInstallationPackage")
+  if (hash(JSON.stringify(restored)) !== "2dcd50ad0f38b76904c2c4b8b478a12b74ee78395bc741b74ada8ad482ff6d61")
+    throw Error("Project content complete parent inventory drift")
   return restored
 }

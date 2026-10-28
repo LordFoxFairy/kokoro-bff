@@ -104,7 +104,7 @@ import { managedPersonalSkillsRoute } from "../http/routes/managed-personal-skil
 import { createPersonalSkillVersionRoute } from "../http/routes/create-personal-skill-version.js"
 import { deletePersonalSkillSeriesRoute } from "../http/routes/delete-personal-skill-series.js"
 import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-skill.js"
-import { skillPackageInspectionRoute } from "../http/routes/skill-package-inspection.js"
+import { skillPackageInspectionRoute, type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 
 async function handle(
@@ -149,7 +149,10 @@ async function handle(
   }
   const rawPathname = new URL(request.url || "/", "http://bff.local").pathname
   const isRawSkillPackageInspection =
-    request.method === "GET" && (/^\/v1\/self\/skills\/[^/]+\/package$/u.test(rawPathname) || /^\/v1\/skill-installations\/[^/]+\/package$/u.test(rawPathname))
+    request.method === "GET" &&
+    (/^\/v1\/self\/skills\/[^/]+\/package$/u.test(rawPathname) ||
+      /^\/v1\/skill-installations\/[^/]+\/package$/u.test(rawPathname) ||
+      /^\/v1\/projects\/[^/]+\/skill-installations\/[^/]+\/package$/u.test(rawPathname))
   let segments: string[]
   try {
     segments = pathOf(request)
@@ -254,11 +257,32 @@ async function handle(
     await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency)
     return
   }
+  const projectContentAccess: ProjectSkillContentAccess = async (projectRef, context, signal) => {
+    const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+    signal.throwIfAborted()
+    if (!fresh.ok) {
+      if (fresh.retryAfter !== undefined) response.setHeader("retry-after", fresh.retryAfter)
+      send(response, fresh.status, {
+        error: { code: fresh.code, message: "Current user admission is required", retryable: fresh.status === 429 || fresh.status >= 500 },
+      })
+      return null
+    }
+    if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+      throw new ConnectError("Project not found", Code.NotFound)
+    if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+    const project = await composition.businessStore.services.projects.find(
+      { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+      projectRef,
+    )
+    signal.throwIfAborted()
+    if (!project) throw new ConnectError("Project not found", Code.NotFound)
+    return project.id
+  }
   if (await appSkillBindingsRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillSpecificationEnabledRoute(request, response, config, composition, id, rawPathname)) return
-  if (await skillDownloadHandleRoute(request, response, config, composition, id, segments)) return
-  if (await exactSkillDownloadRoute(request, response, config, composition, id, segments)) return
+  if (await skillDownloadHandleRoute(request, response, config, composition, id, segments, projectContentAccess)) return
+  if (await exactSkillDownloadRoute(request, response, config, composition, id, segments, projectContentAccess)) return
   if (
     await localSkillImportRoute(
       request,
@@ -359,9 +383,13 @@ async function handle(
   const isSkillPackageInspection =
     isRawSkillPackageInspection &&
     ((businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "package") ||
-      (businessPath.length === 3 && businessPath[0] === "skill-installations" && businessPath[2] === "package"))
+      (businessPath.length === 3 && businessPath[0] === "skill-installations" && businessPath[2] === "package") ||
+      (businessPath.length === 5 && businessPath[0] === "projects" && businessPath[2] === "skill-installations" && businessPath[4] === "package"))
   if (isSkillPackageInspection) {
-    await skillPackageInspectionRoute(request, response, config, composition.sessionAdmission, id, businessPath)
+    await skillPackageInspectionRoute(request, response, config, composition.sessionAdmission, id, businessPath, {
+      access: projectContentAccess,
+      installations: composition.installationClient,
+    })
     return
   }
   const isManagedPersonalSkillRead =

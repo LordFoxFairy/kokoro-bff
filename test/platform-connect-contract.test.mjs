@@ -47,6 +47,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     package_name: "kokoro.platform.v1",
     sources: Object.entries(sources).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
     artifacts: [
+      "execution-operations/project-skill-installation-content-v1.json",
       "execution-operations/mcp-icon-v1.json",
       "execution-operations/mcp-icon-request-vectors-v1.json",
       "execution-operations/app-skill-binding-v1.json",
@@ -111,7 +112,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     provenance: { path: "contract/provenance.json", sha256: artifacts["provenance.json"], combined_sha256: combinedSha256 },
     generated: ownerGenerated,
   })
-  assert.equal(manifest.owner.repository_commit, "f29428f6e6d23e9f35642fe3de5463472bc1f873")
+  assert.equal(manifest.owner.repository_commit, "94e574c68d6c972078b661fa7d917dab90c71042")
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.lockfile_sha256, sha256(await requiredFile("pnpm-lock.yaml")))
   for (const [file, bytes] of Object.entries(await sourceBytes())) assert.equal(sha256(bytes), sources[file])
@@ -412,6 +413,57 @@ async function prePrepareQueryArtifact(file) {
   return parentBytes
 }
 
+// Exact Project content inverse proves the complete f294 owner parent before every old enum/query proof.
+async function preProjectContentArtifact(file, supplied) {
+  const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const { FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
+  const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/`
+  const feature = JSON.parse(await requiredFile(prefix + "execution-operations/project-skill-installation-content-v1.json"))
+  assert.equal(feature.version, "1.0.0")
+  assert.deepEqual(feature.methods, ["InspectProjectSkillInstallationPackage", "GetProjectSkillInstallationPackageDownload"])
+  const pin = feature.inputs.find((value) => value.path === file)
+  assert.ok(pin)
+  const current = supplied ?? (await requiredFile(prefix + file.replace("contract/", "")))
+  assert.equal(sha256(current), pin.sha256)
+  let parent
+  if (file.endsWith(".proto")) {
+    const source = current.toString("utf8")
+    const marker = "\n// Project exact installation content"
+    assert.equal(source.split(marker).length, 2)
+    parent = Buffer.from(source.slice(0, source.indexOf(marker)))
+  } else {
+    const graph = fromBinary(FileDescriptorSetSchema, current)
+    const files = graph.file.filter((value) => value.name === "kokoro/platform/v1/platform_runtime.proto")
+    assert.equal(files.length, 1)
+    const target = files[0]
+    const messages = [
+      "InspectProjectSkillInstallationPackageRequest",
+      "InspectProjectSkillInstallationPackageResponse",
+      "GetProjectSkillInstallationPackageDownloadRequest",
+      "GetProjectSkillInstallationPackageDownloadResponse",
+    ]
+    assert.deepEqual(
+      target.messageType.slice(-4).map((value) => value.name),
+      messages,
+    )
+    assert.equal(target.service.at(-1).name, "ProductProjectSkillInstallationContentService")
+    assert.equal(target.service.filter((value) => value.name === "ProductProjectSkillInstallationContentService").length, 1)
+    target.messageType.splice(-4)
+    target.service.splice(-1)
+    parent = Buffer.from(toBinary(FileDescriptorSetSchema, graph))
+  }
+  assert.equal(sha256(parent), feature.parents[file])
+  return parent
+}
+
+test("Project content adds exactly its named service and four messages over the complete f294 parent", async () => {
+  for (const file of ["contract/proto/kokoro/platform/v1/platform_runtime.proto", "contract/descriptor/platform-v1.binpb"]) {
+    await preProjectContentArtifact(file)
+    const raw = await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/${file.replace("contract/", "")}`)
+    await assert.rejects(preProjectContentArtifact(file, Buffer.concat([raw, Buffer.from([0])])), /Expected values/)
+  }
+})
+
 // Exact test-only enum successor inverse; prove the entire 688bc parent before old query proofs.
 async function prePrepareOutcomeArtifact(file) {
   const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
@@ -420,7 +472,7 @@ async function prePrepareOutcomeArtifact(file) {
   const feature = JSON.parse(await requiredFile(prefix + "execution-operations/mcp-prepare-rejection-v1.json"))
   assert.equal(feature.parents.commit, "688bc1e3d74c18c54ca85bc72d8e4ce242ac995a")
   const pin = feature.parents.inputs[file]
-  const current = await requiredFile(prefix + file.replace("contract/", ""))
+  const current = await preProjectContentArtifact(file)
   const parent = await requiredFile(prefix + pin.path.replace("contract/", ""))
   assert.equal(sha256(parent), pin.sha256)
   if (file.endsWith(".proto")) {

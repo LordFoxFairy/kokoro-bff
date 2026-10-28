@@ -1,0 +1,55 @@
+{
+  "profile": "project-skill-installation-content-v1",
+  "version": "1.0.0",
+  "owner": "Platform/Skills",
+  "status": "prepared-consumer-pairing-required",
+  "normal_activation": false,
+  "service": "kokoro.platform.v1.ProductProjectSkillInstallationContentService",
+  "methods": [
+    "InspectProjectSkillInstallationPackage",
+    "GetProjectSkillInstallationPackageDownload"
+  ],
+  "command": false,
+  "identity": {
+    "caller": "kokoro-bff",
+    "workload": "projection",
+    "tenant": "verified workload tenant",
+    "subject": "trusted x-kokoro-subject",
+    "project": "mandatory trusted x-kokoro-project-ref",
+    "membership_owner": "kokoro-bff",
+    "target": "exact tenant/installation/project; removedAt null"
+  },
+  "semantics": {
+    "pin": "exact original installed revision/asset/digest; never series current or personal/managed fallback",
+    "readable_source_states": [
+      "active",
+      "disabled",
+      "withdrawn"
+    ],
+    "execution_authorized": false,
+    "before_after": "re-admit identity/project and exact installation/package binding after Storage IO",
+    "deadline_ms": 10000,
+    "response_max_bytes": 1048576,
+    "automatic_retry": false,
+    "storage_transfer": "existing exact Storage transfer; not persisted"
+  },
+  "parents": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "26bd1cc61f34e3de8b56359985896d48a1232363b44fd681084a7cd0f1543b2d",
+    "contract/descriptor/platform-v1.binpb": "e391c377d1c156caf855ab46d9baf2ff814a41c17fc9cccb7f85ace4f7b71b5c",
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "d5b244938c9b5e0ef9043414954090649ed62497072768c6186c53407caf1e2c"
+  },
+  "inputs": [
+    {
+      "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
+      "sha256": "26266d24fc1fcffb581662d5a404a97c485c09e3b2e597bb88df3a9cc482ed36"
+    },
+    {
+      "path": "contract/descriptor/platform-v1.binpb",
+      "sha256": "6c7dadd8ccad5a5a1b56a4c9cf17acb7a1a3f41390e8e0c011fb120dd943483f"
+    },
+    {
+      "path": "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
+      "sha256": "dfc1410f5cf18d18d449b35b7f92499e7b08c778d8f258b80f4abec0927c9d5d"
+    }
+  ]
+}

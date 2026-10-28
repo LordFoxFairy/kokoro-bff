@@ -52,7 +52,8 @@
     "execution-operations/mcp-personal-sse-request-vectors-v1.json",
     "execution-operations/mcp-prepare-receipt-v1.json",
     "execution-operations/mcp-prepare-receipt-v1.vectors.json",
-    "execution-operations/mcp-prepare-rejection-v1.json"
+    "execution-operations/mcp-prepare-rejection-v1.json",
+    "execution-operations/project-skill-installation-content-v1.json"
   ],
-  "combinedSha256": "8e07bbef6ae8bcedcbbfe37e4b543bccde7e4ba85815871796c30d4894affa5e"
+  "combinedSha256": "fe6643f9785fd92754d5b044c613ed63e4a44dfed57b0afdaf17b016b1d96e0a"
 }

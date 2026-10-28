@@ -1,3 +1,24 @@
+## Project 安装 package／download D0（2026-10-27，Root 已核准；未发行／未正常启用）
+
+**实施候选／固定输入。** 基于已正式正常的 BFF `31ce61d9c77b47398e703cf06d18407c7f480872`，本片已消费 Root 从正式 Platform `94e574c68d6c972078b661fa7d917dab90c71042` 导出的唯一原件；主 Native 正规生成闭包包含 `project-skill-installation-content-v1` 1.0.0（SHA256 `e69a91b9ec1fdd78fc50a2780f231248057c851d5ac7b2ff0d21a51b25c8e876`）。下文“现有”描述设计基线，不覆盖本段候选实现。新 Public28.8 单 GET／195操作与私有 policy 整数2 的第4签发操作由原生成入口形成；独立 HTTP7／dd8 publication 不迁移。MCP outcomes 仅 owner_feature.commit 随主 pin 导出，lookup policy 仅其 outcomes_source SHA 机械级联，全部原业务 tuple／版本／策略保持，并做完整 JSON 逆证。尚未正式 BFF 发行或正常激活，不将 owner 真实 PG5 或本仓 loopback fixture 称为正常配对验收。
+
+Project 读取与下载在原 route／client／exact handle 中实现；fresh Session、当前 Project finder 和 exact installation metadata 在内容读取前后核验，私有 POST 只读不发 IAM manage 动作。Project qualifier 从签发贯穿 confirm／实际 Storage spool／最终发送前准入与 pin 重核；新下载只用具名 Project RPC，原个人／managed／share／catalog 不借用。真实 binary Native＋Storage HTTP＋BFF HTTP 测试使用自有服务与明确 IAM／Project repository／owner 响应 doubles，覆盖撤权、原 revision、移除、actor 变更、坏 wire／digest 和实际字节校验；跨 owner PG 与正常浏览器由 Root 后继验证，不自动调用。
+
+基线 BFF `d040eb04c5875eec2ade19be947435071dca2a5e`／Public28.7 与 `SKILL_DOWNLOAD_POLICY.version=1`。现个人 package/download 与旧四 qualifier 保持各自原语义，不接受 Project 身份替代。架构／信任／分阶段写区见[技术设计首节](TECHNICAL_DESIGN.md)；无新增数据模型，本片不改 DATA_MODEL／canonical SQL。
+
+| 新增候选操作 | 输入与表示 | 资格与机器来源 |
+| --- | --- | --- |
+| `GET /v1/projects/{projectId}/skill-installations/{installation_id}/package`；候选 operationId `getProjectSkillInstallationPackage` | 无body／Idempotency-Key；可选唯一 `file_path`，原路径UTF8/NFC/256字节／不得二次decode，未知或重复query/framing拒绝。复用 `SkillPackageInspectionOk` strict data（source_ref/revision/files/selected_file），单包128文件／完整JSON≤1MiB与原10秒绝对预算不变；无静默截断 | 当前Session→同tenant/subject的Project membership→canonical Project ID→exact Project installation；Native新具名inspect，前后fresh核验；不是个人subject installation查询。OpenAPI标准owner/visibility/stability/idempotency metadata齐全，读权限写明当前Project可见性，不新造IAM权限词 |
+| `POST /browser/v1/projects/{projectId}/skill-installations/{installation_id}/download` | 沿原private POST无query、零字节body、禁止命令key/身份/selector自报；复用原closed `{data:{source_ref,revision,download_info:{download_url,filename,expires_at}}}`，唯一字节URL仍 `/skill-downloads/{43字符handle}`。POST只签发短时读取句柄，无安装命令receipt／新事实 | 同一当前Project读取资格＋exact Project installation pin＋owner Project-qualified download grant；qualifier closed三字段 `kind=project_installation`／canonical projectId／installationId，不复用 `installation` qualifier或通用个人grant |
+
+身份仅从当次受信准入得tenant/subject；projectId是资源selector，不能作为可信header直接转发。BFF先核Project并解析canonical ID；只在正式projection服务身份下传 owner规定的 `x-kokoro-project-ref`／request字段，owner自己验证服务用途与 exact Project installation。request-id、no-store、取消／deadline和closed Proto/JSON保证沿现client；Project／installation关联从fresh metadata和受信scope核定，inspection／download独立response只按正式闭集字段核source/revision及内容，不虚构关联回显字段，目录/文件读完成后再重验。disabled/default状态不授或剥内容权限；实际可读性由owner当前安装/source策略裁决，不猜active、最新版本或本人creator。
+
+**发行与单事实源。** Root核准新增公开GET使 canonical `contract/openapi/v1/openapi.yaml` **Public28.8.0**（仍`/v1`；仅新path＋info.version；复用原闭集schema/response），用现具名公共父链入口精确恢复完整28.7 SHA`818dfe54d5eb50a72725983be136211c63bb17fa7392f94c5c1d46234db3ebd1`，旧断言／其它对象不变。private增加第4个签发操作及双path参数，现可编辑源仍只 `src/http/routes/skill-download.policy.ts`，其整数版本为 **2**，沿现 `scripts/generate-skill-download-policy.mjs --write/--check` 正规产出 `contract/skill-download-policy.json`；不得另造第二policy schema或把private POST塞进Public OpenAPI。App随后消费Root正式BFF commit与摘要，原个人/private route须兼容其原语义，不是新旧两套parser。
+
+Platform正式新inspection与Project-qualified download方法、服务身份/profile以及新增response关联以owner D0／正式机器原件为准；此处不捏造tag、commit、profile版本或digest。BFF正式输入沿现 `contract/dependencies/platform-connect.json`、`contract/vendor/kokoro-platform/<正式commit>/…` 与 `scripts/generate-platform-connect-client.mjs`，正规输出 `src/generated/platform-connect/…`；保原独立HTTP／MCP publication／Runtime/SSE/private MCP等未变原件及其父证明，不误用主pin替独立pin。此刻不改上述机器文件或实现。
+
+**失败／末端。** path无效／重复query／非零body等400；当前Session401／当前Project无权403或不存在安全404沿现语义；Project installation不存在、已移除或exact pin改变安全404，source策略前置拒绝沿package既有412，不把依赖失败冒不存在。owner response／关联／file/digest不可信502，owner/IAM/Storage不可确认503，限流429/Retry-After；deadline沿各现package／download脱敏错误映射，保旧个人码/状态不泛改。旧handle过期／淘汰／重启仍410。handle GET每次fresh准入、Project资格与安装pin，沿现spool前后confirm＋最终准入，撤权/身份变化/摘要错拒绝header和bytes；不以已签句柄或spool成功代替当前资格。新操作错误闭集及package 403响应若需新增，仅限新path显式列入，旧operation对象逐字承接。实际Native/Storage I/O、撤权／换pin／取消负控与Root正常边界见技术设计。
+
 ## S10 Public28.7 GitHub 目录容量（2026-10-27，Root D0 已批准）
 
 canonical 仍唯一 `contract/openapi/v1/openapi.yaml`：本次仅 `info.version` 28.6.0→28.7.0 与 `GithubSkillResponse` 中 `selection_required=true` 的 `paths.maxItems` 128→512。路径、选择、immutable commit、错误类型及其它 wire 全部保持；原精确父逆证先逐字恢复完整28.6，再运行原28.6→28.5严格门，不放宽旧 hash。

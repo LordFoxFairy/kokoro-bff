@@ -69,11 +69,19 @@ const errors = Object.freeze(
 
 export const SKILL_DOWNLOAD_POLICY = Object.freeze({
   visibility: "browser-private",
-  version: 1,
+  version: 2,
   budgetMs: 10_000,
   operations: [
     { method: "POST", path: "/browser/v1/skill-installations/{installation_id}/download", qualifier: "installation", parameter: "installation_id" },
     { method: "POST", path: "/browser/v1/skills/{version_id}/download", qualifier: "managed", parameter: "version_id" },
     { method: "POST", path: "/browser/v1/skill-shares/{share_id}/download", qualifier: "share", parameter: "share_id" },
+    {
+      method: "POST",
+      path: "/browser/v1/projects/{projectId}/skill-installations/{installation_id}/download",
+      qualifier: "project_installation",
+      parameter: "installation_id",
+      projectParameter: "projectId",
+      projectParameterSchema: id,
+    },
   ].map((operation) => Object.freeze({ ...operation, parameterSchema: id, request, responses: Object.freeze({ 200: success, errors }) })),
 })
