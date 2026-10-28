@@ -246,8 +246,51 @@ export const AGENT_PROCESS_CONSTRAINTS = {
                 },
                 additionalProperties: false,
               },
+              tool_description: {
+                type: "object",
+                required: ["text", "truncated", "redacted"],
+                properties: {
+                  text: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 1024,
+                    "x-kokoro-utf8-byte-limit": 1024,
+                  },
+                  truncated: {
+                    type: "boolean",
+                  },
+                  redacted: {
+                    type: "boolean",
+                  },
+                },
+                additionalProperties: false,
+                description:
+                  "Provider capability documentation observed in this Run, matched by connection and selector. Not a per-call purpose, execution result, title or authorization. Missing or conflicting evidence is omitted; private display only.",
+              },
             },
             additionalProperties: false,
+            allOf: [
+              {
+                if: {
+                  required: ["tool_description"],
+                },
+                then: {
+                  required: ["target"],
+                  properties: {
+                    tool_name: {
+                      enum: ["mcp_call", "mcp_describe_tool"],
+                    },
+                    target: {
+                      properties: {
+                        kind: {
+                          const: "mcp_tool",
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            ],
           },
           description:
             "Private same-Run evidence-bound tool details only; missing fields remain unknown. Filtered bounded text is not a universal secret-free guarantee. Never Share, execution authority, HTML, autolinks or instructions.",
@@ -274,6 +317,14 @@ export const AGENT_PROCESS_CONSTRAINTS = {
       "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",
       description: "Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.",
     },
+  },
+  actionTitle: {
+    type: "string",
+    minLength: 1,
+    maxLength: 256,
+    "x-kokoro-utf8-byte-limit": 256,
+    description:
+      "Public intent of this exact model tool call, bound before approval edits. Not reasoning, capability documentation, execution status or authority. No surrounding whitespace, control/format/surrogate characters or private text. Omitted when absent or mismatched; never inferred from adjacent prose.",
   },
   toolDetail: {
     minScalars: 1,

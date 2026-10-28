@@ -6174,7 +6174,7 @@ integrationTest(
   },
 )
 
-integrationTest("Agent8.2 detail is durable across reopen and identity drift rolls back the whole source transaction", { timeout: 30000 }, async (context) => {
+integrationTest("Agent8.7 title and detail are durable across reopen and identity drift rolls back the whole source transaction", { timeout: 30000 }, async (context) => {
   const c = await r57ProjectionContext(context)
   const { ChatApplicationService } = await import("../dist/application/chat-service.js")
   const running = {
@@ -6184,13 +6184,18 @@ integrationTest("Agent8.2 detail is durable across reopen and identity drift rol
     status: "running",
     display_code: "tool.file.read",
     display_detail: { kind: "file", name: "résumé😀.md" },
+    action_title: "读取项目运行时配置",
   }
-  const { display_detail, ...absent } = { ...running, activity_id: `act_${"c".repeat(64)}` }
+  const { display_detail, action_title, ...absent } = { ...running, activity_id: `act_${"c".repeat(64)}` }
   await c.ingest([c.source(2, running, "activity.updated"), c.source(3, absent, "activity.updated")])
   const before = await c.fingerprint()
   const { display_detail: ignored, ...removed } = running
+  const { action_title: ignoredTitle, ...withoutTitle } = running
   for (const changed of [
     removed,
+    withoutTitle,
+    { ...running, action_title: "另一个动作" },
+    { ...absent, action_title },
     { ...running, display_code: "tool.file.write" },
     { ...running, segment_id: `seg_${"d".repeat(64)}` },
     { ...running, display_detail: { kind: "file", name: "other.md" } },
@@ -6270,5 +6275,6 @@ integrationTest("Agent8.2 detail is durable across reopen and identity drift rol
     [completed, historical],
   )
   assert.equal(Object.hasOwn(parts[1].activity, "display_detail"), false)
+  assert.equal(Object.hasOwn(parts[1].activity, "action_title"), false)
   assert.ok(parts.every((part) => BigInt(part.first_sequence) < BigInt(part.latest_sequence)))
 })

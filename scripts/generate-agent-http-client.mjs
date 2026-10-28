@@ -11,12 +11,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "4f8a8d2485abadc8351efbe1c9d6277ada267096"
+const ownerCommit = "5394d3346c51764c1e1fca10c8e7450abf11f3d2"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897"
-const provenanceDigest = "204e28baa5484c30635fb0cb466e4db6de4a7ea4ec43a03211bd9a27847ac99a"
-const ownerContractVersion = "8.5.0"
+const ownerDigest = "74fb43159ba559fe049f027a5fe4877d29524f5a73eae88c8d15913760cfb9fc"
+const provenanceDigest = "13df62051ecd5f5699c341bc186e9d65da1c8cab66bfe8f87ea2395adcdf4d97"
+const ownerContractVersion = "8.7.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -100,14 +100,61 @@ export function assertFailureContractSchema(document) {
     "#/components/schemas/ChatFailure",
     "ChatEvent run.failed mapping drifted",
   )
-  return { failureCodes: [...failureCodes], retryableFailureCodes: [...retryableFailureCodes] }
+  return {
+    failureCodes: [...failureCodes],
+    retryableFailureCodes: [...retryableFailureCodes],
+  }
 }
 
 // Decode only the published schema graph referenced by ChatEvent's payload mapping.
 // The generator does not follow extension refs; derive these validators from the pinned bytes,
 // rather than maintaining another editable schema or enabling every orphan owner component.
 // Build/test-only raw inverse retains numeric lexemes and numeric-key source order exactly.
+// Build/test-only exact action/capability deltas, preserving the published raw parent.
+const actionTitleDelta =
+  ',\n              "action_title": {\n                "type": "string",\n                "minLength": 1,\n                "maxLength": 256,\n                "x-kokoro-utf8-byte-limit": 256,\n                "description": "Public intent of this exact model tool call, bound before approval edits. Not reasoning, capability documentation, execution status or authority. No surrounding whitespace, control/format/surrogate characters or private text. Omitted when absent or mismatched; never inferred from adjacent prose."\n              }'
+const capabilityDescriptionDelta =
+  ',\n                "tool_description": {\n                  "type": "object",\n                  "required": [\n                    "text",\n                    "truncated",\n                    "redacted"\n                  ],\n                  "properties": {\n                    "text": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 1024,\n                      "x-kokoro-utf8-byte-limit": 1024\n                    },\n                    "truncated": {\n                      "type": "boolean"\n                    },\n                    "redacted": {\n                      "type": "boolean"\n                    }\n                  },\n                  "additionalProperties": false,\n                  "description": "Provider capability documentation observed in this Run, matched by connection and selector. Not a per-call purpose, execution result, title or authorization. Missing or conflicting evidence is omitted; private display only."\n                }'
+const capabilityConditionDelta =
+  ',\n              "allOf": [\n                {\n                  "if": {\n                    "required": [\n                      "tool_description"\n                    ]\n                  },\n                  "then": {\n                    "required": [\n                      "target"\n                    ],\n                    "properties": {\n                      "tool_name": {\n                        "enum": [\n                          "mcp_call",\n                          "mcp_describe_tool"\n                        ]\n                      },\n                      "target": {\n                        "properties": {\n                          "kind": {\n                            "const": "mcp_tool"\n                          }\n                        }\n                      }\n                    }\n                  }\n                }\n              ]'
+export function restoreAgent85ActionDisplayRaw(source) {
+  if (source.includes('"version": "8.7.0"')) {
+    assert.equal(sha256(source), "74fb43159ba559fe049f027a5fe4877d29524f5a73eae88c8d15913760cfb9fc", "Agent8.7 action child drift")
+    source = source.replace(actionTitleDelta, "").replace('"version": "8.7.0"', '"version": "8.6.0"')
+    assert.equal(sha256(source), "de73c229a962e37afbf3f69aba160a8b6b9a56cd2603952a3d3d97f5a610b64b", "Agent8.6 action parent drift")
+  }
+  if (source.includes('"version": "8.6.0"')) {
+    assert.equal(sha256(source), "de73c229a962e37afbf3f69aba160a8b6b9a56cd2603952a3d3d97f5a610b64b", "Agent8.6 capability child drift")
+    source = source.replace(capabilityDescriptionDelta, "").replace(capabilityConditionDelta, "").replace('"version": "8.6.0"', '"version": "8.5.0"')
+    assert.equal(sha256(source), "b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897", "Agent8.5 capability parent drift")
+  }
+  return source
+}
+export function restoreAgent85ActionDisplayContract(document) {
+  if (!["8.6.0", "8.7.0"].includes(document.info?.version)) return document
+  assert.equal(
+    sha256(JSON.stringify(document)),
+    document.info.version === "8.7.0"
+      ? "c4b3f7b6070bdcbf6acea505255abb1957e24941c2c78bb8f0ba4f786a5f6ce1"
+      : "f83500c445f6f45f1d297f37fcea7de71e1c6adad3282ce490eaf416ee4589ed",
+    "Agent action/capability complete child drift",
+  )
+  const parent = structuredClone(document)
+  delete parent.components.schemas.ChatActivity.oneOf[0].properties.action_title
+  const item = parent.components.schemas.RunDisplay.properties.activity_details.items
+  delete item.properties.tool_description
+  delete item.allOf
+  parent.info.version = "8.5.0"
+  assert.equal(
+    sha256(JSON.stringify(parent)),
+    "19858ea0a011017371361c7c952998714b639a5ad092272f271dd9c8de216adc",
+    "Agent8.5 complete action/capability parent drift",
+  )
+  return parent
+}
+
 export function restoreAgent84ActivityDetailsRaw(source) {
+  source = restoreAgent85ActionDisplayRaw(source)
   assert.equal(sha256(source), "b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897", "Agent8.5 complete raw child drift")
   const replacements = [
     ['    "version": "8.5.0"\n', '    "version": "8.4.0"\n'],
@@ -188,6 +235,7 @@ export function restoreAgent82DisplayRaw(source) {
 }
 // Build/test-only strict full owner child inverse. Production generation requires the current exact blob above.
 export function restoreAgent84ActivityDetailsContract(document) {
+  document = restoreAgent85ActionDisplayContract(document)
   if (document.info?.version !== "8.5.0" && !document.components?.schemas?.RunDisplay?.properties?.activity_details) return document
   assert.equal(
     sha256(JSON.stringify(document)),
@@ -342,17 +390,35 @@ export function assertInteractionContractSchema(document) {
     tool.allOf,
     [
       {
-        if: { required: ["display_detail"], properties: { display_detail: { properties: { kind: { const: "file" } } } } },
+        if: {
+          required: ["display_detail"],
+          properties: {
+            display_detail: { properties: { kind: { const: "file" } } },
+          },
+        },
         then: {
           properties: {
-            display_code: { enum: ["tool.file.read", "tool.file.write", "tool.file.deliver"] },
-            display_detail: { properties: { name: { pattern: "^(?!\\.{1,2}$)[^/\\\\:]+$" } } },
+            display_code: {
+              enum: ["tool.file.read", "tool.file.write", "tool.file.deliver"],
+            },
+            display_detail: {
+              properties: { name: { pattern: "^(?!\\.{1,2}$)[^/\\\\:]+$" } },
+            },
           },
         },
       },
       {
-        if: { required: ["display_detail"], properties: { display_detail: { properties: { kind: { const: "mcp_tool" } } } } },
-        then: { properties: { display_code: { enum: ["tool.mcp.describe", "tool.mcp.call"] } } },
+        if: {
+          required: ["display_detail"],
+          properties: {
+            display_detail: { properties: { kind: { const: "mcp_tool" } } },
+          },
+        },
+        then: {
+          properties: {
+            display_code: { enum: ["tool.mcp.describe", "tool.mcp.call"] },
+          },
+        },
       },
     ],
     "Agent tool detail category conditions drifted",
@@ -493,6 +559,7 @@ function processProfileSource(document) {
       activitySkill: skill.properties.display_skills,
       virtualPath: tool.properties.display_detail.properties.virtual_path,
     },
+    actionTitle: tool.properties.action_title,
     toolDetail: {
       minScalars: detailName.minLength,
       maxScalars: detailName.maxLength,
@@ -692,7 +759,11 @@ async function normalizeGeneratorCompatibility(directory) {
 
 async function run(command, args, options = {}) {
   await new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: root, stdio: "inherit", ...options })
+    const child = spawn(command, args, {
+      cwd: root,
+      stdio: "inherit",
+      ...options,
+    })
     child.once("error", reject)
     child.once("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${path.basename(command)} exited ${code}`))))
   })
@@ -740,7 +811,9 @@ async function generateMcpSelectionValidator(directory, document) {
 
 async function generate(directory) {
   const cli = path.join(root, "node_modules/@hey-api/openapi-ts/bin/run.js")
-  await run(process.execPath, [cli, "--silent", "-f", configPath], { env: { ...process.env, AGENT_HTTP_CLIENT_OUTPUT: directory } })
+  await run(process.execPath, [cli, "--silent", "-f", configPath], {
+    env: { ...process.env, AGENT_HTTP_CLIENT_OUTPUT: directory },
+  })
   const ownerDocument = JSON.parse(await readFile(vendorPath, "utf8"))
   await writeFile(path.join(directory, "failure-profile.gen.ts"), failureProfileSource(ownerDocument))
   await writeFile(path.join(directory, "process-profile.gen.ts"), processProfileSource(ownerDocument))

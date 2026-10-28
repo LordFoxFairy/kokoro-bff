@@ -176,6 +176,10 @@ export const zRunDisplay = z
               .object({ text: z.string().min(1), truncated: z.boolean(), redacted: z.boolean() })
               .strict()
               .optional(),
+            tool_description: z
+              .object({ text: z.string().min(1), truncated: z.boolean(), redacted: z.boolean() })
+              .strict()
+              .optional(),
           })
           .strict(),
       )
@@ -364,6 +368,7 @@ export const zChatActivity = z.union([
         .object({ kind: z.enum(["file", "mcp_tool"]), name: z.string().min(1), virtual_path: z.string().min(1).optional() })
         .strict()
         .optional(),
+      action_title: z.string().min(1).optional(),
     })
     .strict(),
   z

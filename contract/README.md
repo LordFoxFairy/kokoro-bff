@@ -1,3 +1,7 @@
+## 当前动作标题读表示（Public28.13）
+
+固定正式Agent5394d334／HTTP8.7，沿原RunToolActivity optional action_title及私有RunDisplay tool_description窄生成。原件/provenance与18件generated摘要由agent-http manifest记录；完整8.7→8.6→8.5父图及Public28.13→28.12逆差证明保留，不作为运行兼容。无新增操作、权限、Schema或Share数据。正常配对与验收见docs/CURRENT.md。
+
 ## 2026-10-28 Public28.12 私有 Run 工具详情候选
 
 Canonical SHA256 `86638da86d786e91c81da9e5dd891dee88ef2ca033579866f5ebc6dd6113c00f`，仅 RunDisplay 增 required `activity_details`（max128／唯一opaqueID／required tool_name／原target域／2048与4096 UTF-8 preview及明确flags）。Public完整逆回28.11 `4d93ec15e2931768afafffb2101039b1da64757ea48c760d16ef88aa8753db16`，199操作及旧父链不变。Agent HTTP8.5 SHA `b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897` 已冻结；正式 commit `4f8a8d2485abadc8351efbe1c9d6277ada267096`／provenance SHA `204e28baa5484c30635fb0cb466e4db6de4a7ea4ec43a03211bd9a27847ac99a`，由原18件生成入口发布 consumer。私有 GET only，非Chat/SSE/Share或执行授权，无新endpoint/DB。preview是过滤的有界纯文本而非绝对无秘密保证；字段及语义边界见API/技术设计首节。当前候选未正常激活。

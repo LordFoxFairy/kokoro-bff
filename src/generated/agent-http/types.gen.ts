@@ -183,28 +183,38 @@ export type RunDisplay = {
   /**
    * Private same-Run evidence-bound tool details only; missing fields remain unknown. Filtered bounded text is not a universal secret-free guarantee. Never Share, execution authority, HTML, autolinks or instructions.
    */
-  activity_details: Array<{
-    activity_id: string
-    tool_name: string
-    target?: unknown & {
-      kind: "file" | "mcp_tool"
-      name: string
+  activity_details: Array<
+    unknown & {
+      activity_id: string
+      tool_name: string
+      target?: unknown & {
+        kind: "file" | "mcp_tool"
+        name: string
+        /**
+         * Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+         */
+        virtual_path?: string
+      }
+      input_preview?: {
+        text: string
+        truncated: boolean
+        redacted: boolean
+      }
+      output_preview?: {
+        text: string
+        truncated: boolean
+        redacted: boolean
+      }
       /**
-       * Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+       * Provider capability documentation observed in this Run, matched by connection and selector. Not a per-call purpose, execution result, title or authorization. Missing or conflicting evidence is omitted; private display only.
        */
-      virtual_path?: string
+      tool_description?: {
+        text: string
+        truncated: boolean
+        redacted: boolean
+      }
     }
-    input_preview?: {
-      text: string
-      truncated: boolean
-      redacted: boolean
-    }
-    output_preview?: {
-      text: string
-      truncated: boolean
-      redacted: boolean
-    }
-  }>
+  >
 }
 
 export type RunDisplayEnvelope = {

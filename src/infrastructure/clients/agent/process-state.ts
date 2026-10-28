@@ -1,11 +1,16 @@
-import { safeSkillDisplays, safeVirtualPath } from "./display-safety.js"
+import { safeActionTitle, safeSkillDisplays, safeVirtualPath } from "./display-safety.js"
 import { Buffer } from "node:buffer"
 
 import { zChatActivity, zChatTodo } from "../../../generated/agent-http/zod.gen.js"
 import { AGENT_PROCESS_CONSTRAINTS } from "../../../generated/agent-http/process-profile.gen.js"
 
 export type AgentTodo = Readonly<{
-  todos: ReadonlyArray<Readonly<{ content: string; status: "pending" | "in_progress" | "completed" }>>
+  todos: ReadonlyArray<
+    Readonly<{
+      content: string
+      status: "pending" | "in_progress" | "completed"
+    }>
+  >
 }>
 
 export type AgentActivity =
@@ -15,6 +20,7 @@ export type AgentActivity =
       segment_id: string
       status: "running" | "completed" | "failed"
       display_code: Extract<ReturnType<typeof zChatActivity.parse>, { activity: "tool" }>["display_code"]
+      action_title?: string
       display_detail?: NonNullable<Extract<ReturnType<typeof zChatActivity.parse>, { activity: "tool" }>["display_detail"]>
     }>
   | Readonly<{
@@ -103,8 +109,13 @@ function activityPayload(payloadJson: string): AgentActivity {
         throw new Error("Agent activity detail does not match its public domain")
     }
     if (activity.activity === "tool") {
-      const { display_detail, ...base } = activity
-      return { ...base, ...(display_detail === undefined ? {} : { display_detail }) }
+      if (activity.action_title !== undefined && !safeActionTitle(activity.action_title)) throw Error("Agent action title is invalid")
+      const { display_detail, action_title, ...base } = activity
+      return {
+        ...base,
+        ...(display_detail === undefined ? {} : { display_detail }),
+        ...(action_title === undefined ? {} : { action_title }),
+      }
     }
     return activity
   }
@@ -147,6 +158,8 @@ export function sameAgentActivityIdentity(previous: AgentActivity, next: AgentAc
   if (previous.segment_id !== next.segment_id || previous.display_code !== next.display_code) return false
   if (previous.activity !== "tool" || next.activity !== "tool") return true
   return (
+    Object.hasOwn(previous, "action_title") === Object.hasOwn(next, "action_title") &&
+    previous.action_title === next.action_title &&
     Object.hasOwn(previous, "display_detail") === Object.hasOwn(next, "display_detail") &&
     previous.display_detail?.kind === next.display_detail?.kind &&
     previous.display_detail?.name === next.display_detail?.name &&

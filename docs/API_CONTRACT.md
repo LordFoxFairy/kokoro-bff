@@ -1,3 +1,7 @@
+## Public28.13：逐调用行动标题与私有能力说明（候选，未激活）
+
+`RunToolActivity.action_title` 可选纯文本，1–256 UTF-8字节，不允许null、首尾空白、Cc/Cf/Cs或已识别私密文本；仅tool分支。它绑定原activity并保持presence/value不变，不影响status或权限，不从邻接正文补造，原CUSTOM/快照/有序历史共用该表示。私有RunDisplay的`activity_details[].tool_description`承接Agent8.6 closed `{text,truncated,redacted}`，text至多1024 UTF-8字节，且仅mcp_call/mcp_describe_tool和mcp_tool目标可提供。两字段语义分开，分享边界、操作集合、数据模型保持。以正式Agent8.7固定发行物为生成来源，按reader-first发布。
+
 ## Public28.12：私有 Run activity_details（Root 已核准，候选未发行）
 
 原 GET `/v1/sessions/{id}/runs/{runId}/display` 的 RunDisplay 新增 required `activity_details`，max128、同数组 `activity_id` 唯一且为精确 `act_`＋64 lowercase hex。每项 closed required `activity_id,tool_name`；optional `target` 为原 ToolDisplayDetail（file basename＋可选同 basename 安全 virtual_path，或无 path 的 mcp_tool）；optional `input_preview/output_preview` 均为 closed `{text,truncated,redacted}`，text非空、UTF-8上限分别2048／4096，flags必须boolean，缺证省略而非null。工具名保持120 scalars／480 bytes及原安全域。自由preview允许正常换行／制表与非NFC原文，但不允许非法scalar／其他控制字符或owner敏感模式；仅私有纯文本，不自动链接、解释HTML或执行指令。

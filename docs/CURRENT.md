@@ -1,3 +1,9 @@
+## 2026-10-28 逐调用动作标题消费者（未正常激活）
+
+固定 Agent5394d3346c51764c1e1fca10c8e7450abf11f3d2／HTTP8.7，Public28.13仅扩原tool activity可选action_title和私有RunDisplay能力说明。沿原事件、快照、ordered与重开消费，不补造旧历史；首次标题presence/value冻结，后续改写或丢失拒绝整批事务。身份、Share whitelist、权限、数据表不变；原完整父契约证明保留。
+
+lint/types、contract1325、architecture36、default2282通过（3既有资源跳过）；主方另在自建独占临时PG库运行真实projection integration，重开标题保留、身份漂移整批回滚、旧缺省不补造1通过。模型/工具为具名离线事件，不冒正常模型执行。并发门禁曾共享dist，最终定向与build另行串行重验；只读审查未见P0–P2。App配对和正常reader-first激活、实际浏览器/模型验证仍待，旧冻结Run不得暗换配方。原始日志留本机，不进Git。
+
 ## 2026-10-26 Agent8 / Public28 工具展示消费者（本地候选，未正常激活）
 
 基线7a94139；固定 Root 已审正式 Agent `ff36759214ff5d1e015cd9e288abbcb2d8e0c46d` / HTTP8.0.0（OpenAPI93103b5f／provenance4333d87e），沿原三操作allowlist／18输出链生成。唯一 canonical Public28.0.0／187operations，仅 version 与 RunToolActivity.display_code 的七值闭集变化；tool/subagent 判别类型与现 strict decoder 对齐，CUSTOM／compact／ordered parts 保原值，不重写透传／SQL或旧行。28→完整Public27原件→全部旧父链保留，不改旧hash；独立媒体、其它dependency pins与operation inventory原件保持。

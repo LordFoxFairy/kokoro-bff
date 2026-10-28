@@ -69,7 +69,7 @@ export function safeToolFacts(value: ReturnType<typeof zRunDisplayEnvelope.parse
 // Private previews are prose, not names: preserve line breaks, tabs and original normalization.
 // The owner filters suspicious text; this bounded private representation is not a universal secret-free guarantee.
 const privatePreviewText =
-  /(?:https?:\/\/[^\s/]+@|(?:^|[\s"'])(?:\/(?:Users|home|private|etc|var|proc|sys|root|tmp|opt)\/|[A-Z]:\\)|Traceback \(most recent call last\)|\b[A-Za-z]*(?:Error|Exception)\s*:|\b(?:Authorization|Set-Cookie|Cookie)\s*:|\b(?:api[_-]?key|password|secret|access[_-]?token)\s*[=:]|\b(?:DATABASE_URL|REDIS_URL|HOME|PATH)\s*=)/iu
+  /(?:https?:\/\/[^\s]+[?&](?:token|key|api_key|signature|sig|auth|x-amz-[a-z-]+)=|https?:\/\/[^\s/]+@|(?:^|[\s"'])(?:\/(?:Users|home|private|etc|var|proc|sys|root|tmp|opt)\/|[A-Z]:\\)|Traceback \(most recent call last\)|\b[A-Za-z]*(?:Error|Exception)\s*:|\b(?:Authorization|Set-Cookie|Cookie)\s*:|\b(?:api[_-]?key|password|secret|access[_-]?token)\s*[=:]|\b(?:DATABASE_URL|REDIS_URL|HOME|PATH)\s*=)/iu
 function safeDetailName(name: string): boolean {
   const domain = AGENT_PROCESS_CONSTRAINTS.toolDetail
   return (
@@ -91,6 +91,16 @@ function safePreview(text: string, limit: number): boolean {
     !privatePreviewText.test(text)
   )
 }
+/** Same-call public intent, never inferred from neighboring prose or capability documentation. */
+export function safeActionTitle(text: string): boolean {
+  return (
+    text === text.trim() &&
+    !forbidden.test(text) &&
+    safePreview(text, AGENT_PROCESS_CONSTRAINTS.actionTitle["x-kokoro-utf8-byte-limit"]) &&
+    !/https?:\/\/[^\s]+[?&](?:token|key|api_key|signature|sig|auth|x-amz-[a-z-]+)=/iu.test(text) &&
+    !/\b(?:token|credential|secret|password|api[_-]?key)\s*[:=]/iu.test(text)
+  )
+}
 /** Exact private Run adjunct only; absent evidence is not synthesized or promoted to execution authority. */
 export function safeActivityDetails(value: ReturnType<typeof zRunDisplayEnvelope.parse>["data"]["activity_details"]): boolean {
   const domain = AGENT_PROCESS_CONSTRAINTS.display.read.properties.activity_details.items.properties
@@ -108,6 +118,13 @@ export function safeActivityDetails(value: ReturnType<typeof zRunDisplayEnvelope
       )
         return false
     }
+    if (
+      item.tool_description !== undefined &&
+      (!["mcp_call", "mcp_describe_tool"].includes(item.tool_name) ||
+        item.target?.kind !== "mcp_tool" ||
+        !safePreview(item.tool_description.text, domain.tool_description.properties.text["x-kokoro-utf8-byte-limit"]))
+    )
+      return false
     return (
       (item.input_preview === undefined || safePreview(item.input_preview.text, domain.input_preview.properties.text["x-kokoro-utf8-byte-limit"])) &&
       (item.output_preview === undefined || safePreview(item.output_preview.text, domain.output_preview.properties.text["x-kokoro-utf8-byte-limit"]))

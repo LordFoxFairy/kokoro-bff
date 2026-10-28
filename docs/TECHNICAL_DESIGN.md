@@ -1,3 +1,11 @@
+## 逐调用行动标题消费者（Public28.13，未激活）
+
+沿既有 Agent HTTP8.7 正式发行物接收 tool activity 的 optional `action_title`，不新增 endpoint、表、请求或解释服务。标题属于同一原 activity 的不可变展示事实，与 display_code/display_detail 一起校验首次与后续帧身份；status 独立变化。原 mapAgentEvent→AG-UI CUSTOM→durable ledger→snapshot/ordered/replay 原样承接，无另建投影源。标题不作为权限、结果或相邻正文，旧缺省保持缺省。发布先更新 BFF/App reader，再激活 producer，原冻结 Run 不暗换配方。
+
+同时承接 HTTP8.6 的私有 `activity_details[].tool_description`：只限 mcp_call/mcp_describe_tool 且 target.kind=mcp_tool；纯文本1024 UTF-8字节，沿原 private preview 验证。它是能力文档，不是行动标题。action_title 为1–256 UTF-8字节、无首尾空白或控制/格式/代理字符，明确私密文本拒收。生成器只消费固定发布原件并验证8.7→8.6→8.5完整父差额；既有旧父证明继续保留。
+
+Public28.13 仅扩这两处读表示及版本，操作/Schema/权限不变。既有分享 whitelist 固定 process=null，仍不投影 activity 或 RunDisplay，不因新增字段改变分享能力。正式源消费、隔离链路与页面验收分开记录，候选不是上线完成。
+
 ## 私有 Run 工具详情（Root 已核准，Public28.12 候选）
 
 仅扩展现本人 owned Run display 读表示；Agent HTTP8.5 canonical SHA `b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897` 已冻结，正式 dependency commit `4f8a8d2485abadc8351efbe1c9d6277ada267096`／provenance SHA `204e28baa5484c30635fb0cb466e4db6de4a7ea4ec43a03211bd9a27847ac99a` 已由 Root 交付。`activity_details` 是同 Run 原工具证据的有界旁读：最多128、opaque activity_id 唯一，required tool_name；target 复用原 file/mcp_tool 域，input/output preview 是带 truncated/redacted 的纯文本。缺失即未知；不猜当前目录、不回填历史、不改原 activity／Run 终态。它不进入 Chat、SSE、Share 或执行授权，也不建立新 endpoint、缓存或数据表。

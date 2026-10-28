@@ -346,3 +346,46 @@ test("private details share the existing absolute read deadline and retire stall
   await ended
   assert.equal(f.calls.length, 1)
 })
+
+test("same-Run capability documentation remains private detail, bounded and bound to MCP selectors", async (t) => {
+  const f = await fixture(t)
+  const description = {
+    text: "Read the repository documentation.\nReturns its page structure.",
+    truncated: false,
+    redacted: false,
+  }
+  const detail = {
+    activity_id: activityId,
+    tool_name: "mcp_call",
+    target: { kind: "mcp_tool", name: "read_wiki_structure" },
+    tool_description: description,
+  }
+  for (const tool_name of ["mcp_call", "mcp_describe_tool"]) {
+    const valid = { ...detail, tool_name }
+    f.setBody({
+      data: { ...display, activity_details: [valid] },
+      meta: { request_id: "agent" },
+    })
+    const result = await f.request()
+    assert.equal(result.status, 200)
+    assert.deepEqual(result.body.data.activity_details, [valid])
+  }
+  for (const invalid of [
+    { ...detail, tool_name: "read_file" },
+    { ...detail, target: undefined },
+    { ...detail, target: { kind: "file", name: "guide.md" } },
+    { ...detail, tool_description: null },
+    ...["😀".repeat(257), "", "bad\u200btext", "\ud800", "Authorization: token", "https://example.org?token=private"].map((text) => ({
+      ...detail,
+      tool_description: { ...description, text },
+    })),
+    { ...detail, tool_description: { ...description, truncated: "false" } },
+    { ...detail, tool_description: { text: "guide" } },
+  ]) {
+    f.setBody({
+      data: { ...display, activity_details: [invalid] },
+      meta: { request_id: "agent" },
+    })
+    assert.equal((await f.request()).status, 502, JSON.stringify(invalid))
+  }
+})
