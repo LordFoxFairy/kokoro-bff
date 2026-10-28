@@ -1,3 +1,7 @@
+## Opaque Skill byte contract（2026-10-28，候选）
+
+原 `skill-download.policy.ts`／generator／`contract/skill-download-policy.json` 整数3补原GET handle的独立ZIP/framing/closed errors，未改route或原4 POST。两近邻policy/HTTP测试验证完整policy2逆回、metadata不可误用、future拒绝和原FailedPrecondition503；正常下载与正式消费者配对由Root后继，非本描述切片完成声明。
+
 ## Project exact installation package／download（2026-10-27，候选未正常启用）
 
 原 `skill-package-inspection` route／Connect client 接正式94e574 Project具名inspection与grant；`exact-skill-download`／`skill-download` 贯穿canonical Project＋installation qualifier、fresh准入和pin，Storage spool后再核才发字节。无个人alias／新Schema。Public28.8仅1GET，原skill-download code-first policy2仅增1私有POST；固定Native与完整28.7／原policy父证明见原contract入口。`test/project-skill-content-http.test.mjs` 是自有binary Native／Storage／BFF HTTP回归（IAM/Project/owner facts为fixture），不替代Root正常配对。

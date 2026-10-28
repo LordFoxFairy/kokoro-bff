@@ -1,3 +1,9 @@
+## Opaque Skill byte policy3（2026-10-28，Root 核准，候选未发行）
+
+本片只补齐 BFF `364f80cab855a4358eab956b7e3e3a4b5bae647b` 已存在的 `GET /skill-downloads/{handle}` 机器描述，不修运行行为。唯一 code-first 源仍 `src/http/routes/skill-download.policy.ts`，原 generator 直接正规产出同一 `contract/skill-download-policy.json`；整数3新增独立 `byte_operation`，原4个 metadata POST 的完整对象与 Public28.8 全文保持。无新 route／owner／Schema／权限／validator runtime／第二错误中心。API 表示与负事实见[API首节](API_CONTRACT.md)。
+
+opaque handle 不是授权：原 fresh Session／exact pin、完整 Storage size+SHA256 spool、撤权及最后资格／TTL重核仍由既有 runtime 执行。现10秒总预算／32MiB有效Skill字节上限、取消／错误前无attachment／已发头后终止stream保持；未新增BFF error JSON大小cap。新机器说明独立 ZIP headers 与 status/code/closed error schema，区别 capitalized bare errors、admission省略retryable及原mapped固定boolean。handle FailedPrecondition原样归503，不借 package GET 的412。消费者从 Root 正式提交/blob生成，不从候选取件；本片测试不替代正常Project安装内容或下载验收。
+
 ## Project 安装内容读取 D0（2026-10-27，BFF d040；Root 已核准，未发行／未正常启用）
 
 **实施候选／固定输入。** 基于已正式正常的 BFF `31ce61d9c77b47398e703cf06d18407c7f480872`，本片已消费 Root 从正式 Platform `94e574c68d6c972078b661fa7d917dab90c71042` 导出的唯一原件；主 Native 正规生成闭包包含 `project-skill-installation-content-v1` 1.0.0（SHA256 `e69a91b9ec1fdd78fc50a2780f231248057c851d5ac7b2ff0d21a51b25c8e876`）。下文“现有”描述设计基线，不覆盖本段候选实现。新 Public28.8 单 GET／195操作与私有 policy 整数2 的第4签发操作由原生成入口形成；独立 HTTP7／dd8 publication 不迁移。MCP outcomes 仅 owner_feature.commit 随主 pin 导出，lookup policy 仅其 outcomes_source SHA 机械级联，全部原业务 tuple／版本／策略保持，并做完整 JSON 逆证。尚未正式 BFF 发行或正常激活，不将 owner 真实 PG5 或本仓 loopback fixture 称为正常配对验收。

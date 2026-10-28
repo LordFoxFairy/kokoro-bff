@@ -1,3 +1,7 @@
+## Skill download policy3（2026-10-28，候选）
+
+唯一现 `src/http/routes/skill-download.policy.ts` 经 `scripts/generate-skill-download-policy.mjs --write`／无参数check发布同一JSON。整数3仅新增 `byte_operation` 描述原GET opaque handle ZIP和独立status/code/shape；原4 POST／完整policy2 SHA454d0980…1584f可精确逆回，Public28.8全文不改。没有412、共享metadata错误fallback或新runtime validator；未知future status/code按闭集拒。消费者仅固定Root正式commit/blob，候选描述不等于正常资源或下载旅程验收。
+
 ## Project installation content successor（2026-10-27，候选）
 
 Canonical Public28.8新增唯一 `GET /v1/projects/{projectId}/skill-installations/{installation_id}/package`，复用原SkillPackageInspection响应；现 `project-pin-public-contract.mjs` 具名严格逆回完整28.7 SHA818dfe54…3ebd1，旧194 inventory按原顺序保留，只追加新operation。私有 `contract/skill-download-policy.json` 由原 `skill-download.policy.ts`／`generate-skill-download-policy.mjs` 唯一生成，version2增加Project双selector签发；success/errors/framing及原3操作全等原policy。主Native正规固定Platform94e574及新content profile，旧Runtime/SSE／独立HTTP7／publication字节保留；outcomes与query仅机械provenance级联，非语义升级。Root正式发行前不消费dirty或冒正常启用。

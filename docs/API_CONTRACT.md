@@ -1,3 +1,11 @@
+## Opaque Skill byte operation（2026-10-28，policy3候选）
+
+`contract/skill-download-policy.json` 整数3只增 `byte_operation`，描述原 `GET /skill-downloads/{handle}`；原4个POST metadata完整值／字节与Public28.8不变。原policy2全文 SHA256 `454d0980e647ef7a7679bb8e986350c3aa5933092ed96df3661bb48e1de1584f` 由严格删除唯一新增operation并恢复version2逆回，无metadata/share错误union借用。生成入口／信任边界见[技术首节](TECHNICAL_DESIGN.md)。
+
+已签发reference为43字符base64url opaque handle；不存在／过期／非canonical lookup key按现有410 Gone，不虚构输入400。GET禁止query、命令头和所有body framing（含Content-Length:0）；成功是原1..33,554,432字节ZIP、准确Content-Length、RFC5987 attachment／no-store／request-id／nosniff／no-referrer。HTTP自动Date／Connection头不因本schema被禁。原10秒总预算包含完整spool、fresh资格和发送；取消不造完成，发头后故障终止stream而不附JSON。
+
+错误仅当前400/401/403/404/405/410/429/502/503/504的具名status-code闭集；各schema严格区分bare无retryable、admission可选固定值和mapped必需固定值，不用“任意boolean”放宽事实。FailedPrecondition在handle路径仍503/skill_dependency_unavailable/true，**无412**；Public package GET 的412不迁入。消费者须拒未知未来status/code、错误envelope extra字段及metadata成功体；BFF本片未改变任何状态、framing、权限或错误映射。
+
 ## Project 安装 package／download D0（2026-10-27，Root 已核准；未发行／未正常启用）
 
 **实施候选／固定输入。** 基于已正式正常的 BFF `31ce61d9c77b47398e703cf06d18407c7f480872`，本片已消费 Root 从正式 Platform `94e574c68d6c972078b661fa7d917dab90c71042` 导出的唯一原件；主 Native 正规生成闭包包含 `project-skill-installation-content-v1` 1.0.0（SHA256 `e69a91b9ec1fdd78fc50a2780f231248057c851d5ac7b2ff0d21a51b25c8e876`）。下文“现有”描述设计基线，不覆盖本段候选实现。新 Public28.8 单 GET／195操作与私有 policy 整数2 的第4签发操作由原生成入口形成；独立 HTTP7／dd8 publication 不迁移。MCP outcomes 仅 owner_feature.commit 随主 pin 导出，lookup policy 仅其 outcomes_source SHA 机械级联，全部原业务 tuple／版本／策略保持，并做完整 JSON 逆证。尚未正式 BFF 发行或正常激活，不将 owner 真实 PG5 或本仓 loopback fixture 称为正常配对验收。
