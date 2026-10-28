@@ -323,7 +323,8 @@ test("GitHub real HTTP final source block fences import and preview with current
         let release,
           started,
           identityMode = "unchanged",
-          admissions = 0
+          admissions = 0,
+          receiptReads = 0
         const gate = new Promise((resolve) => {
             release = resolve
           }),
@@ -390,6 +391,8 @@ test("GitHub real HTTP final source block fences import and preview with current
             businessStore: {
               services: {},
               getReceipt: async () => {
+                receiptReads++
+                if (receiptReads === 1) return null // Initial read-only preflight; original postfetch effect oracle remains below.
                 effects.push("receipt")
                 throw Error("test stop before write")
               },
@@ -429,6 +432,7 @@ test("GitHub real HTTP final source block fences import and preview with current
             (error) => ({ aborted: error.name }),
           )
           await Promise.race([sourceStarted, new Promise((_, reject) => setTimeout(() => reject(Error("source never started")), 3000).unref())])
+          assert.equal(receiptReads, operation === "import" ? 1 : 0, "only the initial exact receipt lookup precedes the source read")
           assert.deepEqual(effects, [])
           if (mode === "abort") {
             controller.abort()
@@ -721,4 +725,340 @@ test("GitHub512-choice response stays below existing1MiB even at conservative JS
   const upperBound = 512 * (6 * 256 + 3) + 6 * 2048 + 64 + 256
   assert.equal(upperBound, 800576)
   assert.ok(upperBound < 1048576)
+})
+
+// Trusted-context local HTTP fixture; owner/Storage commands below are explicit doubles, not normal imports.
+async function githubPersistedResumeFixture(t, stage = "selected") {
+  const { importSkillBytes } = await import("../src/http/routes/skill-ai-import.ts")
+  const { skillCommandId } = await import("../src/http/routes/skill-drafts.ts")
+  const wire = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts")
+  const { create } = await import("@bufbuild/protobuf")
+  const { createHash } = await import("node:crypto")
+  const context = { identity: { namespace: "resume-tenant", userId: "resume-subject" }, requestId: "github-persisted-resume" }
+  const key = "original-github-key",
+    selector = { owner: "owner", repository: "repo", commit: "a".repeat(40), path: "one" }
+  const commandId = skillCommandId({ rawHeaders: ["Idempotency-Key", key] }, context, "github-import")
+  const bytes = Buffer.from("verified immutable package fixture"),
+    digest = createHash("sha256").update(bytes).digest("hex")
+  const provenance = {
+    github: {
+      repository_id: "1",
+      repository_url: "https://github.com/owner/repo",
+      owner_login: "owner",
+      owner_url: "https://github.com/owner",
+      commit: selector.commit,
+      path: selector.path,
+      content_sha256: digest,
+      size_bytes: String(bytes.length),
+      mime_type: "application/zip",
+      repo_stats: { stars: "2", forks: "3", observed_at: "2026-10-27T00:00:00.000Z", metadata_source_url: "https://api.github.com/repos/owner/repo" },
+    },
+  }
+  const originalFetch = globalThis.fetch,
+    scopes = [],
+    commands = [],
+    checkpoints = new Map()
+  let row = null,
+    seeding = true,
+    completeAttempted = false,
+    githubReads = 0,
+    puts = 0,
+    readmits = 0
+  const store = {
+    services: {},
+    getReceipt: async (scope) => {
+      scopes.push(scope)
+      return structuredClone(row)
+    },
+    claimReceipt: async (_scope, fingerprint) => {
+      row = { fingerprint, status: 102, body: {} }
+      return { claimed: true, receipt: structuredClone(row) }
+    },
+    compareAndSetReceipt: async (_scope, fingerprint, expected, replacement) => {
+      assert.equal(fingerprint, row.fingerprint)
+      assert.deepEqual(row, expected)
+      row = structuredClone(replacement)
+      checkpoints.set(row.body.stage ?? "terminal", structuredClone(row))
+      return { updated: true, receipt: structuredClone(row) }
+    },
+  }
+  const client = {
+    command: async (operation, identity, body) => {
+      commands.push({ operation, identity, body: structuredClone(body) })
+      if (operation === "createSkillDraft")
+        return create(wire.CreateSkillDraftResponseSchema, { skillId: { value: "skill" }, status: 1, revision: 1n, stateVersion: 1n })
+      if (operation === "beginSkillPackageUpload")
+        return create(wire.BeginSkillPackageUploadResponseSchema, {
+          skillId: { value: "skill" },
+          attemptId: "attempt",
+          attemptEpoch: 1n,
+          uploadId: "upload",
+          stateVersion: 2n,
+          transferReference: {
+            url: "http://object.test/upload",
+            method: "PUT",
+            requiredHeaders: { "content-type": "application/zip" },
+            expiresAt: { seconds: BigInt(Math.floor(Date.now() / 1000) + 60), nanos: 0 },
+          },
+        })
+      if (operation === "completeSkillPackageUpload") {
+        completeAttempted = true
+        if (seeding && stage === "selected") throw Error("Complete ACK unavailable")
+        return create(wire.CompleteSkillPackageUploadResponseSchema, { skillId: { value: "skill" }, contentSha256: digest, scanState: 2, stateVersion: 3n })
+      }
+      assert.equal(operation, "validateSkillDraft")
+      if (seeding) throw Error("Validate ACK unavailable")
+      return create(wire.ValidateSkillDraftResponseSchema, {
+        skillId: { value: "skill" },
+        valid: true,
+        contentDigest: digest,
+        manifestIdentity: `zip-v2:sha256:${digest}`,
+        stateVersion: 4n,
+      })
+    },
+    getPackageUpload: async () =>
+      create(wire.GetSkillPackageUploadResponseSchema, {
+        skillId: { value: "skill" },
+        attemptId: "attempt",
+        attemptEpoch: 1n,
+        uploadId: "upload",
+        stateVersion: seeding ? 2n : 999n,
+        ...(completeAttempted ? { sourceVersionId: "ORIGINAL-VERSION" } : {}),
+      }),
+  }
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    if (String(url) === "http://object.test/upload") {
+      puts++
+      assert.equal(init.method, "PUT")
+      return new Response(null, { headers: { "x-amz-version-id": "ORIGINAL-VERSION" } })
+    }
+    githubReads++
+    throw Error("GitHub is unavailable during recovery")
+  })
+  await assert.rejects(
+    importSkillBytes(
+      context,
+      commandId,
+      bytes,
+      { display_name: "Actual", summary: "Frozen metadata", tags: [], example_prompts: [], category_keys: [] },
+      provenance,
+      client,
+      store,
+      "http://object.test",
+      AbortSignal.timeout(1000),
+      performance.now() + 1000,
+    ),
+    /ACK unavailable/,
+  )
+  assert.equal(row.body.stage, stage)
+  const initial = structuredClone(row),
+    initialPuts = puts
+  commands.length = 0
+  scopes.length = 0
+  seeding = false
+  const invoke = async (
+    input = selector,
+    readmit = async () => {
+      readmits++
+    },
+  ) => {
+    const { skillGithubImportRoute } = await import("../src/http/routes/skill-github-import.ts")
+    const server = createServer((req, res) => {
+      void skillGithubImportRoute(req, res, context, { storage: { objectOrigin: "http://object.test" } }, store, client, readmit)
+    })
+    server.listen(0, "127.0.0.1")
+    await once(server, "listening")
+    try {
+      const response = await originalFetch(`http://127.0.0.1:${server.address().port}/v1/skills/github/import`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key },
+        body: JSON.stringify(input),
+      })
+      return { status: response.status, body: await response.json() }
+    } finally {
+      server.closeAllConnections()
+      await new Promise((resolve) => server.close(resolve))
+    }
+  }
+  return {
+    invoke,
+    initial,
+    checkpoints,
+    commands,
+    scopes,
+    selector,
+    commandId,
+    store,
+    context,
+    initialPuts,
+    get row() {
+      return row
+    },
+    set row(value) {
+      row = value
+    },
+    get githubReads() {
+      return githubReads
+    },
+    get puts() {
+      return puts
+    },
+    get readmits() {
+      return readmits
+    },
+  }
+}
+
+for (const stage of ["selected", "completed"])
+  test(`GitHub persisted ${stage} resumes its exact owner checkpoint without refetching or replacing bytes`, async (t) => {
+    const h = await githubPersistedResumeFixture(t, stage),
+      result = await h.invoke()
+    assert.equal(result.status, 201)
+    assert.equal(result.body.data.valid, true)
+    assert.equal(h.githubReads, 0)
+    assert.equal(h.puts, h.initialPuts)
+    assert.equal(h.readmits, 1)
+    assert.ok(h.scopes.every((scope) => scope === JSON.stringify([h.context.identity.namespace, h.context.identity.userId, "skill-import-v1", h.commandId])))
+    assert.deepEqual(
+      h.commands.map((value) => value.operation),
+      stage === "selected" ? ["completeSkillPackageUpload", "validateSkillDraft"] : ["validateSkillDraft"],
+    )
+    if (stage === "selected") {
+      const complete = h.commands[0]
+      assert.equal(complete.identity.commandId, h.initial.body.selected.commandId)
+      assert.equal(complete.body.expected_state_version, "2")
+      assert.equal(complete.body.source_version_id, "ORIGINAL-VERSION")
+      assert.equal(complete.body.content_sha256, h.initial.body.frozen.content_sha256)
+      assert.equal(complete.body.size_bytes, h.initial.body.frozen.size_bytes)
+    }
+    assert.equal(h.commands.at(-1).body.expected_state_version, "3", "Validate uses original Complete ACK, never current999")
+  })
+
+for (const field of ["owner", "repository", "commit", "path"])
+  test(`GitHub persisted selected rejects changed ${field} before source reads or owner commands`, async (t) => {
+    const h = await githubPersistedResumeFixture(t),
+      input = { ...h.selector, [field]: field === "commit" ? "b".repeat(40) : "other" }
+    assert.equal((await h.invoke(input)).status, 409)
+    assert.equal(h.githubReads, 0)
+    assert.equal(h.commands.length, 0)
+    assert.deepEqual(h.row, h.initial)
+  })
+
+for (const invalid of ["fingerprint", "frozen-extra", "selected-digest"])
+  test(`GitHub persisted selected fails closed on invalid ${invalid} with no fresh-source fallback`, async (t) => {
+    const h = await githubPersistedResumeFixture(t)
+    if (invalid === "fingerprint") h.row = { ...h.row, fingerprint: "0".repeat(64) }
+    if (invalid === "frozen-extra") h.row.body.frozen.extra = true
+    if (invalid === "selected-digest") h.row.body.selected.requestDigest = "0".repeat(64)
+    const before = structuredClone(h.row)
+    assert.equal((await h.invoke()).status, 503)
+    assert.equal(h.githubReads, 0)
+    assert.equal(h.commands.length, 0)
+    assert.deepEqual(h.row, before)
+  })
+
+for (const stage of ["frozen", "created", "admitted", "terminal"])
+  test(`GitHub persisted ${stage} still requires real source bytes or terminal selector verification`, async (t) => {
+    const h = await githubPersistedResumeFixture(t, "completed")
+    h.row =
+      stage === "terminal"
+        ? {
+            fingerprint: h.initial.fingerprint,
+            status: 201,
+            body: {
+              skill_id: "skill",
+              source_ref: "skill:skill",
+              status: "draft",
+              state_version: "4",
+              valid: true,
+              content_digest: "a".repeat(64),
+              manifest_identity: `zip-v2:sha256:${"a".repeat(64)}`,
+            },
+          }
+        : h.checkpoints.get(stage)
+    assert.ok(h.row)
+    const before = structuredClone(h.row)
+    assert.equal((await h.invoke()).status, 503)
+    assert.equal(h.githubReads, 1)
+    assert.equal(h.commands.length, 0)
+    assert.deepEqual(h.row, before)
+  })
+
+test("GitHub persisted selected re-admits before any recovery owner call and does not bypass receipt faults", async (t) => {
+  const h = await githubPersistedResumeFixture(t)
+  const { ConnectError, Code } = await import("@connectrpc/connect")
+  assert.notEqual(
+    (
+      await h.invoke(h.selector, async () => {
+        throw new ConnectError("Current session changed", Code.PermissionDenied)
+      })
+    ).status,
+    201,
+  )
+  assert.equal(h.githubReads, 0)
+  assert.equal(h.commands.length, 0)
+  assert.deepEqual(h.row, h.initial)
+  h.store.getReceipt = async () => {
+    throw Error("Receipt dependency unavailable")
+  }
+  assert.equal((await h.invoke()).status, 503)
+  assert.equal(h.githubReads, 0)
+  assert.equal(h.commands.length, 0)
+  assert.deepEqual(h.row, h.initial)
+})
+
+for (const point of ["receipt", "readmit"])
+  test(`GitHub persisted selected cancellation at ${point} fences late checkpoint recovery`, async (t) => {
+    const h = await githubPersistedResumeFixture(t),
+      controller = new AbortController()
+    const { resumeGithubSkillImport } = await import("../src/http/routes/skill-ai-import.ts")
+    let finish,
+      began,
+      readmits = 0
+    const started = new Promise((resolve) => {
+      began = resolve
+    })
+    if (point === "receipt")
+      h.store.getReceipt = async () => {
+        began()
+        return new Promise((resolve) => {
+          finish = resolve
+        })
+      }
+    const pending = resumeGithubSkillImport(
+      h.context,
+      h.commandId,
+      h.selector,
+      {},
+      h.store,
+      "http://object.test",
+      controller.signal,
+      performance.now() + 1000,
+      async () => {
+        readmits++
+        began()
+        await new Promise((resolve) => {
+          finish = resolve
+        })
+      },
+    )
+    await started
+    controller.abort(Error("original caller cancelled"))
+    finish(point === "receipt" ? h.initial : undefined)
+    await assert.rejects(pending, /original caller cancelled/)
+    assert.equal(readmits, point === "receipt" ? 0 : 1)
+    assert.equal(h.githubReads, 0)
+    assert.equal(h.commands.length, 0)
+    assert.deepEqual(h.row, h.initial)
+  })
+
+test("GitHub persisted selected cannot downgrade into byte-requiring steps after the exact receipt is reread", async (t) => {
+  const h = await githubPersistedResumeFixture(t)
+  let reads = 0
+  h.store.getReceipt = async () => structuredClone(++reads === 1 ? h.initial : h.checkpoints.get("frozen"))
+  assert.equal((await h.invoke()).status, 503)
+  assert.equal(h.githubReads, 0)
+  assert.equal(h.commands.length, 0)
+  assert.equal(h.puts, h.initialPuts)
+  assert.deepEqual(h.row, h.initial)
 })

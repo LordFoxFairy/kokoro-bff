@@ -1,4 +1,5 @@
 import { ZodError } from "zod"
+import { isDeepStrictEqual } from "node:util"
 import { sha256Jcs } from "../../infrastructure/clients/platform/jcs.js"
 import { skillHandoffResultSchema } from "../../infrastructure/clients/platform/skill-product-schema.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
@@ -16,12 +17,19 @@ import { projectSkillProductCommand } from "../../infrastructure/clients/platfor
 import { FinalArtifactClient } from "../../infrastructure/clients/storage/final-artifact.js"
 import { spoolVerifiedArtifact } from "../../infrastructure/clients/storage/artifact-download-transfer.js"
 import { putStorageBytes } from "../../infrastructure/clients/storage/transfer.js"
-import { skillCreationProvenanceSchema, skillDecimalSchema, skillIdSchema, skillProductInputs, parseSkillProductInput } from "../skill-product-input.js"
+import {
+  skillCreationProvenanceSchema,
+  skillDecimalSchema,
+  skillIdSchema,
+  skillMetadataInputSchema,
+  skillProductInputs,
+  parseSkillProductInput,
+} from "../skill-product-input.js"
 import { runSkillRoute, skillCommandId, skillMetadataWire } from "./skill-drafts.js"
 import { readSkillBody as readBody } from "./skill-drafts.js"
 import { send } from "../response.js"
 
-/** The shared package command chain is specific to these two provenance-bearing Skill imports. */
+/** Fresh imports still verify real bytes before the shared exact owner chain. */
 export async function importSkillBytes(
   context: RequestContext,
   commandId: string,
@@ -34,29 +42,124 @@ export async function importSkillBytes(
   signal: AbortSignal,
   deadlineAt: number,
 ) {
+  return importSkillPackage(
+    context,
+    commandId,
+    {
+      bytes,
+      frozen: {
+        metadata: skillMetadataWire(metadata),
+        provenance,
+        content_sha256: createHash("sha256").update(bytes).digest("hex"),
+        size_bytes: String(bytes.length),
+      },
+    },
+    client,
+    store,
+    origin,
+    signal,
+    deadlineAt,
+  )
+}
+
+function immutableSkillImportSnapshot(value: Record<string, unknown>) {
+  const parsed = skillCreationProvenanceSchema.parse(value.provenance)
+  if (!("github" in parsed)) return value
+  const { repo_stats: _observation, ...github } = parsed.github
+  return { ...value, provenance: { github } }
+}
+
+/** Only positively selected/completed receipts contain a byte-free recovery proof. Terminal201 has no selector proof. */
+export async function resumeGithubSkillImport(
+  context: RequestContext,
+  commandId: string,
+  selector: import("zod").infer<typeof skillProductInputs.githubImport>,
+  client: SkillProductConnectClient,
+  store: BffBusinessStore,
+  origin: string,
+  signal: AbortSignal,
+  deadlineAt: number,
+  readmit: (signal: AbortSignal) => Promise<void>,
+) {
+  signal.throwIfAborted()
+  let receipt
   try {
-    provenance = skillCreationProvenanceSchema.parse(provenance)
-    const digest = createHash("sha256").update(bytes).digest("hex")
+    receipt = await store.getReceipt(JSON.stringify([context.identity.namespace, context.identity.userId, "skill-import-v1", commandId]))
+  } catch {
+    throw new Error("skill_checkpoint_unavailable")
+  }
+  signal.throwIfAborted()
+  if (receipt?.status !== 200) return undefined
+  const body = receipt.body as Record<string, unknown> | null
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("skill_checkpoint_unavailable")
+  if (body.stage !== "selected" && body.stage !== "completed") {
+    if (["frozen", "created", "admitted"].includes(String(body.stage))) return undefined
+    throw new Error("skill_checkpoint_unavailable")
+  }
+  let frozen: Record<string, unknown>, github: Extract<import("zod").infer<typeof skillCreationProvenanceSchema>, { github: unknown }>["github"]
+  try {
+    const value = body.frozen
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join(",") !== "content_sha256,metadata,provenance,size_bytes")
+      throw new Error()
+    frozen = value as Record<string, unknown>
+    const provenance = skillCreationProvenanceSchema.parse(frozen.provenance)
+    if (!("github" in provenance) || frozen.content_sha256 !== provenance.github.content_sha256 || frozen.size_bytes !== provenance.github.size_bytes)
+      throw new Error()
+    github = provenance.github
+    const wire = frozen.metadata as Record<string, unknown> | null
+    if (!wire || typeof wire !== "object" || Array.isArray(wire)) throw new Error()
+    const metadata = skillMetadataInputSchema.parse({
+      display_name: wire.display_name,
+      summary: wire.summary,
+      tags: wire.tags,
+      ...(wire.example_prompts === undefined ? {} : { example_prompts: (wire.example_prompts as Record<string, unknown>)?.prompts }),
+      ...(wire.category_keys === undefined ? {} : { category_keys: (wire.category_keys as Record<string, unknown>)?.keys }),
+    })
+    if (!isDeepStrictEqual(skillMetadataWire(metadata), wire) || sha256Jcs(immutableSkillImportSnapshot(frozen)).sha256 !== receipt.fingerprint)
+      throw new Error()
+  } catch {
+    throw new Error("skill_checkpoint_unavailable")
+  }
+  // Same exact spelling as the fixed provider's original repository/commit/path validation.
+  if (
+    github.repository_url !== `https://github.com/${selector.owner}/${selector.repository}` ||
+    github.owner_login !== selector.owner ||
+    github.owner_url !== `https://github.com/${selector.owner}` ||
+    github.commit !== selector.commit ||
+    github.path !== selector.path
+  )
+    throw new Error("skill_idempotency_conflict")
+  await readmit(signal)
+  signal.throwIfAborted()
+  return importSkillPackage(context, commandId, { frozen }, client, store, origin, signal, deadlineAt)
+}
+
+/** The shared package command chain is specific to these two provenance-bearing Skill imports. */
+async function importSkillPackage(
+  context: RequestContext,
+  commandId: string,
+  source: Readonly<{ frozen: Record<string, unknown>; bytes?: Buffer }>,
+  client: SkillProductConnectClient,
+  store: BffBusinessStore,
+  origin: string,
+  signal: AbortSignal,
+  deadlineAt: number,
+) {
+  try {
+    const { bytes, frozen } = source
+    const provenance = skillCreationProvenanceSchema.parse(frozen.provenance)
+    const digest = frozen.content_sha256,
+      sizeBytes = frozen.size_bytes
     const facts = "ai" in provenance ? provenance.ai : "github" in provenance ? provenance.github : null
-    if (!facts || digest !== facts.content_sha256 || String(bytes.length) !== facts.size_bytes) throw new Error("skill_response_invalid")
-    const common = {
-      requestId: context.requestId,
-      tenant: context.identity.namespace,
-      subject: context.identity.userId,
-    }
-    const frozen = {
-      metadata: skillMetadataWire(metadata),
-      provenance,
-      content_sha256: digest,
-      size_bytes: String(bytes.length),
-    }
-    const immutableSnapshot = (value: Record<string, unknown>) => {
-      const parsed = skillCreationProvenanceSchema.parse(value.provenance)
-      if (!("github" in parsed)) return value
-      const { repo_stats: _observation, ...github } = parsed.github
-      return { ...value, provenance: { github } }
-    }
-    const fingerprint = sha256Jcs(immutableSnapshot(frozen)).sha256
+    if (
+      !facts ||
+      digest !== facts.content_sha256 ||
+      sizeBytes !== facts.size_bytes ||
+      (bytes !== undefined && (createHash("sha256").update(bytes).digest("hex") !== digest || String(bytes.length) !== sizeBytes))
+    )
+      throw new Error("skill_response_invalid")
+    const common = { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId }
+    const fingerprint = sha256Jcs(immutableSkillImportSnapshot(frozen)).sha256
     const adoptFrozen =
       "github" in provenance
         ? (value: unknown): Record<string, unknown> => {
@@ -64,7 +167,7 @@ export async function importSkillBytes(
               !value ||
               typeof value !== "object" ||
               Array.isArray(value) ||
-              sha256Jcs(immutableSnapshot(value as Record<string, unknown>)).sha256 !== fingerprint
+              sha256Jcs(immutableSkillImportSnapshot(value as Record<string, unknown>)).sha256 !== fingerprint
             )
               throw new Error("skill_checkpoint_unavailable")
             return value as Record<string, unknown>
@@ -84,7 +187,7 @@ export async function importSkillBytes(
       upload_id: admission.uploadId,
       source_version_id: version,
       content_sha256: digest,
-      size_bytes: String(bytes.length),
+      size_bytes: sizeBytes,
       expected_state_version: admission.stateVersion,
     })
     return await handoffSkillPackage(
@@ -98,6 +201,7 @@ export async function importSkillBytes(
       store,
       {
         create: async (id, selectedFrozen) => {
+          if (bytes === undefined) throw new Error("skill_checkpoint_unavailable")
           const result = await client.command(
             "createSkillDraft",
             { ...common, commandId: id },
@@ -125,6 +229,7 @@ export async function importSkillBytes(
           }
         },
         begin: async (id, skillId, stateVersion) => {
+          if (bytes === undefined) throw new Error("skill_checkpoint_unavailable")
           const result = await client.command(
             "beginSkillPackageUpload",
             { ...common, commandId: id },
@@ -133,7 +238,7 @@ export async function importSkillBytes(
               expected_state_version: stateVersion,
               filename: "skill.zip",
               mime_type: "application/zip",
-              size_bytes: String(bytes.length),
+              size_bytes: sizeBytes,
               content_sha256: digest,
             },
             signal,
@@ -168,6 +273,7 @@ export async function importSkillBytes(
           }
         },
         put: async (admission) => {
+          if (bytes === undefined) throw new Error("skill_checkpoint_unavailable")
           // Replayed Begin must identify precisely the already persisted attempt; it never admits a replacement.
           const result = await client.command(
             "beginSkillPackageUpload",
@@ -177,7 +283,7 @@ export async function importSkillBytes(
               expected_state_version: admission.initialStateVersion,
               filename: "skill.zip",
               mime_type: "application/zip",
-              size_bytes: String(bytes.length),
+              size_bytes: sizeBytes,
               content_sha256: digest,
             },
             signal,
