@@ -664,7 +664,7 @@ function emptyWitnessFixture() {
     21,
     48,
     "run.completed",
-    { status: "completed", token_usage: null },
+    { status: "completed" },
     { type: "RUN_FINISHED", threadId: "session", runId: "run", status: "completed", outcome: { type: "success" } },
   )
   return { rows, wires }

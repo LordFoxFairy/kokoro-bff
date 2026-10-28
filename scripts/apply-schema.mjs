@@ -1,3 +1,4 @@
+import { messageFinalAnswerDefinitions } from "./message-final-answer-schema.mjs"
 import {
   messageRegenerationDefinitions,
   expectedMessageRegenerationCatalog,
@@ -92,6 +93,13 @@ export async function applyCanonicalSchema(databaseUrl, schema) {
     const regenExpected = await expectedMessageRegenerationCatalog((sql, values) => client.query(sql, values), messageRegenerationDefinitions(schema))
     if ((await inspectMessageRegenerationCatalog((sql, values) => client.query(sql, values), regenExpected)) !== "current")
       throw Error("BFF regeneration schema drift")
+    const finalExpected = await expectedMessageRegenerationCatalog(
+      (sql, values) => client.query(sql, values),
+      messageFinalAnswerDefinitions(schema),
+      "bff_message_final_",
+    )
+    if ((await inspectMessageRegenerationCatalog((sql, values) => client.query(sql, values), finalExpected)) !== "current")
+      throw Error("BFF final answer schema drift")
     await client.query("COMMIT")
   } catch (error) {
     await client?.query("ROLLBACK").catch(() => undefined)

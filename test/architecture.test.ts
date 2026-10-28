@@ -68,7 +68,8 @@ function isNamedSchemaEvolutionReader(relativePath: string, source: string): boo
       "scripts/evolve-project-mcp-recommendations-schema.mjs",
       "scripts/evolve-project-pin-schema.mjs",
       "scripts/evolve-message-feedback-schema.mjs",
-      "scripts/evolve-message-regeneration-schema.mjs",
+      // Shared finite transaction runner used only by the two named Message evolutions.
+      "scripts/message-schema-evolution.mjs",
     ].includes(relativePath)
   )
     return false
@@ -946,7 +947,7 @@ test("R257 named evolution may import exactly the two approved canonical read he
     "scripts/evolve-message-parts-schema.mjs",
     "scripts/evolve-project-mcp-recommendations-schema.mjs",
     "scripts/evolve-message-feedback-schema.mjs",
-    "scripts/evolve-message-regeneration-schema.mjs",
+    "scripts/message-schema-evolution.mjs",
   ]) {
     const namedReader: SourceFile = {
       relativePath,
@@ -959,6 +960,7 @@ test("R257 named evolution may import exactly the two approved canonical read he
 test("R257 named evolution exception rejects installer execution exports and alternate import forms", () => {
   const approved = 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"'
   for (const relativePath of [
+    "scripts/message-schema-evolution.mjs",
     "scripts/personalization-schema-evolution.mjs",
     "scripts/evolve-agent-failure-schema.mjs",
     "scripts/evolve-message-parts-schema.mjs",

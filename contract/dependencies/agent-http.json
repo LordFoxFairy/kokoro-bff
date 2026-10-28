@@ -3,18 +3,18 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-agent",
-    "repository_commit": "5394d3346c51764c1e1fca10c8e7450abf11f3d2",
-    "contract_version": "8.7.0",
+    "repository_commit": "b802f9b778fd686e80774adcdd72758325fb0b9b",
+    "contract_version": "8.8.0",
     "contract_path": "contract/openapi/v1/openapi.json",
-    "contract_sha256": "74fb43159ba559fe049f027a5fe4877d29524f5a73eae88c8d15913760cfb9fc",
+    "contract_sha256": "fd8b2857ecbc9577bd98ca73234e4d81c53d4fe189ba86badcf35c774b9a6830",
     "provenance_path": "contract/provenance.json",
-    "provenance_sha256": "13df62051ecd5f5699c341bc186e9d65da1c8cab66bfe8f87ea2395adcdf4d97"
+    "provenance_sha256": "00b5e906ba36b01df69c104e2892d186438a2bc797c3f6509e8a2a1ccd4b50cd"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.agent.config.ts",
-    "config_sha256": "49b8fb6f2b09af206b5c804507db7a4e7e6d8bcc101c251fa069a6e1491c9700"
+    "config_sha256": "d18f47520360e923f447af129f60f13b35f37c50092ffac73b30e905290d67b0"
   },
   "runtime": {
     "node": "22.22.2",
@@ -77,12 +77,12 @@
     },
     {
       "path": "failure-profile.gen.ts",
-      "source_sha256": "74fb43159ba559fe049f027a5fe4877d29524f5a73eae88c8d15913760cfb9fc",
+      "source_sha256": "fd8b2857ecbc9577bd98ca73234e4d81c53d4fe189ba86badcf35c774b9a6830",
       "sha256": "ef52afa8b45062d35500a9fc12248fecd4edf17b320aac287ac3b7d406d777c1"
     },
     {
       "path": "process-profile.gen.ts",
-      "source_sha256": "74fb43159ba559fe049f027a5fe4877d29524f5a73eae88c8d15913760cfb9fc",
+      "source_sha256": "fd8b2857ecbc9577bd98ca73234e4d81c53d4fe189ba86badcf35c774b9a6830",
       "sha256": "9015b8897c483c9fa08e68816754659ba094c54d01b096083a749559176589b3"
     },
     {
@@ -95,7 +95,7 @@
     },
     {
       "path": "zod.gen.ts",
-      "sha256": "d194281a5840f1239bc2e020932f11b82f6752fcec99cdff0fc0c6e5b1d7caba"
+      "sha256": "e4c5cf74739bd6d8cd7b007b2440949f85bb94b839227a77c7db15904ea885d6"
     }
   ]
 }

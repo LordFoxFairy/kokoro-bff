@@ -1,3 +1,9 @@
+## 最终答复引用（Public28.14，2026-10-28，待配对激活）
+
+固定 Agent HTTP8.8 的 `ChatRunCompleted` 闭集：status completed/cancelled，optional token_usage 和非空 `final_message_id`；后者只允许 completed。BFF 映射为 optional `final_segment_id`，仅成功 `RUN_FINISHED.result` 及本人 ordered rendering／parts 读表示承接。缺失保留缺失，不增加 null 线协议，不从尾段推断。原分享、命令 body 与失败／取消协议不扩展。
+
+分页 final 引用属于同一 parts revision，跨页一致；旧 revision 必须重读，不将未读到目标当目标缺失。运行时引用有完整同 Run 已完成正文证据；公开契约发布与 App consumer 固定版本后方可声称链路完成。
+
 ## Public28.13：逐调用行动标题与私有能力说明（候选，未激活）
 
 `RunToolActivity.action_title` 可选纯文本，1–256 UTF-8字节，不允许null、首尾空白、Cc/Cf/Cs或已识别私密文本；仅tool分支。它绑定原activity并保持presence/value不变，不影响status或权限，不从邻接正文补造，原CUSTOM/快照/有序历史共用该表示。私有RunDisplay的`activity_details[].tool_description`承接Agent8.6 closed `{text,truncated,redacted}`，text至多1024 UTF-8字节，且仅mcp_call/mcp_describe_tool和mcp_tool目标可提供。两字段语义分开，分享边界、操作集合、数据模型保持。以正式Agent8.7固定发行物为生成来源，按reader-first发布。

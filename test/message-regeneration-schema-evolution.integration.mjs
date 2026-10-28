@@ -1,3 +1,4 @@
+import { restoreFinalAnswerSchema } from "../scripts/message-final-answer-schema.mjs"
 import assert from "node:assert/strict"
 import { createHash, randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -14,7 +15,7 @@ integration("real PG additive Message regeneration evolution preserves old user 
   const pool = new pg.Pool({ connectionString: url, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 2 })
   try {
     assert.equal((await pool.query("SELECT to_regclass('kokoro_bff.bff_message') AS relation")).rows[0].relation, null)
-    const canonical = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"),
+    const canonical = restoreFinalAnswerSchema(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")),
       defs = messageRegenerationDefinitions(canonical)
     const prior = canonical.replace(defs.current, defs.prior).replace(messageFeedbackDefinitions(canonical) + "\n", "")
     assert.equal(createHash("sha256").update(prior).digest("hex"), "82b67bc5f8bb18deaa78821c9c4f59962f3d8ca5c986120544b84f9e9c8d13d0")

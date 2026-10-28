@@ -258,6 +258,16 @@ CREATE TABLE IF NOT EXISTS bff_message (
   ordered_parts JSONB,
   parts_format_version SMALLINT,
   parts_public_sequence BIGINT,
+  -- MESSAGE-FINAL-ANSWER-COLUMN-BEGIN
+  final_segment_id TEXT CONSTRAINT ck_bff_message_final_answer CHECK (
+    final_segment_id IS NULL OR (
+      length(btrim(final_segment_id)) > 0 AND role='assistant' AND status='completed'
+      AND run_id IS NOT NULL AND ordered_parts IS NOT NULL
+      AND parts_format_version IS NOT NULL AND parts_format_version=1
+      AND parts_public_sequence IS NOT NULL AND parts_public_sequence>0
+    )
+  ),
+  -- MESSAGE-FINAL-ANSWER-COLUMN-END
   selected_skill_source_refs JSONB NOT NULL DEFAULT '[]'::jsonb CONSTRAINT ck_bff_message_skill_selection CHECK (jsonb_typeof(selected_skill_source_refs) = 'array' AND jsonb_array_length(selected_skill_source_refs) <= 16),
   status TEXT NOT NULL CONSTRAINT ck_bff_message_status CHECK (status IN ('pending', 'streaming', 'completed', 'failed')),
   agent_failure_code TEXT,

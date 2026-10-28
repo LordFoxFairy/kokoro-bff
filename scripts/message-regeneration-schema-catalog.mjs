@@ -1,7 +1,9 @@
+import { withoutFinalAnswerColumn } from "./message-final-answer-schema.mjs"
 import { createHash } from "node:crypto"
 const hash = (value) => createHash("sha256").update(value).digest("hex")
 export function messageRegenerationDefinitions(schema) {
-  const table = schema.match(/^CREATE TABLE IF NOT EXISTS bff_message \([\s\S]*?^\);/mu)?.[0]
+  const published = schema.match(/^CREATE TABLE IF NOT EXISTS bff_message \([\s\S]*?^\);/mu)?.[0]
+  const table = published && withoutFinalAnswerColumn(published)
   if (!table || hash(table) !== "b798b18ac37cbafdfb18538927c51073ac8c7d4ec338e0a752c19be6c1c437ad") throw Error("invalid_schema")
   const columns = table.match(/^  -- MESSAGE-REGENERATION-COLUMNS-BEGIN\n([\s\S]*?)^  -- MESSAGE-REGENERATION-COLUMNS-END\n/mu)
   const constraint = table.match(/^  -- MESSAGE-REGENERATION-CONSTRAINT-BEGIN\n([\s\S]*?)^  -- MESSAGE-REGENERATION-CONSTRAINT-END\n/mu)
@@ -16,6 +18,7 @@ export function messageRegenerationDefinitions(schema) {
   return {
     current: table,
     prior,
+    ...(published === table ? {} : { currentWithFinal: published }),
     alter: `ALTER TABLE kokoro_bff.bff_message ${additions.map((value) => "ADD COLUMN " + value).join(", ")}, ADD ${constraint[1].trim().replace(/,$/u, "")}`,
   }
 }
@@ -45,13 +48,14 @@ async function catalog(query, relation, temp) {
   ).rows[0]
   return { columns, constraints, guards }
 }
-export async function expectedMessageRegenerationCatalog(query, definitions) {
+export async function expectedMessageRegenerationCatalog(query, definitions, prefix = "bff_message_regen_") {
   const result = {}
   for (const [kind, source] of [
     ["prior", definitions.prior],
     ["current", definitions.current],
+    ...(definitions.currentWithFinal ? [["final", definitions.currentWithFinal]] : []),
   ]) {
-    const name = "bff_message_regen_" + kind
+    const name = prefix + kind
     const sql = source
       .replace("CREATE TABLE IF NOT EXISTS bff_message", `CREATE TEMP TABLE ${name}`)
       .replaceAll("CONSTRAINT ", `CONSTRAINT ${name}_`)
@@ -63,7 +67,8 @@ export async function expectedMessageRegenerationCatalog(query, definitions) {
 }
 export async function inspectMessageRegenerationCatalog(query, expected) {
   const current = await catalog(query, "kokoro_bff.bff_message")
-  if (JSON.stringify(current) === JSON.stringify(expected.current)) return "current"
+  if (JSON.stringify(current) === JSON.stringify(expected.current) || (expected.final && JSON.stringify(current) === JSON.stringify(expected.final)))
+    return "current"
   if (JSON.stringify(current) === JSON.stringify(expected.prior)) return "missing"
   throw Error("invalid_schema")
 }

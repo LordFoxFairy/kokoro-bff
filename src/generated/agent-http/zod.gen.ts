@@ -392,3 +392,15 @@ export const zChatActivity = z.union([
     })
     .strict(),
 ])
+
+export const zChatRunCompleted = z
+  .object({
+    status: z.enum(["completed", "cancelled"]),
+    token_usage: z
+      .object({ input_tokens: z.number().int().max(Number.MAX_SAFE_INTEGER).min(0), output_tokens: z.number().int().max(Number.MAX_SAFE_INTEGER).min(0) })
+      .strict()
+      .optional(),
+    final_message_id: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine((value) => value.final_message_id === undefined || value.status === "completed", "Final answer requires completed run")

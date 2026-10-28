@@ -1,3 +1,7 @@
+## 当前最终答复引用（Public28.14，reader-first）
+
+固定 Agent b802f9b／HTTP8.8，在成功 RUN_FINISHED.result 和私有 OrderedMessageRendering／MessagePartsPage 增 optional final_segment_id。同 Run 原公开正文身份、与 parts revision 原子持久化，历史缺失保持缺失；无新operation、无Share或命令扩展。完整28.14→28.13、Agent8.8→8.7逆证保留。候选不是正常页面完成，配对见 docs/CURRENT.md。
+
 ## 当前动作标题读表示（Public28.13）
 
 固定正式Agent5394d334／HTTP8.7，沿原RunToolActivity optional action_title及私有RunDisplay tool_description窄生成。原件/provenance与18件generated摘要由agent-http manifest记录；完整8.7→8.6→8.5父图及Public28.13→28.12逆差证明保留，不作为运行兼容。无新增操作、权限、Schema或Share数据。正常配对与验收见docs/CURRENT.md。

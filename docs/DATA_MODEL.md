@@ -1,3 +1,7 @@
+## 最终答复身份（2026-10-28，设计已定，正常环境未激活）
+
+沿 BFF 自有 bff_message 增加 nullable `final_segment_id`，只用于 assistant 成功终态且已有 ordered parts 的同 Run 已完成正文引用。历史 NULL 表示无证明，不批量回填。该字段与 status／ordered_parts／parts_public_sequence／AG-UI terminal 在原事务中提交；exact tenant、subject、Conversation、Run、Message 绑定不变。私有读表示输出 optional，分享模型不扩展。不增 Run 表或 metadata endpoint。canonical schema 与具名加列演进需隔离验证，正常环境激活单独记录。
+
 ## tool_facts 只读展示后继（Root 已核准）
 
 仅原exact Run display临时表示加已证MCP名称／单工具failed提示；不改Agent源event/id/digest、BFF存储图、Message／Run／账本／feedback／regen行，不建立新表或状态中心。未知仍缺省事实，不借提示修改历史终态。

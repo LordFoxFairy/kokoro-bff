@@ -440,7 +440,20 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
             fact: source.skillUsageFact,
           })
         }
-        if (postTerminalBookkeeping.has(source)) continue
+        if (postTerminalBookkeeping.has(source)) {
+          if (source.assistantUpdate !== undefined) {
+            const stored = await client.query<{ final_segment_id: string | null }>(
+              `SELECT message.final_segment_id FROM bff_message AS message
+               JOIN bff_agent_dispatch_outbox AS dispatch ON dispatch.assistant_message_id=message.message_id
+                 AND dispatch.tenant_id=message.tenant_id AND dispatch.conversation_id=message.conversation_id AND dispatch.run_id=message.run_id
+               WHERE dispatch.tenant_id=$1 AND dispatch.conversation_id=$2 AND dispatch.run_id=$3 AND message.role='assistant'`,
+              [command.tenantId, command.sessionId, source.sourceRunId],
+            )
+            const incoming = source.assistantUpdate.kind === "complete" ? source.assistantUpdate.finalSegmentId ?? null : null
+            if ((stored.rows[0]?.final_segment_id ?? null) !== incoming) throw new AgUiSourceIdentityConflictError()
+          }
+          continue
+        }
 
         if (source.artifactDelivery !== undefined) {
           if (artifactOwner === null) throw new Error("AGUI_ARTIFACT_BINDING_MISSING")
@@ -516,6 +529,8 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
         // Public positions are now assigned; facts and their compatibility body still commit with the same ledger transaction.
         const update = source.assistantUpdate
         const runId = source.sourceRunId
+        const requiresFinalBinding = update?.kind === "complete" && update.finalSegmentId !== undefined
+        let finalBindingPersisted = false
         if (runId !== null && stream.expected_run_id === runId && stream.consumer_subject_id !== null) {
           const current = await client.query<{
             message_id: string
@@ -559,6 +574,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
                         status=CASE WHEN $5::text IS NULL THEN message.status
                           WHEN $5::text IN ('replace','append') THEN 'streaming'
                           WHEN $5::text='complete' THEN 'completed' ELSE 'failed' END,
+                        final_segment_id=CASE WHEN $5::text='complete' THEN $14::text ELSE message.final_segment_id END,
                         agent_failure_code=CASE WHEN $5::text IS NULL THEN message.agent_failure_code WHEN $5::text='fail' THEN $7::text ELSE NULL END,
                         agent_failure_retryable=CASE WHEN $5::text IS NULL THEN message.agent_failure_retryable WHEN $5::text='fail' THEN $8::boolean ELSE NULL END,
                         updated_at=CURRENT_TIMESTAMP(3)
@@ -584,12 +600,15 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
                   parts === null ? null : JSON.stringify(parts.parts),
                   parts?.publicSequence ?? null,
                   message.message_id,
+                  update?.kind === "complete" ? (update.finalSegmentId ?? null) : null,
                 ],
               )
               if (changed.rowCount !== 1) throw new Error("AGUI_ASSISTANT_BINDING_MISSING")
+              finalBindingPersisted = requiresFinalBinding
             }
           }
         }
+        if (requiresFinalBinding && !finalBindingPersisted) throw new Error("AGUI_FINAL_ANSWER_BINDING_MISSING")
       }
 
       const settlesHead = command.terminalRunId !== undefined && command.terminalRunId !== null && command.terminalRunId !== stream.terminal_run_id

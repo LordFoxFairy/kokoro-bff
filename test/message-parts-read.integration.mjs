@@ -45,6 +45,8 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       emptySerialization = false,
       terminalStatus = "completed",
       noText = false,
+      finalSegmentId,
+      deferTerminal = false,
     } = {}) {
       const suffix = randomUUID().replaceAll("-", ""),
         tenantId = `parts_t_${suffix}`,
@@ -100,7 +102,10 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
               source("message.completed", { segment_id: "public-b", content: "B" }),
             ]
           : []),
-        source("run.completed", { status: terminalStatus }),
+        source("run.completed", {
+          status: terminalStatus,
+          ...(finalSegmentId === undefined ? {} : { final_segment_id: finalSegmentId }),
+        }),
       ]
       if (emptyWire) {
         // Exercise the pinned raw Agent decoder and original source digest producer,
@@ -138,7 +143,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
             content_hash: "d".repeat(64),
           }),
           wire("assistant.completed", { content: long }, "raw-visible"),
-          wire("run.completed", { status: "completed", token_usage: null }),
+          wire("run.completed", { status: "completed" }),
         ]
         const parsed = agentEventPage({ events: wires, next_seq: rawSequence, watermark: rawSequence }, conversationId, 0, 1000)
         assert.ok(parsed, "requires the fixed Agent raw ChatEvent shape")
@@ -151,6 +156,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
           event: mapAgentEvent(event),
         }))
       }
+      if (deferTerminal) { events = events.slice(0, -1); sequence -= 1 }
       await store.agUi.ingest(tenantId, conversationId, events)
       const query = (cursor = null, extra = {}) => ({
         ...lifetime(),
@@ -164,7 +170,12 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
         ...extra,
       })
       const snapshot = (context = lifetime(), projectRef) => reader.readSnapshot(tenantId, subjectId, conversationId, projectRef, context)
-      return { tenantId, subjectId, conversationId, messageId, runId, receipt, query, snapshot }
+      return { tenantId, subjectId, conversationId, messageId, runId, receipt, query, snapshot,
+        finish: (finalId) => {
+          const terminal = source("run.completed", {status:"completed",final_segment_id:finalId})
+          sequence -= 1 // Invalid input is never committed; the next attempt reuses the pending source position.
+          return store.agUi.ingest(tenantId, conversationId, [terminal])
+        } }
     }
     const assistant = (snapshot) => snapshot.messages.find((message) => message.role === "assistant")
     const raw = async (c) =>
@@ -173,6 +184,72 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
           c.messageId,
         ])
       ).rows[0]
+
+    await suite.test("proved final answer survives snapshot, separate pages and a fresh reader at one terminal revision", async () => {
+      const c = await create({
+        twoSegments: true,
+        finalSegmentId: "public-b",
+      })
+      const snapshot = assistant(await c.snapshot())
+      assert.equal(snapshot.rendering.final_segment_id, "public-b")
+      const fresh = new PostgresChatRepository({ pool })
+      let cursor = snapshot.rendering.parts_cursor,
+        count = 0,
+        seenFinal = false
+      do {
+        const page = await fresh.readMessageParts(c.query(cursor, { limit: 1 }))
+        assert.equal(page.final_segment_id, "public-b")
+        assert.equal(page.revision, snapshot.rendering.revision)
+        seenFinal ||= page.items.some((part) => part.kind === "text" && part.segment_id === "public-b")
+        count++
+        cursor = page.next_cursor
+      } while (cursor)
+      assert.ok(count >= 3)
+      assert.ok(seenFinal)
+      const row = (await pool.query("SELECT final_segment_id,status FROM bff_message WHERE message_id=$1", [c.messageId])).rows[0]
+      assert.deepEqual(row, {
+        final_segment_id: "public-b",
+        status: "completed",
+      })
+    })
+
+    await suite.test("invalid final binding rolls back the ledger and message; successful terminal retires old page revision", async () => {
+      const c = await create({twoSegments:true,deferTerminal:true})
+      const old = assistant(await c.snapshot()).rendering
+      const before = await raw(c)
+      const ledgerBefore = await store.agUi.status(c.tenantId,c.conversationId)
+      await assert.rejects(c.finish("not-in-this-run"), /AGUI_MESSAGE_PARTS_INVALID/u)
+      assert.deepEqual(await raw(c),before)
+      assert.deepEqual(await store.agUi.status(c.tenantId,c.conversationId),ledgerBefore)
+      await c.finish("public-b")
+      await assert.rejects(reader.readMessageParts(c.query(old.parts_cursor)), /MESSAGE_PARTS_CHANGED/u)
+      const after = assistant(await c.snapshot()).rendering
+      assert.ok(BigInt(after.revision)>BigInt(old.revision))
+      assert.equal(after.final_segment_id,"public-b")
+    })
+
+    await suite.test("a final-bearing terminal cannot bypass the mutable Message or admitted-head fence", async () => {
+      for (const retired of ["message", "head"]) {
+        const c = await create({twoSegments:true,deferTerminal:true})
+        if (retired === "message") await pool.query("UPDATE bff_message SET status='completed' WHERE message_id=$1",[c.messageId])
+        else await pool.query("UPDATE bff_agui_stream SET expected_run_id='other-run' WHERE tenant_id=$1 AND session_id=$2",[c.tenantId,c.conversationId])
+        const before = await store.agUi.status(c.tenantId,c.conversationId)
+        await assert.rejects(c.finish("public-b"), /AGUI_FINAL_ANSWER_BINDING_MISSING/u)
+        assert.deepEqual(await store.agUi.status(c.tenantId,c.conversationId),before)
+        assert.equal((await pool.query("SELECT final_segment_id FROM bff_message WHERE message_id=$1",[c.messageId])).rows[0].final_segment_id,null)
+      }
+    })
+
+    await suite.test("a new terminal identity cannot change or add the settled final answer reference", async () => {
+      for (const [original,incoming] of [["public-b","public-a"],["public-b",undefined],[undefined,"public-b"]]) {
+        const c = await create({twoSegments:true,finalSegmentId:original})
+        const before = await raw(c)
+        const ledger = await store.agUi.status(c.tenantId,c.conversationId)
+        await assert.rejects(c.finish(incoming))
+        assert.deepEqual(await raw(c),before)
+        assert.deepEqual(await store.agUi.status(c.tenantId,c.conversationId),ledger)
+      }
+    })
 
     await suite.test("Agent8.2 trusted detail survives a fresh private parts reader without widening Share", async () => {
       const detail = { ...tool, display_code: "tool.mcp.call", display_detail: { kind: "mcp_tool", name: "public_lookup" } }
@@ -496,10 +573,24 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       for (const content of ["", "confirmed partial"]) {
         const c = await create({ terminalStatus: "cancelled", noText: content === "", long: content })
         const before = await raw(c)
-        assert.equal((await c.snapshot()).messages.find(message => message.messageId === c.messageId).terminal_status, "cancelled")
-        const next = await store.services.chatTurns.submit({ tenantId: c.tenantId, conversationId: c.conversationId, subjectId: c.subjectId, actorId: c.subjectId,
-          requestId: randomUUID(), idempotencyKey: randomUUID(), content: "next fixture turn" })
-        const claim = (await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: randomUUID(), limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }))[0]
+        assert.equal((await c.snapshot()).messages.find((message) => message.messageId === c.messageId).terminal_status, "cancelled")
+        const next = await store.services.chatTurns.submit({
+          tenantId: c.tenantId,
+          conversationId: c.conversationId,
+          subjectId: c.subjectId,
+          actorId: c.subjectId,
+          requestId: randomUUID(),
+          idempotencyKey: randomUUID(),
+          content: "next fixture turn",
+        })
+        const claim = (
+          await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+            workerId: randomUUID(),
+            limit: 1,
+            leaseDurationMs: 5000,
+            maxAttempts: 8,
+          })
+        )[0]
         assert.equal(claim.runId, next.run_id)
         assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
         let seq = Number((await pool.query("SELECT source_high_watermark FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",[c.tenantId,c.conversationId])).rows[0].source_high_watermark)
@@ -509,34 +600,87 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
             sourcePayload:{chat_event_id:id,session_id:c.conversationId,run_id:next.run_id,seq,created_at:seq*1000,payload},
             event:{event_id:id,seq,session_id:c.conversationId,run_id:next.run_id,kind,timestamp:occurredAt,payload} }
         })
-        await store.agUi.ingest(c.tenantId,c.conversationId,events)
-        await pool.query("UPDATE bff_agui_event SET recorded_at=CURRENT_TIMESTAMP(3)-INTERVAL '2 days' WHERE tenant_id=$1 AND session_id=$2 AND event_payload #>> '{metadata,kokoro,run_id}'=$3",[c.tenantId,c.conversationId,c.runId])
-        const collected=await store.agUiConsumers.collectGarbage({now:new Date().toISOString(),retentionMs:86400000,tombstoneRetentionMs:86400000,batchSize:1000})
-        assert.ok(collected.framesDeleted>0)
-        assert.equal(Number((await pool.query("SELECT count(*) AS n FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 AND event_payload #>> '{metadata,kokoro,run_id}'=$3",[c.tenantId,c.conversationId,c.runId])).rows[0].n),0)
-        assert.equal((await c.snapshot()).messages.find(message=>message.messageId===c.messageId).terminal_status,"cancelled")
-        const page=await reader.listMessages(c.tenantId,c.subjectId,c.conversationId,2,null,undefined,lifetime())
-        assert.equal(page.messages.find(message=>message.messageId===c.messageId).terminal_status,"cancelled")
+        await store.agUi.ingest(c.tenantId, c.conversationId, events)
+        await pool.query(
+          "UPDATE bff_agui_event SET recorded_at=CURRENT_TIMESTAMP(3)-INTERVAL '2 days' WHERE tenant_id=$1 AND session_id=$2 AND event_payload #>> '{metadata,kokoro,run_id}'=$3",
+          [c.tenantId, c.conversationId, c.runId],
+        )
+        const collected = await store.agUiConsumers.collectGarbage({
+          now: new Date().toISOString(),
+          retentionMs: 86400000,
+          tombstoneRetentionMs: 86400000,
+          batchSize: 1000,
+        })
+        assert.ok(collected.framesDeleted > 0)
+        assert.equal(
+          Number(
+            (
+              await pool.query(
+                "SELECT count(*) AS n FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 AND event_payload #>> '{metadata,kokoro,run_id}'=$3",
+                [c.tenantId, c.conversationId, c.runId],
+              )
+            ).rows[0].n,
+          ),
+          0,
+        )
+        assert.equal((await c.snapshot()).messages.find((message) => message.messageId === c.messageId).terminal_status, "cancelled")
+        const page = await reader.listMessages(c.tenantId, c.subjectId, c.conversationId, 2, null, undefined, lifetime())
+        assert.equal(page.messages.find((message) => message.messageId === c.messageId).terminal_status, "cancelled")
         assert.ok(page.next_cursor)
-        assert.equal((await reader.listMessages(c.tenantId,c.subjectId,c.conversationId,2,page.next_cursor,undefined,lifetime())).messages.some(message=>message.terminal_status!==undefined),false)
-        for (const [tenant,subject,session] of [["wrong-tenant",c.subjectId,c.conversationId],[c.tenantId,"wrong-owner",c.conversationId],[c.tenantId,c.subjectId,"wrong-session"]]) {
-          assert.equal(await reader.readSnapshot(tenant,subject,session,undefined,lifetime()),null)
+        assert.equal(
+          (await reader.listMessages(c.tenantId, c.subjectId, c.conversationId, 2, page.next_cursor, undefined, lifetime())).messages.some(
+            (message) => message.terminal_status !== undefined,
+          ),
+          false,
+        )
+        for (const [tenant, subject, session] of [
+          ["wrong-tenant", c.subjectId, c.conversationId],
+          [c.tenantId, "wrong-owner", c.conversationId],
+          [c.tenantId, c.subjectId, "wrong-session"],
+        ]) {
+          assert.equal(await reader.readSnapshot(tenant, subject, session, undefined, lifetime()), null)
         }
-        for (const column of ["session_id","run_id"]) {
-          await pool.query(`UPDATE bff_skill_usage_run_terminal SET ${column}=$3 WHERE tenant_id=$1 AND run_id=$2`,[c.tenantId,c.runId,"wrong-terminal"])
-          assert.equal(Object.hasOwn((await c.snapshot()).messages.find(message=>message.messageId===c.messageId),"terminal_status"),false)
-          await pool.query(`UPDATE bff_skill_usage_run_terminal SET ${column}=$3 WHERE tenant_id=$1 AND run_id=$2`,[c.tenantId,column==="run_id"?"wrong-terminal":c.runId,column==="run_id"?c.runId:c.conversationId])
+        for (const column of ["session_id", "run_id"]) {
+          await pool.query(`UPDATE bff_skill_usage_run_terminal SET ${column}=$3 WHERE tenant_id=$1 AND run_id=$2`, [c.tenantId, c.runId, "wrong-terminal"])
+          assert.equal(
+            Object.hasOwn(
+              (await c.snapshot()).messages.find((message) => message.messageId === c.messageId),
+              "terminal_status",
+            ),
+            false,
+          )
+          await pool.query(`UPDATE bff_skill_usage_run_terminal SET ${column}=$3 WHERE tenant_id=$1 AND run_id=$2`, [
+            c.tenantId,
+            column === "run_id" ? "wrong-terminal" : c.runId,
+            column === "run_id" ? c.runId : c.conversationId,
+          ])
         }
-        await pool.query("UPDATE bff_skill_usage_run_terminal SET status='failed' WHERE tenant_id=$1 AND run_id=$2",[c.tenantId,c.runId])
-        assert.equal(Object.hasOwn((await c.snapshot()).messages.find(message=>message.messageId===c.messageId),"terminal_status"),false)
-        await pool.query("DELETE FROM bff_skill_usage_run_terminal WHERE tenant_id=$1 AND run_id=$2",[c.tenantId,c.runId])
-        assert.equal(Object.hasOwn((await c.snapshot()).messages.find(message=>message.messageId===c.messageId),"terminal_status"),false)
-        assert.deepEqual(await raw(c),before)
-        const aborted=new AbortController();aborted.abort()
-        await assert.rejects(c.snapshot({...lifetime(),signal:aborted.signal}),/MESSAGE_PARTS_UNAVAILABLE/u)
-        const share=await reader.createShare(c.tenantId,c.subjectId,c.conversationId)
-        const shared=await store.services.publicShares.listMessages(share.shareId,c.tenantId,c.conversationId,100)
-        assert.equal(shared.messages.some(message=>Object.hasOwn(message,"terminal_status")),false)
+        await pool.query("UPDATE bff_skill_usage_run_terminal SET status='failed' WHERE tenant_id=$1 AND run_id=$2", [c.tenantId, c.runId])
+        assert.equal(
+          Object.hasOwn(
+            (await c.snapshot()).messages.find((message) => message.messageId === c.messageId),
+            "terminal_status",
+          ),
+          false,
+        )
+        await pool.query("DELETE FROM bff_skill_usage_run_terminal WHERE tenant_id=$1 AND run_id=$2", [c.tenantId, c.runId])
+        assert.equal(
+          Object.hasOwn(
+            (await c.snapshot()).messages.find((message) => message.messageId === c.messageId),
+            "terminal_status",
+          ),
+          false,
+        )
+        assert.deepEqual(await raw(c), before)
+        const aborted = new AbortController()
+        aborted.abort()
+        await assert.rejects(c.snapshot({ ...lifetime(), signal: aborted.signal }), /MESSAGE_PARTS_UNAVAILABLE/u)
+        const share = await reader.createShare(c.tenantId, c.subjectId, c.conversationId)
+        const shared = await store.services.publicShares.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
+        assert.equal(
+          shared.messages.some((message) => Object.hasOwn(message, "terminal_status")),
+          false,
+        )
       }
     })
     // CANCELLED-PRIVATE-READ-END

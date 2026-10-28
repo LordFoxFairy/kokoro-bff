@@ -272,11 +272,11 @@ export class PostgresChatRepository implements ChatRepository {
       const messages = includeHistory
         ? await client.query<PrivateMessageRow>(
             `SELECT latest.origin,latest.regenerated_from_message_id,latest.regeneration_user_message_id,latest.message_id, latest.tenant_id, latest.conversation_id, latest.run_id,
-                latest.role, latest.selected_skill_source_refs, latest.content, latest.parts_format_version, latest.parts_public_sequence, latest.parts_count, latest.status, latest.agent_failure_code, latest.agent_failure_retryable, latest.message_seq,
+                latest.role, latest.selected_skill_source_refs, latest.content, latest.parts_format_version, latest.parts_public_sequence, latest.final_segment_id, latest.parts_count, latest.status, latest.agent_failure_code, latest.agent_failure_retryable, latest.message_seq,
                 latest.created_at, latest.updated_at
            FROM (
              SELECT origin,regenerated_from_message_id,regeneration_user_message_id,message_id, tenant_id, conversation_id, run_id, role, selected_skill_source_refs,
-                    CASE WHEN ordered_parts IS NULL THEN content ELSE NULL END AS content, parts_format_version, parts_public_sequence,
+                    CASE WHEN ordered_parts IS NULL THEN content ELSE NULL END AS content, parts_format_version, parts_public_sequence, final_segment_id,
                     CASE WHEN ordered_parts IS NOT NULL THEN jsonb_array_length(ordered_parts) END AS parts_count, status, agent_failure_code, agent_failure_retryable,
                     message_seq, created_at, updated_at
                FROM bff_message
@@ -459,7 +459,7 @@ export class PostgresChatRepository implements ChatRepository {
       const result = await client.query<PrivateMessageRow>(
         `SELECT message.origin,message.regenerated_from_message_id,message.regeneration_user_message_id,message.message_id, message.tenant_id, message.conversation_id, message.run_id,
               message.role, message.selected_skill_source_refs, CASE WHEN message.ordered_parts IS NULL THEN message.content ELSE NULL END AS content,
-              message.parts_format_version,message.parts_public_sequence,CASE WHEN message.ordered_parts IS NOT NULL THEN jsonb_array_length(message.ordered_parts) END AS parts_count,message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
+              message.parts_format_version,message.parts_public_sequence,message.final_segment_id,CASE WHEN message.ordered_parts IS NOT NULL THEN jsonb_array_length(message.ordered_parts) END AS parts_count,message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
               message.created_at, message.updated_at
          FROM bff_message AS message
         WHERE message.tenant_id = $1 AND message.conversation_id = $3 AND message.origin <> 'regeneration_input'

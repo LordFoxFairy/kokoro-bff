@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.13.0
+  version: 28.14.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -22292,6 +22292,10 @@ components:
       additionalProperties: false
       required: [mode, format_version, revision, event_watermark, parts_cursor]
       properties:
+        final_segment_id:
+          type: string
+          minLength: 1
+          description: Proven final answer text segment of this exact completed Run at this revision. May occur on another page; absence is unknown, never inferred from the last visible part.
         mode: { type: string, const: ordered }
         format_version: { type: integer, const: 1 }
         revision: { $ref: '#/components/schemas/MessagePartsDecimal' }
@@ -22344,6 +22348,10 @@ components:
       additionalProperties: false
       required: [session_id, message_id, run_id, format_version, revision, event_watermark, items, next_cursor]
       properties:
+        final_segment_id:
+          type: string
+          minLength: 1
+          description: Proven final answer text segment of this exact completed Run at this revision. May occur on another page; absence is unknown, never inferred from the last visible part.
         session_id: { type: string, minLength: 1 }
         message_id: { type: string, minLength: 1 }
         run_id: { type: string, minLength: 1 }
@@ -22661,6 +22669,9 @@ components:
     SessionEventStream:
       type: string
       description: AG-UI server-sent event frames read from the BFF PostgreSQL ledger. Each id is a distinct opaque resume cursor. Every durable data frame requires owner metadata described by x-kokoro-owner-metadata; public_sequence is the positive decimal BFF ledger position, distinct from unchanged source seq. Never decode an opaque cursor as a sequence. Heartbeat comments have no owner metadata. CUSTOM kokoro.interaction.state carries one complete ChatInteractionState in value; HTTP control admission does not resolve it.
+      x-kokoro-run-finished-results:
+        completed:
+          $ref: '#/components/schemas/FinalAnswerResult'
       x-kokoro-owner-metadata:
         $ref: '#/components/schemas/KokoroAgUiReplayMetadata'
       x-kokoro-custom-event-values:
@@ -22672,6 +22683,13 @@ components:
 
         id: agui_abcdef0123456789abcdef0123456789ab
         data: {"type":"RUN_FINISHED","timestamp":1767225605000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_5","seq":5,"public_sequence":"8","session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:05.000Z"}}}
+    FinalAnswerResult:
+      type: object
+      additionalProperties: false
+      required: [final_segment_id]
+      description: Optional result of a successful RUN_FINISHED only. Its reference is committed with that terminal and the ordered message revision; cancelled and failed runs never carry it.
+      properties:
+        final_segment_id: { type: string, minLength: 1 }
     KokoroAgUiReplayMetadata:
       type: object
       description: Owner metadata on every durable AG-UI data frame. The public_sequence is assigned per emitted frame by the BFF ledger; one Agent source seq can produce several frames. Preserve source seq and source_owner without coercion or fallback.

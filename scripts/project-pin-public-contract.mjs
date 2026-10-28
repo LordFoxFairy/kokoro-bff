@@ -1,3 +1,5 @@
+import { restoreFinalAnswerSchema } from "./message-final-answer-schema.mjs"
+import { restorePublic2813FinalAnswerContract } from "./final-answer-public-contract.mjs"
 // Build/test-only complete Public28.5→28.4 inverse. Never imported by production.
 import { createHash } from "node:crypto"
 const hash = (value) => createHash("sha256").update(value).digest("hex")
@@ -62,6 +64,7 @@ const capabilityPublicDelta =
 const capabilityConditionPublicDelta =
   "            allOf:\n            - if:\n                required:\n                - tool_description\n              then:\n                required:\n                - target\n                properties:\n                  tool_name:\n                    enum:\n                    - mcp_call\n                    - mcp_describe_tool\n                  target:\n                    properties:\n                      kind:\n                        const: mcp_tool\n"
 export function restorePublic2812ActionDisplayContract(source) {
+  source = restorePublic2813FinalAnswerContract(source)
   if (!/^  version: 28\.13\.0$/mu.test(source)) return source
   if (hash(source) !== actionDisplayCurrentSha256) throw Error("Action display complete Public28.13 child drift")
   const parent = source
@@ -246,6 +249,7 @@ export function messageActionsParentInventory(inventory) {
 }
 
 export function restoreMessageActionsSchema(source) {
+  source = restoreFinalAnswerSchema(source)
   if (!source.includes("-- MESSAGE-FEEDBACK-SQL-BEGIN") && !source.includes("-- MESSAGE-REGENERATION-COLUMNS-BEGIN")) return source
   if (hash(source) !== "ec40849678906cfce9f1c53fc7279ebb705481b78827ce02c463dd7c11dae0bb") throw Error("Message actions complete SQL drift")
   let restored = source

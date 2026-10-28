@@ -192,6 +192,7 @@ export type PrivateMessageRow = Omit<MessageRow, "content"> & {
   parts_format_version: number | null
   parts_public_sequence: string | null
   parts_count: number | null
+  final_segment_id?: string | null
 }
 
 function cursorFor(
@@ -210,9 +211,11 @@ export function messageRendering(
   revision: string,
   head: string | null,
   source: "message" | "ledger" = "message",
+  finalSegmentId?: string | null,
 ): OrderedMessageRendering {
   return {
     mode: "ordered",
+    ...(finalSegmentId == null ? {} : { final_segment_id: identity(finalSegmentId) }),
     format_version: 1,
     revision,
     event_watermark: head,
@@ -253,7 +256,7 @@ export function privateMessageFromRow(row: PrivateMessageRow, scope: Omit<Messag
     messageSeq: decimal(String(row.message_seq), true),
     createdAt: instant(row.created_at),
     updatedAt: instant(row.updated_at),
-    rendering: messageRendering({ ...scope, messageId: row.message_id, runId }, decimal(row.parts_public_sequence), head),
+    rendering: messageRendering({ ...scope, messageId: row.message_id, runId }, decimal(row.parts_public_sequence), head, "message", row.final_segment_id),
   }
 }
 
@@ -265,6 +268,7 @@ type OwnerRow = {
   parts_format_version: number | null
   parts_public_sequence: string | null
   parts_count: number | null
+  final_segment_id?: string | null
   legacy_text: string | null
   legacy_bytes: string
   selected_run_id: string | null
@@ -619,7 +623,7 @@ export async function readMessageParts(pool: Pick<Pool, "connect">, query: Messa
   try {
     return await withMessageReadClient(pool, query, async (client) => {
       const result = await client.query<OwnerRow>(
-        `SELECT message.message_id,message.run_id,conversation.project_ref,message.status,message.parts_format_version,message.parts_public_sequence,
+        `SELECT message.message_id,message.run_id,conversation.project_ref,message.status,message.parts_format_version,message.parts_public_sequence,message.final_segment_id,
         CASE WHEN message.ordered_parts IS NOT NULL THEN jsonb_array_length(message.ordered_parts) END AS parts_count,
         CASE WHEN message.ordered_parts IS NULL AND octet_length(message.content)<=4194304 THEN message.content END AS legacy_text,
         octet_length(message.content)::text AS legacy_bytes, stream.latest_run_id AS selected_run_id,
@@ -669,6 +673,7 @@ export async function readMessageParts(pool: Pick<Pool, "connect">, query: Messa
         const revision = decimal(row.parts_public_sequence)
         if (parsed && parsed.revision !== revision) return failed("MESSAGE_PARTS_CHANGED")
         page = await persistedPage(client, parsed ?? cursorFor(scope, revision, head, "message"), row.parts_count, query.limit)
+        if (row.final_segment_id != null) page.final_segment_id = identity(row.final_segment_id)
       }
       if (Buffer.byteLength(JSON.stringify({ data: page, meta: { request_id: "r".repeat(256) } })) > MAX_PAGE_BYTES)
         return failed("MESSAGE_PARTS_BUDGET_EXCEEDED")

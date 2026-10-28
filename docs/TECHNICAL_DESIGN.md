@@ -1,3 +1,11 @@
+## 整轮过程与最终答复边界（2026-10-28，reader-first，未激活）
+
+现有 UI 将相邻 activity 组当整轮过程，缺少独立最终答复身份。沿既有 Agent HTTP8.8 的成功终态 `final_message_id` 消费，并映射为 BFF `final_segment_id`；它引用既有公开正文段，不是新的消息或网络协议。Agent8.8 固定 b802f9b778fd686e80774adcdd72758325fb0b9b，仅正常单 Agent 已验证；Swarm 已知独立失败未验收。
+
+BFF 在原 AG-UI ledger／assistant Message 事务中核验同 Run 已完成文本段并持久化可空 final 引用。终态、parts revision、final 同事务提交，读取复用现有分页 revision 围栏；旧数据缺省，不推测末段、不回填。App 仅在成功终态且目标正文完整后将此前正文与活动收进整轮 disclosure，final 保持外露，内部活动组独立，失败／取消／交互保持可读。
+
+无新 endpoint、owner 或第二事件协议。先固定 reader，再配对 producer；未激活正式数据 schema，不改变当前运行进程。失败保持原事务回滚，禁止将工具失败误写为整轮失败。回退停新 producer，保留可读取新事实的 reader／列，不删事实。
+
 ## 逐调用行动标题消费者（Public28.13，未激活）
 
 沿既有 Agent HTTP8.7 正式发行物接收 tool activity 的 optional `action_title`，不新增 endpoint、表、请求或解释服务。标题属于同一原 activity 的不可变展示事实，与 display_code/display_detail 一起校验首次与后续帧身份；status 独立变化。原 mapAgentEvent→AG-UI CUSTOM→durable ledger→snapshot/ordered/replay 原样承接，无另建投影源。标题不作为权限、结果或相邻正文，旧缺省保持缺省。发布先更新 BFF/App reader，再激活 producer，原冻结 Run 不暗换配方。

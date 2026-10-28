@@ -21,8 +21,15 @@ export type AgUiStreamState = {
 }
 
 export type AgUiAssistantUpdate =
-  | { runId: string; kind: "replace" | "append"; segmentId: string; completed: boolean; content: string }
-  | { runId: string; kind: "complete" | "cancel" }
+  | {
+      runId: string
+      kind: "replace" | "append"
+      segmentId: string
+      completed: boolean
+      content: string
+    }
+  | { runId: string; kind: "complete"; finalSegmentId?: string }
+  | { runId: string; kind: "cancel" }
   | { runId: string; kind: "fail"; failure: AgentFailureProfile }
 
 export type AgUiArtifactDelivery = {

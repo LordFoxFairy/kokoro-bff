@@ -191,10 +191,22 @@ function projectSources(
     }
     if (event.kind === "run.completed") {
       if (event.payload.status !== "completed" && event.payload.status !== "cancelled") throw new AgUiSourceContractError()
+      if (
+        event.payload.final_segment_id !== undefined &&
+        (event.payload.status !== "completed" || typeof event.payload.final_segment_id !== "string" || event.payload.final_segment_id.trim() === "")
+      )
+        throw new AgUiSourceContractError()
       return {
         ...sourceIdentity(source),
         frames,
-        assistantUpdate: { runId, kind: event.payload.status === "cancelled" ? ("cancel" as const) : ("complete" as const) },
+        assistantUpdate:
+          event.payload.status === "cancelled"
+            ? { runId, kind: "cancel" as const }
+            : {
+                runId,
+                kind: "complete" as const,
+                ...(event.payload.final_segment_id === undefined ? {} : { finalSegmentId: String(event.payload.final_segment_id) }),
+              },
         ...(skillUsageFact === undefined ? {} : { skillUsageFact }),
       }
     }

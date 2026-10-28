@@ -1,3 +1,9 @@
+## 2026-10-28 整轮过程最终答复消费者（Public28.14，候选未激活）
+
+固定 Agent b802f9b／HTTP8.8。原成功终态经闭集校验映射 final_segment_id，原 ledger／Message 事务核验同 Run 已完成正文，保存终态、parts revision 与 final；snapshot/list/page 承接同一引用。错 Run、缺段、未完成段、已退休 Message/head 及第二终态引用漂移均回滚，缺省旧记录不猜尾段。无新 endpoint，分享与命令原形不变。
+
+隔离真实 PostgreSQL private-parts 18项通过；fresh canonical installer 与具名 final 列演进真实验证通过（旧行内容/xmin不动、重复apply与catalog漂移）。正常数据与服务未切换；App整轮折叠尚未接入，展示仍 OPEN。停写后串行 lint/typecheck/build/architecture/contract/default 全部 exit0；contract1325、architecture36、default2287通过（3项既有资源跳过）。原 regeneration 演进真实回归亦通过，先旧演进再 final 的顺序已验证。数字不替代页面验收。数据库演进复用原有限事务/取消/commit-unknown逻辑，执行入口为 db:evolve-message-final-answer；未知结果不得自动重试。
+
 ## 2026-10-28 逐调用动作标题消费者（未正常激活）
 
 固定 Agent5394d3346c51764c1e1fca10c8e7450abf11f3d2／HTTP8.7，Public28.13仅扩原tool activity可选action_title和私有RunDisplay能力说明。沿原事件、快照、ordered与重开消费，不补造旧历史；首次标题presence/value冻结，后续改写或丢失拒绝整批事务。身份、Share whitelist、权限、数据表不变；原完整父契约证明保留。

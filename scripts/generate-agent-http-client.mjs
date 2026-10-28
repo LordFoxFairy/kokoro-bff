@@ -1,3 +1,4 @@
+import { restoreAgent87FinalAnswerRaw, restoreAgent87FinalAnswerContract } from "./agent-final-answer-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
@@ -11,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "5394d3346c51764c1e1fca10c8e7450abf11f3d2"
+const ownerCommit = "b802f9b778fd686e80774adcdd72758325fb0b9b"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "74fb43159ba559fe049f027a5fe4877d29524f5a73eae88c8d15913760cfb9fc"
-const provenanceDigest = "13df62051ecd5f5699c341bc186e9d65da1c8cab66bfe8f87ea2395adcdf4d97"
-const ownerContractVersion = "8.7.0"
+const ownerDigest = "fd8b2857ecbc9577bd98ca73234e4d81c53d4fe189ba86badcf35c774b9a6830"
+const provenanceDigest = "00b5e906ba36b01df69c104e2892d186438a2bc797c3f6509e8a2a1ccd4b50cd"
+const ownerContractVersion = "8.8.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -118,6 +119,7 @@ const capabilityDescriptionDelta =
 const capabilityConditionDelta =
   ',\n              "allOf": [\n                {\n                  "if": {\n                    "required": [\n                      "tool_description"\n                    ]\n                  },\n                  "then": {\n                    "required": [\n                      "target"\n                    ],\n                    "properties": {\n                      "tool_name": {\n                        "enum": [\n                          "mcp_call",\n                          "mcp_describe_tool"\n                        ]\n                      },\n                      "target": {\n                        "properties": {\n                          "kind": {\n                            "const": "mcp_tool"\n                          }\n                        }\n                      }\n                    }\n                  }\n                }\n              ]'
 export function restoreAgent85ActionDisplayRaw(source) {
+  source = restoreAgent87FinalAnswerRaw(source)
   if (source.includes('"version": "8.7.0"')) {
     assert.equal(sha256(source), "74fb43159ba559fe049f027a5fe4877d29524f5a73eae88c8d15913760cfb9fc", "Agent8.7 action child drift")
     source = source.replace(actionTitleDelta, "").replace('"version": "8.7.0"', '"version": "8.6.0"')
@@ -131,6 +133,7 @@ export function restoreAgent85ActionDisplayRaw(source) {
   return source
 }
 export function restoreAgent85ActionDisplayContract(document) {
+  document = restoreAgent87FinalAnswerContract(document)
   if (!["8.6.0", "8.7.0"].includes(document.info?.version)) return document
   assert.equal(
     sha256(JSON.stringify(document)),
@@ -435,6 +438,31 @@ export function assertInteractionContractSchema(document) {
 }
 
 function schemaZod(schema) {
+  if (schema.properties?.final_message_id) {
+    assert.deepEqual(
+      schema.allOf,
+      [
+        {
+          if: { required: ["final_message_id"] },
+          then: { properties: { status: { const: "completed" } } },
+        },
+      ],
+      "Agent final answer success condition drifted",
+    )
+    const base = { ...schema }
+    delete base.allOf
+    delete base.properties
+    base.properties = { ...schema.properties }
+    // Compile the published condition; recursive lowering below owns all field validation.
+    const fields = Object.entries(base.properties).map(
+      ([name, value]) => JSON.stringify(name) + ":" + schemaZod(value) + ((base.required ?? []).includes(name) ? "" : ".optional()"),
+    )
+    return (
+      "z.object({" +
+      fields.join(",") +
+      '}).strict().refine((value) => value.final_message_id === undefined || value.status === "completed", "Final answer requires completed run")'
+    )
+  }
   // The new owner RunDisplay adjunct uses required-only anyOf over shared closed fields.
   // Lower only this exact shape; do not turn generic required-only nodes into unknown unions.
   if (schema.type === "object" && schema.anyOf) {
@@ -495,6 +523,7 @@ async function generateDecodedValidators(directory, document) {
     "ChatInteractionState",
     "ChatTodo",
     "ChatActivity",
+    "ChatRunCompleted",
   ]) {
     assert.ok(!source.includes("export const z" + name + " ="), "decoded schema is already generated: " + name)
     source += "\nexport const z" + name + " = " + schemaZod(schemas[name]) + ";\n"

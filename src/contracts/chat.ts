@@ -42,6 +42,7 @@ export type OrderedMessageRendering = {
   revision: string
   event_watermark: string | null
   parts_cursor: string
+  final_segment_id?: string
 }
 
 export type ChatMessageRead = (
@@ -85,6 +86,7 @@ export type MessagePartsPage = {
   event_watermark: string | null
   items: Array<MessageTextPartSlice | MessageActivityPart>
   next_cursor: string | null
+  final_segment_id?: string
 }
 
 export type ChatEvent = {

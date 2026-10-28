@@ -81,7 +81,10 @@ export function foldMessageParts(
   frames: readonly PositionedMessageFrame[],
   update?: AgUiAssistantUpdate,
 ): MessageParts | null {
-  if (current === null) return null
+  if (current === null) {
+    if (update?.kind === "complete" && update.finalSegmentId !== undefined) return invalid()
+    return null
+  }
   const state = parseMessageParts(current.parts, current.formatVersion, current.publicSequence)
   if (state === null) return invalid()
   identity(runId)
@@ -149,6 +152,19 @@ export function foldMessageParts(
     }
   }
   if (textUpdate !== undefined && !appliedText) return invalid()
+  if (update?.kind === "complete" && update.finalSegmentId !== undefined) {
+    const finalId = identity(update.finalSegmentId)
+    if (!state.parts.some((part) => part.kind === "text" && part.segment_id === finalId && part.completed)) return invalid()
+    if (
+      !frames.some(
+        ({ frame }) =>
+          frame.type === "RUN_FINISHED" &&
+          frame.status === "completed" &&
+          (frame.result as { final_segment_id?: unknown } | undefined)?.final_segment_id === finalId,
+      )
+    )
+      return invalid()
+  }
   return state
 }
 
