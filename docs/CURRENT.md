@@ -1,3 +1,7 @@
+## 2026-10-28 正常整轮配对验证（单任务切片）
+
+正常组合 App e7b93c7e／BFF15cc9e1／Agent2e61b85已加载，BFF具名final nullable列演进已确认current；无历史回填。真实新只读任务正常完成，Agent final与BFF parts逐字/身份/顺序一致，正常网页收展及硬刷新保持最终答复独立。2模型attempt sealed、unknown0，usage仍partial。旧MCP历史、Canvas回焦、正常Swarm及整体产品验收仍OPEN，不能将本片成功等同整体完成。原始截图、精确运行前像和回退配置在Root ignored whole-turn-normal-20261028；唯一Root计划记载完整实际范围。无合并或Root版本提升。
+
 ## 2026-10-28 整轮过程最终答复消费者（Public28.14，候选未激活）
 
 固定 Agent b802f9b／HTTP8.8。原成功终态经闭集校验映射 final_segment_id，原 ledger／Message 事务核验同 Run 已完成正文，保存终态、parts revision 与 final；snapshot/list/page 承接同一引用。错 Run、缺段、未完成段、已退休 Message/head 及第二终态引用漂移均回滚，缺省旧记录不猜尾段。无新 endpoint，分享与命令原形不变。
