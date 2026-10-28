@@ -11,12 +11,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "f31b60be27dd9b4dfddd7a1c3579b19e40db150d"
+const ownerCommit = "4f8a8d2485abadc8351efbe1c9d6277ada267096"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52"
-const provenanceDigest = "275f66d882ab85bf01c71347c0a9302b6c4bfc0d7bcd94ee6d01b8ce1219f230"
-const ownerContractVersion = "8.4.0"
+const ownerDigest = "b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897"
+const provenanceDigest = "204e28baa5484c30635fb0cb466e4db6de4a7ea4ec43a03211bd9a27847ac99a"
+const ownerContractVersion = "8.5.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -107,6 +107,23 @@ export function assertFailureContractSchema(document) {
 // The generator does not follow extension refs; derive these validators from the pinned bytes,
 // rather than maintaining another editable schema or enabling every orphan owner component.
 // Build/test-only raw inverse retains numeric lexemes and numeric-key source order exactly.
+export function restoreAgent84ActivityDetailsRaw(source) {
+  assert.equal(sha256(source), "b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897", "Agent8.5 complete raw child drift")
+  const replacements = [
+    ['    "version": "8.5.0"\n', '    "version": "8.4.0"\n'],
+    ['          "tool_facts",\n          "activity_details"\n', '          "tool_facts"\n'],
+    [
+      '          },\n          "activity_details": {\n            "type": "array",\n            "maxItems": 128,\n            "x-kokoro-unique-by": "activity_id",\n            "items": {\n              "type": "object",\n              "required": [\n                "activity_id",\n                "tool_name"\n              ],\n              "properties": {\n                "activity_id": {\n                  "type": "string",\n                  "minLength": 68,\n                  "maxLength": 68,\n                  "pattern": "^act_[0-9a-f]{64}(?![\\\\s\\\\S])"\n                },\n                "tool_name": {\n                  "type": "string",\n                  "minLength": 1,\n                  "maxLength": 120,\n                  "x-kokoro-utf8-byte-limit": 480,\n                  "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n                },\n                "target": {\n                  "type": "object",\n                  "required": [\n                    "kind",\n                    "name"\n                  ],\n                  "properties": {\n                    "kind": {\n                      "type": "string",\n                      "enum": [\n                        "file",\n                        "mcp_tool"\n                      ]\n                    },\n                    "name": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 120,\n                      "x-kokoro-utf8-byte-limit": 480,\n                      "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n                    },\n                    "virtual_path": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 4096,\n                      "x-kokoro-utf8-byte-limit": 4096,\n                      "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",\n                      "description": "Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument."\n                    }\n                  },\n                  "additionalProperties": false,\n                  "allOf": [\n                    {\n                      "if": {\n                        "properties": {\n                          "kind": {\n                            "const": "file"\n                          }\n                        }\n                      },\n                      "then": {\n                        "properties": {\n                          "name": {\n                            "pattern": "^(?!\\\\.{1,2}$)[^/\\\\\\\\:]+$"\n                          }\n                        }\n                      }\n                    },\n                    {\n                      "if": {\n                        "properties": {\n                          "kind": {\n                            "const": "mcp_tool"\n                          }\n                        }\n                      },\n                      "then": {\n                        "not": {\n                          "required": [\n                            "virtual_path"\n                          ]\n                        }\n                      }\n                    }\n                  ]\n                },\n                "input_preview": {\n                  "type": "object",\n                  "required": [\n                    "text",\n                    "truncated",\n                    "redacted"\n                  ],\n                  "properties": {\n                    "text": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 2048,\n                      "x-kokoro-utf8-byte-limit": 2048\n                    },\n                    "truncated": {\n                      "type": "boolean"\n                    },\n                    "redacted": {\n                      "type": "boolean"\n                    }\n                  },\n                  "additionalProperties": false\n                },\n                "output_preview": {\n                  "type": "object",\n                  "required": [\n                    "text",\n                    "truncated",\n                    "redacted"\n                  ],\n                  "properties": {\n                    "text": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 4096,\n                      "x-kokoro-utf8-byte-limit": 4096\n                    },\n                    "truncated": {\n                      "type": "boolean"\n                    },\n                    "redacted": {\n                      "type": "boolean"\n                    }\n                  },\n                  "additionalProperties": false\n                }\n              },\n              "additionalProperties": false\n            },\n            "description": "Private same-Run evidence-bound tool details only; missing fields remain unknown. Filtered bounded text is not a universal secret-free guarantee. Never Share, execution authority, HTML, autolinks or instructions."\n',
+      "",
+    ],
+  ]
+  for (const [from, to] of replacements) {
+    assert.equal(source.split(from).length - 1, 1, "Agent8.5 exact activity details delta drift")
+    source = source.replace(from, to)
+  }
+  assert.equal(sha256(source), "239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52", "Agent8.4 complete raw parent drift")
+  return source
+}
 export function restoreAgent83ToolFactsRaw(source) {
   assert.equal(sha256(source), "239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52", "Agent8.4 complete raw child drift")
   const replacements = [
@@ -170,7 +187,26 @@ export function restoreAgent82DisplayRaw(source) {
   return source
 }
 // Build/test-only strict full owner child inverse. Production generation requires the current exact blob above.
+export function restoreAgent84ActivityDetailsContract(document) {
+  if (document.info?.version !== "8.5.0" && !document.components?.schemas?.RunDisplay?.properties?.activity_details) return document
+  assert.equal(
+    sha256(JSON.stringify(document)),
+    "19858ea0a011017371361c7c952998714b639a5ad092272f271dd9c8de216adc",
+    "Agent8.5 complete activity details child drift",
+  )
+  const parent = structuredClone(document)
+  delete parent.components.schemas.RunDisplay.properties.activity_details
+  parent.components.schemas.RunDisplay.required = ["run_id", "display_skills", "tool_paths", "tool_facts"]
+  parent.info.version = "8.4.0"
+  assert.equal(
+    sha256(JSON.stringify(parent)),
+    "aece8b1ea4d83f63b224f0b219afba99e1c5646f4b698d2257562e36e0c36528",
+    "Agent8.4 complete activity details parent drift",
+  )
+  return parent
+}
 export function restoreAgent83ToolFactsContract(document) {
+  document = restoreAgent84ActivityDetailsContract(document)
   if (document.info?.version !== "8.4.0" && !document.components?.schemas?.RunDisplay?.properties?.tool_facts) return document
   assert.equal(sha256(JSON.stringify(document)), "aece8b1ea4d83f63b224f0b219afba99e1c5646f4b698d2257562e36e0c36528", "Agent8.4 complete tool facts child drift")
   const parent = structuredClone(document)
@@ -530,7 +566,7 @@ async function verifyOwnerSources() {
   const failureArtifact = provenance.generated_artifacts?.find((artifact) => artifact.path === "src/kokoro_agent/protocol/run_failure_generated.py")
   assert.equal(failureArtifact?.source, "contract/openapi/v1/openapi.json", "Agent failure artifact source path drifted")
   assert.equal(failureArtifact?.source_sha256, ownerDigest, "Agent failure artifact source digest drifted")
-  restoreAgent82DisplayRaw(restoreAgent83ToolFactsRaw(vendor.toString("utf8")))
+  restoreAgent82DisplayRaw(restoreAgent83ToolFactsRaw(restoreAgent84ActivityDetailsRaw(vendor.toString("utf8"))))
   const document = JSON.parse(vendor.toString("utf8"))
   assert.equal(document.info?.version, ownerContractVersion, "Agent HTTP contract version drifted")
   assertFailureContractSchema(document)

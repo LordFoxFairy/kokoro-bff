@@ -65,3 +65,52 @@ export function safeToolFacts(value: ReturnType<typeof zRunDisplayEnvelope.parse
     )
   })
 }
+
+// Private previews are prose, not names: preserve line breaks, tabs and original normalization.
+// The owner filters suspicious text; this bounded private representation is not a universal secret-free guarantee.
+const privatePreviewText =
+  /(?:https?:\/\/[^\s/]+@|(?:^|[\s"'])(?:\/(?:Users|home|private|etc|var|proc|sys|root|tmp|opt)\/|[A-Z]:\\)|Traceback \(most recent call last\)|\b[A-Za-z]*(?:Error|Exception)\s*:|\b(?:Authorization|Set-Cookie|Cookie)\s*:|\b(?:api[_-]?key|password|secret|access[_-]?token)\s*[=:]|\b(?:DATABASE_URL|REDIS_URL|HOME|PATH)\s*=)/iu
+function safeDetailName(name: string): boolean {
+  const domain = AGENT_PROCESS_CONSTRAINTS.toolDetail
+  return (
+    name.trim() !== "" &&
+    [...name].length <= domain.maxScalars &&
+    Buffer.byteLength(name, "utf8") <= domain.utf8ByteLimit &&
+    name.normalize(domain.normalization) === name &&
+    !forbidden.test(name) &&
+    !sensitive.test(name)
+  )
+}
+function safePreview(text: string, limit: number): boolean {
+  return (
+    text.length > 0 &&
+    Buffer.byteLength(text, "utf8") <= limit &&
+    !/[\p{Cs}\p{Cf}]/u.test(text) &&
+    !/\p{Cc}/u.test(text.replace(/[\n\r\t]/gu, "")) &&
+    !sensitive.test(text) &&
+    !privatePreviewText.test(text)
+  )
+}
+/** Exact private Run adjunct only; absent evidence is not synthesized or promoted to execution authority. */
+export function safeActivityDetails(value: ReturnType<typeof zRunDisplayEnvelope.parse>["data"]["activity_details"]): boolean {
+  const domain = AGENT_PROCESS_CONSTRAINTS.display.read.properties.activity_details.items.properties
+  const activityPattern = new RegExp(domain.activity_id.pattern, "u")
+  if (new Set(value.map((item) => item.activity_id)).size !== value.length) return false
+  return value.every((item) => {
+    if (item.activity_id.length !== domain.activity_id.minLength || !activityPattern.test(item.activity_id) || !safeDetailName(item.tool_name)) return false
+    if (item.target !== undefined) {
+      const target = item.target
+      if (!safeDetailName(target.name)) return false
+      if (target.kind === "file" && (target.name === "." || target.name === ".." || /[/\\:]/u.test(target.name))) return false
+      if (
+        target.virtual_path !== undefined &&
+        (target.kind !== "file" || !safeVirtualPath(target.virtual_path) || target.virtual_path.split("/").at(-1) !== target.name)
+      )
+        return false
+    }
+    return (
+      (item.input_preview === undefined || safePreview(item.input_preview.text, domain.input_preview.properties.text["x-kokoro-utf8-byte-limit"])) &&
+      (item.output_preview === undefined || safePreview(item.output_preview.text, domain.output_preview.properties.text["x-kokoro-utf8-byte-limit"]))
+    )
+  })
+}

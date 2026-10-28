@@ -1,3 +1,11 @@
+## 私有 Run 工具详情（Root 已核准，Public28.12 候选）
+
+仅扩展现本人 owned Run display 读表示；Agent HTTP8.5 canonical SHA `b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897` 已冻结，正式 dependency commit `4f8a8d2485abadc8351efbe1c9d6277ada267096`／provenance SHA `204e28baa5484c30635fb0cb466e4db6de4a7ea4ec43a03211bd9a27847ac99a` 已由 Root 交付。`activity_details` 是同 Run 原工具证据的有界旁读：最多128、opaque activity_id 唯一，required tool_name；target 复用原 file/mcp_tool 域，input/output preview 是带 truncated/redacted 的纯文本。缺失即未知；不猜当前目录、不回填历史、不改原 activity／Run 终态。它不进入 Chat、SSE、Share 或执行授权，也不建立新 endpoint、缓存或数据表。
+
+原 pre/post fresh Session、exact tenant/subject/Conversation/Run 绑定、当前 owned Conversation、五秒绝对预算、caller abort、单次 owner GET 和完整1MiB上限不变。字段在 owner strict schema 后做独立语义校验：工具名／target 保旧 NFC scalar 和路径限制；preview 允许换行、回车、制表符与原文本 normalization，分别限制2048／4096 UTF-8 bytes，拒绝非法scalar、其他控制／格式字符及 owner 明确敏感模式。不将自由文本套入 name-only 域，不泛化放宽旧 validator；过滤不是任意文本绝对无秘密的保证。消费者仅按纯文本呈现，不能作 HTML、自动链接或指令。
+
+Public28.12 仅增 required 集合，完整字节逆回28.11 `4d93ec15e2931768afafffb2101039b1da64757ea48c760d16ef88aa8753db16`，再承接原父证明。Agent8.5 以三处 raw 差额精确逆回8.4，原 failure/process/interaction/operation 闭集不变。发布沿原生成入口；本候选和隔离 HTTP peer 测试不代表正常服务配对、浏览器验收或真实 Agent 数据证明。
+
 ## 原 Run MCP／失败工具展示后继（Root 已核准，正式 Agent 输入；BFF 候选未发行）
 
 固定正式 Agent `f31b60be27dd9b4dfddd7a1c3579b19e40db150d`／HTTP8.4 SHA `239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52`／provenance SHA `275f66d882ab85bf01c71347c0a9302b6c4bfc0d7bcd94ee6d01b8ce1219f230`。沿本节后的 exact Session Run display 只读资源消费该正式后继；新 required tool_facts 为最多128项的有界展示清单，activity_id唯一，每项至少含安全mcp_tool display_detail或单工具status=failed之一。名称仍为本Run原工具/连接见证，不取当前目录或人名；failed只说明该工具的已证结果，不改整个Run／原activity／ledger终态。身份、当前owned pre/post、5秒／1MiB与原locator预算、取消和无N+1原样。原18件 generator 正规生成并以三处 raw 精确差额逆回完整8.3 be642c、再承接完整8.2；无新owner／Schema／缓存／回填。Public28.11只扩该独立读表示，完整逆回28.10；feedback／regen／原执行与资金事实不动。

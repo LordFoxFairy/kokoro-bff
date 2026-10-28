@@ -180,6 +180,31 @@ export type RunDisplay = {
       status?: "failed"
     }
   >
+  /**
+   * Private same-Run evidence-bound tool details only; missing fields remain unknown. Filtered bounded text is not a universal secret-free guarantee. Never Share, execution authority, HTML, autolinks or instructions.
+   */
+  activity_details: Array<{
+    activity_id: string
+    tool_name: string
+    target?: unknown & {
+      kind: "file" | "mcp_tool"
+      name: string
+      /**
+       * Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+       */
+      virtual_path?: string
+    }
+    input_preview?: {
+      text: string
+      truncated: boolean
+      redacted: boolean
+    }
+    output_preview?: {
+      text: string
+      truncated: boolean
+      redacted: boolean
+    }
+  }>
 }
 
 export type RunDisplayEnvelope = {

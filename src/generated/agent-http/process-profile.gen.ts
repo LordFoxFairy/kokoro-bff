@@ -38,7 +38,7 @@ export const AGENT_PROCESS_CONSTRAINTS = {
     },
     read: {
       type: "object",
-      required: ["run_id", "display_skills", "tool_paths", "tool_facts"],
+      required: ["run_id", "display_skills", "tool_paths", "tool_facts", "activity_details"],
       properties: {
         run_id: {
           type: "string",
@@ -128,6 +128,129 @@ export const AGENT_PROCESS_CONSTRAINTS = {
           },
           description:
             "Read-only exact original MCP activity facts: safe public names witnessed by successful same-Run calls, or independently proved failed journal outcomes. No source event or Run status mutation.",
+        },
+        activity_details: {
+          type: "array",
+          maxItems: 128,
+          "x-kokoro-unique-by": "activity_id",
+          items: {
+            type: "object",
+            required: ["activity_id", "tool_name"],
+            properties: {
+              activity_id: {
+                type: "string",
+                minLength: 68,
+                maxLength: 68,
+                pattern: "^act_[0-9a-f]{64}(?![\\s\\S])",
+              },
+              tool_name: {
+                type: "string",
+                minLength: 1,
+                maxLength: 120,
+                "x-kokoro-utf8-byte-limit": 480,
+                "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",
+              },
+              target: {
+                type: "object",
+                required: ["kind", "name"],
+                properties: {
+                  kind: {
+                    type: "string",
+                    enum: ["file", "mcp_tool"],
+                  },
+                  name: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 120,
+                    "x-kokoro-utf8-byte-limit": 480,
+                    "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",
+                  },
+                  virtual_path: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096,
+                    "x-kokoro-utf8-byte-limit": 4096,
+                    "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",
+                    description: "Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.",
+                  },
+                },
+                additionalProperties: false,
+                allOf: [
+                  {
+                    if: {
+                      properties: {
+                        kind: {
+                          const: "file",
+                        },
+                      },
+                    },
+                    then: {
+                      properties: {
+                        name: {
+                          pattern: "^(?!\\.{1,2}$)[^/\\\\:]+$",
+                        },
+                      },
+                    },
+                  },
+                  {
+                    if: {
+                      properties: {
+                        kind: {
+                          const: "mcp_tool",
+                        },
+                      },
+                    },
+                    then: {
+                      not: {
+                        required: ["virtual_path"],
+                      },
+                    },
+                  },
+                ],
+              },
+              input_preview: {
+                type: "object",
+                required: ["text", "truncated", "redacted"],
+                properties: {
+                  text: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 2048,
+                    "x-kokoro-utf8-byte-limit": 2048,
+                  },
+                  truncated: {
+                    type: "boolean",
+                  },
+                  redacted: {
+                    type: "boolean",
+                  },
+                },
+                additionalProperties: false,
+              },
+              output_preview: {
+                type: "object",
+                required: ["text", "truncated", "redacted"],
+                properties: {
+                  text: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096,
+                    "x-kokoro-utf8-byte-limit": 4096,
+                  },
+                  truncated: {
+                    type: "boolean",
+                  },
+                  redacted: {
+                    type: "boolean",
+                  },
+                },
+                additionalProperties: false,
+              },
+            },
+            additionalProperties: false,
+          },
+          description:
+            "Private same-Run evidence-bound tool details only; missing fields remain unknown. Filtered bounded text is not a universal secret-free guarantee. Never Share, execution authority, HTML, autolinks or instructions.",
         },
       },
       additionalProperties: false,

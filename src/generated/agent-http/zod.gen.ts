@@ -158,6 +158,28 @@ export const zRunDisplay = z
           .refine((value) => value.display_detail !== undefined || value.status !== undefined, "Tool fact requires proved detail or failure"),
       )
       .max(128),
+    activity_details: z
+      .array(
+        z
+          .object({
+            activity_id: z.string().min(68),
+            tool_name: z.string().min(1),
+            target: z
+              .object({ kind: z.enum(["file", "mcp_tool"]), name: z.string().min(1), virtual_path: z.string().min(1).optional() })
+              .strict()
+              .optional(),
+            input_preview: z
+              .object({ text: z.string().min(1), truncated: z.boolean(), redacted: z.boolean() })
+              .strict()
+              .optional(),
+            output_preview: z
+              .object({ text: z.string().min(1), truncated: z.boolean(), redacted: z.boolean() })
+              .strict()
+              .optional(),
+          })
+          .strict(),
+      )
+      .max(128),
   })
   .strict()
 

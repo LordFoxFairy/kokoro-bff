@@ -10,6 +10,7 @@ const display = {
   display_skills: [{ source_ref: "skill:pinned", name: "Original package name", virtual_path: "/.skills/cGlubmVk/SKILL.md", revision: "9007199254740993" }],
   tool_paths: [{ activity_id: activityId, virtual_path: "/workspace/results/report.md" }],
   tool_facts: [],
+  activity_details: [],
 }
 async function fixture(t) {
   const calls = []
@@ -246,4 +247,102 @@ test("real tool selectors containing sk inside a word stay visible, while actual
     f.setBody({ data: { ...display, tool_facts: [{ activity_id: activityId, display_detail: { kind: "mcp_tool", name } }] }, meta: { request_id: "agent" } })
     assert.equal((await f.request()).status, 502, name)
   }
+})
+
+test("private activity details retain exact tools, targets and bounded free-text previews, not a name-only alphabet", async (t) => {
+  const f = await fixture(t)
+  const details = [
+    {
+      activity_id: activityId,
+      tool_name: "read_file",
+      target: { kind: "file", name: "report.md", virtual_path: "/workspace/results/report.md" },
+      input_preview: { text: '{\n\t"path": "/workspace/results/report.md"\r\n}', truncated: false, redacted: false },
+      output_preview: { text: "<b>literal</b>\ne\u0301\nhttps://example.org/result", truncated: true, redacted: true },
+    },
+  ]
+  f.setBody({ data: { ...display, activity_details: details }, meta: { request_id: "agent" } })
+  const result = await f.request()
+  assert.equal(result.status, 200)
+  assert.deepEqual(result.body.data.activity_details, details)
+  assert.equal(f.calls.length, 1)
+})
+
+test("private details enforce closed evidence, per-field UTF-8 and target semantics without weakening old display names", async (t) => {
+  const f = await fixture(t)
+  const detail = { activity_id: activityId, tool_name: "read_file" }
+  const preview = (text) => ({ text, truncated: false, redacted: false })
+  const invalid = [
+    ["missing required collection", undefined],
+    ["duplicate identity", [detail, detail]],
+    ["wrong identity", [{ ...detail, activity_id: activityId + "\n" }]],
+    ["unknown field", [{ ...detail, args: {} }]],
+    ["missing tool", [{ activity_id: activityId }]],
+    ["tool scalar cap", [{ ...detail, tool_name: "a".repeat(121) }]],
+    ["tool control", [{ ...detail, tool_name: "read\nfile" }]],
+    ["tool normalization", [{ ...detail, tool_name: "e\u0301" }]],
+    ["tool secret", [{ ...detail, tool_name: "credentials" }]],
+    ["null target", [{ ...detail, target: null }]],
+    ["file basename mismatch", [{ ...detail, target: { kind: "file", name: "other.md", virtual_path: "/workspace/report.md" } }]],
+    ["file non-basename", [{ ...detail, target: { kind: "file", name: "../report.md" } }]],
+    ["MCP path", [{ ...detail, target: { kind: "mcp_tool", name: "ask_question", virtual_path: "/workspace/report.md" } }]],
+    ["host target", [{ ...detail, target: { kind: "file", name: "report.md", virtual_path: "/Users/person/report.md" } }]],
+    ["input bytes", [{ ...detail, input_preview: preview("🧭".repeat(513)) }]],
+    ["output bytes", [{ ...detail, output_preview: preview("🧭".repeat(1025)) }]],
+    ["null preview", [{ ...detail, output_preview: null }]],
+    ["empty preview", [{ ...detail, output_preview: preview("") }]],
+    ["missing flag", [{ ...detail, output_preview: { text: "result", truncated: false } }]],
+    ["nonboolean flag", [{ ...detail, output_preview: { ...preview("result"), redacted: "true" } }]],
+    ["unknown preview field", [{ ...detail, output_preview: { ...preview("result"), raw: "value" } }]],
+    ...["\ud800", "bad\u0000text", "bad\u202Etext", "Authorization: value", "Traceback (most recent call last)", "/Users/person/file", "sk-test"].map(
+      (text) => ["private preview " + JSON.stringify(text), [{ ...detail, output_preview: preview(text) }]],
+    ),
+    ["array cap", Array.from({ length: 129 }, (_, i) => ({ ...detail, activity_id: `act_${i.toString(16).padStart(64, "0")}` }))],
+  ]
+  for (const [label, activity_details] of invalid)
+    await t.test(label, async () => {
+      f.setBody({ data: { ...display, activity_details }, meta: { request_id: "agent" } })
+      const r = await f.request()
+      assert.equal(r.status, 502)
+      assert.equal(r.body.data, undefined)
+    })
+  const boundary = [{ ...detail, tool_name: "🧭".repeat(120), input_preview: preview("🧭".repeat(512)), output_preview: preview("🧭".repeat(1024)) }]
+  f.setBody({ data: { ...display, activity_details: boundary }, meta: { request_id: "agent" } })
+  const r = await f.request()
+  assert.equal(r.status, 200)
+  assert.deepEqual(r.body.data.activity_details, boundary)
+})
+
+test("private details remain behind late owned admission and the total owner response cap", async (t) => {
+  const f = await fixture(t)
+  const detail = { activity_id: activityId, tool_name: "read_file", output_preview: { text: "private result", truncated: false, redacted: false } }
+  f.setBody({ data: { ...display, activity_details: [detail] }, meta: { request_id: "agent" } })
+  const verify = f.admission.verify.bind(f.admission)
+  f.admission.verify = async (q) => (f.calls.length ? { ok: false, status: 403, code: "session_forbidden" } : verify(q))
+  const r = await f.request()
+  assert.equal(r.status, 403)
+  assert.equal(r.body.data, undefined)
+  f.admission.verify = verify
+  const oversized = Array.from({ length: 128 }, (_, i) => ({
+    ...detail,
+    activity_id: `act_${i.toString(16).padStart(64, "0")}`,
+    target: { kind: "file", name: "report.md", virtual_path: `/workspace/${"a".repeat(4000)}/report.md` },
+    input_preview: { text: "a".repeat(2048), truncated: true, redacted: false },
+    output_preview: { text: "b".repeat(4096), truncated: true, redacted: false },
+  }))
+  const oversizedBody = { data: { ...display, activity_details: oversized }, meta: { request_id: "agent" } }
+  assert.ok(Buffer.byteLength(JSON.stringify(oversizedBody)) > 1048576)
+  f.setBody(oversizedBody)
+  assert.equal((await f.request()).status, 502)
+})
+
+test("private details share the existing absolute read deadline and retire stalled owner I/O without retry", { timeout: 10000 }, async (t) => {
+  const f = await fixture(t)
+  let closed
+  const ended = new Promise((resolve) => (closed = resolve))
+  f.setBody((_req, res) => res.once("close", closed))
+  const result = await f.request()
+  assert.equal(result.status, 503)
+  assert.equal(result.body.data, undefined)
+  await ended
+  assert.equal(f.calls.length, 1)
 })

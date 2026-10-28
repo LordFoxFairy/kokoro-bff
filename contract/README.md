@@ -1,3 +1,7 @@
+## 2026-10-28 Public28.12 私有 Run 工具详情候选
+
+Canonical SHA256 `86638da86d786e91c81da9e5dd891dee88ef2ca033579866f5ebc6dd6113c00f`，仅 RunDisplay 增 required `activity_details`（max128／唯一opaqueID／required tool_name／原target域／2048与4096 UTF-8 preview及明确flags）。Public完整逆回28.11 `4d93ec15e2931768afafffb2101039b1da64757ea48c760d16ef88aa8753db16`，199操作及旧父链不变。Agent HTTP8.5 SHA `b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897` 已冻结；正式 commit `4f8a8d2485abadc8351efbe1c9d6277ada267096`／provenance SHA `204e28baa5484c30635fb0cb466e4db6de4a7ea4ec43a03211bd9a27847ac99a`，由原18件生成入口发布 consumer。私有 GET only，非Chat/SSE/Share或执行授权，无新endpoint/DB。preview是过滤的有界纯文本而非绝对无秘密保证；字段及语义边界见API/技术设计首节。当前候选未正常激活。
+
 ## 2026-10-28 Public28.11 原 Run 工具展示候选
 
 只在原按需 exact Run display 资源增加 required `tool_facts`（最多128、activity_id唯一、至少mcp_tool安全名或failed事实）；原feedback／regen／执行与ledger不变。固定正式Agent f31b60be27dd9b4dfddd7a1c3579b19e40db150d，HTTP8.4 SHA239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52／provenance275f66d882ab85bf01c71347c0a9302b6c4bfc0d7bcd94ee6d01b8ce1219f230。原18件正规生成；完整8.4 raw逆回8.3 be642c再8.2 8a0b，Public28.11严格逆回完整28.10 9e6a。任何name/status缺证缺省，独立读不得回写原activity或Run终态；机器及fixture不替代Root真实normal配对。

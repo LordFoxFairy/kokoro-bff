@@ -1,3 +1,9 @@
+## Public28.12：私有 Run activity_details（Root 已核准，候选未发行）
+
+原 GET `/v1/sessions/{id}/runs/{runId}/display` 的 RunDisplay 新增 required `activity_details`，max128、同数组 `activity_id` 唯一且为精确 `act_`＋64 lowercase hex。每项 closed required `activity_id,tool_name`；optional `target` 为原 ToolDisplayDetail（file basename＋可选同 basename 安全 virtual_path，或无 path 的 mcp_tool）；optional `input_preview/output_preview` 均为 closed `{text,truncated,redacted}`，text非空、UTF-8上限分别2048／4096，flags必须boolean，缺证省略而非null。工具名保持120 scalars／480 bytes及原安全域。自由preview允许正常换行／制表与非NFC原文，但不允许非法scalar／其他控制字符或owner敏感模式；仅私有纯文本，不自动链接、解释HTML或执行指令。
+
+无新path/query/header/权限或副作用；原 pre/post 当前准入与 exact Run/Conversation/subject 复核不变，撤权不输出data。全响应1MiB、五秒绝对预算、取消与不重试保持；非法 owner shape／语义／UTF-8／超限502，读失败不返回假空集合。集合仅属于此私有按需读，不扩展 Share/Chat/SSE。Agent8.5 artifact SHA `b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897`；正式 commit `4f8a8d2485abadc8351efbe1c9d6277ada267096`／provenance SHA `204e28baa5484c30635fb0cb466e4db6de4a7ea4ec43a03211bd9a27847ac99a`。Public28.12 完整逆回28.11后执行既有严格契约门。
+
 ## Run display tool_facts 后继（Root 已核准，正式 Agent 输入；BFF 候选未发行）
 
 原 GET `/v1/sessions/{id}/runs/{runId}/display` 不增path/query/header/权限。新Public28.11的RunDisplay增加required tool_facts数组(max128)，每项closed activity_id＋optional display_detail:{kind:mcp_tool,name:既有安全工具名}＋optional status:failed，至少一个optional有值、同数组ID唯一。无virtual_path／server名称／raw参数；字段缺失/空fact/错kind/status/extra均invalid，而不是推断成功或空历史。正式 Agent f31b60be／HTTP8.4 239219e5／provenance275f66d8由原18件generator消费，并精确raw逆回完整8.3 be642c再8.2 8a0b；不从dirty生成。完整Public28.10 9e6a8ddd…b3f1328为本次精确父，原4动作接口与私有Message表示不改。

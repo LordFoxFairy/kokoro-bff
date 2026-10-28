@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.11.0
+  version: 28.12.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -15787,6 +15787,7 @@ components:
       - display_skills
       - tool_paths
       - tool_facts
+      - activity_details
       properties:
         run_id:
           type: string
@@ -15865,6 +15866,106 @@ components:
           description: >-
             Read-only exact original MCP activity facts: safe public names witnessed by successful same-Run calls, or independently proved failed journal outcomes. No
             source event or Run status mutation.
+        activity_details:
+          type: array
+          maxItems: 128
+          x-kokoro-unique-by: activity_id
+          items:
+            type: object
+            required:
+            - activity_id
+            - tool_name
+            properties:
+              activity_id:
+                type: string
+                minLength: 68
+                maxLength: 68
+                pattern: ^act_[0-9a-f]{64}(?![\s\S])
+              tool_name:
+                type: string
+                minLength: 1
+                maxLength: 120
+                x-kokoro-utf8-byte-limit: 480
+                x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+              target:
+                type: object
+                required:
+                - kind
+                - name
+                properties:
+                  kind:
+                    type: string
+                    enum:
+                    - file
+                    - mcp_tool
+                  name:
+                    type: string
+                    minLength: 1
+                    maxLength: 120
+                    x-kokoro-utf8-byte-limit: 480
+                    x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+                  virtual_path:
+                    type: string
+                    minLength: 1
+                    maxLength: 4096
+                    x-kokoro-utf8-byte-limit: 4096
+                    x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+                    description: Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+                additionalProperties: false
+                allOf:
+                - if:
+                    properties:
+                      kind:
+                        const: file
+                  then:
+                    properties:
+                      name:
+                        pattern: ^(?!\.{1,2}$)[^/\\:]+$
+                - if:
+                    properties:
+                      kind:
+                        const: mcp_tool
+                  then:
+                    not:
+                      required:
+                      - virtual_path
+              input_preview:
+                type: object
+                required:
+                - text
+                - truncated
+                - redacted
+                properties:
+                  text:
+                    type: string
+                    minLength: 1
+                    maxLength: 2048
+                    x-kokoro-utf8-byte-limit: 2048
+                  truncated:
+                    type: boolean
+                  redacted:
+                    type: boolean
+                additionalProperties: false
+              output_preview:
+                type: object
+                required:
+                - text
+                - truncated
+                - redacted
+                properties:
+                  text:
+                    type: string
+                    minLength: 1
+                    maxLength: 4096
+                    x-kokoro-utf8-byte-limit: 4096
+                  truncated:
+                    type: boolean
+                  redacted:
+                    type: boolean
+                additionalProperties: false
+            additionalProperties: false
+          description: Private same-Run evidence-bound tool details only; missing fields remain unknown. Filtered bounded text is not a universal secret-free
+            guarantee. Never Share, execution authority, HTML, autolinks or instructions.
       additionalProperties: false
       description: Recovered safe display facts only. Missing facts remain unknown; source events and execution authority are unchanged. No completeness assertion.
     RunDisplayResponse:
