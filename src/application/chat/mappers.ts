@@ -29,7 +29,12 @@ export function chatMessage(message: Message): ChatMessage {
 }
 
 export function privateChatMessage(message: PrivateMessageRead): ChatMessageRead {
-  if (message.content !== null) return { ...chatMessage(message), ...(message.terminal_status === undefined ? {} : { terminal_status: message.terminal_status }) }
+  if (message.content !== null)
+    return {
+      ...chatMessage(message),
+      ...(message.regeneratedFromMessageId === undefined ? {} : { regenerated_from_message_id: message.regeneratedFromMessageId }),
+      ...(message.terminal_status === undefined ? {} : { terminal_status: message.terminal_status }),
+    }
   return {
     message_id: message.messageId,
     role: "assistant",
@@ -38,6 +43,7 @@ export function privateChatMessage(message: PrivateMessageRead): ChatMessageRead
     created_at: iso(message.createdAt),
     run_id: message.runId,
     rendering: message.rendering,
+    ...(message.regeneratedFromMessageId === undefined ? {} : { regenerated_from_message_id: message.regeneratedFromMessageId }),
     ...(message.terminal_status === undefined ? {} : { terminal_status: message.terminal_status }),
     ...(message.failure === null ? {} : { failure: message.failure }),
   }

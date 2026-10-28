@@ -8,6 +8,7 @@ export async function deleteLockedConversationFacts(
   conversationId: string,
   requestId: string,
 ): Promise<void> {
+  await client.query(`DELETE FROM bff_message_feedback WHERE tenant_id=$1 AND conversation_id=$2`, [tenantId, conversationId])
   await client.query(`DELETE FROM bff_agui_run_interaction WHERE tenant_id=$1 AND session_id=$2`, [tenantId, conversationId])
   await client.query(`DELETE FROM bff_agui_run_activity WHERE tenant_id=$1 AND session_id=$2`, [tenantId, conversationId])
   await client.query(`DELETE FROM bff_agui_run_process WHERE tenant_id=$1 AND session_id=$2`, [tenantId, conversationId])

@@ -45,6 +45,9 @@ export class PostgresBffDatabase {
               AND to_regclass('kokoro_bff.bff_project_pin') IS NOT NULL
               AND to_regclass('kokoro_bff.ix_bff_project_pin_subject_list') IS NOT NULL
               AND to_regclass('kokoro_bff.ix_bff_project_pin_parent_cleanup') IS NOT NULL
+              AND (SELECT count(*)=3 FROM pg_attribute WHERE attrelid=to_regclass('kokoro_bff.bff_message') AND attname IN ('origin','regenerated_from_message_id','regeneration_user_message_id') AND NOT attisdropped)
+              AND to_regclass('kokoro_bff.bff_message_feedback') IS NOT NULL
+              AND to_regclass('kokoro_bff.ix_bff_message_feedback_parent_cleanup') IS NOT NULL
               AND to_regclass('kokoro_bff.bff_conversation') IS NOT NULL
               AND to_regclass('kokoro_bff.bff_scheduled_task') IS NOT NULL
               AND to_regclass('kokoro_bff.bff_idempotency_receipt') IS NOT NULL

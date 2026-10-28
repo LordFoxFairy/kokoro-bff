@@ -134,9 +134,20 @@ export const zDataEnvelope = z.object({
   meta: zMeta,
 })
 
-/**
- * Caller correlation identifier. The Agent creates one when absent.
- */
+export const zSkillDisplay = z
+  .object({ source_ref: z.string().min(7), name: z.string().min(1), virtual_path: z.string().min(1), revision: z.string().optional() })
+  .strict()
+
+export const zRunDisplay = z
+  .object({
+    run_id: z.string().min(1),
+    display_skills: z.array(zSkillDisplay).max(16),
+    tool_paths: z.array(z.object({ activity_id: z.string().min(68), virtual_path: z.string().min(1) }).strict()).max(128),
+  })
+  .strict()
+
+export const zRunDisplayEnvelope = z.object({ data: zRunDisplay, meta: zMeta }).strict()
+
 export const zRequestId = z.string().min(1)
 
 export const zTenantRef = z.string().min(1)
@@ -223,6 +234,25 @@ export const zReplaySessionEventsQuery = z.object({
  */
 export const zReplaySessionEventsResponse = zReplayPageEnvelope
 
+export const zGetRunDisplayHeaders = z.object({
+  "X-Request-Id": z.string().min(1).optional(),
+  "X-Kokoro-Tenant-Ref": z.string().min(1),
+  "X-Kokoro-Subject-Ref": z.string().min(1),
+  "X-Kokoro-Subject-Kind": z.enum(["user", "project", "service"]).optional().default("user"),
+  "X-Kokoro-Actor-Ref": z.string().min(1),
+  "X-Kokoro-Actor-Kind": z.enum(["user", "project", "service"]).optional().default("user"),
+  "X-Kokoro-Identity-Assertion-Ref": z.string().min(1),
+})
+
+export const zGetRunDisplayPath = z.object({
+  run_id: z.string().min(1),
+})
+
+/**
+ * Safe recovered display facts, at most 1MiB.
+ */
+export const zGetRunDisplayResponse = zRunDisplayEnvelope
+
 export const zInteractionValidation = z
   .object({ code: z.literal("json_schema_invalid"), instance_path: z.array(z.union([z.string(), z.number().int().max(Number.MAX_SAFE_INTEGER)])) })
   .strict()
@@ -294,7 +324,7 @@ export const zChatActivity = z.union([
         "tool.file.deliver",
       ]),
       display_detail: z
-        .object({ kind: z.enum(["file", "mcp_tool"]), name: z.string().min(1) })
+        .object({ kind: z.enum(["file", "mcp_tool"]), name: z.string().min(1), virtual_path: z.string().min(1).optional() })
         .strict()
         .optional(),
     })
@@ -316,6 +346,7 @@ export const zChatActivity = z.union([
       source_refs: z.array(z.string().min(7)).min(1).max(16),
       phase: z.enum(["resolving", "loading", "ready", "failed"]),
       error_code: z.enum(["skill_resolve_failed", "skill_load_failed"]).optional(),
+      display_skills: z.array(zSkillDisplay).max(16).optional(),
     })
     .strict(),
 ])

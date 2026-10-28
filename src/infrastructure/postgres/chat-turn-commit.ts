@@ -1,3 +1,4 @@
+import { regenerationSourceInTransaction } from "./message-regeneration.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
 import { performance } from "node:perf_hooks"
 
@@ -242,7 +243,8 @@ export async function commitChatTurn(
   command: CommitChatTurn,
   projectQueuedHead: QueuedHeadProjector,
 ): Promise<AgentDispatchReceipt | null> {
-  const deadline = performance.now() + CHAT_TURN_TOTAL_BUDGET_MS
+  const deadline = Math.min(performance.now() + CHAT_TURN_TOTAL_BUDGET_MS, command.lifetime?.deadlineAt ?? Infinity)
+  command.lifetime?.signal.throwIfAborted()
   for (const value of [
     command.outboxId,
     command.tenantId,
@@ -272,15 +274,29 @@ export async function commitChatTurn(
   const client = await acquireClient(database, deadline)
   let transactionOpen = false
   let destroyClient = false
+  let leaseReleased = false
+  const onCallerAbort = () => {
+    destroyClient = true
+    if (!leaseReleased) {
+      leaseReleased = true
+      client.release(true)
+    }
+  }
   const onLeaseClientError = (): void => {
     destroyClient = true
   }
   client.on("error", onLeaseClientError)
+  command.lifetime?.signal.addEventListener("abort", onCallerAbort, { once: true })
+  if (command.lifetime?.signal.aborted) onCallerAbort()
   async function query<Row extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>> {
     return startWithin(
       deadline,
       "CHAT_TURN_BUDGET_EXHAUSTED",
-      () => client.query<Row>(text, values),
+      () => {
+        command.lifetime?.signal.throwIfAborted()
+        if (destroyClient) throw Error("CHAT_TURN_RETIRED")
+        return client.query<Row>(text, values)
+      },
       () => {
         destroyClient = true
       },
@@ -310,6 +326,7 @@ export async function commitChatTurn(
         deadline,
         "CHAT_TURN_BUDGET_EXHAUSTED",
         () => {
+          command.lifetime?.signal.throwIfAborted()
           commitDispatched = true
           return client.query("COMMIT").then(() => undefined)
         },
@@ -364,6 +381,37 @@ export async function commitChatTurn(
           user_message_id: existingRow.user_message_id,
           assistant_message_id: existingRow.assistant_message_id,
         }
+      }
+      if (command.regeneration !== undefined) {
+        const original = await regenerationSourceInTransaction(
+          { query },
+          {
+            tenantId: command.tenantId,
+            subjectId: command.subjectId,
+            conversationId: command.conversationId,
+            sourceMessageId: command.regeneration.sourceMessageId,
+          },
+        )
+        if (original === null) {
+          await rollback()
+          return null
+        }
+        if (
+          original.sourceRunId !== command.regeneration.sourceRunId ||
+          original.originalUserMessageId !== command.regeneration.originalUserMessageId ||
+          original.sourceFingerprint !== command.regeneration.sourceFingerprint ||
+          original.content !== command.content
+        )
+          throw Error("MESSAGE_REGENERATION_SOURCE_CHANGED")
+        const latest = await query<{ message_id: string }>(
+          `SELECT message_id FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant' ORDER BY message_seq DESC,message_id DESC LIMIT 1`,
+          [command.tenantId, command.conversationId],
+        )
+        const active = await query(
+          `SELECT run_id FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted') LIMIT 1`,
+          [command.tenantId, command.conversationId],
+        )
+        if (latest.rows[0]?.message_id !== command.regeneration.sourceMessageId || active.rows.length > 0) throw Error("MESSAGE_REGENERATION_NOT_READY")
       }
       if (command.skillSelection !== undefined) {
         if (command.skillSelection.projectId !== scope.canonicalProjectId) throw new Error("CHAT_SKILL_SELECTION_CHANGED")
@@ -421,9 +469,9 @@ export async function commitChatTurn(
       if (outbox.rowCount !== 1) throw new Error("AGENT_DISPATCH_INSERT_FAILED")
       const inserted = await query(
         `INSERT INTO bff_message (message_id,tenant_id,conversation_id,run_id,role,content,status,message_seq,selected_skill_source_refs,
-            ordered_parts,parts_format_version,parts_public_sequence)
-         VALUES ($1,$2,$3,$4,'user',$5,'completed',$6::bigint,$8::jsonb,NULL,NULL,NULL),
-                ($7,$2,$3,$4,'assistant','','pending',$6::bigint+1,'[]'::jsonb,'[]'::jsonb,1,0)`,
+            ordered_parts,parts_format_version,parts_public_sequence,origin,regenerated_from_message_id,regeneration_user_message_id)
+         VALUES ($1,$2,$3,$4,'user',$5,'completed',$6::bigint,$8::jsonb,NULL,NULL,NULL,CASE WHEN $9::boolean THEN 'regeneration_input' ELSE 'normal' END,$10,$11),
+                ($7,$2,$3,$4,'assistant','','pending',$6::bigint+1,'[]'::jsonb,'[]'::jsonb,1,0,CASE WHEN $9::boolean THEN 'regeneration_answer' ELSE 'normal' END,$10,$11)`,
         [
           command.userMessageId,
           command.tenantId,
@@ -433,6 +481,9 @@ export async function commitChatTurn(
           nextSequence,
           command.assistantMessageId,
           JSON.stringify(payload.launch.selected_skill_source_refs),
+          command.regeneration !== undefined,
+          command.regeneration?.sourceMessageId ?? null,
+          command.regeneration?.originalUserMessageId ?? null,
         ],
       )
       if (inserted.rowCount !== 2) throw new Error("CHAT_MESSAGE_INSERT_FAILED")
@@ -472,8 +523,9 @@ export async function commitChatTurn(
     throw error
   } finally {
     try {
-      client.release(destroyClient)
+      if (!leaseReleased) client.release(destroyClient)
     } finally {
+      command.lifetime?.signal.removeEventListener("abort", onCallerAbort)
       client.removeListener("error", onLeaseClientError)
     }
   }

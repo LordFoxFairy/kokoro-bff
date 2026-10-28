@@ -1,3 +1,11 @@
+## 原 Run Skill／文件展示（2026-10-28，候选）
+
+`routes/run-display.ts` 仅为当前Session/owned Conversation的exact submitted Run按需读Agent正式8.3；前后bounded资格与caller abort，最后owned检查在immutable映射之后，不插snapshot/list N+1。新safeactivity可选事实沿原process/ordered保留；旧display为独立只读hint，不改source/event/digest、不纳Share或当前catalog。原18生成器及完整父逆证在contract入口，正常由Root后验。
+
+## 本人回答操作（2026-10-28，Root 核准候选）
+
+`routes/message-feedback.ts` 提供本人 exact assistant 的自然 GET／PUT 偏好；`message-regeneration.ts` 复用 ChatTurn/outbox，按可信旧输入及选择建立新 Run 和内部输入镜像，所有产品消息读取在 SQL 限额前隐藏镜像，私有回答保 source 关联。两具名 schema evolver 只加偏好表／Message 关联，旧行不回填；Root 授权隔离 PG 校验，不代表正常 DDL／发行。三面设计与原公共合同完整逆证见现入口。
+
 ## Immediate Stop startup bridge（2026-10-28，候选）
 
 `routes/agent.ts`仅在真实Agent404/run_not_found且当前本人durable queued head精确同Run时，有界等待创建并以原K/body走原cancel路径；每次fresh同head、原绝对budget/abort，queued→active保原资格，退休即停。只返回实际strict Agent202，不造本地cancel终态；深FIFO超窗仍开放。具名回归在原control-adapter测试，正常有限cancel由Root后验。

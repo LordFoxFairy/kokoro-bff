@@ -3,18 +3,18 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-agent",
-    "repository_commit": "fc8b0f09f3cfd96211b33d863d5e629bbed13e46",
-    "contract_version": "8.2.0",
+    "repository_commit": "669fd4e7656f4fdc384eee40ef1fc3155e87d966",
+    "contract_version": "8.3.0",
     "contract_path": "contract/openapi/v1/openapi.json",
-    "contract_sha256": "8a0b9973661205b8e29020934c39e5c7ab629b4c42db4e79c845a410d96efa2a",
+    "contract_sha256": "be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6",
     "provenance_path": "contract/provenance.json",
-    "provenance_sha256": "7a8b442633e08d984a5381389359e5a03d59a0503a1a9d6fb09ea54fad003bd3"
+    "provenance_sha256": "609dc546f657f54fc93b062f45a61cbc7b192b1d9914c27af746204caeded9ae"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.agent.config.ts",
-    "config_sha256": "76e0ca2090dce4e9dc7832126ac7bcb03ef0dd5897fae17f352186eaf8a2f124"
+    "config_sha256": "527beafa6c74d39089114c2527ea06a959dc0acde799ad8c71783d20de3e108a"
   },
   "runtime": {
     "node": "22.22.2",
@@ -77,25 +77,25 @@
     },
     {
       "path": "failure-profile.gen.ts",
-      "source_sha256": "8a0b9973661205b8e29020934c39e5c7ab629b4c42db4e79c845a410d96efa2a",
+      "source_sha256": "be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6",
       "sha256": "ef52afa8b45062d35500a9fc12248fecd4edf17b320aac287ac3b7d406d777c1"
     },
     {
       "path": "process-profile.gen.ts",
-      "source_sha256": "8a0b9973661205b8e29020934c39e5c7ab629b4c42db4e79c845a410d96efa2a",
-      "sha256": "d262c432fdc602b88ee9f743c1bcabb331cb6fdec0f56fcafa01d8578c57b357"
+      "source_sha256": "be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6",
+      "sha256": "346289ca5b251919f5b9740576a1b2c6ef57cdabba0d3d0a53734715b731206e"
     },
     {
       "path": "sdk.gen.ts",
-      "sha256": "e19766b9c02a1323c814dc74052258bd57203c5403c57e58cc8788239a17727f"
+      "sha256": "1e7390450e269a7d1c7edfbe49f97bab6dd245367d43900ac7f0b66a967e9319"
     },
     {
       "path": "types.gen.ts",
-      "sha256": "42bb75e2c90d9ba2bfae1de2332c98196658d3df72632be3dbf138c487b19272"
+      "sha256": "6bff3a760553a5d9c4eddd9c9b97bdb920b0ae6686d9233a0c77d32689ad5810"
     },
     {
       "path": "zod.gen.ts",
-      "sha256": "50e8c3286f2fa19468f8a4cf6ebb3bdcc2bef2d8cd9dfef8d4819f019ffa0b13"
+      "sha256": "bca1e367296d52ebd4ea9ac8ee67e6caaa061bba8f779d5a8514532f1bcd344e"
     }
   ]
 }

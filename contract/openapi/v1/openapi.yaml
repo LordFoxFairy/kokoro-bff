@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.9.0
+  version: 28.10.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -14983,6 +14983,331 @@ paths:
         '429': { $ref: '#/components/responses/AdminModelRoutingRateLimited' }
         '502': { $ref: '#/components/responses/AdminModelRoutingInvalidResponse' }
         '503': { $ref: '#/components/responses/AdminModelRoutingUnavailable' }
+  # AGENT-DISPLAY-PATHS-BEGIN
+  /v1/sessions/{id}/runs/{runId}/display:
+    get:
+      tags: [Chat]
+      operationId: getSessionRunDisplay
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: chat.read
+      summary: Read exact original Run display facts on demand for the currently owned Conversation
+      description: No query, body or command key. Current Session and owned Conversation plus exact submitted Run binding are checked before and after Agent I/O. Five-second absolute budget and one-MiB full JSON. No current catalog lookup, list or snapshot N+1, Share access or mutation of source events and digests. Missing facts are unknown, not a completeness claim.
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+      responses:
+        '200':
+          description: Bounded original display facts only
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            x-request-id: { schema: { type: string, minLength: 1 } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunDisplayResponse' }
+        '400':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '405':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  # AGENT-DISPLAY-PATHS-END
+  # MESSAGE-FEEDBACK-PATHS-BEGIN
+  /v1/sessions/{id}/messages/{messageId}/feedback:
+    get:
+      tags: [Chat]
+      operationId: getMessageFeedback
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: chat.read
+      summary: Read the current owner preference for one assistant Message
+      description: Exact current Session owner and active Conversation/Project are required. No query, command identity or self-asserted actor. PUT sets up/down or clears with null; repeated identical values do not change timestamps. No Message, Run, Agent dispatch or ledger mutation. One absolute ten-second admission/body/database/response budget. Unknown writes are reconciled by GET of the current preference, not a command receipt.
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+      responses:
+        '200':
+          description: Current preference, including a visible assistant with no preference
+          headers:
+            x-request-id: { schema: { type: string, minLength: 1 } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageFeedbackResponse' }
+        '400':
+          description: Invalid closed input
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: Session required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403':
+          description: Session denied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: Message not visible
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '413':
+          description: Request exceeds 1024 bytes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '415':
+          description: JSON required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Session admission rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: Feedback temporarily unavailable or commit unconfirmed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    put:
+      tags: [Chat]
+      operationId: setMessageFeedback
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: chat.write
+      summary: Set the current owner preference for one assistant Message
+      description: Exact current Session owner and active Conversation/Project are required. No query, command identity or self-asserted actor. PUT sets up/down or clears with null; repeated identical values do not change timestamps. No Message, Run, Agent dispatch or ledger mutation. One absolute ten-second admission/body/database/response budget. Unknown writes are reconciled by GET of the current preference, not a command receipt.
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetMessageFeedbackRequest' }
+      responses:
+        '200':
+          description: Current preference, including a visible assistant with no preference
+          headers:
+            x-request-id: { schema: { type: string, minLength: 1 } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageFeedbackResponse' }
+        '400':
+          description: Invalid closed input
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: Session required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403':
+          description: Session denied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: Message not visible
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '413':
+          description: Request exceeds 1024 bytes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '415':
+          description: JSON required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Session admission rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: Feedback temporarily unavailable or commit unconfirmed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  # MESSAGE-FEEDBACK-PATHS-END
+  # MESSAGE-REGENERATION-PATHS-BEGIN
+  /v1/sessions/{id}/messages/{messageId}/regenerate:
+    post:
+      tags: [Chat]
+      operationId: regenerateLatestAssistantMessage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: chat.write
+      summary: Explicitly request another answer to the original trusted question
+      description: Only the latest ended assistant with no active or unknown execution head may start a new attempt. The server loads the original user content and frozen selection from its own typed dispatch. Existing same-key receipts replay before latest/noactive checks. A new Run and internal input mirror preserve original user/answer facts; private/public/share reads hide that mirror before pagination. The new input receives fresh authority, quotas and billing. No checkpoint fork, old admission, credentials or automatic unknown replay.202 is admission, not completion.
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, properties: {} }
+      responses:
+        '202':
+          description: Exact new-attempt admission, with the original user association rather than the Agent input mirror ID
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageRegenerationResponse' }
+        '400':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '405':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '409':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '413':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '415':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  # MESSAGE-REGENERATION-PATHS-END
 components:
   securitySchemes:
     serviceHeader:
@@ -15422,6 +15747,127 @@ components:
         not trim or normalize a non-NFC value.
       schema: { type: string, minLength: 1 }
   schemas:
+    # AGENT-DISPLAY-SCHEMAS-BEGIN
+    RunDisplaySkill:
+      type: object
+      required:
+      - source_ref
+      - name
+      - virtual_path
+      properties:
+        source_ref:
+          type: string
+          minLength: 7
+          maxLength: 197
+          pattern: ^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          x-kokoro-utf8-byte-limit: 480
+          x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+        virtual_path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          x-kokoro-utf8-byte-limit: 4096
+          x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+          description: Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+        revision:
+          type: string
+          pattern: ^[1-9][0-9]{0,18}(?![\s\S])
+          x-kokoro-int64-decimal: true
+      additionalProperties: false
+      x-kokoro-binding: virtual_path must equal /.skills/{base64url(ASCII source_ref suffix)}/SKILL.md; revision only from this Run exact ResolvedSkill, absent
+        if unproven
+    RunDisplay:
+      type: object
+      required:
+      - run_id
+      - display_skills
+      - tool_paths
+      properties:
+        run_id:
+          type: string
+          minLength: 1
+        display_skills:
+          type: array
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/RunDisplaySkill'
+          x-kokoro-unique-by: source_ref
+          x-kokoro-binding: unique source_ref subset of original ready source_refs; no current catalog lookup
+        tool_paths:
+          type: array
+          maxItems: 128
+          x-kokoro-unique-by: activity_id
+          items:
+            type: object
+            required:
+            - activity_id
+            - virtual_path
+            properties:
+              activity_id:
+                type: string
+                minLength: 68
+                maxLength: 68
+                pattern: ^act_[0-9a-f]{64}(?![\s\S])
+              virtual_path:
+                type: string
+                minLength: 1
+                maxLength: 4096
+                x-kokoro-utf8-byte-limit: 4096
+                x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+                description: Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+            additionalProperties: false
+      additionalProperties: false
+      description: Recovered safe display facts only. Missing facts remain unknown; source events and execution authority are unchanged. No completeness assertion.
+    RunDisplayResponse:
+      type: object
+      required:
+      - data
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/RunDisplay'
+    # AGENT-DISPLAY-SCHEMAS-END
+    # MESSAGE-REGENERATION-SCHEMAS-BEGIN
+    MessageRegenerationResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [run_id, user_message_id, assistant_message_id, regenerated_from_message_id]
+          properties:
+            run_id: { type: string, minLength: 1, maxLength: 256 }
+            user_message_id: { type: string, minLength: 1, maxLength: 256 }
+            assistant_message_id: { type: string, minLength: 1, maxLength: 256 }
+            regenerated_from_message_id: { type: string, minLength: 1, maxLength: 256 }
+    # MESSAGE-REGENERATION-SCHEMAS-END
+    # MESSAGE-FEEDBACK-SCHEMAS-BEGIN
+    SetMessageFeedbackRequest:
+      type: object
+      additionalProperties: false
+      required: [feedback]
+      properties:
+        feedback: { type: [string, 'null'], enum: [up, down, null] }
+    MessageFeedbackResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [session_id, message_id, feedback]
+          properties:
+            session_id: { type: string, minLength: 1, maxLength: 256 }
+            message_id: { type: string, minLength: 1, maxLength: 256 }
+            feedback: { type: [string, 'null'], enum: [up, down, null] }
+    # MESSAGE-FEEDBACK-SCHEMAS-END
     # PROJECT-MCP-RECOMMENDATIONS-SCHEMAS-BEGIN
     ProjectMcpRecommendationRef:
       oneOf:
@@ -21472,6 +21918,13 @@ components:
               maxLength: 120
               x-kokoro-utf8-byte-limit: 480
               x-kokoro-unicode-domain: 'NFC Unicode scalars; no Cc, Cf or Cs'
+            virtual_path:
+              type: string
+              minLength: 1
+              maxLength: 4096
+              x-kokoro-utf8-byte-limit: 4096
+              x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+              description: Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
       allOf:
         - if:
             required: [display_detail]
@@ -21493,6 +21946,8 @@ components:
           then:
             properties:
               display_code: { enum: [tool.mcp.describe, tool.mcp.call] }
+              display_detail:
+                not: { required: [virtual_path] }
     RunSubagentActivity:
       type: object
       required: [activity, activity_id, segment_id, status, display_code]
@@ -21517,6 +21972,13 @@ components:
           maxItems: 16
           uniqueItems: true
           items: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        display_skills:
+          type: array
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/RunDisplaySkill'
+          x-kokoro-unique-by: source_ref
+          x-kokoro-binding: unique source_ref subset of original ready source_refs; no current catalog lookup
         phase: { type: string, enum: [resolving, loading, ready, failed] }
         error_code: { type: string, enum: [skill_resolve_failed, skill_load_failed] }
       allOf:
@@ -21526,6 +21988,8 @@ components:
             required: [error_code]
           else:
             not: { required: [error_code] }
+        - if: { required: [display_skills] }
+          then: { properties: { phase: { const: ready } } }
     MessagePartsDecimal:
       type: string
       pattern: '^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\s\S])'
@@ -21537,6 +22001,7 @@ components:
         - $ref: '#/components/schemas/ChatMessage'
         - $ref: '#/components/schemas/OrderedAssistantMessageRead'
         - $ref: '#/components/schemas/CancelledAssistantMessageRead'
+        - $ref: '#/components/schemas/RegeneratedAssistantMessageRead'
     OrderedAssistantMessageRead:
       type: object
       required: [message_id, role, content, status, created_at, run_id, rendering]
@@ -21554,6 +22019,7 @@ components:
         content: { type: 'null', description: Body is not inlined; read the exact ordered Message parts. }
         rendering: { $ref: '#/components/schemas/OrderedMessageRendering' }
         terminal_status: { type: string, const: cancelled }
+        regenerated_from_message_id: { type: string, minLength: 1, maxLength: 256 }
         status:
           type: string
           enum: [pending, streaming, completed, failed]
@@ -21616,6 +22082,25 @@ components:
         run_id: { type: string, minLength: 1 }
         selected_skill_source_refs: { $ref: '#/components/schemas/ChatMessage/properties/selected_skill_source_refs' }
         terminal_status: { type: string, const: cancelled }
+        regenerated_from_message_id: { type: string, minLength: 1, maxLength: 256 }
+    RegeneratedAssistantMessageRead:
+      description: Explicit new answer association. The internal input mirror is never a second visible user question.
+      type: object
+      additionalProperties: false
+      required: [message_id, role, content, status, created_at, run_id, regenerated_from_message_id]
+      properties:
+        message_id: { $ref: '#/components/schemas/ChatMessage/properties/message_id' }
+        role: { type: string, const: assistant }
+        content: { $ref: '#/components/schemas/ChatMessage/properties/content' }
+        status: { $ref: '#/components/schemas/ChatMessage/properties/status' }
+        created_at: { $ref: '#/components/schemas/ChatMessage/properties/created_at' }
+        run_id: { type: string, minLength: 1 }
+        selected_skill_source_refs: { $ref: '#/components/schemas/ChatMessage/properties/selected_skill_source_refs' }
+        regenerated_from_message_id: { type: string, minLength: 1, maxLength: 256 }
+        failure: { $ref: '#/components/schemas/ChatMessage/properties/failure' }
+      allOf:
+        - if: { required: [failure] }
+          then: { properties: { status: { const: failed } } }
     OrderedMessageRendering:
       type: object
       additionalProperties: false

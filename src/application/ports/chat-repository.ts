@@ -1,3 +1,4 @@
+import type { MessageFeedbackQuery, SetMessageFeedback, MessageFeedbackState } from "../chat/message-feedback-input.js"
 import type { InteractionState, MessagePartsPage, OrderedMessageRendering } from "../../contracts/chat.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Message } from "../../domain/chat/message.js"
@@ -23,7 +24,7 @@ export type PrivateMessageRead = (
       content: null
       rendering: OrderedMessageRendering
     })
-) & { terminal_status?: "cancelled" }
+) & { terminal_status?: "cancelled"; regeneratedFromMessageId?: string }
 export type PrivateMessagePage = { messages: PrivateMessageRead[]; next_cursor: string | null }
 export type MessageReadLifetime = Readonly<{ signal: AbortSignal; deadlineAt: number }>
 export type PrivateMessageReadContext = MessageReadLifetime & Readonly<{ scope: "all" | "direct" }>
@@ -101,6 +102,8 @@ export type ArchiveStateCommand = ArchiveStateQuery & Readonly<{ action: "archiv
 export type ArchiveStateResult = Readonly<{ kind: "changed"; receipt: Readonly<{ data: ArchiveState }> }> | Readonly<{ kind: "not_found" | "conflict" }>
 
 export type ChatRepository = {
+  readMessageFeedback(input: MessageFeedbackQuery): Promise<MessageFeedbackState | null>
+  setMessageFeedback(input: SetMessageFeedback): Promise<MessageFeedbackState | null>
   listOwnedArchivedTasks(query: ArchivedTasksQuery): Promise<ArchivedTasksRead>
   readArchiveState(query: ArchiveStateQuery): Promise<ArchiveState | null>
   changeArchiveState(command: ArchiveStateCommand): Promise<ArchiveStateResult>
@@ -113,7 +116,13 @@ export type ChatRepository = {
     deadlineAt: number,
   ): Promise<SharedTasksRead>
   listConversations(tenantId: string, subjectId: string, filter: ConversationCollectionFilter, limit: number, cursor: string | null): Promise<ConversationPage>
-  findConversation(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<Conversation | null>
+  findConversation(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    projectRef: string | undefined,
+    lifetime?: MessageReadLifetime,
+  ): Promise<Conversation | null>
   readSnapshot(
     tenantId: string,
     subjectId: string,

@@ -1,3 +1,27 @@
+## Skill／文件原执行展示（2026-10-28，Root 已核准，正式输入候选消费）
+
+固定正式 Agent `669fd4e7656f4fdc384eee40ef1fc3155e87d966`／HTTP8.3 SHA `be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6`，provenance SHA `609dc546f657f54fc93b062f45a61cbc7b192b1d9914c27af746204caeded9ae`；唯一原 generator 正规产出18件，raw窄差逐字逆回完整8.2原件而非JSON数值／键序重写。新事件沿原 AG-UI safe activity／ordered parts 保留正式 owner 的可选包名／virtual_path／revision；旧 Run 则提供 Session 私有按需 GET `/v1/sessions/{id}/runs/{runId}/display`，不在列表／snapshot 逐 Run 拉取 Agent，不纳 Share、catalog 当前名称、缓存／新表或第二状态中心。先 fresh Session＋当前 owned Conversation，再用现 submittedAgentRuns 校验 exact tenant／subject／Conversation／Run，调用正式 Agent8.3 的单 Run 只读资源；发送前重验当前资格与同一映射。五秒绝对预算覆盖准入／数据库／HTTP／有界1MiB body与编码，caller abort 退休；禁止 query、body framing和命令key。
+
+包名只来自原运行包 loader metadata，revision 缺省是真未知，不猜当前目录或零；文件路径只是真实安全 virtual path，保原 basename name。只有 owner 已证的有限字段进入私有表示，不转发 raw args/checkpoint/tool_call_id；旧源 JSON／event ID／digest 与 ledger身份不改。独立读失败不假空成功，App可静默保旧已证展示；当前仅实现候选，尚未正常配对／应用正常 Schema。
+
+## 本人最新回答再生成（2026-10-28，Root 已核准 A，候选未发行）
+
+仅当前本人会话最新已结束 assistant、无 active／未知 dispatch head 才接显式再生成。POST `/v1/sessions/{id}/messages/{messageId}/regenerate` closed `{}`＋原 Idempotency-Key；这是新用户意图／新 Run，保旧回答并继续当前会话上下文，不 fork checkpoint。来源 prompt 与选择只取 source exact Run 的旧 typed outbox payload，并同原可信 user 内容／tenant／Conversation 关联复核；仅复制 requested model label、agent／thinking、Skill refs、MCP connection IDs，绝不旧凭据／admission／预算／identity assertion／request／Run。新执行仍全部 fresh 授权、quota／资金与原 dispatcher 路径。
+
+Agent Chat PK `(tenant_id,chat_message_id)` 的不可变比较含 run_id；复用原外部 user ID 会在 dispatch claim 前 ChatIdentityConflict。故 Root 裁 A：保原 user 问题关联，新增真实内部 regeneration_input user 镜像与 regeneration_answer assistant，各使用新 Run 专属 Message ID；两行指向 source assistant／原 user，原事实不改。native HumanMessage ID 本来按 newRun 派生，不改 Agent PK／guard。全部产品 private／public／share 的 SQL 读取须在 LIMIT／hasMore／cursor 前过滤内部镜像；执行绑定仍完整读取镜像，UI只新增一版 assistant，不伪装用户重新键入。
+
+已有镜像写入后回退须保该过滤 reader并停新producer，不能直接回退不识别origin的旧reader而重复human；不删事实／列。
+
+同 key 已提交 outbox receipt 先于 latest／no-active 前置条件重放；不同 source digest 冲突，unknown 只恢复原 regen key，不再开 attempt。服务端新关联进 canonical 私有 read 供 UI 标明再生成来源；不拿 engine.retry 恢复函数当此新动作，不覆盖旧答案或扩全部历史分支。
+
+## Message 本人反馈（2026-10-28，Root 已核准，候选未发行）
+
+在既有 BFF Conversation／Message owner 内提供 exact 本人 assistant Message 的 GET／PUT feedback；可信 tenant／subject 仅来自原 Session admission。GET／PUT `/v1/sessions/{id}/messages/{messageId}/feedback` 操作独立偏好资源，PUT `feedback: up|down|null` 自然幂等，null 清除，不建立 command receipt、幂等 key、事件、Agent／Platform 调用或新 owner。同值不更新时间；并发按最后数据库提交收敛，不承诺客户端点击顺序，未知结果先 GET 当前事实，不自动重放旧偏好覆盖新选择。
+
+复用本人 ProjectPin 的有限准入／事务方式：十秒绝对预算覆盖 body、当前 Session 前后复核、单 owner SQL 与完整响应；PUT 先锁本人 active Conversation，再 exact assistant Message，承接原 Project 未删／owner 可见约束，父删除同锁序同事务清反馈。不改原 Message 内容／status、Run、AG-UI、执行或账本。恢复、撤权或取消不伪写入未发生；COMMIT ACK 丢失真实未知，响应失败后不补第二次写。仅新表安装／演进，由 Root 授权正常 DDL 后才启 producer；回退旧 binary 保表不删除偏好。
+
+重新生成依本文件首节已核准 A 实现，现 engine.retry 仍仅原未知提交恢复；不能将其接为 regenerate-message，也不换 key 重发未确认请求或覆盖旧回答。
+
 ## 私有历史取消终态（2026-10-28，Root 已核准，候选未发行）
 
 持久 MessageStatus 四值与 canonical SQL 不变；`cancel` 仍按既有规则持久为 failed/null failure。仅现授权 snapshot／消息分页的 `ChatMessageRead` 增加可选 `terminal_status: cancelled`：在原 READ ONLY RR／绝对预算内，对本页 failed assistant 通过一次有界 batch 复用本 owner 既有 `bff_skill_usage_run_terminal` durable 终态，严格绑定 tenant、subject、Conversation、Run、dispatch.assistant_message_id 与保留的 source 身份；该表在 AG-UI ingest 同事务由真实 run.completed/cancelled 产生，不要求使用 Skill，也不由 frame retention 回收。现 ordered_parts 只有 text/activity，不保存终态，因此不由空 parts／content／failure 缺省推断；不加表、缓存、状态中心、跨 owner IO 或逐消息查询。保留原取消与读退役，任何本地 Stop／HTTP 控制 ACK 都不替代 owner 终态。

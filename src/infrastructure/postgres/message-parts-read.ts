@@ -238,6 +238,9 @@ export function privateMessageFromRow(row: PrivateMessageRow, scope: Omit<Messag
   if (selected === null || (row.agent_failure_code === null) !== (row.agent_failure_retryable === null)) return failed()
   const runId = identity(row.run_id)
   return {
+    ...(row.origin === "regeneration_answer" && typeof row.regenerated_from_message_id === "string"
+      ? { regeneratedFromMessageId: row.regenerated_from_message_id }
+      : {}),
     messageId: row.message_id,
     tenantId: row.tenant_id,
     conversationId: row.conversation_id,
@@ -686,7 +689,11 @@ export async function privateMessagesFromRows(
   selectedRun: string | null,
   latestAssistantId: string | null,
 ): Promise<PrivateMessageRead[]> {
-  const messages = await withCancelledMessageTerminals(client, rows.map((row) => privateMessageFromRow(row, scope, head)), scope)
+  const messages = await withCancelledMessageTerminals(
+    client,
+    rows.map((row) => privateMessageFromRow(row, scope, head)),
+    scope,
+  )
   let index = rows.length - 1
   while (index >= 0 && rows[index]?.role !== "assistant") index -= 1
   const row = rows[index],

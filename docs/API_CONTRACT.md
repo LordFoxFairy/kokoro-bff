@@ -1,3 +1,21 @@
+## Session 私有 Run display（2026-10-28，Root 已核准，候选未发行）
+
+`GET /v1/sessions/{id}/runs/{runId}/display` 为 exact 本人当前会话的只读资源，无 query/body/key，五秒绝对预算／完整JSON≤1MiB／no-store／request-id。新 Public28.10 资源仅返回 `{data:{run_id,display_skills:[{source_ref,name,virtual_path,revision?}],tool_paths:[{activity_id,virtual_path}]}}`；缺项只表示 owner 未提供已证展示，不授予无Skill／无工具结论。字段完整闭集、唯一性、path/name／source绑定和 byte约束以正式 Agent `669fd4e7656f4fdc384eee40ef1fc3155e87d966` 的HTTP8.3（SHA `be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6`）固定机器输入生成并复核，旧Run不请求当前 catalog。当前 Session与Conversation资格及durable submitted Run映射在上游读取前后核验；foreign/missing安全404、坏wire502、依赖或超时503，撤权沿原准入错误。成功不参与mutation receipt或写入。
+
+新 owner 安全 activity 中 Skill 可选 display_skills、file display_detail 可选 virtual_path 直接保留到原 AG-UI／ordered读；mcp_tool 不接受该路径。旧源/事件/digest不回填，Share不暴露此私有端点；Public28.10包含本片反馈／再生成与可选事实，必须以严格唯一逆证逐字恢复完整Public28.9。
+
+## 最新 assistant 再生成（2026-10-28，Root 已核准 A，候选未发行）
+
+具名 POST `/v1/sessions/{id}/messages/{messageId}/regenerate` 只接 strict `{}` 与 Idempotency-Key，source message ID 只来自路由，不接用户反抄 content／model／选择／actor。202为新 attempt 的 durable admission，返回 run_id／assistant_message_id／原 user_message_id／regenerated_from_message_id；不是完成。receipt 的原 user 关联不等于 Agent 独立 input mirror ID，消费者不得走普通 reconcileUserMessageId 重写原 user。原请求重放优先于最新／no-active gate，未知只同 key/body 恢复；新明确再生成方可新 key。source不可见404，非最新／未结束／active或unknown head为409；原 Session／Project／body预算与安全错误原样。
+
+Private ChatMessageRead 可选 regenerated_from_message_id 仅给再生成 assistant，角色／run／来源关系严格闭合；普通 ChatMessage／share 原 wire 不加内部字段，private/public/share SQL统一在分页前过滤 regeneration_input 镜像。旧读缺省保持普通回答，不从 UI 文本／ID后缀猜来源。
+
+## Message 本人反馈资源（2026-10-28，Root 已核准，候选未发行）
+
+唯一 canonical OpenAPI 新增 GET／PUT `/v1/sessions/{id}/messages/{messageId}/feedback`，沿 `chat.read`／`chat.write` 与原可信 Session。PUT closed `{feedback: "up"|"down"|null}`，GET 无 query／body，成功 closed `{data:{session_id,message_id,feedback}}`；合法可见 assistant 无记录时 feedback=null，不可见 tenant／owner／Conversation／Message／角色均 404。只管理当前人的偏好，不扩普通 Message／share／command wire 或执行权限。
+
+资源天然幂等，不接 Idempotency-Key、If-Match 或 receipt；同值无 updated_at 变化，clear 重复保持 null。请求严格单 JSON object／UTF-8／无重复字段，PUT 最多 1KiB，响应最多 64KiB；单十秒绝对 budget 至最终 current admission 与输出。错误使用本仓 closed ErrorEnvelope 与 x-request-id、private no-store；400 无效输入，401／403 原 Session 错误，404 message_not_found，405 method_not_allowed，413 body 超限，415 content type，429 原 admission，503 message_feedback_unavailable。提交未知不称未写；GET 当前状态用于恢复，body 不接受 actor／tenant／任意 Message 状态字段。
+
 ## Private ChatMessageRead 取消终态（2026-10-28，Root 已核准，候选未发行）
 
 Public28.9 只扩现 private snapshot／messages page 的 `ChatMessageRead`：可选 `terminal_status: cancelled`，只允许 exact failed assistant、具 run_id、无 failure profile，并有本 owner 既有 durable run terminal 的真实 cancelled 证明。inline 与 ordered read 均可发布；原 public ChatMessage、command／share schema 与全体原请求不变。非 cancelled 值／错误 role/status／冲突 failure／extra field 都不属于该闭集；缺省不是 completed／cancelled，不用空内容或 null failure 猜测。

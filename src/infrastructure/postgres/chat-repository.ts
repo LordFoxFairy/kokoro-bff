@@ -1,3 +1,5 @@
+import { readMessageFeedback, setMessageFeedback } from "./message-feedback.js"
+import type { MessageFeedbackQuery, SetMessageFeedback } from "../../application/chat/message-feedback-input.js"
 import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "../../application/ports/chat-repository.js"
 import { listOwnedArchivedTasks, readArchiveState, changeArchiveState } from "./archived-tasks.js"
 import { listOwnedSharedTasks } from "./shared-tasks.js"
@@ -6,7 +8,7 @@ import { readRunInteraction } from "./agui-interaction-projection.js"
 import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
 import type { MessagePartsPage } from "../../contracts/chat.js"
-import type { MessagePartsQuery, PrivateMessageReadContext, PrivateMessagePage } from "../../application/ports/chat-repository.js"
+import type { MessagePartsQuery, PrivateMessageReadContext, PrivateMessagePage, MessageReadLifetime } from "../../application/ports/chat-repository.js"
 import { withMessageReadClient, messageReadLifetime, privateMessagesFromRows, readMessageParts, type PrivateMessageRow } from "./message-parts-read.js"
 
 import type {
@@ -123,6 +125,13 @@ export class PostgresChatRepository implements ChatRepository {
     return listOwnedSharedTasks(this.database.pool, tenantId, subjectId, limit, position, signal, deadlineAt)
   }
 
+  public readMessageFeedback(input: MessageFeedbackQuery) {
+    return readMessageFeedback(this.database, input)
+  }
+  public setMessageFeedback(input: SetMessageFeedback) {
+    return setMessageFeedback(this.database, input)
+  }
+
   public listOwnedArchivedTasks(query: ArchivedTasksQuery) {
     return listOwnedArchivedTasks(this.database.pool, query)
   }
@@ -174,9 +183,14 @@ export class PostgresChatRepository implements ChatRepository {
     }
   }
 
-  public async findConversation(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<Conversation | null> {
-    const result = await this.database.pool.query<ConversationRow>(
-      `SELECT ${conversationColumns}
+  public async findConversation(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    projectRef: string | undefined,
+    lifetime?: MessageReadLifetime,
+  ): Promise<Conversation | null> {
+    const sql = `SELECT ${conversationColumns}
          FROM bff_conversation
         WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
           AND (
@@ -189,9 +203,12 @@ export class PostgresChatRepository implements ChatRepository {
             )
           )
           AND ($4::text IS NULL OR project_ref = $4)
-        LIMIT 1`,
-      [tenantId, subjectId, conversationId, projectRef ?? null],
-    )
+        LIMIT 1`
+    const values = [tenantId, subjectId, conversationId, projectRef ?? null]
+    const result =
+      lifetime === undefined
+        ? await this.database.pool.query<ConversationRow>(sql, values)
+        : await withMessageReadClient(this.database.pool, lifetime, (client) => client.query<ConversationRow>(sql, values))
     const row = result.rows[0]
     return row === undefined ? null : conversationFromRow(row)
   }
@@ -254,16 +271,16 @@ export class PostgresChatRepository implements ChatRepository {
       }
       const messages = includeHistory
         ? await client.query<PrivateMessageRow>(
-            `SELECT latest.message_id, latest.tenant_id, latest.conversation_id, latest.run_id,
+            `SELECT latest.origin,latest.regenerated_from_message_id,latest.regeneration_user_message_id,latest.message_id, latest.tenant_id, latest.conversation_id, latest.run_id,
                 latest.role, latest.selected_skill_source_refs, latest.content, latest.parts_format_version, latest.parts_public_sequence, latest.parts_count, latest.status, latest.agent_failure_code, latest.agent_failure_retryable, latest.message_seq,
                 latest.created_at, latest.updated_at
            FROM (
-             SELECT message_id, tenant_id, conversation_id, run_id, role, selected_skill_source_refs,
+             SELECT origin,regenerated_from_message_id,regeneration_user_message_id,message_id, tenant_id, conversation_id, run_id, role, selected_skill_source_refs,
                     CASE WHEN ordered_parts IS NULL THEN content ELSE NULL END AS content, parts_format_version, parts_public_sequence,
                     CASE WHEN ordered_parts IS NOT NULL THEN jsonb_array_length(ordered_parts) END AS parts_count, status, agent_failure_code, agent_failure_retryable,
                     message_seq, created_at, updated_at
                FROM bff_message
-              WHERE tenant_id = $1 AND conversation_id = $2
+              WHERE tenant_id = $1 AND conversation_id = $2 AND origin <> 'regeneration_input'
               ORDER BY message_seq DESC, message_id DESC
               LIMIT 100
            ) AS latest
@@ -440,12 +457,12 @@ export class PostgresChatRepository implements ChatRepository {
       )
       if (exists.rows[0] === undefined) return null
       const result = await client.query<PrivateMessageRow>(
-        `SELECT message.message_id, message.tenant_id, message.conversation_id, message.run_id,
+        `SELECT message.origin,message.regenerated_from_message_id,message.regeneration_user_message_id,message.message_id, message.tenant_id, message.conversation_id, message.run_id,
               message.role, message.selected_skill_source_refs, CASE WHEN message.ordered_parts IS NULL THEN message.content ELSE NULL END AS content,
               message.parts_format_version,message.parts_public_sequence,CASE WHEN message.ordered_parts IS NOT NULL THEN jsonb_array_length(message.ordered_parts) END AS parts_count,message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
               message.created_at, message.updated_at
          FROM bff_message AS message
-        WHERE message.tenant_id = $1 AND message.conversation_id = $3
+        WHERE message.tenant_id = $1 AND message.conversation_id = $3 AND message.origin <> 'regeneration_input'
           AND EXISTS (
             SELECT 1 FROM bff_conversation AS conversation
              WHERE conversation.tenant_id = message.tenant_id

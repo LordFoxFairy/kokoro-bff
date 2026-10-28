@@ -67,6 +67,8 @@ function isNamedSchemaEvolutionReader(relativePath: string, source: string): boo
       "scripts/evolve-message-parts-schema.mjs",
       "scripts/evolve-project-mcp-recommendations-schema.mjs",
       "scripts/evolve-project-pin-schema.mjs",
+      "scripts/evolve-message-feedback-schema.mjs",
+      "scripts/evolve-message-regeneration-schema.mjs",
     ].includes(relativePath)
   )
     return false
@@ -943,6 +945,8 @@ test("R257 named evolution may import exactly the two approved canonical read he
     "scripts/evolve-agent-failure-schema.mjs",
     "scripts/evolve-message-parts-schema.mjs",
     "scripts/evolve-project-mcp-recommendations-schema.mjs",
+    "scripts/evolve-message-feedback-schema.mjs",
+    "scripts/evolve-message-regeneration-schema.mjs",
   ]) {
     const namedReader: SourceFile = {
       relativePath,

@@ -1,3 +1,5 @@
+import type { RegenerateMessageInput } from "../../application/chat/message-regeneration.js"
+import { readRegenerationSource } from "./message-regeneration.js"
 import { createHash, randomUUID } from "node:crypto"
 
 import { EventSchemas, EventType } from "@ag-ui/core"
@@ -287,6 +289,10 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     )
     if (advanced.rowCount !== 1) throw new Error("CHAT_QUEUED_CURSOR_ALLOCATION_FAILED")
     return cursor
+  }
+
+  public readRegenerationSource(input: RegenerateMessageInput) {
+    return readRegenerationSource(this.database, input)
   }
 
   public async prepareChatTurnSelection(input: ChatTurnSelectionInput): Promise<ChatTurnSelection | null> {

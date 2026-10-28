@@ -1,3 +1,4 @@
+import { safeSkillDisplays, safeVirtualPath } from "./display-safety.js"
 import { Buffer } from "node:buffer"
 
 import { zChatActivity, zChatTodo } from "../../../generated/agent-http/zod.gen.js"
@@ -29,6 +30,7 @@ export type AgentActivity =
       preflight_id: string
       source_refs: ReadonlyArray<string>
       phase: "resolving" | "loading" | "ready" | "failed"
+      display_skills?: NonNullable<Extract<ReturnType<typeof zChatActivity.parse>, { activity: "skill" }>["display_skills"]>
       error_code?: "skill_resolve_failed" | "skill_load_failed"
     }>
 
@@ -82,7 +84,9 @@ function activityPayload(payloadJson: string): AgentActivity {
   if (activity.activity === "tool" || activity.activity === "subagent") {
     if (!SEGMENT_ID.test(activity.segment_id)) throw new Error("Agent activity segment identity is invalid")
     if (activity.activity === "tool" && activity.display_detail !== undefined) {
-      const { name, kind } = activity.display_detail
+      const { name, kind, virtual_path } = activity.display_detail
+      if (virtual_path !== undefined && (kind !== "file" || !safeVirtualPath(virtual_path) || virtual_path.split("/").at(-1) !== name))
+        throw Error("Agent virtual path is invalid")
       const domain = AGENT_PROCESS_CONSTRAINTS.toolDetail
       const length = unicodeScalarLength(name)
       const allowed: readonly string[] = domain.codesByKind[kind]
@@ -112,6 +116,8 @@ function activityPayload(payloadJson: string): AgentActivity {
   ) {
     throw new Error("Agent Skill source references are invalid")
   }
+  if (activity.display_skills !== undefined && (activity.phase !== "ready" || !safeSkillDisplays(activity.display_skills, activity.source_refs)))
+    throw Error("Agent Skill display binding is invalid")
   const hasErrorCode = Object.hasOwn(activity, "error_code")
   if ((activity.phase === AGENT_PROCESS_CONSTRAINTS.skill.failedPhase) !== hasErrorCode) {
     throw new Error("Agent Skill failure code presence is invalid")
@@ -122,6 +128,7 @@ function activityPayload(payloadJson: string): AgentActivity {
     preflight_id: activity.preflight_id,
     source_refs: activity.source_refs,
     phase: activity.phase,
+    ...(activity.display_skills === undefined ? {} : { display_skills: activity.display_skills }),
     ...(activity.error_code === undefined ? {} : { error_code: activity.error_code }),
   }
 }
@@ -142,6 +149,7 @@ export function sameAgentActivityIdentity(previous: AgentActivity, next: AgentAc
   return (
     Object.hasOwn(previous, "display_detail") === Object.hasOwn(next, "display_detail") &&
     previous.display_detail?.kind === next.display_detail?.kind &&
-    previous.display_detail?.name === next.display_detail?.name
+    previous.display_detail?.name === next.display_detail?.name &&
+    previous.display_detail?.virtual_path === next.display_detail?.virtual_path
   )
 }

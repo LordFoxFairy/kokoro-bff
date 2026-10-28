@@ -1,3 +1,9 @@
+import {
+  messageRegenerationDefinitions,
+  expectedMessageRegenerationCatalog,
+  inspectMessageRegenerationCatalog,
+} from "./message-regeneration-schema-catalog.mjs"
+import { messageFeedbackDefinitions, expectedMessageFeedbackCatalog, inspectMessageFeedbackCatalog } from "./message-feedback-schema-catalog.mjs"
 import { projectPinDefinitions, expectedProjectPinCatalog, inspectProjectPinCatalog } from "./project-pin-schema-catalog.mjs"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
@@ -55,7 +61,8 @@ export async function applyCanonicalSchema(databaseUrl, schema) {
     assertEmptyOwnerSchema(objects.rows.map((row) => String(row.name)))
     await client.query(schema)
     const installed = await client.query(
-      `SELECT to_regclass('kokoro_bff.bff_project') IS NOT NULL AS project,
+      `SELECT to_regclass('kokoro_bff.bff_message_feedback') IS NOT NULL AS feedback,
+              to_regclass('kokoro_bff.bff_project') IS NOT NULL AS project,
               to_regclass('kokoro_bff.bff_project_pin') IS NOT NULL AS project_pin,
               to_regclass('kokoro_bff.ix_bff_project_pin_subject_list') IS NOT NULL AS pin_list_index,
               to_regclass('kokoro_bff.ix_bff_project_pin_parent_cleanup') IS NOT NULL AS pin_cleanup_index,
@@ -65,6 +72,7 @@ export async function applyCanonicalSchema(databaseUrl, schema) {
               to_regclass('kokoro_bff.ix_bff_project_owner_list') IS NOT NULL AS project_index`,
     )
     if (
+      !installed.rows[0]?.feedback ||
       !installed.rows[0]?.project_pin ||
       !installed.rows[0]?.pin_list_index ||
       !installed.rows[0]?.pin_cleanup_index ||
@@ -78,6 +86,12 @@ export async function applyCanonicalSchema(databaseUrl, schema) {
     }
     const pinExpected = await expectedProjectPinCatalog((sql, values) => client.query(sql, values), projectPinDefinitions(schema))
     if ((await inspectProjectPinCatalog((sql, values) => client.query(sql, values), pinExpected)) !== "current") throw new Error("BFF pin schema drift")
+    const feedbackExpected = await expectedMessageFeedbackCatalog((sql, values) => client.query(sql, values), messageFeedbackDefinitions(schema))
+    if ((await inspectMessageFeedbackCatalog((sql, values) => client.query(sql, values), feedbackExpected)) !== "current")
+      throw new Error("BFF feedback schema drift")
+    const regenExpected = await expectedMessageRegenerationCatalog((sql, values) => client.query(sql, values), messageRegenerationDefinitions(schema))
+    if ((await inspectMessageRegenerationCatalog((sql, values) => client.query(sql, values), regenExpected)) !== "current")
+      throw Error("BFF regeneration schema drift")
     await client.query("COMMIT")
   } catch (error) {
     await client?.query("ROLLBACK").catch(() => undefined)

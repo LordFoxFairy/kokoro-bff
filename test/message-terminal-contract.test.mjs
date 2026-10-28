@@ -5,7 +5,8 @@ import { test } from "node:test"
 import { load } from "js-yaml"
 
 test("Public28.9 only adds a private exact cancelled terminal fact; original public Message and commands stay byte-equivalent", async () => {
-  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"),
+  const { restorePublic289MessageActionsContract } = await import("../scripts/project-pin-public-contract.mjs")
+  const raw = restorePublic289MessageActionsContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
     spec = load(raw)
   assert.equal(spec.info.version, "28.9.0")
   const { restorePublic288CancelledMessageContract } = await import("../scripts/project-pin-public-contract.mjs")

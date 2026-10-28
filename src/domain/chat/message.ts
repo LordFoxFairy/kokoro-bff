@@ -16,6 +16,7 @@ export type AgentFailureCode =
 export type AgentFailureProfile = { source: "agent"; code: AgentFailureCode; retryable: boolean }
 
 export type Message = {
+  regeneratedFromMessageId?: string
   messageId: string
   tenantId: string
   conversationId: string

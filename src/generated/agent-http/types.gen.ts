@@ -144,6 +144,36 @@ export type DataEnvelope = {
   meta: Meta
 }
 
+export type SkillDisplay = {
+  source_ref: string
+  name: string
+  /**
+   * Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+   */
+  virtual_path: string
+  revision?: string
+}
+
+/**
+ * Recovered safe display facts only. Missing facts remain unknown; source events and execution authority are unchanged. No completeness assertion.
+ */
+export type RunDisplay = {
+  run_id: string
+  display_skills: Array<SkillDisplay>
+  tool_paths: Array<{
+    activity_id: string
+    /**
+     * Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+     */
+    virtual_path: string
+  }>
+}
+
+export type RunDisplayEnvelope = {
+  data: RunDisplay
+  meta: Meta
+}
+
 /**
  * Caller correlation identifier. The Agent creates one when absent.
  */
@@ -323,3 +353,54 @@ export type ReplaySessionEventsResponses = {
 }
 
 export type ReplaySessionEventsResponse = ReplaySessionEventsResponses[keyof ReplaySessionEventsResponses]
+
+export type GetRunDisplayData = {
+  body?: never
+  headers: {
+    /**
+     * Caller correlation identifier. The Agent creates one when absent.
+     */
+    "X-Request-Id"?: string
+    "X-Kokoro-Tenant-Ref": string
+    "X-Kokoro-Subject-Ref": string
+    "X-Kokoro-Subject-Kind"?: "user" | "project" | "service"
+    "X-Kokoro-Actor-Ref": string
+    "X-Kokoro-Actor-Kind"?: "user" | "project" | "service"
+    "X-Kokoro-Identity-Assertion-Ref": string
+  }
+  path: {
+    run_id: string
+  }
+  query?: never
+  url: "/v1/runs/{run_id}/display"
+}
+
+export type GetRunDisplayErrors = {
+  /**
+   * Request validation failed.
+   */
+  400: ErrorEnvelope
+  /**
+   * Service credential or trusted identity is missing or invalid.
+   */
+  401: ErrorEnvelope
+  /**
+   * The identity-scoped resource does not exist.
+   */
+  404: ErrorEnvelope
+  /**
+   * A required Agent dependency is unavailable.
+   */
+  503: ErrorEnvelope
+}
+
+export type GetRunDisplayError = GetRunDisplayErrors[keyof GetRunDisplayErrors]
+
+export type GetRunDisplayResponses = {
+  /**
+   * Safe recovered display facts, at most 1MiB.
+   */
+  200: RunDisplayEnvelope
+}
+
+export type GetRunDisplayResponse = GetRunDisplayResponses[keyof GetRunDisplayResponses]

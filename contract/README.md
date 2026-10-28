@@ -1,3 +1,7 @@
+## 2026-10-28 Public28.10 回答操作／原 Run 展示候选
+
+同一 canonical 只增 feedback GET／自然PUT、regen keyedPOST、私有exact Run按需display GET与原activity可选展示／再生成source关联；严格整体逆回完整Public28.9 b438a749。Agent唯一固定正式669fd4e／HTTP8.3 be642c23／provenance609dc546，由原18件generator正规产出并raw逆回完整8.2 8a0b9973，旧 failure／interaction／code闭集原样验证。无第二editablewire／dirty源／Share展示旁路；其余Native/private pins、lock与owner不迁。候选未正常应用Schema或激活，三面门与隔离PG证据不替代Root正常验收。
+
 ## Skill download policy3（2026-10-28，候选）
 
 唯一现 `src/http/routes/skill-download.policy.ts` 经 `scripts/generate-skill-download-policy.mjs --write`／无参数check发布同一JSON。整数3仅新增 `byte_operation` 描述原GET opaque handle ZIP和独立status/code/shape；原4 POST／完整policy2 SHA454d0980…1584f可精确逆回，Public28.8全文不改。没有412、共享metadata错误fallback或新runtime validator；未知future status/code按闭集拒。消费者仅固定Root正式commit/blob，候选描述不等于正常资源或下载旅程验收。

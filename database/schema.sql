@@ -248,6 +248,11 @@ CREATE TABLE IF NOT EXISTS bff_message (
   tenant_id TEXT NOT NULL,
   conversation_id TEXT NOT NULL,
   run_id TEXT,
+  -- MESSAGE-REGENERATION-COLUMNS-BEGIN
+  origin TEXT NOT NULL DEFAULT 'normal',
+  regenerated_from_message_id TEXT,
+  regeneration_user_message_id TEXT,
+  -- MESSAGE-REGENERATION-COLUMNS-END
   role TEXT NOT NULL CONSTRAINT ck_bff_message_role CHECK (role IN ('user', 'assistant')),
   content TEXT NOT NULL,
   ordered_parts JSONB,
@@ -260,6 +265,17 @@ CREATE TABLE IF NOT EXISTS bff_message (
   message_seq BIGINT NOT NULL,
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  -- MESSAGE-REGENERATION-CONSTRAINT-BEGIN
+  CONSTRAINT ck_bff_message_regeneration CHECK (
+    (origin='normal' AND regenerated_from_message_id IS NULL AND regeneration_user_message_id IS NULL)
+    OR (origin='regeneration_input' AND role='user' AND run_id IS NOT NULL
+      AND regenerated_from_message_id IS NOT NULL AND length(btrim(regenerated_from_message_id))>0
+      AND regeneration_user_message_id IS NOT NULL AND length(btrim(regeneration_user_message_id))>0)
+    OR (origin='regeneration_answer' AND role='assistant' AND run_id IS NOT NULL
+      AND regenerated_from_message_id IS NOT NULL AND length(btrim(regenerated_from_message_id))>0
+      AND regeneration_user_message_id IS NOT NULL AND length(btrim(regeneration_user_message_id))>0)
+  ),
+  -- MESSAGE-REGENERATION-CONSTRAINT-END
   CONSTRAINT uq_bff_message_conversation_sequence UNIQUE (tenant_id, conversation_id, message_seq),
   CONSTRAINT ck_bff_message_identity CHECK (length(btrim(tenant_id)) > 0 AND length(btrim(conversation_id)) > 0),
   CONSTRAINT ck_bff_message_sequence CHECK (message_seq >= 1),
@@ -302,6 +318,25 @@ CREATE INDEX IF NOT EXISTS ix_bff_message_tenant_conversation_sequence
 
 -- Transactional Chat -> Agent command queue. A user message, its provisional
 -- assistant message, expected AG-UI run fence, and this row commit together.
+-- MESSAGE-FEEDBACK-SQL-BEGIN
+CREATE TABLE IF NOT EXISTS bff_message_feedback (
+  tenant_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  feedback TEXT NOT NULL CONSTRAINT ck_bff_message_feedback_value CHECK (feedback IN ('up', 'down')),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, subject_id, message_id),
+  CONSTRAINT ck_bff_message_feedback_identity CHECK (
+    length(btrim(tenant_id)) > 0 AND length(btrim(subject_id)) > 0
+    AND length(btrim(conversation_id)) > 0 AND length(btrim(message_id)) > 0
+  )
+);
+CREATE INDEX IF NOT EXISTS ix_bff_message_feedback_parent_cleanup
+  ON bff_message_feedback (tenant_id, conversation_id);
+-- MESSAGE-FEEDBACK-SQL-END
+
 CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
   outbox_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,

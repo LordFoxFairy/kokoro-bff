@@ -1,3 +1,19 @@
+## 原 Run 展示只读 adjunct（2026-10-28，Root 已核准）
+
+无新增数据表／Schema／缓存实体。新 safe activity 可选展示字段作为原 owner 当时发布的事实沿现AG-UI/ordered parts保存；历史只读 display 是按需 exact Run projection，不改旧 source event payload/id/digest，不写当前目录title或虚构revision。原Message再生成关联／反馈模型见下；读权限不从展示字段取得。
+
+## 再生成输入镜像与回答关联（2026-10-28，Root 已核准 A，候选未发行）
+
+沿本 owner Message 增加 origin（normal／regeneration_input／regeneration_answer）、regenerated_from_message_id 与 regeneration_user_message_id；旧行为 normal／空关联。内部 input 镜像为新 Run 的真实 user，assistant 为新回答；两者 exact 关联 source assistant 与最初可信 user，持久身份不复用旧 Agent Chat PK，不修改旧 user／回答。role 与 origin／关联闭集由 canonical CHECK 固定；同事务提交新两行与原 outbox／receipt，不新增 branch owner／表或执行状态。
+
+产品消息读取在 SQL 分页之前排除 regeneration_input；内部 execution／审计仍保真实两行。Message.assistant 私有 read 可显式返回 source 关联，普通 public Message／share 保旧 wire。具名 additive Message regeneration 演进仅加这三列／CHECK，严格旧／当前 catalog，无业务旧行回填；旧 normal 默认列用数据库元数据增加，旧消息内容／run／序列／xmin应不变。回退保新列／表与事实，不自动 drop；已有镜像写入时须保SQL过滤reader并停新producer，不可直接恢复不识别origin的旧reader。生产仅 Root 授权后安装。
+
+## Message 本人反馈（2026-10-28，Root 已核准，候选未发行）
+
+唯一 canonical `database/schema.sql` 新增 `bff_message_feedback`，列 tenant_id／subject_id／conversation_id／message_id／feedback(up|down)／created_at／updated_at；主键(tenant_id,subject_id,message_id)，本 owner tenant／conversation 清理索引。它是偏好资源，不是 Message status／评分统计／审计或执行事实；null PUT 精确 DELETE 本人行，不建 clear 墓碑／版本／receipt，无 FK 沿原 owner 策略。同值 UPSERT 不更新 timestamp，改变值才更新；父 Conversation 删除同事务清子项，不改旧 Message／Run／ledger 行。
+
+fresh installer 从 canonical 安装；具名 message-feedback schema evolution 仅精确新增本表／索引，check 对 catalog 漂移失败关闭，不 ALTER／重建旧表或复制第二 SQL 源。ready 显式核新对象。只在 Root 授权隔离或正常资源执行，旧 binary 回退保留本表与记录，不自动 drop；无旧事实回填。
+
 ## 私有取消终态 read projection（2026-10-28，Root 已核准，候选未发行）
 
 无数据库 Schema／enum／索引／表／数据回填变化，持久 Message.status 继续 pending／streaming／completed／failed。`terminal_status: cancelled` 仅从既有同 owner `bff_skill_usage_run_terminal` 与其保留的 source 身份及 exact dispatch/Message 绑定派生，在原授权 snapshot／分页的 READ ONLY RR 事务中一次有界批量读取；不写旧 Message，不覆盖 failure、不补造 ledger 或完整空正文。ordered_parts 当前只含 text/activity 与 publicSequence，不当终态事实。AG-UI frame/source GC 不影响该持久终态；原 RR 事务保障同一可见提交，不要求 frame 仍存活。durable terminal 缺失不发标志，不具可信绑定不投影；破损或冲突按既有依赖错误边界失败，不能伪造取消。契约见 [API首节](API_CONTRACT.md)。

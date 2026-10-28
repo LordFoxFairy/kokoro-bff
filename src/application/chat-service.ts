@@ -1,6 +1,7 @@
+import type { MessageFeedbackQuery, SetMessageFeedback } from "./chat/message-feedback-input.js"
 import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "./ports/chat-repository.js"
 import type { ChatMessageRead, ChatSessionDetail, PrivateChatSessionDetail, ChatSessionSummary } from "../contracts/index.js"
-import type { PrivateMessageReadContext, MessagePartsQuery } from "./ports/chat-repository.js"
+import type { PrivateMessageReadContext, MessagePartsQuery, MessageReadLifetime } from "./ports/chat-repository.js"
 import type { ChatRepository, ConversationCollectionFilter, SharedTasksPosition, SharedTasksRead } from "./ports/chat-repository.js"
 import { createHash } from "node:crypto"
 import { mutationScope } from "./idempotency.js"
@@ -8,6 +9,12 @@ import type { RequestContext } from "../domain/request-context.js"
 import { privateChatMessage, conversationSummary } from "./chat/mappers.js"
 
 export class ChatApplicationService {
+  public readMessageFeedback(input: MessageFeedbackQuery) {
+    return this.repository.readMessageFeedback(input)
+  }
+  public setMessageFeedback(input: SetMessageFeedback) {
+    return this.repository.setMessageFeedback(input)
+  }
   private readonly repository: ChatRepository
 
   public listOwnedArchivedTasks(query: ArchivedTasksQuery) {
@@ -51,8 +58,11 @@ export class ChatApplicationService {
     subjectId: string,
     conversationId: string,
     projectRef: string | undefined,
+    lifetime?: MessageReadLifetime,
   ): Promise<ChatSessionDetail["session"] | null> {
-    const conversation = await this.repository.findConversation(tenantId, subjectId, conversationId, projectRef)
+    const conversation = await (lifetime === undefined
+      ? this.repository.findConversation(tenantId, subjectId, conversationId, projectRef)
+      : this.repository.findConversation(tenantId, subjectId, conversationId, projectRef, lifetime))
     if (conversation === null) return null
     return {
       session_id: conversation.conversationId,

@@ -11,12 +11,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "fc8b0f09f3cfd96211b33d863d5e629bbed13e46"
+const ownerCommit = "669fd4e7656f4fdc384eee40ef1fc3155e87d966"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "8a0b9973661205b8e29020934c39e5c7ab629b4c42db4e79c845a410d96efa2a"
-const provenanceDigest = "7a8b442633e08d984a5381389359e5a03d59a0503a1a9d6fb09ea54fad003bd3"
-const ownerContractVersion = "8.2.0"
+const ownerDigest = "be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6"
+const provenanceDigest = "609dc546f657f54fc93b062f45a61cbc7b192b1d9914c27af746204caeded9ae"
+const ownerContractVersion = "8.3.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -106,7 +106,66 @@ export function assertFailureContractSchema(document) {
 // Decode only the published schema graph referenced by ChatEvent's payload mapping.
 // The generator does not follow extension refs; derive these validators from the pinned bytes,
 // rather than maintaining another editable schema or enabling every orphan owner component.
+// Build/test-only raw inverse retains numeric lexemes and numeric-key source order exactly.
+export function restoreAgent82DisplayRaw(source) {
+  assert.equal(sha256(source), ownerDigest, "Agent8.3 complete raw child drift")
+  const replacements = [
+    [
+      '      }\n    },\n    "/v1/runs/{run_id}/display": {\n      "get": {\n        "tags": [\n          "runs"\n        ],\n        "summary": "Read bounded identity-scoped Run display facts",\n        "operationId": "getRunDisplay",\n        "security": [\n          {\n            "AgentServiceBearer": []\n          }\n        ],\n        "parameters": [\n          {\n            "name": "run_id",\n            "in": "path",\n            "required": true,\n            "schema": {\n              "type": "string",\n              "minLength": 1\n            }\n          },\n          {\n            "$ref": "#/components/parameters/RequestId"\n          },\n          {\n            "$ref": "#/components/parameters/TenantRef"\n          },\n          {\n            "$ref": "#/components/parameters/SubjectRef"\n          },\n          {\n            "$ref": "#/components/parameters/SubjectKind"\n          },\n          {\n            "$ref": "#/components/parameters/ActorRef"\n          },\n          {\n            "$ref": "#/components/parameters/ActorKind"\n          },\n          {\n            "$ref": "#/components/parameters/AssertionRef"\n          }\n        ],\n        "x-kokoro-owner": "kokoro-agent",\n        "x-kokoro-visibility": "internal-owner",\n        "x-kokoro-stability": "stable",\n        "x-kokoro-idempotency": "read-only",\n        "x-kokoro-permission": "agent-service",\n        "responses": {\n          "200": {\n            "description": "Safe recovered display facts, at most 1MiB.",\n            "content": {\n              "application/json": {\n                "schema": {\n                  "$ref": "#/components/schemas/RunDisplayEnvelope"\n                }\n              }\n            }\n          },\n          "401": {\n            "$ref": "#/components/responses/Unauthorized"\n          },\n          "404": {\n            "$ref": "#/components/responses/NotFound"\n          },\n          "503": {\n            "$ref": "#/components/responses/Unavailable"\n          },\n          "400": {\n            "$ref": "#/components/responses/BadRequest"\n          }\n        },\n        "x-kokoro-read-budget": {\n          "total_timeout_seconds": 5,\n          "checkpoint_locators": 32,\n          "native_input_bytes": 8388608,\n          "query_body": "forbidden; Content-Length, Transfer-Encoding and Idempotency-Key forbidden"\n        }\n      }\n    }\n',
+      "      }\n    }\n",
+    ],
+    [
+      '            "$ref": "#/components/schemas/PreparedModelCallSnapshot"\n          },\n          "meta": {\n            "$ref": "#/components/schemas/Meta"\n          }\n        },\n        "additionalProperties": false\n      },\n      "SkillDisplay": {\n        "type": "object",\n        "required": [\n          "source_ref",\n          "name",\n          "virtual_path"\n        ],\n        "properties": {\n          "source_ref": {\n            "type": "string",\n            "minLength": 7,\n            "maxLength": 197,\n            "pattern": "^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\\\s\\\\S])"\n          },\n          "name": {\n            "type": "string",\n            "minLength": 1,\n            "maxLength": 120,\n            "x-kokoro-utf8-byte-limit": 480,\n            "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n          },\n          "virtual_path": {\n            "type": "string",\n            "minLength": 1,\n            "maxLength": 4096,\n            "x-kokoro-utf8-byte-limit": 4096,\n            "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",\n            "description": "Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument."\n          },\n          "revision": {\n            "type": "string",\n            "pattern": "^[1-9][0-9]{0,18}(?![\\\\s\\\\S])",\n            "x-kokoro-int64-decimal": true\n          }\n        },\n        "additionalProperties": false,\n        "x-kokoro-binding": "virtual_path must equal /.skills/{base64url(ASCII source_ref suffix)}/SKILL.md; revision only from this Run exact ResolvedSkill, absent if unproven"\n      },\n      "RunDisplay": {\n        "type": "object",\n        "required": [\n          "run_id",\n          "display_skills",\n          "tool_paths"\n        ],\n        "properties": {\n          "run_id": {\n            "type": "string",\n            "minLength": 1\n          },\n          "display_skills": {\n            "type": "array",\n            "maxItems": 16,\n            "items": {\n              "$ref": "#/components/schemas/SkillDisplay"\n            },\n            "x-kokoro-unique-by": "source_ref",\n            "x-kokoro-binding": "unique source_ref subset of original ready source_refs; no current catalog lookup"\n          },\n          "tool_paths": {\n            "type": "array",\n            "maxItems": 128,\n            "x-kokoro-unique-by": "activity_id",\n            "items": {\n              "type": "object",\n              "required": [\n                "activity_id",\n                "virtual_path"\n              ],\n              "properties": {\n                "activity_id": {\n                  "type": "string",\n                  "minLength": 68,\n                  "maxLength": 68,\n                  "pattern": "^act_[0-9a-f]{64}(?![\\\\s\\\\S])"\n                },\n                "virtual_path": {\n                  "type": "string",\n                  "minLength": 1,\n                  "maxLength": 4096,\n                  "x-kokoro-utf8-byte-limit": 4096,\n                  "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",\n                  "description": "Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument."\n                }\n              },\n              "additionalProperties": false\n            }\n          }\n        },\n        "additionalProperties": false,\n        "description": "Recovered safe display facts only. Missing facts remain unknown; source events and execution authority are unchanged. No completeness assertion."\n      },\n      "RunDisplayEnvelope": {\n        "type": "object",\n        "required": [\n          "data",\n          "meta"\n        ],\n        "properties": {\n          "data": {\n            "$ref": "#/components/schemas/RunDisplay"\n          },\n',
+      '            "$ref": "#/components/schemas/PreparedModelCallSnapshot"\n          },\n',
+    ],
+    [
+      '              }\n            },\n            "allOf": [\n              {\n                "if": {\n                  "required": [\n                    "display_skills"\n                  ]\n                },\n                "then": {\n                  "properties": {\n                    "phase": {\n                      "const": "ready"\n                    }\n                  }\n                }\n              }\n            ]\n          }\n',
+      "              }\n            }\n          }\n",
+    ],
+    [
+      '                ]\n              },\n              "display_skills": {\n                "type": "array",\n                "maxItems": 16,\n                "items": {\n                  "$ref": "#/components/schemas/SkillDisplay"\n                },\n                "x-kokoro-unique-by": "source_ref",\n                "x-kokoro-binding": "unique source_ref subset of original ready source_refs; no current catalog lookup"\n              }\n',
+      "                ]\n              }\n",
+    ],
+    [
+      '                      ]\n                    },\n                    "display_detail": {\n                      "not": {\n                        "required": [\n                          "virtual_path"\n                        ]\n                      }\n                    }\n',
+      "                      ]\n                    }\n",
+    ],
+    [
+      '                    "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n                  },\n                  "virtual_path": {\n                    "type": "string",\n                    "minLength": 1,\n                    "maxLength": 4096,\n                    "x-kokoro-utf8-byte-limit": 4096,\n                    "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",\n                    "description": "Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument."\n                  }\n',
+      '                    "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n                  }\n',
+    ],
+    [
+      '    "description": "Agent-owned execution admission, control, evidence and identity-scoped chat query boundary. The BFF consumes this contract; the Agent does not expose browser SSE or AG-UI.",\n    "version": "8.3.0"\n  },\n',
+      '    "description": "Agent-owned execution admission, control, evidence and identity-scoped chat query boundary. The BFF consumes this contract; the Agent does not expose browser SSE or AG-UI.",\n    "version": "8.2.0"\n  },\n',
+    ],
+  ]
+  for (const [from, to] of replacements) {
+    assert.equal(source.split(from).length - 1, 1, "Agent8.3 exact raw delta drift")
+    source = source.replace(from, to)
+  }
+  assert.equal(sha256(source), "8a0b9973661205b8e29020934c39e5c7ab629b4c42db4e79c845a410d96efa2a", "Agent8.2 full raw parent drift")
+  return source
+}
+// Build/test-only strict full owner child inverse. Production generation requires the current exact blob above.
+export function restoreAgent82DisplayContract(document) {
+  if (document.info?.version !== "8.3.0" && !document.components?.schemas?.RunDisplay) return document
+  assert.equal(sha256(JSON.stringify(document)), "055f99061318807d48f2a53a8e6290edfc31442623908c145d5cd6b67f0f8188", "Agent8.3 complete display child drift")
+  const parent = structuredClone(document),
+    schemas = parent.components.schemas
+  delete parent.paths["/v1/runs/{run_id}/display"]
+  for (const name of ["SkillDisplay", "RunDisplay", "RunDisplayEnvelope"]) delete schemas[name]
+  delete schemas.ChatActivity.oneOf[0].properties.display_detail.properties.virtual_path
+  delete schemas.ChatActivity.oneOf[0].allOf[1].then.properties.display_detail
+  delete schemas.ChatActivity.oneOf[2].properties.display_skills
+  delete schemas.ChatActivity.oneOf[2].allOf
+  parent.info.version = "8.2.0"
+  assert.equal(sha256(JSON.stringify(parent)), "0599b6504973415a9410e09703b8ea890ad98ef20702192eb6d6d19eda544b3a", "Agent8.2 complete parent drift")
+  return parent
+}
+
 export function assertInteractionContractSchema(document) {
+  const currentDocument = document
+  document = restoreAgent82DisplayContract(document)
   const schemas = record(document.components?.schemas, "Agent schemas")
   assert.deepEqual(schemas.ChatEvent["x-kokoro-decoded-payloads"], {
     discriminator: "event_type",
@@ -236,7 +295,7 @@ export function assertInteractionContractSchema(document) {
   assert.equal(skill.properties.source_refs["x-kokoro-json-byte-limit"], 4096)
   assert.deepEqual(skill.then, { required: ["error_code"] })
   assert.deepEqual(skill.else, { not: { required: ["error_code"] } })
-  return schemas
+  return currentDocument.components.schemas
 }
 
 function schemaZod(schema) {
@@ -272,7 +331,7 @@ async function generateDecodedValidators(directory, document) {
   const schemas = assertInteractionContractSchema(document)
   const file = path.join(directory, "zod.gen.ts")
   let source = await readFile(file, "utf8")
-  for (const name of ["CancelControl", "SteerControl", "ResumeDecision", "ResumeControl"]) {
+  for (const name of ["CancelControl", "SteerControl", "ResumeDecision", "ResumeControl", "SkillDisplay", "RunDisplay", "RunDisplayEnvelope"]) {
     const start = source.indexOf("export const z" + name + " =")
     const end = source.indexOf("export const ", start + 1)
     assert.ok(start >= 0 && end > start, "generated control validator missing: " + name)
@@ -345,6 +404,12 @@ function processProfileSource(document) {
   const unicodeDomain = /^(NFC) Unicode scalars; no (Cc), (Cf) or (Cs)$/u.exec(detailName["x-kokoro-unicode-domain"])
   assert.ok(unicodeDomain, "Agent tool detail Unicode domain is unsupported")
   const profile = {
+    display: {
+      skill: schemas.SkillDisplay,
+      read: schemas.RunDisplay,
+      activitySkill: skill.properties.display_skills,
+      virtualPath: tool.properties.display_detail.properties.virtual_path,
+    },
     toolDetail: {
       minScalars: detailName.minLength,
       maxScalars: detailName.maxLength,
@@ -418,6 +483,7 @@ async function verifyOwnerSources() {
   const failureArtifact = provenance.generated_artifacts?.find((artifact) => artifact.path === "src/kokoro_agent/protocol/run_failure_generated.py")
   assert.equal(failureArtifact?.source, "contract/openapi/v1/openapi.json", "Agent failure artifact source path drifted")
   assert.equal(failureArtifact?.source_sha256, ownerDigest, "Agent failure artifact source digest drifted")
+  restoreAgent82DisplayRaw(vendor.toString("utf8"))
   const document = JSON.parse(vendor.toString("utf8"))
   assert.equal(document.info?.version, ownerContractVersion, "Agent HTTP contract version drifted")
   assertFailureContractSchema(document)
@@ -603,7 +669,7 @@ async function generate(directory) {
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
-    ["controlRun", "createRun", "replaySessionEvents"],
+    ["controlRun", "createRun", "getRunDisplay", "replaySessionEvents"],
     "Agent HTTP generated operation surface drifted",
   )
   const prettier = path.join(root, "node_modules/prettier/bin/prettier.cjs")

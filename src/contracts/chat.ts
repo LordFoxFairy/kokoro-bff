@@ -52,7 +52,7 @@ export type ChatMessageRead = (
       run_id: string
       rendering: OrderedMessageRendering
     })
-) & { terminal_status?: "cancelled" }
+) & { terminal_status?: "cancelled"; regenerated_from_message_id?: string }
 
 export type MessageTextPartSlice = {
   kind: "text"
