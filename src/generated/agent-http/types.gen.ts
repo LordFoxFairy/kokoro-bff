@@ -167,6 +167,19 @@ export type RunDisplay = {
      */
     virtual_path: string
   }>
+  /**
+   * Read-only exact original MCP activity facts: safe public names witnessed by successful same-Run calls, or independently proved failed journal outcomes. No source event or Run status mutation.
+   */
+  tool_facts: Array<
+    unknown & {
+      activity_id: string
+      display_detail?: {
+        kind: "mcp_tool"
+        name: string
+      }
+      status?: "failed"
+    }
+  >
 }
 
 export type RunDisplayEnvelope = {

@@ -1,3 +1,7 @@
+## tool_facts 只读展示后继（Root 已核准）
+
+仅原exact Run display临时表示加已证MCP名称／单工具failed提示；不改Agent源event/id/digest、BFF存储图、Message／Run／账本／feedback／regen行，不建立新表或状态中心。未知仍缺省事实，不借提示修改历史终态。
+
 ## 原 Run 展示只读 adjunct（2026-10-28，Root 已核准）
 
 无新增数据表／Schema／缓存实体。新 safe activity 可选展示字段作为原 owner 当时发布的事实沿现AG-UI/ordered parts保存；历史只读 display 是按需 exact Run projection，不改旧 source event payload/id/digest，不写当前目录title或虚构revision。原Message再生成关联／反馈模型见下；读权限不从展示字段取得。

@@ -11,12 +11,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "669fd4e7656f4fdc384eee40ef1fc3155e87d966"
+const ownerCommit = "f31b60be27dd9b4dfddd7a1c3579b19e40db150d"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6"
-const provenanceDigest = "609dc546f657f54fc93b062f45a61cbc7b192b1d9914c27af746204caeded9ae"
-const ownerContractVersion = "8.3.0"
+const ownerDigest = "239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52"
+const provenanceDigest = "275f66d882ab85bf01c71347c0a9302b6c4bfc0d7bcd94ee6d01b8ce1219f230"
+const ownerContractVersion = "8.4.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -107,8 +107,31 @@ export function assertFailureContractSchema(document) {
 // The generator does not follow extension refs; derive these validators from the pinned bytes,
 // rather than maintaining another editable schema or enabling every orphan owner component.
 // Build/test-only raw inverse retains numeric lexemes and numeric-key source order exactly.
+export function restoreAgent83ToolFactsRaw(source) {
+  assert.equal(sha256(source), "239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52", "Agent8.4 complete raw child drift")
+  const replacements = [
+    [
+      '    "description": "Agent-owned execution admission, control, evidence and identity-scoped chat query boundary. The BFF consumes this contract; the Agent does not expose browser SSE or AG-UI.",\n    "version": "8.4.0"\n  },\n',
+      '    "description": "Agent-owned execution admission, control, evidence and identity-scoped chat query boundary. The BFF consumes this contract; the Agent does not expose browser SSE or AG-UI.",\n    "version": "8.3.0"\n  },\n',
+    ],
+    [
+      '          "display_skills",\n          "tool_paths",\n          "tool_facts"\n        ],\n',
+      '          "display_skills",\n          "tool_paths"\n        ],\n',
+    ],
+    [
+      '            }\n          },\n          "tool_facts": {\n            "type": "array",\n            "maxItems": 128,\n            "x-kokoro-unique-by": "activity_id",\n            "items": {\n              "type": "object",\n              "required": [\n                "activity_id"\n              ],\n              "properties": {\n                "activity_id": {\n                  "type": "string",\n                  "minLength": 68,\n                  "maxLength": 68,\n                  "pattern": "^act_[0-9a-f]{64}(?![\\\\s\\\\S])"\n                },\n                "display_detail": {\n                  "type": "object",\n                  "required": [\n                    "kind",\n                    "name"\n                  ],\n                  "properties": {\n                    "kind": {\n                      "type": "string",\n                      "enum": [\n                        "mcp_tool"\n                      ]\n                    },\n                    "name": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 120,\n                      "x-kokoro-utf8-byte-limit": 480,\n                      "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n                    }\n                  },\n                  "additionalProperties": false\n                },\n                "status": {\n                  "type": "string",\n                  "enum": [\n                    "failed"\n                  ]\n                }\n              },\n              "anyOf": [\n                {\n                  "required": [\n                    "display_detail"\n                  ]\n                },\n                {\n                  "required": [\n                    "status"\n                  ]\n                }\n              ],\n              "additionalProperties": false\n            },\n            "description": "Read-only exact original MCP activity facts: safe public names witnessed by successful same-Run calls, or independently proved failed journal outcomes. No source event or Run status mutation."\n          }\n',
+      "            }\n          }\n",
+    ],
+  ]
+  for (const [from, to] of replacements) {
+    assert.equal(source.split(from).length - 1, 1, "Agent8.4 exact tool facts delta drift")
+    source = source.replace(from, to)
+  }
+  assert.equal(sha256(source), "be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6", "Agent8.3 full raw parent drift")
+  return source
+}
 export function restoreAgent82DisplayRaw(source) {
-  assert.equal(sha256(source), ownerDigest, "Agent8.3 complete raw child drift")
+  assert.equal(sha256(source), "be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6", "Agent8.3 complete raw child drift")
   const replacements = [
     [
       '      }\n    },\n    "/v1/runs/{run_id}/display": {\n      "get": {\n        "tags": [\n          "runs"\n        ],\n        "summary": "Read bounded identity-scoped Run display facts",\n        "operationId": "getRunDisplay",\n        "security": [\n          {\n            "AgentServiceBearer": []\n          }\n        ],\n        "parameters": [\n          {\n            "name": "run_id",\n            "in": "path",\n            "required": true,\n            "schema": {\n              "type": "string",\n              "minLength": 1\n            }\n          },\n          {\n            "$ref": "#/components/parameters/RequestId"\n          },\n          {\n            "$ref": "#/components/parameters/TenantRef"\n          },\n          {\n            "$ref": "#/components/parameters/SubjectRef"\n          },\n          {\n            "$ref": "#/components/parameters/SubjectKind"\n          },\n          {\n            "$ref": "#/components/parameters/ActorRef"\n          },\n          {\n            "$ref": "#/components/parameters/ActorKind"\n          },\n          {\n            "$ref": "#/components/parameters/AssertionRef"\n          }\n        ],\n        "x-kokoro-owner": "kokoro-agent",\n        "x-kokoro-visibility": "internal-owner",\n        "x-kokoro-stability": "stable",\n        "x-kokoro-idempotency": "read-only",\n        "x-kokoro-permission": "agent-service",\n        "responses": {\n          "200": {\n            "description": "Safe recovered display facts, at most 1MiB.",\n            "content": {\n              "application/json": {\n                "schema": {\n                  "$ref": "#/components/schemas/RunDisplayEnvelope"\n                }\n              }\n            }\n          },\n          "401": {\n            "$ref": "#/components/responses/Unauthorized"\n          },\n          "404": {\n            "$ref": "#/components/responses/NotFound"\n          },\n          "503": {\n            "$ref": "#/components/responses/Unavailable"\n          },\n          "400": {\n            "$ref": "#/components/responses/BadRequest"\n          }\n        },\n        "x-kokoro-read-budget": {\n          "total_timeout_seconds": 5,\n          "checkpoint_locators": 32,\n          "native_input_bytes": 8388608,\n          "query_body": "forbidden; Content-Length, Transfer-Encoding and Idempotency-Key forbidden"\n        }\n      }\n    }\n',
@@ -147,7 +170,18 @@ export function restoreAgent82DisplayRaw(source) {
   return source
 }
 // Build/test-only strict full owner child inverse. Production generation requires the current exact blob above.
+export function restoreAgent83ToolFactsContract(document) {
+  if (document.info?.version !== "8.4.0" && !document.components?.schemas?.RunDisplay?.properties?.tool_facts) return document
+  assert.equal(sha256(JSON.stringify(document)), "aece8b1ea4d83f63b224f0b219afba99e1c5646f4b698d2257562e36e0c36528", "Agent8.4 complete tool facts child drift")
+  const parent = structuredClone(document)
+  delete parent.components.schemas.RunDisplay.properties.tool_facts
+  parent.components.schemas.RunDisplay.required = ["run_id", "display_skills", "tool_paths"]
+  parent.info.version = "8.3.0"
+  assert.equal(sha256(JSON.stringify(parent)), "055f99061318807d48f2a53a8e6290edfc31442623908c145d5cd6b67f0f8188", "Agent8.3 complete tool facts parent drift")
+  return parent
+}
 export function restoreAgent82DisplayContract(document) {
+  document = restoreAgent83ToolFactsContract(document)
   if (document.info?.version !== "8.3.0" && !document.components?.schemas?.RunDisplay) return document
   assert.equal(sha256(JSON.stringify(document)), "055f99061318807d48f2a53a8e6290edfc31442623908c145d5cd6b67f0f8188", "Agent8.3 complete display child drift")
   const parent = structuredClone(document),
@@ -299,6 +333,19 @@ export function assertInteractionContractSchema(document) {
 }
 
 function schemaZod(schema) {
+  // The new owner RunDisplay adjunct uses required-only anyOf over shared closed fields.
+  // Lower only this exact shape; do not turn generic required-only nodes into unknown unions.
+  if (schema.type === "object" && schema.anyOf) {
+    assert.deepEqual(Object.keys(schema.properties), ["activity_id", "display_detail", "status"], "Agent tool fact fields drifted")
+    assert.deepEqual(schema.required, ["activity_id"], "Agent tool fact required identity drifted")
+    assert.deepEqual(schema.anyOf, [{ required: ["display_detail"] }, { required: ["status"] }], "Agent tool fact evidence alternatives drifted")
+    assert.equal(schema.additionalProperties, false, "Agent tool fact must be closed")
+    const base = { ...schema }
+    delete base.anyOf
+    return (
+      schemaZod(base) + '.refine((value) => value.display_detail !== undefined || value.status !== undefined, "Tool fact requires proved detail or failure")'
+    )
+  }
   if (schema.$ref) return "z" + schema.$ref.split("/").at(-1)
   if (schema.oneOf || schema.anyOf) return "z.union([" + (schema.oneOf ?? schema.anyOf).map(schemaZod).join(",") + "])"
   if (schema.const !== undefined) return "z.literal(" + JSON.stringify(schema.const) + ")"
@@ -483,7 +530,7 @@ async function verifyOwnerSources() {
   const failureArtifact = provenance.generated_artifacts?.find((artifact) => artifact.path === "src/kokoro_agent/protocol/run_failure_generated.py")
   assert.equal(failureArtifact?.source, "contract/openapi/v1/openapi.json", "Agent failure artifact source path drifted")
   assert.equal(failureArtifact?.source_sha256, ownerDigest, "Agent failure artifact source digest drifted")
-  restoreAgent82DisplayRaw(vendor.toString("utf8"))
+  restoreAgent82DisplayRaw(restoreAgent83ToolFactsRaw(vendor.toString("utf8")))
   const document = JSON.parse(vendor.toString("utf8"))
   assert.equal(document.info?.version, ownerContractVersion, "Agent HTTP contract version drifted")
   assertFailureContractSchema(document)

@@ -9,6 +9,7 @@ const display = {
   run_id: "run",
   display_skills: [{ source_ref: "skill:pinned", name: "Original package name", virtual_path: "/.skills/cGlubmVk/SKILL.md", revision: "9007199254740993" }],
   tool_paths: [{ activity_id: activityId, virtual_path: "/workspace/results/report.md" }],
+  tool_facts: [],
 }
 async function fixture(t) {
   const calls = []
@@ -180,4 +181,69 @@ test("display requires canonical positive revision and exact owner source/activi
       assert.equal(r.status, 502)
       assert.equal(r.body.data, undefined)
     })
+})
+
+test("exact historical MCP name and individual failed-tool facts are read-only adjuncts, not Run terminal rewrites", async (t) => {
+  const f = await fixture(t)
+  const facts = [
+    { activity_id: `act_${"f".repeat(64)}`, display_detail: { kind: "mcp_tool", name: "ask_question" } },
+    { activity_id: activityId, status: "failed" },
+    { activity_id: `act_${"b".repeat(64)}`, display_detail: { kind: "mcp_tool", name: "🧭".repeat(120) }, status: "failed" },
+  ]
+  f.setBody({ data: { ...display, tool_facts: facts }, meta: { request_id: "agent" } })
+  const result = await f.request()
+  assert.equal(result.status, 200)
+  assert.deepEqual(result.body.data.tool_facts, facts)
+  assert.deepEqual(result.body.data.display_skills, display.display_skills)
+  assert.deepEqual(result.body.data.tool_paths, display.tool_paths)
+})
+
+test("Run tool adjuncts reject unproven empty facts, duplicate identities and values outside the existing safe MCP domain", async (t) => {
+  const f = await fixture(t)
+  const fact = { activity_id: activityId, display_detail: { kind: "mcp_tool", name: "ask_question" } }
+  const invalid = [
+    ["empty fact", [{ activity_id: activityId }]],
+    ["duplicate activity", [fact, { activity_id: activityId, status: "failed" }]],
+    ["file kind", [{ ...fact, display_detail: { kind: "file", name: "report.md" } }]],
+    ["completed status", [{ activity_id: activityId, status: "completed" }]],
+    ["extra path", [{ ...fact, display_detail: { ...fact.display_detail, virtual_path: "/workspace/report.md" } }]],
+    ["wrong activity", [{ ...fact, activity_id: `seg_${"a".repeat(64)}` }]],
+    ["activity suffix", [{ ...fact, activity_id: activityId + "\n" }]],
+    ["blank name", [{ ...fact, display_detail: { kind: "mcp_tool", name: " " } }]],
+    ["name scalar cap", [{ ...fact, display_detail: { kind: "mcp_tool", name: "a".repeat(121) } }]],
+    ["unpaired scalar", [{ ...fact, display_detail: { kind: "mcp_tool", name: "\ud800" } }]],
+    ["name control", [{ ...fact, display_detail: { kind: "mcp_tool", name: "ask\nquestion" } }]],
+    ["name normalization", [{ ...fact, display_detail: { kind: "mcp_tool", name: "e\u0301" } }]],
+    ["secret name", [{ ...fact, display_detail: { kind: "mcp_tool", name: "credentials" } }]],
+    ["array cap", Array.from({ length: 129 }, (_, i) => ({ ...fact, activity_id: `act_${i.toString(16).padStart(64, "0")}` }))],
+  ]
+  for (const [label, tool_facts] of invalid)
+    await t.test(label, async () => {
+      f.setBody({ data: { ...display, tool_facts }, meta: { request_id: "agent" } })
+      const result = await f.request()
+      assert.equal(result.status, 502)
+      assert.equal(result.body.data, undefined)
+    })
+})
+
+test("required tool facts cannot silently fall back to an empty historical collection", async (t) => {
+  const f = await fixture(t)
+  const { tool_facts, ...legacy } = display
+  assert.deepEqual(tool_facts, [])
+  f.setBody({ data: legacy, meta: { request_id: "agent" } })
+  assert.equal((await f.request()).status, 502)
+})
+
+test("real tool selectors containing sk inside a word stay visible, while actual key-prefix positions remain private", async (t) => {
+  const f = await fixture(t)
+  for (const name of ["ask_question", "task_read", "desk_tool", "1sk_name"]) {
+    f.setBody({ data: { ...display, tool_facts: [{ activity_id: activityId, display_detail: { kind: "mcp_tool", name } }] }, meta: { request_id: "agent" } })
+    const result = await f.request()
+    assert.equal(result.status, 200, name)
+    assert.equal(result.body.data.tool_facts[0].display_detail.name, name)
+  }
+  for (const name of ["sk-token", "sk_token", " sk-token", "/sk_token", ".sk-token", ":sk_token", "_sk-token", "SK-TOKEN", "credentials", "github_pat_token"]) {
+    f.setBody({ data: { ...display, tool_facts: [{ activity_id: activityId, display_detail: { kind: "mcp_tool", name } }] }, meta: { request_id: "agent" } })
+    assert.equal((await f.request()).status, 502, name)
+  }
 })

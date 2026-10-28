@@ -1,3 +1,7 @@
+## 原 Run MCP／失败工具展示后继（Root 已核准，正式 Agent 输入；BFF 候选未发行）
+
+固定正式 Agent `f31b60be27dd9b4dfddd7a1c3579b19e40db150d`／HTTP8.4 SHA `239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52`／provenance SHA `275f66d882ab85bf01c71347c0a9302b6c4bfc0d7bcd94ee6d01b8ce1219f230`。沿本节后的 exact Session Run display 只读资源消费该正式后继；新 required tool_facts 为最多128项的有界展示清单，activity_id唯一，每项至少含安全mcp_tool display_detail或单工具status=failed之一。名称仍为本Run原工具/连接见证，不取当前目录或人名；failed只说明该工具的已证结果，不改整个Run／原activity／ledger终态。身份、当前owned pre/post、5秒／1MiB与原locator预算、取消和无N+1原样。原18件 generator 正规生成并以三处 raw 精确差额逆回完整8.3 be642c、再承接完整8.2；无新owner／Schema／缓存／回填。Public28.11只扩该独立读表示，完整逆回28.10；feedback／regen／原执行与资金事实不动。
+
 ## Skill／文件原执行展示（2026-10-28，Root 已核准，正式输入候选消费）
 
 固定正式 Agent `669fd4e7656f4fdc384eee40ef1fc3155e87d966`／HTTP8.3 SHA `be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6`，provenance SHA `609dc546f657f54fc93b062f45a61cbc7b192b1d9914c27af746204caeded9ae`；唯一原 generator 正规产出18件，raw窄差逐字逆回完整8.2原件而非JSON数值／键序重写。新事件沿原 AG-UI safe activity／ordered parts 保留正式 owner 的可选包名／virtual_path／revision；旧 Run 则提供 Session 私有按需 GET `/v1/sessions/{id}/runs/{runId}/display`，不在列表／snapshot 逐 Run 拉取 Agent，不纳 Share、catalog 当前名称、缓存／新表或第二状态中心。先 fresh Session＋当前 owned Conversation，再用现 submittedAgentRuns 校验 exact tenant／subject／Conversation／Run，调用正式 Agent8.3 的单 Run 只读资源；发送前重验当前资格与同一映射。五秒绝对预算覆盖准入／数据库／HTTP／有界1MiB body与编码，caller abort 退休；禁止 query、body framing和命令key。

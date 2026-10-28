@@ -3,9 +3,14 @@ import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 import { load } from "js-yaml"
-import { restorePublic289MessageActionsContract, restoreMessageActionsSchema, messageActionsParentInventory } from "../scripts/project-pin-public-contract.mjs"
+import {
+  restorePublic2810ToolFactsContract,
+  restorePublic289MessageActionsContract,
+  restoreMessageActionsSchema,
+  messageActionsParentInventory,
+} from "../scripts/project-pin-public-contract.mjs"
 test("message actions preserve complete Public28.9 and expose only exact feedback preference operations", async () => {
-  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"),
+  const raw = restorePublic2810ToolFactsContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
     spec = load(raw)
   const parent = restorePublic289MessageActionsContract(raw)
   assert.equal(createHash("sha256").update(parent).digest("hex"), "b438a749c919d24c4e0f1dadfdbcbbb11e0ac755f5785c543a661336c2cbb354")

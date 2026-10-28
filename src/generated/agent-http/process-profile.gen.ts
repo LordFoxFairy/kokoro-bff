@@ -38,7 +38,7 @@ export const AGENT_PROCESS_CONSTRAINTS = {
     },
     read: {
       type: "object",
-      required: ["run_id", "display_skills", "tool_paths"],
+      required: ["run_id", "display_skills", "tool_paths", "tool_facts"],
       properties: {
         run_id: {
           type: "string",
@@ -78,6 +78,56 @@ export const AGENT_PROCESS_CONSTRAINTS = {
             },
             additionalProperties: false,
           },
+        },
+        tool_facts: {
+          type: "array",
+          maxItems: 128,
+          "x-kokoro-unique-by": "activity_id",
+          items: {
+            type: "object",
+            required: ["activity_id"],
+            properties: {
+              activity_id: {
+                type: "string",
+                minLength: 68,
+                maxLength: 68,
+                pattern: "^act_[0-9a-f]{64}(?![\\s\\S])",
+              },
+              display_detail: {
+                type: "object",
+                required: ["kind", "name"],
+                properties: {
+                  kind: {
+                    type: "string",
+                    enum: ["mcp_tool"],
+                  },
+                  name: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 120,
+                    "x-kokoro-utf8-byte-limit": 480,
+                    "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",
+                  },
+                },
+                additionalProperties: false,
+              },
+              status: {
+                type: "string",
+                enum: ["failed"],
+              },
+            },
+            anyOf: [
+              {
+                required: ["display_detail"],
+              },
+              {
+                required: ["status"],
+              },
+            ],
+            additionalProperties: false,
+          },
+          description:
+            "Read-only exact original MCP activity facts: safe public names witnessed by successful same-Run calls, or independently proved failed journal outcomes. No source event or Run status mutation.",
         },
       },
       additionalProperties: false,

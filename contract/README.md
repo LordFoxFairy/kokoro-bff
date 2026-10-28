@@ -1,3 +1,7 @@
+## 2026-10-28 Public28.11 原 Run 工具展示候选
+
+只在原按需 exact Run display 资源增加 required `tool_facts`（最多128、activity_id唯一、至少mcp_tool安全名或failed事实）；原feedback／regen／执行与ledger不变。固定正式Agent f31b60be27dd9b4dfddd7a1c3579b19e40db150d，HTTP8.4 SHA239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52／provenance275f66d882ab85bf01c71347c0a9302b6c4bfc0d7bcd94ee6d01b8ce1219f230。原18件正规生成；完整8.4 raw逆回8.3 be642c再8.2 8a0b，Public28.11严格逆回完整28.10 9e6a。任何name/status缺证缺省，独立读不得回写原activity或Run终态；机器及fixture不替代Root真实normal配对。
+
 ## 2026-10-28 Public28.10 回答操作／原 Run 展示候选
 
 同一 canonical 只增 feedback GET／自然PUT、regen keyedPOST、私有exact Run按需display GET与原activity可选展示／再生成source关联；严格整体逆回完整Public28.9 b438a749。Agent唯一固定正式669fd4e／HTTP8.3 be642c23／provenance609dc546，由原18件generator正规产出并raw逆回完整8.2 8a0b9973，旧 failure／interaction／code闭集原样验证。无第二editablewire／dirty源／Share展示旁路；其余Native/private pins、lock与owner不迁。候选未正常应用Schema或激活，三面门与隔离PG证据不替代Root正常验收。

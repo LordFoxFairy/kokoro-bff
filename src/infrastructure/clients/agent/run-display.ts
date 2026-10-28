@@ -2,7 +2,7 @@ import { AGENT_PROCESS_CONSTRAINTS } from "../../../generated/agent-http/process
 import type { BffConfig } from "../../../config/runtime.js"
 import { zRunDisplayEnvelope } from "../../../generated/agent-http/zod.gen.js"
 import { agentIdentityHeaders } from "./identity.js"
-import { safeSkillDisplays, safeVirtualPath } from "./display-safety.js"
+import { safeSkillDisplays, safeToolFacts, safeVirtualPath } from "./display-safety.js"
 import { strictParseRawJson } from "../../raw-json.js"
 import type { RequestContext } from "../../../domain/request-context.js"
 const activityIdPattern = new RegExp(AGENT_PROCESS_CONSTRAINTS.activityId.pattern, "u")
@@ -64,6 +64,7 @@ export async function readAgentRunDisplay(config: BffConfig, context: RequestCon
   if (
     data.run_id !== runId ||
     !safeSkillDisplays(data.display_skills) ||
+    !safeToolFacts(data.tool_facts) ||
     new Set(data.tool_paths.map((item) => item.activity_id)).size !== data.tool_paths.length ||
     data.tool_paths.some((item) => !activityIdPattern.test(item.activity_id) || !safeVirtualPath(item.virtual_path))
   )

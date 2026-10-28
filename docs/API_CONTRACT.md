@@ -1,3 +1,7 @@
+## Run display tool_facts 后继（Root 已核准，正式 Agent 输入；BFF 候选未发行）
+
+原 GET `/v1/sessions/{id}/runs/{runId}/display` 不增path/query/header/权限。新Public28.11的RunDisplay增加required tool_facts数组(max128)，每项closed activity_id＋optional display_detail:{kind:mcp_tool,name:既有安全工具名}＋optional status:failed，至少一个optional有值、同数组ID唯一。无virtual_path／server名称／raw参数；字段缺失/空fact/错kind/status/extra均invalid，而不是推断成功或空历史。正式 Agent f31b60be／HTTP8.4 239219e5／provenance275f66d8由原18件generator消费，并精确raw逆回完整8.3 be642c再8.2 8a0b；不从dirty生成。完整Public28.10 9e6a8ddd…b3f1328为本次精确父，原4动作接口与私有Message表示不改。
+
 ## Session 私有 Run display（2026-10-28，Root 已核准，候选未发行）
 
 `GET /v1/sessions/{id}/runs/{runId}/display` 为 exact 本人当前会话的只读资源，无 query/body/key，五秒绝对预算／完整JSON≤1MiB／no-store／request-id。新 Public28.10 资源仅返回 `{data:{run_id,display_skills:[{source_ref,name,virtual_path,revision?}],tool_paths:[{activity_id,virtual_path}]}}`；缺项只表示 owner 未提供已证展示，不授予无Skill／无工具结论。字段完整闭集、唯一性、path/name／source绑定和 byte约束以正式 Agent `669fd4e7656f4fdc384eee40ef1fc3155e87d966` 的HTTP8.3（SHA `be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6`）固定机器输入生成并复核，旧Run不请求当前 catalog。当前 Session与Conversation资格及durable submitted Run映射在上游读取前后核验；foreign/missing安全404、坏wire502、依赖或超时503，撤权沿原准入错误。成功不参与mutation receipt或写入。

@@ -143,6 +143,21 @@ export const zRunDisplay = z
     run_id: z.string().min(1),
     display_skills: z.array(zSkillDisplay).max(16),
     tool_paths: z.array(z.object({ activity_id: z.string().min(68), virtual_path: z.string().min(1) }).strict()).max(128),
+    tool_facts: z
+      .array(
+        z
+          .object({
+            activity_id: z.string().min(68),
+            display_detail: z
+              .object({ kind: z.enum(["mcp_tool"]), name: z.string().min(1) })
+              .strict()
+              .optional(),
+            status: z.enum(["failed"]).optional(),
+          })
+          .strict()
+          .refine((value) => value.display_detail !== undefined || value.status !== undefined, "Tool fact requires proved detail or failure"),
+      )
+      .max(128),
   })
   .strict()
 
