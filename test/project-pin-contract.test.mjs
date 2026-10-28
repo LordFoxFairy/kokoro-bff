@@ -94,7 +94,8 @@ test("S10 GitHub discovery changes only512 choices and version, preserving exact
 })
 
 test("Project content Public28.8 adds exactly one Project installation package read over complete Public28.7", async () => {
-  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"),
+  const { restorePublic288CancelledMessageContract } = await import("../scripts/project-pin-public-contract.mjs")
+  const raw = restorePublic288CancelledMessageContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
     spec = load(raw)
   assert.equal(spec.info.version, "28.8.0")
   const parent = restorePublic287ProjectContentContract(raw),

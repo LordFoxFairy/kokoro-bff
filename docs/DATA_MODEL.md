@@ -1,3 +1,7 @@
+## 私有取消终态 read projection（2026-10-28，Root 已核准，候选未发行）
+
+无数据库 Schema／enum／索引／表／数据回填变化，持久 Message.status 继续 pending／streaming／completed／failed。`terminal_status: cancelled` 仅从既有同 owner `bff_skill_usage_run_terminal` 与其保留的 source 身份及 exact dispatch/Message 绑定派生，在原授权 snapshot／分页的 READ ONLY RR 事务中一次有界批量读取；不写旧 Message，不覆盖 failure、不补造 ledger 或完整空正文。ordered_parts 当前只含 text/activity 与 publicSequence，不当终态事实。AG-UI frame/source GC 不影响该持久终态；原 RR 事务保障同一可见提交，不要求 frame 仍存活。durable terminal 缺失不发标志，不具可信绑定不投影；破损或冲突按既有依赖错误边界失败，不能伪造取消。契约见 [API首节](API_CONTRACT.md)。
+
 ## S10 GitHub 目录发现（2026-10-27，Root D0 已批准）
 
 无 Schema、数据库 enum／表／role、receipt 或存储写入变化。preview 仍只读固定 GitHub provider，内存扫描最多512个 SKILL.md 后最终重验当前 Session；实际导入依旧既有 owner 路径，单精选包128文件原限保持。只扩大目录响应候选容量，不创建持久缓存或新 owner；[API边界](API_CONTRACT.md)与[实现边界](TECHNICAL_DESIGN.md)首节为准。

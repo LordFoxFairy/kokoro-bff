@@ -15,7 +15,7 @@ export type MessagePage = {
   next_cursor: string | null
 }
 
-export type PrivateMessageRead =
+export type PrivateMessageRead = (
   | Message
   | (Omit<Message, "content" | "role" | "runId"> & {
       role: "assistant"
@@ -23,6 +23,7 @@ export type PrivateMessageRead =
       content: null
       rendering: OrderedMessageRendering
     })
+) & { terminal_status?: "cancelled" }
 export type PrivateMessagePage = { messages: PrivateMessageRead[]; next_cursor: string | null }
 export type MessageReadLifetime = Readonly<{ signal: AbortSignal; deadlineAt: number }>
 export type PrivateMessageReadContext = MessageReadLifetime & Readonly<{ scope: "all" | "direct" }>

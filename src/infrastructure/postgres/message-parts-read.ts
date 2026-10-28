@@ -1,3 +1,4 @@
+import { withCancelledMessageTerminals } from "./message-terminal-read.js"
 import { Buffer } from "node:buffer"
 import type { Pool, PoolClient, QueryResultRow } from "pg"
 import { EventSchemas } from "@ag-ui/core"
@@ -685,7 +686,7 @@ export async function privateMessagesFromRows(
   selectedRun: string | null,
   latestAssistantId: string | null,
 ): Promise<PrivateMessageRead[]> {
-  const messages = rows.map((row) => privateMessageFromRow(row, scope, head))
+  const messages = await withCancelledMessageTerminals(client, rows.map((row) => privateMessageFromRow(row, scope, head)), scope)
   let index = rows.length - 1
   while (index >= 0 && rows[index]?.role !== "assistant") index -= 1
   const row = rows[index],

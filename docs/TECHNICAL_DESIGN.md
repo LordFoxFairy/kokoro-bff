@@ -1,3 +1,9 @@
+## 私有历史取消终态（2026-10-28，Root 已核准，候选未发行）
+
+持久 MessageStatus 四值与 canonical SQL 不变；`cancel` 仍按既有规则持久为 failed/null failure。仅现授权 snapshot／消息分页的 `ChatMessageRead` 增加可选 `terminal_status: cancelled`：在原 READ ONLY RR／绝对预算内，对本页 failed assistant 通过一次有界 batch 复用本 owner 既有 `bff_skill_usage_run_terminal` durable 终态，严格绑定 tenant、subject、Conversation、Run、dispatch.assistant_message_id 与保留的 source 身份；该表在 AG-UI ingest 同事务由真实 run.completed/cancelled 产生，不要求使用 Skill，也不由 frame retention 回收。现 ordered_parts 只有 text/activity，不保存终态，因此不由空 parts／content／failure 缺省推断；不加表、缓存、状态中心、跨 owner IO 或逐消息查询。保留原取消与读退役，任何本地 Stop／HTTP 控制 ACK 都不替代 owner 终态。
+
+字段缺省沿旧事实，不将 generic failure、unknown 或缺失的 durable terminal proof 改判。App 必须 reader-first，明确取消呈现中性已停止并保正文与未读事实；取消不是正文完整／空的证明。public 普通 ChatMessage、command／share、既有接口与身份规则不变；精确 wire 见 [API](API_CONTRACT.md)，零数据写见 [数据](DATA_MODEL.md)。
+
 ## Immediate Stop 创建窗口（2026-10-28，Root 核准候选）
 
 BFF966ec5的Message/Run durable提交先于后台Agent创建；原cancel直接转发一次，创建窗口404不能证明无已接收Turn。正式Agent fc8b0f09 `ingress.py:284–300` 与 `postgres_run_admission.py:104–119` 证明run_not_found均在control receipt INSERT／Redis publish之前，故原K/body可安全抵达同Run后续真正准入。最小桥仅首次确切404＋本人当前queued exact head建立资格；原绝对upstream预算内最多8次原cancel传输，每次前后fresh同head，queued→active可继续，换Run／terminal／owner不可读／caller abort即停。预算不续、K/body/digest不变，只接受实际Agent严格202，未引入BFF取消receipt、Schema、资金／dispatch写入或本地终态。较深FIFO或超出预算仍真实失败，尚不声称任意queued永久取消；正常与跨owner终态由Root限量后验。

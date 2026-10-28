@@ -43,6 +43,8 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       hiddenCompletion = "",
       indexShift = 0,
       emptySerialization = false,
+      terminalStatus = "completed",
+      noText = false,
     } = {}) {
       const suffix = randomUUID().replaceAll("-", ""),
         tenantId = `parts_t_${suffix}`,
@@ -89,8 +91,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       let events = [
         ...(prelude ? [source("activity.updated", skill)] : []),
         source("run.created", { run_id: runId }),
-        source("message.delta", { segment_id: "public-a", delta: long }),
-        source("message.completed", { segment_id: "public-a", content: long }),
+        ...(noText ? [] : [source("message.delta", { segment_id: "public-a", delta: long }), source("message.completed", { segment_id: "public-a", content: long })]),
         ...(twoSegments
           ? [
               source("activity.updated", { ...activity, status: "running" }),
@@ -99,7 +100,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
               source("message.completed", { segment_id: "public-b", content: "B" }),
             ]
           : []),
-        source("run.completed", { status: "completed" }),
+        source("run.completed", { status: terminalStatus }),
       ]
       if (emptyWire) {
         // Exercise the pinned raw Agent decoder and original source digest producer,
@@ -490,6 +491,55 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       ])
       await assert.rejects(reader.readMessageParts(c.query()), /MESSAGE_PARTS_BUDGET_EXCEEDED/u)
     })
+    // CANCELLED-PRIVATE-READ-BEGIN
+    await suite.test("durable cancelled private reads survive a newer Run and actual old-frame GC without changing Message or Share", async () => {
+      for (const content of ["", "confirmed partial"]) {
+        const c = await create({ terminalStatus: "cancelled", noText: content === "", long: content })
+        const before = await raw(c)
+        assert.equal((await c.snapshot()).messages.find(message => message.messageId === c.messageId).terminal_status, "cancelled")
+        const next = await store.services.chatTurns.submit({ tenantId: c.tenantId, conversationId: c.conversationId, subjectId: c.subjectId, actorId: c.subjectId,
+          requestId: randomUUID(), idempotencyKey: randomUUID(), content: "next fixture turn" })
+        const claim = (await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: randomUUID(), limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }))[0]
+        assert.equal(claim.runId, next.run_id)
+        assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+        let seq = Number((await pool.query("SELECT source_high_watermark FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",[c.tenantId,c.conversationId])).rows[0].source_high_watermark)
+        const events = [["run.created",{run_id:next.run_id}],["run.completed",{status:"completed"}]].map(([kind,payload]) => {
+          seq++; const id=randomUUID(), occurredAt=new Date(seq*1000).toISOString()
+          return { sourceRunId:next.run_id,sourceEventId:id,sourceSequence:seq,sourceOccurredAt:occurredAt,
+            sourcePayload:{chat_event_id:id,session_id:c.conversationId,run_id:next.run_id,seq,created_at:seq*1000,payload},
+            event:{event_id:id,seq,session_id:c.conversationId,run_id:next.run_id,kind,timestamp:occurredAt,payload} }
+        })
+        await store.agUi.ingest(c.tenantId,c.conversationId,events)
+        await pool.query("UPDATE bff_agui_event SET recorded_at=CURRENT_TIMESTAMP(3)-INTERVAL '2 days' WHERE tenant_id=$1 AND session_id=$2 AND event_payload #>> '{metadata,kokoro,run_id}'=$3",[c.tenantId,c.conversationId,c.runId])
+        const collected=await store.agUiConsumers.collectGarbage({now:new Date().toISOString(),retentionMs:86400000,tombstoneRetentionMs:86400000,batchSize:1000})
+        assert.ok(collected.framesDeleted>0)
+        assert.equal(Number((await pool.query("SELECT count(*) AS n FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 AND event_payload #>> '{metadata,kokoro,run_id}'=$3",[c.tenantId,c.conversationId,c.runId])).rows[0].n),0)
+        assert.equal((await c.snapshot()).messages.find(message=>message.messageId===c.messageId).terminal_status,"cancelled")
+        const page=await reader.listMessages(c.tenantId,c.subjectId,c.conversationId,2,null,undefined,lifetime())
+        assert.equal(page.messages.find(message=>message.messageId===c.messageId).terminal_status,"cancelled")
+        assert.ok(page.next_cursor)
+        assert.equal((await reader.listMessages(c.tenantId,c.subjectId,c.conversationId,2,page.next_cursor,undefined,lifetime())).messages.some(message=>message.terminal_status!==undefined),false)
+        for (const [tenant,subject,session] of [["wrong-tenant",c.subjectId,c.conversationId],[c.tenantId,"wrong-owner",c.conversationId],[c.tenantId,c.subjectId,"wrong-session"]]) {
+          assert.equal(await reader.readSnapshot(tenant,subject,session,undefined,lifetime()),null)
+        }
+        for (const column of ["session_id","run_id"]) {
+          await pool.query(`UPDATE bff_skill_usage_run_terminal SET ${column}=$3 WHERE tenant_id=$1 AND run_id=$2`,[c.tenantId,c.runId,"wrong-terminal"])
+          assert.equal(Object.hasOwn((await c.snapshot()).messages.find(message=>message.messageId===c.messageId),"terminal_status"),false)
+          await pool.query(`UPDATE bff_skill_usage_run_terminal SET ${column}=$3 WHERE tenant_id=$1 AND run_id=$2`,[c.tenantId,column==="run_id"?"wrong-terminal":c.runId,column==="run_id"?c.runId:c.conversationId])
+        }
+        await pool.query("UPDATE bff_skill_usage_run_terminal SET status='failed' WHERE tenant_id=$1 AND run_id=$2",[c.tenantId,c.runId])
+        assert.equal(Object.hasOwn((await c.snapshot()).messages.find(message=>message.messageId===c.messageId),"terminal_status"),false)
+        await pool.query("DELETE FROM bff_skill_usage_run_terminal WHERE tenant_id=$1 AND run_id=$2",[c.tenantId,c.runId])
+        assert.equal(Object.hasOwn((await c.snapshot()).messages.find(message=>message.messageId===c.messageId),"terminal_status"),false)
+        assert.deepEqual(await raw(c),before)
+        const aborted=new AbortController();aborted.abort()
+        await assert.rejects(c.snapshot({...lifetime(),signal:aborted.signal}),/MESSAGE_PARTS_UNAVAILABLE/u)
+        const share=await reader.createShare(c.tenantId,c.subjectId,c.conversationId)
+        const shared=await store.services.publicShares.listMessages(share.shareId,c.tenantId,c.conversationId,100)
+        assert.equal(shared.messages.some(message=>Object.hasOwn(message,"terminal_status")),false)
+      }
+    })
+    // CANCELLED-PRIVATE-READ-END
   } finally {
     try {
       if (store) await store.close()

@@ -44,7 +44,7 @@ export type OrderedMessageRendering = {
   parts_cursor: string
 }
 
-export type ChatMessageRead =
+export type ChatMessageRead = (
   | ChatMessage
   | (Omit<ChatMessage, "role" | "content" | "run_id"> & {
       role: "assistant"
@@ -52,6 +52,7 @@ export type ChatMessageRead =
       run_id: string
       rendering: OrderedMessageRendering
     })
+) & { terminal_status?: "cancelled" }
 
 export type MessageTextPartSlice = {
   kind: "text"

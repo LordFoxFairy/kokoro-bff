@@ -1,3 +1,9 @@
+## Private ChatMessageRead 取消终态（2026-10-28，Root 已核准，候选未发行）
+
+Public28.9 只扩现 private snapshot／messages page 的 `ChatMessageRead`：可选 `terminal_status: cancelled`，只允许 exact failed assistant、具 run_id、无 failure profile，并有本 owner 既有 durable run terminal 的真实 cancelled 证明。inline 与 ordered read 均可发布；原 public ChatMessage、command／share schema 与全体原请求不变。非 cancelled 值／错误 role/status／冲突 failure／extra field 都不属于该闭集；缺省不是 completed／cancelled，不用空内容或 null failure 猜测。
+
+消费者先接受可选字段，缺省保持旧语义，再启新 producer；旧 reader 遇新增字段可能严格拒绝，故不能倒序部署。无新 endpoint、分页、重试／取消协议或默认写行为。App 以同 exact Run 的真实 RUN_FINISHED 或新字段显示中性停止，不把未读消息冒为空或完整，不将本地 Stop 意图升级为 owner 事实。详见 [技术首节](TECHNICAL_DESIGN.md)。
+
 ## Immediate Stop startup404恢复（2026-10-28，候选）
 
 原controlRun wire／状态／权限与Public28.8不变。仅run.cancel的Agent确切404/run_not_found且fresh本人queued exact Run可在单一原预算内有界等待／原K与body重送；首发非queued／其他404不扩展，已取得资格的同Run queued→active不是新意图。fresh head退休或不可读则返回真实原结果，不以等待产生202或cancelled；202仍为原Agent真实命令receipt，不是取消终态。超窗／深FIFO不补假ACK，normal终态另验。

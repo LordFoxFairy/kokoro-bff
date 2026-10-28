@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.8.0
+  version: 28.9.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -21536,6 +21536,7 @@ components:
       oneOf:
         - $ref: '#/components/schemas/ChatMessage'
         - $ref: '#/components/schemas/OrderedAssistantMessageRead'
+        - $ref: '#/components/schemas/CancelledAssistantMessageRead'
     OrderedAssistantMessageRead:
       type: object
       required: [message_id, role, content, status, created_at, run_id, rendering]
@@ -21552,6 +21553,7 @@ components:
           const: assistant
         content: { type: 'null', description: Body is not inlined; read the exact ordered Message parts. }
         rendering: { $ref: '#/components/schemas/OrderedMessageRendering' }
+        terminal_status: { type: string, const: cancelled }
         status:
           type: string
           enum: [pending, streaming, completed, failed]
@@ -21594,6 +21596,26 @@ components:
               role: { const: assistant }
               status: { const: failed }
               run_id: { type: string, minLength: 1 }
+        - if:
+            required: [terminal_status]
+          then:
+            properties:
+              status: { const: failed }
+            not: { required: [failure] }
+    CancelledAssistantMessageRead:
+      description: Private inline assistant read with a proven durable cancellation. Does not assert empty or fully read content.
+      type: object
+      additionalProperties: false
+      required: [message_id, role, content, status, created_at, run_id, terminal_status]
+      properties:
+        message_id: { $ref: '#/components/schemas/ChatMessage/properties/message_id' }
+        role: { type: string, const: assistant }
+        content: { $ref: '#/components/schemas/ChatMessage/properties/content' }
+        status: { type: string, const: failed }
+        created_at: { $ref: '#/components/schemas/ChatMessage/properties/created_at' }
+        run_id: { type: string, minLength: 1 }
+        selected_skill_source_refs: { $ref: '#/components/schemas/ChatMessage/properties/selected_skill_source_refs' }
+        terminal_status: { type: string, const: cancelled }
     OrderedMessageRendering:
       type: object
       additionalProperties: false
