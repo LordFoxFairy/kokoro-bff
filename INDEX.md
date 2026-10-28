@@ -1,3 +1,7 @@
+## Immediate Stop startup bridge（2026-10-28，候选）
+
+`routes/agent.ts`仅在真实Agent404/run_not_found且当前本人durable queued head精确同Run时，有界等待创建并以原K/body走原cancel路径；每次fresh同head、原绝对budget/abort，queued→active保原资格，退休即停。只返回实际strict Agent202，不造本地cancel终态；深FIFO超窗仍开放。具名回归在原control-adapter测试，正常有限cancel由Root后验。
+
 ## Opaque Skill byte contract（2026-10-28，候选）
 
 原 `skill-download.policy.ts`／generator／`contract/skill-download-policy.json` 整数3补原GET handle的独立ZIP/framing/closed errors，未改route或原4 POST。两近邻policy/HTTP测试验证完整policy2逆回、metadata不可误用、future拒绝和原FailedPrecondition503；正常下载与正式消费者配对由Root后继，非本描述切片完成声明。

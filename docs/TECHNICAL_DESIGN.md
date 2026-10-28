@@ -1,3 +1,7 @@
+## Immediate Stop 创建窗口（2026-10-28，Root 核准候选）
+
+BFF966ec5的Message/Run durable提交先于后台Agent创建；原cancel直接转发一次，创建窗口404不能证明无已接收Turn。正式Agent fc8b0f09 `ingress.py:284–300` 与 `postgres_run_admission.py:104–119` 证明run_not_found均在control receipt INSERT／Redis publish之前，故原K/body可安全抵达同Run后续真正准入。最小桥仅首次确切404＋本人当前queued exact head建立资格；原绝对upstream预算内最多8次原cancel传输，每次前后fresh同head，queued→active可继续，换Run／terminal／owner不可读／caller abort即停。预算不续、K/body/digest不变，只接受实际Agent严格202，未引入BFF取消receipt、Schema、资金／dispatch写入或本地终态。较深FIFO或超出预算仍真实失败，尚不声称任意queued永久取消；正常与跨owner终态由Root限量后验。
+
 ## Opaque Skill byte policy3（2026-10-28，Root 核准，候选未发行）
 
 本片只补齐 BFF `364f80cab855a4358eab956b7e3e3a4b5bae647b` 已存在的 `GET /skill-downloads/{handle}` 机器描述，不修运行行为。唯一 code-first 源仍 `src/http/routes/skill-download.policy.ts`，原 generator 直接正规产出同一 `contract/skill-download-policy.json`；整数3新增独立 `byte_operation`，原4个 metadata POST 的完整对象与 Public28.8 全文保持。无新 route／owner／Schema／权限／validator runtime／第二错误中心。API 表示与负事实见[API首节](API_CONTRACT.md)。

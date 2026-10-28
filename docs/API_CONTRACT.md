@@ -1,3 +1,7 @@
+## Immediate Stop startup404恢复（2026-10-28，候选）
+
+原controlRun wire／状态／权限与Public28.8不变。仅run.cancel的Agent确切404/run_not_found且fresh本人queued exact Run可在单一原预算内有界等待／原K与body重送；首发非queued／其他404不扩展，已取得资格的同Run queued→active不是新意图。fresh head退休或不可读则返回真实原结果，不以等待产生202或cancelled；202仍为原Agent真实命令receipt，不是取消终态。超窗／深FIFO不补假ACK，normal终态另验。
+
 ## Opaque Skill byte operation（2026-10-28，policy3候选）
 
 `contract/skill-download-policy.json` 整数3只增 `byte_operation`，描述原 `GET /skill-downloads/{handle}`；原4个POST metadata完整值／字节与Public28.8不变。原policy2全文 SHA256 `454d0980e647ef7a7679bb8e986350c3aa5933092ed96df3661bb48e1de1584f` 由严格删除唯一新增operation并恢复version2逆回，无metadata/share错误union借用。生成入口／信任边界见[技术首节](TECHNICAL_DESIGN.md)。
