@@ -689,3 +689,51 @@ it("Agent8 safe tool classes remain exact when the existing projector prepares c
     assert.equal(calls[0].at(-1), false, "tool classification must not gain the Skill pre-START exemption")
   }
 })
+
+describe("AG-UI idle eligibility", () => {
+  for (const exhausted of [false, true]) {
+    it(`allows idle settlement only for a source snapshot exhausted=${exhausted}`, async () => {
+      const progress = []
+      const consumers = {
+        seedConsumers: async () => 0,
+        claimConsumers: async () => [lease()],
+        renewConsumerLease: async () => true,
+        markConsumerProgress: async (...args) => {
+          progress.push(args)
+          return true
+        },
+        markConsumerRetryable: async () => assert.fail("no source error"),
+        markConsumerBlocked: async () => assert.fail("no source error"),
+        releaseConsumer: async () => true,
+        collectGarbage: async () => ({
+          streamsScanned: 0,
+          framesDeleted: 0,
+          tombstonesInserted: 0,
+          tombstonesDeleted: 0,
+        }),
+      }
+      const now = "2026-09-02T12:00:00.000Z"
+      const runner = new AgUiProjectorRunner(
+        { ingest: async () => ({ sourceHighWatermark: 1, insertedFrames: 0 }) },
+        consumers,
+        {
+          read: async () => ({
+            events: [source(1)],
+            nextSequence: 1,
+            watermark: exhausted ? 1 : 2,
+            exhausted,
+          }),
+        },
+        {
+          workerId: "idle_gate",
+          maxPagesPerConsumer: 1,
+          now: () => new Date(now),
+        },
+      )
+      assert.equal((await runner.runOnce()).consumersSucceeded, 1)
+      assert.equal(progress.length, 1)
+      assert.equal(progress[0][3] ?? false, exhausted)
+      if (!exhausted) assert.equal(progress[0][1], now, "unread pages remain immediately eligible")
+    })
+  }
+})

@@ -1,3 +1,9 @@
+## 2026-10-28 终态 source consumer 闲置轮询（本轮局部修复）
+
+Owner仍为BFF既有durable AG-UI projector。仅在Agent source page明确exhausted后，consumer结算事务按原Conversation→stream锁和lease/fence确认：没有expected Run、latest Run等于非空terminal Run、没有未终态dispatch，才将下一次轮询推迟到至少30秒。consumer仍active，晚到Skill等bookkeeping仍按原cursor摄取，在后续闲置轮询读取（30秒是默认间隔，不是硬延迟上限）；不以终态推断source永远封闭。未读尽、在途/等待Run、未知终态、失败重试保持原节奏。
+
+新任务复用原registration的立即next_poll及换head fence，不新增唤醒通道。新提交先于结算时，原锁序/未终态dispatch检查避免延迟；带新expected Run的dispatch注册先于结算时旧lease失效；仅pending提交不fence，靠同事务outbox检查保持原节奏；新注册后于结算时将next_poll提前。删除项为终态空闲会话每秒请求的行为，无Schema、公开API/事件、凭据或依赖变化。验证需真实隔离PG证明连续空闲轮无读取、晚到事件保留、新任务即时可领取及旧fence拒绝；停留于代码/测试时不宣称正常生效。
+
 ## 整轮过程与最终答复边界（2026-10-28，reader-first，未激活）
 
 现有 UI 将相邻 activity 组当整轮过程，缺少独立最终答复身份。沿既有 Agent HTTP8.8 的成功终态 `final_message_id` 消费，并映射为 BFF `final_segment_id`；它引用既有公开正文段，不是新的消息或网络协议。Agent8.8 固定 b802f9b778fd686e80774adcdd72758325fb0b9b，仅正常单 Agent 已验证；Swarm 已知独立失败未验收。

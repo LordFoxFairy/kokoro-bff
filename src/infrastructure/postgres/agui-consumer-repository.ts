@@ -264,7 +264,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
     }
   }
 
-  public async markConsumerProgress(lease: AgUiConsumerLease, nextPollAt: string, now: string): Promise<boolean> {
+  public async markConsumerProgress(lease: AgUiConsumerLease, nextPollAt: string, now: string, sourceExhausted = false): Promise<boolean> {
     return this.settleConsumer(lease, {
       state: "active",
       nextPollAt,
@@ -272,6 +272,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
       errorAt: null,
       now,
       resetFailures: true,
+      sourceExhausted,
     })
   }
 
@@ -337,6 +338,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
       errorAt: string | null
       now: string
       resetFailures: boolean
+      sourceExhausted?: boolean
     },
   ): Promise<boolean> {
     const now = instant(values.now, "AG-UI poll completion time")
@@ -357,10 +359,22 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
       const clock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
       const dbNow = clock.rows[0]?.db_now
       if (dbNow === undefined) throw new Error("AG-UI database clock unavailable")
+      // Exhausted is a snapshot boundary, not a permanently sealed source. Keep
+      // idle terminals polling for late bookkeeping. Evaluate current head and
+      // FIFO under the existing parent/stream locks so a new submit cannot be
+      // delayed by a stale lease; registration already wakes this row immediately.
       const result = await client.query(
         `UPDATE bff_agui_stream
             SET consumer_state=$7,
-                consumer_next_poll_at=$11::timestamptz + ($8::double precision * INTERVAL '1 millisecond'),
+                consumer_next_poll_at=$11::timestamptz + (CASE
+                  WHEN $12::boolean AND expected_run_id IS NULL
+                    AND terminal_run_id IS NOT NULL AND latest_run_id=terminal_run_id
+                    AND NOT EXISTS (SELECT 1 FROM bff_agent_dispatch_outbox AS dispatch
+                      WHERE dispatch.tenant_id=bff_agui_stream.tenant_id
+                        AND dispatch.conversation_id=bff_agui_stream.session_id
+                        AND dispatch.status IN ('pending','leased','retryable','admitted'))
+                  THEN GREATEST($8::double precision, 30000)
+                  ELSE $8::double precision END * INTERVAL '1 millisecond'),
                 consumer_last_error_code=$9,
                 consumer_last_error_at=CASE WHEN $9::text IS NULL THEN NULL ELSE $11::timestamptz END,
                 consumer_last_polled_at=$11::timestamptz,
@@ -382,6 +396,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
           values.errorCode,
           values.resetFailures,
           dbNow,
+          values.sourceExhausted ?? false,
         ],
       )
       await client.query("COMMIT")

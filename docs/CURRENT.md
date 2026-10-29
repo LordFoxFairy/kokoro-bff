@@ -1,3 +1,13 @@
+## 2026-10-28 终态会话后台轮询降频（候选，正常效果待验证）
+
+正常只读快照20个active stream全部符合终态闲置，未终态dispatch为0；随后独立60.010秒日志窗960次business GET200，request reference均有原projector前缀。前一采样器误按JSON解析键值日志、得到空分类；保留该无效分类窗口，不用它作请求归因。
+
+在原BFF consumer结算事务修复：只有明确exhausted且当前无expected、latest等于非空terminal、无pending/leased/retryable/admitted dispatch才使用至少30秒闲置间隔。不是停消费，不改cursor/Schema/公开协议；晚到bookkeeping继续读，新提交沿原registration立即提前due，带expected的dispatch注册仍fence旧lease。30秒为默认间隔，不是读取延迟硬上限。
+
+隔离PG先复现旧0.998秒轮询，再验闲置不重复领取、late Skill一次入账、pending提交唤醒/无expected不降频、dispatch注册后旧lease拒绝、未读尽不闲置。独审未见确定阻断；验证为顺序不同赢家与状态，不冒称双连接barrier并发。单元72通过；追加真实PG5项通过，所有临时数据库已删除。首次扩大命令缺tsx导致2模块解析失败；修正到仓库入口后通过。首次筛选PG缺schema且旧用例留active行干扰，隔离runner建schema、新用例沿原suite隔离表后通过，未放宽断言。格式门同时修正邻近既有Agent8.7测试排版（语义未改、真实PG重验）；错误默认格式化造成的其它源码改动已完整去除。
+
+本片仅降低后台终态空转，不代表用户界面所有请求达到100ms，也不关闭旧MCP展示缺口。最终停写默认测试2289通过／3条原资源跳过，format/lint/typecheck/build通过，contract1325及architecture36通过；925非文档输入验同。正常切换及请求量仍待实测。
+
 ## 2026-10-28 正常整轮配对验证（单任务切片）
 
 正常组合 App e7b93c7e／BFF15cc9e1／Agent2e61b85已加载，BFF具名final nullable列演进已确认current；无历史回填。真实新只读任务正常完成，Agent final与BFF parts逐字/身份/顺序一致，正常网页收展及硬刷新保持最终答复独立。2模型attempt sealed、unknown0，usage仍partial。旧MCP历史、Canvas回焦、正常Swarm及整体产品验收仍OPEN，不能将本片成功等同整体完成。原始截图、精确运行前像和回退配置在Root ignored whole-turn-normal-20261028；唯一Root计划记载完整实际范围。无合并或Root版本提升。

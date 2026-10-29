@@ -144,7 +144,7 @@ export interface AgUiProjectionConsumerRepository {
   seedConsumers(limit: number): Promise<number>
   claimConsumers(input: AgUiConsumerClaimInput): Promise<AgUiConsumerLease[]>
   renewConsumerLease(lease: AgUiConsumerLease, now: string, leaseUntil: string): Promise<boolean>
-  markConsumerProgress(lease: AgUiConsumerLease, nextPollAt: string, now: string): Promise<boolean>
+  markConsumerProgress(lease: AgUiConsumerLease, nextPollAt: string, now: string, sourceExhausted?: boolean): Promise<boolean>
   markConsumerRetryable(lease: AgUiConsumerLease, nextPollAt: string, errorCode: string, now: string): Promise<boolean>
   markConsumerBlocked(lease: AgUiConsumerLease, errorCode: string, now: string): Promise<boolean>
   releaseConsumer(lease: AgUiConsumerLease, now: string): Promise<boolean>

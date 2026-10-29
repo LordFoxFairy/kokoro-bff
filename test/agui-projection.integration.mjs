@@ -6174,107 +6174,282 @@ integrationTest(
   },
 )
 
-integrationTest("Agent8.7 title and detail are durable across reopen and identity drift rolls back the whole source transaction", { timeout: 30000 }, async (context) => {
-  const c = await r57ProjectionContext(context)
-  const { ChatApplicationService } = await import("../dist/application/chat-service.js")
-  const running = {
-    activity: "tool",
-    activity_id: `act_${"a".repeat(64)}`,
-    segment_id: `seg_${"b".repeat(64)}`,
-    status: "running",
-    display_code: "tool.file.read",
-    display_detail: { kind: "file", name: "résumé😀.md" },
-    action_title: "读取项目运行时配置",
-  }
-  const { display_detail, action_title, ...absent } = { ...running, activity_id: `act_${"c".repeat(64)}` }
-  await c.ingest([c.source(2, running, "activity.updated"), c.source(3, absent, "activity.updated")])
-  const before = await c.fingerprint()
-  const { display_detail: ignored, ...removed } = running
-  const { action_title: ignoredTitle, ...withoutTitle } = running
-  for (const changed of [
-    removed,
-    withoutTitle,
-    { ...running, action_title: "另一个动作" },
-    { ...absent, action_title },
-    { ...running, display_code: "tool.file.write" },
-    { ...running, segment_id: `seg_${"d".repeat(64)}` },
-    { ...running, display_detail: { kind: "file", name: "other.md" } },
-    { ...absent, display_detail },
-  ]) {
-    // A valid source prefix must not survive a later identity conflict in this batch.
-    await assert.rejects(
-      c.ingest([
-        c.source(4, { segment_id: "public-detail", delta: "rolled back" }, "message.delta"),
-        c.source(5, { ...changed, status: "completed" }, "activity.updated"),
-      ]),
-      /ACTIVITY_IDENTITY/u,
+integrationTest(
+  "Agent8.7 title and detail are durable across reopen and identity drift rolls back the whole source transaction",
+  { timeout: 30000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context)
+    const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+    const running = {
+      activity: "tool",
+      activity_id: `act_${"a".repeat(64)}`,
+      segment_id: `seg_${"b".repeat(64)}`,
+      status: "running",
+      display_code: "tool.file.read",
+      display_detail: { kind: "file", name: "résumé😀.md" },
+      action_title: "读取项目运行时配置",
+    }
+    const { display_detail, action_title, ...absent } = { ...running, activity_id: `act_${"c".repeat(64)}` }
+    await c.ingest([c.source(2, running, "activity.updated"), c.source(3, absent, "activity.updated")])
+    const before = await c.fingerprint()
+    const { display_detail: ignored, ...removed } = running
+    const { action_title: ignoredTitle, ...withoutTitle } = running
+    for (const changed of [
+      removed,
+      withoutTitle,
+      { ...running, action_title: "另一个动作" },
+      { ...absent, action_title },
+      { ...running, display_code: "tool.file.write" },
+      { ...running, segment_id: `seg_${"d".repeat(64)}` },
+      { ...running, display_detail: { kind: "file", name: "other.md" } },
+      { ...absent, display_detail },
+    ]) {
+      // A valid source prefix must not survive a later identity conflict in this batch.
+      await assert.rejects(
+        c.ingest([
+          c.source(4, { segment_id: "public-detail", delta: "rolled back" }, "message.delta"),
+          c.source(5, { ...changed, status: "completed" }, "activity.updated"),
+        ]),
+        /ACTIVITY_IDENTITY/u,
+      )
+      assert.deepEqual(await c.fingerprint(), before)
+    }
+    // Legacy Messages have no ordered document: the compact tuple must still reject drift.
+    const messageBefore = before.bff_message.find((message) => message.role === "assistant")
+    await c.pool.query(
+      "UPDATE bff_message SET ordered_parts=NULL,parts_format_version=NULL,parts_public_sequence=NULL WHERE tenant_id=$1 AND conversation_id=$2 AND message_id=$3",
+      [c.tenantId, c.sessionId, messageBefore.message_id],
     )
-    assert.deepEqual(await c.fingerprint(), before)
-  }
-  // Legacy Messages have no ordered document: the compact tuple must still reject drift.
-  const messageBefore = before.bff_message.find((message) => message.role === "assistant")
-  await c.pool.query(
-    "UPDATE bff_message SET ordered_parts=NULL,parts_format_version=NULL,parts_public_sequence=NULL WHERE tenant_id=$1 AND conversation_id=$2 AND message_id=$3",
-    [c.tenantId, c.sessionId, messageBefore.message_id],
-  )
-  const legacyBefore = await c.fingerprint()
-  await assert.rejects(c.ingest([c.source(4, { ...running, display_code: "tool.file.write" }, "activity.updated")]), /ACTIVITY_IDENTITY/u)
-  assert.deepEqual(await c.fingerprint(), legacyBefore)
-  await c.pool.query(
-    "UPDATE bff_message SET ordered_parts=$4::jsonb,parts_format_version=$5,parts_public_sequence=$6 WHERE tenant_id=$1 AND conversation_id=$2 AND message_id=$3",
-    [
+    const legacyBefore = await c.fingerprint()
+    await assert.rejects(c.ingest([c.source(4, { ...running, display_code: "tool.file.write" }, "activity.updated")]), /ACTIVITY_IDENTITY/u)
+    assert.deepEqual(await c.fingerprint(), legacyBefore)
+    await c.pool.query(
+      "UPDATE bff_message SET ordered_parts=$4::jsonb,parts_format_version=$5,parts_public_sequence=$6 WHERE tenant_id=$1 AND conversation_id=$2 AND message_id=$3",
+      [
+        c.tenantId,
+        c.sessionId,
+        messageBefore.message_id,
+        JSON.stringify(messageBefore.ordered_parts),
+        messageBefore.parts_format_version,
+        messageBefore.parts_public_sequence,
+      ],
+    )
+    // Independently exercise the fold guard: a divergent but well-formed compact tuple is not authority to replace the confirmed part.
+    const divergent = { ...running, display_detail: { kind: "file", name: "other.md" } }
+    await c.pool.query("UPDATE bff_agui_run_activity SET safe_payload=$5::jsonb WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3 AND activity_id=$4", [
       c.tenantId,
       c.sessionId,
-      messageBefore.message_id,
-      JSON.stringify(messageBefore.ordered_parts),
-      messageBefore.parts_format_version,
-      messageBefore.parts_public_sequence,
-    ],
-  )
-  // Independently exercise the fold guard: a divergent but well-formed compact tuple is not authority to replace the confirmed part.
-  const divergent = { ...running, display_detail: { kind: "file", name: "other.md" } }
-  await c.pool.query("UPDATE bff_agui_run_activity SET safe_payload=$5::jsonb WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3 AND activity_id=$4", [
-    c.tenantId,
-    c.sessionId,
-    c.runId,
-    running.activity_id,
-    JSON.stringify(divergent),
-  ])
-  const foldBefore = await c.fingerprint()
-  await assert.rejects(
-    c.ingest([
-      c.source(4, { segment_id: "public-detail", delta: "rolled back by fold" }, "message.delta"),
-      c.source(5, { ...divergent, status: "completed" }, "activity.updated"),
-    ]),
-    /AGUI_MESSAGE_PARTS_INVALID/u,
-  )
-  assert.deepEqual(await c.fingerprint(), foldBefore)
-  await c.pool.query("UPDATE bff_agui_run_activity SET safe_payload=$5::jsonb WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3 AND activity_id=$4", [
-    c.tenantId,
-    c.sessionId,
-    c.runId,
-    running.activity_id,
-    JSON.stringify(running),
-  ])
-  const completed = { ...running, status: "completed" },
-    historical = { ...absent, status: "failed" }
-  const batch = [c.source(4, completed, "activity.updated"), c.source(5, historical, "activity.updated"), c.source(6, { status: "completed" }, "run.completed")]
-  await c.ingest(batch)
-  const committed = await c.fingerprint()
-  await c.ingest(batch)
-  assert.deepEqual(await c.fingerprint(), committed)
-  const reopened = new ChatApplicationService(new PostgresChatRepository({ pool: c.pool }))
-  assert.equal(await reopened.snapshot(c.tenantId, "other_subject", c.sessionId, undefined), null)
-  const snapshot = await reopened.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
-  assert.deepEqual(snapshot.execution_process.activities, [completed, historical])
-  const assistant = snapshot.messages.find((message) => message.role === "assistant" && message.run_id === c.runId)
-  const page = await reopened.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, assistant))
-  const parts = page.items.filter((item) => item.kind === "activity")
-  assert.deepEqual(
-    parts.map((part) => part.activity),
-    [completed, historical],
-  )
-  assert.equal(Object.hasOwn(parts[1].activity, "display_detail"), false)
-  assert.equal(Object.hasOwn(parts[1].activity, "action_title"), false)
-  assert.ok(parts.every((part) => BigInt(part.first_sequence) < BigInt(part.latest_sequence)))
+      c.runId,
+      running.activity_id,
+      JSON.stringify(divergent),
+    ])
+    const foldBefore = await c.fingerprint()
+    await assert.rejects(
+      c.ingest([
+        c.source(4, { segment_id: "public-detail", delta: "rolled back by fold" }, "message.delta"),
+        c.source(5, { ...divergent, status: "completed" }, "activity.updated"),
+      ]),
+      /AGUI_MESSAGE_PARTS_INVALID/u,
+    )
+    assert.deepEqual(await c.fingerprint(), foldBefore)
+    await c.pool.query("UPDATE bff_agui_run_activity SET safe_payload=$5::jsonb WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3 AND activity_id=$4", [
+      c.tenantId,
+      c.sessionId,
+      c.runId,
+      running.activity_id,
+      JSON.stringify(running),
+    ])
+    const completed = { ...running, status: "completed" },
+      historical = { ...absent, status: "failed" }
+    const batch = [
+      c.source(4, completed, "activity.updated"),
+      c.source(5, historical, "activity.updated"),
+      c.source(6, { status: "completed" }, "run.completed"),
+    ]
+    await c.ingest(batch)
+    const committed = await c.fingerprint()
+    await c.ingest(batch)
+    assert.deepEqual(await c.fingerprint(), committed)
+    const reopened = new ChatApplicationService(new PostgresChatRepository({ pool: c.pool }))
+    assert.equal(await reopened.snapshot(c.tenantId, "other_subject", c.sessionId, undefined), null)
+    const snapshot = await reopened.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+    assert.deepEqual(snapshot.execution_process.activities, [completed, historical])
+    const assistant = snapshot.messages.find((message) => message.role === "assistant" && message.run_id === c.runId)
+    const page = await reopened.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, assistant))
+    const parts = page.items.filter((item) => item.kind === "activity")
+    assert.deepEqual(
+      parts.map((part) => part.activity),
+      [completed, historical],
+    )
+    assert.equal(Object.hasOwn(parts[1].activity, "display_detail"), false)
+    assert.equal(Object.hasOwn(parts[1].activity, "action_title"), false)
+    assert.ok(parts.every((part) => BigInt(part.first_sequence) < BigInt(part.latest_sequence)))
+  },
+)
+
+integrationTest("exhausted terminal consumers idle without losing late facts or delaying the next Run", { timeout: 30_000 }, async () => {
+  const { randomUUID } = await import("node:crypto")
+  const pool = new Pool({
+    connectionString: postgresUrl,
+    options: "-c search_path=kokoro_bff -c timezone=UTC",
+  })
+  let store = null
+  const suffix = randomUUID().replaceAll("-", "")
+  const tenantId = `tenant_idle_${suffix}`,
+    sessionId = `session_idle_${suffix}`,
+    ownerId = `owner_idle_${suffix}`
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const runId = await submitAndAdmit(store, pool, {
+      tenantId,
+      sessionId,
+      ownerId,
+      suffix,
+    })
+    await store.agUi.ingest(tenantId, sessionId, [
+      agentSource({
+        id: `idle_terminal_${suffix}`,
+        sequence: 1,
+        kind: "run.completed",
+        payload: { status: "completed" },
+        sessionId,
+        runId,
+      }),
+    ])
+    const initialNow = new Date()
+    const [undrained] = await store.agUiConsumers.claimConsumers({
+      workerId: `undrained_${suffix}`,
+      now: initialNow.toISOString(),
+      leaseUntil: new Date(initialNow.getTime() + 60_000).toISOString(),
+      limit: 1,
+    })
+    assert.ok(undrained)
+    assert.equal(await store.agUiConsumers.markConsumerProgress(undrained, initialNow.toISOString(), initialNow.toISOString(), false), true)
+    const undrainedDelay = (
+      await pool.query(
+        "SELECT EXTRACT(EPOCH FROM (consumer_next_poll_at-clock_timestamp())) AS delay FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",
+        [tenantId, sessionId],
+      )
+    ).rows[0].delay
+    assert.ok(Number(undrainedDelay) <= 0, "a terminal marker alone does not imply source exhaustion")
+    let reads = 0
+    let late = null
+    const runner = new AgUiProjectorRunner(
+      store.agUi,
+      store.agUiConsumers,
+      {
+        read: async (_scope, after) => {
+          reads += 1
+          const events = late && after < 2 ? [late] : []
+          const watermark = late ? 2 : 1
+          return {
+            events,
+            nextSequence: watermark,
+            watermark,
+            exhausted: true,
+          }
+        },
+      },
+      { workerId: `idle_${suffix}`, maxConsumersPerCycle: 1 },
+    )
+    assert.equal((await runner.runOnce()).consumersSucceeded, 1)
+    const idle = (
+      await pool.query(
+        "SELECT consumer_state, EXTRACT(EPOCH FROM (consumer_next_poll_at-clock_timestamp())) AS delay FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",
+        [tenantId, sessionId],
+      )
+    ).rows[0]
+    assert.equal(idle.consumer_state, "active")
+    assert.ok(Number(idle.delay) > 25 && Number(idle.delay) <= 30, `idle delay was ${idle.delay}`)
+    assert.equal((await runner.runOnce()).consumersClaimed, 0)
+    assert.equal(reads, 1)
+    // Move only this fixture's due time forward instead of waiting 30 seconds.
+    await pool.query("UPDATE bff_agui_stream SET consumer_next_poll_at=clock_timestamp() WHERE tenant_id=$1 AND session_id=$2", [tenantId, sessionId])
+    late = agentSource({
+      id: `idle_ready_${suffix}`,
+      sequence: 2,
+      kind: "activity.updated",
+      payload: {
+        activity: "skill",
+        activity_id: `activity_${suffix}`,
+        preflight_id: `preflight_${suffix}`,
+        source_refs: ["skill:revision"],
+        phase: "ready",
+      },
+      sessionId,
+      runId,
+    })
+    assert.equal((await runner.runOnce()).sourceEvents, 1)
+    assert.equal(reads, 2)
+    assert.equal(
+      (
+        await pool.query("SELECT count(*)::int AS count FROM bff_skill_usage_observation WHERE tenant_id=$1 AND run_id=$2 AND counted_at IS NOT NULL", [
+          tenantId,
+          runId,
+        ])
+      ).rows[0].count,
+      1,
+    )
+    const nextRun = await submitAndAdmit(store, pool, {
+      tenantId,
+      sessionId,
+      ownerId,
+      suffix: `${suffix}_next`,
+      dispatchState: "pending",
+    })
+    const now = new Date()
+    const claimNext = () =>
+      store.agUiConsumers.claimConsumers({
+        workerId: `next_${suffix}`,
+        now: now.toISOString(),
+        leaseUntil: new Date(now.getTime() + 60_000).toISOString(),
+        limit: 1,
+      })
+    const [pendingClaim] = await claimNext()
+    assert.ok(pendingClaim, "pending submit wakes a previously idle consumer before Agent admission")
+    assert.equal(await store.agUiConsumers.markConsumerProgress(pendingClaim, new Date(now.getTime() + 1000).toISOString(), now.toISOString(), true), true)
+    const pending = (
+      await pool.query(
+        "SELECT expected_run_id, EXTRACT(EPOCH FROM (consumer_next_poll_at-clock_timestamp())) AS delay FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",
+        [tenantId, sessionId],
+      )
+    ).rows[0]
+    assert.equal(pending.expected_run_id, null)
+    assert.ok(Number(pending.delay) <= 1, "pending FIFO prevents idle settlement even without expected_run_id")
+    await pool.query("UPDATE bff_agui_stream SET consumer_next_poll_at=clock_timestamp() WHERE tenant_id=$1 AND session_id=$2", [tenantId, sessionId])
+    const [staleClaim] = await claimNext()
+    const [dispatch] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: `dispatch_${suffix}`,
+      limit: 1,
+      leaseDurationMs: 5000,
+      maxAttempts: 8,
+    })
+    assert.equal(dispatch.runId, nextRun)
+    assert.equal(
+      await store.agUiConsumers.markConsumerProgress(staleClaim, now.toISOString(), now.toISOString(), true),
+      false,
+      "new expected registration fences a late idle settlement",
+    )
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(dispatch), true)
+    const [claim] = await claimNext()
+    assert.ok(claim)
+    assert.equal(claim.sessionId, sessionId)
+    assert.equal(await store.agUiConsumers.markConsumerProgress(claim, new Date(now.getTime() + 1000).toISOString(), now.toISOString(), true), true)
+    const active = (
+      await pool.query(
+        "SELECT expected_run_id, EXTRACT(EPOCH FROM (consumer_next_poll_at-clock_timestamp())) AS delay FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",
+        [tenantId, sessionId],
+      )
+    ).rows[0]
+    assert.equal(active.expected_run_id, nextRun)
+    assert.ok(Number(active.delay) <= 1, "an unfinished Run keeps its normal polling interval")
+  } finally {
+    if (store !== null) await store.close().catch(() => undefined)
+    for (const table of TABLES) await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenantId]).catch(() => undefined)
+    await pool.end()
+  }
 })
