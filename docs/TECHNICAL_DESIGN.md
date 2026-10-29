@@ -1,3 +1,9 @@
+## 2026-10-28 旧最终答复只读绑定（候选设计门）
+
+Agent正式HTTP8.9提供可选legacy `final_message_id`，BFF不转发该字段；仅在同一请求期限内，通过本人active Conversation与exact submitted Run→assistant Message查询，确认completed、format1、唯一已完成目标text slot和合法parts revision；现有durable final有值必须一致。项目仍须当前本人可访问且未删除，退休dispatch不绑定。返回Public28.15 RunDisplay可选闭集 `final_answer:{segment_id,revision}`。大正文不跨DB传输，只读取有字节上界的候选slot元数据，复用原parts解析器和read-only/abort资源生命周期。
+
+保持前后session/subject准入、5秒总期限与1MiB响应；不回填历史final列，不变更Schema/AG-UI/Share，不从Agent序号猜BFF revision。不匹配省略证明，不伪造完整正文；数据库故障保原读取失败边界。App仅以当前有效旁读绑定复用整轮展示，不能污染durable final合并。8.9固定正式提交后生成窄client，Public28.15去除此可选字段应完整恢复28.14；尚未正常激活。
+
 ## 2026-10-28 终态 source consumer 闲置轮询（本轮局部修复）
 
 Owner仍为BFF既有durable AG-UI projector。仅在Agent source page明确exhausted后，consumer结算事务按原Conversation→stream锁和lease/fence确认：没有expected Run、latest Run等于非空terminal Run、没有未终态dispatch，才将下一次轮询推迟到至少30秒。consumer仍active，晚到Skill等bookkeeping仍按原cursor摄取，在后续闲置轮询读取（30秒是默认间隔，不是硬延迟上限）；不以终态推断source永远封闭。未读尽、在途/等待Run、未知终态、失败重试保持原节奏。

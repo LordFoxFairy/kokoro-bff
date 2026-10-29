@@ -1,5 +1,5 @@
 import type { MessageFeedbackQuery, SetMessageFeedback } from "./chat/message-feedback-input.js"
-import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "./ports/chat-repository.js"
+import type { RunFinalAnswerQuery, ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "./ports/chat-repository.js"
 import type { ChatMessageRead, ChatSessionDetail, PrivateChatSessionDetail, ChatSessionSummary } from "../contracts/index.js"
 import type { PrivateMessageReadContext, MessagePartsQuery, MessageReadLifetime } from "./ports/chat-repository.js"
 import type { ChatRepository, ConversationCollectionFilter, SharedTasksPosition, SharedTasksRead } from "./ports/chat-repository.js"
@@ -150,6 +150,10 @@ export class ChatApplicationService {
       ? this.repository.listMessages(tenantId, subjectId, conversationId, limit, cursor, projectRef)
       : this.repository.listMessages(tenantId, subjectId, conversationId, limit, cursor, projectRef, context))
     return page === null ? null : { messages: page.messages.map(privateChatMessage), next_cursor: page.next_cursor }
+  }
+
+  public readRunFinalAnswer(query: RunFinalAnswerQuery): ReturnType<ChatRepository["readRunFinalAnswer"]> {
+    return this.repository.readRunFinalAnswer(query)
   }
 
   public readMessageParts(query: MessagePartsQuery): ReturnType<ChatRepository["readMessageParts"]> {

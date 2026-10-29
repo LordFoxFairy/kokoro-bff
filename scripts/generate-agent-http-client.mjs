@@ -12,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "b802f9b778fd686e80774adcdd72758325fb0b9b"
+const ownerCommit = "b80d68337c6643992cc2920aa18c70d9cc783488"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "fd8b2857ecbc9577bd98ca73234e4d81c53d4fe189ba86badcf35c774b9a6830"
-const provenanceDigest = "00b5e906ba36b01df69c104e2892d186438a2bc797c3f6509e8a2a1ccd4b50cd"
-const ownerContractVersion = "8.8.0"
+const ownerDigest = "875545c23cf4cd055adfb4aedf6ea3c994eab6be10a25f1f68db248ffecb32c9"
+const provenanceDigest = "96b835e5ea25d607bd7e5671502c7b891ef54740a20bf098ffd469cb3c452234"
+const ownerContractVersion = "8.9.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -438,7 +438,7 @@ export function assertInteractionContractSchema(document) {
 }
 
 function schemaZod(schema) {
-  if (schema.properties?.final_message_id) {
+  if (schema.properties?.final_message_id && schema.properties?.status) {
     assert.deepEqual(
       schema.allOf,
       [

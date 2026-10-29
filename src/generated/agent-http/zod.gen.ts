@@ -184,6 +184,7 @@ export const zRunDisplay = z
           .strict(),
       )
       .max(128),
+    final_message_id: z.string().optional(),
   })
   .strict()
 

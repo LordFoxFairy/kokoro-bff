@@ -295,6 +295,12 @@ export const AGENT_PROCESS_CONSTRAINTS = {
           description:
             "Private same-Run evidence-bound tool details only; missing fields remain unknown. Filtered bounded text is not a universal secret-free guarantee. Never Share, execution authority, HTML, autolinks or instructions.",
         },
+        final_message_id: {
+          type: "string",
+          pattern: "^msg_[0-9a-f]{32}(?![\\s\\S])",
+          description:
+            "Optional private read-only proof of a completed legacy Run's final public assistant message identity. Derived from a bounded reviewed native terminal and exact same-Run public body; never inferred from public ordering, never written back to historical events, and not an execution authority. Omitted when unproven. Consumers must bind their own exact ordered parts and revision before display.",
+        },
       },
       additionalProperties: false,
       description:

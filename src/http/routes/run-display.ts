@@ -100,7 +100,21 @@ export async function runDisplayRoute(
       if (!owned) throw Error("run_display_not_found")
     }
     await check()
-    const data = await within(() => readAgentRunDisplay(config, context, runId, controller.signal))
+    const { final_message_id, ...facts } = await within(() => readAgentRunDisplay(config, context, runId, controller.signal))
+    const finalAnswer = final_message_id
+      ? await within(() =>
+          checkedStore.services.chat.readRunFinalAnswer({
+            tenantId: context.identity.namespace,
+            subjectId: context.identity.userId,
+            conversationId: sessionId,
+            runId,
+            finalMessageId: final_message_id,
+            signal: controller.signal,
+            deadlineAt,
+          }),
+        )
+      : null
+    const data = finalAnswer ? { ...facts, final_answer: finalAnswer } : facts
     await check()
     controller.signal.throwIfAborted()
     if (Buffer.byteLength(JSON.stringify({ data })) > 1048576) throw Error("run_display_response_invalid")

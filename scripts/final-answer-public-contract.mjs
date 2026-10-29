@@ -21,6 +21,7 @@ const deltas = [
   ],
 ]
 export function restorePublic2813FinalAnswerContract(source) {
+  source = restorePublic2814FinalDisplayContract(source)
   if (!/^  version: 28\.14\.0$/mu.test(source)) return source
   if (hash(source) !== "921be666a3bd570eb984503528d9ee713e3739cc8525e2e1c2f46c96fa161a05") throw Error("Final answer Public28.14 child drift")
   for (const [child, parent] of deltas) {
@@ -28,5 +29,16 @@ export function restorePublic2813FinalAnswerContract(source) {
     source = source.replace(child, () => parent)
   }
   if (hash(source) !== "30b288a7f719ec1d5a6f85c70ad80f18bbbce614fbdad1412d1ff3de7a0b2f9c") throw Error("Final answer Public28.13 parent drift")
+  return source
+}
+
+export function restorePublic2814FinalDisplayContract(source) {
+  if (!/^  version: 28\.15\.0$/mu.test(source)) return source
+  if (hash(source) !== "8a56966d2d9a4a380b29dadeb9f79f5db8ef9975e8e2bbac4b1748ef03a70234") throw Error("Private final Public28.15 child drift")
+  const field =
+    "        final_answer:\n          type: object\n          required: [segment_id, revision]\n          additionalProperties: false\n          description: Private read-only legacy final proof bound to this owner's exact completed Message parts revision; never a historical write or an execution authority. Existing durable final identity takes precedence; unproven or conflicting bindings are omitted.\n          properties:\n            segment_id:\n              type: string\n              pattern: ^msg_[0-9a-f]{32}(?![\\s\\S])\n            revision:\n              type: string\n              pattern: ^[1-9][0-9]{0,18}(?![\\s\\S])\n              x-kokoro-int64-decimal: true\n"
+  if (source.split(field).length !== 2) throw Error("Private final exact delta drift")
+  source = source.replace(field, "").replace("  version: 28.15.0\n", "  version: 28.14.0\n")
+  if (hash(source) !== "921be666a3bd570eb984503528d9ee713e3739cc8525e2e1c2f46c96fa161a05") throw Error("Private final Public28.14 parent drift")
   return source
 }

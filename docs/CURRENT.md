@@ -1,4 +1,12 @@
-## 2026-10-28 终态会话后台轮询降频（候选，正常效果待验证）
+## 2026-10-28 历史最终答复只读旁证（消费者候选，未正常激活）
+
+固定 Agent b80d68337c6643992cc2920aa18c70d9cc783488／HTTP8.9，原 Run display 私有读消费 final_message_id，再由本仓 exact tenant/subject/Conversation/Run/dispatch assistant Message 绑定唯一 completed ordered text 与真实 parts revision，输出 Public28.15 optional final_answer。正式持久 final 冲突时缺省；不回填历史、不改 Schema、账本或执行。原五秒绝对期限、取消、发送前重验、1MiB 响应边界不变。
+
+新回归先 RED 后 GREEN；隔离真实 PG parts 套件19项通过，原大正文/所有权/撤销用例保留。格式、lint、typecheck、build；contract1325、architecture36、默认2290通过／3条原资源跳过；扩展定向108通过（含新旁证规则），新文件已加入默认与格式命令。独立只读复核未发现阻断，完整 Public28.15→28.14 与 Agent8.9→8.8 父证明通过。生成器最初误将 RunDisplay 的同名字段当作 run.completed 条件，已按是否拥有 status 收窄，不削弱原成功终态断言。
+
+App 固定消费者、正常配对和旧 conv_6530 页面复查仍待；以上工程/隔离证据不代表 Manus 视觉闭环。
+
+## 2026-10-28 终态会话后台轮询降频（正常局部已验证）
 
 正常只读快照20个active stream全部符合终态闲置，未终态dispatch为0；随后独立60.010秒日志窗960次business GET200，request reference均有原projector前缀。前一采样器误按JSON解析键值日志、得到空分类；保留该无效分类窗口，不用它作请求归因。
 
@@ -6,7 +14,7 @@
 
 隔离PG先复现旧0.998秒轮询，再验闲置不重复领取、late Skill一次入账、pending提交唤醒/无expected不降频、dispatch注册后旧lease拒绝、未读尽不闲置。独审未见确定阻断；验证为顺序不同赢家与状态，不冒称双连接barrier并发。单元72通过；追加真实PG5项通过，所有临时数据库已删除。首次扩大命令缺tsx导致2模块解析失败；修正到仓库入口后通过。首次筛选PG缺schema且旧用例留active行干扰，隔离runner建schema、新用例沿原suite隔离表后通过，未放宽断言。格式门同时修正邻近既有Agent8.7测试排版（语义未改、真实PG重验）；错误默认格式化造成的其它源码改动已完整去除。
 
-本片仅降低后台终态空转，不代表用户界面所有请求达到100ms，也不关闭旧MCP展示缺口。最终停写默认测试2289通过／3条原资源跳过，format/lint/typecheck/build通过，contract1325及architecture36通过；925非文档输入验同。正常切换及请求量仍待实测。
+本片仅降低后台终态空转，不代表用户界面所有请求达到100ms，也不关闭旧MCP展示缺口。最终停写默认测试2289通过／3条原资源跳过，format/lint/typecheck/build通过，contract1325及architecture36通过；925非文档输入验同。BFF 10fe197 已仅切换正常 BFF，925 个非文档输入核同，App/Agent HTTP/worker 进程保持，readiness 正常。相同采样器的独立后窗 60.011 秒记录 projector GET200 共40次，对比前窗960次减少95.83%；这是20个终态闲置会话的后台请求量，不是接口延迟或并发新任务性能证明。运行回退与原始证据在 Root ignored agui-idle-20261028。
 
 ## 2026-10-28 正常整轮配对验证（单任务切片）
 

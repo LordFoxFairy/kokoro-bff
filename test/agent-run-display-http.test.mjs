@@ -13,7 +13,9 @@ const display = {
   activity_details: [],
 }
 async function fixture(t) {
-  const calls = []
+  const calls = [],
+    finalReads = []
+  let finalProof = null
   let ownerBody = { data: display, meta: { request_id: "agent-request" } },
     visible = true,
     submitted = true
@@ -56,7 +58,15 @@ async function fixture(t) {
                 : { tenantId: q.tenantId, userId: "subject", runId: q.runId, conversationId: "session" }
               : null,
       },
-      services: { chat: { findConversation: async () => (visible ? { session_id: "session" } : null) } },
+      services: {
+        chat: {
+          findConversation: async () => (visible ? { session_id: "session" } : null),
+          readRunFinalAnswer: async (q) => {
+            finalReads.push(q)
+            return typeof finalProof === "function" ? finalProof(q) : finalProof
+          },
+        },
+      },
     },
     readiness: async () => undefined,
     sessionAdmission: admission,
@@ -81,7 +91,16 @@ async function fixture(t) {
     })
     return { status: r.status, body: await r.json(), headers: r.headers }
   }
-  return { request, calls, admission, setBody: (v) => (ownerBody = v), setVisible: (v) => (visible = v), setSubmitted: (v) => (submitted = v) }
+  return {
+    request,
+    calls,
+    finalReads,
+    setFinalProof: (v) => (finalProof = v),
+    admission,
+    setBody: (v) => (ownerBody = v),
+    setVisible: (v) => (visible = v),
+    setSubmitted: (v) => (submitted = v),
+  }
 }
 test("exact owned Run display is an on-demand read of original facts, not current catalog or snapshot enrichment", async (t) => {
   const f = await fixture(t),
@@ -388,4 +407,26 @@ test("same-Run capability documentation remains private detail, bounded and boun
     })
     assert.equal((await f.request()).status, 502, JSON.stringify(invalid))
   }
+})
+
+test("legacy owner final identity is exposed only after exact BFF parts binding and final admission", async (t) => {
+  const f = await fixture(t)
+  const id = `msg_${"d".repeat(32)}`
+  f.setBody({ data: { ...display, final_message_id: id }, meta: { request_id: "owner" } })
+  f.setFinalProof({ segment_id: id, revision: "9007199254740993" })
+  const result = await f.request()
+  assert.equal(result.status, 200)
+  assert.deepEqual(result.body.data, { ...display, final_answer: { segment_id: id, revision: "9007199254740993" } })
+  assert.equal(f.finalReads.length, 1)
+  const q = f.finalReads[0]
+  assert.deepEqual([q.tenantId, q.subjectId, q.conversationId, q.runId, q.finalMessageId], ["tenant", "subject", "session", "run", id])
+  assert.ok(q.signal instanceof AbortSignal)
+  assert.ok(Number.isFinite(q.deadlineAt))
+  f.setFinalProof(null)
+  assert.deepEqual((await f.request()).body.data, display)
+  f.setFinalProof(() => {
+    f.setVisible(false)
+    return { segment_id: id, revision: "9" }
+  })
+  assert.equal((await f.request()).status, 404)
 })

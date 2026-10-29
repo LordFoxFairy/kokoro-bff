@@ -6,7 +6,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 import { restoreAgent84ActivityDetailsRaw, restoreAgent83ToolFactsRaw, restoreAgent82DisplayRaw } from "../scripts/generate-agent-http-client.mjs"
-const vendor = new URL("../contract/vendor/kokoro-agent/b802f9b778fd686e80774adcdd72758325fb0b9b/", import.meta.url)
+const vendor = new URL("../contract/vendor/kokoro-agent/b80d68337c6643992cc2920aa18c70d9cc783488/", import.meta.url)
 test("formal Agent8.5 details,8.4 raw tool facts and8.3 display deltas restores the complete original8.2 including int64 lexemes and numeric response order", async () => {
   const raw = await readFile(new URL("openapi.json", vendor), "utf8"),
     parent = restoreAgent82DisplayRaw(restoreAgent83ToolFactsRaw(restoreAgent84ActivityDetailsRaw(raw)))
@@ -22,7 +22,7 @@ test("both current generator modes reject a full legacy owner blob rather than p
       join(dir, "scripts/agent-final-answer-contract.mjs"),
       await readFile(new URL("../scripts/agent-final-answer-contract.mjs", import.meta.url)),
     )
-    const dest = join(dir, "contract/vendor/kokoro-agent/b802f9b778fd686e80774adcdd72758325fb0b9b")
+    const dest = join(dir, "contract/vendor/kokoro-agent/b80d68337c6643992cc2920aa18c70d9cc783488")
     await mkdir(dest, { recursive: true })
     await writeFile(join(dir, "scripts/generate-agent-http-client.mjs"), await readFile(new URL("../scripts/generate-agent-http-client.mjs", import.meta.url)))
     await writeFile(
@@ -51,7 +51,7 @@ test("Public tool adjunct delta restores every original Public28.10 byte, includ
     raw + "\n",
     raw.replace("getMessageFeedback", "changedFeedback"),
     raw.replace("maxItems: 128", "maxItems: 129"),
-    raw.replace("  version: 28.14.0", "  version: 28.15.0"),
+    raw.replace("  version: 28.15.0", "  version: 28.16.0"),
   ]) {
     assert.notEqual(bad, raw)
     assert.throws(() => restorePublic2810ToolFactsContract(bad), /drift/)
@@ -76,7 +76,7 @@ test("formal Agent tool facts restore the complete HTTP8.3 before the older stri
 test("private activity details restore the exact complete Public28.11 parent, without broadening Chat or Share", async () => {
   const { restorePublic2811ActivityDetailsContract } = await import("../scripts/project-pin-public-contract.mjs")
   const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  assert.match(raw, /^  version: 28\.14\.0$/mu)
+  assert.match(raw, /^  version: 28\.15\.0$/mu)
   const parent = restorePublic2811ActivityDetailsContract(raw)
   assert.equal(createHash("sha256").update(parent).digest("hex"), "4d93ec15e2931768afafffb2101039b1da64757ea48c760d16ef88aa8753db16")
   for (const bad of [raw + "\n", raw.replace("getMessageFeedback", "changedFeedback"), raw.replace("activity_details:", "other_details:")])

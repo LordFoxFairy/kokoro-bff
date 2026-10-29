@@ -215,6 +215,10 @@ export type RunDisplay = {
       }
     }
   >
+  /**
+   * Optional private read-only proof of a completed legacy Run's final public assistant message identity. Derived from a bounded reviewed native terminal and exact same-Run public body; never inferred from public ordering, never written back to historical events, and not an execution authority. Omitted when unproven. Consumers must bind their own exact ordered parts and revision before display.
+   */
+  final_message_id?: string
 }
 
 export type RunDisplayEnvelope = {

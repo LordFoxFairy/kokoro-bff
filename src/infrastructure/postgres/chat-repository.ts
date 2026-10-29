@@ -1,3 +1,5 @@
+import { readRunFinalAnswer } from "./run-final-answer-read.js"
+import type { RunFinalAnswerQuery, RunFinalAnswer } from "../../application/ports/chat-repository.js"
 import { readMessageFeedback, setMessageFeedback } from "./message-feedback.js"
 import type { MessageFeedbackQuery, SetMessageFeedback } from "../../application/chat/message-feedback-input.js"
 import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "../../application/ports/chat-repository.js"
@@ -221,6 +223,10 @@ export class PostgresChatRepository implements ChatRepository {
     context?: PrivateMessageReadContext,
   ): Promise<ChatSnapshot | null> {
     return this.readSnapshotState(tenantId, subjectId, conversationId, projectRef, true, context ?? { ...messageReadLifetime(), scope: "all" })
+  }
+
+  public readRunFinalAnswer(query: RunFinalAnswerQuery): Promise<RunFinalAnswer | null> {
+    return readRunFinalAnswer(this.database.pool, query)
   }
 
   public readMessageParts(query: MessagePartsQuery): Promise<MessagePartsPage | null> {
