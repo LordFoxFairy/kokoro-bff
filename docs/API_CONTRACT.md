@@ -1,3 +1,7 @@
+## Public28.16 私有会话 MCP 选择（2026-10-28，设计先行）
+
+PrivateSessionSnapshotResponse.data 可选 composer_selection，严格对象包含 source_message_id 和 selected_mcp_connection_ids（复用 MessageCreateRequest 原16项/ID/字节约束）。表示最新已接受 normal/user 消息冻结的选择；数组 [] 是该次无选择，不表示继承；缺字段表示没有可证明来源，不保证 []. 不授工具权限，App 使用前须按当前本人连接目录核可用性。匿名 Share、MessageCreate、再生成、幂等和所有既有写入语义不变；不改变未发送草稿生命周期。新字段来自同 snapshot 授权与事务读取，不新增 endpoint。
+
 ## 2026-10-28 旧最终答复只读绑定（候选设计门）
 
 Agent正式HTTP8.9提供可选legacy `final_message_id`，BFF不转发该字段；仅在同一请求期限内，通过本人active Conversation与exact submitted Run→assistant Message查询，确认completed、format1、唯一已完成目标text slot和合法parts revision；现有durable final有值必须一致。项目仍须当前本人可访问且未删除，退休dispatch不绑定。返回Public28.15 RunDisplay可选闭集 `final_answer:{segment_id,revision}`。大正文不跨DB传输，只读取有字节上界的候选slot元数据，复用原parts解析器和read-only/abort资源生命周期。

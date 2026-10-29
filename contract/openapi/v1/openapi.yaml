@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.15.0
+  version: 28.16.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -22401,6 +22401,24 @@ components:
           additionalProperties: false
           properties:
             session: { $ref: '#/components/schemas/ChatSession' }
+            composer_selection:
+              type: object
+              additionalProperties: false
+              required: [source_message_id, selected_mcp_connection_ids]
+              description: Latest accepted normal user Message selection in this private session. Unsent changes are not persisted. Absent when no source can be proven; [] means that request selected no MCP connections. Not execution authorization. Regeneration does not replace this baseline.
+              properties:
+                source_message_id: { type: string, minLength: 1 }
+                selected_mcp_connection_ids:
+                  type: array
+                  maxItems: 16
+                  uniqueItems: true
+                  x-kokoro-json-byte-limit: 4096
+                  description: Exact ordered Platform MCP Connection IDs for this message. Omission or [] adds no connections. This is intent, not authorization; compact ASCII JSON is limited to 4096 bytes.
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 191
+                    pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
             messages:
               type: array
               items: { $ref: '#/components/schemas/ChatMessageRead' }

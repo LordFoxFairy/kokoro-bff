@@ -1,3 +1,7 @@
+## 会话 MCP 选择读取（2026-10-28，未激活）
+
+无新增表或列。唯一事实仍是消息创建事务冻结的 bff_agent_dispatch_outbox.payload.launch.selected_mcp_connection_ids，与 bff_message normal/user 的 Run/Message/Conversation 和当前 subject 精确匹配。最新普通消息按既有 message_seq/message_id 排序，只取一条；镜像再生成不改变草稿基线。原 schema_version=3 launch 缺省与空数组等价为该次无额外 MCP；旧 trace 不升级为执行选择。缺失/损坏来源不落库修补，也不回退旧非空项。读取使用既有同库本 owner 事务，禁止关联 Platform 数据库；删除与保留策略不变。
+
 ## 最终答复身份（2026-10-28，设计已定，正常环境未激活）
 
 沿 BFF 自有 bff_message 增加 nullable `final_segment_id`，只用于 assistant 成功终态且已有 ordered parts 的同 Run 已完成正文引用。历史 NULL 表示无证明，不批量回填。该字段与 status／ordered_parts／parts_public_sequence／AG-UI terminal 在原事务中提交；exact tenant、subject、Conversation、Run、Message 绑定不变。私有读表示输出 optional，分享模型不扩展。不增 Run 表或 metadata endpoint。canonical schema 与具名加列演进需隔离验证，正常环境激活单独记录。

@@ -151,7 +151,11 @@ export type ChatSessionDetail = {
   } | null
 }
 
-export type PrivateChatSessionDetail = Omit<ChatSessionDetail, "messages"> & { messages?: ChatMessageRead[] }
+export type ChatComposerSelection = Readonly<{ source_message_id: string; selected_mcp_connection_ids: string[] }>
+export type PrivateChatSessionDetail = Omit<ChatSessionDetail, "messages"> & {
+  messages?: ChatMessageRead[]
+  composer_selection?: ChatComposerSelection
+}
 
 /** Public read projection of the published owner full state; no private decision values. */
 export type InteractionState = {

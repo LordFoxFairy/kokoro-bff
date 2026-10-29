@@ -1,3 +1,4 @@
+import { readChatComposerSelection } from "./chat-composer-selection.js"
 import { readRunFinalAnswer } from "./run-final-answer-read.js"
 import type { RunFinalAnswerQuery, RunFinalAnswer } from "../../application/ports/chat-repository.js"
 import { readMessageFeedback, setMessageFeedback } from "./message-feedback.js"
@@ -275,6 +276,7 @@ export class PostgresChatRepository implements ChatRepository {
       if (row === undefined) {
         return null
       }
+      const composerSelection = includeHistory ? await readChatComposerSelection(client, tenantId, subjectId, conversationId) : undefined
       const messages = includeHistory
         ? await client.query<PrivateMessageRow>(
             `SELECT latest.origin,latest.regenerated_from_message_id,latest.regeneration_user_message_id,latest.message_id, latest.tenant_id, latest.conversation_id, latest.run_id,
@@ -358,6 +360,7 @@ export class PostgresChatRepository implements ChatRepository {
       }
       return {
         conversation: conversationFromRow(row),
+        ...(composerSelection === undefined ? {} : { composerSelection }),
         messages: await privateMessagesFromRows(
           client,
           messages.rows,

@@ -1,5 +1,5 @@
 import type { MessageFeedbackQuery, SetMessageFeedback, MessageFeedbackState } from "../chat/message-feedback-input.js"
-import type { InteractionState, MessagePartsPage, OrderedMessageRendering } from "../../contracts/chat.js"
+import type { ChatComposerSelection, InteractionState, MessagePartsPage, OrderedMessageRendering } from "../../contracts/chat.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Message } from "../../domain/chat/message.js"
 import type { Share } from "../../domain/chat/share.js"
@@ -51,6 +51,7 @@ export type RunFinalAnswerQuery = MessageReadLifetime &
 export type RunFinalAnswer = Readonly<{ segment_id: string; revision: string }>
 
 export type ChatSnapshot = {
+  composerSelection?: ChatComposerSelection
   conversation: Conversation
   messages: PrivateMessageRead[]
   deliveries: ChatArtifactDelivery[]

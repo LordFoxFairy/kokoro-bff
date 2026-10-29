@@ -84,7 +84,7 @@ export class ChatApplicationService {
       ? this.repository.readSnapshot(tenantId, subjectId, conversationId, projectRef)
       : this.repository.readSnapshot(tenantId, subjectId, conversationId, projectRef, context))
     if (snapshot === null) return null
-    const { conversation, messages, deliveries, deliveriesHasMore, eventWatermark, executionHead, executionProcess } = snapshot
+    const { conversation, messages, deliveries, deliveriesHasMore, eventWatermark, executionHead, executionProcess, composerSelection } = snapshot
     return {
       session: {
         session_id: conversation.conversationId,
@@ -94,6 +94,7 @@ export class ChatApplicationService {
         updated_at: conversation.updatedAt.toISOString(),
       },
       ...(messages.length === 0 ? {} : { messages: messages.map(privateChatMessage) }),
+      ...(composerSelection === undefined ? {} : { composer_selection: composerSelection }),
       files: [],
       deliveries: deliveries.map((delivery) => ({
         conversation_id: delivery.conversationId,

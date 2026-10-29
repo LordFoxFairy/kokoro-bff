@@ -51,7 +51,7 @@ test("Public tool adjunct delta restores every original Public28.10 byte, includ
     raw + "\n",
     raw.replace("getMessageFeedback", "changedFeedback"),
     raw.replace("maxItems: 128", "maxItems: 129"),
-    raw.replace("  version: 28.15.0", "  version: 28.16.0"),
+    raw.replace("  version: 28.16.0", "  version: 28.17.0"),
   ]) {
     assert.notEqual(bad, raw)
     assert.throws(() => restorePublic2810ToolFactsContract(bad), /drift/)
@@ -76,7 +76,7 @@ test("formal Agent tool facts restore the complete HTTP8.3 before the older stri
 test("private activity details restore the exact complete Public28.11 parent, without broadening Chat or Share", async () => {
   const { restorePublic2811ActivityDetailsContract } = await import("../scripts/project-pin-public-contract.mjs")
   const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  assert.match(raw, /^  version: 28\.15\.0$/mu)
+  assert.match(raw, /^  version: 28\.16\.0$/mu)
   const parent = restorePublic2811ActivityDetailsContract(raw)
   assert.equal(createHash("sha256").update(parent).digest("hex"), "4d93ec15e2931768afafffb2101039b1da64757ea48c760d16ef88aa8753db16")
   for (const bad of [raw + "\n", raw.replace("getMessageFeedback", "changedFeedback"), raw.replace("activity_details:", "other_details:")])

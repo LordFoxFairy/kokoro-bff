@@ -1,3 +1,9 @@
+## 已发送 MCP 选择恢复（2026-10-28，已批准设计；未激活）
+
+私有 session snapshot 增加可选 composer_selection，只是 BFF 已接受普通用户消息的读取投影，不是默认执行授权或第二偏好 owner。取最大 message_seq 的 normal/user Message；精确绑定本 tenant、当前 owner/subject、conversation、Run、user Message 的冻结 dispatch。再生成镜像不参与最新普通选择。有效 schema_version=3 的 launch 无 MCP 字段按原提交语义为 []；无来源、身份/版本/形状不符则省略，不寻找更早非空选择。不得读取工具 trace、推断用户未保存开关、公开完整 payload 或改写历史。
+
+读取挂既有授权后的 snapshot RR/read-only/取消预算，同连接、有界一行，不对 execution-head poll 增加查询；Share不增加字段。App 后续消费该基线并校验当前可用性，临时覆盖仅内存。已冻结 unknown 提交不变。无 DDL/新 owner，回退旧 reader 即可；缺字段消费者保持原行为。
+
 ## 2026-10-28 旧最终答复只读绑定（候选设计门）
 
 Agent正式HTTP8.9提供可选legacy `final_message_id`，BFF不转发该字段；仅在同一请求期限内，通过本人active Conversation与exact submitted Run→assistant Message查询，确认completed、format1、唯一已完成目标text slot和合法parts revision；现有durable final有值必须一致。项目仍须当前本人可访问且未删除，退休dispatch不绑定。返回Public28.15 RunDisplay可选闭集 `final_answer:{segment_id,revision}`。大正文不跨DB传输，只读取有字节上界的候选slot元数据，复用原parts解析器和read-only/abort资源生命周期。
