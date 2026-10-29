@@ -205,6 +205,7 @@ export async function deleteProjectAggregate(
     }
     await pauseProjectScheduledTasks(bounded, scope, projectId, requestId, key)
     await insertRelease(bounded, scope, projectId, "project", projectId)
+    await query("DELETE FROM bff_project_pin WHERE tenant_id=$1 AND project_id=$2", [scope.tenantId, projectId])
     await query(`UPDATE bff_project SET deleted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3`, [
       scope.tenantId,
       scope.subjectId,

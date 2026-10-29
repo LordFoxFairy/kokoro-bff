@@ -37,6 +37,17 @@ export type LaunchRequest = {
     [key: string]: unknown
   }
   project_ref: string | null
+  /**
+   * Exact Platform MCP Connection IDs selected for this Run, in caller order. Omission or [] selects no additional connections; selection is intent, not authorization. JSON ASCII encoding is limited to 4096 bytes.
+   */
+  selected_mcp_connection_ids?: Array<string>
+  /**
+   * Exact Platform CustomAPI profile IDs and state versions selected for this Run, in caller order. Omission or [] selects none and preserves legacy request bytes. Profile IDs must be unique even across different versions. Safe intent only, not authorization; no credentials, names, instructions or environment values.
+   */
+  selected_custom_api_profiles?: Array<{
+    profile_id: string
+    expected_state_version: number
+  }>
 }
 
 export type LaunchReceipt = {
@@ -137,6 +148,88 @@ export type ReplayPageEnvelope = {
 
 export type DataEnvelope = {
   data: unknown
+  meta: Meta
+}
+
+export type SkillDisplay = {
+  source_ref: string
+  name: string
+  /**
+   * Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+   */
+  virtual_path: string
+  revision?: string
+}
+
+/**
+ * Recovered safe display facts only. Missing facts remain unknown; source events and execution authority are unchanged. No completeness assertion.
+ */
+export type RunDisplay = {
+  run_id: string
+  display_skills: Array<SkillDisplay>
+  tool_paths: Array<{
+    activity_id: string
+    /**
+     * Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+     */
+    virtual_path: string
+  }>
+  /**
+   * Read-only exact original MCP activity facts: safe public names witnessed by successful same-Run calls, or independently proved failed journal outcomes. No source event or Run status mutation.
+   */
+  tool_facts: Array<
+    unknown & {
+      activity_id: string
+      display_detail?: {
+        kind: "mcp_tool"
+        name: string
+      }
+      status?: "failed"
+    }
+  >
+  /**
+   * Private same-Run evidence-bound tool details only; missing fields remain unknown. Filtered bounded text is not a universal secret-free guarantee. Never Share, execution authority, HTML, autolinks or instructions.
+   */
+  activity_details: Array<
+    unknown & {
+      activity_id: string
+      tool_name: string
+      target?: unknown & {
+        kind: "file" | "mcp_tool"
+        name: string
+        /**
+         * Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+         */
+        virtual_path?: string
+      }
+      input_preview?: {
+        text: string
+        truncated: boolean
+        redacted: boolean
+      }
+      output_preview?: {
+        text: string
+        truncated: boolean
+        redacted: boolean
+      }
+      /**
+       * Provider capability documentation observed in this Run, matched by connection and selector. Not a per-call purpose, execution result, title or authorization. Missing or conflicting evidence is omitted; private display only.
+       */
+      tool_description?: {
+        text: string
+        truncated: boolean
+        redacted: boolean
+      }
+    }
+  >
+  /**
+   * Optional private read-only proof of a completed legacy Run's final public assistant message identity. Derived from a bounded reviewed native terminal and exact same-Run public body; never inferred from public ordering, never written back to historical events, and not an execution authority. Omitted when unproven. Consumers must bind their own exact ordered parts and revision before display.
+   */
+  final_message_id?: string
+}
+
+export type RunDisplayEnvelope = {
+  data: RunDisplay
   meta: Meta
 }
 
@@ -319,3 +412,54 @@ export type ReplaySessionEventsResponses = {
 }
 
 export type ReplaySessionEventsResponse = ReplaySessionEventsResponses[keyof ReplaySessionEventsResponses]
+
+export type GetRunDisplayData = {
+  body?: never
+  headers: {
+    /**
+     * Caller correlation identifier. The Agent creates one when absent.
+     */
+    "X-Request-Id"?: string
+    "X-Kokoro-Tenant-Ref": string
+    "X-Kokoro-Subject-Ref": string
+    "X-Kokoro-Subject-Kind"?: "user" | "project" | "service"
+    "X-Kokoro-Actor-Ref": string
+    "X-Kokoro-Actor-Kind"?: "user" | "project" | "service"
+    "X-Kokoro-Identity-Assertion-Ref": string
+  }
+  path: {
+    run_id: string
+  }
+  query?: never
+  url: "/v1/runs/{run_id}/display"
+}
+
+export type GetRunDisplayErrors = {
+  /**
+   * Request validation failed.
+   */
+  400: ErrorEnvelope
+  /**
+   * Service credential or trusted identity is missing or invalid.
+   */
+  401: ErrorEnvelope
+  /**
+   * The identity-scoped resource does not exist.
+   */
+  404: ErrorEnvelope
+  /**
+   * A required Agent dependency is unavailable.
+   */
+  503: ErrorEnvelope
+}
+
+export type GetRunDisplayError = GetRunDisplayErrors[keyof GetRunDisplayErrors]
+
+export type GetRunDisplayResponses = {
+  /**
+   * Safe recovered display facts, at most 1MiB.
+   */
+  200: RunDisplayEnvelope
+}
+
+export type GetRunDisplayResponse = GetRunDisplayResponses[keyof GetRunDisplayResponses]

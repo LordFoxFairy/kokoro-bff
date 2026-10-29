@@ -1,3 +1,4 @@
+import { strictParseRawJson } from "../raw-json.js"
 import { randomUUID } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 
@@ -86,7 +87,10 @@ async function boundedJson(response: Response, maxBytes: number): Promise<unknow
   } finally {
     await reader.cancel().catch(() => undefined)
   }
-  return JSON.parse(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8")) as unknown
+  const rawBytes = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
+  if (rawBytes[0] === 0xef && rawBytes[1] === 0xbb && rawBytes[2] === 0xbf) throw new Error("Invalid IAM response")
+  strictParseRawJson(rawBytes)
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(rawBytes)) as unknown
 }
 
 function mappedError(status: number, headers: Headers): TeamReadResult {

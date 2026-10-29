@@ -1,7 +1,18 @@
+import { runDisplayRoute, RunDisplayAdmissionError } from "../http/routes/run-display.js"
+import { messageRegenerationRoute, MessageRegenerationAdmissionError } from "../http/routes/message-regeneration.js"
+import { messageFeedbackRoute, MessageFeedbackAdmissionError } from "../http/routes/message-feedback.js"
+import { projectPinRoute, ProjectPinAdmissionError } from "../http/routes/project-pin.js"
+import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
+import { projectResourceReadRoute } from "../http/routes/project-resource-read.js"
+import { projectResourceDeleteRoute } from "../http/routes/project-resource-delete.js"
+import { mcpProjectPublicationOperation, mcpProjectPublicationRoute } from "../http/routes/mcp-project-publication.js"
+import { liveAdminMetering, matchMeteringAdmin } from "../http/routes/billing-metering-admin.js"
+import { liveAdminCreditGrant } from "../http/routes/billing-credit-grant-admin.js"
 import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
+import { agentModelAdmissionRoute } from "../http/routes/model-admission.js"
 import { projectExecutionBindingRoute } from "../http/routes/project-execution-binding.js"
 import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
@@ -49,6 +60,7 @@ import {
 } from "../auth/user-admission.js"
 import { localSkillImportRoute } from "../http/routes/local-skill-import.js"
 import { failure, ok } from "../contracts/index.js"
+import { publicShareSnapshot } from "../application/public-share-service.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
 import {
   mutationFingerprint,
@@ -95,7 +107,7 @@ import { managedPersonalSkillsRoute } from "../http/routes/managed-personal-skil
 import { createPersonalSkillVersionRoute } from "../http/routes/create-personal-skill-version.js"
 import { deletePersonalSkillSeriesRoute } from "../http/routes/delete-personal-skill-series.js"
 import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-skill.js"
-import { skillPackageInspectionRoute } from "../http/routes/skill-package-inspection.js"
+import { skillPackageInspectionRoute, type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 
 async function handle(
@@ -125,6 +137,10 @@ async function handle(
     await sharedTasksRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.services.chat, id)
     return
   }
+  if ((request.url ?? "").split("?", 1)[0] === "/internal/v1/model-admissions" || (request.url ?? "").startsWith("/internal/v1/model-admissions/")) {
+    await agentModelAdmissionRoute(request, response, config, composition.businessStore?.submittedAgentRuns ?? null)
+    return
+  }
   if ((request.url ?? "").split("?", 1)[0] === "/internal/v1/project-execution-bindings/verify") {
     await projectExecutionBindingRoute(
       request,
@@ -136,7 +152,10 @@ async function handle(
   }
   const rawPathname = new URL(request.url || "/", "http://bff.local").pathname
   const isRawSkillPackageInspection =
-    request.method === "GET" && (/^\/v1\/self\/skills\/[^/]+\/package$/u.test(rawPathname) || /^\/v1\/skill-installations\/[^/]+\/package$/u.test(rawPathname))
+    request.method === "GET" &&
+    (/^\/v1\/self\/skills\/[^/]+\/package$/u.test(rawPathname) ||
+      /^\/v1\/skill-installations\/[^/]+\/package$/u.test(rawPathname) ||
+      /^\/v1\/projects\/[^/]+\/skill-installations\/[^/]+\/package$/u.test(rawPathname))
   let segments: string[]
   try {
     segments = pathOf(request)
@@ -197,27 +216,21 @@ async function handle(
         send(response, 404, failure("share_not_found", "Share was not found", id))
         return
       }
-      send(
-        response,
-        200,
-        ok(
-          {
-            session: {
-              session_id: shared.conversation.conversationId,
-              title: shared.conversation.title,
-              owner_id: shared.conversation.ownerId,
-              created_at: shared.conversation.createdAt.toISOString(),
-              updated_at: shared.conversation.updatedAt.toISOString(),
-            },
-            ...(messages.messages.length === 0 ? {} : { messages: messages.messages }),
-            files: [],
-            deliveries: [],
-            deliveries_has_more: false,
-            event_watermark: null,
-          },
-          id,
-        ),
-      )
+      const snapshot = publicShareSnapshot({
+        session: {
+          session_id: shared.conversation.conversationId,
+          title: shared.conversation.title,
+          owner_id: shared.conversation.ownerId,
+          created_at: shared.conversation.createdAt.toISOString(),
+          updated_at: shared.conversation.updatedAt.toISOString(),
+        },
+        ...(messages.messages.length === 0 ? {} : { messages: messages.messages }),
+      })
+      if (snapshot === null) {
+        send(response, 503, failure("share_projection_invalid", "Share projection is invalid", id))
+        return
+      }
+      send(response, 200, ok(snapshot, id))
       return
     }
     if (composition.sharedSessionReader === undefined) {
@@ -234,8 +247,12 @@ async function handle(
       send(response, 404, failure("share_not_found", "Share was not found", id))
       return
     }
-    // A service-only Share snapshot does not grant private Artifact visibility.
-    send(response, 200, ok({ ...(detail as object), deliveries: [], deliveries_has_more: false }, id))
+    const snapshot = publicShareSnapshot(detail)
+    if (snapshot === null) {
+      send(response, 503, failure("share_projection_invalid", "Share projection is invalid", id))
+      return
+    }
+    send(response, 200, ok(snapshot, id))
     return
   }
 
@@ -243,11 +260,32 @@ async function handle(
     await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency)
     return
   }
+  const projectContentAccess: ProjectSkillContentAccess = async (projectRef, context, signal) => {
+    const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+    signal.throwIfAborted()
+    if (!fresh.ok) {
+      if (fresh.retryAfter !== undefined) response.setHeader("retry-after", fresh.retryAfter)
+      send(response, fresh.status, {
+        error: { code: fresh.code, message: "Current user admission is required", retryable: fresh.status === 429 || fresh.status >= 500 },
+      })
+      return null
+    }
+    if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+      throw new ConnectError("Project not found", Code.NotFound)
+    if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+    const project = await composition.businessStore.services.projects.find(
+      { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+      projectRef,
+    )
+    signal.throwIfAborted()
+    if (!project) throw new ConnectError("Project not found", Code.NotFound)
+    return project.id
+  }
   if (await appSkillBindingsRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillSpecificationEnabledRoute(request, response, config, composition, id, rawPathname)) return
-  if (await skillDownloadHandleRoute(request, response, config, composition, id, segments)) return
-  if (await exactSkillDownloadRoute(request, response, config, composition, id, segments)) return
+  if (await skillDownloadHandleRoute(request, response, config, composition, id, segments, projectContentAccess)) return
+  if (await exactSkillDownloadRoute(request, response, config, composition, id, segments, projectContentAccess)) return
   if (
     await localSkillImportRoute(
       request,
@@ -284,13 +322,15 @@ async function handle(
   }
 
   const businessPath = browserPrivateMcp ? segments.slice(2) : segments.slice(1)
-  const providerDiscoveryDeadline =
+  const adminOperationDeadline =
     !browserPrivateMcp &&
-    request.method === "GET" &&
-    businessPath.length === 4 &&
-    businessPath[0] === "admin" &&
-    businessPath[1] === "model-providers" &&
-    businessPath[3] === "upstream-models"
+    ((request.method === "GET" &&
+      businessPath.length === 4 &&
+      businessPath[0] === "admin" &&
+      businessPath[1] === "model-providers" &&
+      businessPath[3] === "upstream-models") ||
+      (request.method === "POST" && businessPath.join("/") === "admin/billing/credit-grants") ||
+      matchMeteringAdmin(request.method ?? "", businessPath) !== null)
       ? Date.now() + Math.min(config.upstreamTimeoutMs, 10_000)
       : undefined
   if (!browserPrivateMcp && businessPath[0] === "self" && businessPath[1] === "mcp") {
@@ -298,6 +338,23 @@ async function handle(
     return
   }
   const isConnectorList = !browserPrivateMcp && isConnectorListRequest(businessPath, request.method ?? "GET")
+  const isProjectPinPath =
+    !browserPrivateMcp &&
+    ((businessPath.length === 2 && businessPath[0] === "self" && businessPath[1] === "project-pins") ||
+      (businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "pin"))
+  const projectPinDeadline = isProjectPinPath ? performance.now() + 10_000 : null
+  const isMessageFeedbackPath =
+    !browserPrivateMcp && businessPath.length === 5 && businessPath[0] === "sessions" && businessPath[2] === "messages" && businessPath[4] === "feedback"
+  const messageFeedbackDeadline = isMessageFeedbackPath ? performance.now() + 10_000 : null
+  const isMessageRegenerationPath =
+    !browserPrivateMcp && businessPath.length === 5 && businessPath[0] === "sessions" && businessPath[2] === "messages" && businessPath[4] === "regenerate"
+  const messageRegenerationDeadline = isMessageRegenerationPath ? performance.now() + 10000 : null
+  const isRunDisplayPath =
+    !browserPrivateMcp && businessPath.length === 5 && businessPath[0] === "sessions" && businessPath[2] === "runs" && businessPath[4] === "display"
+  const runDisplayDeadline = isRunDisplayPath ? performance.now() + 5000 : null
+  const preferenceDeadline = projectPinDeadline ?? messageFeedbackDeadline ?? messageRegenerationDeadline ?? runDisplayDeadline
+  const isProjectMcpRecommendationsPath =
+    !browserPrivateMcp && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "mcp-recommendations"
   const isProjectSkillSelectionPath =
     composition.routeHandler === undefined && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "skill-selection"
   const isProjectInstallationPath = businessPath[0] === "projects" && businessPath[2] === "skill-installations"
@@ -308,17 +365,29 @@ async function handle(
     (businessPath[0] === "admin" && businessPath[1] === "skills") ||
     (businessPath[0] === "self" && businessPath[1] === "skills")
   if (hasSkillsBudget) startSkillRequestBudget(request)
-  const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath, browserPrivateMcp)
+  const projectPublicationOperation = browserPrivateMcp ? mcpProjectPublicationOperation(businessPath, request.method ?? "GET") : null
+  const isMcpProjectPublication = projectPublicationOperation !== null
+  const mcpAction = isMcpProjectPublication
+    ? projectPublicationOperation === "list"
+      ? "read"
+      : "manage"
+    : mcpActionForRequest(request.method ?? "GET", businessPath, browserPrivateMcp)
   const isMcpPersonalOperation = browserPrivateMcp && mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
   const isCustomApiOperation = browserPrivateMcp && customApiOperation(businessPath, request.method ?? "GET") !== null
   const defersMcpPersonalReadAction = isMcpPersonalOperation && request.method === "GET"
   const isMcpPackageAdminOperation = !browserPrivateMcp && mcpPackageAdminOperation(businessPath, request.method ?? "GET") !== null
   const isMcpProviderAdminOperation = !browserPrivateMcp && mcpProviderAdminOperation(businessPath, request.method ?? "GET") !== null
-  if (browserPrivateMcp && !isMcpPersonalOperation && !isCustomApiOperation) {
+  if (browserPrivateMcp && !isMcpPersonalOperation && !isCustomApiOperation && !isMcpProjectPublication) {
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
   }
-  const hasMcpBudget = mcpAction !== null || isMcpPersonalOperation || isMcpProviderAdminOperation || isMcpPackageAdminOperation || isCustomApiOperation
+  const hasMcpBudget =
+    isProjectMcpRecommendationsPath ||
+    mcpAction !== null ||
+    isMcpPersonalOperation ||
+    isMcpProviderAdminOperation ||
+    isMcpPackageAdminOperation ||
+    isCustomApiOperation
   if (hasMcpBudget) {
     startMcpRequestBudget(request, isMcpPackageAdminOperation ? 20_000 : 10_000)
     response.setHeader("cache-control", "no-store")
@@ -327,9 +396,13 @@ async function handle(
   const isSkillPackageInspection =
     isRawSkillPackageInspection &&
     ((businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "package") ||
-      (businessPath.length === 3 && businessPath[0] === "skill-installations" && businessPath[2] === "package"))
+      (businessPath.length === 3 && businessPath[0] === "skill-installations" && businessPath[2] === "package") ||
+      (businessPath.length === 5 && businessPath[0] === "projects" && businessPath[2] === "skill-installations" && businessPath[4] === "package"))
   if (isSkillPackageInspection) {
-    await skillPackageInspectionRoute(request, response, config, composition.sessionAdmission, id, businessPath)
+    await skillPackageInspectionRoute(request, response, config, composition.sessionAdmission, id, businessPath, {
+      access: projectContentAccess,
+      installations: composition.installationClient,
+    })
     return
   }
   const isManagedPersonalSkillRead =
@@ -422,13 +495,15 @@ async function handle(
   const admissionAbort = new AbortController()
   const admissionTimer = setTimeout(
     () => admissionAbort.abort(new Error("skill_admission_deadline")),
-    providerDiscoveryDeadline === undefined
-      ? hasMcpBudget
-        ? mcpRequestRemaining(request)
-        : hasSkillsBudget
-          ? skillRequestRemaining(request)
-          : 10_000
-      : Math.max(0, providerDiscoveryDeadline - Date.now()),
+    preferenceDeadline !== null
+      ? Math.max(0, preferenceDeadline - performance.now())
+      : adminOperationDeadline === undefined
+        ? hasMcpBudget
+          ? mcpRequestRemaining(request)
+          : hasSkillsBudget
+            ? skillRequestRemaining(request)
+            : 10_000
+        : Math.max(0, adminOperationDeadline - Date.now()),
   )
   const onRequestAborted = (): void => {
     admissionAbort.abort()
@@ -446,7 +521,11 @@ async function handle(
         if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_admission_deadline")
         const checked = await authorizeMcpAction(composition.mcpAuthorization, result, mcpAction, admissionAbort.signal)
         if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_admission_deadline")
-        if (!checked.ok) return { ...checked, retryAfter: undefined }
+        if (!checked.ok)
+          return {
+            ...checked,
+            retryAfter: checked.status === 429 ? checked.retryAfter : undefined,
+          }
       }
       const action = skillActionForRequest(request.method ?? "GET", businessPath)
       if (!result.ok || action === null) return result
@@ -546,12 +625,54 @@ async function handle(
     await customApiRoute(request, response, composition, admission.context, id, businessPath)
     return
   }
-  if (hasMcpBudget && !isMcpPersonalOperation && (request.method !== "GET" || businessPath[0] === "self")) {
+  if (
+    hasMcpBudget &&
+    !isMcpPersonalOperation &&
+    !isMcpProjectPublication &&
+    !isProjectMcpRecommendationsPath &&
+    (request.method !== "GET" || businessPath[0] === "self")
+  ) {
     if (!response.destroyed && !response.writableEnded)
       send(response, 503, failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", id))
     return
   }
   const context = admission.context
+  if (isRunDisplayPath && runDisplayDeadline !== null) {
+    await runDisplayRoute(request, response, config, context, businessPath, composition.businessStore, runDisplayDeadline, async (signal) => {
+      const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+      if (!fresh.ok) throw new RunDisplayAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
+      if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+        throw new RunDisplayAdmissionError(404, "run_not_found")
+    })
+    return
+  }
+  if (isMessageRegenerationPath && messageRegenerationDeadline !== null) {
+    await messageRegenerationRoute(request, response, context, businessPath, composition.businessStore, messageRegenerationDeadline, async (signal) => {
+      const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+      if (!fresh.ok) throw new MessageRegenerationAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
+      if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+        throw new MessageRegenerationAdmissionError(404, "message_not_found")
+    })
+    return
+  }
+  if (isMessageFeedbackPath && messageFeedbackDeadline !== null) {
+    await messageFeedbackRoute(request, response, context, businessPath, composition.businessStore, messageFeedbackDeadline, async (signal) => {
+      const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+      if (!fresh.ok) throw new MessageFeedbackAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
+      if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+        throw new MessageFeedbackAdmissionError(404, "message_not_found")
+    })
+    return
+  }
+  if (isProjectPinPath && projectPinDeadline !== null) {
+    await projectPinRoute(request, response, context, businessPath, composition.businessStore, projectPinDeadline, async (signal) => {
+      const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+      if (!fresh.ok) throw new ProjectPinAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
+      if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+        throw new ProjectPinAdmissionError(404, "project_not_found")
+    })
+    return
+  }
   if (composition.routeHandler === undefined && request.method === "GET" && businessPath[0] === "scheduled-tasks" && businessPath.length <= 2) {
     await scheduledTaskReadRoute(
       request,
@@ -583,6 +704,34 @@ async function handle(
     signal.throwIfAborted()
     if (!project) throw new ConnectError("Project not found", Code.NotFound)
     return project.id
+  }
+  if (isMcpProjectPublication) {
+    await mcpProjectPublicationRoute(
+      request,
+      response,
+      { tenant: context.identity.namespace, subject: context.identity.userId, requestId: context.requestId },
+      businessPath,
+      composition.mcpProjectPublicationClient,
+      async (projectIds, action, signal) => {
+        const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+        if (!fresh.ok) throw new ConnectError("Project publication admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
+        if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+          throw new ConnectError("Project not found", Code.NotFound)
+        const checked = await authorizeMcpAction(composition.mcpAuthorization, fresh, action, signal)
+        if (!checked.ok) throw new ConnectError("MCP action denied", checked.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
+        if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+        for (const projectId of projectIds) {
+          signal.throwIfAborted()
+          const project = await composition.businessStore.services.projects.find(
+            { tenantId: fresh.context.identity.namespace, subjectId: fresh.context.identity.userId },
+            projectId,
+          )
+          signal.throwIfAborted()
+          if (!project || project.id !== projectId) throw new ConnectError("Project not found", Code.NotFound)
+        }
+      },
+    )
+    return
   }
   if (isMcpPersonalOperation) {
     await mcpPersonalRoute(request, response, config, composition, admission, businessPath)
@@ -652,6 +801,26 @@ async function handle(
     return
   }
 
+  const meteringKind = matchMeteringAdmin(request.method ?? "", businessPath)
+  if (meteringKind !== null) {
+    await liveAdminMetering(
+      request,
+      response,
+      config,
+      context,
+      admission.bearerToken,
+      composition.sessionAdmission,
+      meteringKind,
+      adminOperationDeadline ?? Date.now(),
+    )
+    return
+  }
+
+  if (request.method === "POST" && businessPath.join("/") === "admin/billing/credit-grants") {
+    await liveAdminCreditGrant(request, response, config, context, admission.bearerToken, composition.sessionAdmission, adminOperationDeadline ?? Date.now())
+    return
+  }
+
   if (businessPath[0] === "admin" && businessPath[1] === "identity") {
     await liveAdminIdentityRead(request, response, config, context, admission.bearerToken, businessPath)
     return
@@ -681,6 +850,40 @@ async function handle(
     return
   }
 
+  if (isProjectMcpRecommendationsPath) {
+    await projectMcpRecommendationsRoute(
+      request,
+      response,
+      context,
+      businessPath,
+      composition.businessStore,
+      composition,
+      async (mcpRead, signal, deadlineAt) => {
+        const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+        if (!fresh.ok) throw new ProjectMcpRecommendationsAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
+        if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+          throw new ConnectError("Project not found", Code.NotFound)
+        if (mcpRead) {
+          const checked = await authorizeMcpAction(composition.mcpAuthorization, fresh, "read", signal)
+          if (!checked.ok) throw new ProjectMcpRecommendationsAdmissionError(checked.status, checked.code, checked.retryAfter)
+        }
+        signal.throwIfAborted()
+        if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+        const project = await composition.businessStore.services.projects.mcpRecommendations({
+          tenantId: context.identity.namespace,
+          subjectId: context.identity.userId,
+          projectId: businessPath[1] ?? "",
+          signal,
+          deadlineAt,
+        })
+        signal.throwIfAborted()
+        if (!project || project.project_id !== businessPath[1]) throw new ConnectError("Project not found", Code.NotFound)
+        return project.project_id
+      },
+    )
+    return
+  }
+
   if (isProjectSkillSelectionPath) {
     await projectSkillSelectionRoute(request, response, context, composition.businessStore, composition.installationClient, (signal) =>
       currentProjectAccess(businessPath[1] ?? "", signal),
@@ -698,6 +901,22 @@ async function handle(
     return
   }
 
+  if (
+    composition.routeHandler === undefined &&
+    businessPath[0] === "projects" &&
+    businessPath[2] === "resources" &&
+    businessPath[1] !== undefined &&
+    businessPath[3] !== undefined
+  ) {
+    if (request.method === "GET" && (businessPath.length === 4 || (businessPath.length === 5 && businessPath[4] === "download"))) {
+      await projectResourceReadRoute(request, response, config, context, businessPath[1], businessPath[3], businessPath.length === 5, composition.businessStore)
+      return
+    }
+    if (request.method === "DELETE" && businessPath.length === 4) {
+      await projectResourceDeleteRoute(request, response, config, context, businessPath[1], businessPath[3], composition.businessStore)
+      return
+    }
+  }
   if (isProjectRenamePath) {
     await projectRenameRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
     return
@@ -866,7 +1085,7 @@ async function handle(
   }
 
   if (composition.routeHandler === undefined && businessPath[0] === "admin") {
-    if (await liveModelConfigurationAdmin(request, response, config, context, businessPath, providerDiscoveryDeadline)) return
+    if (await liveModelConfigurationAdmin(request, response, config, context, businessPath, adminOperationDeadline)) return
     await liveModelRoutingAdmin(request, response, config, context, businessPath)
     return
   }
@@ -890,7 +1109,13 @@ async function handle(
 
   const key = upstreamKey(businessPath)
   const upstreamBase = key === null ? null : configuredUpstream(config, key)
-  if (composition.routeHandler === undefined && key === null && !bffOwnedBusinessPath(businessPath) && !isMoriBusinessPath(businessPath)) {
+  if (
+    composition.routeHandler === undefined &&
+    key === null &&
+    !isPlatformProjectionRead &&
+    !bffOwnedBusinessPath(businessPath) &&
+    !isMoriBusinessPath(businessPath)
+  ) {
     send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
     return
   }
@@ -1154,7 +1379,7 @@ export type BffServer = Server & {
 export function createBffServer(config: BffConfig = loadConfig(), options: BffServerOptions = {}): BffServer {
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
-  const server = createServer((request, response) => {
+  const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
     void handle(request, response, config, composition).catch(() => {
       if (!response.headersSent) {
         if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {

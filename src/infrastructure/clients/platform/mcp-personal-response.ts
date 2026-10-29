@@ -61,7 +61,7 @@ export function projectMcpPersonalAvailability(value: unknown): z.infer<typeof m
       throw new Error("mcp_personal_response_invalid")
   }
 }
-const connector = z
+export const mcpPersonalConnectorSchema = z
   .object({
     connector_id: id,
     availability: mcpPersonalAvailabilitySchema,
@@ -78,6 +78,7 @@ const connector = z
     server_id: id.optional(),
   })
   .strict()
+const connector = mcpPersonalConnectorSchema
 const connection = z
   .object({
     connection_id: id,

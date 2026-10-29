@@ -1,3 +1,4 @@
+import type { SelectedCustomApiProfile } from "../domain/chat/custom-api-profile-selection.js"
 export type ChatSessionStatus = "active" | "deleted"
 export type ChatRunStatus = "queued" | "running" | "waiting" | "stopped" | "completed" | "cancelled" | "error"
 export type ChatMessageRole = "user" | "assistant"
@@ -14,6 +15,7 @@ export type ChatFailure = {
     | "model_unavailable"
     | "dependency_unavailable"
     | "model_access_denied"
+    | "model_settlement_pending"
   retryable: boolean
 }
 
@@ -32,6 +34,60 @@ export type ChatMessage = {
   created_at: string
   run_id?: string
   failure?: ChatFailure
+}
+
+/** Private read-only representation; historical Message/command/share bodies stay unchanged. */
+export type OrderedMessageRendering = {
+  mode: "ordered"
+  format_version: 1
+  revision: string
+  event_watermark: string | null
+  parts_cursor: string
+  final_segment_id?: string
+}
+
+export type ChatMessageRead = (
+  | ChatMessage
+  | (Omit<ChatMessage, "role" | "content" | "run_id"> & {
+      role: "assistant"
+      content: null
+      run_id: string
+      rendering: OrderedMessageRendering
+    })
+) & { terminal_status?: "cancelled"; regenerated_from_message_id?: string }
+
+export type MessageTextPartSlice = {
+  kind: "text"
+  part_id: string
+  segment_id: string
+  first_sequence: string
+  latest_sequence: string
+  text: string
+  offset: string
+  end: string
+  total_scalars: string
+  completed: boolean
+}
+
+export type MessageActivityPart = {
+  kind: "activity"
+  part_id: string
+  first_sequence: string
+  latest_sequence: string
+  /** Validated by the existing strict owner activity decoder, not raw tool payload. */
+  activity: Record<string, unknown>
+}
+
+export type MessagePartsPage = {
+  session_id: string
+  message_id: string
+  run_id: string
+  format_version: 1
+  revision: string
+  event_watermark: string | null
+  items: Array<MessageTextPartSlice | MessageActivityPart>
+  next_cursor: string | null
+  final_segment_id?: string
 }
 
 export type ChatEvent = {
@@ -94,6 +150,16 @@ export type ChatSessionDetail = {
     activities: Array<Record<string, unknown>>
     next_cursor: string | null
   } | null
+}
+
+export type ChatComposerSelection = Readonly<{
+  source_message_id: string
+  selected_mcp_connection_ids: string[]
+  selected_custom_api_profiles?: SelectedCustomApiProfile[]
+}>
+export type PrivateChatSessionDetail = Omit<ChatSessionDetail, "messages"> & {
+  messages?: ChatMessageRead[]
+  composer_selection?: ChatComposerSelection
 }
 
 /** Public read projection of the published owner full state; no private decision values. */

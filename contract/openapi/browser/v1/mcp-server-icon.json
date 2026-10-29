@@ -1,0 +1,721 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kokoro BFF browser-private MCP Server icon",
+    "version": "1.0.0"
+  },
+  "x-kokoro-media-policy": {
+    "profile": "mcp-server-icon-browser",
+    "version": "1.0.0",
+    "owner": "kokoro-bff",
+    "visibility": "browser-private",
+    "path": "/browser/v1/mcp/servers/{server_id}/icon",
+    "method": "GET",
+    "operation_id": "getPersonalMcpServerIcon",
+    "permission": "mcp_personal.read",
+    "body": false,
+    "query": false,
+    "command_headers": false,
+    "automatic_retries": false,
+    "new_command_authorized": false,
+    "max_bytes": 1048576,
+    "max_reference_ttl_ms": 301000,
+    "success": {
+      "status": 200,
+      "content_types": [
+        "image/png",
+        "image/jpeg"
+      ],
+      "headers": {
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "content-length": "exact_verified_bytes",
+        "x-request-id": "request_correlation"
+      }
+    },
+    "errors": [
+      {
+        "status": 400,
+        "code": "invalid_mcp_personal_request",
+        "retryable": false
+      },
+      {
+        "status": 404,
+        "code": "mcp_personal_not_found",
+        "retryable": false
+      },
+      {
+        "status": 502,
+        "code": "mcp_personal_response_invalid",
+        "retryable": false
+      },
+      {
+        "status": 503,
+        "code": "mcp_personal_dependency_unavailable",
+        "retryable": true
+      },
+      {
+        "status": 401,
+        "code": "session_authentication_required",
+        "retryable": false
+      },
+      {
+        "status": 401,
+        "code": "session_invalid",
+        "retryable": false
+      },
+      {
+        "status": 403,
+        "code": "service_auth_failed",
+        "retryable": false
+      },
+      {
+        "status": 403,
+        "code": "product_tenant_forbidden",
+        "retryable": false
+      },
+      {
+        "status": 403,
+        "code": "session_forbidden",
+        "retryable": false
+      },
+      {
+        "status": 429,
+        "code": "session_rate_limited",
+        "retryable": true
+      },
+      {
+        "status": 503,
+        "code": "product_tenant_not_configured",
+        "retryable": true
+      },
+      {
+        "status": 503,
+        "code": "iam_admission_unavailable",
+        "retryable": true
+      }
+    ]
+  },
+  "paths": {
+    "/browser/v1/mcp/servers/{server_id}/icon": {
+      "get": {
+        "operationId": "getPersonalMcpServerIcon",
+        "x-kokoro-owner": "kokoro-bff",
+        "x-kokoro-visibility": "browser-private",
+        "x-kokoro-stability": "beta",
+        "x-kokoro-idempotency": "none",
+        "x-kokoro-permission": "mcp_personal.read",
+        "description": "No query, body or command headers. Independently verifies the complete bounded object, current exact binding and fresh human Session/MCP read before any image bytes. No signed URL is exposed.",
+        "security": [
+          {
+            "ProductSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete verified PNG or JPEG bytes, never a JSON envelope or URL",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "content-length": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                },
+                "description": "Exact verified binary length, at most 1048576"
+              },
+              "x-content-type-options": {
+                "required": true,
+                "schema": {
+                  "const": "nosniff"
+                }
+              },
+              "referrer-policy": {
+                "required": true,
+                "schema": {
+                  "const": "no-referrer"
+                }
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Closed existing private MCP read/admission failure; no partial image output or command authorization",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "invalid_mcp_personal_request"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Closed existing private MCP read/admission failure; no partial image output or command authorization",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "session_authentication_required"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "session_invalid"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Closed existing private MCP read/admission failure; no partial image output or command authorization",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "service_auth_failed"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "product_tenant_forbidden"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "session_forbidden"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Closed existing private MCP read/admission failure; no partial image output or command authorization",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_not_found"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Closed existing private MCP read/admission failure; no partial image output or command authorization",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,4}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "session_rate_limited"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": true
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Closed existing private MCP read/admission failure; no partial image output or command authorization",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_response_invalid"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Closed existing private MCP read/admission failure; no partial image output or command authorization",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "mcp_personal_dependency_unavailable"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "product_tenant_not_configured"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "iam_admission_unavailable"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "const": true
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ProductSession": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Existing trusted browser service envelope and current human Product Session, never an owner service credential."
+      }
+    }
+  }
+}

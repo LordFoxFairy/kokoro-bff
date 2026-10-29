@@ -12,6 +12,7 @@ export const AGENT_FAILURE_CODES = [
   "model_unavailable",
   "dependency_unavailable",
   "model_access_denied",
+  "model_settlement_pending",
 ] as const
 export const RETRYABLE_AGENT_FAILURE_CODES = ["model_unavailable", "dependency_unavailable"] as const
 

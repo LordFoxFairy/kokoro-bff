@@ -1,0 +1,3038 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "Kokoro Agent internal HTTP API",
+    "description": "Agent-owned execution admission, control, evidence and identity-scoped chat query boundary. The BFF consumes this contract; the Agent does not expose browser SSE or AG-UI.",
+    "version": "8.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://{host}:{port}",
+      "variables": {
+        "host": {
+          "default": "127.0.0.1"
+        },
+        "port": {
+          "default": "4401"
+        }
+      }
+    }
+  ],
+  "x-kokoro-owner": "kokoro-agent",
+  "x-kokoro-visibility": "internal-owner",
+  "x-kokoro-stability": "stable",
+  "tags": [
+    {
+      "name": "health",
+      "description": "Process and dependency health."
+    },
+    {
+      "name": "runs",
+      "description": "Run admission, control and execution evidence."
+    },
+    {
+      "name": "sessions",
+      "description": "Identity-scoped chat history and replay."
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "AgentServiceBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque service credential",
+        "description": "BFF or another trusted service credential. The credential is supplied by deployment, never by a browser."
+      },
+      "BillingModelCallReaderBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque service credential",
+        "description": "Dedicated kokoro-billing credential for exact model-call evidence reads."
+      }
+    },
+    "parameters": {
+      "RequestId": {
+        "name": "X-Request-Id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": "Caller correlation identifier. The Agent creates one when absent."
+      },
+      "TenantRef": {
+        "name": "X-Kokoro-Tenant-Ref",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "SubjectRef": {
+        "name": "X-Kokoro-Subject-Ref",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "SubjectKind": {
+        "name": "X-Kokoro-Subject-Kind",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "user",
+            "project",
+            "service"
+          ],
+          "default": "user"
+        }
+      },
+      "ActorRef": {
+        "name": "X-Kokoro-Actor-Ref",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "ActorKind": {
+        "name": "X-Kokoro-Actor-Kind",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "user",
+            "project",
+            "service"
+          ],
+          "default": "user"
+        }
+      },
+      "AssertionRef": {
+        "name": "X-Kokoro-Identity-Assertion-Ref",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": "Stable command identity. Reusing it with a different request body is rejected."
+      },
+      "AfterSeq": {
+        "name": "after_seq",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "EvidenceAfterSeq": {
+        "name": "after_seq",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": -1,
+          "maximum": 9223372036854775807,
+          "default": -1
+        }
+      },
+      "EvidenceLimit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 200
+        }
+      },
+      "SessionLimit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      "ProjectRef": {
+        "name": "project_ref",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "SessionCursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "required": [
+          "status",
+          "service"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "ready"
+            ]
+          },
+          "service": {
+            "type": "string",
+            "const": "kokoro-agent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Meta": {
+        "type": "object",
+        "required": [
+          "request_id"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "error",
+          "meta"
+        ],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Error"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IdentityRef": {
+        "type": "object",
+        "required": [
+          "kind",
+          "opaque_ref"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "user",
+              "project",
+              "service"
+            ]
+          },
+          "opaque_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExecutionIdentity": {
+        "type": "object",
+        "required": [
+          "tenant_ref",
+          "actor",
+          "subject",
+          "identity_assertion_ref"
+        ],
+        "properties": {
+          "tenant_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actor": {
+            "$ref": "#/components/schemas/IdentityRef"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/IdentityRef"
+          },
+          "identity_assertion_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "LaunchRequest": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "run_id",
+          "session_id",
+          "feature_key",
+          "selected_skill_source_refs",
+          "message_id",
+          "content",
+          "project_ref"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "run_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "feature_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "selected_skill_source_refs": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "x-kokoro-json-byte-limit": 4096,
+            "description": "Exact Platform SkillSourceRef values for this Run, in caller-selected order; explicit [] means no external Skill. The JSON array must encode to at most 4096 bytes.",
+            "items": {
+              "type": "string",
+              "minLength": 7,
+              "maxLength": 197,
+              "pattern": "^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])"
+            }
+          },
+          "message_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          },
+          "requested_model_label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "trace": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "project_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected_mcp_connection_ids": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "x-kokoro-json-byte-limit": 4096,
+            "description": "Exact Platform MCP Connection IDs selected for this Run, in caller order. Omission or [] selects no additional connections; selection is intent, not authorization. JSON ASCII encoding is limited to 4096 bytes.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 191,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "LaunchReceipt": {
+        "type": "object",
+        "required": [
+          "run_id",
+          "session_id",
+          "replayed"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LaunchReceiptEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/LaunchReceipt"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CancelControl": {
+        "type": "object",
+        "required": [
+          "kind",
+          "session_id"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "run.cancel"
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "SteerControl": {
+        "type": "object",
+        "required": [
+          "kind",
+          "session_id",
+          "message_id",
+          "content"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "run.steer"
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResumeDecision": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "item_id"
+            ],
+            "properties": {
+              "type": {
+                "const": "approve"
+              },
+              "args": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              },
+              "item_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "item_id",
+              "args"
+            ],
+            "properties": {
+              "type": {
+                "const": "edit"
+              },
+              "args": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "item_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "item_id"
+            ],
+            "properties": {
+              "type": {
+                "const": "reject"
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "item_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "item_id",
+              "response"
+            ],
+            "properties": {
+              "type": {
+                "const": "respond"
+              },
+              "response": {
+                "type": "string",
+                "minLength": 1
+              },
+              "item_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "item_id",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "const": "submit"
+              },
+              "value": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "item_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ResumeControl": {
+        "type": "object",
+        "required": [
+          "kind",
+          "session_id",
+          "decisions",
+          "expected_pause_revision",
+          "pause_ref"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "run.resume"
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "decisions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/ResumeDecision"
+            }
+          },
+          "expected_pause_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "pause_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "description": "Full pending collection submission for one exact pause. The owner rejects duplicate, missing, extra or stale item identities as a whole; HTTP admission is not native consumption."
+      },
+      "ControlRequest": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/CancelControl"
+          },
+          {
+            "$ref": "#/components/schemas/SteerControl"
+          },
+          {
+            "$ref": "#/components/schemas/ResumeControl"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "kind"
+        }
+      },
+      "ControlReceipt": {
+        "type": "object",
+        "required": [
+          "command_id",
+          "request_digest",
+          "status",
+          "replayed"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "request_digest": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "error_code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentEvent": {
+        "type": "object",
+        "required": [
+          "kind",
+          "run_id",
+          "index",
+          "timestamp",
+          "payload"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "run_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "index": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Internal Agent event time in UTC epoch milliseconds; public BFF projections translate it to RFC 3339."
+          },
+          "durable_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "event_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "EvidencePage": {
+        "type": "object",
+        "required": [
+          "run_id",
+          "events",
+          "next_seq",
+          "terminal"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentEvent"
+            }
+          },
+          "next_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": -1,
+            "maximum": 9223372036854775807
+          },
+          "terminal": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChatMessage": {
+        "type": "object",
+        "required": [
+          "chat_message_id",
+          "session_id",
+          "run_id",
+          "role",
+          "content",
+          "status",
+          "seq",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "chat_message_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "run_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed"
+            ]
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Internal Agent UTC epoch milliseconds."
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Internal Agent UTC epoch milliseconds."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChatEvent": {
+        "type": "object",
+        "required": [
+          "chat_event_id",
+          "session_id",
+          "run_id",
+          "source_index",
+          "event_type",
+          "payload_json",
+          "seq",
+          "created_at"
+        ],
+        "properties": {
+          "chat_event_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "run_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_index": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "chat_message_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "run.started",
+              "assistant.delta",
+              "assistant.completed",
+              "activity",
+              "todo.updated",
+              "interaction.state",
+              "delivery",
+              "run.completed",
+              "run.failed"
+            ]
+          },
+          "payload_json": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Internal Agent UTC epoch milliseconds."
+          }
+        },
+        "additionalProperties": false,
+        "x-kokoro-decoded-payloads": {
+          "discriminator": "event_type",
+          "property": "payload_json",
+          "mapping": {
+            "run.failed": "#/components/schemas/ChatFailure",
+            "interaction.state": "#/components/schemas/ChatInteractionState",
+            "activity": "#/components/schemas/ChatActivity",
+            "todo.updated": "#/components/schemas/ChatTodo"
+          }
+        }
+      },
+      "Session": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "title",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "project_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Internal Agent UTC epoch milliseconds."
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Internal Agent UTC epoch milliseconds."
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionListPage": {
+        "type": "object",
+        "required": [
+          "sessions"
+        ],
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "HistoryPage": {
+        "type": "object",
+        "required": [
+          "messages",
+          "next_seq"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            }
+          },
+          "next_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReplayPage": {
+        "type": "object",
+        "required": [
+          "events",
+          "next_seq",
+          "watermark"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatEvent"
+            }
+          },
+          "next_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "watermark": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReplayPageEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReplayPage"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {},
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExecutionProofJwkSet": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "keys"
+        ],
+        "properties": {
+          "keys": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kty",
+                "crv",
+                "use",
+                "alg",
+                "kid",
+                "x"
+              ],
+              "properties": {
+                "kty": {
+                  "type": "string",
+                  "const": "OKP"
+                },
+                "crv": {
+                  "type": "string",
+                  "const": "Ed25519"
+                },
+                "use": {
+                  "type": "string",
+                  "const": "sig"
+                },
+                "alg": {
+                  "type": "string",
+                  "const": "EdDSA"
+                },
+                "kid": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "x": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Failure": {
+        "type": "object",
+        "required": [
+          "code",
+          "retryable"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "token_budget_exceeded",
+              "recursion_limit_exceeded",
+              "assembly_failed",
+              "enqueue_failed",
+              "dispatch_exhausted",
+              "contract_incompatible",
+              "internal_error",
+              "model_unavailable",
+              "dependency_unavailable",
+              "model_access_denied",
+              "model_settlement_pending"
+            ]
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "if": {
+          "properties": {
+            "retryable": {
+              "const": true
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "code": {
+              "enum": [
+                "model_unavailable",
+                "dependency_unavailable"
+              ]
+            }
+          }
+        }
+      },
+      "RunFailure": {
+        "$ref": "#/components/schemas/Failure",
+        "unevaluatedProperties": false
+      },
+      "ChatFailure": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Failure"
+          },
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "failed"
+              }
+            }
+          }
+        ],
+        "unevaluatedProperties": false
+      },
+      "InteractionValidation": {
+        "type": "object",
+        "required": [
+          "code",
+          "instance_path"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "json_schema_invalid"
+          },
+          "instance_path": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "integer"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "InteractionDisplay": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "editable",
+          "input_schema"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "input_schema": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "result_preview": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "truncated": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "result_preview"
+              ],
+              "properties": {
+                "result_preview": {
+                  "type": "string"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "truncated",
+                "source"
+              ],
+              "properties": {
+                "truncated": {
+                  "type": "boolean"
+                },
+                "source": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        ]
+      },
+      "InteractionItem": {
+        "type": "object",
+        "required": [
+          "item_id",
+          "request_id",
+          "kind",
+          "allowed_decisions",
+          "display"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "tool_approval",
+              "ask_user_question",
+              "result_review",
+              "input"
+            ]
+          },
+          "allowed_decisions": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "approve",
+                "edit",
+                "reject",
+                "respond",
+                "submit"
+              ]
+            }
+          },
+          "display": {
+            "$ref": "#/components/schemas/InteractionDisplay"
+          },
+          "validation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InteractionValidation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "InteractionGroup": {
+        "type": "object",
+        "required": [
+          "group_id",
+          "items"
+        ],
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/InteractionItem"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "InteractionActionResult": {
+        "type": "object",
+        "required": [
+          "command_id",
+          "pause_revision",
+          "kind"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "pause_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "native_consumed",
+              "validation_failed",
+              "unknown",
+              "cancelled"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChatInteractionState": {
+        "type": "object",
+        "required": [
+          "interaction_revision",
+          "pause_revision",
+          "pause_ref",
+          "phase",
+          "groups",
+          "action_result"
+        ],
+        "properties": {
+          "interaction_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "pause_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pause_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "active",
+              "waiting",
+              "resuming",
+              "terminal"
+            ]
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InteractionGroup"
+            }
+          },
+          "action_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InteractionActionResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "phase": {
+                  "enum": [
+                    "waiting",
+                    "resuming"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "groups": {
+                  "minItems": 1
+                },
+                "pause_revision": {
+                  "minimum": 1
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "groups": {
+                  "maxItems": 0
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "pause_revision": {
+                  "const": 0
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "pause_ref": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "pause_ref": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "phase": {
+                  "const": "resuming"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "action_result": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/InteractionActionResult"
+                    },
+                    {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "accepted",
+                            "unknown"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "description": "Complete replacement of the pending collection, never a delta. Runtime additionally enforces globally unique group/item IDs, pause_revision <= interaction_revision, action_result.pause_revision <= pause_revision, exact current revision for resuming, and an earlier action revision for validation_failed waiting. Locator, arguments and submitted values are private and absent."
+      },
+      "ChatTodo": {
+        "type": "object",
+        "required": [
+          "todos"
+        ],
+        "properties": {
+          "todos": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "required": [
+                "content",
+                "status"
+              ],
+              "properties": {
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^[^\\uD800-\\uDFFF]*(?![\\s\\S])"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "completed"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false,
+        "x-kokoro-json-byte-limit": 65536
+      },
+      "ChatActivity": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "activity",
+              "activity_id",
+              "segment_id",
+              "status",
+              "display_code"
+            ],
+            "properties": {
+              "activity": {
+                "type": "string",
+                "const": "tool"
+              },
+              "activity_id": {
+                "type": "string",
+                "minLength": 68,
+                "maxLength": 68,
+                "pattern": "^act_[0-9a-f]{64}(?![\\s\\S])"
+              },
+              "segment_id": {
+                "type": "string",
+                "minLength": 68,
+                "maxLength": 68,
+                "pattern": "^seg_[0-9a-f]{64}(?![\\s\\S])"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "running",
+                  "completed",
+                  "failed"
+                ]
+              },
+              "display_code": {
+                "type": "string",
+                "enum": [
+                  "tool.execution",
+                  "tool.file.read",
+                  "tool.mcp.discover",
+                  "tool.mcp.describe",
+                  "tool.mcp.call",
+                  "tool.web.search",
+                  "tool.web.fetch"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "activity",
+              "activity_id",
+              "segment_id",
+              "status",
+              "display_code"
+            ],
+            "properties": {
+              "activity": {
+                "type": "string",
+                "const": "subagent"
+              },
+              "activity_id": {
+                "type": "string",
+                "minLength": 68,
+                "maxLength": 68,
+                "pattern": "^act_[0-9a-f]{64}(?![\\s\\S])"
+              },
+              "segment_id": {
+                "type": "string",
+                "minLength": 68,
+                "maxLength": 68,
+                "pattern": "^seg_[0-9a-f]{64}(?![\\s\\S])"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "running",
+                  "completed",
+                  "failed"
+                ]
+              },
+              "display_code": {
+                "type": "string",
+                "const": "subagent.execution"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "activity",
+              "activity_id",
+              "preflight_id",
+              "source_refs",
+              "phase"
+            ],
+            "properties": {
+              "activity": {
+                "type": "string",
+                "const": "skill"
+              },
+              "activity_id": {
+                "type": "string",
+                "minLength": 68,
+                "maxLength": 68,
+                "pattern": "^act_[0-9a-f]{64}(?![\\s\\S])"
+              },
+              "preflight_id": {
+                "type": "string",
+                "minLength": 68,
+                "maxLength": 68,
+                "pattern": "^spf_[0-9a-f]{64}(?![\\s\\S])"
+              },
+              "source_refs": {
+                "type": "array",
+                "maxItems": 16,
+                "uniqueItems": true,
+                "x-kokoro-json-byte-limit": 4096,
+                "description": "Exact Platform SkillSourceRef values for this Run, in caller-selected order; explicit [] means no external Skill. The JSON array must encode to at most 4096 bytes.",
+                "items": {
+                  "type": "string",
+                  "minLength": 7,
+                  "maxLength": 197,
+                  "pattern": "^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])"
+                },
+                "minItems": 1
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "resolving",
+                  "loading",
+                  "ready",
+                  "failed"
+                ]
+              },
+              "error_code": {
+                "type": "string",
+                "enum": [
+                  "skill_resolve_failed",
+                  "skill_load_failed"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "if": {
+              "properties": {
+                "phase": {
+                  "const": "failed"
+                }
+              },
+              "required": [
+                "phase"
+              ]
+            },
+            "then": {
+              "required": [
+                "error_code"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "error_code"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "FinalModelCallUsageEvidence": {
+        "type": "object",
+        "required": [
+          "artifact_version",
+          "attempt_id",
+          "event_id",
+          "revision",
+          "evidence_bytes_base64url",
+          "evidence_digest",
+          "sealed",
+          "observed_at"
+        ],
+        "properties": {
+          "artifact_version": {
+            "type": "string",
+            "enum": [
+              "1.0.0",
+              "2.0.0"
+            ]
+          },
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "evidence_bytes_base64url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 87382,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "evidence_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sealed": {
+            "type": "boolean",
+            "const": true
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FinalModelCallUsageEvidenceEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/FinalModelCallUsageEvidence"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PreparedModelCallSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "binding_version",
+          "attempt_id",
+          "status",
+          "attempt_binding_bytes_base64url",
+          "attempt_binding_digest",
+          "planned_bytes_base64url",
+          "planned_digest",
+          "authorization_bytes_base64url",
+          "authorization_digest",
+          "final_request_binding_version",
+          "final_request_digest",
+          "prepared_at",
+          "observed_at",
+          "lease_expires_at"
+        ],
+        "properties": {
+          "binding_version": {
+            "type": "string",
+            "const": "2.0.0"
+          },
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "prepared",
+              "authorization_pending",
+              "authorized"
+            ]
+          },
+          "attempt_binding_bytes_base64url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 87382,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Original canonical RFC8785 UTF-8 JSON bytes, 1..65536, unpadded canonical base64url. Decoded shape is usage/v2 EvidenceIdentity with event_id removed; no other fields added. Its digest is ordinary SHA256 of these exact bytes."
+          },
+          "attempt_binding_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "planned_bytes_base64url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 87382,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Original canonical usage/v2 PlannedBinding bytes; binding_version must be 2.0.0. Ordinary SHA256, not the final evidence digest domain. Never actual commercial attribution."
+          },
+          "planned_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "authorization_bytes_base64url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 87382,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Current canonical usage/v2 AuthorizationObservation bytes: prepared/not_requested, authorization_pending/requested_unknown with original request_ref, or authorized/granted with original request_ref and admission_ref. This observation changes with state; it is not the creation receipt."
+          },
+          "authorization_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "final_request_binding_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "final_request_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "prepared_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+            "description": "Database time for the single joined read; lease expiry is observation, never a renewable dispatch permit."
+          },
+          "lease_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+          }
+        }
+      },
+      "PreparedModelCallSnapshotEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PreparedModelCallSnapshot"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Request validation failed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Service credential or trusted identity is missing or invalid.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The identity-scoped resource does not exist.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The idempotency identity was reused with a different request.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "A required Agent dependency is unavailable.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Process health",
+        "operationId": "getHealth",
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "public-health",
+        "responses": {
+          "200": {
+            "description": "Process is alive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Dependency readiness",
+        "operationId": "getReadiness",
+        "security": [
+          {
+            "AgentServiceBearer": []
+          }
+        ],
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "agent-service",
+        "responses": {
+          "200": {
+            "description": "Required dependencies are reachable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/v1/runs": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Durably admit a run",
+        "operationId": "createRun",
+        "security": [
+          {
+            "AgentServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectKind"
+          },
+          {
+            "$ref": "#/components/parameters/ActorRef"
+          },
+          {
+            "$ref": "#/components/parameters/ActorKind"
+          },
+          {
+            "$ref": "#/components/parameters/AssertionRef"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LaunchRequest"
+              }
+            }
+          }
+        },
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "run_id-and-request-fence",
+        "x-kokoro-permission": "agent-service",
+        "responses": {
+          "202": {
+            "description": "Admission persisted and notification published or replayable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LaunchReceiptEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/v1/runs/{run_id}/control": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Admit an idempotent run control command",
+        "operationId": "controlRun",
+        "security": [
+          {
+            "AgentServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectKind"
+          },
+          {
+            "$ref": "#/components/parameters/ActorRef"
+          },
+          {
+            "$ref": "#/components/parameters/ActorKind"
+          },
+          {
+            "$ref": "#/components/parameters/AssertionRef"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlRequest"
+              }
+            }
+          }
+        },
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "Idempotency-Key",
+        "x-kokoro-permission": "agent-service",
+        "responses": {
+          "202": {
+            "description": "Command receipt admitted or replayed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/v1/runs/{run_id}/events": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Read identity-scoped run evidence",
+        "operationId": "listRunEvents",
+        "security": [
+          {
+            "AgentServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/EvidenceAfterSeq"
+          },
+          {
+            "$ref": "#/components/parameters/EvidenceLimit"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectKind"
+          },
+          {
+            "$ref": "#/components/parameters/ActorRef"
+          },
+          {
+            "$ref": "#/components/parameters/ActorKind"
+          },
+          {
+            "$ref": "#/components/parameters/AssertionRef"
+          }
+        ],
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "agent-service",
+        "responses": {
+          "200": {
+            "description": "Evidence page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/v1/sessions": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "List identity-scoped sessions",
+        "operationId": "listSessions",
+        "security": [
+          {
+            "AgentServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectRef"
+          },
+          {
+            "$ref": "#/components/parameters/SessionCursor"
+          },
+          {
+            "$ref": "#/components/parameters/SessionLimit"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectKind"
+          },
+          {
+            "$ref": "#/components/parameters/ActorRef"
+          },
+          {
+            "$ref": "#/components/parameters/ActorKind"
+          },
+          {
+            "$ref": "#/components/parameters/AssertionRef"
+          }
+        ],
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "agent-service",
+        "responses": {
+          "200": {
+            "description": "Session page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/v1/sessions/{session_id}/messages": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Read identity-scoped chat history",
+        "operationId": "listSessionMessages",
+        "security": [
+          {
+            "AgentServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/AfterSeq"
+          },
+          {
+            "$ref": "#/components/parameters/EvidenceLimit"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectKind"
+          },
+          {
+            "$ref": "#/components/parameters/ActorRef"
+          },
+          {
+            "$ref": "#/components/parameters/ActorKind"
+          },
+          {
+            "$ref": "#/components/parameters/AssertionRef"
+          }
+        ],
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "agent-service",
+        "responses": {
+          "200": {
+            "description": "History page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/v1/sessions/{session_id}/events": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Replay identity-scoped chat events",
+        "operationId": "replaySessionEvents",
+        "security": [
+          {
+            "AgentServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/AfterSeq"
+          },
+          {
+            "$ref": "#/components/parameters/EvidenceLimit"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectRef"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectKind"
+          },
+          {
+            "$ref": "#/components/parameters/ActorRef"
+          },
+          {
+            "$ref": "#/components/parameters/ActorKind"
+          },
+          {
+            "$ref": "#/components/parameters/AssertionRef"
+          }
+        ],
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "agent-service",
+        "responses": {
+          "200": {
+            "description": "Replay page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayPageEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/v1/execution-proof/jwks": {
+      "get": {
+        "tags": [
+          "execution-proof"
+        ],
+        "summary": "Read the execution-proof public JWK set",
+        "operationId": "getExecutionProofJwks",
+        "security": [],
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "none",
+        "responses": {
+          "200": {
+            "description": "Canonical Agent execution-proof public JWK set.",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "Every representation is non-cacheable."
+              },
+              "Content-Length": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "description": "Exact GET representation byte length; HEAD returns no body with the same value."
+              }
+            },
+            "content": {
+              "application/jwk-set+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionProofJwkSet"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request framing or headers are invalid.",
+            "x-kokoro-error-code": "execution_proof_jwks_invalid_request",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "Every representation is non-cacheable."
+              },
+              "Content-Length": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "description": "Exact GET representation byte length; HEAD returns no body with the same value."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Only GET and HEAD are allowed.",
+            "x-kokoro-error-code": "execution_proof_jwks_method_not_allowed",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "Every representation is non-cacheable."
+              },
+              "Content-Length": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "description": "Exact GET representation byte length; HEAD returns no body with the same value."
+              },
+              "Allow": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "GET, HEAD"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The immutable public key ring is unavailable.",
+            "x-kokoro-error-code": "execution_proof_jwks_unavailable",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "Every representation is non-cacheable."
+              },
+              "Content-Length": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "description": "Exact GET representation byte length; HEAD returns no body with the same value."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "execution-proof"
+        ],
+        "summary": "Inspect the execution-proof public JWK set",
+        "operationId": "headExecutionProofJwks",
+        "security": [],
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "none",
+        "responses": {
+          "200": {
+            "description": "Canonical Agent execution-proof public JWK set.",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "Every representation is non-cacheable."
+              },
+              "Content-Length": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "description": "Exact GET representation byte length; HEAD returns no body with the same value."
+              }
+            },
+            "content": {
+              "application/jwk-set+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionProofJwkSet"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request framing or headers are invalid.",
+            "x-kokoro-error-code": "execution_proof_jwks_invalid_request",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "Every representation is non-cacheable."
+              },
+              "Content-Length": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "description": "Exact GET representation byte length; HEAD returns no body with the same value."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Only GET and HEAD are allowed.",
+            "x-kokoro-error-code": "execution_proof_jwks_method_not_allowed",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "Every representation is non-cacheable."
+              },
+              "Content-Length": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "description": "Exact GET representation byte length; HEAD returns no body with the same value."
+              },
+              "Allow": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "GET, HEAD"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The immutable public key ring is unavailable.",
+            "x-kokoro-error-code": "execution_proof_jwks_unavailable",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "Every representation is non-cacheable."
+              },
+              "Content-Length": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "description": "Exact GET representation byte length; HEAD returns no body with the same value."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/model-call-attempts/{attempt_id}/usage-evidence/{event_id}": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Read one exact final model-call usage evidence artifact",
+        "operationId": "getFinalModelCallUsageEvidence",
+        "security": [
+          {
+            "BillingModelCallReaderBearer": []
+          }
+        ],
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "candidate",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "model-usage-evidence.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantRef"
+          },
+          {
+            "name": "attempt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exact immutable sealed evidence head.",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalModelCallUsageEvidenceEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Path identity is invalid.",
+            "x-kokoro-error-code": "invalid_model_call_evidence_identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Reader credential is invalid.",
+            "x-kokoro-error-code": "billing_model_call_reader_auth_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Tenant assertion or identity context is forbidden.",
+            "x-kokoro-error-code": "billing_model_call_reader_identity_forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Evidence is absent or not visible.",
+            "x-kokoro-error-code": "model_call_evidence_not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Persisted evidence violates owner invariants.",
+            "x-kokoro-error-code": "model_call_evidence_invariant_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Reader authentication or dependency is unavailable.",
+            "x-kokoro-error-code": "billing_model_call_reader_not_configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read the exact immutable sealed event, including historical revisions, for the authenticated Billing reader tenant and attempt. Independently validate the current head and requested event against frozen attempt facts; a corrupt or missing head fails closed. Return original artifact bytes, revision, digest and observation time. This read does not grant execution permission or modify authorization, evidence or funds."
+      }
+    },
+    "/v1/model-call-attempts/{attempt_id}/prepared": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Read current frozen model-call preparation for Billing admission",
+        "operationId": "getPreparedModelCall",
+        "security": [
+          {
+            "BillingModelCallReaderBearer": []
+          }
+        ],
+        "x-kokoro-owner": "kokoro-agent",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "candidate",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "model-call-prepared.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantRef"
+          },
+          {
+            "name": "attempt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current read-only preparation observation, not an immutable historical receipt.",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreparedModelCallSnapshotEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Path or query is invalid.",
+            "x-kokoro-error-code": "invalid_model_call_prepared_request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Reader credential is invalid.",
+            "x-kokoro-error-code": "billing_model_call_reader_auth_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Tenant assertion or identity context is forbidden.",
+            "x-kokoro-error-code": "billing_model_call_reader_identity_forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Preparation is absent or not visible.",
+            "x-kokoro-error-code": "model_call_prepared_not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Persisted preparation violates owner invariants.",
+            "x-kokoro-error-code": "model_call_prepared_invariant_failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Reader authentication or dependency is unavailable.",
+            "x-kokoro-error-code": "billing_model_call_reader_not_configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Current state or lease is unsuitable for admission; this is not proof of non-dispatch.",
+            "x-kokoro-error-code": "model_call_prepared_unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "description": "Dedicated Billing observation, not a dispatch permit or supplier cost bound. No query or request body. Only current usage2 prepared/pending/authorized attempts with live matching Run fence are visible as successful snapshots. Existing Billing receipt recovery does not require this read to remain available."
+      }
+    }
+  }
+}

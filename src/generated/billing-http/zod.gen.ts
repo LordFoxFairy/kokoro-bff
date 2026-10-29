@@ -2,7 +2,71 @@
 
 import * as z from "zod"
 
+export const zMeteringRational = z
+  .object({
+    numerator: z
+      .string()
+      .max(78)
+      .regex(/^(?:0|[1-9][0-9]{0,77})$(?![\s\S])/),
+    denominator: z
+      .string()
+      .max(78)
+      .regex(/^[1-9][0-9]{0,77}$(?![\s\S])/),
+  })
+  .strict()
+
+export const zMeteringPublication = z
+  .object({
+    kind: z.enum(["rate", "policy"]),
+    revision: z
+      .string()
+      .max(19)
+      .regex(/^[1-9][0-9]{0,18}$(?![\s\S])/),
+    content_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    published_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    effective_from: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+  })
+  .strict()
+
+export const zMeteringPublicationResponse = z
+  .object({
+    data: zMeteringPublication,
+  })
+  .strict()
+
+export const zAdminCreditGrantRequest = z
+  .object({
+    funding_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/),
+    subject_id: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    amount_credits: z
+      .string()
+      .min(1)
+      .max(13)
+      .regex(/^[1-9][0-9]{0,12}$(?![\s\S])/),
+    reason: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 500),
+    effective_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+  })
+  .strict()
+
 export const zUuid = z.uuid()
+
+export const zAdminCreditGrantResponse = z
+  .object({
+    data: z
+      .object({
+        account_id: zUuid,
+        grant_id: zUuid,
+        journal_id: zUuid,
+      })
+      .strict(),
+  })
+  .strict()
 
 export const zUtcInstant = z.iso.datetime().regex(/Z$/)
 
@@ -15,6 +79,163 @@ export const zCreditMicros = zDecimalInteger
 export const zNonNegativeCreditMicros = zCreditMicros.and(zNonNegativeDecimal)
 
 export const zCurrencyCode = z.string().regex(/^[A-Z]{3}$/)
+
+export const zMeteringRate = z
+  .object({
+    model_revision: z
+      .object({
+        id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+        content_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+      })
+      .strict(),
+    provider_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    environment: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    pricing_account_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    model_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    model_version: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    bucket: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 128),
+    unit: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 128),
+    applicability: z.union([
+      z
+        .object({
+          kind: z.literal("all"),
+        })
+        .strict(),
+      z
+        .object({
+          kind: z.literal("range"),
+          dimension: z
+            .string()
+            .min(1)
+            .refine((value) => [...value].length <= 128),
+          unit: z
+            .string()
+            .min(1)
+            .refine((value) => [...value].length <= 128),
+          lower_inclusive: z
+            .string()
+            .max(19)
+            .regex(/^(?:0|[1-9][0-9]{0,77})$(?![\s\S])/),
+          upper_exclusive: z
+            .string()
+            .max(19)
+            .regex(/^(?:0|[1-9][0-9]{0,18})$(?![\s\S])/)
+            .nullable(),
+        })
+        .strict(),
+    ]),
+    currency_code: zCurrencyCode,
+    minor_per_unit: zMeteringRational,
+  })
+  .strict()
+
+export const zMeteringRateConfiguration = z
+  .object({
+    effective_from: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    source_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    verified_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    rates: z.array(zMeteringRate).min(1).max(64),
+  })
+  .strict()
+
+export const zMeteringPolicyConfiguration = z
+  .object({
+    effective_from: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    source_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 255),
+    verified_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    currency_code: zCurrencyCode,
+    multiplier: zMeteringRational,
+    credit_micros_per_minor: zMeteringRational,
+    max_attempt_credits: z
+      .string()
+      .max(13)
+      .regex(/^[1-9][0-9]{0,12}$(?![\s\S])/),
+  })
+  .strict()
+
+export const zAdminMeteringRatePublishRequest = z
+  .object({
+    publication_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/),
+    reason: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 500),
+    configuration: zMeteringRateConfiguration,
+  })
+  .strict()
+
+export const zAdminMeteringPolicyPublishRequest = z
+  .object({
+    publication_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/),
+    reason: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 500),
+    configuration: zMeteringPolicyConfiguration,
+  })
+  .strict()
+
+export const zMeteringRateRevision = z
+  .object({
+    revision: z
+      .string()
+      .max(19)
+      .regex(/^[1-9][0-9]{0,18}$(?![\s\S])/),
+    content_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    published_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    configuration: zMeteringRateConfiguration,
+  })
+  .strict()
+
+export const zMeteringPolicyRevision = z
+  .object({
+    revision: z
+      .string()
+      .max(19)
+      .regex(/^[1-9][0-9]{0,18}$(?![\s\S])/),
+    content_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    published_at: z.iso.datetime().regex(/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    configuration: zMeteringPolicyConfiguration,
+  })
+  .strict()
+
+export const zAdminMeteringPricingResponse = z
+  .object({
+    data: z
+      .object({
+        rate_revision: zMeteringRateRevision.nullable(),
+        policy_revision: zMeteringPolicyRevision.nullable(),
+      })
+      .strict(),
+  })
+  .strict()
 
 export const zErrorResponse = z
   .object({
@@ -98,6 +319,267 @@ export const zCreditLedgerResponse = z
   })
   .strict()
 
+export const zAdmissionCreateRequest = z
+  .object({
+    run_id: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 512)
+      .meta({ maxLength: 512 }),
+    attempt_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+    request_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 512)
+      .meta({ maxLength: 512 }),
+    attempt_binding_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    planned_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    final_request_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+  })
+  .strict()
+
+export const zAdmissionSettlementRequest = z
+  .object({
+    run_id: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 512)
+      .meta({ maxLength: 512 }),
+    evidence_event_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+    evidence_revision: z
+      .string()
+      .max(19)
+      .refine(
+        (value) =>
+          !new RegExp(
+            "^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\\s\\S])",
+          ).test(value),
+      )
+      .meta({
+        not: {
+          pattern:
+            "^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\\s\\S])",
+        },
+      })
+      .regex(/^[1-9][0-9]*$(?![\s\S])/),
+    evidence_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+  })
+  .strict()
+
+export const zAdmissionSettlement = z
+  .object({
+    admission_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+    attempt_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+    evidence_event_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+    run_id: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 512)
+      .meta({ maxLength: 512 }),
+    evidence_revision: z
+      .string()
+      .max(19)
+      .refine(
+        (value) =>
+          !new RegExp(
+            "^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\\s\\S])",
+          ).test(value),
+      )
+      .meta({
+        not: {
+          pattern:
+            "^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\\s\\S])",
+        },
+      })
+      .regex(/^[1-9][0-9]*$(?![\s\S])/),
+    evidence_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    status: z.enum(["captured", "released", "pending_reconciliation"]),
+    reason: z.enum(["unknown_usage_or_outcome", "budget_exceeded"]).nullable(),
+    captured_credits: z
+      .string()
+      .max(13)
+      .refine(
+        (value) =>
+          !new RegExp(
+            "^(?:9[3-9][0-9]{11}|92[3-9][0-9]{10}|922[4-9][0-9]{9}|9223[4-9][0-9]{8}|92233[8-9][0-9]{7}|922337[3-9][0-9]{6}|9223372[1-9][0-9]{5}|92233720[4-9][0-9]{4}|922337203[7-9][0-9]{3}|92233720369[0-9]{2}|92233720368[6-9][0-9]{1}|922337203685[5-9])$(?![\\s\\S])",
+          ).test(value),
+      )
+      .meta({
+        not: {
+          pattern:
+            "^(?:9[3-9][0-9]{11}|92[3-9][0-9]{10}|922[4-9][0-9]{9}|9223[4-9][0-9]{8}|92233[8-9][0-9]{7}|922337[3-9][0-9]{6}|9223372[1-9][0-9]{5}|92233720[4-9][0-9]{4}|922337203[7-9][0-9]{3}|92233720369[0-9]{2}|92233720368[6-9][0-9]{1}|922337203685[5-9])$(?![\\s\\S])",
+        },
+      })
+      .regex(/^(?:0|[1-9][0-9]*)$(?![\s\S])/),
+    released_credits: z
+      .string()
+      .max(13)
+      .refine(
+        (value) =>
+          !new RegExp(
+            "^(?:9[3-9][0-9]{11}|92[3-9][0-9]{10}|922[4-9][0-9]{9}|9223[4-9][0-9]{8}|92233[8-9][0-9]{7}|922337[3-9][0-9]{6}|9223372[1-9][0-9]{5}|92233720[4-9][0-9]{4}|922337203[7-9][0-9]{3}|92233720369[0-9]{2}|92233720368[6-9][0-9]{1}|922337203685[5-9])$(?![\\s\\S])",
+          ).test(value),
+      )
+      .meta({
+        not: {
+          pattern:
+            "^(?:9[3-9][0-9]{11}|92[3-9][0-9]{10}|922[4-9][0-9]{9}|9223[4-9][0-9]{8}|92233[8-9][0-9]{7}|922337[3-9][0-9]{6}|9223372[1-9][0-9]{5}|92233720[4-9][0-9]{4}|922337203[7-9][0-9]{3}|92233720369[0-9]{2}|92233720368[6-9][0-9]{1}|922337203685[5-9])$(?![\\s\\S])",
+        },
+      })
+      .regex(/^(?:0|[1-9][0-9]*)$(?![\s\S])/),
+    usage_event_id: z
+      .uuid()
+      .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/)
+      .nullable(),
+    settlement_id: z
+      .uuid()
+      .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/)
+      .nullable(),
+    updated_at: z.iso.datetime().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+  })
+  .strict()
+  .pipe(
+    z.intersection(
+      z.union([
+        z.object({
+          status: z.literal("captured"),
+          reason: z.null().optional(),
+          usage_event_id: z.string().optional(),
+          settlement_id: z.string().optional(),
+        }),
+        z.object({
+          status: z.literal("released"),
+          reason: z.null().optional(),
+          captured_credits: z.literal("0").optional(),
+          usage_event_id: z.null().optional(),
+          settlement_id: z.null().optional(),
+        }),
+        z.object({
+          status: z.literal("pending_reconciliation"),
+          reason: z.enum(["unknown_usage_or_outcome", "budget_exceeded"]).optional(),
+          captured_credits: z.literal("0").optional(),
+          released_credits: z.literal("0").optional(),
+          usage_event_id: z.null().optional(),
+          settlement_id: z.null().optional(),
+        }),
+      ]),
+      z
+        .object({
+          admission_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+          attempt_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+          evidence_event_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+          run_id: z
+            .string()
+            .min(1)
+            .refine((value) => [...value].length <= 512)
+            .meta({ maxLength: 512 }),
+          evidence_revision: z
+            .string()
+            .max(19)
+            .refine(
+              (value) =>
+                !new RegExp(
+                  "^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\\s\\S])",
+                ).test(value),
+            )
+            .meta({
+              not: {
+                pattern:
+                  "^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\\s\\S])",
+              },
+            })
+            .regex(/^[1-9][0-9]*$(?![\s\S])/),
+          evidence_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+          status: z.enum(["captured", "released", "pending_reconciliation"]),
+          reason: z.enum(["unknown_usage_or_outcome", "budget_exceeded"]).nullable(),
+          captured_credits: z
+            .string()
+            .max(13)
+            .refine(
+              (value) =>
+                !new RegExp(
+                  "^(?:9[3-9][0-9]{11}|92[3-9][0-9]{10}|922[4-9][0-9]{9}|9223[4-9][0-9]{8}|92233[8-9][0-9]{7}|922337[3-9][0-9]{6}|9223372[1-9][0-9]{5}|92233720[4-9][0-9]{4}|922337203[7-9][0-9]{3}|92233720369[0-9]{2}|92233720368[6-9][0-9]{1}|922337203685[5-9])$(?![\\s\\S])",
+                ).test(value),
+            )
+            .meta({
+              not: {
+                pattern:
+                  "^(?:9[3-9][0-9]{11}|92[3-9][0-9]{10}|922[4-9][0-9]{9}|9223[4-9][0-9]{8}|92233[8-9][0-9]{7}|922337[3-9][0-9]{6}|9223372[1-9][0-9]{5}|92233720[4-9][0-9]{4}|922337203[7-9][0-9]{3}|92233720369[0-9]{2}|92233720368[6-9][0-9]{1}|922337203685[5-9])$(?![\\s\\S])",
+              },
+            })
+            .regex(/^(?:0|[1-9][0-9]*)$(?![\s\S])/),
+          released_credits: z
+            .string()
+            .max(13)
+            .refine(
+              (value) =>
+                !new RegExp(
+                  "^(?:9[3-9][0-9]{11}|92[3-9][0-9]{10}|922[4-9][0-9]{9}|9223[4-9][0-9]{8}|92233[8-9][0-9]{7}|922337[3-9][0-9]{6}|9223372[1-9][0-9]{5}|92233720[4-9][0-9]{4}|922337203[7-9][0-9]{3}|92233720369[0-9]{2}|92233720368[6-9][0-9]{1}|922337203685[5-9])$(?![\\s\\S])",
+                ).test(value),
+            )
+            .meta({
+              not: {
+                pattern:
+                  "^(?:9[3-9][0-9]{11}|92[3-9][0-9]{10}|922[4-9][0-9]{9}|9223[4-9][0-9]{8}|92233[8-9][0-9]{7}|922337[3-9][0-9]{6}|9223372[1-9][0-9]{5}|92233720[4-9][0-9]{4}|922337203[7-9][0-9]{3}|92233720369[0-9]{2}|92233720368[6-9][0-9]{1}|922337203685[5-9])$(?![\\s\\S])",
+              },
+            })
+            .regex(/^(?:0|[1-9][0-9]*)$(?![\s\S])/),
+          usage_event_id: z
+            .uuid()
+            .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/)
+            .nullable(),
+          settlement_id: z
+            .uuid()
+            .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/)
+            .nullable(),
+          updated_at: z.iso.datetime().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+        })
+        .strict(),
+    ),
+  )
+
+export const zAdmissionSettlementResponse = z
+  .object({
+    data: zAdmissionSettlement,
+  })
+  .strict()
+
+export const zAdmission = z
+  .object({
+    admission_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+    run_id: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 512)
+      .meta({ maxLength: 512 }),
+    attempt_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+    request_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 512)
+      .meta({ maxLength: 512 }),
+    attempt_binding_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    planned_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    final_request_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    hold_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+    budget_credits: z
+      .string()
+      .regex(
+        /^(?:[1-9][0-9]{0,11}|[1-8][0-9]{12}|9[0-1][0-9]{11}|92[0-1][0-9]{10}|922[0-2][0-9]{9}|9223[0-2][0-9]{8}|92233[0-6][0-9]{7}|922337[0-1][0-9]{6}|92233720[0-2][0-9]{4}|922337203[0-5][0-9]{3}|9223372036[0-7][0-9]{2}|92233720368[0-4][0-9]|922337203685[0-3]|9223372036854)$(?![\s\S])/,
+      ),
+    pricing_snapshot_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    status: z.enum(["held", "captured", "released", "pending_reconciliation"]),
+    created_at: z.iso.datetime().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+    updated_at: z.iso.datetime().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])/),
+  })
+  .strict()
+
+export const zAdmissionResponse = z
+  .object({
+    data: zAdmission,
+  })
+  .strict()
+
 export const zPersonalTenantId = z
   .string()
   .min(5)
@@ -109,6 +591,12 @@ export const zPersonalSubjectId = z
   .min(5)
   .max(1363)
   .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/)
+
+export const zIdempotencyKey = z
+  .string()
+  .min(8)
+  .max(128)
+  .regex(/^[\x20-\x7E]+$/)
 
 export const zLimit = z.int().gte(1).lte(100).default(50)
 
@@ -204,3 +692,187 @@ export const zGetMyCreditLedgerQuery = z.object({
  * Success
  */
 export const zGetMyCreditLedgerResponse = zCreditLedgerResponse
+
+export const zCreateAdmissionBody = zAdmissionCreateRequest
+
+export const zCreateAdmissionHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+  "idempotency-key": z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[\x21-\x7e]{8,128}$(?![\s\S])/),
+  "x-billing-execution-proof": z
+    .string()
+    .min(1)
+    .max(16384)
+    .regex(/^[\x21-\x7e]{1,16384}$(?![\s\S])/),
+})
+
+/**
+ * Success
+ */
+export const zCreateAdmissionResponse = zAdmissionResponse
+
+export const zRecoverModelAdmissionBody = zAdmissionCreateRequest
+
+export const zRecoverModelAdmissionHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+  "idempotency-key": z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[\x21-\x7e]{8,128}$(?![\s\S])/),
+})
+
+/**
+ * Original held creation receipt, including after settlement; not current status
+ */
+export const zRecoverModelAdmissionResponse = zAdmissionResponse
+
+export const zSettleModelAdmissionBody = zAdmissionSettlementRequest
+
+export const zSettleModelAdmissionHeaders = z.object({
+  "idempotency-key": z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[\x20-\x7E]+$/),
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+})
+
+export const zSettleModelAdmissionPath = z.object({
+  admission_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+})
+
+/**
+ * Success
+ */
+export const zSettleModelAdmissionResponse = zAdmissionSettlementResponse
+
+export const zGetAdminMeteringPricingHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+})
+
+/**
+ * Latest published configurations (not necessarily active)
+ */
+export const zGetAdminMeteringPricingResponse = zAdminMeteringPricingResponse
+
+export const zPublishAdminMeteringRateBody = zAdminMeteringRatePublishRequest
+
+export const zPublishAdminMeteringRateHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+  "idempotency-key": z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[\x20-\x7E]+$/),
+})
+
+/**
+ * Immutable revision published or original receipt replay
+ */
+export const zPublishAdminMeteringRateResponse = zMeteringPublicationResponse
+
+export const zPublishAdminMeteringPolicyBody = zAdminMeteringPolicyPublishRequest
+
+export const zPublishAdminMeteringPolicyHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+  "idempotency-key": z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[\x20-\x7E]+$/),
+})
+
+/**
+ * Immutable revision published or original receipt replay
+ */
+export const zPublishAdminMeteringPolicyResponse = zMeteringPublicationResponse
+
+export const zCreateAdminCreditGrantBody = zAdminCreditGrantRequest
+
+export const zCreateAdminCreditGrantHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+  "idempotency-key": z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[\x20-\x7E]+$/),
+})
+
+/**
+ * Grant created or exact receipt replay
+ */
+export const zCreateAdminCreditGrantResponse = zAdminCreditGrantResponse

@@ -4,6 +4,125 @@ export type ClientOptions = {
   baseUrl: "https://billing.internal" | (string & {})
 }
 
+export type MeteringRational = {
+  numerator: string
+  denominator: string
+}
+
+export type MeteringRate = {
+  model_revision: {
+    id: string
+    content_digest: string
+  }
+  provider_ref: string
+  environment: string
+  pricing_account_ref: string
+  model_ref: string
+  model_version: string
+  bucket: string
+  unit: string
+  applicability:
+    | {
+        kind: "all"
+      }
+    | {
+        kind: "range"
+        dimension: string
+        unit: string
+        lower_inclusive: string
+        upper_exclusive: string | null
+      }
+  currency_code: CurrencyCode
+  minor_per_unit: MeteringRational
+}
+
+export type MeteringRateConfiguration = {
+  effective_from: string
+  source_ref: string
+  verified_at: string
+  rates: Array<MeteringRate>
+}
+
+export type MeteringPolicyConfiguration = {
+  effective_from: string
+  source_ref: string
+  verified_at: string
+  currency_code: CurrencyCode
+  multiplier: MeteringRational
+  credit_micros_per_minor: MeteringRational
+  /**
+   * Whole Credits, 1 through 9223372036854. A spending budget, not a supplier cost guarantee.
+   */
+  max_attempt_credits: string
+}
+
+export type AdminMeteringRatePublishRequest = {
+  publication_id: string
+  reason: string
+  configuration: MeteringRateConfiguration
+}
+
+export type AdminMeteringPolicyPublishRequest = {
+  publication_id: string
+  reason: string
+  configuration: MeteringPolicyConfiguration
+}
+
+export type MeteringPublication = {
+  kind: "rate" | "policy"
+  revision: string
+  content_digest: string
+  published_at: string
+  effective_from: string
+}
+
+export type MeteringPublicationResponse = {
+  data: MeteringPublication
+}
+
+export type MeteringRateRevision = {
+  revision: string
+  content_digest: string
+  published_at: string
+  configuration: MeteringRateConfiguration
+}
+
+export type MeteringPolicyRevision = {
+  revision: string
+  content_digest: string
+  published_at: string
+  configuration: MeteringPolicyConfiguration
+}
+
+export type AdminMeteringPricingResponse = {
+  data: {
+    rate_revision: MeteringRateRevision | null
+    policy_revision: MeteringPolicyRevision | null
+  }
+}
+
+export type AdminCreditGrantRequest = {
+  funding_id: string
+  subject_id: string
+  /**
+   * Whole Credits, not micros. Maximum 9223372036854; server multiplies by 1000000 using BigInt and rejects overflow.
+   */
+  amount_credits: string
+  reason: string
+  /**
+   * UTC millisecond business intent frozen by the BFF at first submission; never regenerated on retry.
+   */
+  effective_at: string
+}
+
+export type AdminCreditGrantResponse = {
+  data: {
+    account_id: Uuid
+    grant_id: Uuid
+    journal_id: Uuid
+  }
+}
+
 export type Uuid = string
 
 export type UtcInstant = string
@@ -82,9 +201,89 @@ export type CreditLedgerResponse = {
   }
 }
 
+export type AdmissionCreateRequest = {
+  run_id: string
+  attempt_id: string
+  request_ref: string
+  attempt_binding_digest: string
+  planned_digest: string
+  final_request_digest: string
+}
+
+export type AdmissionSettlementRequest = {
+  run_id: string
+  evidence_event_id: string
+  evidence_revision: string
+  evidence_digest: string
+}
+
+export type AdmissionSettlement = (
+  | {
+      status: "captured"
+      reason?: null
+      usage_event_id?: string
+      settlement_id?: string
+    }
+  | {
+      status: "released"
+      reason?: null
+      captured_credits?: "0"
+      usage_event_id?: null
+      settlement_id?: null
+    }
+  | {
+      status: "pending_reconciliation"
+      reason?: "unknown_usage_or_outcome" | "budget_exceeded"
+      captured_credits?: "0"
+      released_credits?: "0"
+      usage_event_id?: null
+      settlement_id?: null
+    }
+) & {
+  admission_id: string
+  attempt_id: string
+  evidence_event_id: string
+  run_id: string
+  evidence_revision: string
+  evidence_digest: string
+  status: "captured" | "released" | "pending_reconciliation"
+  reason: null | "unknown_usage_or_outcome" | "budget_exceeded"
+  captured_credits: string
+  released_credits: string
+  usage_event_id: string | null
+  settlement_id: string | null
+  updated_at: string
+}
+
+export type AdmissionSettlementResponse = {
+  data: AdmissionSettlement
+}
+
+export type Admission = {
+  admission_id: string
+  run_id: string
+  attempt_id: string
+  request_ref: string
+  attempt_binding_digest: string
+  planned_digest: string
+  final_request_digest: string
+  hold_id: string
+  budget_credits: string
+  pricing_snapshot_digest: string
+  status: "held" | "captured" | "released" | "pending_reconciliation"
+  created_at: string
+  updated_at: string
+}
+
+export type AdmissionResponse = {
+  data: Admission
+}
+
 export type PersonalTenantId = string
 
 export type PersonalSubjectId = string
+
+export type IdempotencyKey = string
 
 export type Limit = number
 
@@ -291,3 +490,362 @@ export type GetMyCreditLedgerResponses = {
 }
 
 export type GetMyCreditLedgerResponse = GetMyCreditLedgerResponses[keyof GetMyCreditLedgerResponses]
+
+export type CreateAdmissionData = {
+  body: AdmissionCreateRequest
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+    "idempotency-key": string
+    "x-billing-execution-proof": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/internal/billing/admissions"
+}
+
+export type CreateAdmissionErrors = {
+  /**
+   * Request failed
+   */
+  400: ErrorResponse
+  /**
+   * Authentication required
+   */
+  401: ErrorResponse
+  /**
+   * Forbidden
+   */
+  403: ErrorResponse
+  /**
+   * Not found
+   */
+  404: ErrorResponse
+  /**
+   * Conflict
+   */
+  409: ErrorResponse
+  /**
+   * Invalid state
+   */
+  422: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type CreateAdmissionError = CreateAdmissionErrors[keyof CreateAdmissionErrors]
+
+export type CreateAdmissionResponses = {
+  /**
+   * Success
+   */
+  201: AdmissionResponse
+}
+
+export type CreateAdmissionResponse = CreateAdmissionResponses[keyof CreateAdmissionResponses]
+
+export type RecoverModelAdmissionData = {
+  body: AdmissionCreateRequest
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+    "idempotency-key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/internal/billing/admissions/recover"
+}
+
+export type RecoverModelAdmissionErrors = {
+  /**
+   * Request failed
+   */
+  400: ErrorResponse
+  /**
+   * Authentication required
+   */
+  401: ErrorResponse
+  /**
+   * Forbidden
+   */
+  403: ErrorResponse
+  /**
+   * Not found
+   */
+  404: ErrorResponse
+  /**
+   * Conflict
+   */
+  409: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type RecoverModelAdmissionError = RecoverModelAdmissionErrors[keyof RecoverModelAdmissionErrors]
+
+export type RecoverModelAdmissionResponses = {
+  /**
+   * Original held creation receipt, including after settlement; not current status
+   */
+  200: AdmissionResponse
+}
+
+export type RecoverModelAdmissionResponse = RecoverModelAdmissionResponses[keyof RecoverModelAdmissionResponses]
+
+export type SettleModelAdmissionData = {
+  body: AdmissionSettlementRequest
+  headers: {
+    "idempotency-key": string
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+  }
+  path: {
+    admission_id: string
+  }
+  query?: never
+  url: "/v1/internal/billing/admissions/{admission_id}/settle"
+}
+
+export type SettleModelAdmissionErrors = {
+  /**
+   * Request failed
+   */
+  400: ErrorResponse
+  /**
+   * Authentication required
+   */
+  401: ErrorResponse
+  /**
+   * Forbidden
+   */
+  403: ErrorResponse
+  /**
+   * Not found
+   */
+  404: ErrorResponse
+  /**
+   * Conflict
+   */
+  409: ErrorResponse
+  /**
+   * Invalid state
+   */
+  422: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type SettleModelAdmissionError = SettleModelAdmissionErrors[keyof SettleModelAdmissionErrors]
+
+export type SettleModelAdmissionResponses = {
+  /**
+   * Success
+   */
+  200: AdmissionSettlementResponse
+}
+
+export type SettleModelAdmissionResponse = SettleModelAdmissionResponses[keyof SettleModelAdmissionResponses]
+
+export type GetAdminMeteringPricingData = {
+  body?: never
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+  }
+  path?: never
+  query?: never
+  url: "/v1/admin/billing/metering/pricing"
+}
+
+export type GetAdminMeteringPricingErrors = {
+  /**
+   * Invalid request
+   */
+  400: ErrorResponse
+  /**
+   * Privileged service admission denied
+   */
+  403: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type GetAdminMeteringPricingError = GetAdminMeteringPricingErrors[keyof GetAdminMeteringPricingErrors]
+
+export type GetAdminMeteringPricingResponses = {
+  /**
+   * Latest published configurations (not necessarily active)
+   */
+  200: AdminMeteringPricingResponse
+}
+
+export type GetAdminMeteringPricingResponse = GetAdminMeteringPricingResponses[keyof GetAdminMeteringPricingResponses]
+
+export type PublishAdminMeteringRateData = {
+  body: AdminMeteringRatePublishRequest
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+    "idempotency-key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/admin/billing/metering/rate-revisions"
+}
+
+export type PublishAdminMeteringRateErrors = {
+  /**
+   * Invalid request
+   */
+  400: ErrorResponse
+  /**
+   * Privileged service admission denied
+   */
+  403: ErrorResponse
+  /**
+   * Command identity conflicts
+   */
+  409: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type PublishAdminMeteringRateError = PublishAdminMeteringRateErrors[keyof PublishAdminMeteringRateErrors]
+
+export type PublishAdminMeteringRateResponses = {
+  /**
+   * Immutable revision published or original receipt replay
+   */
+  201: MeteringPublicationResponse
+}
+
+export type PublishAdminMeteringRateResponse = PublishAdminMeteringRateResponses[keyof PublishAdminMeteringRateResponses]
+
+export type PublishAdminMeteringPolicyData = {
+  body: AdminMeteringPolicyPublishRequest
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+    "idempotency-key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/admin/billing/metering/policy-revisions"
+}
+
+export type PublishAdminMeteringPolicyErrors = {
+  /**
+   * Invalid request
+   */
+  400: ErrorResponse
+  /**
+   * Privileged service admission denied
+   */
+  403: ErrorResponse
+  /**
+   * Command identity conflicts
+   */
+  409: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type PublishAdminMeteringPolicyError = PublishAdminMeteringPolicyErrors[keyof PublishAdminMeteringPolicyErrors]
+
+export type PublishAdminMeteringPolicyResponses = {
+  /**
+   * Immutable revision published or original receipt replay
+   */
+  201: MeteringPublicationResponse
+}
+
+export type PublishAdminMeteringPolicyResponse = PublishAdminMeteringPolicyResponses[keyof PublishAdminMeteringPolicyResponses]
+
+export type CreateAdminCreditGrantData = {
+  body: AdminCreditGrantRequest
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+    "idempotency-key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/admin/billing/credit-grants"
+}
+
+export type CreateAdminCreditGrantErrors = {
+  /**
+   * Invalid request
+   */
+  400: ErrorResponse
+  /**
+   * Privileged service admission denied
+   */
+  403: ErrorResponse
+  /**
+   * Command identity conflicts
+   */
+  409: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type CreateAdminCreditGrantError = CreateAdminCreditGrantErrors[keyof CreateAdminCreditGrantErrors]
+
+export type CreateAdminCreditGrantResponses = {
+  /**
+   * Grant created or exact receipt replay
+   */
+  201: AdminCreditGrantResponse
+}
+
+export type CreateAdminCreditGrantResponse = CreateAdminCreditGrantResponses[keyof CreateAdminCreditGrantResponses]

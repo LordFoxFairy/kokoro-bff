@@ -95,7 +95,10 @@ function canonicalQuery(request: IncomingMessage): Array<[string, string]> {
 
 function canonicalJsonBody(request: IncomingMessage, businessPath: readonly string[], json: Readonly<Record<string, unknown>>): unknown {
   if (request.method === "POST" && businessPath.length === 3 && businessPath[0] === "sessions" && businessPath[2] === "messages") {
-    return parseMessageCreateRequest(Object.fromEntries(Object.entries(json)), queryOf(request).get("project_ref") ?? undefined) ?? json
+    const parsed = parseMessageCreateRequest(Object.fromEntries(Object.entries(json)), queryOf(request).get("project_ref") ?? undefined)
+    if (parsed === null) return json
+    const { selectedCustomApiProfiles, ...prior } = parsed
+    return selectedCustomApiProfiles?.length ? parsed : prior
   }
   if (
     request.method === "PATCH" &&

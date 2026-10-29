@@ -38,6 +38,9 @@ function adminBusinessRoute(method: string, target: string): boolean {
   if (method === "POST" && /^\/v1\/admin\/model-revisions\/[0-9a-f-]{36}\/publish$/iu.test(path)) return true
   if (method === "PATCH" && /^\/v1\/admin\/model-labels\/[0-9a-f-]{36}$/iu.test(path)) return true
   if (method === "GET" && path === "/v1/me") return true
+  if (method === "POST" && path === "/v1/admin/billing/credit-grants") return true
+  if (method === "GET" && path === "/v1/admin/billing/metering/pricing") return true
+  if (method === "POST" && ["/v1/admin/billing/metering/rate-revisions", "/v1/admin/billing/metering/policy-revisions"].includes(path)) return true
   if (
     method === "GET" &&
     [

@@ -1104,6 +1104,22 @@ it("R123 real owner reader maps complete Todo replacement and every published sa
       status,
       display_code: "tool.execution",
     })),
+    ...[
+      "tool.file.read",
+      "tool.mcp.discover",
+      "tool.mcp.describe",
+      "tool.mcp.call",
+      "tool.web.search",
+      "tool.web.fetch",
+      "tool.file.write",
+      "tool.file.deliver",
+    ].map((display_code, index) => ({
+      activity: "tool",
+      activity_id: r123ActivityId(String(index)),
+      segment_id: r123SegmentId("b"),
+      status: "completed",
+      display_code,
+    })),
     ...["running", "completed", "failed"].map((status) => ({
       activity: "subagent",
       activity_id: r123ActivityId("c"),
@@ -1368,3 +1384,27 @@ for (const [name, payload] of r123InvalidSkillActivities) {
     await assert.rejects(r123ReadOwnerEvents([r123SafeSource(1, "activity", payload)]), AgUiSourceContractError)
   })
 }
+
+it("Agent8.2 owner HTTP page and AG-UI CUSTOM preserve the frozen detail without leaking raw metadata", async () => {
+  const payload = {
+    activity: "tool",
+    activity_id: r123ActivityId("a"),
+    segment_id: r123SegmentId("b"),
+    status: "running",
+    display_code: "tool.mcp.call",
+    display_detail: { kind: "mcp_tool", name: "lookup_public" },
+  }
+  const source = r123SafeSource(1, "activity", payload, { chat_message_id: "private_message_canary" })
+  const page = await r123ReadOwnerEvents([source])
+  assert.deepEqual(page.events[0].sourcePayload, source)
+  assert.deepEqual(page.events[0].event.payload, payload)
+  const { createAgUiProjectionState, projectChatEvent } = await import("../dist/application/agui/project-chat-event.js")
+  const [frame] = projectChatEvent(page.events[0].event, createAgUiProjectionState())
+  assert.equal(frame.name, "kokoro.activity.updated")
+  assert.deepEqual(frame.value, payload)
+  assert.equal(JSON.stringify(frame).includes("private_message_canary"), false)
+  await assert.rejects(
+    r123ReadOwnerEvents([r123SafeSource(1, "activity", { ...payload, display_detail: { kind: "mcp_tool", name: "x\u200b" } })]),
+    AgUiSourceContractError,
+  )
+})

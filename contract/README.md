@@ -1,3 +1,93 @@
+## 当前最终答复引用（Public28.14，reader-first）
+
+固定 Agent b802f9b／HTTP8.8，在成功 RUN_FINISHED.result 和私有 OrderedMessageRendering／MessagePartsPage 增 optional final_segment_id。同 Run 原公开正文身份、与 parts revision 原子持久化，历史缺失保持缺失；无新operation、无Share或命令扩展。完整28.14→28.13、Agent8.8→8.7逆证保留。候选不是正常页面完成，配对见 docs/CURRENT.md。
+
+## 当前动作标题读表示（Public28.13）
+
+固定正式Agent5394d334／HTTP8.7，沿原RunToolActivity optional action_title及私有RunDisplay tool_description窄生成。原件/provenance与18件generated摘要由agent-http manifest记录；完整8.7→8.6→8.5父图及Public28.13→28.12逆差证明保留，不作为运行兼容。无新增操作、权限、Schema或Share数据。正常配对与验收见docs/CURRENT.md。
+
+## 2026-10-28 Public28.12 私有 Run 工具详情候选
+
+Canonical SHA256 `86638da86d786e91c81da9e5dd891dee88ef2ca033579866f5ebc6dd6113c00f`，仅 RunDisplay 增 required `activity_details`（max128／唯一opaqueID／required tool_name／原target域／2048与4096 UTF-8 preview及明确flags）。Public完整逆回28.11 `4d93ec15e2931768afafffb2101039b1da64757ea48c760d16ef88aa8753db16`，199操作及旧父链不变。Agent HTTP8.5 SHA `b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897` 已冻结；正式 commit `4f8a8d2485abadc8351efbe1c9d6277ada267096`／provenance SHA `204e28baa5484c30635fb0cb466e4db6de4a7ea4ec43a03211bd9a27847ac99a`，由原18件生成入口发布 consumer。私有 GET only，非Chat/SSE/Share或执行授权，无新endpoint/DB。preview是过滤的有界纯文本而非绝对无秘密保证；字段及语义边界见API/技术设计首节。当前候选未正常激活。
+
+## 2026-10-28 Public28.11 原 Run 工具展示候选
+
+只在原按需 exact Run display 资源增加 required `tool_facts`（最多128、activity_id唯一、至少mcp_tool安全名或failed事实）；原feedback／regen／执行与ledger不变。固定正式Agent f31b60be27dd9b4dfddd7a1c3579b19e40db150d，HTTP8.4 SHA239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52／provenance275f66d882ab85bf01c71347c0a9302b6c4bfc0d7bcd94ee6d01b8ce1219f230。原18件正规生成；完整8.4 raw逆回8.3 be642c再8.2 8a0b，Public28.11严格逆回完整28.10 9e6a。任何name/status缺证缺省，独立读不得回写原activity或Run终态；机器及fixture不替代Root真实normal配对。
+
+## 2026-10-28 Public28.10 回答操作／原 Run 展示候选
+
+同一 canonical 只增 feedback GET／自然PUT、regen keyedPOST、私有exact Run按需display GET与原activity可选展示／再生成source关联；严格整体逆回完整Public28.9 b438a749。Agent唯一固定正式669fd4e／HTTP8.3 be642c23／provenance609dc546，由原18件generator正规产出并raw逆回完整8.2 8a0b9973，旧 failure／interaction／code闭集原样验证。无第二editablewire／dirty源／Share展示旁路；其余Native/private pins、lock与owner不迁。候选未正常应用Schema或激活，三面门与隔离PG证据不替代Root正常验收。
+
+## Skill download policy3（2026-10-28，候选）
+
+唯一现 `src/http/routes/skill-download.policy.ts` 经 `scripts/generate-skill-download-policy.mjs --write`／无参数check发布同一JSON。整数3仅新增 `byte_operation` 描述原GET opaque handle ZIP和独立status/code/shape；原4 POST／完整policy2 SHA454d0980…1584f可精确逆回，Public28.8全文不改。没有412、共享metadata错误fallback或新runtime validator；未知future status/code按闭集拒。消费者仅固定Root正式commit/blob，候选描述不等于正常资源或下载旅程验收。
+
+## Project installation content successor（2026-10-27，候选）
+
+Canonical Public28.8新增唯一 `GET /v1/projects/{projectId}/skill-installations/{installation_id}/package`，复用原SkillPackageInspection响应；现 `project-pin-public-contract.mjs` 具名严格逆回完整28.7 SHA818dfe54…3ebd1，旧194 inventory按原顺序保留，只追加新operation。私有 `contract/skill-download-policy.json` 由原 `skill-download.policy.ts`／`generate-skill-download-policy.mjs` 唯一生成，version2增加Project双selector签发；success/errors/framing及原3操作全等原policy。主Native正规固定Platform94e574及新content profile，旧Runtime/SSE／独立HTTP7／publication字节保留；outcomes与query仅机械provenance级联，非语义升级。Root正式发行前不消费dirty或冒正常启用。
+
+## 当前 Public28.5 Project pin 消费候选（2026-10-27）
+
+只增加 `listSelfProjectPins`／`setProjectPin` 两个 personal-preference operation，总计194；原192有序 inventory 保持后追加新项，Project 原 closed wire 不加字段。当前完整原件与完整28.4 SHA48aa9638d133223c9f78655e9398ddbb44159963f92a2db891a09212f3aa2726的逆证由 `scripts/project-pin-public-contract.mjs` 固定，后续旧父 hash 原样。自然状态 PUT 不要 key／CAS／receipt，project.read不授 Project 共享写权限；正常 DB／运行配对未由源码候选代证。
+
+## 2026-10-26 Public28 / Agent HTTP8 工具展示闭集候选
+
+唯一canonical `openapi/v1/openapi.yaml` 为Public28.0.0／187operations，仅原RunToolActivity.display_code const→七值enum与version变化；unknown／错分支拒绝，旧tool.execution仍原样。固定正式Agent `ff36759214ff5d1e015cd9e288abbcb2d8e0c46d` 的HTTP8.0.0 OpenAPI/provenance（SHA256分别93103b5f1df90ad4524e7fc08274211ed2f0805760d70923931e9449a59e37ff／4333d87e7f2199d549afb1c3334bebf17af99682bcbc093e9b2bba204982570f），只经现Agent generator与三operation allowlist更新18既有输出，不读取浮动owner源码。
+
+具名build/test-only `scripts/tool-display-public-contract.mjs` 只逆本字段与version，完整恢复Public27 SHA256 d2b3d546164cadc9655616fc44daf1511a6f7d4a2e5d172f1415552af8942ed1，再进入旧message-parts／SSE及全部历史链；旧hash／delta原件与187operation inventory不改。CUSTOM、compact、ordered parts只承接安全类别，不公开raw参数／结果或授执行资格。正常组合未切换；App等Root正式提交后固定artifact生成，新code落库后不盲降reader。
+
+## 2026-10-26 独立 MCP Server icon 私有媒体契约
+
+`src/application/mcp-server-icon.contract.ts` 是唯一可编辑媒体政策/ID事实源，现 `pnpm contract:generate:connector-command-errors` 正规生成 [`openapi/browser/v1/mcp-server-icon.json`](openapi/browser/v1/mcp-server-icon.json)，独立profile `mcp-server-icon-browser/1.0.0`。只含一个binary GET及现有read/Session的status/code/retryable闭集，无新命令恢复资格或owner RPC。Public27、现connector-command-errors-v1和项目发布私有OpenAPI原件及canonical Schema以完整父SHA测试保护，不重签父artifact。消费者应固定正式提交与此原件SHA后生成，不直接依赖工作树；正常配对另行验收。
+
+## 2026-10-26 Public27 / durable AG-UI public position（同一未发行候选的跟进）
+
+前候选 `9f46a8ea32357631424d062cbabf93bc53299cad` 保留，不 amend。唯一 canonical 在原 SessionEventStream 补 required `metadata.kokoro.public_sequence` 正十进制字符串及两种既有 source metadata：Agent `seq:number`、BFF `seq:string + source_owner` 均不改变。坐标来自真实 BFF ledger，不解析 opaque cursor，不用 Agent seq 代替；heartbeat comment 不涉。Read projection 附加后计入 byte budget，不 UPDATE 旧 ledger、source digest 或 Message parts。187 operations、完整 Public26 父 SHA 与原 shared/ACK 原件保持；App 固定 artifact 与 normal 激活仍由 Root 验收。
+
+## 2026-10-25 Public27 / private ordered assistant read（候选，未正常激活）
+
+canonical新增一个 `getSessionMessageParts` GET及独立private read DTO，187 operations。原 `ChatMessage`、`SessionSnapshotResponse`（匿名shared使用）、Shared权限和命令三ID ACK原件保持；仅private GET指向 `PrivateSessionSnapshotResponse`，消息列表使用 `ChatMessageRead`。有序assistant `content:null`表示未内联，`rendering`提供格式、版本、原AG-UI opaque水位及parts初始cursor；user/不可证旧消息仍原正文，不伪造顺序或final phase。
+
+parts按真实first序号/稳定part_id承接安全text/activity，text显式保原公开AG-UI `segment_id`以合并live更新，cursor不解码part_id；Unicode scalar分片4096、默认16/最大32逻辑slot，完整JSON≤1MiB。每页当前身份/项目/Message授权与版本绑定，409仅显式重读，不重派模型或命令。`scripts/message-parts-public-contract.mjs`精确恢复完整Public26 SHA `20d26736cf23da32c242c2c7cf75c45affb62c5d27696dcecb0bc6193bc39a09`及186操作父清单，再沿原26→25历史链，旧hash/断言不重签。新回归由原platform-http契约入口明确导入；本片未实施HTTP/runtime、App消费者或正常Schema/服务装配，不冒产品闭环。
+
+## 2026-10-25 Public26 / personal SSE 消费者候选
+
+唯一 canonical Public26.0.0 SHA256 `20d26736cf23da32c242c2c7cf75c45affb62c5d27696dcecb0bc6193bc39a09`，仅 version 与 McpConnectionProjection.transport 增 sse_compat。`scripts/mcp-personal-sse-public-contract.mjs` 只在 build/test 完整恢复 Public25 SHA7261ac9ce2140555ba97ebff2bf0359533cc49dda014b08dcd6a6054a8d38b1c，再沿原25→24完整历史链；旧 hash/断言与所有其它 API 不变。Platform Connect/HTTP7.0 固定正式 `8cfead647856ef54ec851a3bebe169a3ca14d212` 原件、closed allowlist 与现正规生成器；独立项目发布 dd8d536 原 pin/产物保持。
+
+browser-private Register 的 optional 真实传输、SSE JSON 摘要及 Current/历史 ACK 分层见现 API/TECH；缺 transport 不默认 HTTP、不构造 Get 补回执、不据此新 key 重派。consumer 工程候选不表示 normal 或 App/Agent 已配对；无新 endpoint、owner、权限、数据库 Schema、依赖或外部 SSE 网络客户端。
+
+## 2026-10-25 Public25 metadata/detail 分离候选
+
+唯一 canonical Public25.0.0 原件 SHA256 `7261ac9ce2140555ba97ebff2bf0359533cc49dda014b08dcd6a6054a8d38b1c`；operation inventory 不变。GetSkill 改 strict `{skill}` 的独立 SpecificationDetailResponse，DownloadSkill strict `{skill,downloadInfo}` 原件保持。准确 build-only inverse `scripts/skill-detail-public-contract.mjs` 恢复完整 Public24 SHA f4caf11f3cd9255d2cd9daf69b74ff9988505d640e31c686ce495e6d8a578b2c，再由原检查链证明所有历史父；旧 oracle/hash 未改。源码候选未由本 worker 提交或正常激活，消费者待 Root 正式 commit/digest 后更新唯一 snapshot 与既有生成链。
+
+## 2026-10-24 Public24 / Agent7.4 候选
+
+唯一public机器源仅在MessageCreateRequest退役trace-only mcp_servers并新增optional selected_mcp_connection_ids，完整父逆证保全部其它API；正常配对状态见CURRENT。Agent HTTP固定4c46ec681ee569e42808acb9409248acddd8ae41，唯一当前原件与18生成文件/manifest由现generator维护；新字段唯一性/字节限制正规编译，不手改生成物。JSONB恢复保旧诊断trace但不将其升级为执行选择；无Schema变化。
+
+## 2026-10-22 当前内部恢复发行
+
+Public23／186及原件SHA34ea71e0保持；内部code-first当前1.3 raw SHA256 `4de1a6c7564f3a994d879cfc93588021c5ef4aeebbcc89959fa574d5b6f16d39`，只增加 `POST /internal/v1/model-admissions/recover`，复用原schema／独立Agent身份，禁proof／旧consumption。Billing唯一固定 `23ff71993f7772219cab8d3a3a4c7fbb4d66f735`／exp10，原件SHA256 `f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654`；正规生成十一操作、原十项保持，旧exp9 vendor退役。精确剥本op核完整1.2 parsed hash64b3d8a5，再过原1.1／1.0及Public原件门；保not、码点、strict交集normalize，无第二DTO／运行fallback。详细验收及未激活边界见CURRENT首节；以下为历史快照。
+
+## 2026-10-22 内部正式结算发行
+
+Public23／186原件SHA34ea71e0保持。内部code-first新增原admission的settle命令，当前internal1.2原件SHA256 `8b3d9d788434d7a3d67cc42909a9e7f545b7e6464eef84bc760d17b55bf5f126`；精确删除本delta后原internal1.1全图hash保持，再过原1.0保护。唯一Billing固定deab94efc9ee7d86d1d1072481920423d55b36ff／exp9，原件SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`，正规生成十操作，原九项保持；旧exp8 vendor退役无runtime兼容。settle只收原Run与sealed身份，owner／internal schema均拒自报金额、证据原文与身份；新ACK严格三态、整积分／修订上界及原Run绑定。生成器补全not、codepoint与strict-before-intersection，规则直接来自固定owner原件，不手改产物／维护第二DTO。实际验收和未激活边界见CURRENT首节；后续Agent必须固定本次正式提交后消费，不直接引用工作树。
+
+## 2026-10-22 内部模型预算发行
+
+public23／186原件保持。内部code-first源新增Agent model admission，正式生成internal1.1原件SHA256 `695901b23f1f0322fd18ec2a11be27c5b6efcce07b04f57839498eab402d17c6`，旧internal1.0 IAM全图精确保护。唯一Billing d345025／experimental.8仍SHA2c65b64c，现生成集九操作／strict Admission闭集，旧八操作不改变；退役旧vendor，不存在runtime兼容。字段只在各owner机器契约维护，不复制第二份手写Admission。详细失败／通过与未正常激活见CURRENT首节。
+
+## 2026-10-22 精确模型选价绑定发行
+
+本地Public23.0.0／186操作，raw SHA256 `34ea71e0aa56256ca00fc5b3c40abd4d142bea82e664a6871190b8547ec2b9e6`；固定Billing `2d3ed0fbee9219a93f02b67b23f69492fd568917`／exp6／`7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962`。唯一wire变化为MeteringRate required闭集model_revision{id,content_digest}，八消费正式生成且嵌套严格；无旧字段默认／兼容。原完整22.5与186有序操作受既有build-only inverse承接，正常配对和实际Agent资金链仍待。当前验证见CURRENT，以下仅历史。
+
+## 当前计价管理Public22.5（2026-10-22）
+
+本地候选Public22.5.0／186操作，raw SHA256 `c77e4921ccce98cfd91d77fc6897cf327599f237ed13438117323b6a3f8555eb`。沿固定Billing35651fc／experimental.5（8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab），原5＋计价管理3操作由唯一生成器正规派生；原183操作及顺序全文逆证，旧runtime vendor退出。新增仅两发布POST及最新发布配置RR单体GET，不是有效价/执行许可；当前Product管理员每次派发前重验。POST1MiB/12层／当前协议绑定owner固定，充值16KiB原界不变；未知状态只能原publication_id/key/config/time恢复。源码/契约候选尚不代表App/Admin或正常部署、实际扣分完成。
+
+## CREDIT-1 非现金发放消费者（2026-10-22，源码候选）
+
+唯一当前Public22.4.0 /183操作；新增POST /v1/admin/billing/credit-grants，strict五字段与required key，先当前管理员/可信tenant成员资格、发送前同主体重验，再向Billing固定90929ef/4.0.0-experimental.4单次派发。owner原blob SHA256 a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2，正规生成五操作；原旧pin退休，无runtime兼容/第二账本。旧182操作全文与inventory完整逆恢复，仅作为构建保护，不替代新旅程验收。当前public源码摘要 f6b8f3bd250c144a2d648af94c9fd5fe068db33991a4289b849a077eef009f32。Admin页面和正常资金/Agent计费仍待，不以本契约发布代替整链。
+
 ## MODEL-1 Public22.3 / System6.1（本地候选）
 
 新增唯一平台管理员 GET `/v1/admin/model-providers/{provider_id}/upstream-models`，Public22.3.0 /182操作。标准data为provider_id与items[{id}]，不含Key/URL/handle；无query/body framing/Content-Type/命令headers，单总10秒含准入、no-store、无自动重试或配置写入。

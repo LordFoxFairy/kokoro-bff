@@ -264,7 +264,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
     }
   }
 
-  public async markConsumerProgress(lease: AgUiConsumerLease, nextPollAt: string, now: string): Promise<boolean> {
+  public async markConsumerProgress(lease: AgUiConsumerLease, nextPollAt: string, now: string, sourceExhausted = false): Promise<boolean> {
     return this.settleConsumer(lease, {
       state: "active",
       nextPollAt,
@@ -272,6 +272,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
       errorAt: null,
       now,
       resetFailures: true,
+      sourceExhausted,
     })
   }
 
@@ -337,6 +338,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
       errorAt: string | null
       now: string
       resetFailures: boolean
+      sourceExhausted?: boolean
     },
   ): Promise<boolean> {
     const now = instant(values.now, "AG-UI poll completion time")
@@ -357,10 +359,22 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
       const clock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
       const dbNow = clock.rows[0]?.db_now
       if (dbNow === undefined) throw new Error("AG-UI database clock unavailable")
+      // Exhausted is a snapshot boundary, not a permanently sealed source. Keep
+      // idle terminals polling for late bookkeeping. Evaluate current head and
+      // FIFO under the existing parent/stream locks so a new submit cannot be
+      // delayed by a stale lease; registration already wakes this row immediately.
       const result = await client.query(
         `UPDATE bff_agui_stream
             SET consumer_state=$7,
-                consumer_next_poll_at=$11::timestamptz + ($8::double precision * INTERVAL '1 millisecond'),
+                consumer_next_poll_at=$11::timestamptz + (CASE
+                  WHEN $12::boolean AND expected_run_id IS NULL
+                    AND terminal_run_id IS NOT NULL AND latest_run_id=terminal_run_id
+                    AND NOT EXISTS (SELECT 1 FROM bff_agent_dispatch_outbox AS dispatch
+                      WHERE dispatch.tenant_id=bff_agui_stream.tenant_id
+                        AND dispatch.conversation_id=bff_agui_stream.session_id
+                        AND dispatch.status IN ('pending','leased','retryable','admitted'))
+                  THEN GREATEST($8::double precision, 30000)
+                  ELSE $8::double precision END * INTERVAL '1 millisecond'),
                 consumer_last_error_code=$9,
                 consumer_last_error_at=CASE WHEN $9::text IS NULL THEN NULL ELSE $11::timestamptz END,
                 consumer_last_polled_at=$11::timestamptz,
@@ -382,6 +396,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
           values.errorCode,
           values.resetFailures,
           dbNow,
+          values.sourceExhausted ?? false,
         ],
       )
       await client.query("COMMIT")
@@ -427,6 +442,22 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
                      ON dispatch.tenant_id=interaction.tenant_id AND dispatch.conversation_id=interaction.session_id AND dispatch.run_id=interaction.run_id
                   WHERE interaction.tenant_id=bff_agui_stream.tenant_id AND interaction.session_id=bff_agui_stream.session_id
                     AND dispatch.status IN ('pending','leased','retryable','admitted')),
+                bff_agui_stream.latest_run_start_sequence), COALESCE(
+                (SELECT min(activity.first_public_sequence)
+                   FROM bff_agui_run_activity AS activity
+                   JOIN bff_agui_run_process AS process
+                     ON process.tenant_id=activity.tenant_id AND process.session_id=activity.session_id
+                    AND process.run_id=activity.run_id AND process.subject_id=activity.subject_id
+                   JOIN bff_agui_event AS start
+                     ON start.tenant_id=process.tenant_id AND start.session_id=process.session_id
+                    AND start.public_sequence=process.start_public_sequence AND start.cursor=process.start_public_cursor
+                    AND start.source_owner=process.start_source_owner AND start.source_event_id=process.start_source_event_id
+                  WHERE activity.tenant_id=bff_agui_stream.tenant_id AND activity.session_id=bff_agui_stream.session_id
+                    AND activity.subject_id=bff_agui_stream.consumer_subject_id
+                    AND process.start_public_sequence=bff_agui_stream.latest_run_start_sequence
+                    AND start.event_type='RUN_STARTED' AND start.source_owner='kokoro-agent'
+                    AND start.event_payload->>'runId'=process.run_id AND start.event_payload #>> '{metadata,kokoro,run_id}'=process.run_id
+                    AND start.event_payload->>'threadId'=process.session_id),
                 bff_agui_stream.latest_run_start_sequence))`
       const streamCandidatesQuery = `SELECT tenant_id, session_id, ${effectiveRetainFrom}::text AS effective_retain_from
            FROM bff_agui_stream

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 22.3.0
+  version: 28.17.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -49,6 +49,129 @@ tags:
   - name: Administration
     description: Platform-administrator projections backed by their owning services.
 paths:
+  # PROJECT-MCP-RECOMMENDATIONS-PATHS-BEGIN
+  /v1/projects/{projectId}/mcp-recommendations:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      operationId: getProjectMcpRecommendations
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.read
+      summary: Read current project MCP recommendations
+      description: 'Current owned Project only. References are preferences, not execution grants. No query, untrusted identity, Idempotency-Key, receipt or automatic write retry. Stale CAS always fails; matching same values do not advance the version. Only newly added references require current owner metadata validation. Custom API runtime binding is not implemented.'
+      responses:
+        '200':
+          description: Authoritative current configuration, not an immutable historical command receipt
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-Request-Id: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendations' }
+        '400':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError400' }
+        '401':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError401' }
+        '403':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError403' }
+        '404':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError404' }
+        '429':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError429' }
+        '502':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError502' }
+        '503':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError503' }
+    put:
+      tags: [Projects]
+      operationId: replaceProjectMcpRecommendations
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: project.update
+      summary: Conditionally replace project MCP recommendations
+      description: 'Current owned Project only. References are preferences, not execution grants. No query, untrusted identity, Idempotency-Key, receipt or automatic write retry. Stale CAS always fails; matching same values do not advance the version. Only newly added references require current owner metadata validation. Custom API runtime binding is not implemented.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplaceProjectMcpRecommendationsRequest' }
+      responses:
+        '200':
+          description: Authoritative current configuration, not an immutable historical command receipt
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-Request-Id: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendations' }
+        '400':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError400' }
+        '401':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError401' }
+        '403':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError403' }
+        '404':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError404' }
+        '412':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError412' }
+        '429':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError429' }
+        '502':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError502' }
+        '503':
+          description: Closed recommendation or current admission failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError503' }
+  # PROJECT-MCP-RECOMMENDATIONS-PATHS-END
   /v1/account/archived-tasks:
     get:
       tags:
@@ -2983,6 +3106,191 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/admin/billing/metering/pricing:
+    get:
+      tags:
+        - Administration
+      operationId: getAdminMeteringPricing
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.billing.metering.manage
+      summary: Read latest published metering configuration (not an active price quote)
+      description: >-
+        One owner RR snapshot of the latest published tenant rate and policy, independently nullable and
+        possibly future-effective. Not an active price quote or proof of an unknown command outcome. No query,
+        body, Content-Type, framing or command headers. Current platform administrator only.
+      responses:
+        '200':
+          description: Latest published configuration, not necessarily effective
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMeteringPricingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/ServiceAuthFailed'
+        '403':
+          $ref: '#/components/responses/ServiceAuthFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/admin/billing/metering/rate-revisions:
+    post:
+      tags:
+        - Administration
+      operationId: publishAdminMeteringRate
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.billing.metering.manage
+      summary: Publish immutable metering rates
+      description: >-
+        Current platform administrator and trusted tenant/actor are rechecked before one dispatch. Strict JSON
+        up to 1MiB and 12 levels, no query or CAS headers. Preserve original publication_id, key, reason,
+        complete configuration and its explicit UTC times on unknown outcome; reading latest configuration does
+        not prove no publication occurred. No model request or funds effect.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+            pattern: ^[\x21-\x2b\x2d-\x7e]{8,128}$(?![\s\S])
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminMeteringRatePublishRequest'
+      responses:
+        '201':
+          description: Exact immutable publication receipt or original receipt replay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeteringPublicationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/ServiceAuthFailed'
+        '403':
+          $ref: '#/components/responses/ServiceAuthFailed'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-kokoro-max-body-bytes: 1048576
+      x-kokoro-max-json-depth: 12
+  /v1/admin/billing/metering/policy-revisions:
+    post:
+      tags:
+        - Administration
+      operationId: publishAdminMeteringPolicy
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.billing.metering.manage
+      summary: Publish immutable metering policy and integer budget
+      description: >-
+        Current platform administrator and trusted tenant/actor are rechecked before one dispatch. Strict JSON
+        up to 1MiB and 12 levels, no query or CAS headers. Preserve original publication_id, key, reason,
+        complete configuration and its explicit UTC times on unknown outcome; reading latest configuration does
+        not prove no publication occurred. No model request or funds effect.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+            pattern: ^[\x21-\x2b\x2d-\x7e]{8,128}$(?![\s\S])
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminMeteringPolicyPublishRequest'
+      responses:
+        '201':
+          description: Exact immutable publication receipt or original receipt replay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeteringPublicationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/ServiceAuthFailed'
+        '403':
+          $ref: '#/components/responses/ServiceAuthFailed'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-kokoro-max-body-bytes: 1048576
+      x-kokoro-max-json-depth: 12
+  /v1/admin/billing/credit-grants:
+    post:
+      tags: [Administration]
+      operationId: createAdminCreditGrant
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.billing.credit_grant
+      summary: Issue non-cash whole Credits to a current-tenant member
+      description: >-
+        Current Product platform administrator and recipient membership are rechecked before dispatch.
+        No query parameters. Preserve the complete body, Idempotency-Key and permanent funding_id on
+        explicit recovery, including effective_at frozen at first submission. A timeout, transport failure
+        or invalid acknowledgement does not prove no funds were issued; never create a new command to retry.
+        This operation is not a cash payment or a manual usage charge. Tenant, actor, source and price are server-owned.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+            pattern: '^[\x21-\x2b\x2d-\x7e]{8,128}$(?![\s\S])'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminCreditGrantRequest' }
+      responses:
+        '201':
+          description: Exact owner issuance receipt, also returned for a valid replay
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCreditGrantResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/admin/identity/members:
     get:
       tags: [Administration]
@@ -3401,7 +3709,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SessionSnapshotResponse'
+                $ref: '#/components/schemas/PrivateSessionSnapshotResponse'
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -3494,6 +3802,70 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/sessions/{id}/messages/{messageId}/parts:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - name: messageId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1 }
+        description: Exact owned assistant Message identifier, not an Agent segment, artifact or Run identifier.
+    get:
+      tags: [Chat]
+      operationId: getSessionMessageParts
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: chat.session.read
+      x-kokoro-max-response-bytes: 1048576
+      summary: Read one bounded ordered assistant Message parts page
+      description: Current IAM Session admission and exact Conversation/Message/Run visibility are rechecked on every page; anonymous shares do not use this resource. Omitted scope filters select the currently owned session. scope=direct requires the session to have no project, and project_ref requires an exact current owned project match; nonempty project_ref combined with scope=direct is 400 and scope mismatches are 404. The opaque cursor also binds the actual current subject/project, Message, format and revision, never grants access, and must not be parsed or constructed by clients. A changed revision is 409 message_parts_changed; preserve confirmed partial/live content and allow explicit reread, never automatically rerun a command/model. Parts are a read resource, not a second event stream. At most 32 slots and 4096 Unicode scalars per text slice, with the complete UTF-8 JSON envelope limited to 1048576 bytes. The original absolute 10-second read budget and cancellation cover every page operation.
+      parameters:
+        - $ref: '#/components/parameters/DirectScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1 }
+          description: Opaque initial or continuation cursor. Omission explicitly starts a fresh read of the current version; malformed or wrong-context cursors are 400.
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 32, default: 16 }
+      responses:
+        '200':
+          description: Exact version-bound parts page; null next_cursor means this version has been completely read, not that the Run is terminal.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessagePartsPageResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: message_parts_changed - the Message revision changed. Keep confirmed partial/live content; only an explicit fresh reread restarts this read.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '410':
+          description: message_parts_gone - retained legacy recovery evidence was collected. It is not proof that the Run did not execute.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: IAM Session admission is rate limited; do not replay writes.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: message_parts_unavailable or message_parts_budget_exceeded - evidence/dependency unavailable or fixed page metadata exceeds the bounded response; never substitute an empty successful history.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/sessions/{id}/messages:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -3869,6 +4241,74 @@ paths:
                 $ref: '#/components/schemas/SessionSnapshotResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+  # PROJECT-PIN-PATHS-BEGIN
+  /v1/self/project-pins:
+    get:
+      tags: [Projects]
+      operationId: listSelfProjectPins
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.read
+      summary: List the current subject's pinned Projects
+      description: Personal preferences only. Current owned active Projects are rechecked on every page. Exact project_id is mutually exclusive with limit and cursor; an accessible unpinned Project returns empty items, while an invisible Project returns404. Pagination is not a snapshot or authorization. Never infer unpinned state from an incomplete page.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+        - name: project_id
+          in: query
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+      responses:
+        '200':
+          description: Current personal pins ordered by pinned_at descending and canonical project_id C byte order ascending
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectPinListResponse' }
+        '400': { $ref: '#/components/responses/ProjectPinInvalid' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/ProjectPinNotFound' }
+        '429': { $ref: '#/components/responses/ProjectPinRateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/projects/{projectId}/pin:
+    put:
+      tags: [Projects]
+      operationId: setProjectPin
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: project.read
+      summary: Set a personal Project pin
+      description: Own preference write, not Project mutation or sharing authorization. No query, Idempotency-Key or If-Match. Repeated true preserves the original timestamp; false removes only this subject's association. Last serialized committed state wins. Unknown outcomes require an explicit exact current GET, not automatic PUT or a claimed command receipt.
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetProjectPinRequest' }
+      responses:
+        '200':
+          description: Committed current personal state; true has its persisted timestamp and false has null
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectPinResponse' }
+        '400': { $ref: '#/components/responses/ProjectPinInvalid' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/ProjectPinNotFound' }
+        '429': { $ref: '#/components/responses/ProjectPinRateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  # PROJECT-PIN-PATHS-END
   /v1/projects:
     get:
       tags: [Projects]
@@ -4679,6 +5119,136 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  # PROJECT-RESOURCE-ACCESS-PATHS-BEGIN
+  /v1/projects/{projectId}/resources/{asset_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+    get:
+      tags: [Projects]
+      operationId: getProjectResource
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.resource.read
+      summary: Read one currently owned clean Project resource
+      description: Fresh Product Session and current private Project ownership are required on every request. Asset identity is scoped to the canonical Project, never personal scope. Metadata does not prove downloaded bytes. Query and request body are forbidden.
+      responses:
+        '200':
+          description: Current clean ordinary Asset metadata, without object locators or signed URLs
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectResourceItemResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: Current admission or resource capacity is rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Invalid Storage response, exact reference, or byte integrity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+    delete:
+      tags: [Projects]
+      operationId: deleteProjectResource
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: project.update
+      summary: Permanently logically delete one Project Asset
+      description: Irreversible Asset deletion, not unlinking or physical cleanup completion. Current Project ownership precedes each call, including replay. One original key derives a stable owner command; unknown results must use this exact key and empty body. The original command can replay after the Asset is invisible; a different key on a deleted Asset is 404. Existing signed URLs may remain usable for their original maximum 300 seconds. Never release the whole Project scope.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Storage logical deletion receipt confirmed; physical cleanup can remain pending
+          headers:
+            x-request-id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectResourceDeletionResponse' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: Current admission or resource capacity is rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Invalid Storage response, exact reference, or byte integrity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/projects/{projectId}/resources/{asset_id}/download:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+    get:
+      tags: [Projects]
+      operationId: downloadProjectResource
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.resource.read
+      summary: Download a completely verified Project resource attachment
+      description: Fresh scoped Asset and download reference must agree on exact identity, SHA-256, size and MIME. Complete private spool size/SHA verification precedes success. Existing limits remain 1073741824 bytes and two shared spool slots, with bounded transfer and cleanup; no personal or Artifact authorization is reused. No query/body, redirects, signed URL or internal credential is exposed.
+      responses:
+        '200':
+          description: Complete verified private attachment
+          headers:
+            x-request-id: { schema: { type: string } }
+            Content-Length: { schema: { type: integer, minimum: 0, maximum: 1073741824 } }
+            Content-Disposition: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+            Referrer-Policy: { schema: { type: string, const: no-referrer } }
+            X-Content-Type-Options: { schema: { type: string, const: nosniff } }
+          content:
+            '*/*':
+              schema: { type: string, format: binary }
+        '413':
+          description: Declared resource exceeds the existing verified spool capacity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: Current admission or resource capacity is rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Invalid Storage response, exact reference, or byte integrity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  # PROJECT-RESOURCE-ACCESS-PATHS-END
   /v1/projects/{projectId}/resources:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -5826,6 +6396,43 @@ paths:
         '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
         '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
         '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
+  /v1/projects/{projectId}/skill-installations/{installation_id}/package:
+    get:
+      tags: [Skills]
+      operationId: getProjectSkillInstallationPackage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.installation.read
+      summary: Inspect an exact Skill installation package in the currently visible Project
+      description: >-
+        Resolve the currently visible Project before and after the exact installed pin read.
+        Uses only InspectProjectSkillInstallationPackage with trusted Project transport, never personal or current catalog aliases.
+        Reject unknown or duplicate query keys, body, transfer-encoding and idempotency-key. The decoded identifier and optional
+        file_path are passed without trimming or a second decode. A single absolute ten-second budget covers admission, credentials,
+        OAuth HTTP, owner RPC, strict projection and final UTF-8 JSON encoding. The complete public JSON is at most 1,048,576 bytes;
+        responses are not truncated. For a file read, selected_file.path equals the requested file_path exactly.
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - name: installation_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - $ref: '#/components/parameters/SkillPackageInspectionFilePath'
+      responses:
+        '200': { $ref: '#/components/responses/SkillPackageInspectionOk' }
+        '400': { $ref: '#/components/responses/SkillPackageInspectionBadRequest' }
+        '401': { $ref: '#/components/responses/SkillPackageInspectionUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillPackageInspectionForbidden' }
+        '404': { $ref: '#/components/responses/SkillPackageInspectionNotFound' }
+        '412': { $ref: '#/components/responses/SkillPackageInspectionPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillPackageInspectionRateLimited' }
+        '502': { $ref: '#/components/responses/SkillPackageInspectionBadGateway' }
+        '503': { $ref: '#/components/responses/SkillPackageInspectionUnavailable' }
   /v1/skill-installations/{installation_id}/package:
     get:
       tags: [Skills]
@@ -13249,7 +13856,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SpecificationDownloadInfo"
+                $ref: "#/components/schemas/SpecificationDetailResponse"
         "400":
           description: Fixed sanitized local failure. Website error protocol has not been observed.
           headers:
@@ -14376,6 +14983,331 @@ paths:
         '429': { $ref: '#/components/responses/AdminModelRoutingRateLimited' }
         '502': { $ref: '#/components/responses/AdminModelRoutingInvalidResponse' }
         '503': { $ref: '#/components/responses/AdminModelRoutingUnavailable' }
+  # AGENT-DISPLAY-PATHS-BEGIN
+  /v1/sessions/{id}/runs/{runId}/display:
+    get:
+      tags: [Chat]
+      operationId: getSessionRunDisplay
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: chat.read
+      summary: Read exact original Run display facts on demand for the currently owned Conversation
+      description: No query, body or command key. Current Session and owned Conversation plus exact submitted Run binding are checked before and after Agent I/O. Five-second absolute budget and one-MiB full JSON. No current catalog lookup, list or snapshot N+1, Share access or mutation of source events and digests. Missing facts are unknown, not a completeness claim.
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+      responses:
+        '200':
+          description: Bounded original display facts only
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            x-request-id: { schema: { type: string, minLength: 1 } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunDisplayResponse' }
+        '400':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '405':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: Read rejected or not confirmed; no display data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  # AGENT-DISPLAY-PATHS-END
+  # MESSAGE-FEEDBACK-PATHS-BEGIN
+  /v1/sessions/{id}/messages/{messageId}/feedback:
+    get:
+      tags: [Chat]
+      operationId: getMessageFeedback
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: chat.read
+      summary: Read the current owner preference for one assistant Message
+      description: Exact current Session owner and active Conversation/Project are required. No query, command identity or self-asserted actor. PUT sets up/down or clears with null; repeated identical values do not change timestamps. No Message, Run, Agent dispatch or ledger mutation. One absolute ten-second admission/body/database/response budget. Unknown writes are reconciled by GET of the current preference, not a command receipt.
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+      responses:
+        '200':
+          description: Current preference, including a visible assistant with no preference
+          headers:
+            x-request-id: { schema: { type: string, minLength: 1 } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageFeedbackResponse' }
+        '400':
+          description: Invalid closed input
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: Session required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403':
+          description: Session denied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: Message not visible
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '413':
+          description: Request exceeds 1024 bytes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '415':
+          description: JSON required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Session admission rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: Feedback temporarily unavailable or commit unconfirmed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    put:
+      tags: [Chat]
+      operationId: setMessageFeedback
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: chat.write
+      summary: Set the current owner preference for one assistant Message
+      description: Exact current Session owner and active Conversation/Project are required. No query, command identity or self-asserted actor. PUT sets up/down or clears with null; repeated identical values do not change timestamps. No Message, Run, Agent dispatch or ledger mutation. One absolute ten-second admission/body/database/response budget. Unknown writes are reconciled by GET of the current preference, not a command receipt.
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetMessageFeedbackRequest' }
+      responses:
+        '200':
+          description: Current preference, including a visible assistant with no preference
+          headers:
+            x-request-id: { schema: { type: string, minLength: 1 } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageFeedbackResponse' }
+        '400':
+          description: Invalid closed input
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: Session required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403':
+          description: Session denied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: Message not visible
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '413':
+          description: Request exceeds 1024 bytes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '415':
+          description: JSON required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Session admission rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: Feedback temporarily unavailable or commit unconfirmed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  # MESSAGE-FEEDBACK-PATHS-END
+  # MESSAGE-REGENERATION-PATHS-BEGIN
+  /v1/sessions/{id}/messages/{messageId}/regenerate:
+    post:
+      tags: [Chat]
+      operationId: regenerateLatestAssistantMessage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: chat.write
+      summary: Explicitly request another answer to the original trusted question
+      description: Only the latest ended assistant with no active or unknown execution head may start a new attempt. The server loads the original user content and frozen selection from its own typed dispatch. Existing same-key receipts replay before latest/noactive checks. A new Run and internal input mirror preserve original user/answer facts; private/public/share reads hide that mirror before pagination. The new input receives fresh authority, quotas and billing. No checkpoint fork, old admission, credentials or automatic unknown replay.202 is admission, not completion.
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, properties: {} }
+      responses:
+        '202':
+          description: Exact new-attempt admission, with the original user association rather than the Agent input mirror ID
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageRegenerationResponse' }
+        '400':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '405':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '409':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '413':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '415':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: Closed current admission, source precondition or unconfirmed result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  # MESSAGE-REGENERATION-PATHS-END
 components:
   securitySchemes:
     serviceHeader:
@@ -14815,6 +15747,475 @@ components:
         not trim or normalize a non-NFC value.
       schema: { type: string, minLength: 1 }
   schemas:
+    # AGENT-DISPLAY-SCHEMAS-BEGIN
+    RunDisplaySkill:
+      type: object
+      required:
+      - source_ref
+      - name
+      - virtual_path
+      properties:
+        source_ref:
+          type: string
+          minLength: 7
+          maxLength: 197
+          pattern: ^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          x-kokoro-utf8-byte-limit: 480
+          x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+        virtual_path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          x-kokoro-utf8-byte-limit: 4096
+          x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+          description: Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+        revision:
+          type: string
+          pattern: ^[1-9][0-9]{0,18}(?![\s\S])
+          x-kokoro-int64-decimal: true
+      additionalProperties: false
+      x-kokoro-binding: virtual_path must equal /.skills/{base64url(ASCII source_ref suffix)}/SKILL.md; revision only from this Run exact ResolvedSkill, absent
+        if unproven
+    RunDisplay:
+      type: object
+      required:
+      - run_id
+      - display_skills
+      - tool_paths
+      - tool_facts
+      - activity_details
+      properties:
+        run_id:
+          type: string
+          minLength: 1
+        final_answer:
+          type: object
+          required: [segment_id, revision]
+          additionalProperties: false
+          description: Private read-only legacy final proof bound to this owner's exact completed Message parts revision; never a historical write or an execution authority. Existing durable final identity takes precedence; unproven or conflicting bindings are omitted.
+          properties:
+            segment_id:
+              type: string
+              pattern: ^msg_[0-9a-f]{32}(?![\s\S])
+            revision:
+              type: string
+              pattern: ^[1-9][0-9]{0,18}(?![\s\S])
+              x-kokoro-int64-decimal: true
+        display_skills:
+          type: array
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/RunDisplaySkill'
+          x-kokoro-unique-by: source_ref
+          x-kokoro-binding: unique source_ref subset of original ready source_refs; no current catalog lookup
+        tool_paths:
+          type: array
+          maxItems: 128
+          x-kokoro-unique-by: activity_id
+          items:
+            type: object
+            required:
+            - activity_id
+            - virtual_path
+            properties:
+              activity_id:
+                type: string
+                minLength: 68
+                maxLength: 68
+                pattern: ^act_[0-9a-f]{64}(?![\s\S])
+              virtual_path:
+                type: string
+                minLength: 1
+                maxLength: 4096
+                x-kokoro-utf8-byte-limit: 4096
+                x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+                description: Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+            additionalProperties: false
+        tool_facts:
+          type: array
+          maxItems: 128
+          x-kokoro-unique-by: activity_id
+          items:
+            type: object
+            required:
+              - activity_id
+            properties:
+              activity_id:
+                type: string
+                minLength: 68
+                maxLength: 68
+                pattern: ^act_[0-9a-f]{64}(?![\s\S])
+              display_detail:
+                type: object
+                required:
+                  - kind
+                  - name
+                properties:
+                  kind:
+                    type: string
+                    enum:
+                      - mcp_tool
+                  name:
+                    type: string
+                    minLength: 1
+                    maxLength: 120
+                    x-kokoro-utf8-byte-limit: 480
+                    x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+                additionalProperties: false
+              status:
+                type: string
+                enum:
+                  - failed
+            anyOf:
+              - required:
+                  - display_detail
+              - required:
+                  - status
+            additionalProperties: false
+          description: >-
+            Read-only exact original MCP activity facts: safe public names witnessed by successful same-Run calls, or independently proved failed journal outcomes. No
+            source event or Run status mutation.
+        activity_details:
+          type: array
+          maxItems: 128
+          x-kokoro-unique-by: activity_id
+          items:
+            type: object
+            required:
+            - activity_id
+            - tool_name
+            properties:
+              activity_id:
+                type: string
+                minLength: 68
+                maxLength: 68
+                pattern: ^act_[0-9a-f]{64}(?![\s\S])
+              tool_name:
+                type: string
+                minLength: 1
+                maxLength: 120
+                x-kokoro-utf8-byte-limit: 480
+                x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+              target:
+                type: object
+                required:
+                - kind
+                - name
+                properties:
+                  kind:
+                    type: string
+                    enum:
+                    - file
+                    - mcp_tool
+                  name:
+                    type: string
+                    minLength: 1
+                    maxLength: 120
+                    x-kokoro-utf8-byte-limit: 480
+                    x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+                  virtual_path:
+                    type: string
+                    minLength: 1
+                    maxLength: 4096
+                    x-kokoro-utf8-byte-limit: 4096
+                    x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+                    description: Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+                additionalProperties: false
+                allOf:
+                - if:
+                    properties:
+                      kind:
+                        const: file
+                  then:
+                    properties:
+                      name:
+                        pattern: ^(?!\.{1,2}$)[^/\\:]+$
+                - if:
+                    properties:
+                      kind:
+                        const: mcp_tool
+                  then:
+                    not:
+                      required:
+                      - virtual_path
+              input_preview:
+                type: object
+                required:
+                - text
+                - truncated
+                - redacted
+                properties:
+                  text:
+                    type: string
+                    minLength: 1
+                    maxLength: 2048
+                    x-kokoro-utf8-byte-limit: 2048
+                  truncated:
+                    type: boolean
+                  redacted:
+                    type: boolean
+                additionalProperties: false
+              output_preview:
+                type: object
+                required:
+                - text
+                - truncated
+                - redacted
+                properties:
+                  text:
+                    type: string
+                    minLength: 1
+                    maxLength: 4096
+                    x-kokoro-utf8-byte-limit: 4096
+                  truncated:
+                    type: boolean
+                  redacted:
+                    type: boolean
+                additionalProperties: false
+              tool_description:
+                type: object
+                required:
+                - text
+                - truncated
+                - redacted
+                properties:
+                  text:
+                    type: string
+                    minLength: 1
+                    maxLength: 1024
+                    x-kokoro-utf8-byte-limit: 1024
+                  truncated:
+                    type: boolean
+                  redacted:
+                    type: boolean
+                additionalProperties: false
+                description: Provider capability documentation observed in this Run, matched by connection and selector. Not a per-call purpose, execution result, title or authorization. Missing or conflicting evidence is omitted; private display only.
+            additionalProperties: false
+            allOf:
+            - if:
+                required:
+                - tool_description
+              then:
+                required:
+                - target
+                properties:
+                  tool_name:
+                    enum:
+                    - mcp_call
+                    - mcp_describe_tool
+                  target:
+                    properties:
+                      kind:
+                        const: mcp_tool
+          description: Private same-Run evidence-bound tool details only; missing fields remain unknown. Filtered bounded text is not a universal secret-free
+            guarantee. Never Share, execution authority, HTML, autolinks or instructions.
+      additionalProperties: false
+      description: Recovered safe display facts only. Missing facts remain unknown; source events and execution authority are unchanged. No completeness assertion.
+    RunDisplayResponse:
+      type: object
+      required:
+      - data
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/RunDisplay'
+    # AGENT-DISPLAY-SCHEMAS-END
+    # MESSAGE-REGENERATION-SCHEMAS-BEGIN
+    MessageRegenerationResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [run_id, user_message_id, assistant_message_id, regenerated_from_message_id]
+          properties:
+            run_id: { type: string, minLength: 1, maxLength: 256 }
+            user_message_id: { type: string, minLength: 1, maxLength: 256 }
+            assistant_message_id: { type: string, minLength: 1, maxLength: 256 }
+            regenerated_from_message_id: { type: string, minLength: 1, maxLength: 256 }
+    # MESSAGE-REGENERATION-SCHEMAS-END
+    # MESSAGE-FEEDBACK-SCHEMAS-BEGIN
+    SetMessageFeedbackRequest:
+      type: object
+      additionalProperties: false
+      required: [feedback]
+      properties:
+        feedback: { type: [string, 'null'], enum: [up, down, null] }
+    MessageFeedbackResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [session_id, message_id, feedback]
+          properties:
+            session_id: { type: string, minLength: 1, maxLength: 256 }
+            message_id: { type: string, minLength: 1, maxLength: 256 }
+            feedback: { type: [string, 'null'], enum: [up, down, null] }
+    # MESSAGE-FEEDBACK-SCHEMAS-END
+    # PROJECT-MCP-RECOMMENDATIONS-SCHEMAS-BEGIN
+    ProjectMcpRecommendationRef:
+      oneOf:
+        - type: object
+          required: [kind, provider_key]
+          additionalProperties: false
+          properties:
+            kind: { const: provider }
+            provider_key: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z0-9][a-z0-9._-]{0,63}(?![\s\S])' }
+        - type: object
+          required: [kind, connector_id]
+          additionalProperties: false
+          properties:
+            kind: { const: mcp_connector }
+            connector_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+        - type: object
+          required: [kind, profile_id]
+          additionalProperties: false
+          properties:
+            kind: { const: custom_api }
+            profile_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+    ProjectMcpRecommendations:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [project_id, recommendations, state_version]
+          additionalProperties: false
+          properties:
+            project_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+            recommendations:
+              type: array
+              maxItems: 16
+              uniqueItems: true
+              description: Sorted by kind then corresponding ID using ASCII order; failed old references are retained, never execution grants.
+              items: { $ref: '#/components/schemas/ProjectMcpRecommendationRef' }
+            state_version: { type: string, pattern: '^[1-9][0-9]{0,9}(?![\s\S])', description: 'Canonical integer in 1..2147483647; runtime enforces the upper bound.' }
+    ReplaceProjectMcpRecommendationsRequest:
+      type: object
+      required: [expected_state_version, recommendations]
+      additionalProperties: false
+      properties:
+        expected_state_version: { type: string, pattern: '^[1-9][0-9]{0,9}(?![\s\S])', description: 'Canonical integer in 1..2147483647; runtime enforces the upper bound.' }
+        recommendations:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ProjectMcpRecommendationRef' }
+    ProjectMcpRecommendationsError400:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [project_mcp_recommendations_request_invalid] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError401:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [session_authentication_required, session_invalid] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError403:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [service_auth_failed, product_tenant_forbidden, session_forbidden, permission_denied] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError404:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [project_not_found] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError412:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [project_mcp_recommendations_precondition_failed] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError429:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [session_rate_limited] }
+            message: { type: string }
+            retryable: { const: true }
+    ProjectMcpRecommendationsError502:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [project_mcp_recommendations_response_invalid] }
+            message: { type: string }
+            retryable: { const: false }
+    ProjectMcpRecommendationsError503:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, enum: [project_mcp_recommendations_dependency_unavailable, product_tenant_not_configured, iam_admission_unavailable] }
+            message: { type: string }
+            retryable: { const: true }
+    # PROJECT-MCP-RECOMMENDATIONS-SCHEMAS-END
     AdminModelProvider:
       type: object
       properties:
@@ -16757,6 +18158,12 @@ components:
           items:
             type: object
             properties:
+              product:
+                $ref: "#/components/schemas/Public9SkillProductFacts"
+                description: Same authorized current version owner product; absence is only the coordinated predecessor-reader transition, not an inferred publisher.
+              publisher_profile:
+                $ref: "#/components/schemas/SkillPublisherProfile"
+                description: Required exactly when product.publisher.kind is iam; kind and id match its iam ref. Omitted for unknown or verified GitHub publisher. Missing never substitutes a creator or default name.
               skillId:
                 type: string
               originalName:
@@ -17126,6 +18533,12 @@ components:
               type: string
           additionalProperties: false
       additionalProperties: false
+    SpecificationDetailResponse:
+      type: object
+      additionalProperties: false
+      required: [skill]
+      properties:
+        skill: { $ref: "#/components/schemas/SpecificationSkill" }
     SpecificationDownloadInfo:
       type: object
       additionalProperties: false
@@ -19335,6 +20748,45 @@ components:
             - $ref: '#/components/schemas/LibraryFilePage'
             - $ref: '#/components/schemas/LibraryArtifactPage'
         meta: { $ref: '#/components/schemas/RequestMeta' }
+    # PROJECT-RESOURCE-ACCESS-SCHEMAS-BEGIN
+    ProjectResourceItem:
+      type: object
+      additionalProperties: false
+      required: [asset_id, filename, mime_type, size_bytes, content_sha256, scan_state]
+      properties:
+        asset_id: { type: string, minLength: 1, maxLength: 191 }
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        mime_type: { type: string, minLength: 1, maxLength: 191 }
+        size_bytes: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+        content_sha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        scan_state: { type: string, const: clean }
+    ProjectResourceItemResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [resource]
+          properties:
+            resource: { $ref: '#/components/schemas/ProjectResourceItem' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    ProjectResourceDeletionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [asset_id, deleted_at, replayed]
+          properties:
+            asset_id: { type: string, minLength: 1, maxLength: 191 }
+            deleted_at: { type: string, format: date-time }
+            replayed: { type: boolean }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    # PROJECT-RESOURCE-ACCESS-SCHEMAS-END
     ProjectResourceListResponse:
       type: object
       additionalProperties: false
@@ -19388,6 +20840,381 @@ components:
         meta:
           $ref: '#/components/schemas/RequestMeta'
 
+    MeteringRational:
+      type: object
+      additionalProperties: false
+      required:
+        - numerator
+        - denominator
+      properties:
+        numerator:
+          type: string
+          pattern: ^(?:0|[1-9][0-9]{0,77})$(?![\s\S])
+          maxLength: 78
+        denominator:
+          type: string
+          pattern: ^[1-9][0-9]{0,77}$(?![\s\S])
+          maxLength: 78
+    MeteringRate:
+      type: object
+      additionalProperties: false
+      required:
+        - model_revision
+        - provider_ref
+        - environment
+        - pricing_account_ref
+        - model_ref
+        - model_version
+        - bucket
+        - unit
+        - applicability
+        - currency_code
+        - minor_per_unit
+      properties:
+        model_revision:
+          type: object
+          additionalProperties: false
+          required:
+            - id
+            - content_digest
+          properties:
+            id:
+              type: string
+              format: uuid
+              pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])
+            content_digest:
+              type: string
+              pattern: ^[0-9a-f]{64}$(?![\s\S])
+        provider_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        environment:
+          type: string
+          minLength: 1
+          maxLength: 255
+        pricing_account_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        model_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        model_version:
+          type: string
+          minLength: 1
+          maxLength: 255
+        bucket:
+          type: string
+          minLength: 1
+          maxLength: 128
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 128
+        applicability:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required:
+                - kind
+              properties:
+                kind:
+                  type: string
+                  const: all
+            - type: object
+              additionalProperties: false
+              required:
+                - kind
+                - dimension
+                - unit
+                - lower_inclusive
+                - upper_exclusive
+              properties:
+                kind:
+                  type: string
+                  const: range
+                dimension:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                unit:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                lower_inclusive:
+                  type: string
+                  pattern: ^(?:0|[1-9][0-9]{0,77})$(?![\s\S])
+                  maxLength: 19
+                upper_exclusive:
+                  type:
+                    - string
+                    - 'null'
+                  pattern: ^(?:0|[1-9][0-9]{0,18})$(?![\s\S])
+                  maxLength: 19
+        currency_code:
+          type: string
+          pattern: ^[A-Z]{3}$
+        minor_per_unit:
+          $ref: '#/components/schemas/MeteringRational'
+    MeteringRateConfiguration:
+      type: object
+      additionalProperties: false
+      required:
+        - effective_from
+        - source_ref
+        - verified_at
+        - rates
+      properties:
+        effective_from:
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+        source_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        verified_at:
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+        rates:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/MeteringRate'
+    MeteringPolicyConfiguration:
+      type: object
+      additionalProperties: false
+      required:
+        - effective_from
+        - source_ref
+        - verified_at
+        - currency_code
+        - multiplier
+        - credit_micros_per_minor
+        - max_attempt_credits
+      properties:
+        effective_from:
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+        source_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        verified_at:
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+        currency_code:
+          type: string
+          pattern: ^[A-Z]{3}$
+        multiplier:
+          $ref: '#/components/schemas/MeteringRational'
+        credit_micros_per_minor:
+          $ref: '#/components/schemas/MeteringRational'
+        max_attempt_credits:
+          type: string
+          pattern: ^[1-9][0-9]{0,12}$(?![\s\S])
+          maxLength: 13
+          description: Whole Credits, 1 through 9223372036854. A spending budget, not a supplier cost guarantee.
+    AdminMeteringRatePublishRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - publication_id
+        - reason
+        - configuration
+      properties:
+        publication_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        configuration:
+          $ref: '#/components/schemas/MeteringRateConfiguration'
+    AdminMeteringPolicyPublishRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - publication_id
+        - reason
+        - configuration
+      properties:
+        publication_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        configuration:
+          $ref: '#/components/schemas/MeteringPolicyConfiguration'
+    MeteringPublication:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - revision
+        - content_digest
+        - published_at
+        - effective_from
+      properties:
+        kind:
+          type: string
+          enum:
+            - rate
+            - policy
+        revision:
+          type: string
+          pattern: ^[1-9][0-9]{0,18}$(?![\s\S])
+          maxLength: 19
+        content_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$(?![\s\S])
+        published_at:
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+        effective_from:
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+    MeteringPublicationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: '#/components/schemas/MeteringPublication'
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    MeteringRateRevision:
+      type: object
+      additionalProperties: false
+      required:
+        - revision
+        - content_digest
+        - published_at
+        - configuration
+      properties:
+        revision:
+          type: string
+          pattern: ^[1-9][0-9]{0,18}$(?![\s\S])
+          maxLength: 19
+        content_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$(?![\s\S])
+        published_at:
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+        configuration:
+          $ref: '#/components/schemas/MeteringRateConfiguration'
+    MeteringPolicyRevision:
+      type: object
+      additionalProperties: false
+      required:
+        - revision
+        - content_digest
+        - published_at
+        - configuration
+      properties:
+        revision:
+          type: string
+          pattern: ^[1-9][0-9]{0,18}$(?![\s\S])
+          maxLength: 19
+        content_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$(?![\s\S])
+        published_at:
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+        configuration:
+          $ref: '#/components/schemas/MeteringPolicyConfiguration'
+    AdminMeteringPricingResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - rate_revision
+            - policy_revision
+          properties:
+            rate_revision:
+              anyOf:
+                - $ref: '#/components/schemas/MeteringRateRevision'
+                - type: 'null'
+            policy_revision:
+              anyOf:
+                - $ref: '#/components/schemas/MeteringPolicyRevision'
+                - type: 'null'
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    AdminCreditGrantRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - funding_id
+        - subject_id
+        - amount_credits
+        - reason
+        - effective_at
+      properties:
+        funding_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])
+        subject_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        amount_credits:
+          type: string
+          minLength: 1
+          maxLength: 13
+          pattern: ^[1-9][0-9]{0,12}$(?![\s\S])
+          description: Whole Credits, not micros. Maximum 9223372036854; server multiplies
+            by 1000000 using BigInt and rejects overflow.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        effective_at:
+          type: string
+          format: date-time
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$(?![\s\S])
+          description: UTC millisecond business intent frozen by the BFF at first
+            submission; never regenerated on retry.
+    AdminCreditGrantResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [account_id, grant_id, journal_id]
+          additionalProperties: false
+          properties:
+            account_id: { type: string, format: uuid }
+            grant_id: { type: string, format: uuid }
+            journal_id: { type: string, format: uuid }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     RequestId:
       type: string
       minLength: 1
@@ -19700,7 +21527,7 @@ components:
           properties:
             messages:
               type: array
-              items: { $ref: '#/components/schemas/ChatMessage' }
+              items: { $ref: '#/components/schemas/ChatMessageRead' }
             next_cursor:
               type: [string, 'null']
               description: Opaque cursor for the next page; null means there is no next page.
@@ -19767,6 +21594,7 @@ components:
                 - model_unavailable
                 - dependency_unavailable
                 - model_access_denied
+                - model_settlement_pending
             retryable: { type: boolean }
           if:
             properties:
@@ -20270,7 +22098,55 @@ components:
         activity_id: { type: string, pattern: '^act_[0-9a-f]{64}$' }
         segment_id: { type: string, pattern: '^seg_[0-9a-f]{64}$' }
         status: { type: string, enum: [running, completed, failed] }
-        display_code: { const: tool.execution }
+        display_code: { type: string, enum: [tool.execution, tool.file.read, tool.mcp.discover, tool.mcp.describe, tool.mcp.call, tool.web.search, tool.web.fetch, tool.file.write, tool.file.deliver] }
+        display_detail:
+          type: object
+          required: [kind, name]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [file, mcp_tool] }
+            name:
+              type: string
+              minLength: 1
+              maxLength: 120
+              x-kokoro-utf8-byte-limit: 480
+              x-kokoro-unicode-domain: 'NFC Unicode scalars; no Cc, Cf or Cs'
+            virtual_path:
+              type: string
+              minLength: 1
+              maxLength: 4096
+              x-kokoro-utf8-byte-limit: 4096
+              x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+              description: Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument.
+        action_title:
+          type: string
+          minLength: 1
+          maxLength: 256
+          x-kokoro-utf8-byte-limit: 256
+          description: Public intent of this exact model tool call, bound before approval edits. Not reasoning, capability documentation, execution status or authority. No surrounding whitespace, control/format/surrogate characters or private text. Omitted when absent or mismatched; never inferred from adjacent prose.
+      allOf:
+        - if:
+            required: [display_detail]
+            properties:
+              display_detail:
+                properties: { kind: { const: file } }
+          then:
+            properties:
+              display_code: { enum: [tool.file.read, tool.file.write, tool.file.deliver] }
+              display_detail:
+                properties:
+                  name:
+                    pattern: '^(?!\.{1,2}$)[^/\\:]+$'
+        - if:
+            required: [display_detail]
+            properties:
+              display_detail:
+                properties: { kind: { const: mcp_tool } }
+          then:
+            properties:
+              display_code: { enum: [tool.mcp.describe, tool.mcp.call] }
+              display_detail:
+                not: { required: [virtual_path] }
     RunSubagentActivity:
       type: object
       required: [activity, activity_id, segment_id, status, display_code]
@@ -20295,6 +22171,13 @@ components:
           maxItems: 16
           uniqueItems: true
           items: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        display_skills:
+          type: array
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/RunDisplaySkill'
+          x-kokoro-unique-by: source_ref
+          x-kokoro-binding: unique source_ref subset of original ready source_refs; no current catalog lookup
         phase: { type: string, enum: [resolving, loading, ready, failed] }
         error_code: { type: string, enum: [skill_resolve_failed, skill_load_failed] }
       allOf:
@@ -20304,7 +22187,210 @@ components:
             required: [error_code]
           else:
             not: { required: [error_code] }
-    SessionSnapshotResponse:
+        - if: { required: [display_skills] }
+          then: { properties: { phase: { const: ready } } }
+    MessagePartsDecimal:
+      type: string
+      pattern: '^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$(?![\s\S])'
+      maxLength: 19
+      description: Canonical nonnegative decimal integer through 9223372036854775807; never convert it through a lossy JavaScript Number.
+    ChatMessageRead:
+      description: Private read only. Legacy and user bodies keep their original representation; proven ordered assistant bodies are read through their bound parts cursor.
+      oneOf:
+        - $ref: '#/components/schemas/ChatMessage'
+        - $ref: '#/components/schemas/OrderedAssistantMessageRead'
+        - $ref: '#/components/schemas/CancelledAssistantMessageRead'
+        - $ref: '#/components/schemas/RegeneratedAssistantMessageRead'
+    OrderedAssistantMessageRead:
+      type: object
+      required: [message_id, role, content, status, created_at, run_id, rendering]
+      additionalProperties: false
+      properties:
+        selected_skill_source_refs:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+        message_id: { type: string, minLength: 1 }
+        role:
+          type: string
+          const: assistant
+        content: { type: 'null', description: Body is not inlined; read the exact ordered Message parts. }
+        rendering: { $ref: '#/components/schemas/OrderedMessageRendering' }
+        terminal_status: { type: string, const: cancelled }
+        regenerated_from_message_id: { type: string, minLength: 1, maxLength: 256 }
+        status:
+          type: string
+          enum: [pending, streaming, completed, failed]
+        created_at: { type: string, format: date-time }
+        run_id: { type: string, minLength: 1 }
+        failure:
+          type: object
+          required: [source, code, retryable]
+          additionalProperties: false
+          properties:
+            source: { type: string, const: agent }
+            code:
+              type: string
+              enum:
+                - token_budget_exceeded
+                - recursion_limit_exceeded
+                - assembly_failed
+                - enqueue_failed
+                - dispatch_exhausted
+                - contract_incompatible
+                - internal_error
+                - model_unavailable
+                - dependency_unavailable
+                - model_access_denied
+                - model_settlement_pending
+            retryable: { type: boolean }
+          if:
+            properties:
+              retryable: { const: true }
+          then:
+            properties:
+              code: { enum: [model_unavailable, dependency_unavailable] }
+      allOf:
+        - if:
+            properties: { failure: {} }
+            required: [failure]
+          then:
+            required: [run_id]
+            properties:
+              role: { const: assistant }
+              status: { const: failed }
+              run_id: { type: string, minLength: 1 }
+        - if:
+            required: [terminal_status]
+          then:
+            properties:
+              status: { const: failed }
+            not: { required: [failure] }
+    CancelledAssistantMessageRead:
+      description: Private inline assistant read with a proven durable cancellation. Does not assert empty or fully read content.
+      type: object
+      additionalProperties: false
+      required: [message_id, role, content, status, created_at, run_id, terminal_status]
+      properties:
+        message_id: { $ref: '#/components/schemas/ChatMessage/properties/message_id' }
+        role: { type: string, const: assistant }
+        content: { $ref: '#/components/schemas/ChatMessage/properties/content' }
+        status: { type: string, const: failed }
+        created_at: { $ref: '#/components/schemas/ChatMessage/properties/created_at' }
+        run_id: { type: string, minLength: 1 }
+        selected_skill_source_refs: { $ref: '#/components/schemas/ChatMessage/properties/selected_skill_source_refs' }
+        terminal_status: { type: string, const: cancelled }
+        regenerated_from_message_id: { type: string, minLength: 1, maxLength: 256 }
+    RegeneratedAssistantMessageRead:
+      description: Explicit new answer association. The internal input mirror is never a second visible user question.
+      type: object
+      additionalProperties: false
+      required: [message_id, role, content, status, created_at, run_id, regenerated_from_message_id]
+      properties:
+        message_id: { $ref: '#/components/schemas/ChatMessage/properties/message_id' }
+        role: { type: string, const: assistant }
+        content: { $ref: '#/components/schemas/ChatMessage/properties/content' }
+        status: { $ref: '#/components/schemas/ChatMessage/properties/status' }
+        created_at: { $ref: '#/components/schemas/ChatMessage/properties/created_at' }
+        run_id: { type: string, minLength: 1 }
+        selected_skill_source_refs: { $ref: '#/components/schemas/ChatMessage/properties/selected_skill_source_refs' }
+        regenerated_from_message_id: { type: string, minLength: 1, maxLength: 256 }
+        failure: { $ref: '#/components/schemas/ChatMessage/properties/failure' }
+      allOf:
+        - if: { required: [failure] }
+          then: { properties: { status: { const: failed } } }
+    OrderedMessageRendering:
+      type: object
+      additionalProperties: false
+      required: [mode, format_version, revision, event_watermark, parts_cursor]
+      properties:
+        final_segment_id:
+          type: string
+          minLength: 1
+          description: Proven final answer text segment of this exact completed Run at this revision. May occur on another page; absence is unknown, never inferred from the last visible part.
+        mode: { type: string, const: ordered }
+        format_version: { type: integer, const: 1 }
+        revision: { $ref: '#/components/schemas/MessagePartsDecimal' }
+        event_watermark: { $ref: '#/components/schemas/EventWatermark' }
+        parts_cursor:
+          type: string
+          minLength: 1
+          description: Opaque initial parts continuation bound to this exact Message, admitted identity, current project scope, format and revision. It does not grant access.
+    MessageTextPartSlice:
+      type: object
+      additionalProperties: false
+      required: [kind, part_id, segment_id, first_sequence, latest_sequence, text, offset, end, total_scalars, completed]
+      description: One Unicode-scalar slice of a stable public text segment. Preserve segment_id as the already-public AG-UI messageId for same-slot live updates; never parse part_id. Require 1 <= first_sequence <= latest_sequence <= page revision and 0 <= offset <= end <= total_scalars; end-offset equals the exact Unicode scalar count of text. Slices neither add separators nor imply a final-answer phase.
+      properties:
+        kind: { type: string, const: text }
+        part_id: { type: string, minLength: 1 }
+        segment_id: { type: string, minLength: 1 }
+        first_sequence:
+          allOf:
+            - $ref: '#/components/schemas/MessagePartsDecimal'
+            - not: { const: '0' }
+        latest_sequence:
+          allOf:
+            - $ref: '#/components/schemas/MessagePartsDecimal'
+            - not: { const: '0' }
+        text: { type: string, maxLength: 4096 }
+        offset: { $ref: '#/components/schemas/MessagePartsDecimal' }
+        end: { $ref: '#/components/schemas/MessagePartsDecimal' }
+        total_scalars: { $ref: '#/components/schemas/MessagePartsDecimal' }
+        completed: { type: boolean }
+    MessageActivityPart:
+      type: object
+      additionalProperties: false
+      required: [kind, part_id, first_sequence, latest_sequence, activity]
+      description: A safe public activity at its original first position. Require 1 <= first_sequence <= latest_sequence <= page revision. Status updates replace the same activity_id without moving or duplicating this slot; raw tool arguments, results and private summaries are not exposed.
+      properties:
+        kind: { type: string, const: activity }
+        part_id: { type: string, minLength: 1 }
+        first_sequence:
+          allOf:
+            - $ref: '#/components/schemas/MessagePartsDecimal'
+            - not: { const: '0' }
+        latest_sequence:
+          allOf:
+            - $ref: '#/components/schemas/MessagePartsDecimal'
+            - not: { const: '0' }
+        activity: { $ref: '#/components/schemas/RunProcessActivity' }
+    MessagePartsPage:
+      type: object
+      additionalProperties: false
+      required: [session_id, message_id, run_id, format_version, revision, event_watermark, items, next_cursor]
+      properties:
+        final_segment_id:
+          type: string
+          minLength: 1
+          description: Proven final answer text segment of this exact completed Run at this revision. May occur on another page; absence is unknown, never inferred from the last visible part.
+        session_id: { type: string, minLength: 1 }
+        message_id: { type: string, minLength: 1 }
+        run_id: { type: string, minLength: 1 }
+        format_version: { type: integer, const: 1 }
+        revision: { $ref: '#/components/schemas/MessagePartsDecimal' }
+        event_watermark: { $ref: '#/components/schemas/EventWatermark' }
+        items:
+          type: array
+          maxItems: 32
+          description: Logical slots in stable first_sequence order. A large text slot continues at the next scalar offset before advancing to the next slot; repeated slices are not new messages or tool calls.
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/MessageTextPartSlice'
+              - $ref: '#/components/schemas/MessageActivityPart'
+        next_cursor:
+          type: [string, 'null']
+          minLength: 1
+          description: Opaque continuation for this exact version; null only after all slots and text scalars have been read. It does not indicate Run completion or authorize an interaction.
+    MessagePartsPageResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/MessagePartsPage' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    PrivateSessionSnapshotResponse:
       type: object
       required: [data, meta]
       additionalProperties: false
@@ -20315,9 +22401,47 @@ components:
           additionalProperties: false
           properties:
             session: { $ref: '#/components/schemas/ChatSession' }
+            composer_selection:
+              type: object
+              additionalProperties: false
+              required: [source_message_id, selected_mcp_connection_ids]
+              description: Latest accepted normal user Message selection in this private session. Unsent changes are not persisted. Absent when no source can be proven; [] means that request selected no MCP connections. Not execution authorization. Regeneration does not replace this baseline.
+              properties:
+                source_message_id: { type: string, minLength: 1 }
+                selected_mcp_connection_ids:
+                  type: array
+                  maxItems: 16
+                  uniqueItems: true
+                  x-kokoro-json-byte-limit: 4096
+                  description: Exact ordered Platform MCP Connection IDs for this message. Omission or [] adds no connections. This is intent, not authorization; compact ASCII JSON is limited to 4096 bytes.
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 191
+                    pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
+                selected_custom_api_profiles:
+                  type: array
+                  maxItems: 32
+                  uniqueItems: true
+                  x-kokoro-unique-by: profile_id
+                  description: Exact ordered Custom API profile/version references for this message. Omission or [] selects none. Selection is intent, not authorization; values and credentials are never included.
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [profile_id, expected_state_version]
+                    properties:
+                      profile_id:
+                        type: string
+                        minLength: 1
+                        maxLength: 191
+                        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
+                      expected_state_version:
+                        type: integer
+                        minimum: 1
+                        maximum: 2147483647
             messages:
               type: array
-              items: { $ref: '#/components/schemas/ChatMessage' }
+              items: { $ref: '#/components/schemas/ChatMessageRead' }
             execution_head: { $ref: '#/components/schemas/ExecutionHead' }
             execution_process:
               oneOf:
@@ -20350,6 +22474,51 @@ components:
             todos: null
             activities: []
             next_cursor: null
+          files: []
+          deliveries: []
+          deliveries_has_more: false
+          event_watermark: agui_0123456789abcdef0123456789abcdef
+        meta:
+          request_id: req_01JASYNC000000000000000000
+    SessionSnapshotResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [session, files, deliveries, deliveries_has_more, event_watermark, execution_process]
+          additionalProperties: false
+          properties:
+            session: { $ref: '#/components/schemas/ChatSession' }
+            messages:
+              type: array
+              items: { $ref: '#/components/schemas/ChatMessage' }
+            execution_head: { $ref: '#/components/schemas/ExecutionHead' }
+            execution_process: { type: 'null' }
+            files:
+              type: array
+              items: { $ref: '#/components/schemas/WorkspaceFile' }
+            deliveries:
+              type: array
+              items: { $ref: '#/components/schemas/Delivery' }
+            deliveries_has_more: { type: boolean }
+            event_watermark: { $ref: '#/components/schemas/EventWatermark' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+      example:
+        data:
+          session:
+            session_id: session_kokoro
+            title: Review business API contract
+            owner_id: ns_test
+            created_at: '2026-01-01T00:00:00.000Z'
+            updated_at: '2026-01-01T00:00:00.000Z'
+          messages: []
+          execution_head:
+            run_id: run_01JASYNC
+            state: active
+            pending_pauses: []
+          execution_process: null
           files: []
           deliveries: []
           deliveries_has_more: false
@@ -20401,9 +22570,37 @@ components:
             minLength: 7
             maxLength: 197
             pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
-        mcp_servers:
+        selected_mcp_connection_ids:
           type: array
-          items: { type: string, minLength: 1 }
+          maxItems: 16
+          uniqueItems: true
+          x-kokoro-json-byte-limit: 4096
+          description: Exact ordered Platform MCP Connection IDs for this message. Omission or [] adds no connections. This is intent, not authorization; compact ASCII JSON is limited to 4096 bytes.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 191
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
+        selected_custom_api_profiles:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          x-kokoro-unique-by: profile_id
+          description: Exact ordered Custom API profile/version references for this message. Omission or [] selects none. Selection is intent, not authorization; values and credentials are never included.
+          items:
+            type: object
+            additionalProperties: false
+            required: [profile_id, expected_state_version]
+            properties:
+              profile_id:
+                type: string
+                minLength: 1
+                maxLength: 191
+                pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
+              expected_state_version:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
         project_ref: { type: string, minLength: 1 }
       example:
         content: Review the latest project changes.
@@ -20542,16 +22739,64 @@ components:
           request_id: req_01JASYNC000000000000000000
     SessionEventStream:
       type: string
-      description: AG-UI server-sent event frames read from the BFF PostgreSQL ledger. Each id is a distinct opaque resume cursor. CUSTOM kokoro.interaction.state carries one complete ChatInteractionState in value; HTTP control admission does not resolve it.
+      description: AG-UI server-sent event frames read from the BFF PostgreSQL ledger. Each id is a distinct opaque resume cursor. Every durable data frame requires owner metadata described by x-kokoro-owner-metadata; public_sequence is the positive decimal BFF ledger position, distinct from unchanged source seq. Never decode an opaque cursor as a sequence. Heartbeat comments have no owner metadata. CUSTOM kokoro.interaction.state carries one complete ChatInteractionState in value; HTTP control admission does not resolve it.
+      x-kokoro-run-finished-results:
+        completed:
+          $ref: '#/components/schemas/FinalAnswerResult'
+      x-kokoro-owner-metadata:
+        $ref: '#/components/schemas/KokoroAgUiReplayMetadata'
       x-kokoro-custom-event-values:
         kokoro.interaction.state:
           $ref: '#/components/schemas/ChatInteractionState'
       example: |-
         id: agui_0123456789abcdef0123456789abcdef
-        data: {"type":"CUSTOM","name":"kokoro.interaction.state","timestamp":1767225604000,"value":{"interaction_revision":1,"pause_revision":1,"pause_ref":"pause_01J","phase":"waiting","groups":[{"group_id":"group_01J","items":[{"item_id":"item_01J","request_id":"request_01J","kind":"tool_approval","allowed_decisions":["approve","reject"],"display":{"name":"Review","description":"Approve this action","editable":false,"input_schema":{"type":"object"}}}]}],"action_result":null},"metadata":{"kokoro":{"event_id":"agent_event_4","seq":4,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:04.000Z"}}}
+        data: {"type":"CUSTOM","name":"kokoro.interaction.state","timestamp":1767225604000,"value":{"interaction_revision":1,"pause_revision":1,"pause_ref":"pause_01J","phase":"waiting","groups":[{"group_id":"group_01J","items":[{"item_id":"item_01J","request_id":"request_01J","kind":"tool_approval","allowed_decisions":["approve","reject"],"display":{"name":"Review","description":"Approve this action","editable":false,"input_schema":{"type":"object"}}}]}],"action_result":null},"metadata":{"kokoro":{"event_id":"agent_event_4","seq":4,"public_sequence":"7","session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:04.000Z"}}}
 
         id: agui_abcdef0123456789abcdef0123456789ab
-        data: {"type":"RUN_FINISHED","timestamp":1767225605000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_5","seq":5,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:05.000Z"}}}
+        data: {"type":"RUN_FINISHED","timestamp":1767225605000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_5","seq":5,"public_sequence":"8","session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:05.000Z"}}}
+    FinalAnswerResult:
+      type: object
+      additionalProperties: false
+      required: [final_segment_id]
+      description: Optional result of a successful RUN_FINISHED only. Its reference is committed with that terminal and the ordered message revision; cancelled and failed runs never carry it.
+      properties:
+        final_segment_id: { type: string, minLength: 1 }
+    KokoroAgUiReplayMetadata:
+      type: object
+      description: Owner metadata on every durable AG-UI data frame. The public_sequence is assigned per emitted frame by the BFF ledger; one Agent source seq can produce several frames. Preserve source seq and source_owner without coercion or fallback.
+      required: [kokoro]
+      additionalProperties: false
+      properties:
+        kokoro:
+          oneOf:
+            - type: object
+              required: [event_id, seq, session_id, run_id, timestamp, public_sequence]
+              additionalProperties: false
+              properties:
+                event_id: { type: string, minLength: 1 }
+                seq: { type: integer, minimum: 0, maximum: 9007199254740991 }
+                session_id: { type: string, minLength: 1 }
+                run_id: { type: [string, 'null'], minLength: 1 }
+                timestamp: { type: string, format: date-time }
+                public_sequence:
+                  $ref: '#/components/schemas/MessagePartsDecimal'
+                  not: { const: '0' }
+                failure: { $ref: '#/components/schemas/ChatMessage/properties/failure' }
+            - type: object
+              required: [event_id, seq, session_id, run_id, timestamp, source_owner, public_sequence]
+              additionalProperties: false
+              properties:
+                event_id: { type: string, minLength: 1 }
+                seq:
+                  $ref: '#/components/schemas/MessagePartsDecimal'
+                  not: { const: '0' }
+                session_id: { type: string, minLength: 1 }
+                run_id: { type: string, minLength: 1 }
+                timestamp: { type: string, format: date-time }
+                source_owner: { type: string, const: kokoro-bff }
+                public_sequence:
+                  $ref: '#/components/schemas/MessagePartsDecimal'
+                  not: { const: '0' }
     RenameProjectRequest:
       type: object
       required: [name]
@@ -20711,6 +22956,62 @@ components:
         instruction: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    # PROJECT-PIN-SCHEMAS-BEGIN
+    SetProjectPinRequest:
+      type: object
+      additionalProperties: false
+      required: [is_pinned]
+      properties:
+        is_pinned: { type: boolean }
+    ProjectPinItem:
+      type: object
+      additionalProperties: false
+      required: [project_id, pinned_at]
+      properties:
+        project_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        pinned_at: { type: string, format: date-time }
+    ProjectPinListResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, next_cursor]
+          properties:
+            items:
+              type: array
+              maxItems: 100
+              items: { $ref: '#/components/schemas/ProjectPinItem' }
+            next_cursor:
+              oneOf:
+                - { type: string, minLength: 1, maxLength: 2048 }
+                - { type: 'null' }
+    ProjectPinResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [project_id, is_pinned, pinned_at]
+          properties:
+            project_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+            is_pinned: { type: boolean }
+            pinned_at:
+              oneOf:
+                - { type: string, format: date-time }
+                - { type: 'null' }
+          allOf:
+            - if:
+                properties: { is_pinned: { const: true } }
+              then:
+                properties: { pinned_at: { type: string, format: date-time } }
+              else:
+                properties: { pinned_at: { type: 'null' } }
+    # PROJECT-PIN-SCHEMAS-END
     ProjectListResponse:
       type: object
       required: [data, meta]
@@ -21298,7 +23599,7 @@ components:
         connector_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
         server_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
         provider_key: { type: string, minLength: 1, maxLength: 191 }
-        transport: { type: string, enum: [streamable_http] }
+        transport: { type: string, enum: [streamable_http, sse_compat] }
         status: { type: string, enum: [active] }
     McpConnectionListResponse:
       type: object
@@ -21471,7 +23772,7 @@ components:
                   pattern: ^[a-f0-9]{40}(?:[a-f0-9]{24})?$
                 paths:
                   type: array
-                  maxItems: 128
+                  maxItems: 512
                   items:
                     type: string
                     maxLength: 256
@@ -22369,6 +24670,36 @@ components:
             retryable: { type: boolean }
 
   responses:
+    # PROJECT-PIN-RESPONSES-BEGIN
+    ProjectPinInvalid:
+      description: project_pin_request_invalid; retryable false
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/ErrorEnvelope' }
+              - properties:
+                  error:
+                    properties: { code: { const: project_pin_request_invalid }, retryable: { const: false } }
+    ProjectPinNotFound:
+      description: project_not_found; retryable false, including invisible or deleted Projects
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/ErrorEnvelope' }
+              - properties:
+                  error:
+                    properties: { code: { const: project_not_found }, retryable: { const: false } }
+    ProjectPinRateLimited:
+      description: Current IAM admission is rate limited
+      headers:
+        Retry-After:
+          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    # PROJECT-PIN-RESPONSES-END
     AdminMcpPackageBeginOk:
       description: Current owner result, not tool execution permission
       headers:

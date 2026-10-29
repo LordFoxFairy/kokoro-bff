@@ -3,6 +3,15 @@
 import { client } from "./client.gen.js"
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from "./client/index.js"
 import type {
+  CreateAdminCreditGrantData,
+  CreateAdminCreditGrantErrors,
+  CreateAdminCreditGrantResponses,
+  CreateAdmissionData,
+  CreateAdmissionErrors,
+  CreateAdmissionResponses,
+  GetAdminMeteringPricingData,
+  GetAdminMeteringPricingErrors,
+  GetAdminMeteringPricingResponses,
   GetCatalogData,
   GetCatalogErrors,
   GetCatalogResponses,
@@ -15,8 +24,32 @@ import type {
   OpenMyCreditAccountData,
   OpenMyCreditAccountErrors,
   OpenMyCreditAccountResponses,
+  PublishAdminMeteringPolicyData,
+  PublishAdminMeteringPolicyErrors,
+  PublishAdminMeteringPolicyResponses,
+  PublishAdminMeteringRateData,
+  PublishAdminMeteringRateErrors,
+  PublishAdminMeteringRateResponses,
+  RecoverModelAdmissionData,
+  RecoverModelAdmissionErrors,
+  RecoverModelAdmissionResponses,
+  SettleModelAdmissionData,
+  SettleModelAdmissionErrors,
+  SettleModelAdmissionResponses,
 } from "./types.gen.js"
-import { zGetCatalogResponse, zGetMyCreditAccountResponse, zGetMyCreditLedgerResponse, zOpenMyCreditAccountResponse } from "./zod.gen.js"
+import {
+  zCreateAdminCreditGrantResponse,
+  zCreateAdmissionResponse,
+  zGetAdminMeteringPricingResponse,
+  zGetCatalogResponse,
+  zGetMyCreditAccountResponse,
+  zGetMyCreditLedgerResponse,
+  zOpenMyCreditAccountResponse,
+  zPublishAdminMeteringPolicyResponse,
+  zPublishAdminMeteringRateResponse,
+  zRecoverModelAdmissionResponse,
+  zSettleModelAdmissionResponse,
+} from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
   TData,
@@ -151,4 +184,220 @@ export const getMyCreditLedger = <ThrowOnError extends boolean = false>(
     ],
     url: "/v1/billing/me/credit-ledger",
     ...options,
+  })
+
+/**
+ * Commits the configured whole-attempt credit budget before dispatch. A durable command-receipt replay returns the original creation representation (held); GET reads the current financial status. A dependency failure permits only recovery with the same command, never an automatic new attempt, price guess, free usage or duplicate dispatch.
+ */
+export const createAdmission = <ThrowOnError extends boolean = false>(
+  options: Options<CreateAdmissionData, ThrowOnError>,
+): RequestResult<CreateAdmissionResponses, CreateAdmissionErrors, ThrowOnError> =>
+  (options.client ?? client).post<CreateAdmissionResponses, CreateAdmissionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCreateAdmissionResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+    ],
+    url: "/v1/internal/billing/admissions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * Recover only a committed original model budget receipt; a miss does not prove cancellation or permit a new dispatch
+ *
+ * Both execution proof and retired consumption headers are forbidden. No live Agent or IAM call and no new hold. A concurrent original create may commit after a recovery miss; recover again with the original facts and key.
+ */
+export const recoverModelAdmission = <ThrowOnError extends boolean = false>(
+  options: Options<RecoverModelAdmissionData, ThrowOnError>,
+): RequestResult<RecoverModelAdmissionResponses, RecoverModelAdmissionErrors, ThrowOnError> =>
+  (options.client ?? client).post<RecoverModelAdmissionResponses, RecoverModelAdmissionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zRecoverModelAdmissionResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+    ],
+    url: "/v1/internal/billing/admissions/recover",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+export const settleModelAdmission = <ThrowOnError extends boolean = false>(
+  options: Options<SettleModelAdmissionData, ThrowOnError>,
+): RequestResult<SettleModelAdmissionResponses, SettleModelAdmissionErrors, ThrowOnError> =>
+  (options.client ?? client).post<SettleModelAdmissionResponses, SettleModelAdmissionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zSettleModelAdmissionResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+    ],
+    url: "/v1/internal/billing/admissions/{admission_id}/settle",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * Latest published rate and policy configurations in one read-only tenant snapshot, independently nullable; may be future effective. Not an active price quote or a history collection. No query or request body.
+ */
+export const getAdminMeteringPricing = <ThrowOnError extends boolean = false>(
+  options: Options<GetAdminMeteringPricingData, ThrowOnError>,
+): RequestResult<GetAdminMeteringPricingResponses, GetAdminMeteringPricingErrors, ThrowOnError> =>
+  (options.client ?? client).get<GetAdminMeteringPricingResponses, GetAdminMeteringPricingErrors, ThrowOnError>({
+    responseValidator: async (data) => await zGetAdminMeteringPricingResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+      { name: "x-kokoro-proxy-secret", type: "apiKey" },
+    ],
+    url: "/v1/admin/billing/metering/pricing",
+    ...options,
+  })
+
+/**
+ * Publish one immutable pricing revision. BFF verifies current platform administrator membership. Current usage profile and settlement semantics are owner fixed; no funds or model dispatch.
+ */
+export const publishAdminMeteringRate = <ThrowOnError extends boolean = false>(
+  options: Options<PublishAdminMeteringRateData, ThrowOnError>,
+): RequestResult<PublishAdminMeteringRateResponses, PublishAdminMeteringRateErrors, ThrowOnError> =>
+  (options.client ?? client).post<PublishAdminMeteringRateResponses, PublishAdminMeteringRateErrors, ThrowOnError>({
+    responseValidator: async (data) => await zPublishAdminMeteringRateResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+      { name: "x-kokoro-proxy-secret", type: "apiKey" },
+    ],
+    url: "/v1/admin/billing/metering/rate-revisions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * Publish one immutable pricing revision. BFF verifies current platform administrator membership. Current usage profile and settlement semantics are owner fixed; no funds or model dispatch.
+ */
+export const publishAdminMeteringPolicy = <ThrowOnError extends boolean = false>(
+  options: Options<PublishAdminMeteringPolicyData, ThrowOnError>,
+): RequestResult<PublishAdminMeteringPolicyResponses, PublishAdminMeteringPolicyErrors, ThrowOnError> =>
+  (options.client ?? client).post<PublishAdminMeteringPolicyResponses, PublishAdminMeteringPolicyErrors, ThrowOnError>({
+    responseValidator: async (data) => await zPublishAdminMeteringPolicyResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+      { name: "x-kokoro-proxy-secret", type: "apiKey" },
+    ],
+    url: "/v1/admin/billing/metering/policy-revisions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * Non-cash administrative credit issuance. The BFF verifies current platform administrator permission and recipient membership in the trusted tenant before invoking. No user bearer or caller supplied role fallback.
+ */
+export const createAdminCreditGrant = <ThrowOnError extends boolean = false>(
+  options: Options<CreateAdminCreditGrantData, ThrowOnError>,
+): RequestResult<CreateAdminCreditGrantResponses, CreateAdminCreditGrantErrors, ThrowOnError> =>
+  (options.client ?? client).post<CreateAdminCreditGrantResponses, CreateAdminCreditGrantErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCreateAdminCreditGrantResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+      { name: "x-kokoro-proxy-secret", type: "apiKey" },
+    ],
+    url: "/v1/admin/billing/credit-grants",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   })

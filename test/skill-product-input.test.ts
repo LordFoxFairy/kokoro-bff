@@ -117,7 +117,7 @@ test("both publication command digests match the fixed owner vectors and reject 
   const vectors = JSON.parse(
     await readFile(
       new URL(
-        "../contract/vendor/kokoro-platform/451d0fb5a2df76f9050a685eef02782989d94cce/execution-operations/skill-publication-precondition-v1.vectors.json",
+        "../contract/vendor/kokoro-platform/94e574c68d6c972078b661fa7d917dab90c71042/execution-operations/skill-publication-precondition-v1.vectors.json",
         import.meta.url,
       ),
       "utf8",
@@ -173,7 +173,7 @@ test("personal series delete digest matches the fixed owner vectors and binds ac
   const { projectDeletePersonalSkillSeries } = await import("../src/infrastructure/clients/platform/delete-personal-skill-series-projector.js")
   const vectors = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/451d0fb5a2df76f9050a685eef02782989d94cce/execution-operations/skill-series-delete-v1.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/94e574c68d6c972078b661fa7d917dab90c71042/execution-operations/skill-series-delete-v1.json", import.meta.url),
       "utf8",
     ),
   ).vectors

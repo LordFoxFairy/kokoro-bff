@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package kokoro.platform.v1;
+
+import "google/protobuf/timestamp.proto";
+import "kokoro/common/v1/common.proto";
+
+// Existing mcp_personal BFF credential and trusted subject. Project existence and
+// current human access are verified by BFF; this service never grants execution.
+service ProductMcpProjectPublicationService {
+  rpc PublishMcpUrlToProjects(PublishMcpUrlToProjectsRequest) returns (PublishMcpUrlToProjectsResponse);
+  rpc ListProjectMcpPins(ListProjectMcpPinsRequest) returns (ListProjectMcpPinsResponse);
+  rpc RemoveProjectMcpPin(RemoveProjectMcpPinRequest) returns (RemoveProjectMcpPinResponse);
+  rpc GetMcpProjectPublicationReceipt(GetMcpProjectPublicationReceiptRequest) returns (GetMcpProjectPublicationReceiptResponse);
+}
+
+message McpProjectPinPrecondition {
+  oneof expected {
+    bool absent = 1;
+    McpProjectPinVersion current = 2;
+  }
+}
+message McpProjectPinVersion {
+  string pin_id = 1;
+  uint64 state_version = 2;
+}
+message McpProjectPublicationTarget {
+  string project_id = 1;
+  McpProjectPinPrecondition expected_pin = 2;
+}
+message PublishMcpUrlToProjectsRequest {
+  reserved 100;
+  reserved "tenant_id", "subject_id", "owner_scope", "execution_proof", "actor_id";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  string server_id = 3;
+  string connector_id = 4;
+  uint64 expected_source_state_version = 5;
+  repeated McpProjectPublicationTarget targets = 6;
+}
+message McpUrlRevisionSummary {
+  string revision_id = 1;
+  string server_id = 2;
+  string connector_id = 3;
+  string content_digest = 4;
+  uint64 source_state_version = 5;
+  string display_name = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+message McpProjectPin {
+  string pin_id = 1;
+  string project_id = 2;
+  McpUrlRevisionSummary revision = 3;
+  uint64 state_version = 4;
+  bool removed = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  // This control-plane slice has no runtime/Agent/IAM revision binding.
+  // False is required and must not be inferred from the private connection.
+  optional bool execution_ready = 7;
+}
+message PublishMcpUrlToProjectsResponse {
+  McpUrlRevisionSummary revision = 1;
+  repeated McpProjectPin pins = 2;
+  bool replayed = 3;
+}
+message ListProjectMcpPinsRequest {
+  reserved 100;
+  reserved "tenant_id", "subject_id", "owner_scope", "execution_proof", "actor_id";
+  string request_id = 1;
+  string project_id = 2;
+  uint32 limit = 3;
+  optional string cursor = 4;
+}
+message ListProjectMcpPinsResponse {
+  repeated McpProjectPin pins = 1;
+  optional string next_cursor = 2;
+}
+message RemoveProjectMcpPinRequest {
+  reserved 100;
+  reserved "tenant_id", "subject_id", "owner_scope", "execution_proof", "actor_id";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  string project_id = 3;
+  string pin_id = 4;
+  uint64 expected_state_version = 5;
+}
+message RemoveProjectMcpPinResponse {
+  McpProjectPin pin = 1;
+  bool replayed = 2;
+}
+message GetMcpProjectPublicationReceiptRequest {
+  string request_id = 1;
+  // Re-submit only the frozen typed identity for a read-only receipt lookup.
+  // This operation never invokes either command.
+  oneof original {
+    PublishMcpUrlToProjectsRequest publication = 2;
+    RemoveProjectMcpPinRequest removal = 3;
+  }
+}
+message GetMcpProjectPublicationReceiptResponse {
+  oneof result {
+    PublishMcpUrlToProjectsResponse publication = 1;
+    RemoveProjectMcpPinResponse removal = 2;
+  }
+}

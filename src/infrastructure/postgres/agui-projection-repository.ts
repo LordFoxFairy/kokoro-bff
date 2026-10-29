@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto"
-import { interactionFromRow, readRunInteraction, writeRunInteraction } from "./agui-interaction-projection.js"
+import { agUiReplayPayload } from "./agui-replay-payload.js"
+import {
+  interactionFromRow,
+  isCurrentStartlessRun,
+  isInitialTerminalInteraction,
+  readRunInteraction,
+  writeRunInteraction,
+} from "./agui-interaction-projection.js"
 import { interactionDigest, replaceInteraction } from "../../application/agui/interaction-state.js"
 import { parseAgentInteractionState } from "../clients/agent/interaction-state.js"
 import type { PoolClient } from "pg"
@@ -24,6 +31,7 @@ import type { PostgresBffDatabase } from "./client.js"
 import { insertArtifactDelivery, lockArtifactConversation } from "./conversation-artifact-projection.js"
 import { PostgresAgentDispatchOutboxRepository } from "./agent-dispatch-outbox-repository.js"
 import { projectRunProcessFrame } from "./agui-process-projection.js"
+import { foldMessageParts, messagePartsContent, parseMessageParts, type PositionedMessageFrame } from "./message-parts.js"
 
 type StreamRow = {
   interaction_row?: unknown
@@ -188,7 +196,7 @@ function storedFrame(row: FrameRow): StoredAgUiFrame {
     publicSequence: safeInteger(row.public_sequence, "public sequence"),
     cursor: row.cursor,
     eventType: row.event_type,
-    payload: row.event_payload,
+    payload: agUiReplayPayload(row.event_payload, row.public_sequence, row.event_type),
   }
 }
 
@@ -222,7 +230,8 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
       `SELECT ${streamColumns()},
               (SELECT to_jsonb(interaction) FROM bff_agui_run_interaction AS interaction
                 WHERE interaction.tenant_id=bff_agui_stream.tenant_id AND interaction.session_id=bff_agui_stream.session_id
-                  AND interaction.run_id=bff_agui_stream.latest_run_id) AS interaction_row
+                  AND (interaction.run_id=bff_agui_stream.expected_run_id OR interaction.run_id=bff_agui_stream.latest_run_id)
+                ORDER BY (interaction.run_id=bff_agui_stream.expected_run_id) DESC NULLS LAST LIMIT 1) AS interaction_row
          FROM bff_agui_stream
         WHERE tenant_id = $1 AND session_id = $2`,
       [tenantId, sessionId],
@@ -240,8 +249,8 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
       }
     }
     return {
-      ...(isRecord(row.interaction_row) && row.latest_run_id !== null
-        ? { interaction: { runId: row.latest_run_id, state: interactionFromRow(row.interaction_row) } }
+      ...(isRecord(row.interaction_row) && typeof row.interaction_row.run_id === "string"
+        ? { interaction: { runId: row.interaction_row.run_id, state: interactionFromRow(row.interaction_row) } }
         : {}),
       version: safeInteger(row.version, "stream version"),
       sourceHighWatermark: safeInteger(row.source_high_watermark, "source high watermark"),
@@ -347,13 +356,20 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
       let latestRunStartSequence = stream.latest_run_start_sequence === null ? null : safeInteger(stream.latest_run_start_sequence, "latest run start sequence")
       let startedRunId = stream.latest_run_id
       for (const source of command.sources) {
+        const hasCurrentStart = source.sourceRunId === startedRunId && latestRunStartSequence !== null
+        const startlessRun =
+          !hasCurrentStart &&
+          source.sourceOwner === "kokoro-agent" &&
+          source.sourceRunId !== null &&
+          stream.consumer_subject_id !== null &&
+          (source.interactionState !== undefined || source.frames.some((frame) => frame.type === "CUSTOM" && frame.name === "kokoro.activity.updated")) &&
+          (await isCurrentStartlessRun(client, command.tenantId, command.sessionId, source.sourceRunId, stream.consumer_subject_id))
         let interactionChanged = false
         if (source.interactionState !== undefined) {
           if (
             source.sourceRunId === null ||
             source.sourceRunId !== stream.expected_run_id ||
-            source.sourceRunId !== startedRunId ||
-            latestRunStartSequence === null ||
+            (!hasCurrentStart && !startlessRun) ||
             stream.consumer_subject_id === null
           )
             throw new Error("AGUI_INTERACTION_RUN_INVALID")
@@ -379,11 +395,13 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
             command.sessionId,
             source.sourceRunId,
             stream.consumer_subject_id,
-            latestRunStartSequence,
+            hasCurrentStart ? latestRunStartSequence : null,
             nextPublicSequence - 1,
             source.sourceSequence - 1,
           )
-          interactionChanged = replaceInteraction(previous, parseAgentInteractionState(source.interactionState))
+          const next = parseAgentInteractionState(source.interactionState)
+          if (!hasCurrentStart && !isInitialTerminalInteraction(next)) throw new Error("AGUI_INTERACTION_RUN_INVALID")
+          interactionChanged = replaceInteraction(previous, next)
           if (
             source.frames.length !== (interactionChanged ? 1 : 0) ||
             (interactionChanged &&
@@ -422,65 +440,27 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
             fact: source.skillUsageFact,
           })
         }
-        if (postTerminalBookkeeping.has(source)) continue
+        if (postTerminalBookkeeping.has(source)) {
+          if (source.assistantUpdate !== undefined) {
+            const stored = await client.query<{ final_segment_id: string | null }>(
+              `SELECT message.final_segment_id FROM bff_message AS message
+               JOIN bff_agent_dispatch_outbox AS dispatch ON dispatch.assistant_message_id=message.message_id
+                 AND dispatch.tenant_id=message.tenant_id AND dispatch.conversation_id=message.conversation_id AND dispatch.run_id=message.run_id
+               WHERE dispatch.tenant_id=$1 AND dispatch.conversation_id=$2 AND dispatch.run_id=$3 AND message.role='assistant'`,
+              [command.tenantId, command.sessionId, source.sourceRunId],
+            )
+            const incoming = source.assistantUpdate.kind === "complete" ? source.assistantUpdate.finalSegmentId ?? null : null
+            if ((stored.rows[0]?.final_segment_id ?? null) !== incoming) throw new AgUiSourceIdentityConflictError()
+          }
+          continue
+        }
 
         if (source.artifactDelivery !== undefined) {
           if (artifactOwner === null) throw new Error("AGUI_ARTIFACT_BINDING_MISSING")
           await insertArtifactDelivery(client, command.tenantId, command.sessionId, artifactOwner, source, stream.expected_run_id, stream.consumer_subject_id)
         }
 
-        const update = source.assistantUpdate
-        if (update !== undefined && stream.expected_run_id === update.runId && stream.consumer_subject_id !== null) {
-          // The source event is an ordering signal, never authority for the BFF Message ID.
-          // The admitted run and its outbox bind the only assistant row this transaction may change.
-          const changed = await client.query(
-            `UPDATE bff_message AS message
-                SET content = CASE
-                      WHEN $5::text = 'replace' THEN $6::text
-                      WHEN $5::text = 'append' THEN message.content || $6::text
-                      ELSE message.content
-                    END,
-                    status = CASE
-                      WHEN $5::text IN ('replace', 'append') THEN 'streaming'
-                      WHEN $5::text = 'complete' THEN 'completed'
-                      ELSE 'failed'
-                    END,
-                    agent_failure_code = CASE WHEN $5::text = 'fail' THEN $7::text ELSE NULL END,
-                    agent_failure_retryable = CASE WHEN $5::text = 'fail' THEN $8::boolean ELSE NULL END,
-                    updated_at = CURRENT_TIMESTAMP(3)
-               FROM bff_agent_dispatch_outbox AS dispatch,
-                    bff_conversation AS conversation
-              WHERE dispatch.tenant_id = $1
-                AND dispatch.conversation_id = $2
-                AND dispatch.run_id = $3
-                AND dispatch.subject_id = $4
-                AND dispatch.status IN ('leased', 'retryable', 'admitted', 'terminal')
-                AND conversation.tenant_id = dispatch.tenant_id
-                AND conversation.conversation_id = dispatch.conversation_id
-                AND conversation.owner_id = dispatch.subject_id
-                AND conversation.status = 'active'
-                AND message.message_id = dispatch.assistant_message_id
-                AND message.tenant_id = dispatch.tenant_id
-                AND message.conversation_id = dispatch.conversation_id
-                AND message.run_id = dispatch.run_id
-                AND message.role = 'assistant'
-                AND message.status IN ('pending', 'streaming')`,
-            [
-              command.tenantId,
-              command.sessionId,
-              update.runId,
-              stream.consumer_subject_id,
-              update.kind,
-              "content" in update ? update.content : null,
-              update.kind === "fail" ? update.failure.code : null,
-              update.kind === "fail" ? update.failure.retryable : null,
-            ],
-          )
-          if (changed.rowCount !== 1) {
-            await assertAssistantBindingOrLegitimateSkip(client, command.tenantId, command.sessionId, update.runId, stream.consumer_subject_id)
-          }
-        }
-
+        const positionedFrames: PositionedMessageFrame[] = []
         for (const [frameIndex, frame] of source.frames.entries()) {
           const frameCursor = newCursor()
           const frameRunId = frame.runId ?? frame.metadata.kokoro.run_id
@@ -530,15 +510,105 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
               frame,
               nextPublicSequence,
               frameCursor,
+              startlessRun &&
+                source.interactionState === undefined &&
+                source.assistantUpdate === undefined &&
+                source.artifactDelivery === undefined &&
+                source.frames.length === 1,
             )
           }
           if (interactionChanged && source.interactionState !== undefined) {
             await writeRunInteraction(client, command.tenantId, command.sessionId, stream.consumer_subject_id, source, nextPublicSequence, frameCursor)
           }
+          positionedFrames.push({ publicSequence: nextPublicSequence, frame })
           nextPublicSequence += 1
           insertedFrames += 1
           notificationCursor = frameCursor
         }
+
+        // Public positions are now assigned; facts and their compatibility body still commit with the same ledger transaction.
+        const update = source.assistantUpdate
+        const runId = source.sourceRunId
+        const requiresFinalBinding = update?.kind === "complete" && update.finalSegmentId !== undefined
+        let finalBindingPersisted = false
+        if (runId !== null && stream.expected_run_id === runId && stream.consumer_subject_id !== null) {
+          const current = await client.query<{
+            message_id: string
+            ordered_parts: unknown
+            parts_format_version: number | null
+            parts_public_sequence: string | null
+          }>(
+            `SELECT message.message_id,message.ordered_parts,message.parts_format_version,message.parts_public_sequence
+               FROM bff_message AS message
+               JOIN bff_agent_dispatch_outbox AS dispatch
+                 ON dispatch.assistant_message_id=message.message_id AND dispatch.tenant_id=message.tenant_id
+                AND dispatch.conversation_id=message.conversation_id AND dispatch.run_id=message.run_id
+               JOIN bff_conversation AS conversation
+                 ON conversation.tenant_id=dispatch.tenant_id AND conversation.conversation_id=dispatch.conversation_id
+              WHERE dispatch.tenant_id=$1 AND dispatch.conversation_id=$2 AND dispatch.run_id=$3 AND dispatch.subject_id=$4
+                AND dispatch.status IN ('leased','retryable','admitted','terminal')
+                AND conversation.owner_id=dispatch.subject_id AND conversation.status='active'
+                AND message.role='assistant' AND message.status IN ('pending','streaming')
+              FOR UPDATE OF message`,
+            [command.tenantId, command.sessionId, runId, stream.consumer_subject_id],
+          )
+          const message = current.rows[0]
+          if (message === undefined) {
+            // Preserve legacy AG-UI-only/deleted/retired Message behavior, including the existing binding failure guard.
+            if (update !== undefined)
+              await assertAssistantBindingOrLegitimateSkip(client, command.tenantId, command.sessionId, runId, stream.consumer_subject_id)
+          } else {
+            const previousParts = parseMessageParts(message.ordered_parts, message.parts_format_version, message.parts_public_sequence)
+            const parts = foldMessageParts(previousParts, runId, positionedFrames, update)
+            if (update !== undefined || (parts !== null && positionedFrames.length > 0)) {
+              const changed = await client.query(
+                `UPDATE bff_message AS message
+                    SET content = CASE
+                          WHEN $9::boolean THEN $10::text
+                          WHEN $5::text='replace' THEN $6::text
+                          WHEN $5::text='append' THEN message.content || $6::text
+                          ELSE message.content END,
+                        ordered_parts=CASE WHEN $9::boolean THEN $11::jsonb ELSE message.ordered_parts END,
+                        parts_format_version=CASE WHEN $9::boolean THEN 1 ELSE message.parts_format_version END,
+                        parts_public_sequence=CASE WHEN $9::boolean THEN $12::bigint ELSE message.parts_public_sequence END,
+                        status=CASE WHEN $5::text IS NULL THEN message.status
+                          WHEN $5::text IN ('replace','append') THEN 'streaming'
+                          WHEN $5::text='complete' THEN 'completed' ELSE 'failed' END,
+                        final_segment_id=CASE WHEN $5::text='complete' THEN $14::text ELSE message.final_segment_id END,
+                        agent_failure_code=CASE WHEN $5::text IS NULL THEN message.agent_failure_code WHEN $5::text='fail' THEN $7::text ELSE NULL END,
+                        agent_failure_retryable=CASE WHEN $5::text IS NULL THEN message.agent_failure_retryable WHEN $5::text='fail' THEN $8::boolean ELSE NULL END,
+                        updated_at=CURRENT_TIMESTAMP(3)
+                   FROM bff_agent_dispatch_outbox AS dispatch,bff_conversation AS conversation
+                  WHERE dispatch.tenant_id=$1 AND dispatch.conversation_id=$2 AND dispatch.run_id=$3 AND dispatch.subject_id=$4
+                    AND dispatch.status IN ('leased','retryable','admitted','terminal')
+                    AND conversation.tenant_id=dispatch.tenant_id AND conversation.conversation_id=dispatch.conversation_id
+                    AND conversation.owner_id=dispatch.subject_id AND conversation.status='active'
+                    AND message.message_id=$13 AND message.message_id=dispatch.assistant_message_id
+                    AND message.tenant_id=dispatch.tenant_id AND message.conversation_id=dispatch.conversation_id AND message.run_id=dispatch.run_id
+                    AND message.role='assistant' AND message.status IN ('pending','streaming')`,
+                [
+                  command.tenantId,
+                  command.sessionId,
+                  runId,
+                  stream.consumer_subject_id,
+                  update?.kind ?? null,
+                  update !== undefined && "content" in update ? update.content : null,
+                  update?.kind === "fail" ? update.failure.code : null,
+                  update?.kind === "fail" ? update.failure.retryable : null,
+                  parts !== null,
+                  parts === null ? null : messagePartsContent(parts),
+                  parts === null ? null : JSON.stringify(parts.parts),
+                  parts?.publicSequence ?? null,
+                  message.message_id,
+                  update?.kind === "complete" ? (update.finalSegmentId ?? null) : null,
+                ],
+              )
+              if (changed.rowCount !== 1) throw new Error("AGUI_ASSISTANT_BINDING_MISSING")
+              finalBindingPersisted = requiresFinalBinding
+            }
+          }
+        }
+        if (requiresFinalBinding && !finalBindingPersisted) throw new Error("AGUI_FINAL_ANSWER_BINDING_MISSING")
       }
 
       const settlesHead = command.terminalRunId !== undefined && command.terminalRunId !== null && command.terminalRunId !== stream.terminal_run_id
@@ -686,7 +756,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
                 event.cursor,
                 event.event_type,
                 event.event_payload,
-                octet_length(event.event_payload::text)
+                octet_length(jsonb_set(event.event_payload, '{metadata,kokoro,public_sequence}', to_jsonb(event.public_sequence::text), true)::text)
                   + octet_length(event.cursor)
                   + octet_length(event.event_type)
                   + 64 AS frame_bytes

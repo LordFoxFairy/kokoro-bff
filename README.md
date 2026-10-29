@@ -1,3 +1,11 @@
+## 2026-10-22 当前内部模型预算入口
+
+Agent使用独立 `KOKORO_BFF_AGENT_MODEL_ADMISSION_CREDENTIAL_FILE` 调用内部POST；BFF从原提交Run来源派生租户／付款用户，再单次调用固定Billing d345025／exp8。无浏览器token回取、用户grant、额外服务或本地receipt；internal1.1新增一操作、public23／186不变。最小运行配置／边界见三设计首节，完整验收与尚待Agent消费者／实际结算见 `docs/CURRENT.md`。以下较早切片仅历史。
+
+## 当前实现入口（2026-10-22）
+
+当前公共契约 Public23.0.0／186 operations，计价费率必须绑定精确System模型修订ID／摘要；固定Billing exp6，旧无绑定rate拒绝。原管理／非现金充值不变，本地完整门与真实owner HTTP／PG已验，详细范围见 [docs/CURRENT.md](docs/CURRENT.md)。App/Admin新字段消费者及Agent实际用量结算后继，正常环境未因本片激活。下方日期段仅保留阶段历史。
+
 ## 2026-10-21 个人系列删除候选
 
 当前机器契约 Public22.1.0 /177，新增个人系列 DELETE，保留 distinct withdraw；严格 CAS/publication、当前 IAM delete_series 和原 key 回执。Platform Native 固定883d771、IAM0.15固定4db7012。公开三身份矩阵及 App 页面尚待接线，正常环境未激活；边界与实际验证见 `docs/CURRENT.md`。下方版本段为阶段历史。
@@ -191,3 +199,7 @@ Project resources can be reloaded with `GET /v1/projects/{projectId}/resources?l
 - `src/infrastructure/clients/agent/interaction-state.ts` 严格解码固定 owner schema；`src/application/agui/interaction-state.ts` 校验完整 revision/no-op；`src/application/chat-run-control.ts` 校验当前 pause 的完整 decision 集合。
 - `bff_agui_run_interaction` 是最新 run read projection；source/CUSTOM/cursor 与它同事务。`chat-repository.ts` 在授权 RR 中校验 head、完整 state 与 ledger provenance；ACK 不清除 pause。
 - 本轮静态/纯测试证据与未决 fixture 见 `docs/CURRENT.md`。真实 PG/Redis/HTTP、发布及 Web 消费归 Root 后续验收，不能以源码候选代替。
+
+### Agent 7.3 待核对失败码的既有库配对
+
+Public23.1只追加 `model_settlement_pending`（不可自动重试），不改变真实结算规则。新库继续用原fresh-only installer；非空旧owner须在备份及恢复演练后显式运行 `KOKORO_BFF_POSTGRES_URL=... pnpm db:evolve-agent-failure check` / `apply`，仅接纳精确旧或目标CHECK，绝不清库。此入口不随服务启动自动执行。正常激活须与固定Agent7.3和App消费者配对，具体当前状态见 `docs/CURRENT.md`；组件测试通过不代表正常整链已验收。

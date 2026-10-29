@@ -1,3 +1,5 @@
+import { McpProjectPublicationConnectClient } from "../infrastructure/clients/platform/mcp-project-publication-connect.js"
+import type { McpProjectPublicationClient } from "../infrastructure/clients/platform/mcp-project-publication.js"
 import { AppSkillBindingConnectClient } from "../infrastructure/clients/platform/app-skill-binding-connect.js"
 import type { AppSkillBindingClient } from "../application/app-skill-bindings.types.js"
 import { OpenAppManagementAdmissionClient, type OpenAppManagementAdmission } from "../auth/open-app-management-admission.client.js"
@@ -51,6 +53,7 @@ import type { LocalSkillImportClient } from "../http/routes/local-skill-import.j
 import { LocalSkillImportConnectClient } from "../infrastructure/clients/platform/local-skill-import-connect.js"
 import { ExactSkillDownloadService, exactInstallationRecord, exactManagedRecord, type ExactSkillDownloadSource } from "../application/exact-skill-download.js"
 import { projectInstallation } from "../infrastructure/clients/platform/skill-installation-response.js"
+import { SkillPackageInspectionConnectClient } from "../infrastructure/clients/platform/skill-package-inspection-connect.js"
 import { projectSkillPackageInspectionResponse } from "../infrastructure/clients/platform/skill-package-inspection-response.js"
 import { assertSkillWireKnown, skillTimestamp } from "../infrastructure/clients/platform/skill-product-response.js"
 
@@ -80,8 +83,11 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
+  mcpProjectPublicationClient: McpProjectPublicationClient | null
   mcpPersonalClient:
-    (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
+    | (Pick<McpPersonalConnectClient, "read"> &
+        Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon" | "prepareReceipt">>)
+    | null
   mcpPackageAdminClient: (Pick<McpPackageAdminConnectClient, "execute"> & Partial<Pick<McpPackageAdminConnectClient, "close">>) | null
   mcpProviderAdminClient: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
   customApiClient: (Pick<CustomApiConnectClient, "execute"> & Partial<Pick<CustomApiConnectClient, "close">>) | null
@@ -121,8 +127,11 @@ export type BffServerComposition = {
 }
 
 export type BffCompositionOptions = {
+  mcpProjectPublicationClient?: McpProjectPublicationClient | null
   mcpPersonalClient?:
-    (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
+    | (Pick<McpPersonalConnectClient, "read"> &
+        Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon" | "prepareReceipt">>)
+    | null
   mcpPackageAdminClient?: (Pick<McpPackageAdminConnectClient, "execute"> & Partial<Pick<McpPackageAdminConnectClient, "close">>) | null
   mcpProviderAdminClient?: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
   customApiClient?: (Pick<CustomApiConnectClient, "execute"> & Partial<Pick<CustomApiConnectClient, "close">>) | null
@@ -255,6 +264,14 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
             config.skillDraft.timeoutMs,
           )
         : null
+  const projectContentClient =
+    config.platformProjection?.baseUrl && config.platformProjection.credentialFile
+      ? new SkillPackageInspectionConnectClient(
+          config.platformProjection.baseUrl,
+          config.platformProjection.credentialFile,
+          config.platformProjection.timeoutMs,
+        )
+      : null
   const localSkillImportClient =
     options.localSkillImportClient !== undefined
       ? options.localSkillImportClient
@@ -400,6 +417,15 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     config.platformProjection?.baseUrl && config.platformProjection.credentialFile
       ? new PlatformProjectionHttpClient(config.platformProjection.baseUrl, config.platformProjection.credentialFile, config.platformProjection.timeoutMs)
       : null
+  const mcpProjectPublicationClient =
+    options.mcpProjectPublicationClient !== undefined
+      ? options.mcpProjectPublicationClient
+      : config.mcpPersonal
+        ? new McpProjectPublicationConnectClient(
+            config.mcpPersonal.baseUrl,
+            new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"),
+          )
+        : null
   const mcpPersonalClient =
     options.mcpPersonalClient !== undefined
       ? options.mcpPersonalClient
@@ -434,6 +460,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const close = (): Promise<void> => {
     if (closePromise !== null) return closePromise
     closePromise = (async (): Promise<void> => {
+      mcpProjectPublicationClient?.close?.()
       mcpPersonalClient?.close?.()
       mcpProviderAdminClient?.close?.()
       mcpPackageAdminClient?.close?.()
@@ -445,6 +472,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     return closePromise
   }
   return {
+    mcpProjectPublicationClient,
     mcpPersonalClient,
     mcpProviderAdminClient,
     mcpPackageAdminClient,
@@ -475,6 +503,71 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
           ? new ExactSkillDownloadService({
               handles: skillDownloadHandles,
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
+              ...(projectContentClient
+                ? {
+                    projectInstallation: {
+                      resolve: async (
+                        projectId: string,
+                        installationId: string,
+                        context: import("../application/skill-specification.types.js").SkillSpecificationContext,
+                        signal: AbortSignal,
+                      ) => {
+                        signal.throwIfAborted()
+                        const project = await businessStore.services.projects.find(
+                          { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+                          projectId,
+                        )
+                        signal.throwIfAborted()
+                        if (!project || project.id !== projectId) return null
+                        const owner = await installationClient.get(
+                          {
+                            requestId: context.requestId,
+                            tenant: context.identity.namespace,
+                            subject: context.identity.userId,
+                            projectRef: projectId,
+                            installationId,
+                          },
+                          signal,
+                        )
+                        if (!("projectRef" in owner) || owner.projectRef !== projectId) throw new Error("skill_response_invalid")
+                        const record = exactInstallationRecord(installationId, projectInstallation(owner.installation))
+                        const current = await businessStore.services.projects.find(
+                          { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+                          projectId,
+                        )
+                        signal.throwIfAborted()
+                        return current?.id === projectId ? record : null
+                      },
+                      download: async (
+                        projectId: string,
+                        installationId: string,
+                        context: import("../application/skill-specification.types.js").SkillSpecificationContext,
+                        signal: AbortSignal,
+                        deadlineAt: number,
+                      ) => {
+                        const value = await projectContentClient.downloadProject(
+                          { projectId, installationId, requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId },
+                          signal,
+                          deadlineAt,
+                        )
+                        assertSkillWireKnown(value)
+                        return {
+                          sourceRef: value.sourceRef?.value ?? "",
+                          revision: value.revision.toString(),
+                          filename: value.filename,
+                          sizeBytes: value.sizeBytes,
+                          contentSha256: value.contentSha256,
+                          transfer: {
+                            url: value.transferReference?.url ?? "",
+                            method: value.transferReference?.method ?? "",
+                            requiredHeaders: value.transferReference?.requiredHeaders ?? {},
+                            expiresAt: skillTimestamp(value.transferReference?.expiresAt),
+                          },
+                        }
+                      },
+                    },
+                  }
+                : {}),
               download: async (sourceRef, context, signal, deadlineAt) => {
                 const value = await skillProductClient.download(
                   {

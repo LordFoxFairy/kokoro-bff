@@ -66,7 +66,7 @@ export type McpConnection = {
   connector_id: string
   server_id: string
   provider_key: string
-  transport: "streamable_http"
+  transport: "streamable_http" | "sse_compat"
   status: "active"
 }
 

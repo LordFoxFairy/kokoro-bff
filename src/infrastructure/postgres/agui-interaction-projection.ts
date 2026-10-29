@@ -36,6 +36,43 @@ export function interactionFromRow(row: Record<string, unknown>): InteractionSta
   })
 }
 
+/** No pause or control authority can be derived from a failed initial assembly. */
+export function isInitialTerminalInteraction(state: InteractionState): boolean {
+  return (
+    state.phase === "terminal" &&
+    state.interaction_revision === 1 &&
+    state.pause_revision === 0 &&
+    state.pause_ref === null &&
+    state.groups.length === 0 &&
+    state.action_result === null
+  )
+}
+
+/** Caller holds the Conversation/stream write locks or an authorized RR snapshot. */
+export async function isCurrentStartlessRun(client: PoolClient, tenantId: string, sessionId: string, runId: string, subjectId: string): Promise<boolean> {
+  const result = await client.query<{ allowed: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM bff_agui_stream AS stream
+       JOIN bff_conversation AS conversation ON conversation.tenant_id=stream.tenant_id AND conversation.conversation_id=stream.session_id
+       JOIN LATERAL (
+         SELECT run_id,subject_id,status FROM bff_agent_dispatch_outbox
+          WHERE tenant_id=stream.tenant_id AND conversation_id=stream.session_id AND status IN ('pending','leased','retryable','admitted')
+          ORDER BY conversation_dispatch_seq,outbox_id LIMIT 1
+       ) AS head ON TRUE
+       WHERE stream.tenant_id=$1 AND stream.session_id=$2 AND stream.expected_run_id=$3
+         AND stream.consumer_subject_id=$4 AND stream.consumer_state='active'
+         AND stream.terminal_run_id IS DISTINCT FROM $3
+         AND conversation.status='active' AND conversation.owner_id=$4
+         AND head.run_id=$3 AND head.subject_id=$4 AND head.status IN ('leased','retryable','admitted')
+         AND NOT EXISTS (SELECT 1 FROM bff_agui_run_process WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3)
+         AND NOT EXISTS (SELECT 1 FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 AND event_type='RUN_STARTED'
+           AND (event_payload->>'runId'=$3 OR event_payload #>> '{metadata,kokoro,run_id}'=$3))
+     ) AS allowed`,
+    [tenantId, sessionId, runId, subjectId],
+  )
+  return result.rows[0]?.allowed === true
+}
+
 /** Caller holds a parent/stream write lock or an authorized repeatable-read snapshot. */
 export async function readRunInteraction(
   client: PoolClient,
@@ -43,7 +80,7 @@ export async function readRunInteraction(
   sessionId: string,
   runId: string,
   subjectId: string,
-  startSequence: number,
+  startSequence: number | null,
   publicWatermark: number,
   sourceWatermark: number,
 ): Promise<InteractionState | undefined> {
@@ -69,13 +106,16 @@ export async function readRunInteraction(
     [tenantId, sessionId, runId, startSequence, sourceWatermark],
   )
   const pair = result.rows[0]
-  if (pair === undefined || !pair.start_valid || startSequence < 1 || startSequence > publicWatermark) throw new Error("AGUI_INTERACTION_START_INVALID")
+  if (pair === undefined) throw new Error("AGUI_INTERACTION_START_INVALID")
+  if (startSequence !== null && (!pair.start_valid || startSequence < 1 || startSequence > publicWatermark)) throw new Error("AGUI_INTERACTION_START_INVALID")
   if (pair.projection === null && pair.frame === null) return undefined
+  if (startSequence === null && !(await isCurrentStartlessRun(client, tenantId, sessionId, runId, subjectId))) throw new Error("AGUI_INTERACTION_START_INVALID")
   if (!isRecord(pair.projection) || !isRecord(pair.frame) || !isRecord(pair.source)) throw new Error("AGUI_INTERACTION_PROJECTION_MISSING")
   const row = pair.projection,
     frame = pair.frame,
     source = pair.source
   const state = interactionFromRow(row)
+  if (startSequence === null && !isInitialTerminalInteraction(state)) throw new Error("AGUI_INTERACTION_START_INVALID")
   const payload = frame.event_payload
   if (!isRecord(payload) || !isRecord(payload.metadata) || !isRecord(payload.metadata.kokoro)) throw new Error("AGUI_INTERACTION_FRAME_INVALID")
   const metadata = payload.metadata.kokoro
@@ -88,7 +128,8 @@ export async function readRunInteraction(
     row.interaction_digest !== interactionDigest(state) ||
     interactionDigest(frameState) !== row.interaction_digest ||
     !Number.isSafeInteger(sequence) ||
-    sequence <= startSequence ||
+    sequence < 1 ||
+    (startSequence !== null && sequence <= startSequence) ||
     sequence > publicWatermark ||
     !Number.isSafeInteger(sourceSequence) ||
     sourceSequence < 1 ||

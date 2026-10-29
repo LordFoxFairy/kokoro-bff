@@ -1,5 +1,7 @@
+import "./chat-message-parts-read.test.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { EventEmitter } from "node:events"
 
 import { ChatApplicationService } from "../dist/application/chat-service.js"
 import { authorizeChatRequest } from "../dist/http/routes/chat-authorization.js"
@@ -337,7 +339,7 @@ for (const [name, marker] of [
   test(`Chat snapshot rejects ${name} and rolls back and releases its connection`, async () => {
     const calls: Array<{ sql: string; values?: unknown[] }> = []
     let released = false
-    const client = {
+    const client = Object.assign(new EventEmitter(), {
       query: async (sql: string, values?: unknown[]) => {
         calls.push({ sql, values })
         if (sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1"))
@@ -362,7 +364,7 @@ for (const [name, marker] of [
       release: () => {
         released = true
       },
-    }
+    })
     const repository = new PostgresChatRepository({ pool: { connect: async () => client } } as never)
 
     await assert.rejects(repository.readSnapshot("tenant_a", "owner_a", "session_invalid", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
@@ -376,7 +378,7 @@ for (const [name, marker] of [
 test("Chat snapshot performs no stream read when the Conversation ACL rejects access", async () => {
   const calls: string[] = []
   let released = false
-  const client = {
+  const client = Object.assign(new EventEmitter(), {
     query: async (sql: string) => {
       calls.push(sql)
       return { rows: [] }
@@ -384,7 +386,7 @@ test("Chat snapshot performs no stream read when the Conversation ACL rejects ac
     release: () => {
       released = true
     },
-  }
+  })
   const repository = new PostgresChatRepository({ pool: { connect: async () => client } } as never)
   assert.equal(await repository.readSnapshot("tenant_a", "other_subject", "session_hidden", undefined), null)
   assert.equal(

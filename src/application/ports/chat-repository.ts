@@ -1,4 +1,5 @@
-import type { InteractionState } from "../../contracts/chat.js"
+import type { MessageFeedbackQuery, SetMessageFeedback, MessageFeedbackState } from "../chat/message-feedback-input.js"
+import type { ChatComposerSelection, InteractionState, MessagePartsPage, OrderedMessageRendering } from "../../contracts/chat.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Message } from "../../domain/chat/message.js"
 import type { Share } from "../../domain/chat/share.js"
@@ -15,9 +16,44 @@ export type MessagePage = {
   next_cursor: string | null
 }
 
+export type PrivateMessageRead = (
+  | Message
+  | (Omit<Message, "content" | "role" | "runId"> & {
+      role: "assistant"
+      runId: string
+      content: null
+      rendering: OrderedMessageRendering
+    })
+) & { terminal_status?: "cancelled"; regeneratedFromMessageId?: string }
+export type PrivateMessagePage = { messages: PrivateMessageRead[]; next_cursor: string | null }
+export type MessageReadLifetime = Readonly<{ signal: AbortSignal; deadlineAt: number }>
+export type PrivateMessageReadContext = MessageReadLifetime & Readonly<{ scope: "all" | "direct" }>
+export type MessagePartsQuery = MessageReadLifetime &
+  Readonly<{
+    tenantId: string
+    subjectId: string
+    conversationId: string
+    messageId: string
+    projectRef: string | undefined
+    scope: "all" | "direct"
+    cursor: string | null
+    limit: number
+  }>
+
+export type RunFinalAnswerQuery = MessageReadLifetime &
+  Readonly<{
+    tenantId: string
+    subjectId: string
+    conversationId: string
+    runId: string
+    finalMessageId: string
+  }>
+export type RunFinalAnswer = Readonly<{ segment_id: string; revision: string }>
+
 export type ChatSnapshot = {
+  composerSelection?: ChatComposerSelection
   conversation: Conversation
-  messages: Message[]
+  messages: PrivateMessageRead[]
   deliveries: ChatArtifactDelivery[]
   deliveriesHasMore: boolean
   eventWatermark: string | null
@@ -77,6 +113,8 @@ export type ArchiveStateCommand = ArchiveStateQuery & Readonly<{ action: "archiv
 export type ArchiveStateResult = Readonly<{ kind: "changed"; receipt: Readonly<{ data: ArchiveState }> }> | Readonly<{ kind: "not_found" | "conflict" }>
 
 export type ChatRepository = {
+  readMessageFeedback(input: MessageFeedbackQuery): Promise<MessageFeedbackState | null>
+  setMessageFeedback(input: SetMessageFeedback): Promise<MessageFeedbackState | null>
   listOwnedArchivedTasks(query: ArchivedTasksQuery): Promise<ArchivedTasksRead>
   readArchiveState(query: ArchiveStateQuery): Promise<ArchiveState | null>
   changeArchiveState(command: ArchiveStateCommand): Promise<ArchiveStateResult>
@@ -89,8 +127,22 @@ export type ChatRepository = {
     deadlineAt: number,
   ): Promise<SharedTasksRead>
   listConversations(tenantId: string, subjectId: string, filter: ConversationCollectionFilter, limit: number, cursor: string | null): Promise<ConversationPage>
-  findConversation(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<Conversation | null>
-  readSnapshot(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSnapshot | null>
+  findConversation(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    projectRef: string | undefined,
+    lifetime?: MessageReadLifetime,
+  ): Promise<Conversation | null>
+  readSnapshot(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    projectRef: string | undefined,
+    context?: PrivateMessageReadContext,
+  ): Promise<ChatSnapshot | null>
+  readRunFinalAnswer(query: RunFinalAnswerQuery): Promise<RunFinalAnswer | null>
+  readMessageParts(query: MessagePartsQuery): Promise<MessagePartsPage | null>
   readRunProcessPage(
     tenantId: string,
     subjectId: string,
@@ -109,7 +161,8 @@ export type ChatRepository = {
     limit: number,
     cursor: string | null,
     projectRef?: string,
-  ): Promise<MessagePage | null>
+    context?: PrivateMessageReadContext,
+  ): Promise<PrivateMessagePage | null>
   renameConversation(tenantId: string, subjectId: string, conversationId: string, title: string, projectRef?: string): Promise<Conversation | null>
   moveConversation(command: MoveConversationCommand): Promise<MoveConversationResult>
   deleteConversation(tenantId: string, subjectId: string, conversationId: string, requestId: string, projectRef?: string): Promise<boolean>

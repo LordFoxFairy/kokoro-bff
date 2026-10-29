@@ -1,3 +1,5 @@
+import { restorePublic25McpPersonalSseContract } from "./mcp-personal-sse-public-contract.mjs"
+import { restorePublic26MessagePartsContract } from "./message-parts-public-contract.mjs"
 import { restorePublic16KnowledgeContract } from "./verify-personal-knowledge-contract.mjs"
 import { readFileSync } from "node:fs"
 import { createHash } from "node:crypto"
@@ -131,6 +133,7 @@ export function inspectSkillProductContract(source, baseline = OPERATIONS) {
 
 /** Current specification gate; historical Public11 proofs are not the active publication protocol. */
 function inspectSkillsSpecificationSurface(source, expectedVersion) {
+  source = restorePublic26MessagePartsContract(source)
   const errors = []
   let document
   try {
@@ -145,11 +148,19 @@ function inspectSkillsSpecificationSurface(source, expectedVersion) {
     require(document?.info?.version === expectedVersion, `Public${expectedVersion.split(".")[0]} version must equal ${expectedVersion}`)
   const paths = document?.paths ?? {},
     schemas = document?.components?.schemas ?? {}
+  const metadataOnly = expectedVersion === null && ["25.0.0", "26.0.0"].includes(document?.info?.version)
+  if (document?.info?.version === "26.0.0") restorePublic25McpPersonalSseContract(source)
   const expected = [
     ["/v1/skill.list", "get", "listSkills", "public", "SpecificationPublicSkillList"],
     ["/skill.v1.SkillOptionalService/ListSkills", "post", "websiteListSkills", "browser-private", "SpecificationListResponse"],
     ["/skill.v1.SkillOptionalService/ListHubSkills", "post", "websiteListHubSkills", "browser-private", "SpecificationHubResponse"],
-    ["/skill.v1.SkillOptionalService/GetSkill", "post", "websiteGetSkill", "browser-private", "SpecificationDownloadInfo"],
+    [
+      "/skill.v1.SkillOptionalService/GetSkill",
+      "post",
+      "websiteGetSkill",
+      "browser-private",
+      metadataOnly ? "SpecificationDetailResponse" : "SpecificationDownloadInfo",
+    ],
     ["/skill.v1.SkillService/DownloadSkill", "post", "websiteDownloadSkill", "browser-private", "SpecificationDownloadInfo"],
     ["/skill-downloads/{handle}", "get", "downloadSkillBytes", "browser-private", null],
   ]
@@ -211,6 +222,13 @@ function inspectSkillsSpecificationSurface(source, expectedVersion) {
     request?.properties?.query?.type === "string" &&
     request?.properties?.pageToken?.type === "string" &&
     request?.properties?.excludeTop?.type === "boolean", "Hub request field types drifted")
+  if (metadataOnly) {
+    const detail = schemas.SpecificationDetailResponse
+    require(detail?.additionalProperties === false &&
+      JSON.stringify(detail?.required) === JSON.stringify(["skill"]) &&
+      JSON.stringify(detail?.properties) ===
+        JSON.stringify({ skill: { $ref: "#/components/schemas/SpecificationSkill" } }), "GetSkill metadata must be a closed skill-only response")
+  }
   const info = schemas.SpecificationDownloadInfo?.properties?.downloadInfo
   require(info?.additionalProperties === false &&
     JSON.stringify(info?.required) === JSON.stringify(["downloadUrl", "filename", "expiresAt"]) &&

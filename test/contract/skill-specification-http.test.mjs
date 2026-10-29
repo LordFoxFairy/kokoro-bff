@@ -98,6 +98,7 @@ async function fixture(
             readPublicList:
               source.readPublicList?.bind(source) ?? ((input, context, signal, deadline) => source.read("skill.list", input, context, signal, deadline)),
             read: source.read?.bind(source),
+            readDetail: source.readDetail?.bind(source),
             prepareDownload: source.prepareDownload?.bind(source),
             confirmDownload: source.confirmDownload?.bind(source),
           },
@@ -287,44 +288,187 @@ test("R357 Hub forwards observed tag/query/includeOfficialSkills before owner pa
     await app.close()
   }
 })
-for (const name of ["GetSkill", "DownloadSkill"])
-  test(`R357 ${name} issues same-origin opaque bytes resource bound to exact version, actual filename and expiry`, async () => {
-    const operation = name === "GetSkill" ? website + name : "/skill.v1.SkillService/DownloadSkill"
-    const binding = {
-      tenantId: "tenant",
-      subjectId: "human",
-      qualifier: { kind: "catalog_current", seriesId: "stable-series" },
-      sourceRef: "skill:version-one",
-      revision: "1",
-      filename: "original.zip",
-      sizeBytes: 3,
-      contentSha256: "a".repeat(64),
-      expiresAt: Date.now() + 300000,
-      transfer: {
-        url: "http://private-store.invalid/secret",
-        method: "GET",
-        requiredHeaders: {},
-        expiresAt: Date.now() + 300000,
-      },
-    }
-    const app = await fixture({
-      async prepareDownload() {
-        return { skill: detail, binding }
-      },
+test("metadata detail uses current authorized facts without package IO or handles while explicit download still fails offline", async (t) => {
+  const owner = await specificationServiceFixture()
+  let downloads = 0
+  owner.deps.product.download = async () => {
+    downloads++
+    throw new ConnectError("private package deadline", Code.DeadlineExceeded)
+  }
+  const issued = t.mock.method(SkillDownloadHandles.prototype, "issue")
+  const app = await fixture(owner.service)
+  try {
+    const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
+    assert.equal(result.status, 200)
+    assert.deepEqual(Object.keys(result.body), ["skill"])
+    assert.equal(result.body.skill.id, "stable-series")
+    assert.equal(result.body.skill.version, "current-version")
+    assert.equal(result.body.skill.displayName, "Current")
+    assert.equal(result.body.skill.coverImage, "/api/v1/skills/current-version/cover")
+    assert.deepEqual(owner.calls.find((call) => call.kind === "current").input, {
+      requestId: "spec-request",
+      tenant: "tenant",
+      subject: "human",
+      seriesId: "stable-series",
     })
+    assert.equal(downloads, 0)
+    assert.equal(issued.mock.calls.length, 0)
+    const download = await app.request("/skill.v1.SkillService/DownloadSkill", { skillId: "stable-series" })
+    assert.equal(download.status, 503)
+    assert.equal(download.body.error.code, "Unavailable")
+    assert.equal(JSON.stringify(download.body).includes("private package"), false)
+    assert.equal(downloads, 1)
+    assert.equal(issued.mock.calls.length, 0)
+  } finally {
+    await app.close()
+  }
+})
+
+for (const fault of ["series", "source", "status"])
+  test(`metadata detail rejects owner ${fault} mismatch without package IO or handles`, async (t) => {
+    const owner = await specificationServiceFixture()
+    const current = owner.deps.product.current
+    owner.deps.product.current = async (...args) => {
+      const value = await current(...args)
+      if (fault === "series") value.publication.currentVersion.seriesId.value = "other-series"
+      if (fault === "source") value.publication.currentVersion.sourceRef.value = "skill:other-version"
+      if (fault === "status") value.publication.currentVersion.status = 3
+      return value
+    }
+    let downloads = 0
+    owner.deps.product.download = async () => {
+      downloads++
+      throw Error("package should not be read")
+    }
+    const issued = t.mock.method(SkillDownloadHandles.prototype, "issue")
+    const app = await fixture(owner.service)
     try {
-      const r = await app.request(operation, { skillId: "stable-series" })
-      assert.equal(r.status, 200)
-      assert.deepEqual(r.body.skill, detail)
-      assert.match(r.body.downloadInfo.downloadUrl, /^\/api\/skill-downloads\/[\w-]{43}$/)
-      assert.equal(r.body.downloadInfo.filename, "original.zip")
-      assert.ok(Date.parse(r.body.downloadInfo.expiresAt) > Date.now())
-      assert.ok(Date.parse(r.body.downloadInfo.expiresAt) <= Date.now() + 60000)
-      assert.equal(JSON.stringify(r.body).includes("private-store"), false)
+      const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
+      assert.equal(result.status, 502)
+      assert.equal(downloads, 0)
+      assert.equal(issued.mock.calls.length, 0)
     } finally {
       await app.close()
     }
   })
+
+test("metadata detail Public25 separates the closed GetSkill response from unchanged download information", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const { load } = await import("js-yaml")
+  const { restorePublic26MessagePartsContract } = await import("../../scripts/message-parts-public-contract.mjs")
+  const public26 = restorePublic26MessagePartsContract(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  assert.equal(createHash("sha256").update(public26).digest("hex"), "20d26736cf23da32c242c2c7cf75c45affb62c5d27696dcecb0bc6193bc39a09")
+  const document = load(public26)
+  assert.equal(document.info.version, "26.0.0")
+  assert.equal(
+    document.paths[website + "GetSkill"].post.responses["200"].content["application/json"].schema.$ref,
+    "#/components/schemas/SpecificationDetailResponse",
+  )
+  const metadata = document.components.schemas.SpecificationDetailResponse
+  assert.equal(metadata.additionalProperties, false)
+  assert.deepEqual(metadata.required, ["skill"])
+  assert.deepEqual(metadata.properties, { skill: { $ref: "#/components/schemas/SpecificationSkill" } })
+  assert.equal(
+    document.paths["/skill.v1.SkillService/DownloadSkill"].post.responses["200"].content["application/json"].schema.$ref,
+    "#/components/schemas/SpecificationDownloadInfo",
+  )
+  assert.deepEqual(document.components.schemas.SpecificationDownloadInfo.required, ["skill", "downloadInfo"])
+  const { restorePublic24SkillDetailContract } = await import("../../scripts/skill-detail-public-contract.mjs")
+  const { restorePublic25McpPersonalSseContract } = await import("../../scripts/mcp-personal-sse-public-contract.mjs")
+  const raw = restorePublic25McpPersonalSseContract(public26)
+  assert.equal(
+    createHash("sha256").update(restorePublic24SkillDetailContract(raw)).digest("hex"),
+    "f4caf11f3cd9255d2cd9daf69b74ff9988505d640e31c686ce495e6d8a578b2c",
+  )
+  for (const changed of [
+    raw.replace("required: [skill]", "required: [skill, downloadInfo]"),
+    raw.replace("        - downloadInfo\n", ""),
+    raw.replace("/v1/account/archived-tasks", "/v1/account/retired-tasks"),
+    raw.replace("x-kokoro-permission: capability.skill.read", "x-kokoro-permission: forged.read"),
+  ]) {
+    assert.notEqual(changed, raw)
+    assert.throws(() => restorePublic24SkillDetailContract(changed))
+  }
+})
+
+for (const [fault, payload] of [
+  ["wrong identity", { skill: { ...detail, id: "another-series" } }],
+  ["missing exact version", { skill: { ...detail, version: undefined } }],
+  ["legacy download mixture", { skill: detail, downloadInfo: {} }],
+])
+  test(`metadata detail rejects ${fault} instead of accepting an unbound or fallback response`, async () => {
+    const app = await fixture({ readDetail: async () => payload })
+    try {
+      const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
+      assert.equal(result.status, 502)
+      assert.equal(result.body.error.code, "InvalidResponse")
+    } finally {
+      await app.close()
+    }
+  })
+
+for (const [code, status] of [
+  [Code.PermissionDenied, 403],
+  [Code.NotFound, 404],
+])
+  test(`metadata detail preserves current owner denial ${status} without package IO`, async () => {
+    const owner = await specificationServiceFixture()
+    owner.deps.product.current = async () => {
+      throw new ConnectError("private current denial", code)
+    }
+    let downloads = 0
+    owner.deps.product.download = async () => {
+      downloads++
+      throw Error("package should not be read")
+    }
+    const app = await fixture(owner.service)
+    try {
+      const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
+      assert.equal(result.status, status)
+      assert.equal(downloads, 0)
+      assert.equal(JSON.stringify(result.body).includes("private current"), false)
+    } finally {
+      await app.close()
+    }
+  })
+
+test("R357 DownloadSkill issues same-origin opaque bytes resource bound to exact version, actual filename and expiry", async () => {
+  const operation = "/skill.v1.SkillService/DownloadSkill"
+  const binding = {
+    tenantId: "tenant",
+    subjectId: "human",
+    qualifier: { kind: "catalog_current", seriesId: "stable-series" },
+    sourceRef: "skill:version-one",
+    revision: "1",
+    filename: "original.zip",
+    sizeBytes: 3,
+    contentSha256: "a".repeat(64),
+    expiresAt: Date.now() + 300000,
+    transfer: {
+      url: "http://private-store.invalid/secret",
+      method: "GET",
+      requiredHeaders: {},
+      expiresAt: Date.now() + 300000,
+    },
+  }
+  const app = await fixture({
+    async prepareDownload() {
+      return { skill: detail, binding }
+    },
+  })
+  try {
+    const r = await app.request(operation, { skillId: "stable-series" })
+    assert.equal(r.status, 200)
+    assert.deepEqual(r.body.skill, detail)
+    assert.match(r.body.downloadInfo.downloadUrl, /^\/api\/skill-downloads\/[\w-]{43}$/)
+    assert.equal(r.body.downloadInfo.filename, "original.zip")
+    assert.ok(Date.parse(r.body.downloadInfo.expiresAt) > Date.now())
+    assert.ok(Date.parse(r.body.downloadInfo.expiresAt) <= Date.now() + 60000)
+    assert.equal(JSON.stringify(r.body).includes("private-store"), false)
+  } finally {
+    await app.close()
+  }
+})
 test("R357 prepare refuses different stable identity/tenant/subject without disclosing transport", async () => {
   const app = await fixture({
     async prepareDownload() {
@@ -332,7 +476,7 @@ test("R357 prepare refuses different stable identity/tenant/subject without disc
     },
   })
   try {
-    const r = await app.request(website + "GetSkill", {
+    const r = await app.request("/skill.v1.SkillService/DownloadSkill", {
       skillId: "stable-series",
     })
     assert.equal(r.status, 502)
@@ -657,7 +801,8 @@ test("R357 active contract rejects observed-field/type/error/alias/auth/cache dr
   const { readFile } = await import("node:fs/promises")
   const { load, dump } = await import("js-yaml")
   const { inspectCurrentSkillsSpecificationContract } = await import("../../scripts/verify-skill-product-contract.mjs")
-  const raw = await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const { restorePublic25McpPersonalSseContract } = await import("../../scripts/mcp-personal-sse-public-contract.mjs")
+  const raw = restorePublic25McpPersonalSseContract(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
   assert.deepEqual(inspectCurrentSkillsSpecificationContract(raw), [])
   for (const change of [
     (d) => (d.paths["/v1/skill.list"].get.security = []),
@@ -754,7 +899,7 @@ test("R357 malformed download owner envelope is502 with fixed error, not transpo
     },
   })
   try {
-    const r = await app.request(website + "GetSkill", {
+    const r = await app.request("/skill.v1.SkillService/DownloadSkill", {
       skillId: "stable-series",
     })
     assert.equal(r.status, 502)
@@ -890,7 +1035,7 @@ test("R357 malformed qualified handle facts fail502 before any successful metada
       },
     })
     try {
-      const r = await app.request(website + "GetSkill", {
+      const r = await app.request("/skill.v1.SkillService/DownloadSkill", {
         skillId: "stable-series",
       })
       assert.equal(r.status, 502)
@@ -901,7 +1046,7 @@ test("R357 malformed qualified handle facts fail502 before any successful metada
   }
 })
 
-test("R357 cancelled metadata never issues a handle from late owner results", async (t) => {
+test("R357 cancelled download preparation never issues a handle from late owner results", async (t) => {
   let finish, entered
   const called = new Promise((resolve) => (entered = resolve))
   const spy = t.mock.method(SkillDownloadHandles.prototype, "issue")
@@ -913,7 +1058,7 @@ test("R357 cancelled metadata never issues a handle from late owner results", as
   })
   const controller = new AbortController()
   try {
-    const pending = app.request(website + "GetSkill", { skillId: "stable-series" }, { signal: controller.signal })
+    const pending = app.request("/skill.v1.SkillService/DownloadSkill", { skillId: "stable-series" }, { signal: controller.signal })
     await called
     controller.abort()
     await assert.rejects(pending, { name: "AbortError" })
@@ -1231,7 +1376,7 @@ test("R357 formal aggregation lists stopped exact installations, resolves actual
   assert.equal(app.calls.find((call) => call.kind === "installed").input.installed, true)
   assert.equal(Object.hasOwn(app.calls.find((call) => call.kind === "installed").input, "enabled"), false)
 })
-test("R357 formal Hub aggregation binds true stable/current/exact publication and owner-side query/tag/page cursor before pagination", async () => {
+test("R357 formal Hub aggregation binds exact publication and its cover locator without inline media proof", async () => {
   const app = await specificationServiceFixture()
   const data = await app.service.read(
     "ListHubSkills",
@@ -1249,6 +1394,7 @@ test("R357 formal Hub aggregation binds true stable/current/exact publication an
   )
   assert.equal(data.skills[0].skillId, "stable-series")
   assert.equal(data.skills[0].currentVersion.versionUid, "current-version")
+  assert.equal(data.skills[0].coverImage, "/api/v1/skills/current-version/cover")
   assert.equal(data.skills[0].currentVersion.archiveSize, "3")
   assert.equal(data.skills[0].usageCount, "7")
   assert.equal(data.nextPageToken, "original-owner-cursor")
@@ -1285,10 +1431,11 @@ test("R357 formal Hub returns an empty category page without querying usage", as
   assert.deepEqual(data.skills, [])
   assert.equal(data.nextPageToken, undefined)
 })
-test("R357 formal download aggregation binds original exact version and rejects current-version rotation instead of rebasing handle", async () => {
+test("R357 formal download aggregation binds exact cover locator without inline proof and rejects version rotation", async () => {
   const app = await specificationServiceFixture()
   const value = await app.service.prepareDownload("DownloadSkill", "stable-series", app.context, app.signal, app.deadline)
   assert.equal(value.skill.id, "stable-series")
+  assert.equal(value.skill.coverImage, "/api/v1/skills/current-version/cover")
   assert.equal(value.binding.sourceRef, "skill:current-version")
   assert.equal(value.binding.filename, "actual.zip")
   assert.equal(app.calls.find((call) => call.kind === "download").input.sourceRef, "skill:current-version")
@@ -1756,7 +1903,7 @@ test("R357 bounded handles evict oldest only after validation, reclaim expiry, a
   assert.throws(() => store.resolve(second.handle, "tenant", "second"), /expired/)
   assert.throws(() => store.resolve(third.handle, "tenant", "third"), /expired/)
 })
-test("R357 over128 cross-subject previews retain normal GetSkill and DownloadSkill, evicted metadata can be reapplied", async () => {
+test("R357 over128 cross-subject explicit downloads retain bounded eviction and renewed metadata", async () => {
   let subject = "human-0"
   const expiresAt = Date.now() + 300000
   const app = await fixture(
@@ -1779,14 +1926,14 @@ test("R357 over128 cross-subject previews retain normal GetSkill and DownloadSki
     }),
   )
   try {
-    const first = await app.request(website + "GetSkill", {
+    const first = await app.request("/skill.v1.SkillService/DownloadSkill", {
       skillId: "stable-series",
     })
     assert.equal(first.status, 200)
     const oldPath = first.body.downloadInfo.downloadUrl.slice(4)
     for (let i = 1; i <= 129; i++) {
       subject = `human-${i}`
-      const result = await app.request(website + "GetSkill", {
+      const result = await app.request("/skill.v1.SkillService/DownloadSkill", {
         skillId: "stable-series",
       })
       assert.equal(result.status, 200, `preview ${i}`)
@@ -1924,7 +2071,7 @@ test("shared revision summary serves exact old revision through the admitted pub
   }
 })
 
-test("shared summary never calls series current or prepares a download", async () => {
+test("shared summary binds the old revision cover locator without inline proof, series current or download", async () => {
   const { SkillSpecificationService } = await import("../../src/application/skill-specification.ts")
   let current = 0
   const service = new SkillSpecificationService({
@@ -1966,7 +2113,7 @@ test("shared summary never calls series current or prepares a download", async (
     new AbortController().signal,
     performance.now() + 1000,
   )
-  assert.deepEqual(result, sharedSummary)
+  assert.deepEqual(result, { ...sharedSummary, cover_image: "/api/v1/skills/version-old/cover" })
   assert.equal(current, 0)
 })
 
@@ -2330,4 +2477,338 @@ test("public Open App maps an exact disabled binding's approved metadata, withou
     [["disabled-series", "Disabled exact", "app"]],
   )
   assert.equal(app.calls.filter((call) => call.kind === "installed").length, 0)
+})
+
+async function s13HubFixture(productPatch) {
+  const app = await specificationServiceFixture()
+  const current = app.deps.owner.current.bind(app.deps.owner)
+  app.deps.owner.current = async (...args) => {
+    const value = await current(...args)
+    return productPatch === undefined
+      ? value
+      : {
+          ...value,
+          skill: { ...value.skill, product: productPatch(value.skill.product) },
+        }
+  }
+  app.context = {
+    requestId: app.context.requestId,
+    identity: app.context.identity,
+    humanBearer: app.context.humanBearer,
+  }
+  return app
+}
+const s13ReadHub = (app, signal = app.signal) => app.service.read("ListHubSkills", {}, app.context, signal, app.deadline)
+
+test("S13 Hub resolves publisher distinct from creator and preserves exact owner product", async () => {
+  const app = await s13HubFixture()
+  const data = await s13ReadHub(app)
+  assert.equal(data.skills[0].product.publisher.iam.id, "actual-publisher")
+  assert.equal(data.skills[0].product.creator_ref.id, "actual-creator")
+  assert.deepEqual(data.skills[0].publisher_profile, {
+    kind: "user",
+    id: "actual-publisher",
+    status: "found",
+    display_name: "Real Publisher",
+    image_url: null,
+  })
+  assert.deepEqual(
+    app.calls.filter((call) => call.kind === "profiles").map((call) => call.refs),
+    [[{ kind: "user", id: "actual-publisher" }]],
+  )
+  assert.equal(app.calls.find((call) => call.kind === "profiles").bearer, "actual-human")
+})
+for (const [kind, status] of [
+  ["user", "missing"],
+  ["organization", "found"],
+])
+  test(`S13 Hub preserves IAM ${kind} ${status} without creator fallback`, async () => {
+    const app = await s13HubFixture((product) => ({
+      ...product,
+      publisher: {
+        kind: "iam",
+        iam: {
+          kind,
+          id: kind === "organization" ? "tenant" : "actual-publisher",
+        },
+      },
+    }))
+    let refsSeen
+    app.deps.profiles.resolve = async (tenant, bearer, requestId, refs) => {
+      assert.equal(tenant, "tenant")
+      assert.equal(bearer, "actual-human")
+      assert.equal(requestId, "aggregate-request")
+      refsSeen = refs
+      return new Map(
+        refs.map((ref) => [
+          JSON.stringify([ref.kind, ref.id]),
+          {
+            ...ref,
+            status,
+            ...(status === "found" ? { display_name: "Actual organization", image_url: null } : {}),
+          },
+        ]),
+      )
+    }
+    const data = await s13ReadHub(app)
+    assert.deepEqual(refsSeen, [{ kind, id: kind === "organization" ? "tenant" : "actual-publisher" }])
+    assert.equal(data.skills[0].publisher_profile.status, status)
+    if (status === "missing") assert.equal(Object.hasOwn(data.skills[0].publisher_profile, "display_name"), false)
+  })
+test("S13 Hub verified GitHub publisher never resolves importer through IAM", async () => {
+  const github = {
+    kind: "github",
+    repository_id: "123456",
+    repository_url: "https://github.com/actual-owner/repository",
+    owner_login: "actual-owner",
+    owner_url: "https://github.com/actual-owner",
+    commit: "a".repeat(40),
+    path: "",
+    content_sha256: "a".repeat(64),
+    size_bytes: "3",
+    mime_type: "application/zip",
+  }
+  const app = await s13HubFixture((product) => ({
+    ...product,
+    source_kind: "third_party",
+    presentation_kind: "github_repository",
+    publisher: { kind: "github_repository", github_repository: github },
+    creation_provenance: github,
+  }))
+  app.deps.profiles.resolve = async () => assert.fail("GitHub publisher must not disclose importer refs to IAM")
+  const data = await s13ReadHub(app)
+  assert.deepEqual(data.skills[0].product.publisher.github_repository, github)
+  assert.equal(Object.hasOwn(data.skills[0], "publisher_profile"), false)
+})
+test("S13 Hub unknown legacy publisher and empty pages perform zero profile I/O", async () => {
+  const app = await s13HubFixture(() => ({
+    publication_audience: "catalog",
+    state_version: "2",
+  }))
+  app.deps.profiles.resolve = async () => assert.fail("no publisher refs, no IAM call")
+  const data = await s13ReadHub(app)
+  assert.deepEqual(data.skills[0].product, {
+    publication_audience: "catalog",
+    state_version: "2",
+  })
+  assert.equal(Object.hasOwn(data.skills[0], "publisher_profile"), false)
+  app.deps.projection.read = async () => ({
+    ok: true,
+    status: 200,
+    data: { skills: [], next_cursor: null },
+  })
+  assert.deepEqual((await s13ReadHub(app)).skills, [])
+})
+for (const scenario of ["wrong-profile-ref", "foreign-org-rejected", "unavailable", "caller-cancel"])
+  test(`S13 Hub rejects ${scenario} instead of inventing author`, async () => {
+    const app = await s13HubFixture(),
+      cancellation = new AbortController()
+    app.deps.profiles.resolve = async (_tenant, _bearer, _requestId, refs) => {
+      if (scenario === "foreign-org-rejected" || scenario === "unavailable") throw new Error("publisher_profile_unavailable")
+      if (scenario === "caller-cancel") cancellation.abort(new Error("fixture_caller_cancel"))
+      return new Map(
+        refs.map((ref) => [
+          JSON.stringify([ref.kind, ref.id]),
+          {
+            kind: ref.kind,
+            id: "not-the-publisher",
+            status: "found",
+            display_name: "Wrong",
+            image_url: null,
+          },
+        ]),
+      )
+    }
+    await assert.rejects(
+      s13ReadHub(app, cancellation.signal),
+      scenario === "wrong-profile-ref" ? /skill_response_invalid/ : scenario === "caller-cancel" ? /fixture_caller_cancel/ : /publisher_profile_unavailable/,
+    )
+  })
+test("S13 Hub current publication change rejects before any publisher lookup", async () => {
+  const app = await s13HubFixture()
+  app.change()
+  app.deps.profiles.resolve = async () => assert.fail("changed publication must not query publisher")
+  await assert.rejects(s13ReadHub(app), (error) => error instanceof ConnectError && error.code === Code.Unavailable)
+})
+
+for (const mode of [
+  "found",
+  "missing",
+  "found-extra",
+  "missing-name",
+  "missing-image",
+  "wrong-ref",
+  "profile-without-product",
+  "iam-without-profile",
+  "organization-missing",
+  "product-extra",
+  "old394-absence",
+])
+  test(`S13 Hub HTTP closed publisher codec ${mode}`, async () => {
+    const service = await s13HubFixture(),
+      data = await s13ReadHub(service)
+    const item = data.skills[0]
+    if (mode.startsWith("missing"))
+      item.publisher_profile = {
+        kind: "user",
+        id: "actual-publisher",
+        status: "missing",
+      }
+    if (mode === "found-extra") item.publisher_profile.private_note = "must-not-leak"
+    if (mode === "missing-name") item.publisher_profile.display_name = "must-not-leak"
+    if (mode === "missing-image") item.publisher_profile.image_url = null
+    if (mode === "wrong-ref") item.publisher_profile.id = "another-publisher"
+    if (mode === "profile-without-product" || mode === "old394-absence") delete item.product
+    if (mode === "old394-absence") delete item.publisher_profile
+    if (mode === "iam-without-profile") delete item.publisher_profile
+    if (mode === "organization-missing") {
+      item.product.publisher.iam.kind = "organization"
+      item.product.publisher.iam.id = "tenant"
+      item.publisher_profile = { kind: "organization", id: "tenant", status: "missing" }
+    }
+    if (mode === "product-extra") item.product.private_note = "must-not-leak"
+    const app = await fixture({
+      async read() {
+        return data
+      },
+    })
+    try {
+      const result = await app.request(website + "ListHubSkills", {})
+      const expected = ["found", "missing", "old394-absence"].includes(mode) ? 200 : 502
+      assert.equal(result.status, expected)
+      if (expected === 502) assert.equal(JSON.stringify(result.body).includes("must-not-leak"), false)
+      if (mode === "missing")
+        assert.deepEqual(result.body.skills[0].publisher_profile, {
+          kind: "user",
+          id: "actual-publisher",
+          status: "missing",
+        })
+    } finally {
+      await app.close()
+    }
+  })
+test("S13 Hub upstream IAM403 remains website dependency503, never publisher missing or browser403", async () => {
+  const { IamPublisherProfileClient } = await import("../../src/infrastructure/clients/iam-publisher-profile.ts")
+  const seen = []
+  const iam = createServer(async (request, response) => {
+    const chunks = []
+    for await (const chunk of request) chunks.push(chunk)
+    seen.push({
+      path: request.url,
+      bearer: request.headers.authorization,
+      refs: JSON.parse(Buffer.concat(chunks).toString()).refs,
+    })
+    response.writeHead(403, {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "x-request-id": "aggregate-request",
+    })
+    response.end(JSON.stringify({ error: { code: "PERMISSION_DENIED" } }))
+  })
+  await new Promise((resolve) => iam.listen(0, "127.0.0.1", resolve))
+  const service = await s13HubFixture((product) => ({
+    ...product,
+    publisher: {
+      kind: "iam",
+      iam: { kind: "organization", id: "foreign-organization" },
+    },
+  }))
+  service.deps.profiles = new IamPublisherProfileClient(`http://127.0.0.1:${iam.address().port}`, 1000)
+  const app = await fixture(service.service)
+  try {
+    const result = await app.request(website + "ListHubSkills", {})
+    assert.equal(result.status, 503)
+    assert.deepEqual(seen, [
+      {
+        path: "/internal/v1/tenants/tenant/publisher-profiles/resolve",
+        bearer: "Bearer human",
+        refs: [{ kind: "organization", id: "foreign-organization" }],
+      },
+    ])
+    assert.equal(Object.hasOwn(result.body, "skills"), false)
+  } finally {
+    await app.close()
+    iam.closeAllConnections()
+    await new Promise((resolve) => iam.close(resolve))
+  }
+})
+test("S13 Hub deduplicates only current publisher refs and never exceeds the IAM batch bound", async () => {
+  const app = await s13HubFixture(),
+    catalog = await app.deps.owner.listCatalog({}, app.context, app.signal),
+    current = await app.deps.owner.current("stable-series", app.context, app.signal, app.deadline)
+  // Application-port rows exercise batching, not a claim of owner pagination I/O.
+  app.deps.owner.listCatalog = async () => ({
+    skills: Array.from({ length: 202 }, (_, index) => ({
+      ...catalog.skills[0],
+      series_id: `series-${index}`,
+      source_ref: `skill:version-${index}`,
+    })),
+  })
+  app.deps.owner.current = async (series) => {
+    const index = Number(series.slice(7))
+    return {
+      ...current,
+      skill: {
+        ...current.skill,
+        series_id: series,
+        skill_id: `version-${index}`,
+        source_ref: `skill:version-${index}`,
+        product: {
+          ...current.skill.product,
+          publisher: {
+            kind: "iam",
+            iam: { kind: "user", id: `publisher-${index % 101}` },
+          },
+        },
+      },
+    }
+  }
+  const batches = []
+  app.deps.profiles.resolve = async (tenant, bearer, _id, refs, signal) => {
+    assert.equal(tenant, "tenant")
+    assert.equal(bearer, "actual-human")
+    assert.equal(signal, app.signal)
+    assert.ok(refs.length <= 100)
+    batches.push(refs)
+    return new Map(refs.map((ref) => [JSON.stringify([ref.kind, ref.id]), { ...ref, status: "found", display_name: ref.id, image_url: null }]))
+  }
+  const result = await s13ReadHub(app)
+  assert.equal(result.skills.length, 202)
+  assert.deepEqual(
+    batches.map((batch) => batch.length),
+    [100, 1],
+  )
+  assert.equal(new Set(batches.flat().map((ref) => ref.id)).size, 101)
+})
+
+test("S13 Hub HTTP retains verified GitHub owner without an IAM profile", async () => {
+  const github = {
+    kind: "github",
+    repository_id: "123456",
+    repository_url: "https://github.com/actual-owner/repository",
+    owner_login: "actual-owner",
+    owner_url: "https://github.com/actual-owner",
+    commit: "a".repeat(40),
+    path: "",
+    content_sha256: "a".repeat(64),
+    size_bytes: "3",
+    mime_type: "application/zip",
+  }
+  const service = await s13HubFixture((product) => ({
+    ...product,
+    source_kind: "third_party",
+    presentation_kind: "github_repository",
+    publisher: { kind: "github_repository", github_repository: github },
+    creation_provenance: github,
+  }))
+  service.deps.profiles.resolve = async () => assert.fail("repository publisher must not query IAM")
+  const app = await fixture(service.service)
+  try {
+    const result = await app.request(website + "ListHubSkills", {})
+    assert.equal(result.status, 200)
+    assert.equal(result.body.skills[0].product.publisher.github_repository.owner_login, "actual-owner")
+    assert.equal(Object.hasOwn(result.body.skills[0], "publisher_profile"), false)
+  } finally {
+    await app.close()
+  }
 })

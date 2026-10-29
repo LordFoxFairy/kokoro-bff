@@ -1,3 +1,4 @@
+import { mcpIconBindingSchema, projectMcpIconBinding } from "./mcp-icon.js"
 import { z } from "zod"
 import type { McpPersonalServerInput, McpPersonalServerOperation } from "./mcp-personal-server-binding.js"
 import {
@@ -5,6 +6,7 @@ import {
   projectMcpPersonalConnector,
   projectMcpPersonalAvailability,
   mcpPersonalAvailabilitySchema,
+  mcpPersonalConnectorSchema,
 } from "./mcp-personal-response.js"
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u)
@@ -13,14 +15,14 @@ const version = z
   .string()
   .regex(/^[1-9][0-9]{0,9}(?![\s\S])/u)
   .refine((value) => BigInt(value) <= 2_147_483_647n)
-const text = (min: number, max: number) =>
+const text = (min: number, max?: number) =>
   z
     .string()
     .refine(
       (value) =>
         !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value) &&
         Buffer.byteLength(value, "utf8") >= min &&
-        Buffer.byteLength(value, "utf8") <= max &&
+        (max === undefined || Buffer.byteLength(value, "utf8") <= max) &&
         (min === 0 || Boolean(value.trim())),
     )
 function isDevelopmentLoopback(url: URL): boolean {
@@ -64,7 +66,9 @@ const oauth = z
   .strict()
   .refine((value) => value.configured === (value.status === "configured"))
 const selector = text(1, 256)
-const displayName = text(1, 1000)
+// Owner discovery descriptions have no per-field length cap; the Connect
+// transport already bounds the complete response to 1 MiB. Preserve the text.
+const displayName = text(1)
 const requiredScopes = z
   .array(text(1, 128))
   .max(2000)
@@ -83,8 +87,10 @@ const declaration = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("resource"), selector, display_name: displayName }).strict(),
   z.object({ kind: z.literal("prompt"), selector, display_name: displayName }).strict(),
 ])
-const server = z
+const acknowledgementServer = z
   .object({
+    transport: z.enum(["streamable_http", "sse_compat"]).optional(),
+    icon: mcpIconBindingSchema.optional(),
     server_id: id,
     availability: mcpPersonalAvailabilitySchema,
     display_name: text(1, 100),
@@ -115,6 +121,52 @@ const server = z
     if (value.prepare_status === "ready" && !value.declarations_available) context.addIssue({ code: "custom", message: "ready server lacks declarations" })
   })
 
+// Only current representations require transport; old completed ACKs remain historical facts.
+const currentServer = acknowledgementServer.safeExtend({ transport: z.enum(["streamable_http", "sse_compat"]) })
+
+/** The lookup returns an old ACK, never a current resource or negative outcome. */
+export const mcpPrepareReceiptResponseSchema = z
+  .object({
+    completed: z
+      .object({
+        server: acknowledgementServer.safeExtend({ prepare_status: z.enum(["ready", "needs_oauth"]) }),
+        connector: mcpPersonalConnectorSchema,
+        declarations: z.array(declaration).max(2000),
+        replayed: z.literal(true),
+      })
+      .strict(),
+  })
+  .strict()
+
+export function validateMcpPersonalPrepareReceipt(value: unknown, input: McpPersonalServerInput): z.infer<typeof mcpPrepareReceiptResponseSchema> {
+  const result = mcpPrepareReceiptResponseSchema.parse(value)
+  const { server, connector, declarations } = result.completed
+  if (
+    !input.commandId ||
+    !input.expectedStateVersion ||
+    server.server_id !== input.id ||
+    connector.server_id !== input.id ||
+    BigInt(server.state_version) !== BigInt(input.expectedStateVersion) + 1n ||
+    connector.enabled !== (server.prepare_status === "ready") ||
+    (server.status === "pending" && connector.status !== "pending") ||
+    (server.status === "registered" && connector.status !== "active") ||
+    JSON.stringify(declarations) !== JSON.stringify(server.declarations)
+  )
+    throw new Error("mcp_personal_response_invalid")
+  return result
+}
+
+export function projectMcpPersonalPrepareReceipt(raw: unknown, input: McpPersonalServerInput): z.infer<typeof mcpPrepareReceiptResponseSchema> {
+  assertMcpPersonalWireKnown(raw)
+  const value = object(raw)
+  if (Object.keys(value).some((key) => !["$typeName", "$unknown", "completed"].includes(key))) throw new Error("mcp_personal_response_invalid")
+  const completed = object(value.completed)
+  if (Object.keys(completed).some((key) => !["$typeName", "$unknown", "server", "connector", "declarations", "replayed"].includes(key)))
+    throw new Error("mcp_personal_response_invalid")
+  if (completed.replayed !== true) throw new Error("mcp_personal_response_invalid")
+  return validateMcpPersonalPrepareReceipt({ completed: projectMcpPersonalServer("prepareServer", completed, input) }, input)
+}
+
 function object(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("mcp_personal_response_invalid")
   return value as Record<string, unknown>
@@ -138,8 +190,9 @@ function projectDeclaration(raw: unknown): unknown {
   if (kind.case === "resource" || kind.case === "prompt") return { kind: kind.case, selector: item.selector, display_name: item.displayName }
   throw new Error("mcp_personal_response_invalid")
 }
-function projectServer(raw: unknown): z.infer<typeof server> {
+function projectServer(raw: unknown, current: boolean): z.infer<typeof acknowledgementServer> {
   const value = object(raw)
+  if (value.transport !== undefined && value.transport !== 2 && value.transport !== 3) throw new Error("mcp_personal_response_invalid")
   const declarations = Array.isArray(value.declarations) ? value.declarations.map(projectDeclaration) : undefined
   const headers = Array.isArray(value.headers)
     ? value.headers.map((rawHeader) => {
@@ -153,7 +206,9 @@ function projectServer(raw: unknown): z.infer<typeof server> {
       })
     : undefined
   const valueOauth = value.oauthClient === undefined ? undefined : object(value.oauthClient)
-  return server.parse({
+  return (current ? currentServer : acknowledgementServer).parse({
+    ...(value.transport === undefined ? {} : { transport: value.transport === 2 ? "streamable_http" : "sse_compat" }),
+    ...(value.icon === undefined ? {} : { icon: projectMcpIconBinding(value.icon) }),
     server_id: identity(value.serverId),
     availability: projectMcpPersonalAvailability(value.availability),
     display_name: value.displayName,
@@ -195,7 +250,20 @@ export function projectMcpPersonalServer(operation: McpPersonalServerOperation, 
     if (result.server_id !== input.id || result.deleted !== true || typeof result.replayed !== "boolean") throw new Error("mcp_personal_response_invalid")
     return result
   }
-  const resultServer = projectServer(value.server)
+  const completedReplay = value.replayed === true && typeof input.commandId === "string" && /^[\x21-\x7e]{1,191}(?![\s\S])/u.test(input.commandId)
+  const historicalAcknowledgement = operation !== "server" && completedReplay && (operation !== "registerServer" || input.transport === undefined)
+  const resultServer = projectServer(value.server, !historicalAcknowledgement)
+  if (
+    operation === "registerServer" &&
+    resultServer.transport !== undefined &&
+    resultServer.transport !== ((input.transport ?? 2) === 2 ? "streamable_http" : "sse_compat")
+  )
+    throw new Error("mcp_personal_response_invalid")
+  if (
+    (operation === "registerServer" || operation === "updateServer") &&
+    ((input.icon !== undefined && resultServer.icon?.intent_id !== input.icon.intentId) || (input.clearIcon === true && resultServer.icon !== undefined))
+  )
+    throw new Error("mcp_personal_response_invalid")
   // JSON import returns a batch of newly allocated server IDs, so it reuses
   // this descriptor projector without a caller-supplied server selector.
   // Selector-bearing reads and mutations still require an exact ID match.

@@ -3,18 +3,18 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-agent",
-    "repository_commit": "7104f3da6e812e1092866cf4e60e32826a8992c1",
-    "contract_version": "7.0.0",
+    "repository_commit": "f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87",
+    "contract_version": "8.10.0",
     "contract_path": "contract/openapi/v1/openapi.json",
-    "contract_sha256": "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
+    "contract_sha256": "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
     "provenance_path": "contract/provenance.json",
-    "provenance_sha256": "e87d077af7729317f8e20ad8423d6c96ac14ad46f002f410274401486a8bf8ec"
+    "provenance_sha256": "a829f5a89e038b851b26f12bcd3af89f955efa603effac911317172011934089"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.agent.config.ts",
-    "config_sha256": "f87ff67f72d282d4b3d6fb87716e6d2bb6fe53d6ea6e5e8c44ca57e986458221"
+    "config_sha256": "6741c28ea63e833e84271cc3cb1cdebf3b7c788d7149501f9f5a4fb1eef1b3f1"
   },
   "runtime": {
     "node": "22.22.2",
@@ -77,25 +77,25 @@
     },
     {
       "path": "failure-profile.gen.ts",
-      "source_sha256": "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
-      "sha256": "7109099419791e05c418f217c733abb4c7aa64c76165587550c96b8da7506454"
+      "source_sha256": "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
+      "sha256": "ef52afa8b45062d35500a9fc12248fecd4edf17b320aac287ac3b7d406d777c1"
     },
     {
       "path": "process-profile.gen.ts",
-      "source_sha256": "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
-      "sha256": "3515c8cd25a1b6ed489bf7ec847b2b3ade7b224617b9d2cf69f4aa55ea7c6493"
+      "source_sha256": "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
+      "sha256": "f663a996ea141843a97f94c4f28ec27ababa1a962a6142eb50ba2ca6e81cc587"
     },
     {
       "path": "sdk.gen.ts",
-      "sha256": "e19766b9c02a1323c814dc74052258bd57203c5403c57e58cc8788239a17727f"
+      "sha256": "1e7390450e269a7d1c7edfbe49f97bab6dd245367d43900ac7f0b66a967e9319"
     },
     {
       "path": "types.gen.ts",
-      "sha256": "544b53c82e08f558bbf64968f831dccc37eb9a0e5a1b05ebed92c661c33d388c"
+      "sha256": "bb8d4891d9d95c4a9d71bbcca9158c3b2c21349df801c4538c573caabcc57115"
     },
     {
       "path": "zod.gen.ts",
-      "sha256": "b47d10ab7ea3daae47b995f67ea5da32a2681a71545f800872da88b91f530710"
+      "sha256": "35e1bd3d2f1c87389a17104938bc9c35754e78c5a1fb6578797b7dd8a259f602"
     }
   ]
 }

@@ -93,7 +93,8 @@ test("Cover decoder rejects a header-only PNG before returning any object bytes"
 import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { createServer } from "node:http"
-import { once } from "node:events"
+import { EventEmitter, once } from "node:events"
+import { Code, ConnectError } from "@connectrpc/connect"
 const correctionConfig = {
   host: "127.0.0.1",
   port: 4300,
@@ -127,6 +128,54 @@ const correctionHeaders = {
   "content-type": "application/json",
   "idempotency-key": "readmit-1",
 }
+
+for (const [ownerCode, status, errorCode] of [
+  [Code.NotFound, 404, "skill_not_found"],
+  [Code.Unavailable, 503, "skill_dependency_unavailable"],
+])
+  test(`exact cover locator leaves media ${status} to the independent admitted GET`, async () => {
+    const { skillCoverRoute } = await import("../src/http/routes/skill-cover.ts")
+    const request = Object.assign(new EventEmitter(), { method: "GET", url: "/v1/skills/current-version/cover", headers: {} })
+    const responseHeaders = {},
+      calls = []
+    let body, responseStatus
+    const response = Object.assign(new EventEmitter(), {
+      writableEnded: false,
+      headersSent: false,
+      destroyed: false,
+      setHeader(name, value) {
+        responseHeaders[name] = value
+      },
+      writeHead(code, values) {
+        responseStatus = code
+        Object.assign(responseHeaders, values)
+      },
+      end(value) {
+        body = JSON.parse(value.toString())
+        this.writableEnded = true
+      },
+    })
+    await skillCoverRoute(
+      request,
+      response,
+      { requestId: "media-read", identity: { namespace: "tenant", userId: "user" } },
+      "current-version",
+      "cover",
+      {
+        async cover(input) {
+          calls.push(input)
+          throw new ConnectError("private owner failure", ownerCode)
+        },
+      },
+      "https://objects.test",
+    )
+    assert.deepEqual(calls, [{ requestId: "media-read", tenant: "tenant", subject: "user", sourceRef: "skill:current-version" }])
+    assert.equal(responseStatus, status)
+    assert.equal(body.error.code, errorCode)
+    assert.equal(JSON.stringify(body).includes("private owner failure"), false)
+    assert.equal(responseHeaders["x-request-id"], "media-read")
+    assert.equal(responseHeaders["cache-control"], "no-store")
+  })
 
 test("Cover real HTTP rejects owner MIME schema as502 without transferring bytes", async () => {
   let calls = 0

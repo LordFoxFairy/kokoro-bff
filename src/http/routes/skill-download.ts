@@ -14,6 +14,7 @@ import { projectSkillPackageInspectionResponse, validSkillPackagePath } from "..
 import { skillIdSchema } from "../skill-product-input.js"
 import { assertSkillReadRequest, runSkillRoute } from "./skill-drafts.js"
 import { send } from "../response.js"
+import type { ProjectSkillContentAccess } from "./skill-package-inspection.js"
 import type { ExactSkillDownloadQualifier } from "../../application/exact-skill-download.js"
 export async function publishedSkillPackageInspectionRoute(
   request: IncomingMessage,
@@ -55,6 +56,7 @@ export async function skillDownloadHandleRoute(
   composition: BffServerComposition,
   requestId: string,
   path: string[],
+  projectAccess?: ProjectSkillContentAccess,
 ): Promise<boolean> {
   if (path[0] !== "skill-downloads" || path.length !== 2) return false
   if (request.method !== "GET") {
@@ -94,6 +96,12 @@ export async function skillDownloadHandleRoute(
       if (!objectOrigin) throw new ConnectError("Download dependency missing", Code.Unavailable)
       const qualify = async (): Promise<boolean> => {
         try {
+          if (entry.binding.qualifier.kind === "project_installation") {
+            if (!projectAccess) throw new ConnectError("Project download not permitted", Code.PermissionDenied)
+            const projectId = await projectAccess(entry.binding.qualifier.projectId, context, signal)
+            if (projectId === null) return false
+            if (projectId !== entry.binding.qualifier.projectId) throw new ConnectError("Project not found", Code.NotFound)
+          }
           if (entry.binding.qualifier.kind === "catalog_current") {
             if (!composition.skillSpecificationSource) throw new ConnectError("Download dependency missing", Code.Unavailable)
             await composition.skillSpecificationSource.confirmDownload(entry.binding, context, signal, deadlineAt)
@@ -143,6 +151,13 @@ export async function skillDownloadHandleRoute(
           send(response, 410, { error: { code: "Gone", message: "Download qualification has expired" } })
           return
         }
+        if (entry.binding.qualifier.kind === "project_installation") {
+          if (!(await qualify())) return
+          if (entry.expiresAt <= Date.now()) {
+            send(response, 410, { error: { code: "Gone", message: "Download qualification has expired" } })
+            return
+          }
+        }
         signal.throwIfAborted()
         response.writeHead(200, {
           "content-type": "application/zip",
@@ -164,6 +179,10 @@ export async function skillDownloadHandleRoute(
 
 const PRIVATE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
 function exactQualifier(path: string[]): ExactSkillDownloadQualifier | null {
+  if (path.length === 7 && path[0] === "browser" && path[1] === "v1" && path[2] === "projects" && path[4] === "skill-installations" && path[6] === "download") {
+    if (!PRIVATE_ID.test(path[3] ?? "") || !PRIVATE_ID.test(path[5] ?? "")) return null
+    return { kind: "project_installation", projectId: path[3]!, installationId: path[5]! }
+  }
   if (path.length !== 5 || path[0] !== "browser" || path[1] !== "v1" || path[4] !== "download") return null
   const id = path[3] ?? ""
   if (!PRIVATE_ID.test(id)) return null
@@ -211,9 +230,12 @@ export async function exactSkillDownloadRoute(
   composition: BffServerComposition,
   requestId: string,
   path: string[],
+  projectAccess?: ProjectSkillContentAccess,
 ): Promise<boolean> {
   const candidate = path.length === 5 && path[0] === "browser" && path[1] === "v1" && path[4] === "download"
-  if (!candidate || !["skill-installations", "skills", "skill-shares"].includes(path[2] ?? "")) return false
+  const projectCandidate =
+    path.length === 7 && path[0] === "browser" && path[1] === "v1" && path[2] === "projects" && path[4] === "skill-installations" && path[6] === "download"
+  if (!(candidate && ["skill-installations", "skills", "skill-shares"].includes(path[2] ?? "")) && !projectCandidate) return false
   response.setHeader("x-request-id", requestId)
   if (request.method !== "POST") {
     response.setHeader("allow", "POST")
@@ -225,7 +247,7 @@ export async function exactSkillDownloadRoute(
     response,
     { requestId, identity: { namespace: "", userId: "" } },
     async (signal, deadlineAt) => {
-      const qualifier = exactQualifier(path)
+      let qualifier = exactQualifier(path)
       if (
         !qualifier ||
         new URL(request.url ?? "/", "http://bff.local").search ||
@@ -243,7 +265,19 @@ export async function exactSkillDownloadRoute(
       const source = composition.exactSkillDownloadSource
       if (!source) throw new ConnectError("Skill download dependency missing", Code.Unavailable)
       const context = Object.freeze({ ...admission.context, identity: Object.freeze({ ...admission.context.identity }), humanBearer: admission.bearerToken })
+      if (qualifier.kind === "project_installation") {
+        if (!projectAccess) throw new ConnectError("Project download not permitted", Code.PermissionDenied)
+        const projectId = await projectAccess(qualifier.projectId, context, signal)
+        if (projectId === null) return
+        qualifier = { ...qualifier, projectId }
+      }
       const entry = await source.prepare(qualifier, context, signal, deadlineAt)
+      if (qualifier.kind === "project_installation") {
+        const projectId = await projectAccess!(qualifier.projectId, context, signal)
+        if (projectId === null) return
+        if (projectId !== qualifier.projectId) throw new ConnectError("Project not found", Code.NotFound)
+        await source.confirm(entry.binding, context, signal, deadlineAt)
+      }
       signal.throwIfAborted()
       send(response, 200, {
         data: {

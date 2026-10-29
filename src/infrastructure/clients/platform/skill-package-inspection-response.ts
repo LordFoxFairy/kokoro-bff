@@ -1,5 +1,6 @@
 import type {
   InspectPersonalSkillInstallationPackageResponse,
+  InspectProjectSkillInstallationPackageResponse,
   InspectSkillPackageResponse,
   InspectPersonalSkillPackageResponse,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
@@ -40,12 +41,18 @@ function validUnicode(value: string): boolean {
 }
 
 export function projectSkillPackageInspectionResponse(
-  value: InspectPersonalSkillPackageResponse | InspectPersonalSkillInstallationPackageResponse | InspectSkillPackageResponse,
-  expected: Readonly<{ sourceRef?: string; selectedFilePath?: string }>,
+  value:
+    | InspectPersonalSkillPackageResponse
+    | InspectPersonalSkillInstallationPackageResponse
+    | InspectSkillPackageResponse
+    | InspectProjectSkillInstallationPackageResponse,
+  expected: Readonly<{ sourceRef?: string; revision?: string; selectedFilePath?: string }>,
 ): SkillPackageInspectionData {
   const sourceRef = value.sourceRef?.value ?? ""
   if (!SOURCE_REF.test(sourceRef) || (expected.sourceRef !== undefined && sourceRef !== expected.sourceRef)) throw new SkillPackageInspectionResponseError()
   if (value.revision < 1n || value.revision > UINT64_MAX || value.files.length > 128) throw new SkillPackageInspectionResponseError()
+
+  if (expected.revision !== undefined && value.revision.toString() !== expected.revision) throw new SkillPackageInspectionResponseError()
 
   const seen = new Set<string>()
   const files: Array<{ path: string; size_bytes: string }> = []

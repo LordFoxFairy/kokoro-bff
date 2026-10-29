@@ -1,3 +1,5 @@
+import type { RegenerateMessageInput } from "../../application/chat/message-regeneration.js"
+import { readRegenerationSource } from "./message-regeneration.js"
 import { createHash, randomUUID } from "node:crypto"
 
 import { EventSchemas, EventType } from "@ag-ui/core"
@@ -23,7 +25,8 @@ import { commitChatTurn, prepareChatTurnSelection } from "./chat-turn-commit.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
 import { instant } from "./chat-repository-mappers.js"
 import type { ProjectExecutionBindingInput, ProjectExecutionBindingReader } from "../../application/ports/project-execution-binding-reader.js"
-import { readProjectExecutionBinding } from "./project-execution-binding.js"
+import type { SubmittedAgentRunInput, SubmittedAgentRunReader } from "../../application/ports/submitted-agent-run-reader.js"
+import { readSubmittedAgentRun, readProjectExecutionBinding } from "./project-execution-binding.js"
 
 type AgentDispatchRow = {
   outbox_id: string
@@ -160,8 +163,12 @@ function claimedAgentDispatch(row: AgentDispatchRow): AgentDispatchCommand {
 }
 
 /** PostgreSQL transaction boundary for Chat admission and Agent delivery. */
-export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutboxRepository, ProjectExecutionBindingReader {
+export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutboxRepository, ProjectExecutionBindingReader, SubmittedAgentRunReader {
   public constructor(private readonly database: PostgresBffDatabase) {}
+
+  public readSubmittedAgentRun(input: SubmittedAgentRunInput) {
+    return readSubmittedAgentRun(this.database, input)
+  }
 
   public readProjectExecutionBinding(input: ProjectExecutionBindingInput) {
     return readProjectExecutionBinding(this.database, input)
@@ -282,6 +289,10 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     )
     if (advanced.rowCount !== 1) throw new Error("CHAT_QUEUED_CURSOR_ALLOCATION_FAILED")
     return cursor
+  }
+
+  public readRegenerationSource(input: RegenerateMessageInput) {
+    return readRegenerationSource(this.database, input)
   }
 
   public async prepareChatTurnSelection(input: ChatTurnSelectionInput): Promise<ChatTurnSelection | null> {

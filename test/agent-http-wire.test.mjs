@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises"
 import { describe, it } from "node:test"
 import { parseAgentErrorCode, parseAgentHttpJson, parseLaunchReceipt, parseReplayPage } from "../dist/infrastructure/clients/agent/http-wire.js"
 
+import { mapAgentEvent } from "../dist/infrastructure/clients/agent/projection.js"
+
 const receipt = { data: { run_id: "run_1", session_id: "session_1", replayed: false }, meta: { request_id: "request_1" } }
 const event = {
   chat_event_id: "event_1",
@@ -29,43 +31,81 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "7104f3da6e812e1092866cf4e60e32826a8992c1",
-        contract_version: "7.0.0",
+        repository_commit: "f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87",
+        contract_version: "8.10.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
+        contract_sha256: "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "e87d077af7729317f8e20ad8423d6c96ac14ad46f002f410274401486a8bf8ec",
+        provenance_sha256: "a829f5a89e038b851b26f12bcd3af89f955efa603effac911317172011934089",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
+        source_sha256: "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
     assert.match(manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256 ?? "", /^[0-9a-f]{64}$/u)
   })
 
-  it("uses one HTTP7 publication for process, delivery and interaction with no split source pin", async () => {
+  it("uses one HTTP8 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "7104f3da6e812e1092866cf4e60e32826a8992c1")
+    assert.equal(manifest.owner.repository_commit, "f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
+      "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/7104f3da6e812e1092866cf4e60e32826a8992c1/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87/openapi.json", import.meta.url), "utf8"),
     )
+    assert.deepEqual(owner.components.schemas.ChatActivity.oneOf[0].properties.display_code, {
+      type: "string",
+      enum: [
+        "tool.execution",
+        "tool.file.read",
+        "tool.mcp.discover",
+        "tool.mcp.describe",
+        "tool.mcp.call",
+        "tool.web.search",
+        "tool.web.fetch",
+        "tool.file.write",
+        "tool.file.deliver",
+      ],
+    })
     assert.doesNotThrow(() => assertInteractionContractSchema(owner))
     for (const change of [
+      (s) => {
+        delete s.ChatActivity.oneOf[0].allOf[0].then.properties.display_detail.properties.name.pattern
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].allOf[1].then.properties.display_detail = { properties: { name: { pattern: "no-slash" } } }
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_detail.properties.name.maxLength = 121
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_detail.properties.name["x-kokoro-utf8-byte-limit"] = 481
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_detail.properties.name["x-kokoro-unicode-domain"] = "NFC Unicode text"
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_detail.additionalProperties = true
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_detail.required.pop()
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].allOf[0].then.properties.display_code.enum.push("tool.execution")
+      },
       (s) => {
         delete s.ChatEvent["x-kokoro-decoded-payloads"].mapping["interaction.state"]
       },
@@ -95,6 +135,18 @@ describe("Agent event-protocol provenance", () => {
       },
       (s) => {
         s.ResumeDecision.oneOf[1].properties.type.const = "approve"
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_code = { type: "string" }
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_code.enum.push("tool.file.unreviewed")
+      },
+      (s) => {
+        s.ChatActivity.oneOf[0].properties.display_code.enum.pop()
+      },
+      (s) => {
+        s.ChatActivity.oneOf[1].properties.display_code = { const: "tool.execution" }
       },
       (s) => {
         s.ChatActivity.oneOf[0].additionalProperties = true
@@ -429,4 +481,214 @@ describe("Agent HTTP7 frozen BFF project projection", () => {
       assert.equal(received[0].body.trace.project_ref, "observation_not_authority")
     })
   })
+})
+
+describe("confirmed model settlement pending", () => {
+  it("projects a nonretryable model settlement pending owner event without diagnostics", () => {
+    const pending = {
+      ...event,
+      event_type: "run.failed",
+      payload_json: JSON.stringify({ status: "failed", code: "model_settlement_pending", retryable: false }),
+    }
+    assert.deepEqual(mapAgentEvent(pending).payload.failure, { source: "agent", code: "model_settlement_pending", retryable: false })
+    for (const payload of [
+      { status: "failed", code: "model_settlement_pending", retryable: true },
+      { status: "failed", code: "model_settlement_pending", retryable: false, amount: "1" },
+      { status: "failed", code: "made_up_settlement_status", retryable: false },
+    ])
+      assert.throws(() => mapAgentEvent({ ...pending, payload_json: JSON.stringify(payload) }))
+  })
+})
+
+it("consumes only the exact optional MCP execution selection from HTTP7.4 and Public24", async () => {
+  const { zLaunchRequest } = await import("../dist/generated/agent-http/zod.gen.js")
+  const { load } = await import("js-yaml")
+  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
+  const owner = JSON.parse(await readFile(new URL(`../contract/vendor/kokoro-agent/${manifest.owner.repository_commit}/openapi.json`, import.meta.url), "utf8"))
+  const { restorePublic24SkillDetailContract } = await import("../scripts/skill-detail-public-contract.mjs")
+  const { restorePublic25McpPersonalSseContract } = await import("../scripts/mcp-personal-sse-public-contract.mjs")
+  const doc = load(
+    restorePublic24SkillDetailContract(
+      restorePublic25McpPersonalSseContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+    ),
+  )
+  assert.equal(doc.info.version, "24.0.0")
+  const publicRequest = doc.components.schemas.MessageCreateRequest
+  const internal = owner.components.schemas.LaunchRequest
+  assert.equal(publicRequest.properties.mcp_servers, undefined)
+  assert.equal(publicRequest.required.includes("selected_mcp_connection_ids"), false)
+  assert.equal(internal.required.includes("selected_mcp_connection_ids"), false)
+  for (const key of ["type", "maxItems", "uniqueItems", "x-kokoro-json-byte-limit", "items"]) {
+    assert.deepEqual(publicRequest.properties.selected_mcp_connection_ids[key], internal.properties.selected_mcp_connection_ids[key])
+  }
+  const base = {
+    request_id: "r",
+    run_id: "run",
+    session_id: "conversation",
+    feature_key: "chat",
+    project_ref: null,
+    selected_skill_source_refs: [],
+    message_id: "message",
+    content: "hello",
+  }
+  assert.equal(zLaunchRequest.strict().safeParse(base).success, true)
+  for (const value of [[], ["connection-b", "connection-a"]]) {
+    const parsed = zLaunchRequest.strict().safeParse({ ...base, selected_mcp_connection_ids: value })
+    assert.equal(parsed.success, true)
+    assert.deepEqual(parsed.data.selected_mcp_connection_ids, value)
+  }
+  for (const value of [null, [true], ["x", "x"], ["x\n"], ["https://host/mcp"], ["a".repeat(192)], Array.from({ length: 17 }, (_, i) => `c${i}`)]) {
+    assert.equal(zLaunchRequest.strict().safeParse({ ...base, selected_mcp_connection_ids: value }).success, false, JSON.stringify(value))
+  }
+})
+
+for (const [activity, display_code] of [
+  ["tool", "tool.file.unreviewed"],
+  ["tool", "subagent.execution"],
+  ["subagent", "tool.web.search"],
+  ["tool", null],
+  ["tool", 42],
+]) {
+  it(`Agent8 rejects unknown or cross-branch display code ${activity}/${display_code} without a generic fallback`, () => {
+    assert.throws(() =>
+      mapAgentEvent({
+        ...event,
+        event_type: "activity",
+        payload_json: JSON.stringify({
+          activity,
+          activity_id: `act_${"a".repeat(64)}`,
+          segment_id: `seg_${"b".repeat(64)}`,
+          status: "running",
+          display_code,
+        }),
+      }),
+    )
+  })
+}
+
+it("Agent8.2 carries only the owner's bounded typed action detail, preserving scalar text and old absence", async () => {
+  const { parseAgentProcessPayload } = await import("../src/infrastructure/clients/agent/process-state.ts")
+  for (const [display_code, kind] of [
+    ["tool.file.read", "file"],
+    ["tool.file.write", "file"],
+    ["tool.file.deliver", "file"],
+    ["tool.mcp.describe", "mcp_tool"],
+    ["tool.mcp.call", "mcp_tool"],
+  ]) {
+    for (const name of ["report.md", "é😀", "😀".repeat(120)]) {
+      const payload = {
+        activity: "tool",
+        activity_id: `act_${"a".repeat(64)}`,
+        segment_id: `seg_${"b".repeat(64)}`,
+        status: "running",
+        display_code,
+        display_detail: { kind, name },
+      }
+      assert.deepEqual(parseAgentProcessPayload("activity", JSON.stringify(payload)), { kind: "activity.updated", value: payload })
+      const { display_detail, ...old } = payload
+      assert.deepEqual(parseAgentProcessPayload("activity", JSON.stringify(old)).value, old)
+    }
+  }
+})
+
+it("Agent8.2 rejects invalid detail domains or cross-category metadata rather than stripping or repairing them", async () => {
+  const { parseAgentProcessPayload } = await import("../src/infrastructure/clients/agent/process-state.ts")
+  const tool = {
+    activity: "tool",
+    activity_id: `act_${"a".repeat(64)}`,
+    segment_id: `seg_${"b".repeat(64)}`,
+    status: "completed",
+    display_code: "tool.file.read",
+  }
+  for (const display_detail of [
+    null,
+    {},
+    { kind: "unknown", name: "x" },
+    { kind: "file", name: "x", secret: "PRIVATE" },
+    ...["", "a".repeat(121), "😀".repeat(121), "e\u0301", "x\u0000", "x\n", "x\u007f", "x\u0085", "x\u200b", "x\u202e", "x\ud800"].map((name) => ({
+      kind: "file",
+      name,
+    })),
+  ]) {
+    assert.throws(() => parseAgentProcessPayload("activity", JSON.stringify({ ...tool, display_detail })))
+  }
+  for (const display_code of ["tool.execution", "tool.mcp.discover", "tool.web.search", "tool.web.fetch", "tool.mcp.call"]) {
+    assert.throws(() => parseAgentProcessPayload("activity", JSON.stringify({ ...tool, display_code, display_detail: { kind: "file", name: "report.md" } })))
+  }
+  assert.throws(() =>
+    parseAgentProcessPayload(
+      "activity",
+      JSON.stringify({ ...tool, activity: "subagent", display_code: "subagent.execution", display_detail: { kind: "file", name: "report.md" } }),
+    ),
+  )
+})
+
+it("Agent8.2 file detail obeys the producer basename domain while MCP public declaration names may contain slash", async () => {
+  const { parseAgentProcessPayload } = await import("../src/infrastructure/clients/agent/process-state.ts")
+  const base = {
+    activity: "tool",
+    activity_id: `act_${"a".repeat(64)}`,
+    segment_id: `seg_${"b".repeat(64)}`,
+    status: "running",
+    display_code: "tool.file.read",
+  }
+  for (const name of [".", "..", "/private/report.md", "a\\b", "C:secret"]) {
+    assert.throws(() => parseAgentProcessPayload("activity", JSON.stringify({ ...base, display_detail: { kind: "file", name } })), name)
+  }
+  const mcp = { ...base, display_code: "tool.mcp.call", display_detail: { kind: "mcp_tool", name: "namespace/public_tool" } }
+  assert.deepEqual(parseAgentProcessPayload("activity", JSON.stringify(mcp)).value, mcp)
+})
+
+it("Agent Custom API launch validators preserve exact optional refs and reject duplicate profile IDs and secret-shaped extras", async () => {
+  const { zLaunchRequest } = await import("../dist/generated/agent-http/zod.gen.js")
+  const { projectSavedAgentLaunch } = await import("../dist/infrastructure/clients/agent/http-wire.js")
+  const base = {
+    request_id: "r",
+    run_id: "run",
+    session_id: "session",
+    feature_key: "chat",
+    project_ref: null,
+    selected_skill_source_refs: [],
+    message_id: "message",
+    content: "hello",
+    trace: { source: "kokoro-bff" },
+  }
+  const { load } = await import("js-yaml")
+  const publicSchema = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")).components.schemas.MessageCreateRequest
+    .properties.selected_custom_api_profiles
+  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
+  const ownerSchema = JSON.parse(
+    await readFile(new URL(`../contract/vendor/kokoro-agent/${manifest.owner.repository_commit}/openapi.json`, import.meta.url), "utf8"),
+  ).components.schemas.LaunchRequest.properties.selected_custom_api_profiles
+  for (const key of ["type", "maxItems", "uniqueItems", "x-kokoro-unique-by"]) assert.deepEqual(publicSchema[key], ownerSchema[key])
+  for (const key of ["type", "additionalProperties", "required"]) assert.deepEqual(publicSchema.items[key], ownerSchema.items[key])
+  assert.deepEqual(publicSchema.items.properties.profile_id, ownerSchema.items.properties.profile_id)
+  for (const key of ["type", "minimum", "maximum"])
+    assert.deepEqual(publicSchema.items.properties.expected_state_version[key], ownerSchema.items.properties.expected_state_version[key])
+  const profile = { profile_id: "api-one", expected_state_version: 3 }
+  for (const selected_custom_api_profiles of [
+    [],
+    [profile],
+    Array.from({ length: 32 }, (_, i) => ({ profile_id: `p:${i}`, expected_state_version: 2147483647 })),
+  ]) {
+    const input = { ...base, selected_custom_api_profiles }
+    const parsed = zLaunchRequest.strict().safeParse(input)
+    assert.equal(parsed.success, true)
+    assert.deepEqual(parsed.data.selected_custom_api_profiles, selected_custom_api_profiles)
+    const { project_ref: _scope, ...saved } = input
+    assert.deepEqual(projectSavedAgentLaunch(saved), input)
+  }
+  for (const value of [
+    null,
+    ["api-one"],
+    [profile, { ...profile, expected_state_version: 4 }],
+    [{ ...profile, secret: "not-a-wire-field" }],
+    [{ ...profile, profile_id: "p\n" }],
+    [{ ...profile, expected_state_version: true }],
+    [{ ...profile, expected_state_version: 0 }],
+    [{ ...profile, expected_state_version: 2147483648 }],
+    Array.from({ length: 33 }, (_, i) => ({ ...profile, profile_id: `p${i}` })),
+  ])
+    assert.equal(zLaunchRequest.strict().safeParse({ ...base, selected_custom_api_profiles: value }).success, false, JSON.stringify(value))
+  assert.deepEqual(zLaunchRequest.strict().parse(base), base)
 })

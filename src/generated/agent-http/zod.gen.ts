@@ -42,6 +42,23 @@ export const zLaunchRequest = z.object({
   requested_model_label: z.string().min(1).optional(),
   trace: z.record(z.string(), z.unknown()).optional(),
   project_ref: z.string().min(1).max(255).nullable(),
+  selected_mcp_connection_ids: z
+    .array(z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")))
+    .max(16)
+    .refine((values) => new Set(values).size === values.length && new TextEncoder().encode(JSON.stringify(values)).byteLength <= 4096)
+    .optional(),
+  selected_custom_api_profiles: z
+    .array(
+      z
+        .object({
+          profile_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+          expected_state_version: z.number().int().min(1).max(2147483647),
+        })
+        .strict(),
+    )
+    .max(32)
+    .refine((values) => new Set(values.map((value) => value.profile_id)).size === values.length)
+    .optional(),
 })
 
 export const zLaunchReceipt = z
@@ -129,9 +146,62 @@ export const zDataEnvelope = z.object({
   meta: zMeta,
 })
 
-/**
- * Caller correlation identifier. The Agent creates one when absent.
- */
+export const zSkillDisplay = z
+  .object({ source_ref: z.string().min(7), name: z.string().min(1), virtual_path: z.string().min(1), revision: z.string().optional() })
+  .strict()
+
+export const zRunDisplay = z
+  .object({
+    run_id: z.string().min(1),
+    display_skills: z.array(zSkillDisplay).max(16),
+    tool_paths: z.array(z.object({ activity_id: z.string().min(68), virtual_path: z.string().min(1) }).strict()).max(128),
+    tool_facts: z
+      .array(
+        z
+          .object({
+            activity_id: z.string().min(68),
+            display_detail: z
+              .object({ kind: z.enum(["mcp_tool"]), name: z.string().min(1) })
+              .strict()
+              .optional(),
+            status: z.enum(["failed"]).optional(),
+          })
+          .strict()
+          .refine((value) => value.display_detail !== undefined || value.status !== undefined, "Tool fact requires proved detail or failure"),
+      )
+      .max(128),
+    activity_details: z
+      .array(
+        z
+          .object({
+            activity_id: z.string().min(68),
+            tool_name: z.string().min(1),
+            target: z
+              .object({ kind: z.enum(["file", "mcp_tool"]), name: z.string().min(1), virtual_path: z.string().min(1).optional() })
+              .strict()
+              .optional(),
+            input_preview: z
+              .object({ text: z.string().min(1), truncated: z.boolean(), redacted: z.boolean() })
+              .strict()
+              .optional(),
+            output_preview: z
+              .object({ text: z.string().min(1), truncated: z.boolean(), redacted: z.boolean() })
+              .strict()
+              .optional(),
+            tool_description: z
+              .object({ text: z.string().min(1), truncated: z.boolean(), redacted: z.boolean() })
+              .strict()
+              .optional(),
+          })
+          .strict(),
+      )
+      .max(128),
+    final_message_id: z.string().optional(),
+  })
+  .strict()
+
+export const zRunDisplayEnvelope = z.object({ data: zRunDisplay, meta: zMeta }).strict()
+
 export const zRequestId = z.string().min(1)
 
 export const zTenantRef = z.string().min(1)
@@ -218,6 +288,25 @@ export const zReplaySessionEventsQuery = z.object({
  */
 export const zReplaySessionEventsResponse = zReplayPageEnvelope
 
+export const zGetRunDisplayHeaders = z.object({
+  "X-Request-Id": z.string().min(1).optional(),
+  "X-Kokoro-Tenant-Ref": z.string().min(1),
+  "X-Kokoro-Subject-Ref": z.string().min(1),
+  "X-Kokoro-Subject-Kind": z.enum(["user", "project", "service"]).optional().default("user"),
+  "X-Kokoro-Actor-Ref": z.string().min(1),
+  "X-Kokoro-Actor-Kind": z.enum(["user", "project", "service"]).optional().default("user"),
+  "X-Kokoro-Identity-Assertion-Ref": z.string().min(1),
+})
+
+export const zGetRunDisplayPath = z.object({
+  run_id: z.string().min(1),
+})
+
+/**
+ * Safe recovered display facts, at most 1MiB.
+ */
+export const zGetRunDisplayResponse = zRunDisplayEnvelope
+
 export const zInteractionValidation = z
   .object({ code: z.literal("json_schema_invalid"), instance_path: z.array(z.union([z.string(), z.number().int().max(Number.MAX_SAFE_INTEGER)])) })
   .strict()
@@ -277,7 +366,22 @@ export const zChatActivity = z.union([
       activity_id: z.string().min(68),
       segment_id: z.string().min(68),
       status: z.enum(["running", "completed", "failed"]),
-      display_code: z.literal("tool.execution"),
+      display_code: z.enum([
+        "tool.execution",
+        "tool.file.read",
+        "tool.mcp.discover",
+        "tool.mcp.describe",
+        "tool.mcp.call",
+        "tool.web.search",
+        "tool.web.fetch",
+        "tool.file.write",
+        "tool.file.deliver",
+      ]),
+      display_detail: z
+        .object({ kind: z.enum(["file", "mcp_tool"]), name: z.string().min(1), virtual_path: z.string().min(1).optional() })
+        .strict()
+        .optional(),
+      action_title: z.string().min(1).optional(),
     })
     .strict(),
   z
@@ -297,6 +401,19 @@ export const zChatActivity = z.union([
       source_refs: z.array(z.string().min(7)).min(1).max(16),
       phase: z.enum(["resolving", "loading", "ready", "failed"]),
       error_code: z.enum(["skill_resolve_failed", "skill_load_failed"]).optional(),
+      display_skills: z.array(zSkillDisplay).max(16).optional(),
     })
     .strict(),
 ])
+
+export const zChatRunCompleted = z
+  .object({
+    status: z.enum(["completed", "cancelled"]),
+    token_usage: z
+      .object({ input_tokens: z.number().int().max(Number.MAX_SAFE_INTEGER).min(0), output_tokens: z.number().int().max(Number.MAX_SAFE_INTEGER).min(0) })
+      .strict()
+      .optional(),
+    final_message_id: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine((value) => value.final_message_id === undefined || value.status === "completed", "Final answer requires completed run")

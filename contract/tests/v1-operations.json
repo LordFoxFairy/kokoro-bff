@@ -152,6 +152,11 @@
       "operation_id": "listSessions"
     },
     {
+      "method": "POST",
+      "path": "/v1/admin/billing/credit-grants",
+      "operation_id": "createAdminCreditGrant"
+    },
+    {
       "method": "GET",
       "path": "/v1/admin/identity/members",
       "operation_id": "listAdminIdentityMembers"
@@ -215,6 +220,11 @@
       "method": "GET",
       "path": "/v1/sessions/{id}/runs/{runId}/process",
       "operation_id": "getRunProcess"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sessions/{id}/messages/{messageId}/parts",
+      "operation_id": "getSessionMessageParts"
     },
     {
       "method": "GET",
@@ -910,6 +920,81 @@
       "method": "GET",
       "path": "/v1/admin/model-providers/{provider_id}/upstream-models",
       "operation_id": "listAdminModelProviderUpstreamModels"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/billing/metering/pricing",
+      "operation_id": "getAdminMeteringPricing"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/billing/metering/rate-revisions",
+      "operation_id": "publishAdminMeteringRate"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/billing/metering/policy-revisions",
+      "operation_id": "publishAdminMeteringPolicy"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/resources/{asset_id}",
+      "operation_id": "getProjectResource"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/{projectId}/resources/{asset_id}",
+      "operation_id": "deleteProjectResource"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/resources/{asset_id}/download",
+      "operation_id": "downloadProjectResource"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/mcp-recommendations",
+      "operation_id": "getProjectMcpRecommendations"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/{projectId}/mcp-recommendations",
+      "operation_id": "replaceProjectMcpRecommendations"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/self/project-pins",
+      "operation_id": "listSelfProjectPins"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/{projectId}/pin",
+      "operation_id": "setProjectPin"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/package",
+      "operation_id": "getProjectSkillInstallationPackage"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sessions/{id}/messages/{messageId}/feedback",
+      "operation_id": "getMessageFeedback"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/sessions/{id}/messages/{messageId}/feedback",
+      "operation_id": "setMessageFeedback"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sessions/{id}/messages/{messageId}/regenerate",
+      "operation_id": "regenerateLatestAssistantMessage"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sessions/{id}/runs/{runId}/display",
+      "operation_id": "getSessionRunDisplay"
     }
   ]
 }

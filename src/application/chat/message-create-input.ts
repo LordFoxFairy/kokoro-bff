@@ -1,3 +1,5 @@
+import { parseCustomApiProfileSelection, type SelectedCustomApiProfile } from "../../domain/chat/custom-api-profile-selection.js"
+import { parseMcpConnectionSelection } from "../../domain/chat/mcp-connection-selection.js"
 import { parseSkillSourceSelection } from "../../domain/chat/skill-source-selection.js"
 
 export type MessageCreateInput = {
@@ -6,29 +8,27 @@ export type MessageCreateInput = {
   agent?: string
   thinking?: boolean
   selectedSkillSourceRefs?: string[]
-  mcpServers?: string[]
+  selectedMcpConnectionIds?: string[]
+  selectedCustomApiProfiles?: SelectedCustomApiProfile[]
   projectRef?: string
 }
 
-const MESSAGE_CREATE_KEYS = new Set(["content", "model", "agent", "thinking", "selected_skill_source_refs", "mcp_servers", "project_ref"])
+const MESSAGE_CREATE_KEYS = new Set([
+  "content",
+  "model",
+  "agent",
+  "thinking",
+  "selected_skill_source_refs",
+  "selected_mcp_connection_ids",
+  "selected_custom_api_profiles",
+  "project_ref",
+])
 
 function optionalTrimmedString(value: unknown): string | undefined | null {
   if (value === undefined) return undefined
   if (typeof value !== "string") return null
   const trimmed = value.trim()
   return trimmed === "" ? null : trimmed
-}
-
-function optionalTrimmedStrings(value: unknown): string[] | undefined | null {
-  if (value === undefined) return undefined
-  if (!Array.isArray(value)) return null
-  const result: string[] = []
-  for (const item of value) {
-    const parsed = optionalTrimmedString(item)
-    if (parsed === null || parsed === undefined) return null
-    result.push(parsed)
-  }
-  return result
 }
 
 /** Strict runtime parser for the canonical public MessageCreateRequest. */
@@ -41,14 +41,17 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
   const bodyProjectRef = optionalTrimmedString(json.project_ref)
   const fallbackProjectRef = optionalTrimmedString(queryProjectRef)
   const selectedSkillSourceRefs = json.selected_skill_source_refs === undefined ? undefined : parseSkillSourceSelection(json.selected_skill_source_refs)
-  const mcpServers = optionalTrimmedStrings(json.mcp_servers)
+  const selectedMcpConnectionIds = json.selected_mcp_connection_ids === undefined ? undefined : parseMcpConnectionSelection(json.selected_mcp_connection_ids)
+  const selectedCustomApiProfiles =
+    json.selected_custom_api_profiles === undefined ? undefined : parseCustomApiProfileSelection(json.selected_custom_api_profiles)
   if (
     model === null ||
     agent === null ||
     bodyProjectRef === null ||
     fallbackProjectRef === null ||
     selectedSkillSourceRefs === null ||
-    mcpServers === null ||
+    selectedMcpConnectionIds === null ||
+    selectedCustomApiProfiles === null ||
     (json.thinking !== undefined && typeof json.thinking !== "boolean") ||
     (bodyProjectRef !== undefined && fallbackProjectRef !== undefined && bodyProjectRef !== fallbackProjectRef)
   )
@@ -60,7 +63,8 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
     ...(agent === undefined ? {} : { agent }),
     ...(json.thinking === undefined ? {} : { thinking: json.thinking }),
     ...(selectedSkillSourceRefs === undefined ? {} : { selectedSkillSourceRefs }),
-    ...(mcpServers === undefined ? {} : { mcpServers }),
+    ...(selectedMcpConnectionIds === undefined ? {} : { selectedMcpConnectionIds }),
+    ...(selectedCustomApiProfiles === undefined ? {} : { selectedCustomApiProfiles }),
     ...(projectRef === undefined ? {} : { projectRef }),
   }
 }

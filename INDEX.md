@@ -1,3 +1,80 @@
+## 原 Run Skill／文件展示（2026-10-28，候选）
+
+`routes/run-display.ts` 仅为当前Session/owned Conversation的exact submitted Run按需读Agent正式8.3；前后bounded资格与caller abort，最后owned检查在immutable映射之后，不插snapshot/list N+1。新safeactivity可选事实沿原process/ordered保留；旧display为独立只读hint，不改source/event/digest、不纳Share或当前catalog。原18生成器及完整父逆证在contract入口，正常由Root后验。
+
+## 本人回答操作（2026-10-28，Root 核准候选）
+
+`routes/message-feedback.ts` 提供本人 exact assistant 的自然 GET／PUT 偏好；`message-regeneration.ts` 复用 ChatTurn/outbox，按可信旧输入及选择建立新 Run 和内部输入镜像，所有产品消息读取在 SQL 限额前隐藏镜像，私有回答保 source 关联。两具名 schema evolver 只加偏好表／Message 关联，旧行不回填；Root 授权隔离 PG 校验，不代表正常 DDL／发行。三面设计与原公共合同完整逆证见现入口。
+
+## Immediate Stop startup bridge（2026-10-28，候选）
+
+`routes/agent.ts`仅在真实Agent404/run_not_found且当前本人durable queued head精确同Run时，有界等待创建并以原K/body走原cancel路径；每次fresh同head、原绝对budget/abort，queued→active保原资格，退休即停。只返回实际strict Agent202，不造本地cancel终态；深FIFO超窗仍开放。具名回归在原control-adapter测试，正常有限cancel由Root后验。
+
+## Opaque Skill byte contract（2026-10-28，候选）
+
+原 `skill-download.policy.ts`／generator／`contract/skill-download-policy.json` 整数3补原GET handle的独立ZIP/framing/closed errors，未改route或原4 POST。两近邻policy/HTTP测试验证完整policy2逆回、metadata不可误用、future拒绝和原FailedPrecondition503；正常下载与正式消费者配对由Root后继，非本描述切片完成声明。
+
+## Project exact installation package／download（2026-10-27，候选未正常启用）
+
+原 `skill-package-inspection` route／Connect client 接正式94e574 Project具名inspection与grant；`exact-skill-download`／`skill-download` 贯穿canonical Project＋installation qualifier、fresh准入和pin，Storage spool后再核才发字节。无个人alias／新Schema。Public28.8仅1GET，原skill-download code-first policy2仅增1私有POST；固定Native与完整28.7／原policy父证明见原contract入口。`test/project-skill-content-http.test.mjs` 是自有binary Native／Storage／BFF HTTP回归（IAM/Project/owner facts为fixture），不替代Root正常配对。
+
+## MCP Prepare 历史回执 lookup-only 候选（2026-10-27）
+
+仅新增 browser-private GET `mcp/servers/{server_id}/prepare-receipt` 的候选 route、原 CAS/key 绑定、completed 历史ACK严格包装与独立 lookup-only code-first profile；同 key 仅重读 GET，不授 Prepare POST／新 key。普通 GET 继续拒命令头及 receipt marker。现已固定 Platform 正式688bc1e3／private-server1.5／query1.0，原生Get方法及严格completed包装实际接线；独立binary协议peer通过，不等于正常终态恢复。三设计面已获 Root 批准；当前 peer/HTTP 及生成检查不替代实际 owner／正常验收。
+
+## 个人 Project pin（2026-10-27，本地候选，未应用库）
+
+`domain/project/pin.ts`／`http/project-pin-input.ts`／`routes/project-pin.ts` 只接 self 列表与 exact canonical Project 状态 PUT；Session／subject 生命周期、限时／闭集和自然幂等沿本次三面 D0。`postgres/project-pin.ts` 复用具名 Project 端口与 parent 锁，原 `project-delete.ts` 同墓碑事务清个人关联；原 Project wire／updated_at 不变。canonical 新关系表／两索引、ready／fresh 和 `project-pin-schema-catalog.mjs` 的 exact target／实际 catalog 比对闭合，具名 evolution 仅供 Root 显式操作，不是启动安装或迁移框架。`pnpm test:project-pin` 为纯／自有 loopback 入口，`test:project-pin:integration` 仅 Root 指定独占临时 PG，未运行资源测试不称通过。Public28.5／194 的完整28.4父字节和旧192 inventory保持；正式交付／正常配对归 Root。
+
+## Project MCP 推荐配置（2026-10-27，本地候选）
+
+`src/domain/project/mcp-recommendations.ts`定义三种strict稳定ref和canonical集合；`src/http/routes/project-mcp-recommendations.ts`仅接exact `/v1/projects/{projectId}/mcp-recommendations` GET/PUT。metadata candidate reader复用现provider/本人connector/Custom API安全GET，最多4并发、只校新增项；`src/infrastructure/postgres/project-mcp-recommendations.ts`提供有界当前读与parent锁CAS/no-op，不建receipt/journal/outbox。bootstrap当前Project准入同样走此有界reader，不走旧finder。
+
+canonical两列及具名 `scripts/evolve-project-mcp-recommendations-schema.mjs`仅在本run独占临时PG验证；public28.2/192和 `scripts/project-mcp-recommendations-public-contract.mjs`保完整28.1/190及SQL父proof，旧oracle不更新。新增具名tests通过现package脚本接入；三面D1记录当前事实、失效引用与自然幂等恢复。未正常DDL/服务切换，App消费者与Custom API运行映射后继OPEN。
+
+## MCP 已绑定图标独立媒体读取（2026-10-26）
+
+现 `routes/mcp-personal.ts` 仅增 exact Server icon GET 分支，具名 `routes/mcp-server-icon.ts` 沿当前 Session/MCP read、原绝对预算/取消，调用正式 Server getter并在完整字节后鲜核绑定及准入；`storage/mcp-icon-transfer.ts` 使用每请求≤1MiB内存，不耦合artifact spool。唯一新code-first源 `src/application/mcp-server-icon.contract.ts` 由现private generator生成独立媒体OpenAPI；原Public27/命令profile/Schema保持。`test/mcp-server-icon-{http,contract}` 覆盖真实bootstrap/Storage loopback及完整父字节保护；非正常owner业务联调，正常配对归Root。
+
+## preflight-first AG-UI 投影（2026-10-25，候选）
+
+现 postgres agui-projection/process/interaction-projection 在原锁、source、lease 和 FIFO 边界承接 current trusted Skill prelude，不造 START/process；chat-repository 仅容严格 initial terminal 的 queued 中间页，agui-consumer-repository 共享 GC 边界保 selected 真 START 的 activity 首 provenance。回归在现 test/agui-projection.integration.mjs；Schema、Public25、Agent 和正常资源不在本片写区。
+
+## GetSkill metadata-only（2026-10-25，候选）
+
+现 `SkillSpecificationSource.readDetail` / `SkillSpecificationService.readDetail` 仅复用已授权 owner current 与展示 mapper；`platform-projection.ts` 的 GetSkill 分支校 strict skill-only/id/exact UID，不调用包或 handle。DownloadSkill/confirm/字节链保持独立。Public25 唯一 canonical 与 `scripts/skill-detail-public-contract.mjs` 的完整 Public24 inverse 接原 metering 检查链；具名 RED/边界回归留在现 `test/contract/skill-specification-http.test.mjs`。正常配对由 Root 负责。
+
+## URL MCP 项目定义发布候选（2026-10-25）
+
+私有错误profile1.1由同一canonical源发布exact tuple；runtime mapper共用自有定义，generator组合既有MCP receipt policy并绑定SHA，原shared文件不变。HTTP行为回归保首次400/412明确拒绝的有限修改能力与unknown/ACK后404/receipt404锁，机器向量不以retryable授新key。
+
+`src/application/mcp-project-publication.contract.ts` 是四个 browser-private 操作的 code-first 事实源，既有 `generate-connector-command-errors.mjs` 生成其私有 OpenAPI；Public24 不变。`routes/mcp-project-publication.ts` 与 bootstrap 共用现 Session/MCP action 和当前本人 canonical Project 准入，先全目标验证再单次 owner 操作、回包前重验。`clients/platform/mcp-project-publication{,-connect}.ts` 消费固定实际提交 dd8d536a28059cbdbe0674debc47bf28d039fb47 的独立 Platform Proto/profile/descriptor，以原 key/body/CAS/digest 只读查询 receipt；pin ACK 显式 execution_ready=false，不是运行权限。无 BFF Schema 或 message/dispatch 变更。两个 `test/mcp-project-publication-*` 覆盖真实 bootstrap HTTP 及二进制 loopback transport；非正常业务/PG 联调。精确依赖/生成入口见 `contract/dependencies/platform-connect.json`，五项冻结artifact已按实际Git对象核等；BFF集成和正常激活仍由Root负责。
+
+## Prepare核验后原请求恢复（2026-10-24）
+
+既有connector-command-fault.ts唯一code-first政策1.1增加Prepare专属核验条件，原错误分类不变；既有generate-connector-command-errors正规生成browser-private JSON。test/mcp-personal-server.test.ts同时证明新闭集与1.0整份原件逆证，无新public operation/表/服务。实际配对与剩余见CURRENT。
+
+## 私有MCP长发现文本（2026-10-24）
+
+现mcp-personal-server-response只移除declaration显示文本额外1000-byte cap，Connect整体1MiB预算保持；读与Prepare首次/重放使用同一校验。test/mcp-personal-server.test.ts覆盖三类长描述原文/digest/replayed与坏Unicode。旧502冻结请求仍inspect_owner，不因本片自动重放或置成功。
+
+## MCP projection bootstrap 回归（2026-10-24）
+
+`src/bootstrap/server.ts` 将原具名MCP projection GET送入现owner处理器，不配置通用MCP上游。
+`test/platform-projection-route.test.mjs` 同时覆盖生产bootstrap和原子handler；前者检查当前Session/MCP准入、真实路由到达及近似路径零owner，避免只验子handler遗漏正常入口。
+
+## AGENT-1／CREDIT-1 正式结算消费者（2026-10-22）
+
+原model-admission route拥有create／settle明确分支，proof分别必需／禁止；原独立Agent凭据及durable submitter reader复用。具名billing-model-settlement.ts消费固定exp9，billing-model-transport.ts仅抽取原bounded传输与owner错误映射供两命令共享，不做通用代理。内部1.2由现code-first生成链产出，Public23与Schema不改；测试沿model-settlement-{contract,http,transport}及扩展submitted-agent-run真实PG来源回路。实际门禁见CURRENT首节。
+
+## AGENT-1 内部模型预算入口（2026-10-22）
+
+`src/http/routes/model-admission.ts`／`model-admission.contract.ts`拥有Agent专用内部HTTP，`src/auth/agent-model-admission-credential.ts`鲜读独立caller/surface/tenant；`clients/owner/billing-model-admission.ts`消费固定exp8九操作生成集。`postgres/project-execution-binding.ts`追加已提交来源读取（原live reader不改），现outbox repository／businessStore正式暴露。源码按transport／凭据／事实来源职责拆分，不建新服务或表。测试为model-admission-{http,transport,contract}及submitted-agent-run.integration；正式内契约仍由现生成器产出，实际门禁与证据边界见CURRENT首节。
+
+## AGENT-1／CREDIT-1 计价管理消费者（2026-10-22）
+
+`src/http/routes/billing-metering-admin.ts`拥有三具名route及fresh管理员／同主体准入；`src/infrastructure/clients/owner/billing-metering-wire.ts`消费固定生成类型／严格JSON，`billing-metering.ts`负责固定owner SDK、绝对预算／bounded EOF与完整ACK。Public23.0／Billing2d3ed0f（exp6，必填精确model_revision pair），构建期精确inverse在 `scripts/billing-metering-public-contract.mjs`；对应HTTP、transport及contract回归在 `test/billing-metering-*.test.mjs`，已注册完整门。无新SQL、通用代理或运行兼容。最终门禁／真实HTTP＋PG／未正常激活边界见 `docs/CURRENT.md`。
+
 ## MODEL-1 上游候选读取（2026-10-22）
 
 现 `model-configuration-admin.ts` / `system-model-configuration.ts` 显式 provider upstream-models GET，固定 System6.1。只管理读取候选，无分页／正文／命令头；与准入共用10秒预算，严格回包绑定provider。`provider-model-discovery-public-contract.mjs` 仅构建期完整逆证Public22.2，无运行fallback。后继App/Admin须固定正式Public22.3后接线。
@@ -204,6 +281,7 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 - Agent Chat：`src/http/routes/agent.ts` 只承接 durable AG-UI 读取和 run control；Agent launch 由后台 outbox dispatcher 投递；`src/application/agui/` 投影；
   `src/application/agui/projector.ts` 独立消费 Agent source；`agui-projection-repository.ts` 在公开发送前持久化并分配 cursor，
   `agui-consumer-repository.ts` 维护 lease/fence、重试、保留水位与 tombstone GC
+  D1A候选：`src/infrastructure/postgres/message-parts.ts`复用既有safe activity decoder，按真实public位置折叠同Message有序slot；projection事务同时保存parts/聚合正文，新assistant显式空文档，旧NULL不补造。当前未扩read wire或实现非空库演进，不能正常激活。
 - Scheduler：当前由 `src/http/routes/scheduler.ts` 注册、对账和处理 dispatch
 - Mori：当前由 `src/infrastructure/clients/mori/owner-route.ts` 投影独立 Music owner
 
@@ -235,3 +313,9 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 ### Connector command 恢复错误
 
 Platform Connect 固定消费 receipt metadata profile；`src/infrastructure/clients/platform/connector-command-fault.ts` 是MCP/Custom API两边界的唯一窄错误映射与code-first恢复policy，独立于资源投影。`scripts/generate-connector-command-errors.mjs` 正规发布只读 `contract/connector-command-errors-v1.json`，后继App固定commit/digest消费。unknown/expired/lost不自动重放或授权新key；MCP原生OAuth的三项typed原因独立可辨，缺detail的原生CAS与URL typed约束不混淆。真实HTTP/Connect组合与未知/错码/重复/混合/read负控位于现MCP/Custom API测试，非正常IAM/DB/OAuth验收。
+
+## 私有 Message 有序读取候选（2026-10-26）
+
+`src/infrastructure/postgres/message-parts-read.ts` 负责 private snapshot/list 的只读 ref 与独立 parts GET：同一受界 RR 租约、当前本人/direct/Project 与原 scope 绑定、decimal revision、公有 opaque watermark、409 显式重读、4096 Unicode scalar 分页和完整 envelope 1 MiB。唯一 legacy 候选须同 Run/latest assistant、dispatch 与完整 retained public/source ledger 证明，取消/GC 不伪造正文或写旧行。`src/http/chat-message-parts-input.ts` 只解具名 GET query；路由与 service 复用原 Chat owner，Shared/command ACK 保持原 DTO。`test/chat-message-parts-read.test.ts` 静态导入现 default Chat suite；`test/message-parts-read.integration.mjs` 仅接受 Root 的具名空临时库，真实 PostgreSQL 验收与正常组合由 Root 执行。
+
+Legacy 空完成恢复仅重建固定 raw Agent empty-wire 候选并复用原 canonical source digest；完整 SHA 精确匹配才折叠空串，索引差只作候选而非源序号不变量。空 ID 后续重开拒绝，delivery 仅具名非 parts 事件；所有原只读、scope、retention 与总预算守卫保持。

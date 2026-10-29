@@ -1963,6 +1963,45 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     ])
     assert.equal(persistedSelection.rows[0].payload.schema_version, 3)
     assert.deepEqual(persistedSelection.rows[0].payload.launch.selected_skill_source_refs, selectedBody.selected_skill_source_refs)
+    const mcpId = `conv_${randomUUID()}`
+    const mcpBody = { selected_mcp_connection_ids: ["connection-b", "connection-a"] }
+    const mcpResponse = await send("mcp-selected-turn", "MCP choice", mcpId, mcpBody)
+    assert.equal(mcpResponse.status, 202)
+    const mcpReceipt = (await mcpResponse.json()).data
+    const mcpFacts = async () =>
+      (
+        await pool.query("SELECT payload,request_digest,xmin::text AS xmin FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [
+          tenant,
+          mcpId,
+        ])
+      ).rows
+    const savedMcp = await mcpFacts()
+    assert.equal(savedMcp.length, 1)
+    assert.deepEqual(savedMcp[0].payload.launch.selected_mcp_connection_ids, mcpBody.selected_mcp_connection_ids)
+    assert.equal(savedMcp[0].payload.launch.trace.mcp_servers, undefined)
+    const mcpReplay = await send("mcp-selected-turn", "MCP choice", mcpId, mcpBody)
+    assert.equal(mcpReplay.status, 202)
+    assert.deepEqual((await mcpReplay.json()).data, mcpReceipt)
+    for (const ids of [["connection-a", "connection-b"], ["connection-c"], []]) {
+      const conflict = await send("mcp-selected-turn", "MCP choice", mcpId, { selected_mcp_connection_ids: ids })
+      assert.equal(conflict.status, 409)
+    }
+    for (const malformed of [["x", "x"], ["x\n"], [true], null]) {
+      assert.equal((await send("mcp-bad-choice", "MCP choice", mcpId, { selected_mcp_connection_ids: malformed })).status, 400)
+    }
+    assert.equal((await send("retired-trace-alias", "MCP choice", mcpId, { mcp_servers: ["connection-b"] })).status, 400)
+    assert.deepEqual(await mcpFacts(), savedMcp, "replay/conflict/rejected input must not rewrite the committed choice")
+    const reopenedPool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+    try {
+      const reopened = await reopenedPool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [tenant, mcpId])
+      const { parseAgentDispatchPayload } = await import("../dist/domain/chat/agent-dispatch.js")
+      assert.deepEqual(parseAgentDispatchPayload(reopened.rows[0].payload).launch.selected_mcp_connection_ids, mcpBody.selected_mcp_connection_ids)
+    } finally {
+      await reopenedPool.end()
+    }
+    const emptyMcpReplay = await send("first-turn", titleSource, conversationId, { selected_mcp_connection_ids: [] })
+    assert.equal(emptyMcpReplay.status, 202)
+    assert.deepEqual((await emptyMcpReplay.json()).data, receipt)
     const explicitEmptyReplay = await send("first-turn", titleSource, conversationId, { selected_skill_source_refs: [] })
     assert.equal(explicitEmptyReplay.status, 409)
     assert.equal((await explicitEmptyReplay.json()).error.code, "idempotency_conflict")
@@ -2096,15 +2135,19 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     assert.equal(listed.status, 200)
     assert.equal((await listed.json()).data.sessions[0].session_id, conversationId)
 
-    let directSnapshotBody
-    for (const query of ["scope=direct", "scope="]) {
-      const scoped = await fetch(`${base}/v1/sessions/${conversationId}?${query}`, { headers: auth(tenant, "chat_user") })
+    let ownedSnapshotBody
+    for (const query of ["", "scope="]) {
+      const scoped = await fetch(`${base}/v1/sessions/${conversationId}${query === "" ? "" : `?${query}`}`, { headers: auth(tenant, "chat_user") })
       assert.equal(scoped.status, 200)
       const body = await scoped.json()
-      if (query === "scope=direct") directSnapshotBody = body
+      if (query === "") ownedSnapshotBody = body
     }
-    assert.deepEqual(directSnapshotBody.data.messages.at(-1).failure, { source: "agent", code: "model_unavailable", retryable: true })
-    assert.equal(Object.hasOwn(directSnapshotBody.data.messages[0], "failure"), false)
+    assert.deepEqual(ownedSnapshotBody.data.messages.at(-1).failure, { source: "agent", code: "model_unavailable", retryable: true })
+    assert.equal(Object.hasOwn(ownedSnapshotBody.data.messages[0], "failure"), false)
+    // This fixture belongs to a Project, so direct-only reads must not expose it.
+    const direct = await fetch(`${base}/v1/sessions/${conversationId}?scope=direct`, { headers: auth(tenant, "chat_user") })
+    assert.equal(direct.status, 404)
+    assert.equal((await direct.json()).error.code, "session_not_found")
     const invalidScope = await fetch(`${base}/v1/sessions/${conversationId}?scope=team`, { headers: auth(tenant, "chat_user") })
     assert.equal(invalidScope.status, 400)
     assert.equal((await invalidScope.json()).error.code, "invalid_scope")
@@ -2145,6 +2188,26 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     assert.equal(shared.status, 200)
     const shareId = (await shared.json()).data.share_id
 
+    // Public Share must keep the persisted answer even when the same Message has private tool parts.
+    const shareCanary = "PRIVATE_SHARE_TOOL_DETAIL_CANARY"
+    const privateActivity = {
+      activity: "tool",
+      activity_id: "act_" + "a".repeat(64),
+      segment_id: "seg_" + "b".repeat(64),
+      status: "completed",
+      display_code: "tool.file.read",
+      display_detail: { kind: "file", name: shareCanary },
+    }
+    await pool.query(
+      "UPDATE bff_message SET ordered_parts=$3::jsonb,parts_format_version=1,parts_public_sequence=1 WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant'",
+      [
+        tenant,
+        conversationId,
+        JSON.stringify([
+          { kind: "activity", part_id: `activity:${privateActivity.activity_id}`, first_sequence: "1", latest_sequence: "1", activity: privateActivity },
+        ]),
+      ],
+    )
     const publicShare = await fetch(`${base}/v1/shared/${shareId}`, {
       headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret" },
     })
@@ -2152,6 +2215,18 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     const publicShareBody = await publicShare.json()
     assert.equal(publicShareBody.data.session.session_id, conversationId)
     assert.deepEqual(publicShareBody.data.messages.at(-1).failure, { source: "agent", code: "model_unavailable", retryable: true })
+    assert.equal(publicShareBody.data.execution_process, null)
+    assert.equal(publicShareBody.data.messages.at(-1).content, "Second high sequence")
+    assert.equal(JSON.stringify(publicShareBody).includes(shareCanary), false)
+    assert.equal(
+      publicShareBody.data.messages.some((message) => Object.hasOwn(message, "rendering") || Object.hasOwn(message, "ordered_parts")),
+      false,
+    )
+    assert.equal(Object.hasOwn(publicShareBody.data, "execution_head"), false)
+    await pool.query(
+      "UPDATE bff_message SET ordered_parts=NULL,parts_format_version=NULL,parts_public_sequence=NULL WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant'",
+      [tenant, conversationId],
+    )
 
     const otherSubject = "other_chat_user"
     const factsBeforeDeniedAccess = await pool.query(
