@@ -39,6 +39,7 @@ export function restoreAgent87FinalAnswerContract(document) {
 }
 
 export function restoreAgent88FinalDisplayRaw(source) {
+  source = restoreAgent89CustomApiSelectionRaw(source)
   if (!source.includes('"version": "8.9.0"')) return source
   assert.equal(hash(source), "875545c23cf4cd055adfb4aedf6ea3c994eab6be10a25f1f68db248ffecb32c9", "Agent8.9 final display child drift")
   const field =
@@ -49,6 +50,7 @@ export function restoreAgent88FinalDisplayRaw(source) {
   return source
 }
 export function restoreAgent88FinalDisplayContract(document) {
+  document = restoreAgent89CustomApiSelectionContract(document)
   if (document.info?.version !== "8.9.0") return document
   const parent = structuredClone(document)
   assert.deepEqual(
@@ -64,5 +66,45 @@ export function restoreAgent88FinalDisplayContract(document) {
   delete parent.components.schemas.RunDisplay.properties.final_message_id
   parent.info.version = "8.8.0"
   assert.equal(hash(JSON.stringify(parent)), "f8917739db7545ebd0285f366b465849038ea561cb51c9cb40eae1f01ebd89ab", "Agent8.8 complete final display parent drift")
+  return parent
+}
+
+export function restoreAgent89CustomApiSelectionRaw(source) {
+  if (!source.includes('"version": "8.10.0"')) return source
+  assert.equal(hash(source), "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e", "Agent8.10 Custom API child drift")
+  const field =
+    ',\n          "selected_custom_api_profiles": {\n            "type": "array",\n            "maxItems": 32,\n            "uniqueItems": true,\n            "x-kokoro-unique-by": "profile_id",\n            "description": "Exact Platform CustomAPI profile IDs and state versions selected for this Run, in caller order. Omission or [] selects none and preserves legacy request bytes. Profile IDs must be unique even across different versions. Safe intent only, not authorization; no credentials, names, instructions or environment values.",\n            "items": {\n              "type": "object",\n              "additionalProperties": false,\n              "required": [\n                "profile_id",\n                "expected_state_version"\n              ],\n              "properties": {\n                "profile_id": {\n                  "type": "string",\n                  "minLength": 1,\n                  "maxLength": 191,\n                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\\\s\\\\S])"\n                },\n                "expected_state_version": {\n                  "type": "integer",\n                  "format": "int32",\n                  "minimum": 1,\n                  "maximum": 2147483647\n                }\n              }\n            }\n          }'
+  assert.equal(source.split(field).length, 2, "Agent8.10 Custom API exact delta drift")
+  source = source.replace(field, "").replace('"version": "8.10.0"', '"version": "8.9.0"')
+  assert.equal(hash(source), "875545c23cf4cd055adfb4aedf6ea3c994eab6be10a25f1f68db248ffecb32c9", "Agent8.9 Custom API parent drift")
+  return source
+}
+export function restoreAgent89CustomApiSelectionContract(document) {
+  if (document.info?.version !== "8.10.0") return document
+  const parent = structuredClone(document)
+  assert.deepEqual(
+    parent.components.schemas.LaunchRequest.properties.selected_custom_api_profiles,
+    {
+      type: "array",
+      maxItems: 32,
+      uniqueItems: true,
+      "x-kokoro-unique-by": "profile_id",
+      description:
+        "Exact Platform CustomAPI profile IDs and state versions selected for this Run, in caller order. Omission or [] selects none and preserves legacy request bytes. Profile IDs must be unique even across different versions. Safe intent only, not authorization; no credentials, names, instructions or environment values.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["profile_id", "expected_state_version"],
+        properties: {
+          profile_id: { type: "string", minLength: 1, maxLength: 191, pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])" },
+          expected_state_version: { type: "integer", format: "int32", minimum: 1, maximum: 2147483647 },
+        },
+      },
+    },
+    "Agent8.10 Custom API shape drift",
+  )
+  delete parent.components.schemas.LaunchRequest.properties.selected_custom_api_profiles
+  parent.info.version = "8.9.0"
+  assert.equal(hash(JSON.stringify(parent)), "390e799d6534f7eda94bf4fe8b1318640e944a4da06326a33ed7e303cc618278", "Agent8.9 Custom API complete parent drift")
   return parent
 }

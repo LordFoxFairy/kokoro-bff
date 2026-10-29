@@ -1,3 +1,4 @@
+import { parseCustomApiProfileSelection, type SelectedCustomApiProfile } from "../../domain/chat/custom-api-profile-selection.js"
 import { parseMcpConnectionSelection } from "../../domain/chat/mcp-connection-selection.js"
 import { parseSkillSourceSelection } from "../../domain/chat/skill-source-selection.js"
 
@@ -8,10 +9,20 @@ export type MessageCreateInput = {
   thinking?: boolean
   selectedSkillSourceRefs?: string[]
   selectedMcpConnectionIds?: string[]
+  selectedCustomApiProfiles?: SelectedCustomApiProfile[]
   projectRef?: string
 }
 
-const MESSAGE_CREATE_KEYS = new Set(["content", "model", "agent", "thinking", "selected_skill_source_refs", "selected_mcp_connection_ids", "project_ref"])
+const MESSAGE_CREATE_KEYS = new Set([
+  "content",
+  "model",
+  "agent",
+  "thinking",
+  "selected_skill_source_refs",
+  "selected_mcp_connection_ids",
+  "selected_custom_api_profiles",
+  "project_ref",
+])
 
 function optionalTrimmedString(value: unknown): string | undefined | null {
   if (value === undefined) return undefined
@@ -31,6 +42,8 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
   const fallbackProjectRef = optionalTrimmedString(queryProjectRef)
   const selectedSkillSourceRefs = json.selected_skill_source_refs === undefined ? undefined : parseSkillSourceSelection(json.selected_skill_source_refs)
   const selectedMcpConnectionIds = json.selected_mcp_connection_ids === undefined ? undefined : parseMcpConnectionSelection(json.selected_mcp_connection_ids)
+  const selectedCustomApiProfiles =
+    json.selected_custom_api_profiles === undefined ? undefined : parseCustomApiProfileSelection(json.selected_custom_api_profiles)
   if (
     model === null ||
     agent === null ||
@@ -38,6 +51,7 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
     fallbackProjectRef === null ||
     selectedSkillSourceRefs === null ||
     selectedMcpConnectionIds === null ||
+    selectedCustomApiProfiles === null ||
     (json.thinking !== undefined && typeof json.thinking !== "boolean") ||
     (bodyProjectRef !== undefined && fallbackProjectRef !== undefined && bodyProjectRef !== fallbackProjectRef)
   )
@@ -50,6 +64,7 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
     ...(json.thinking === undefined ? {} : { thinking: json.thinking }),
     ...(selectedSkillSourceRefs === undefined ? {} : { selectedSkillSourceRefs }),
     ...(selectedMcpConnectionIds === undefined ? {} : { selectedMcpConnectionIds }),
+    ...(selectedCustomApiProfiles === undefined ? {} : { selectedCustomApiProfiles }),
     ...(projectRef === undefined ? {} : { projectRef }),
   }
 }

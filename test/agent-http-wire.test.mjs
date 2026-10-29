@@ -31,19 +31,19 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "b80d68337c6643992cc2920aa18c70d9cc783488",
-        contract_version: "8.9.0",
+        repository_commit: "f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87",
+        contract_version: "8.10.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "875545c23cf4cd055adfb4aedf6ea3c994eab6be10a25f1f68db248ffecb32c9",
+        contract_sha256: "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "96b835e5ea25d607bd7e5671502c7b891ef54740a20bf098ffd469cb3c452234",
+        provenance_sha256: "a829f5a89e038b851b26f12bcd3af89f955efa603effac911317172011934089",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "875545c23cf4cd055adfb4aedf6ea3c994eab6be10a25f1f68db248ffecb32c9",
+        source_sha256: "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
@@ -53,18 +53,18 @@ describe("Agent event-protocol provenance", () => {
   it("uses one HTTP8 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "b80d68337c6643992cc2920aa18c70d9cc783488")
+    assert.equal(manifest.owner.repository_commit, "f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "875545c23cf4cd055adfb4aedf6ea3c994eab6be10a25f1f68db248ffecb32c9",
+      "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/b80d68337c6643992cc2920aa18c70d9cc783488/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87/openapi.json", import.meta.url), "utf8"),
     )
     assert.deepEqual(owner.components.schemas.ChatActivity.oneOf[0].properties.display_code, {
       type: "string",
@@ -637,4 +637,58 @@ it("Agent8.2 file detail obeys the producer basename domain while MCP public dec
   }
   const mcp = { ...base, display_code: "tool.mcp.call", display_detail: { kind: "mcp_tool", name: "namespace/public_tool" } }
   assert.deepEqual(parseAgentProcessPayload("activity", JSON.stringify(mcp)).value, mcp)
+})
+
+it("Agent Custom API launch validators preserve exact optional refs and reject duplicate profile IDs and secret-shaped extras", async () => {
+  const { zLaunchRequest } = await import("../dist/generated/agent-http/zod.gen.js")
+  const { projectSavedAgentLaunch } = await import("../dist/infrastructure/clients/agent/http-wire.js")
+  const base = {
+    request_id: "r",
+    run_id: "run",
+    session_id: "session",
+    feature_key: "chat",
+    project_ref: null,
+    selected_skill_source_refs: [],
+    message_id: "message",
+    content: "hello",
+    trace: { source: "kokoro-bff" },
+  }
+  const { load } = await import("js-yaml")
+  const publicSchema = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")).components.schemas.MessageCreateRequest
+    .properties.selected_custom_api_profiles
+  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
+  const ownerSchema = JSON.parse(
+    await readFile(new URL(`../contract/vendor/kokoro-agent/${manifest.owner.repository_commit}/openapi.json`, import.meta.url), "utf8"),
+  ).components.schemas.LaunchRequest.properties.selected_custom_api_profiles
+  for (const key of ["type", "maxItems", "uniqueItems", "x-kokoro-unique-by"]) assert.deepEqual(publicSchema[key], ownerSchema[key])
+  for (const key of ["type", "additionalProperties", "required"]) assert.deepEqual(publicSchema.items[key], ownerSchema.items[key])
+  assert.deepEqual(publicSchema.items.properties.profile_id, ownerSchema.items.properties.profile_id)
+  for (const key of ["type", "minimum", "maximum"])
+    assert.deepEqual(publicSchema.items.properties.expected_state_version[key], ownerSchema.items.properties.expected_state_version[key])
+  const profile = { profile_id: "api-one", expected_state_version: 3 }
+  for (const selected_custom_api_profiles of [
+    [],
+    [profile],
+    Array.from({ length: 32 }, (_, i) => ({ profile_id: `p:${i}`, expected_state_version: 2147483647 })),
+  ]) {
+    const input = { ...base, selected_custom_api_profiles }
+    const parsed = zLaunchRequest.strict().safeParse(input)
+    assert.equal(parsed.success, true)
+    assert.deepEqual(parsed.data.selected_custom_api_profiles, selected_custom_api_profiles)
+    const { project_ref: _scope, ...saved } = input
+    assert.deepEqual(projectSavedAgentLaunch(saved), input)
+  }
+  for (const value of [
+    null,
+    ["api-one"],
+    [profile, { ...profile, expected_state_version: 4 }],
+    [{ ...profile, secret: "not-a-wire-field" }],
+    [{ ...profile, profile_id: "p\n" }],
+    [{ ...profile, expected_state_version: true }],
+    [{ ...profile, expected_state_version: 0 }],
+    [{ ...profile, expected_state_version: 2147483648 }],
+    Array.from({ length: 33 }, (_, i) => ({ ...profile, profile_id: `p${i}` })),
+  ])
+    assert.equal(zLaunchRequest.strict().safeParse({ ...base, selected_custom_api_profiles: value }).success, false, JSON.stringify(value))
+  assert.deepEqual(zLaunchRequest.strict().parse(base), base)
 })

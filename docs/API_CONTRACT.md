@@ -1,3 +1,11 @@
+## 2026-10-29 Custom API 选择冻结与私有恢复（候选）
+
+已固定 Agent `f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87` HTTP8.10，OpenAPI SHA256 `af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e`；原生成入口派生18份client/validator/profile并验证两次字节一致，新数组按owner profile_id唯一且嵌套项strict，不手改生成物。
+
+Public28.17.0仅在MessageCreateRequest和PrivateSessionSnapshotResponse.data.composer_selection各新增optional selected_custom_api_profiles。字段为最多32的有序数组，项仅profile_id（ASCII ID，1..191）及expected_state_version（1..2147483647整数），按profile_id唯一，拒未知项字段/null/重复ID（即使版本不同）。省略/[]均不选择，原Skills与MCP语义不变；ACK、路由和公共operation数量不变。
+
+私有composer_selection来源已证明时新版总返回API数组；旧reader省略字段代表该消息未带API选择，不回退历史非空。Share无此表示。沿原Idempotency-Key，非空选择及精确版本影响请求digest；同key改版本冲突，unknown不换原body/key。Agent HTTP8.10固定artifact消费同形字段，实际执行需当前IAM/Platform和隔离backend授权，不因BFF已接受选择而保证执行成功。完整28.16原始父契约通过独立逆delta/hash保留。
+
 ## Public28.16 私有会话 MCP 选择（2026-10-28，设计先行）
 
 PrivateSessionSnapshotResponse.data 可选 composer_selection，严格对象包含 source_message_id 和 selected_mcp_connection_ids（复用 MessageCreateRequest 原16项/ID/字节约束）。表示最新已接受 normal/user 消息冻结的选择；数组 [] 是该次无选择，不表示继承；缺字段表示没有可证明来源，不保证 []. 不授工具权限，App 使用前须按当前本人连接目录核可用性。匿名 Share、MessageCreate、再生成、幂等和所有既有写入语义不变；不改变未发送草稿生命周期。新字段来自同 snapshot 授权与事务读取，不新增 endpoint。

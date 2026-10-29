@@ -47,6 +47,18 @@ export const zLaunchRequest = z.object({
     .max(16)
     .refine((values) => new Set(values).size === values.length && new TextEncoder().encode(JSON.stringify(values)).byteLength <= 4096)
     .optional(),
+  selected_custom_api_profiles: z
+    .array(
+      z
+        .object({
+          profile_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+          expected_state_version: z.number().int().min(1).max(2147483647),
+        })
+        .strict(),
+    )
+    .max(32)
+    .refine((values) => new Set(values.map((value) => value.profile_id)).size === values.length)
+    .optional(),
 })
 
 export const zLaunchReceipt = z

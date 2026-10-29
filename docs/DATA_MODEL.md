@@ -1,3 +1,9 @@
+## 2026-10-29 Custom API 选择冻结与私有恢复（候选）
+
+不增表、列、DDL、缓存或第二份偏好事实。原bff_agent_dispatch_outbox.payload.launch可携带selected_custom_api_profiles，只含{profile_id,expected_state_version}，按原提交事务持久冻结；schema_version=3继续接受旧省略形式。空数组producer规范化为省略，旧JSON/digest原字节不变；既有历史行不回填。
+
+私有读取仍在同一ACL/read事务选择最新normal/user Message，并按tenant/subject/actor/Conversation/Run/Message精确关联dispatch。SQL只多投影有界API数组：32项各含最大191 ASCII ID及int32版本，16384字节上限覆盖合法JSONB文本；解析再核完整闭集。不存在来源或任一选择损坏不返回伪空，不跳过最新消息寻找旧配置；regeneration_input不替换normal来源。原删除/保留/事务及canonical schema保持。
+
 ## 会话 MCP 选择读取（2026-10-28，未激活）
 
 无新增表或列。唯一事实仍是消息创建事务冻结的 bff_agent_dispatch_outbox.payload.launch.selected_mcp_connection_ids，与 bff_message normal/user 的 Run/Message/Conversation 和当前 subject 精确匹配。最新普通消息按既有 message_seq/message_id 排序，只取一条；镜像再生成不改变草稿基线。原 schema_version=3 launch 缺省与空数组等价为该次无额外 MCP；旧 trace 不升级为执行选择。缺失/损坏来源不落库修补，也不回退旧非空项。读取使用既有同库本 owner 事务，禁止关联 Platform 数据库；删除与保留策略不变。

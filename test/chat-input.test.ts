@@ -117,3 +117,30 @@ it("preserves exact MCP Connection choice and rejects the former trace-only alia
     assert.equal(parseMessageCreateRequest({ content: "hello", selected_mcp_connection_ids: value }, undefined), null, JSON.stringify(value))
   }
 })
+
+it("accepts only exact unique Custom API profile/version references without treating them as MCP IDs", () => {
+  for (const profiles of [
+    [],
+    [{ profile_id: "profile-a", expected_state_version: 1 }],
+    Array.from({ length: 32 }, (_, i) => ({ profile_id: `profile:${i}`, expected_state_version: 2147483647 })),
+  ]) {
+    assert.deepEqual(parseMessageCreateRequest({ content: "hello", selected_custom_api_profiles: profiles }, undefined), {
+      content: "hello",
+      selectedCustomApiProfiles: profiles,
+    })
+  }
+  const profile = { profile_id: "profile-a", expected_state_version: 1 }
+  for (const invalid of [
+    null,
+    "profile-a",
+    ["profile-a"],
+    [profile, { ...profile, expected_state_version: 2 }],
+    [{ ...profile, value: "secret" }],
+    [{ profile_id: "profile-a" }],
+    ...[0, -1, 1.5, true, "1", 2147483648].map((expected_state_version) => [{ ...profile, expected_state_version }]),
+    ...["", "x\n", " x", "x/1", "x".repeat(192)].map((profile_id) => [{ ...profile, profile_id }]),
+    Array.from({ length: 33 }, (_, i) => ({ ...profile, profile_id: `p${i}` })),
+  ]) {
+    assert.equal(parseMessageCreateRequest({ content: "hello", selected_custom_api_profiles: invalid }, undefined), null, JSON.stringify(invalid))
+  }
+})

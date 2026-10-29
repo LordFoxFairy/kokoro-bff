@@ -1,3 +1,9 @@
+## 2026-10-29 Custom API 安全选择发送/恢复（候选，正常未启用）
+
+Public28.17新增可选 safe profile_id/expected_state_version 引用，固定消费 Agent HTTP8.10 f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87。原提交 digest/outbox 深冻结、unknown重试、再生成复制与私有snapshot回读承接同一选择；省略/空数组保持旧digest/payload字节，严格拒绝重复ID、坏版本和额外字段。不新增Schema、Platform调用、权限或Share字段。
+
+主控Node22复核：相关62通过、默认2306通过/3资源条件跳过，lint/typecheck/build、Agent18生成物两次一致通过；真实受管PostgreSQL独立临时库10通过，验证原发送/清空/再生成/跨账号/无历史改写，专属临时库已回收。子方另有相关70与历史公共契约126通过，OpenAPI semantic199 operations及53既有warnings保留。正常服务未替换，App固定消费与真实执行/UI配对仍待，不据此宣称用户页面已修复。
+
 ## 2026-10-28 历史最终答复只读旁证（消费者候选，未正常激活）
 
 固定 Agent b80d68337c6643992cc2920aa18c70d9cc783488／HTTP8.9，原 Run display 私有读消费 final_message_id，再由本仓 exact tenant/subject/Conversation/Run/dispatch assistant Message 绑定唯一 completed ordered text 与真实 parts revision，输出 Public28.15 optional final_answer。正式持久 final 冲突时缺省；不回填历史、不改 Schema、账本或执行。原五秒绝对期限、取消、发送前重验、1MiB 响应边界不变。

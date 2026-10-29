@@ -44,7 +44,7 @@ integration("real PG private snapshot restores only latest ordinary accepted MCP
           )
         ).rows,
       )
-    const submit = async (key, ids) => {
+    const submit = async (key, ids, profiles) => {
       const receipt = await turns.submit({
         tenantId,
         subjectId,
@@ -55,6 +55,7 @@ integration("real PG private snapshot restores only latest ordinary accepted MCP
         content: "fixture " + key,
         selectedSkillSourceRefs: [],
         ...(ids === undefined ? {} : { selectedMcpConnectionIds: ids }),
+        ...(profiles === undefined ? {} : { selectedCustomApiProfiles: profiles }),
       })
       assert.ok(receipt)
       await pool.query(
@@ -68,11 +69,16 @@ integration("real PG private snapshot restores only latest ordinary accepted MCP
       return receipt
     }
     await t.test("new session has no fabricated baseline", async () => assert.equal((await snapshot()).composer_selection, undefined))
-    const first = await submit("first", ["connection-one"])
+    const profiles = [{ profile_id: "api-one", expected_state_version: 3 }]
+    const first = await submit("first", ["connection-one"], profiles)
     await t.test("accepted selection survives independent reads and history stays byte/revision identical", async () => {
       const before = await fingerprint()
       for (let i = 0; i < 2; i++)
-        assert.deepEqual((await snapshot()).composer_selection, { source_message_id: first.user_message_id, selected_mcp_connection_ids: ["connection-one"] })
+        assert.deepEqual((await snapshot()).composer_selection, {
+          source_message_id: first.user_message_id,
+          selected_mcp_connection_ids: ["connection-one"],
+          selected_custom_api_profiles: profiles,
+        })
       assert.equal(await fingerprint(), before)
     })
     await t.test("regeneration input does not replace the original ordinary source identity", async () => {
@@ -87,19 +93,31 @@ integration("real PG private snapshot restores only latest ordinary accepted MCP
         ...life(),
       })
       assert.ok(regeneration)
-      assert.deepEqual((await snapshot()).composer_selection, { source_message_id: first.user_message_id, selected_mcp_connection_ids: ["connection-one"] })
+      assert.deepEqual((await snapshot()).composer_selection, {
+        source_message_id: first.user_message_id,
+        selected_mcp_connection_ids: ["connection-one"],
+        selected_custom_api_profiles: profiles,
+      })
       await pool.query(
         "UPDATE bff_agent_dispatch_outbox SET status='terminal',admitted_at=CURRENT_TIMESTAMP(3),completed_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND run_id=$2",
         [tenantId, regeneration.run_id],
       )
     })
-    const second = await submit("second", [])
+    const second = await submit("second", [], [])
     await t.test("latest empty selection clears previous nonempty choice", async () =>
-      assert.deepEqual((await snapshot()).composer_selection, { source_message_id: second.user_message_id, selected_mcp_connection_ids: [] }),
+      assert.deepEqual((await snapshot()).composer_selection, {
+        source_message_id: second.user_message_id,
+        selected_mcp_connection_ids: [],
+        selected_custom_api_profiles: [],
+      }),
     )
     const latest = await submit("third-omitted", undefined)
     await t.test("original omission remains no MCP, not inherited selection", async () =>
-      assert.deepEqual((await snapshot()).composer_selection, { source_message_id: latest.user_message_id, selected_mcp_connection_ids: [] }),
+      assert.deepEqual((await snapshot()).composer_selection, {
+        source_message_id: latest.user_message_id,
+        selected_mcp_connection_ids: [],
+        selected_custom_api_profiles: [],
+      }),
     )
     await t.test("other tenant/subject and wrong project remain unauthorized", async () => {
       assert.equal(await chat.snapshot(tenantId, "other", conversationId, undefined, life()), null)
@@ -110,6 +128,9 @@ integration("real PG private snapshot restores only latest ordinary accepted MCP
       .payload
     await t.test("bad latest payload never falls back to earlier nonempty record", async () => {
       for (const patch of [
+        { ...original, launch: { ...original.launch, selected_custom_api_profiles: null } },
+        { ...original, launch: { ...original.launch, selected_custom_api_profiles: [profiles[0], { ...profiles[0], expected_state_version: 4 }] } },
+        { ...original, launch: { ...original.launch, selected_custom_api_profiles: [{ profile_id: "x".repeat(17000), expected_state_version: 1 }] } },
         { ...original, schema_version: 2 },
         { ...original, schema_version: "3" },
         { ...original, launch: { ...original.launch, run_id: "wrong" } },

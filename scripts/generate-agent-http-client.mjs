@@ -12,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "b80d68337c6643992cc2920aa18c70d9cc783488"
+const ownerCommit = "f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "875545c23cf4cd055adfb4aedf6ea3c994eab6be10a25f1f68db248ffecb32c9"
-const provenanceDigest = "96b835e5ea25d607bd7e5671502c7b891ef54740a20bf098ffd469cb3c452234"
-const ownerContractVersion = "8.9.0"
+const ownerDigest = "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e"
+const provenanceDigest = "a829f5a89e038b851b26f12bcd3af89f955efa603effac911317172011934089"
+const ownerContractVersion = "8.10.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -838,6 +838,23 @@ async function generateMcpSelectionValidator(directory, document) {
   await writeFile(file, source)
 }
 
+async function generateCustomApiSelectionValidator(directory, document) {
+  const schema = document.components.schemas.LaunchRequest.properties.selected_custom_api_profiles
+  assert.equal(schema.type, "array")
+  assert.equal(schema.uniqueItems, true)
+  assert.equal(schema["x-kokoro-unique-by"], "profile_id")
+  assert.equal(schema.items.additionalProperties, false)
+  assert.deepEqual(schema.items.required, ["profile_id", "expected_state_version"])
+  const { profile_id: id, expected_state_version: version } = schema.items.properties
+  const file = path.join(directory, "zod.gen.ts")
+  let source = await readFile(file, "utf8")
+  const property = /^[ \t]*selected_custom_api_profiles:[\s\S]*?(?=\n\}\);)/gmu
+  assert.equal([...source.matchAll(property)].length, 1, "generated exact Custom API selection property drifted")
+  const expression = `selected_custom_api_profiles: z.array(z.object({profile_id: z.string().min(${id.minLength}).max(${id.maxLength}).regex(new RegExp(${JSON.stringify(id.pattern)}, "u")), expected_state_version: z.number().int().min(${version.minimum}).max(${version.maximum})}).strict()).max(${schema.maxItems}).refine(values => new Set(values.map(value => value.profile_id)).size === values.length).optional(),`
+  source = source.replace(property, () => expression)
+  await writeFile(file, source)
+}
+
 async function generate(directory) {
   const cli = path.join(root, "node_modules/@hey-api/openapi-ts/bin/run.js")
   await run(process.execPath, [cli, "--silent", "-f", configPath], {
@@ -851,6 +868,7 @@ async function generate(directory) {
   await normalizeGeneratorCompatibility(directory)
   await generateDecodedValidators(directory, ownerDocument)
   await generateMcpSelectionValidator(directory, ownerDocument)
+  await generateCustomApiSelectionValidator(directory, ownerDocument)
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),

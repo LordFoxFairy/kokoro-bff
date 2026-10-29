@@ -1,3 +1,4 @@
+import type { SelectedCustomApiProfile } from "../domain/chat/custom-api-profile-selection.js"
 export type ChatSessionStatus = "active" | "deleted"
 export type ChatRunStatus = "queued" | "running" | "waiting" | "stopped" | "completed" | "cancelled" | "error"
 export type ChatMessageRole = "user" | "assistant"
@@ -151,7 +152,11 @@ export type ChatSessionDetail = {
   } | null
 }
 
-export type ChatComposerSelection = Readonly<{ source_message_id: string; selected_mcp_connection_ids: string[] }>
+export type ChatComposerSelection = Readonly<{
+  source_message_id: string
+  selected_mcp_connection_ids: string[]
+  selected_custom_api_profiles?: SelectedCustomApiProfile[]
+}>
 export type PrivateChatSessionDetail = Omit<ChatSessionDetail, "messages"> & {
   messages?: ChatMessageRead[]
   composer_selection?: ChatComposerSelection

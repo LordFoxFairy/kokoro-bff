@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.16.0
+  version: 28.17.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -22419,6 +22419,26 @@ components:
                     minLength: 1
                     maxLength: 191
                     pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
+                selected_custom_api_profiles:
+                  type: array
+                  maxItems: 32
+                  uniqueItems: true
+                  x-kokoro-unique-by: profile_id
+                  description: Exact ordered Custom API profile/version references for this message. Omission or [] selects none. Selection is intent, not authorization; values and credentials are never included.
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [profile_id, expected_state_version]
+                    properties:
+                      profile_id:
+                        type: string
+                        minLength: 1
+                        maxLength: 191
+                        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
+                      expected_state_version:
+                        type: integer
+                        minimum: 1
+                        maximum: 2147483647
             messages:
               type: array
               items: { $ref: '#/components/schemas/ChatMessageRead' }
@@ -22561,6 +22581,26 @@ components:
             minLength: 1
             maxLength: 191
             pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
+        selected_custom_api_profiles:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          x-kokoro-unique-by: profile_id
+          description: Exact ordered Custom API profile/version references for this message. Omission or [] selects none. Selection is intent, not authorization; values and credentials are never included.
+          items:
+            type: object
+            additionalProperties: false
+            required: [profile_id, expected_state_version]
+            properties:
+              profile_id:
+                type: string
+                minLength: 1
+                maxLength: 191
+                pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
+              expected_state_version:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
         project_ref: { type: string, minLength: 1 }
       example:
         content: Review the latest project changes.

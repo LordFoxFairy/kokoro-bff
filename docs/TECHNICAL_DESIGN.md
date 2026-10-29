@@ -1,3 +1,11 @@
+## 2026-10-29 Custom API 选择冻结与私有恢复（候选）
+
+已固定 Agent `f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87` HTTP8.10，OpenAPI SHA256 `af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e`；原生成入口派生18份client/validator/profile并验证两次字节一致，新数组按owner profile_id唯一且嵌套项strict，不手改生成物。
+
+复用 MessageCreate → ChatTurnApplicationService → 原 durable dispatch/outbox → Agent HTTP 链，新增 optional selected_custom_api_profiles 精确 ID/version safe refs；不把 API profile 当 MCP Connection，不建 Platform 代理、授权模型、配置副本或新模块。最多32个、profile_id唯一、版本positive int32；外部闭集解析，等待项目默认项前复制数组及每个对象，保持 digest 和 payload 同一意图。省略或[]保旧 digest／冻结JSON原字节；非空纳请求digest、冻结launch，unknown retry和再生成均复用原选择。Agent消费者只从上述固定正式HTTP8.10正规生成，不能手改生成校验器。
+
+私有 snapshot 同原事务与准入读取最新 normal/user Message 的 exact dispatch，投影MCP及Custom API独立数组。缺省API为[]，最新空选择不回退旧非空；坏/跨主体/缺来源整体省略composer_selection。Shared contract不增加该字段，BFF不读任何秘密、profile说明或环境值，不把选择视授权。Agent/Platform继续每次在线验当前资格/精确版本、Run/lease与隔离backend。无正常环境激活；回退前停新producer并保留已写safe-ref事实，不将旧reader失败视为清空选择。
+
 ## 已发送 MCP 选择恢复（2026-10-28，已批准设计；未激活）
 
 私有 session snapshot 增加可选 composer_selection，只是 BFF 已接受普通用户消息的读取投影，不是默认执行授权或第二偏好 owner。取最大 message_seq 的 normal/user Message；精确绑定本 tenant、当前 owner/subject、conversation、Run、user Message 的冻结 dispatch。再生成镜像不参与最新普通选择。有效 schema_version=3 的 launch 无 MCP 字段按原提交语义为 []；无来源、身份/版本/形状不符则省略，不寻找更早非空选择。不得读取工具 trace、推断用户未保存开关、公开完整 payload 或改写历史。

@@ -41,6 +41,13 @@ export type LaunchRequest = {
    * Exact Platform MCP Connection IDs selected for this Run, in caller order. Omission or [] selects no additional connections; selection is intent, not authorization. JSON ASCII encoding is limited to 4096 bytes.
    */
   selected_mcp_connection_ids?: Array<string>
+  /**
+   * Exact Platform CustomAPI profile IDs and state versions selected for this Run, in caller order. Omission or [] selects none and preserves legacy request bytes. Profile IDs must be unique even across different versions. Safe intent only, not authorization; no credentials, names, instructions or environment values.
+   */
+  selected_custom_api_profiles?: Array<{
+    profile_id: string
+    expected_state_version: number
+  }>
 }
 
 export type LaunchReceipt = {

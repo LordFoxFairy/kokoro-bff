@@ -15,6 +15,7 @@ const frozen = {
     project_ref: "old-project",
     selected_skill_source_refs: ["skill:pinned"],
     selected_mcp_connection_ids: ["connection:original"],
+    selected_custom_api_profiles: [{ profile_id: "api:original", expected_state_version: 3 }],
     requested_model_label: "model:original",
     trace: { source: "kokoro-bff" as const, agent: "deep", thinking: true, mcp_servers: ["diagnostic-only"] },
   },
@@ -58,6 +59,7 @@ test("regeneration copies only frozen execution choices and creates distinct nat
   assert.equal(command.payload.launch.content, "original trusted question")
   assert.deepEqual(command.payload.launch.selected_skill_source_refs, ["skill:pinned"])
   assert.deepEqual(command.payload.launch.selected_mcp_connection_ids, ["connection:original"])
+  assert.deepEqual(command.payload.launch.selected_custom_api_profiles, [{ profile_id: "api:original", expected_state_version: 3 }])
   assert.equal(command.payload.launch.requested_model_label, "model:original")
   assert.equal(command.payload.launch.trace.mcp_servers, undefined)
   assert.equal(command.payload.launch.project_ref, null)

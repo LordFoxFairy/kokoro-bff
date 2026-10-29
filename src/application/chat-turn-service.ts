@@ -32,6 +32,9 @@ export class ChatTurnApplicationService {
       content: source.content,
       selectedSkillSourceRefs: [...frozen.selected_skill_source_refs],
       ...(frozen.selected_mcp_connection_ids === undefined ? {} : { selectedMcpConnectionIds: [...frozen.selected_mcp_connection_ids] }),
+      ...(frozen.selected_custom_api_profiles === undefined
+        ? {}
+        : { selectedCustomApiProfiles: frozen.selected_custom_api_profiles.map((profile) => ({ ...profile })) }),
       ...(frozen.requested_model_label === undefined ? {} : { model: frozen.requested_model_label }),
       ...(frozen.trace.agent === undefined ? {} : { agent: frozen.trace.agent }),
       ...(frozen.trace.thinking === undefined ? {} : { thinking: frozen.trace.thinking }),
@@ -80,8 +83,10 @@ export class ChatTurnApplicationService {
   ): Promise<AgentDispatchReceipt | null> {
     signal?.throwIfAborted()
     const suffix = this.stableIdGenerator.generate(agentDispatchIdentityMaterial(input))
-    // The same MCP intent must bind both digest and payload across awaited defaults.
+    // The same connector intent must bind both digest and payload across awaited defaults.
     if (input.selectedMcpConnectionIds !== undefined) input = { ...input, selectedMcpConnectionIds: [...input.selectedMcpConnectionIds] }
+    if (input.selectedCustomApiProfiles !== undefined)
+      input = { ...input, selectedCustomApiProfiles: input.selectedCustomApiProfiles.map((profile) => ({ ...profile })) }
     const runId = `run_bff_${suffix}`
     const userMessageId = `msg_bff_${suffix}_user`
     const assistantMessageId = `msg_bff_${suffix}_assistant`

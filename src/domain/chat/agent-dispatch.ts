@@ -1,3 +1,4 @@
+import { parseCustomApiProfileSelection, type SelectedCustomApiProfile } from "./custom-api-profile-selection.js"
 import { parseMcpConnectionSelection } from "./mcp-connection-selection.js"
 import { isRecord } from "../json.js"
 import { parseSkillSourceSelection } from "./skill-source-selection.js"
@@ -14,6 +15,7 @@ export type AgentLaunchBody = {
   project_ref: string | null
   selected_skill_source_refs: string[]
   selected_mcp_connection_ids?: string[]
+  selected_custom_api_profiles?: SelectedCustomApiProfile[]
   requested_model_label?: string
   trace: {
     source: "kokoro-bff"
@@ -81,6 +83,7 @@ export type AgentDispatchInput = {
   thinking?: boolean
   selectedSkillSourceRefs?: string[]
   selectedMcpConnectionIds?: string[]
+  selectedCustomApiProfiles?: SelectedCustomApiProfile[]
 }
 
 function requiredString(value: unknown, code: string): string {
@@ -114,6 +117,8 @@ export function assertAgentDispatchInput(input: AgentDispatchInput): void {
     throw new Error("CHAT_TURN_INPUT_INVALID")
   if (input.selectedMcpConnectionIds !== undefined && parseMcpConnectionSelection(input.selectedMcpConnectionIds) === null)
     throw new Error("CHAT_TURN_INPUT_INVALID")
+  if (input.selectedCustomApiProfiles !== undefined && parseCustomApiProfileSelection(input.selectedCustomApiProfiles) === null)
+    throw new Error("CHAT_TURN_INPUT_INVALID")
 }
 
 /** Stable command identity; payload changes are detected separately by requestDigest. */
@@ -139,6 +144,10 @@ export function agentDispatchRequestMaterial(input: AgentDispatchInput): string 
     null, // Retired trace-only mcp_servers position; preserve old unselected digests.
   ]
   if (input.selectedMcpConnectionIds?.length) material.push({ selected_mcp_connection_ids: input.selectedMcpConnectionIds })
+  if (input.selectedCustomApiProfiles?.length)
+    material.push({
+      selected_custom_api_profiles: input.selectedCustomApiProfiles.map(({ profile_id, expected_state_version }) => ({ profile_id, expected_state_version })),
+    })
   return JSON.stringify(material)
 }
 
@@ -162,6 +171,7 @@ export function buildAgentDispatchPayload(input: AgentDispatchInput, ids: { runI
       project_ref: input.projectRef ?? null,
       selected_skill_source_refs: [...(input.selectedSkillSourceRefs ?? [])],
       ...(input.selectedMcpConnectionIds?.length ? { selected_mcp_connection_ids: [...input.selectedMcpConnectionIds] } : {}),
+      ...(input.selectedCustomApiProfiles?.length ? { selected_custom_api_profiles: input.selectedCustomApiProfiles.map((profile) => ({ ...profile })) } : {}),
       ...(input.model === undefined ? {} : { requested_model_label: input.model }),
       trace,
     },
@@ -202,6 +212,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
           "project_ref",
           "selected_skill_source_refs",
           "selected_mcp_connection_ids",
+          "selected_custom_api_profiles",
           "requested_model_label",
           "trace",
         ].includes(key),
@@ -225,6 +236,9 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
   const selectedMcpConnectionIds =
     launchValue.selected_mcp_connection_ids === undefined ? undefined : parseMcpConnectionSelection(launchValue.selected_mcp_connection_ids)
   if (selectedMcpConnectionIds === null) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
+  const selectedCustomApiProfiles =
+    launchValue.selected_custom_api_profiles === undefined ? undefined : parseCustomApiProfileSelection(launchValue.selected_custom_api_profiles)
+  if (selectedCustomApiProfiles === null) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const thinking = traceValue.thinking
   if (thinking !== undefined && typeof thinking !== "boolean") throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const requestedModel = optionalString(launchValue, "requested_model_label")
@@ -240,6 +254,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
       project_ref: executionProject,
       selected_skill_source_refs: selectedSkillSourceRefs,
       ...(selectedMcpConnectionIds === undefined ? {} : { selected_mcp_connection_ids: selectedMcpConnectionIds }),
+      ...(selectedCustomApiProfiles === undefined ? {} : { selected_custom_api_profiles: selectedCustomApiProfiles }),
       ...(requestedModel === undefined ? {} : { requested_model_label: requestedModel }),
       trace: {
         source: "kokoro-bff",
