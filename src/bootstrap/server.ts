@@ -92,11 +92,8 @@ import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 import { handleSkillDraftRequest } from "../http/routes/skill-draft-native.js"
 import { handleSkillDraftMutationRequest } from "../http/routes/skill-draft-mutations-native.js"
+import { handleSkillCatalogCommandRequest } from "../http/routes/skill-catalog-command-native.js"
 import { getSkillPackageUploadRoute } from "../http/routes/get-skill-package-upload.js"
-import { beginSkillPackageUploadRoute } from "../http/routes/begin-skill-package-upload.js"
-import { completeSkillPackageUploadRoute } from "../http/routes/complete-skill-package-upload.js"
-import { validateSkillDraftRoute } from "../http/routes/validate-skill-draft.js"
-import { publishSkillRoute } from "../http/routes/publish-skill.js"
 import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
@@ -614,59 +611,12 @@ export async function handleBffRequest(
     return
   }
 
-  if (isSkillPublishPath) {
+  if (isSkillPackagePath && request.method === "GET") {
     const routeAbort = new AbortController()
     const abortRoute = (): void => routeAbort.abort()
     request.once("aborted", abortRoute)
     response.once("close", abortRoute)
-    await publishSkillRoute(request, response, context, segments[2] ?? "", composition.skillDraftClient, routeAbort.signal).finally(() => {
-      request.removeListener("aborted", abortRoute)
-      response.removeListener("close", abortRoute)
-    })
-    return
-  }
-
-  if (isSkillValidatePath) {
-    const routeAbort = new AbortController()
-    const abortRoute = (): void => routeAbort.abort()
-    request.once("aborted", abortRoute)
-    response.once("close", abortRoute)
-    await validateSkillDraftRoute(request, response, context, segments[2] ?? "", composition.skillDraftClient, routeAbort.signal).finally(() => {
-      request.removeListener("aborted", abortRoute)
-      response.removeListener("close", abortRoute)
-    })
-    return
-  }
-
-  if (isSkillPackageCompletePath) {
-    const routeAbort = new AbortController()
-    const abortRoute = (): void => routeAbort.abort()
-    request.once("aborted", abortRoute)
-    response.once("close", abortRoute)
-    await completeSkillPackageUploadRoute(request, response, context, segments[2] ?? "", composition.skillDraftClient, routeAbort.signal).finally(() => {
-      request.removeListener("aborted", abortRoute)
-      response.removeListener("close", abortRoute)
-    })
-    return
-  }
-
-  if (isSkillPackagePath) {
-    const routeAbort = new AbortController()
-    const abortRoute = (): void => routeAbort.abort()
-    request.once("aborted", abortRoute)
-    response.once("close", abortRoute)
-    const operation =
-      request.method === "POST"
-        ? beginSkillPackageUploadRoute(
-            request,
-            response,
-            context,
-            segments[2] ?? "",
-            composition.skillDraftClient,
-            config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
-            routeAbort.signal,
-          )
-        : getSkillPackageUploadRoute(request, response, context, segments[2] ?? "", composition.skillDraftClient, routeAbort.signal)
+    const operation = getSkillPackageUploadRoute(request, response, context, segments[2] ?? "", composition.skillDraftClient, routeAbort.signal)
     await operation.finally(() => {
       request.removeListener("aborted", abortRoute)
       response.removeListener("close", abortRoute)
@@ -1036,6 +986,20 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 composition.sessionAdmission,
                 composition.skillAuthorization,
                 composition.skillProductClient,
+              ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleSkillCatalogCommandRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.skillAuthorization,
+                composition.skillDraftClient,
               ),
       )
       .then((handled) =>
