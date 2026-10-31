@@ -84,7 +84,6 @@ import { handleSystemNativeRequest } from "../http/routes/system-native.js"
 import { handleChatNativeRequest } from "../http/routes/chat-native.js"
 import { liveModelConfigurationAdmin } from "../http/routes/model-configuration-admin.js"
 import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
-import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 import { handleSkillDraftRequest } from "../http/routes/skill-draft-native.js"
 import { handleSkillDraftMutationRequest } from "../http/routes/skill-draft-mutations-native.js"
@@ -92,6 +91,7 @@ import { handleSkillCatalogCommandRequest, handleSkillCoverRequest, handleSkillG
 import { handleSkillGithubImportRequest } from "../http/routes/skill-import-native.js"
 import { handleSkillAiImportRequest } from "../http/routes/skill-ai-import-native.js"
 import { handleSkillShareRequest } from "../http/routes/skill-share-native.js"
+import { handleAdminIdentityRequest } from "../http/routes/admin-identity-native.js"
 import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
@@ -508,11 +508,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (businessPath[0] === "admin" && businessPath[1] === "identity") {
-    await liveAdminIdentityRead(request, response, config, context, admission.bearerToken, businessPath)
-    return
-  }
-
   if (isMoveSessionPath) {
     await moveSessionRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
     return
@@ -809,6 +804,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleIamRelayRequest(request, response, config))
       .then((handled) => handled ? true : composition.routeHandler === undefined ? handleSharedPublicRequest(request, response, config, composition.publicShareService) : false)
       .then((handled) => handled ? true : handleSharedReaderRequest(request, response, config, composition.sharedSessionReader))
+      .then((handled) => handled ? true : handleAdminIdentityRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
       .then((handled) =>
         handled

@@ -31,8 +31,11 @@ test("scheduled-task state reader port is owned by its feature module", async ()
 })
 
 test("AccountModule owns the SessionAdmission provider consumed by the transitional runtime", async () => {
-  const [accountModule, runtime, legacyModule] = await Promise.all([
+  const [accountModule, middleware, nativeRoute, server, runtime, legacyModule] = await Promise.all([
     readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/account/account.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/admin-identity-native.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
     readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
   ])
@@ -42,6 +45,10 @@ test("AccountModule owns the SessionAdmission provider consumed by the transitio
   assert.match(runtime, /Inject\(SESSION_ADMISSION\)/u)
   assert.match(runtime, /sessionAdmission/u)
   assert.match(legacyModule, /imports: \[AccountModule\]/u)
+  assert.match(middleware, /handleAdminIdentityRequest/u)
+  assert.match(nativeRoute, /handleAdminIdentityRequest/u)
+  assert.match(server, /handleAdminIdentityRequest/u)
+  assert.doesNotMatch(server, /await liveAdminIdentityRead\(/u)
 })
 
 test("IamRelayModule owns the native protocol relay before the transitional dispatcher", async () => {

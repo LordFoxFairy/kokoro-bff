@@ -6,6 +6,7 @@ import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { PERSONALIZATION_PROVIDER, type PersonalizationProvider } from "./personalization.provider.js"
 import { handleAccountNativeRequest } from "../../http/routes/account-native.js"
 import { handlePersonalKnowledgeRequest } from "../../http/routes/personal-knowledge-native.js"
+import { handleAdminIdentityRequest } from "../../http/routes/admin-identity-native.js"
 import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
 
 /** Account-owned routes terminate here; unrelated traffic continues to the transitional dispatcher. */
@@ -19,7 +20,8 @@ export class AccountMiddleware implements NestMiddleware {
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
-    void handlePersonalKnowledgeRequest(request, response, this.config, this.admission, this.knowledgeRepository)
+    void handleAdminIdentityRequest(request, response, this.config, this.admission)
+      .then((handled) => handled || handlePersonalKnowledgeRequest(request, response, this.config, this.admission, this.knowledgeRepository))
       .then((handled) => handled || handleAccountNativeRequest(request, response, this.config, this.admission, this.personalizationProvider))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
