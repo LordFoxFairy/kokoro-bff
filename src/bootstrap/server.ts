@@ -1310,7 +1310,7 @@ export async function handleBffRequest(
       composition.agUiRuntime,
       composition.agUiProjector !== undefined,
       chatAuthorization,
-      composition.businessStore?.services.chat ?? null,
+      composition.chatService ?? composition.businessStore?.services?.chat ?? null,
     )
     return
   }
