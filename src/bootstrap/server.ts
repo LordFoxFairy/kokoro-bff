@@ -12,8 +12,7 @@ import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { handleScheduledTaskReadRequest } from "../http/routes/scheduled-task-native.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
-import { agentModelAdmissionRoute } from "../http/routes/model-admission.js"
-import { projectExecutionBindingRoute } from "../http/routes/project-execution-binding.js"
+import { handleAgentRunsInternalRequest } from "../http/routes/agent-runs-native.js"
 import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 
@@ -118,19 +117,6 @@ export async function handleBffRequest(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
-  if ((request.url ?? "").split("?", 1)[0] === "/internal/v1/model-admissions" || (request.url ?? "").startsWith("/internal/v1/model-admissions/")) {
-    await agentModelAdmissionRoute(request, response, config, composition.businessStore?.submittedAgentRuns ?? null)
-    return
-  }
-  if ((request.url ?? "").split("?", 1)[0] === "/internal/v1/project-execution-bindings/verify") {
-    await projectExecutionBindingRoute(
-      request,
-      response,
-      config.projectExecutionCredentialFile ?? null,
-      composition.businessStore?.projectExecutionBindings ?? null,
-    )
-    return
-  }
   const rawPathname = new URL(request.url || "/", "http://bff.local").pathname
   const isRawSkillPackageInspection =
     request.method === "GET" &&
@@ -1326,6 +1312,17 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   const composition = createBffComposition(config, options)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
     const handler = handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider)
+      .then((handled) =>
+        handled
+          ? true
+          : handleAgentRunsInternalRequest(
+              request,
+              response,
+              config,
+              composition.businessStore?.submittedAgentRuns ?? null,
+              composition.businessStore?.projectExecutionBindings ?? null,
+            ),
+      )
       .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
       .then((handled) => (handled ? true : handleProjectPinRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) =>
