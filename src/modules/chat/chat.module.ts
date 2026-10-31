@@ -5,11 +5,10 @@ import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.j
 import { PostgresChatRepository } from "../../infrastructure/postgres/chat-repository.js"
 import { ChatApplicationService } from "../../application/chat-service.js"
 import { AccountModule } from "../account/account.module.js"
-import { AgentRunsModule } from "../agent-runs/agent-runs.module.js"
 import { ChatMiddleware } from "./chat.middleware.js"
 
 @Module({
-  imports: [AccountModule, DatabaseModule, AgentRunsModule],
+  imports: [AccountModule, DatabaseModule],
   providers: [
     ChatMiddleware,
     {

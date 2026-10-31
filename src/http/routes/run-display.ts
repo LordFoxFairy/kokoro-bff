@@ -1,10 +1,14 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import { authorizeUserRequest } from "../../auth/user-admission.js"
+import type { SubmittedAgentRunReader } from "../../application/ports/submitted-agent-run-reader.js"
+import type { ChatApplicationService } from "../../application/chat-service.js"
 import { messageFeedbackId } from "../../application/chat/message-feedback-input.js"
 import { readAgentRunDisplay } from "../../infrastructure/clients/agent/run-display.js"
 import { failure } from "../../contracts/index.js"
+import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
 export class RunDisplayAdmissionError extends Error {
   constructor(
@@ -15,13 +19,16 @@ export class RunDisplayAdmissionError extends Error {
     super("Run display admission failed")
   }
 }
+
+export type RunDisplayProvider = Readonly<{ submittedAgentRuns: SubmittedAgentRunReader; chat: ChatApplicationService }>
+
 export async function runDisplayRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
   context: RequestContext,
   path: readonly string[],
-  store: BffBusinessStore | null,
+  store: RunDisplayProvider | null,
   deadlineAt: number,
   currentAdmission: (signal: AbortSignal) => Promise<void>,
 ): Promise<void> {
@@ -76,7 +83,7 @@ export async function runDisplayRoute(
       fail(405, "method_not_allowed")
       return
     }
-    if (!store?.submittedAgentRuns) throw Error("run_display_unavailable")
+    if (!store) throw Error("run_display_unavailable")
     const checkedStore = store
     const check = async () => {
       await within(() => currentAdmission(controller.signal))
@@ -92,7 +99,7 @@ export async function runDisplayRoute(
       )
         throw Error("run_display_not_found")
       const owned = await within(() =>
-        checkedStore.services.chat.findConversation(context.identity.namespace, context.identity.userId, sessionId, undefined, {
+        checkedStore.chat.findConversation(context.identity.namespace, context.identity.userId, sessionId, undefined, {
           signal: controller.signal,
           deadlineAt,
         }),
@@ -103,7 +110,7 @@ export async function runDisplayRoute(
     const { final_message_id, ...facts } = await within(() => readAgentRunDisplay(config, context, runId, controller.signal))
     const finalAnswer = final_message_id
       ? await within(() =>
-          checkedStore.services.chat.readRunFinalAnswer({
+          checkedStore.chat.readRunFinalAnswer({
             tenantId: context.identity.namespace,
             subjectId: context.identity.userId,
             conversationId: sessionId,
@@ -129,5 +136,54 @@ export async function runDisplayRoute(
     controller.abort()
     request.removeListener("aborted", abort)
     response.removeListener("close", abort)
+  }
+}
+
+export function isRunDisplayRequest(request: IncomingMessage): boolean {
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  return /^\/v1\/sessions\/[^/]+\/runs\/[^/]+\/display$/u.test(path)
+}
+
+/** AgentRuns/AG-UI-owned run display adapter with fresh human admission before and after owner reads. */
+export async function handleRunDisplayRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  provider: RunDisplayProvider | null,
+): Promise<boolean> {
+  if (!isRunDisplayRequest(request)) return false
+  const id = requestId(request)
+  response.setHeader("x-request-id", id)
+  const abort = new AbortController()
+  const deadlineAt = performance.now() + Math.min(config.upstreamTimeoutMs, 5_000)
+  const timer = setTimeout(() => abort.abort(), Math.max(0, deadlineAt - performance.now()))
+  const onAborted = (): void => abort.abort()
+  const onClosed = (): void => {
+    if (!response.writableEnded) abort.abort()
+  }
+  request.once("aborted", onAborted)
+  response.once("close", onClosed)
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    if (!admitted.ok) {
+      send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+      return true
+    }
+    await runDisplayRoute(request, response, config, admitted.context, pathOf(request).slice(1), provider, deadlineAt, async (signal) => {
+      const fresh = await authorizeUserRequest(request, config, admission, id, signal)
+      if (!fresh.ok) throw new RunDisplayAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
+      if (fresh.context.identity.namespace !== admitted.context.identity.namespace || fresh.context.identity.userId !== admitted.context.identity.userId)
+        throw new RunDisplayAdmissionError(404, "run_not_found")
+    })
+    return true
+  } catch {
+    if (!response.headersSent && !response.writableEnded && !response.destroyed)
+      send(response, 503, failure("run_display_unavailable", "Run display read failed", id))
+    return true
+  } finally {
+    clearTimeout(timer)
+    request.removeListener("aborted", onAborted)
+    response.removeListener("close", onClosed)
   }
 }

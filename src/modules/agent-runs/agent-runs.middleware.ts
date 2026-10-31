@@ -1,10 +1,12 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { AGENT_RUNS_READER, BFF_CONFIG } from "../../common/tokens.js"
+import { AGENT_RUNS_READER, BFF_CONFIG, RUN_DISPLAY_PROVIDER, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { SubmittedAgentRunReader } from "../../application/ports/submitted-agent-run-reader.js"
 import type { ProjectExecutionBindingReader } from "../../application/ports/project-execution-binding-reader.js"
 import { handleAgentRunsInternalRequest } from "../../http/routes/agent-runs-native.js"
+import { handleRunDisplayRequest, type RunDisplayProvider } from "../../http/routes/run-display.js"
 
 type AgentRunsReader = SubmittedAgentRunReader & ProjectExecutionBindingReader
 
@@ -12,11 +14,14 @@ type AgentRunsReader = SubmittedAgentRunReader & ProjectExecutionBindingReader
 export class AgentRunsMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
+    @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(AGENT_RUNS_READER) private readonly reader: AgentRunsReader,
+    @Inject(RUN_DISPLAY_PROVIDER) private readonly runDisplay: RunDisplayProvider,
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleAgentRunsInternalRequest(request, response, this.config, this.reader, this.reader)
+      .then((handled) => handled || handleRunDisplayRequest(request, response, this.config, this.admission, this.runDisplay))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

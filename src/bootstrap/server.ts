@@ -1,4 +1,4 @@
-import { runDisplayRoute, RunDisplayAdmissionError } from "../http/routes/run-display.js"
+import { handleRunDisplayRequest } from "../http/routes/run-display.js"
 import { messageRegenerationRoute, MessageRegenerationAdmissionError } from "../http/routes/message-regeneration.js"
 import { messageFeedbackRoute, MessageFeedbackAdmissionError } from "../http/routes/message-feedback.js"
 import { handleProjectPinRequest } from "../http/routes/project-native.js"
@@ -313,10 +313,7 @@ export async function handleBffRequest(
   const isMessageRegenerationPath =
     !browserPrivateMcp && businessPath.length === 5 && businessPath[0] === "sessions" && businessPath[2] === "messages" && businessPath[4] === "regenerate"
   const messageRegenerationDeadline = isMessageRegenerationPath ? performance.now() + 10000 : null
-  const isRunDisplayPath =
-    !browserPrivateMcp && businessPath.length === 5 && businessPath[0] === "sessions" && businessPath[2] === "runs" && businessPath[4] === "display"
-  const runDisplayDeadline = isRunDisplayPath ? performance.now() + 5000 : null
-  const preferenceDeadline = messageFeedbackDeadline ?? messageRegenerationDeadline ?? runDisplayDeadline
+  const preferenceDeadline = messageFeedbackDeadline ?? messageRegenerationDeadline
   const isProjectMcpRecommendationsPath =
     !browserPrivateMcp && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "mcp-recommendations"
   const isProjectSkillSelectionPath =
@@ -599,15 +596,6 @@ export async function handleBffRequest(
     return
   }
   const context = admission.context
-  if (isRunDisplayPath && runDisplayDeadline !== null) {
-    await runDisplayRoute(request, response, config, context, businessPath, composition.businessStore, runDisplayDeadline, async (signal) => {
-      const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
-      if (!fresh.ok) throw new RunDisplayAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
-      if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
-        throw new RunDisplayAdmissionError(404, "run_not_found")
-    })
-    return
-  }
   if (isMessageRegenerationPath && messageRegenerationDeadline !== null) {
     await messageRegenerationRoute(request, response, context, businessPath, composition.businessStore, messageRegenerationDeadline, async (signal) => {
       const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
@@ -1321,6 +1309,19 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
               config,
               composition.businessStore?.submittedAgentRuns ?? null,
               composition.businessStore?.projectExecutionBindings ?? null,
+            ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : handleRunDisplayRequest(
+              request,
+              response,
+              config,
+              composition.sessionAdmission,
+              composition.businessStore?.submittedAgentRuns && composition.businessStore?.services?.chat
+                ? { submittedAgentRuns: composition.businessStore.submittedAgentRuns, chat: composition.businessStore.services.chat }
+                : null,
             ),
       )
       .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))

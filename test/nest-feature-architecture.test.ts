@@ -110,6 +110,20 @@ test("AgentRunsModule owns internal admission and execution-binding adapters", a
   assert.doesNotMatch(server, /await projectExecutionBindingRoute\(/u)
 })
 
+test("AgentRunsModule owns the run-display adapter and provider seam", async () => {
+  const [agentModule, middleware, nativeRoute, server] = await Promise.all([
+    readFile(path.join(root, "src/modules/agent-runs/agent-runs.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/agent-runs/agent-runs.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/run-display.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+  ])
+  assert.match(agentModule, /provide: RUN_DISPLAY_PROVIDER/u)
+  assert.match(middleware, /handleRunDisplayRequest/u)
+  assert.match(nativeRoute, /runDisplayRoute/u)
+  assert.match(server, /handleRunDisplayRequest/u)
+  assert.doesNotMatch(server, /await runDisplayRoute\(/u)
+})
+
 async function fileExists(relativePath: string): Promise<boolean> {
   try {
     await readFile(path.join(root, relativePath))
