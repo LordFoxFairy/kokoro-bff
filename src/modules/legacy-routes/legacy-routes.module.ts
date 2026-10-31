@@ -5,6 +5,9 @@ import { LegacyRoutesRuntime } from "./legacy-routes.runtime.js"
 @Module({ providers: [LegacyRoutesRuntime], exports: [LegacyRoutesRuntime] })
 export class LegacyRoutesModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(LegacyRoutesMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
+    consumer
+      .apply(LegacyRoutesMiddleware)
+      .exclude({ path: "healthz", method: RequestMethod.GET }, { path: "readyz", method: RequestMethod.GET })
+      .forRoutes({ path: "*", method: RequestMethod.ALL })
   }
 }

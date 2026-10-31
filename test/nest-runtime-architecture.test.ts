@@ -30,3 +30,15 @@ test("BFF production entrypoint does not create a second raw HTTP listener", asy
   const main = await readFile(path.join(root, "src/main.ts"), "utf8")
   assert.doesNotMatch(main, /createServer\(|node:http/u)
 })
+
+test("Nest health controller owns health and readiness instead of the legacy route adapter", async () => {
+  const [healthModule, legacyModule] = await Promise.all([
+    readFile(path.join(root, "src/modules/health/health.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
+  ])
+  assert.match(healthModule, /@Get\("healthz"\)/u)
+  assert.match(healthModule, /@Get\("readyz"\)/u)
+  assert.match(legacyModule, /exclude\(/u)
+  assert.match(legacyModule, /path: "healthz"/u)
+  assert.match(legacyModule, /path: "readyz"/u)
+})
