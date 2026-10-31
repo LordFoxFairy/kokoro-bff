@@ -13,8 +13,10 @@ export type PersonalizationReadResult = Readonly<{ kind: "read"; snapshot: Perso
 export type PersonalizationSaveResult =
   Readonly<{ kind: "saved"; snapshot: PersonalizationSnapshot }> | Readonly<{ kind: "conflict" | "exhausted" | "unavailable" | "unknown" }>
 
-/** Current caller-owned Product facts, not an IAM profile or a model instruction grant. */
-export interface PersonalizationRepository {
+/** Account-owned caller facts; this provider is feature-local, not a global application port. */
+export interface PersonalizationProvider {
   read(scope: PersonalizationScope, options: PersonalizationReadOptions): Promise<PersonalizationReadResult>
   replace(scope: PersonalizationScope, replacement: PersonalizationReplacement, options: PersonalizationReadOptions): Promise<PersonalizationSaveResult>
 }
+
+export const PERSONALIZATION_PROVIDER = Symbol("PERSONALIZATION_PROVIDER")

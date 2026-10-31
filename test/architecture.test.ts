@@ -192,7 +192,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/store.ts",
     "src/migrate.ts",
     "src/adapters",
-    "src/modules",
+    "src/legacy-modules",
     "src/interfaces/http/agui/events.ts",
     "src/infrastructure/mock",
     "src/http/routes/mock.ts",
@@ -665,7 +665,7 @@ test("BFF production code has one explicit owner boundary", async () => {
     if (typeof file !== "string" || !file.endsWith(".ts")) continue
     const source = await readFile(path.join(root, "src", file), "utf8")
     assert.equal(source.includes("/adapters/"), false, `src/${file}`)
-    assert.equal(source.includes("/modules/"), false, `src/${file}`)
+    assert.equal(source.includes("/legacy-modules/"), false, `src/${file}`)
   }
 })
 
@@ -897,12 +897,14 @@ test("current administrator qualification belongs only to admitted user context 
 test("R257 personalization stays caller-owned and bypasses generic receipt dispatch without another service", async () => {
   const route = await readFile(path.join(root, "src/http/routes/personalization.ts"), "utf8")
   const repository = await readFile(path.join(root, "src/infrastructure/postgres/personalization-repository.ts"), "utf8")
-  const port = await readFile(path.join(root, "src/application/ports/personalization-repository.ts"), "utf8")
+  const provider = await readFile(path.join(root, "src/modules/account/personalization.provider.ts"), "utf8")
   const server = await readFile(path.join(root, "src/bootstrap/server.ts"), "utf8")
   assert.match(route, /context\.identity\.namespace/u)
   assert.match(route, /context\.identity\.userId/u)
   assert.doesNotMatch(route, /platformAdmin|ownerIdentityHeaders|localStorage|mutationTicket/u)
-  assert.doesNotMatch(port, /from ["'](?:pg|redis|node:http)["']/u)
+  assert.match(provider, /export interface PersonalizationProvider/u)
+  assert.match(provider, /PERSONALIZATION_PROVIDER/u)
+  assert.doesNotMatch(provider, /from ["'](?:pg|redis|node:http)["']/u)
   assert.doesNotMatch(repository, /bff_idempotency_receipt|kokoro_iam|kokoro_system|\.redis\./u)
   assert.ok(server.indexOf("await personalizationRoute(") < server.indexOf("const mutationRequired ="))
 })

@@ -6,11 +6,11 @@ import type {
   PersonalizationReadOptions,
   PersonalizationReadResult,
   PersonalizationReplacement,
-  PersonalizationRepository,
+  PersonalizationProvider,
   PersonalizationSaveResult,
   PersonalizationScope,
   PersonalizationSnapshot,
-} from "../../application/ports/personalization-repository.js"
+} from "../../modules/account/personalization.provider.js"
 import type { PostgresBffDatabase } from "./client.js"
 
 function snapshot(row: Record<string, unknown> | undefined): PersonalizationSnapshot {
@@ -36,7 +36,7 @@ function snapshot(row: Record<string, unknown> | undefined): PersonalizationSnap
 }
 
 /** One caller-owned row and its finite exact-client lifecycle; no generic receipt or retry. */
-export class PostgresPersonalizationRepository implements PersonalizationRepository {
+export class PostgresPersonalizationRepository implements PersonalizationProvider {
   public constructor(private readonly database: PostgresBffDatabase) {}
 
   public async read(scope: PersonalizationScope, options: PersonalizationReadOptions): Promise<PersonalizationReadResult> {
