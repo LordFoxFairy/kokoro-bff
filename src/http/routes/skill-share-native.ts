@@ -3,6 +3,7 @@ import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SkillShareRepository } from "../../application/ports/skill-share-repository.js"
+import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { SkillSpecificationSource } from "../../application/skill-specification.types.js"
 import type { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
 import { skillShareRoute } from "./skill-share.js"
@@ -21,6 +22,12 @@ function matches(path: readonly string[], method: string): boolean {
     (path.length === 2 && ["GET", "DELETE"].includes(method)) ||
     (path.length === 3 && path[2] === "skill" && method === "GET")
   )
+}
+
+export function skillShareRepositoryFromBusinessStore(store: BffBusinessStore | null): SkillShareRepository | undefined {
+  if (store?.skillShares !== undefined) return store.skillShares
+  const services = store?.services as unknown as { skillShares?: SkillShareRepository } | undefined
+  return services?.skillShares
 }
 
 /** Skill share lifecycle is owned by SkillsModule and reuses the existing projection boundary. */
