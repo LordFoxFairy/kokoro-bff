@@ -2,12 +2,15 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { DeleteProjectResult, RenameProjectResult } from "../../application/ports/project-repository.js"
+import { ProjectResourceError } from "../../application/project-resource.error.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { failure, ok } from "../../contracts/index.js"
 import { isEmptyProjectDeletionRequest, isProjectDeletionId, projectDeletionHeaderValues, validProjectDeletionKey } from "../project-deletion-input.js"
 import { isCanonicalRenameProjectId, parseProjectRenameName, renameProjectHeaderValues, validRenameProjectKey } from "../project-rename-input.js"
+import { projectResourceListInput } from "../project-resource-list-input.js"
 import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
+import { StorageUploadClient } from "../../infrastructure/clients/storage/client.js"
 import { projectPinRoute, ProjectPinAdmissionError, type ProjectPinProvider } from "./project-pin.js"
 
 export type ProjectCoreReadProvider = Readonly<{
@@ -47,6 +50,78 @@ export function isProjectDeletionStatusRequest(request: IncomingMessage): boolea
 export function isProjectRenameRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
   return request.method === "PATCH" && /^\/v1\/projects\/[^/]+\/name$/u.test(path)
+}
+
+export function isProjectResourceListRequest(request: IncomingMessage): boolean {
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  return request.method === "GET" && /^\/v1\/projects\/[^/]+\/resources$/u.test(path)
+}
+
+/** Projects-owned resource collection read; the legacy dispatcher no longer owns this path. */
+export async function handleProjectResourceListRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  projects: ProjectCoreReadProvider | null,
+  clientFactory: (storage: NonNullable<BffConfig["storage"]>, context: { tenantId: string; subjectId: string; projectId: string; requestId: string }) => Pick<StorageUploadClient, "listAssets"> = (storage, context) =>
+    new StorageUploadClient(storage, context),
+): Promise<boolean> {
+  if (!isProjectResourceListRequest(request)) return false
+  const id = requestId(request)
+  response.setHeader("x-request-id", id)
+  const abort = new AbortController()
+  const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(10_000)])
+  const onAborted = (): void => abort.abort()
+  const onClosed = (): void => {
+    if (!response.writableEnded) abort.abort()
+  }
+  request.once("aborted", onAborted)
+  response.once("close", onClosed)
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    if (!admitted.ok) {
+      send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+      return true
+    }
+    if (projects === null) throw new ProjectResourceError("business_store_unavailable", 503, true)
+    const url = new URL(request.url ?? "/", "http://bff.local")
+    const match = /^\/v1\/projects\/([^/]+)\/resources$/u.exec(url.pathname)
+    if (match?.[1] === undefined) throw new ProjectResourceError("invalid_project_resource_page", 400)
+    let projectRef: string
+    try {
+      projectRef = decodeURIComponent(match[1])
+    } catch {
+      throw new ProjectResourceError("invalid_project_resource_page", 400)
+    }
+    if (request.headers["transfer-encoding"] !== undefined || (request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0"))
+      throw new ProjectResourceError("invalid_project_resource_page", 400)
+    const project = await projects.find(
+      { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId },
+      projectRef,
+    )
+    if (project === null) throw new ProjectResourceError("project_not_found", 404)
+    if (typeof project !== "object" || project === null || !("id" in project) || typeof project.id !== "string")
+      throw new ProjectResourceError("project_resources_unavailable", 503, true)
+    if (config.storage === undefined) throw new ProjectResourceError("storage_projection_not_configured", 503, true)
+    const input = projectResourceListInput(url.searchParams)
+    const page = await clientFactory(config.storage, {
+      tenantId: admitted.context.identity.namespace,
+      subjectId: admitted.context.identity.userId,
+      projectId: project.id,
+      requestId: id,
+    }).listAssets(input, signal)
+    signal.throwIfAborted()
+    if (!response.destroyed) send(response, 200, ok(page, id))
+  } catch (error) {
+    if (response.destroyed || response.writableEnded) return true
+    const known = error instanceof ProjectResourceError ? error : new ProjectResourceError("project_resources_unavailable", 503, true)
+    send(response, known.status, failure(known.code, "Project resources could not be read", id))
+  } finally {
+    request.removeListener("aborted", onAborted)
+    response.removeListener("close", onClosed)
+  }
+  return true
 }
 
 async function readProjectRenameBody(request: IncomingMessage): Promise<Buffer> {

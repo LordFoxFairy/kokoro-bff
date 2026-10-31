@@ -160,26 +160,48 @@ test("list query rejects unknown/duplicate/oversized pagination rather than forw
 })
 
 test("GET route checks current owner before Storage and binds every page to canonical project and subject", async () => {
-  const { projectResourceListRoute } = await import("../dist/http/routes/project-resource-list.js")
+  const { handleProjectResourceListRequest } = await import("../dist/http/routes/project-native.js")
   const { EventEmitter } = await import("node:events")
   let calls = 0
   const scopes = []
-  const store = {
-    services: {
-      projects: {
-        async find(scope, ref) {
-          scopes.push(scope)
-          return scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
-        },
-      },
+  const projects = {
+    async list() { return [] },
+    async find(scope, ref) {
+      scopes.push(scope)
+      return scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
+    },
+    async revisions() { return [] },
+    async deletion() { return null },
+    async rename() { return { kind: "conflict" } },
+    async delete() { return { kind: "not_found" } },
+  }
+  const config = { storage: storageConfig, tenantId: "tenant-1", sharedSecret: "web-secret", upstreamTimeoutMs: 5000, iamBaseUrl: null }
+  const admission = {
+    async verify({ token }) {
+      const [namespace, userId] = token.split(":")
+      return { ok: true, identity: { namespace, userId } }
     },
   }
-  const config = { storage: storageConfig }
   const invoke = async (identity = { namespace: "tenant-1", userId: "subject-1" }, ref = "slug", query = "", factory) => {
     const req = new EventEmitter()
+    req.method = "GET"
     req.url = `/v1/projects/${ref}/resources${query}`
-    req.headers = {}
+    req.headers = {
+      authorization: `Bearer ${identity.namespace}:${identity.userId}`,
+      "x-kokoro-service": "web-bff",
+      "x-kokoro-internal-secret": "web-secret",
+      "x-request-id": "req-list",
+    }
+    req.rawHeaders = [
+      "authorization", req.headers.authorization,
+      "x-kokoro-service", "web-bff",
+      "x-kokoro-internal-secret", "web-secret",
+      "x-request-id", "req-list",
+    ]
     const res = new EventEmitter()
+    res.destroyed = false
+    res.writableEnded = false
+    res.setHeader = (name, value) => { res.headers ??= {}; res.headers[name.toLowerCase()] = value }
     res.writeHead = (status, headers) => {
       res.status = status
       res.headers = headers
@@ -188,13 +210,12 @@ test("GET route checks current owner before Storage and binds every page to cano
       res.body = JSON.parse(data)
       res.writableEnded = true
     }
-    await projectResourceListRoute(
+    await handleProjectResourceListRequest(
       req,
       res,
       config,
-      { requestId: "req-list", identity },
-      ref,
-      store,
+      admission,
+      projects,
       factory ??
         ((_cfg, ctx) => {
           calls++
@@ -216,12 +237,12 @@ test("GET route checks current owner before Storage and binds every page to cano
   assert.equal(res.status, 200)
   assert.equal(res.body.data.next_cursor, null)
   assert.equal(calls, 2)
-  for (const [identity, ref] of [
-    [{ namespace: "other", userId: "subject-1" }, "slug"],
-    [{ namespace: "tenant-1", userId: "other" }, "slug"],
-    [undefined, "other-project"],
+  for (const [identity, ref, expected] of [
+    [{ namespace: "other", userId: "subject-1" }, "slug", 403],
+    [{ namespace: "tenant-1", userId: "other" }, "slug", 404],
+    [undefined, "other-project", 404],
   ])
-    assert.equal((await invoke(identity, ref)).status, 404)
+    assert.equal((await invoke(identity, ref)).status, expected)
   assert.equal(calls, 2, "unauthorized projects never create a Storage transport")
   assert.equal((await invoke(undefined, "slug", "?subject_id=forged")).status, 400)
   assert.equal(calls, 2)
