@@ -2,8 +2,11 @@ import { isDeepStrictEqual } from "node:util"
 import { authorizePublicSkillList } from "../../auth/public-skill-list-admission.js"
 import { ConnectError, Code } from "@connectrpc/connect"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
 import type { SkillSpecificationOperation } from "../../application/skill-specification.types.js"
+import type { SkillListAdmission } from "../../auth/skill-list-admission.client.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { SkillSpecificationSource } from "../../application/skill-specification.types.js"
+import type { SkillDownloadHandles } from "../../application/skill-download-handles.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import {
   publicSkillListSchema,
@@ -27,6 +30,13 @@ import { zListMcpServersQuery, zListSelfMcpConnectionsQuery } from "../../genera
 import { PlatformProjectionHttpClient, type ProjectionOperation } from "../../infrastructure/clients/platform/projection-http.js"
 import { queryOf } from "../request.js"
 import { send } from "../response.js"
+
+export type SkillSpecificationProvider = Readonly<{
+  skillListAdmission: SkillListAdmission
+  skillSpecificationSource: SkillSpecificationSource | null
+  sessionAdmission: SessionAdmission
+  skillDownloadHandles: SkillDownloadHandles
+}>
 
 const clients = new WeakMap<BffConfig, PlatformProjectionHttpClient>()
 const connectionQueryKeys = new Set(["connection_id", "provider_key", "limit", "cursor"])
@@ -153,7 +163,7 @@ export async function skillSpecificationReadRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: SkillSpecificationProvider,
   requestId: string,
   pathname: string,
 ): Promise<boolean> {

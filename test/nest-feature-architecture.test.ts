@@ -268,7 +268,7 @@ test("McpModule owns MCP route admission and candidate clients", async () => {
 })
 
 test("SkillsModule owns personal skill-installation admission and client", async () => {
-  const [skillsModule, middleware, route, managedRoute, enabledRoute, usageRoute, lifecycleRoute, draftRoute, draftMutationsRoute, catalogCommandRoute, importRoute, aiImportRoute, shareRoute, appBindingsRoute, appBindingsNativeRoute, server] = await Promise.all([
+  const [skillsModule, middleware, route, managedRoute, enabledRoute, usageRoute, lifecycleRoute, draftRoute, draftMutationsRoute, catalogCommandRoute, importRoute, aiImportRoute, shareRoute, appBindingsRoute, appBindingsNativeRoute, specificationNativeRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/skills/skills.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/skills/skills.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/skill-installations.ts"), "utf8"),
@@ -284,6 +284,7 @@ test("SkillsModule owns personal skill-installation admission and client", async
     readFile(path.join(root, "src/http/routes/skill-share-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/app-skill-bindings.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/app-skill-bindings-native.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/skill-specification-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(skillsModule, /SKILL_INSTALLATION_CLIENT/u)
@@ -298,6 +299,10 @@ test("SkillsModule owns personal skill-installation admission and client", async
   assert.match(middleware, /handleAppSkillBindingsRequest/u)
   assert.match(appBindingsNativeRoute, /appSkillBindingsRoute/u)
   assert.match(appBindingsRoute, /AppSkillBindingProvider/u)
+  assert.match(skillsModule, /SKILL_LIST_ADMISSION/u)
+  assert.match(skillsModule, /SKILL_DOWNLOAD_HANDLES/u)
+  assert.match(middleware, /handleSkillSpecificationRequest/u)
+  assert.match(specificationNativeRoute, /skillSpecificationReadRoute/u)
   assert.match(server, /handleAppSkillBindingsRequest/u)
   assert.match(middleware, /handlePersonalSkillInstallationRequest/u)
   assert.match(middleware, /handleManagedPersonalSkillsRequest/u)

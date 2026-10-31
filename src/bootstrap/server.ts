@@ -27,7 +27,7 @@ import { customApiOperation, customApiRoute } from "../http/routes/custom-api.js
 import { handleMcpAdminRequest } from "../http/routes/mcp-admin-native.js"
 import { handleMcpProjectPublicationRequest } from "../http/routes/mcp-project-publication-native.js"
 import { handleConnectorListRequest } from "../http/routes/connector-list-native.js"
-import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
+import { handleSkillSpecificationRequest } from "../http/routes/skill-specification-native.js"
 import { handleSkillSpecificationEnabledRequest } from "../http/routes/skill-specification-enabled.js"
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
@@ -157,7 +157,6 @@ export async function handleBffRequest(
     if (!project) throw new ConnectError("Project not found", Code.NotFound)
     return project.id
   }
-  if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillDownloadHandleRoute(request, response, config, composition, id, segments, projectContentAccess)) return
   if (await exactSkillDownloadRoute(request, response, config, composition, id, segments, projectContentAccess)) return
   const removedSkillRead =
@@ -708,6 +707,12 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
         client: composition.mcpProjectPublicationClient,
       }))
       .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
+      .then((handled) => handled ? true : handleSkillSpecificationRequest(request, response, config, {
+        skillListAdmission: composition.skillListAdmission,
+        skillSpecificationSource: composition.skillSpecificationSource,
+        sessionAdmission: composition.sessionAdmission,
+        skillDownloadHandles: composition.skillDownloadHandles,
+      }))
       .then((handled) => handled ? true : handleAppSkillBindingsRequest(request, response, config, composition.sessionAdmission, composition.openAppManagementAdmission, composition.appSkillBindingClient))
       .then((handled) => handled ? true : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization))
       .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.services.chat ?? null))
