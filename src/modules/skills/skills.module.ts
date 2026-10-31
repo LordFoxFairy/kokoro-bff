@@ -2,7 +2,7 @@ import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/c
 import { BffConfigModule } from "../../config/config.module.js"
 import { AccountModule } from "../account/account.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
-import { BFF_CONFIG, BFF_POOL, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_USAGE_READER } from "../../common/tokens.js"
+import { BFF_CONFIG, BFF_POOL, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_USAGE_READER } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
 import { PlatformServiceCredentialSource } from "../../infrastructure/clients/platform/platform-service-credential.js"
@@ -10,6 +10,8 @@ import { SkillInstallationConnectClient } from "../../infrastructure/clients/pla
 import { CatalogConnectClient } from "../../infrastructure/clients/platform/catalog-connect.js"
 import { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
 import { SkillAdminConnectClient } from "../../infrastructure/clients/platform/skill-admin-connect.js"
+import { LocalSkillImportConnectClient } from "../../infrastructure/clients/platform/local-skill-import-connect.js"
+import type { LocalSkillImportClient } from "../../http/routes/local-skill-import.js"
 import { SkillsMiddleware } from "./skills.middleware.js"
 import type { Pool } from "pg"
 import { readSkillUsage } from "../../infrastructure/postgres/skill-usage-projection.js"
@@ -93,6 +95,19 @@ import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
       },
     },
     {
+      provide: SKILL_LOCAL_IMPORT_CLIENT,
+      inject: [BFF_CONFIG],
+      useFactory: (config: BffConfig): LocalSkillImportClient | undefined => {
+        if (config.skillDraft?.platformBaseUrl === null || config.skillDraft?.platformBaseUrl === undefined || config.skillDraft.credentialFile === null || config.skillDraft.credentialFile === undefined || config.platformProjection?.credentialFile === null || config.platformProjection?.credentialFile === undefined)
+          return undefined
+        return new LocalSkillImportConnectClient(
+          config.skillDraft.platformBaseUrl,
+          new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
+          new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
+        )
+      },
+    },
+    {
       provide: SKILL_USAGE_READER,
       inject: [BFF_POOL],
       useFactory: (pool: Pool): ((tenant: string, refs: readonly string[]) => Promise<Map<string, SkillUsageResult>>) => async (tenant, refs) => {
@@ -105,7 +120,7 @@ import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
       },
     },
   ],
-  exports: [SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_USAGE_READER],
+  exports: [SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_USAGE_READER],
 })
 export class SkillsModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

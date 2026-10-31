@@ -57,7 +57,7 @@ import {
   authorizeSkillAction,
   skillActionForRequest,
 } from "../auth/user-admission.js"
-import { localSkillImportRoute } from "../http/routes/local-skill-import.js"
+import { handleSkillLocalImportRequest } from "../http/routes/skill-local-import-native.js"
 import { failure } from "../contracts/index.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
 import {
@@ -164,19 +164,6 @@ export async function handleBffRequest(
   if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillDownloadHandleRoute(request, response, config, composition, id, segments, projectContentAccess)) return
   if (await exactSkillDownloadRoute(request, response, config, composition, id, segments, projectContentAccess)) return
-  if (
-    await localSkillImportRoute(
-      request,
-      response,
-      config,
-      composition.sessionAdmission,
-      composition.skillAuthorization,
-      composition.localSkillImportClient,
-      id,
-      segments,
-    )
-  )
-    return
   const removedSkillRead =
     request.method === "GET" &&
     segments[0] === "v1" &&
@@ -965,6 +952,13 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           : composition.routeHandler !== undefined
             ? false
             : handleSkillGithubPreviewRequest(request, response, config, composition.sessionAdmission),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleSkillLocalImportRequest(request, response, config, composition.sessionAdmission, composition.skillAuthorization, composition.localSkillImportClient),
       )
       .then((handled) =>
         handled
