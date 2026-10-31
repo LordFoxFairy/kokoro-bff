@@ -17,7 +17,6 @@ import { handleHealthRequest } from "../http/routes/health-native.js"
 import { handleProjectMcpRecommendationsRequest, projectMcpRecommendationsProvider } from "../http/routes/project-mcp-recommendations.js"
 import { mcpProjectPublicationOperation, mcpProjectPublicationRoute } from "../http/routes/mcp-project-publication.js"
 import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
-import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { handleScheduledTaskReadRequest } from "../http/routes/scheduled-task-native.js"
 import { handlePersonalKnowledgeRequest } from "../http/routes/personal-knowledge-native.js"
 import { handleAgentRunsInternalRequest } from "../http/routes/agent-runs-native.js"
@@ -25,8 +24,8 @@ import { handleProjectSkillSelectionRequest, projectSkillSelectionProvider } fro
 import { Code, ConnectError } from "@connectrpc/connect"
 
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
-import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
 import { customApiOperation, customApiRoute } from "../http/routes/custom-api.js"
+import { handleMcpAdminRequest } from "../http/routes/mcp-admin-native.js"
 import { handleConnectorListRequest } from "../http/routes/connector-list-native.js"
 import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
 import { handleSkillSpecificationEnabledRequest } from "../http/routes/skill-specification-enabled.js"
@@ -219,8 +218,6 @@ export async function handleBffRequest(
   const isMcpPersonalOperation = browserPrivateMcp && mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
   const isCustomApiOperation = browserPrivateMcp && customApiOperation(businessPath, request.method ?? "GET") !== null
   const defersMcpPersonalReadAction = isMcpPersonalOperation && request.method === "GET"
-  const isMcpPackageAdminOperation = !browserPrivateMcp && mcpPackageAdminOperation(businessPath, request.method ?? "GET") !== null
-  const isMcpProviderAdminOperation = !browserPrivateMcp && mcpProviderAdminOperation(businessPath, request.method ?? "GET") !== null
   if (browserPrivateMcp && !isMcpPersonalOperation && !isCustomApiOperation && !isMcpProjectPublication) {
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
@@ -229,11 +226,9 @@ export async function handleBffRequest(
     isProjectMcpRecommendationsPath ||
     mcpAction !== null ||
     isMcpPersonalOperation ||
-    isMcpProviderAdminOperation ||
-    isMcpPackageAdminOperation ||
     isCustomApiOperation
   if (hasMcpBudget) {
-    startMcpRequestBudget(request, isMcpPackageAdminOperation ? 20_000 : 10_000)
+    startMcpRequestBudget(request, 10_000)
     response.setHeader("cache-control", "no-store")
     response.setHeader("x-request-id", id)
   }
@@ -372,14 +367,6 @@ export async function handleBffRequest(
           retryable: true,
         },
       })
-    return
-  }
-  if (isMcpPackageAdminOperation) {
-    await mcpPackageAdminRoute(request, response, config, composition, id, businessPath)
-    return
-  }
-  if (isMcpProviderAdminOperation) {
-    await mcpProviderAdminRoute(request, response, config, composition, id, businessPath)
     return
   }
   if (isCustomApiOperation) {
@@ -757,6 +744,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleAdminIdentityRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleBillingAdminRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleSystemAdminRequest(request, response, config, composition.sessionAdmission))
+      .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
       .then((handled) => handled ? true : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization))
       .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.services.chat ?? null))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))

@@ -3,7 +3,9 @@ import { BffConfigModule } from "../../config/config.module.js"
 import {
   BFF_CONFIG,
   MCP_AUTHORIZATION,
+  MCP_PACKAGE_ADMIN_CLIENT,
   MCP_PERSONAL_CLIENT,
+  MCP_PROVIDER_ADMIN_CLIENT,
   PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
   PROJECT_SERVICE,
 } from "../../common/tokens.js"
@@ -11,10 +13,13 @@ import type { BffConfig } from "../../config/runtime.js"
 import { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
 import { PlatformServiceCredentialSource } from "../../infrastructure/clients/platform/platform-service-credential.js"
 import { McpPersonalConnectClient } from "../../infrastructure/clients/platform/mcp-personal-connect.js"
+import { McpPackageAdminConnectClient } from "../../infrastructure/clients/platform/mcp-package-admin-connect.js"
+import { McpProviderAdminConnectClient } from "../../infrastructure/clients/platform/mcp-provider-admin-connect.js"
 import { CustomApiConnectClient } from "../../infrastructure/clients/platform/custom-api-connect.js"
 import type { ProjectService } from "../../application/project-service.js"
 import { ProjectMcpRecommendationsMiddleware } from "./project-mcp-recommendations.middleware.js"
 import { ConnectorListMiddleware } from "./connector-list.middleware.js"
+import { McpAdminMiddleware } from "./mcp-admin.middleware.js"
 import type { ProjectMcpRecommendationsProvider } from "../../http/routes/project-mcp-recommendations.js"
 import { AccountModule } from "../account/account.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
@@ -32,12 +37,27 @@ class ProjectMcpRecommendationsRuntime implements OnApplicationShutdown {
   }
 }
 
+@Injectable()
+class McpAdminRuntime implements OnApplicationShutdown {
+  public constructor(
+    @Inject(MCP_PROVIDER_ADMIN_CLIENT) private readonly providerClient: McpProviderAdminConnectClient | null,
+    @Inject(MCP_PACKAGE_ADMIN_CLIENT) private readonly packageClient: McpPackageAdminConnectClient | null,
+  ) {}
+
+  public onApplicationShutdown(): void {
+    this.providerClient?.close()
+    this.packageClient?.close()
+  }
+}
+
 @Module({
   imports: [AccountModule, IamRelayModule, ProjectsModule, BffConfigModule],
   providers: [
     ProjectMcpRecommendationsMiddleware,
     ConnectorListMiddleware,
+    McpAdminMiddleware,
     ProjectMcpRecommendationsRuntime,
+    McpAdminRuntime,
     {
       provide: MCP_AUTHORIZATION,
       inject: [BFF_CONFIG],
@@ -63,12 +83,27 @@ class ProjectMcpRecommendationsRuntime implements OnApplicationShutdown {
         ? new McpPersonalConnectClient(config.mcpPersonal.baseUrl, new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"))
         : null,
     },
+    {
+      provide: MCP_PROVIDER_ADMIN_CLIENT,
+      inject: [BFF_CONFIG],
+      useFactory: (config: BffConfig): McpProviderAdminConnectClient | null => config.mcpProviderAdmin
+        ? new McpProviderAdminConnectClient(config.mcpProviderAdmin.baseUrl, new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"))
+        : null,
+    },
+    {
+      provide: MCP_PACKAGE_ADMIN_CLIENT,
+      inject: [BFF_CONFIG],
+      useFactory: (config: BffConfig): McpPackageAdminConnectClient | null => config.mcpProviderAdmin
+        ? new McpPackageAdminConnectClient(config.mcpProviderAdmin.baseUrl, new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"))
+        : null,
+    },
   ],
-  exports: [MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
+  exports: [MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, MCP_PROVIDER_ADMIN_CLIENT, MCP_PACKAGE_ADMIN_CLIENT, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
 })
 export class McpModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
     consumer.apply(ProjectMcpRecommendationsMiddleware).forRoutes({ path: "v1/projects/:projectId/mcp-recommendations", method: RequestMethod.ALL })
     consumer.apply(ConnectorListMiddleware).forRoutes({ path: "v1/connector.list", method: RequestMethod.GET })
+    consumer.apply(McpAdminMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
   }
 }
