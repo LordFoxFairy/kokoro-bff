@@ -317,6 +317,8 @@ test("SkillsModule owns personal skill-installation admission and client", async
   assert.match(middleware, /handleSkillPackageInspectionRequest/u)
   assert.match(packageInspectionNativeRoute, /skillPackageInspectionRoute/u)
   assert.match(server, /handleSkillPackageInspectionRequest/u)
+  assert.match(server, /projectContentAccessForRequest/u)
+  assert.doesNotMatch(server, /exactSkillDownloadRoute/u)
   assert.match(server, /handleAppSkillBindingsRequest/u)
   assert.match(middleware, /handlePersonalSkillInstallationRequest/u)
   assert.match(middleware, /handleManagedPersonalSkillsRequest/u)

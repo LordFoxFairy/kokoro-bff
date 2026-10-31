@@ -31,7 +31,7 @@ import { handleSkillSpecificationRequest } from "../http/routes/skill-specificat
 import { handleSkillPackageInspectionRequest } from "../http/routes/skill-package-inspection-native.js"
 import { handleSkillDownloadRequest } from "../http/routes/skill-download-native.js"
 import { handleSkillSpecificationEnabledRequest } from "../http/routes/skill-specification-enabled.js"
-import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
+import { skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
 import { handleSkillUsageRequest } from "../http/routes/skill-usage.js"
 import { handlePublishedSkillPackageRequest } from "../http/routes/skill-published-package-native.js"
@@ -99,6 +99,44 @@ import { type ProjectSkillContentAccess } from "../http/routes/skill-package-ins
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 import { handleIamRelayRequest } from "../modules/iam-relay/iam-relay.middleware.js"
 
+function projectContentAccessForRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  composition: ReturnType<typeof createBffComposition>,
+  requestIdValue: string,
+): ProjectSkillContentAccess {
+  return async (projectRef, context, signal) => {
+    const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, requestIdValue, signal)
+    signal.throwIfAborted()
+    if (!fresh.ok) {
+      if (fresh.retryAfter !== undefined) response.setHeader("retry-after", fresh.retryAfter)
+      send(response, fresh.status, {
+        error: {
+          code: fresh.code,
+          message: "Current user admission is required",
+          retryable: fresh.status === 429 || fresh.status >= 500,
+        },
+      })
+      return null
+    }
+    if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+      throw new ConnectError("Project not found", Code.NotFound)
+    const owner = composition.projectService ?? composition.businessStore?.projectService ?? composition.businessStore?.services.projects
+    if (!owner) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+    const project = await owner.find(
+      {
+        tenantId: context.identity.namespace,
+        subjectId: context.identity.userId,
+      },
+      projectRef,
+    )
+    signal.throwIfAborted()
+    if (!project) throw new ConnectError("Project not found", Code.NotFound)
+    return project.id
+  }
+}
+
 export async function handleBffRequest(
   request: IncomingMessage,
   response: ServerResponse,
@@ -129,36 +167,8 @@ export async function handleBffRequest(
     await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency)
     return
   }
-  const projectContentAccess: ProjectSkillContentAccess = async (projectRef, context, signal) => {
-    const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
-    signal.throwIfAborted()
-    if (!fresh.ok) {
-      if (fresh.retryAfter !== undefined) response.setHeader("retry-after", fresh.retryAfter)
-      send(response, fresh.status, {
-        error: {
-          code: fresh.code,
-          message: "Current user admission is required",
-          retryable: fresh.status === 429 || fresh.status >= 500,
-        },
-      })
-      return null
-    }
-    if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
-      throw new ConnectError("Project not found", Code.NotFound)
-    if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
-    const project = await (composition.businessStore.projectService ?? composition.businessStore.services.projects).find(
-      {
-        tenantId: context.identity.namespace,
-        subjectId: context.identity.userId,
-      },
-      projectRef,
-    )
-    signal.throwIfAborted()
-    if (!project) throw new ConnectError("Project not found", Code.NotFound)
-    return project.id
-  }
+  const projectContentAccess = projectContentAccessForRequest(request, response, config, composition, id)
   if (await skillDownloadHandleRoute(request, response, config, composition, id, segments, projectContentAccess)) return
-  if (await exactSkillDownloadRoute(request, response, config, composition, id, segments, projectContentAccess)) return
   const removedSkillRead =
     request.method === "GET" &&
     segments[0] === "v1" &&
@@ -696,7 +706,16 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       }))
       .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
       .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService ?? composition.businessStore?.projectService ?? composition.businessStore?.services.projects ?? null))
-      .then((handled) => handled ? true : handleSkillDownloadRequest(request, response, config, composition.sessionAdmission, composition.skillDownloadHandles, composition.skillSpecificationSource, composition.exactSkillDownloadSource))
+      .then((handled) => handled ? true : handleSkillDownloadRequest(
+        request,
+        response,
+        config,
+        composition.sessionAdmission,
+        composition.skillDownloadHandles,
+        composition.skillSpecificationSource,
+        composition.exactSkillDownloadSource,
+        projectContentAccessForRequest(request, response, config, composition, requestId(request)),
+      ))
       .then((handled) => handled ? true : handleSkillSpecificationRequest(request, response, config, {
         skillListAdmission: composition.skillListAdmission,
         skillSpecificationSource: composition.skillSpecificationSource,
