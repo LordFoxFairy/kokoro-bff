@@ -203,7 +203,7 @@ test("McpModule owns project MCP recommendation admission and candidate clients"
 })
 
 test("SkillsModule owns personal skill-installation admission and client", async () => {
-  const [skillsModule, middleware, route, managedRoute, enabledRoute, usageRoute, lifecycleRoute, server] = await Promise.all([
+  const [skillsModule, middleware, route, managedRoute, enabledRoute, usageRoute, lifecycleRoute, draftRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/skills/skills.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/skills/skills.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/skill-installations.ts"), "utf8"),
@@ -211,6 +211,7 @@ test("SkillsModule owns personal skill-installation admission and client", async
     readFile(path.join(root, "src/http/routes/skill-specification-enabled.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/skill-usage.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/personal-skill-lifecycle-native.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/skill-draft-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(skillsModule, /SKILL_INSTALLATION_CLIENT/u)
@@ -221,7 +222,9 @@ test("SkillsModule owns personal skill-installation admission and client", async
   assert.match(middleware, /handleSkillSpecificationEnabledRequest/u)
   assert.match(middleware, /handleSkillUsageRequest/u)
   assert.match(middleware, /handlePersonalSkillLifecycleRequest/u)
+  assert.match(middleware, /handleSkillDraftRequest/u)
   assert.match(lifecycleRoute, /handlePersonalSkillLifecycleRequest/u)
+  assert.match(draftRoute, /handleSkillDraftRequest/u)
   assert.match(route, /handlePersonalSkillInstallationRequest/u)
   assert.match(usageRoute, /handleSkillUsageRequest/u)
   assert.match(managedRoute, /handleManagedPersonalSkillsRequest/u)

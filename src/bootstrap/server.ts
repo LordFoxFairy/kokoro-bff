@@ -90,7 +90,7 @@ import { liveModelConfigurationAdmin } from "../http/routes/model-configuration-
 import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
 import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
-import { createSkillDraftRoute } from "../http/routes/create-skill-draft.js"
+import { handleSkillDraftRequest } from "../http/routes/skill-draft-native.js"
 import { getSkillPackageUploadRoute } from "../http/routes/get-skill-package-upload.js"
 import { beginSkillPackageUploadRoute } from "../http/routes/begin-skill-package-upload.js"
 import { completeSkillPackageUploadRoute } from "../http/routes/complete-skill-package-upload.js"
@@ -689,23 +689,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (new URL(request.url || "/", "http://bff.local").pathname === "/v1/skills/drafts") {
-    if (request.method !== "POST" || request.url !== "/v1/skills/drafts") {
-      response.setHeader("x-request-id", id)
-      send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
-      return
-    }
-    const routeAbort = new AbortController()
-    const abortRoute = (): void => routeAbort.abort()
-    request.once("aborted", abortRoute)
-    response.once("close", abortRoute)
-    await createSkillDraftRoute(request, response, context, composition.skillDraftClient, routeAbort.signal).finally(() => {
-      request.removeListener("aborted", abortRoute)
-      response.removeListener("close", abortRoute)
-    })
-    return
-  }
-
   if (composition.routeHandler === undefined && businessPath[0] === "admin") {
     if (await liveModelConfigurationAdmin(request, response, config, context, businessPath, adminOperationDeadline)) return
     await liveModelRoutingAdmin(request, response, config, context, businessPath)
@@ -1040,6 +1023,20 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 composition.sessionAdmission,
                 projectSkillSelectionProvider(composition.businessStore),
                 composition.installationClient,
+              ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleSkillDraftRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.skillAuthorization,
+                composition.skillDraftClient,
               ),
       )
       .then((handled) =>

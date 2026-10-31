@@ -10,6 +10,7 @@ import { handleManagedPersonalSkillsRequest } from "../../http/routes/managed-pe
 import { handleSkillSpecificationEnabledRequest } from "../../http/routes/skill-specification-enabled.js"
 import { handleSkillUsageRequest } from "../../http/routes/skill-usage.js"
 import { handlePersonalSkillLifecycleRequest } from "../../http/routes/personal-skill-lifecycle-native.js"
+import { handleSkillDraftRequest } from "../../http/routes/skill-draft-native.js"
 import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
 import type { CatalogConnectClient } from "../../infrastructure/clients/platform/catalog-connect.js"
 
@@ -28,6 +29,7 @@ export class SkillsMiddleware implements NestMiddleware {
     void handlePersonalSkillInstallationRequest(request, response, this.config, this.admission, this.skillAuthorization, this.client)
       .then((handled) => handled || handleManagedPersonalSkillsRequest(request, response, this.config, this.admission))
       .then((handled) => handled || handleSkillSpecificationEnabledRequest(request, response, this.config, this.admission, this.client))
+      .then((handled) => handled || handleSkillDraftRequest(request, response, this.config, this.admission, this.skillAuthorization, this.draftClient))
       .then((handled) => handled || handlePersonalSkillLifecycleRequest(request, response, this.config, this.admission, this.skillAuthorization, this.draftClient))
       .then((handled) => handled || handleSkillUsageRequest(request, response, this.config, this.admission, this.usageReader))
       .then((handled) => {
