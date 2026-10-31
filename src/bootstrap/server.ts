@@ -80,8 +80,6 @@ import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamK
 import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { handleSystemNativeRequest } from "../http/routes/system-native.js"
 import { handleChatNativeRequest } from "../http/routes/chat-native.js"
-import { liveModelConfigurationAdmin } from "../http/routes/model-configuration-admin.js"
-import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 import { handleSkillDraftRequest } from "../http/routes/skill-draft-native.js"
 import { handleSkillDraftMutationRequest } from "../http/routes/skill-draft-mutations-native.js"
@@ -91,6 +89,7 @@ import { handleSkillAiImportRequest } from "../http/routes/skill-ai-import-nativ
 import { handleSkillShareRequest } from "../http/routes/skill-share-native.js"
 import { handleAdminIdentityRequest } from "../http/routes/admin-identity-native.js"
 import { handleBillingAdminRequest } from "../http/routes/billing-admin-native.js"
+import { handleSystemAdminRequest } from "../http/routes/system-admin-native.js"
 import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
@@ -184,10 +183,10 @@ export async function handleBffRequest(
   const adminOperationDeadline =
     !browserPrivateMcp &&
     request.method === "GET" &&
-      businessPath.length === 4 &&
-      businessPath[0] === "admin" &&
-      businessPath[1] === "model-providers" &&
-      businessPath[3] === "upstream-models"
+    businessPath.length === 4 &&
+    businessPath[0] === "admin" &&
+    businessPath[1] === "model-providers" &&
+    businessPath[3] === "upstream-models"
       ? Date.now() + Math.min(config.upstreamTimeoutMs, 10_000)
       : undefined
   if (!browserPrivateMcp && businessPath[0] === "self" && businessPath[1] === "mcp") {
@@ -495,12 +494,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (composition.routeHandler === undefined && businessPath[0] === "admin") {
-    if (await liveModelConfigurationAdmin(request, response, config, context, businessPath, adminOperationDeadline)) return
-    await liveModelRoutingAdmin(request, response, config, context, businessPath)
-    return
-  }
-
   if (composition.routeHandler === undefined && businessPath[0] === "projects" && businessPath.length === 4 && businessPath[2] === "skills") {
     send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
     return
@@ -783,6 +776,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleSharedReaderRequest(request, response, config, composition.sharedSessionReader))
       .then((handled) => handled ? true : handleAdminIdentityRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleBillingAdminRequest(request, response, config, composition.sessionAdmission))
+      .then((handled) => handled ? true : handleSystemAdminRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
       .then((handled) =>
         handled

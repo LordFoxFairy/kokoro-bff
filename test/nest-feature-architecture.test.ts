@@ -77,6 +77,21 @@ test("BillingModule owns administrator credit and metering routes", async () => 
   assert.doesNotMatch(server, /await liveAdminMetering\(/u)
 })
 
+test("SystemModule owns administrator model configuration and routing routes", async () => {
+  const [moduleSource, middleware, nativeRoute, server] = await Promise.all([
+    readFile(path.join(root, "src/modules/system/system.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/system/system.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/system-admin-native.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+  ])
+  assert.match(moduleSource, /AccountModule/u)
+  assert.match(middleware, /handleSystemAdminRequest/u)
+  assert.match(nativeRoute, /handleSystemAdminRequest/u)
+  assert.match(server, /handleSystemAdminRequest/u)
+  assert.doesNotMatch(server, /await liveModelConfigurationAdmin\(/u)
+  assert.doesNotMatch(server, /await liveModelRoutingAdmin\(/u)
+})
+
 test("ChatModule owns the archive/share adapters and chat provider", async () => {
   const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, server, legacyModule] = await Promise.all([
     readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),

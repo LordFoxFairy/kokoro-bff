@@ -1,15 +1,18 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG } from "../../common/tokens.js"
+import { BFF_CONFIG, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { handleSystemNativeRequest } from "../../http/routes/system-native.js"
+import { handleSystemAdminRequest } from "../../http/routes/system-admin-native.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
 
 @Injectable()
 export class SystemMiddleware implements NestMiddleware {
-  public constructor(@Inject(BFF_CONFIG) private readonly config: BffConfig) {}
+  public constructor(@Inject(BFF_CONFIG) private readonly config: BffConfig, @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
-    void handleSystemNativeRequest(request, response, this.config)
+    void handleSystemAdminRequest(request, response, this.config, this.admission)
+      .then((handled) => handled || handleSystemNativeRequest(request, response, this.config))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })
