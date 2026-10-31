@@ -471,7 +471,7 @@ async function partsHttp(
     {},
     null,
     new Map(),
-    { services: { chat: { readMessageParts: read } } } as never,
+    { chatService: { readMessageParts: read } } as never,
     authorization as never,
   )
   return { handled, status, body, headers, request, response }

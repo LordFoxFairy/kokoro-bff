@@ -41,13 +41,11 @@ async function collectionRepositoryCall(query: string): Promise<{ calls: unknown
   }
   const chat = new ChatApplicationService(repository as never)
   const store = {
-    services: {
-      chat,
-      projects: {
-        find: async () => {
-          projectReads += 1
-          return {}
-        },
+    chatService: chat,
+    projectService: {
+      find: async () => {
+        projectReads += 1
+        return {}
       },
     },
   } as never
@@ -111,12 +109,10 @@ for (const [name, query, expectedFilter, expectedProjectReads] of [
 test("rejects direct plus project collection filters before Project lookup", async () => {
   let projectReads = 0
   const store = {
-    services: {
-      projects: {
-        find: async () => {
-          projectReads += 1
-          return {}
-        },
+    projectService: {
+      find: async () => {
+        projectReads += 1
+        return {}
       },
     },
   } as never
@@ -136,18 +132,16 @@ test("keeps direct plus project resource authorization on the existing project-b
   let projectReads = 0
   let conversationReads = 0
   const store = {
-    services: {
-      projects: {
-        find: async () => {
-          projectReads += 1
-          return {}
-        },
+    projectService: {
+      find: async () => {
+        projectReads += 1
+        return {}
       },
-      chat: {
-        findConversation: async () => {
-          conversationReads += 1
-          return {}
-        },
+    },
+    chatService: {
+      findConversation: async () => {
+        conversationReads += 1
+        return {}
       },
     },
   } as never

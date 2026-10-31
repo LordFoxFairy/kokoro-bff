@@ -487,7 +487,6 @@ export async function handleBffRequest(
     ...(chatService === undefined || chatService === null ? {} : { chatService }),
     ...(composition.businessStore?.services?.chatTurns === undefined ? {} : { chatTurnService: composition.businessStore.services.chatTurns }),
     ...(projectService === undefined || projectService === null ? {} : { projectService }),
-    ...(composition.businessStore?.services === undefined ? {} : { services: composition.businessStore.services }),
     ...(composition.businessStore?.agUiConsumers === undefined ? {} : { agUiConsumers: composition.businessStore.agUiConsumers }),
   }
   if (composition.routeHandler === undefined && composition.businessStore !== null) {
