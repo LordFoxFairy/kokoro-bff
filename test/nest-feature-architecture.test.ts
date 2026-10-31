@@ -43,6 +43,17 @@ test("AccountModule owns the SessionAdmission provider consumed by the transitio
   assert.match(legacyModule, /imports: \[AccountModule\]/u)
 })
 
+test("IamRelayModule owns the native protocol relay before the transitional dispatcher", async () => {
+  const [moduleSource, middleware, server] = await Promise.all([
+    readFile(path.join(root, "src/modules/iam-relay/iam-relay.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/iam-relay/iam-relay.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+  ])
+  assert.match(moduleSource, /IamRelayMiddleware/u)
+  assert.match(middleware, /iamProtocolRelay/u)
+  assert.doesNotMatch(server, /startsWith\("\/iam"\)/u)
+})
+
 test("ChatModule owns the archive/share adapters and chat provider", async () => {
   const [chatModule, middleware, nativeRoute, feedbackRoute, server, legacyModule] = await Promise.all([
     readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),

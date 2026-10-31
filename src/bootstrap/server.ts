@@ -85,7 +85,6 @@ import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamK
 import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { handleSystemNativeRequest } from "../http/routes/system-native.js"
 import { handleChatNativeRequest } from "../http/routes/chat-native.js"
-import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
 import { liveModelConfigurationAdmin } from "../http/routes/model-configuration-admin.js"
 import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
 import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
@@ -104,6 +103,7 @@ import { deletePersonalSkillSeriesRoute } from "../http/routes/delete-personal-s
 import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-skill.js"
 import { skillPackageInspectionRoute, type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
+import { handleIamRelayRequest } from "../modules/iam-relay/iam-relay.middleware.js"
 
 export async function handleBffRequest(
   request: IncomingMessage,
@@ -111,10 +111,6 @@ export async function handleBffRequest(
   config: BffConfig,
   composition: ReturnType<typeof createBffComposition>,
 ): Promise<void> {
-  if ((request.url ?? "").startsWith("/iam")) {
-    await iamProtocolRelay(request, response, config)
-    return
-  }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
   const rawPathname = new URL(request.url || "/", "http://bff.local").pathname
@@ -1258,7 +1254,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
-    const handler = handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider)
+    const handler = handleIamRelayRequest(request, response, config)
+      .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
       .then((handled) =>
         handled
           ? true

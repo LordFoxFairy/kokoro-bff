@@ -1,6 +1,7 @@
-import { Inject, Injectable, Module } from "@nestjs/common"
+import { Inject, Injectable, MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common"
 import { BFF_CONFIG } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
+import { IamRelayMiddleware } from "./iam-relay.middleware.js"
 
 @Injectable()
 export class IamRelayService {
@@ -11,5 +12,9 @@ export class IamRelayService {
   }
 }
 
-@Module({ providers: [IamRelayService], exports: [IamRelayService] })
-export class IamRelayModule {}
+@Module({ providers: [IamRelayService, IamRelayMiddleware], exports: [IamRelayService] })
+export class IamRelayModule implements NestModule {
+  public configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(IamRelayMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
+  }
+}
