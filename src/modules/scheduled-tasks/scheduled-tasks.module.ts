@@ -8,11 +8,12 @@ import { SchedulerControlClient } from "../../infrastructure/clients/scheduler/c
 import { SchedulerTaskStateReader } from "../../infrastructure/clients/scheduler/task-state-reader.js"
 import { ScheduledTaskReadService } from "../../application/scheduled-task-read-service.js"
 import { AgentRunsModule } from "../agent-runs/agent-runs.module.js"
+import { AccountModule } from "../account/account.module.js"
 import { ProjectsModule } from "../projects/projects.module.js"
 import { ScheduledTaskReadMiddleware } from "./scheduled-task-read.middleware.js"
 
 @Module({
-  imports: [ProjectsModule, AgentRunsModule, DatabaseModule],
+  imports: [AccountModule, ProjectsModule, AgentRunsModule, DatabaseModule],
   providers: [
     ScheduledTaskReadMiddleware,
     {
