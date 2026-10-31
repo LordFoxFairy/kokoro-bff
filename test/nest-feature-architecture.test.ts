@@ -143,6 +143,8 @@ test("ProjectsModule owns the project-pin adapter and provider", async () => {
   assert.match(projectsModule, /ProjectSkillDownloadMiddleware/u)
   assert.match(packageMiddleware, /handleSkillPackageInspectionRequest/u)
   assert.match(downloadMiddleware, /handleSkillDownloadRequest/u)
+  assert.match(downloadMiddleware, /SKILL_EXACT_DOWNLOAD_SOURCE/u)
+  assert.match(downloadMiddleware, /SKILL_SPECIFICATION_SOURCE/u)
   assert.match(middleware, /handleProjectPinRequest/u)
   assert.match(middleware, /handleProjectDeletionStatusRequest/u)
   assert.match(middleware, /handleProjectRenameRequest/u)

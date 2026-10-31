@@ -5,7 +5,7 @@ import type { ExactSkillDownloadSource } from "../../application/exact-skill-dow
 import type { SkillDownloadHandles } from "../../application/skill-download-handles.js"
 import type { SkillSpecificationSource } from "../../application/skill-specification.types.js"
 import { pathOf, requestId } from "../request.js"
-import { exactSkillDownloadRoute, type SkillDownloadProvider } from "./skill-download.js"
+import { exactSkillDownloadRoute, skillDownloadHandleRoute, type SkillDownloadProvider } from "./skill-download.js"
 
 export async function handleSkillDownloadRequest(
   request: IncomingMessage,
@@ -21,7 +21,10 @@ export async function handleSkillDownloadRequest(
   try { path = pathOf(request) } catch { return false }
   const projectPath = path.length === 7 && path[0] === "browser" && path[1] === "v1" && path[2] === "projects" && path[4] === "skill-installations" && path[6] === "download"
   const exactPath = path.length === 5 && path[0] === "browser" && path[1] === "v1" && path[4] === "download" && ["skill-installations", "skills", "skill-shares"].includes(path[2] ?? "")
-  if (!exactPath && !(projectPath && projectAccess)) return false
+  const handlePath = path.length === 2 && path[0] === "skill-downloads"
+  if (handlePath && !projectAccess) return false
+  if (!exactPath && !(projectPath && projectAccess) && !handlePath) return false
   const provider: SkillDownloadProvider = { sessionAdmission: admission, skillDownloadHandles: handles, skillSpecificationSource: specification, exactSkillDownloadSource: exact }
+  if (handlePath) return skillDownloadHandleRoute(request, response, config, provider, requestId(request), path, projectAccess)
   return exactSkillDownloadRoute(request, response, config, provider, requestId(request), path, projectAccess)
 }

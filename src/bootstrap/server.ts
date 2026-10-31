@@ -31,7 +31,6 @@ import { handleSkillSpecificationRequest } from "../http/routes/skill-specificat
 import { handleSkillPackageInspectionRequest } from "../http/routes/skill-package-inspection-native.js"
 import { handleSkillDownloadRequest } from "../http/routes/skill-download-native.js"
 import { handleSkillSpecificationEnabledRequest } from "../http/routes/skill-specification-enabled.js"
-import { skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
 import { handleSkillUsageRequest } from "../http/routes/skill-usage.js"
 import { handlePublishedSkillPackageRequest } from "../http/routes/skill-published-package-native.js"
@@ -167,8 +166,6 @@ export async function handleBffRequest(
     await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency)
     return
   }
-  const projectContentAccess = projectContentAccessForRequest(request, response, config, composition, id)
-  if (await skillDownloadHandleRoute(request, response, config, composition, id, segments, projectContentAccess)) return
   const removedSkillRead =
     request.method === "GET" &&
     segments[0] === "v1" &&

@@ -121,7 +121,7 @@ import { assertSkillWireKnown, skillTimestamp } from "../../infrastructure/clien
 export class ProjectsModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
     consumer.apply(ProjectPinMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
-    consumer.apply(ProjectSkillDownloadMiddleware).forRoutes({ path: "*", method: RequestMethod.POST })
+    consumer.apply(ProjectSkillDownloadMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(ProjectSkillPackageInspectionMiddleware).forRoutes({ path: "*", method: RequestMethod.GET })
   }
 }
