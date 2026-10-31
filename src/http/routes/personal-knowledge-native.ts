@@ -12,7 +12,9 @@ type KnowledgeRepository = PersonalKnowledgeRepository | BffBusinessStore | null
 
 function repositoryOf(value: KnowledgeRepository): PersonalKnowledgeRepository | null {
   if (value === null) return null
-  return "services" in value ? value.services.personalKnowledge ?? null : value
+  if ("personalKnowledge" in value) return value.personalKnowledge ?? null
+  const legacy = value as BffBusinessStore & { services?: { personalKnowledge?: PersonalKnowledgeRepository } }
+  return legacy.services?.personalKnowledge ?? (value as PersonalKnowledgeRepository)
 }
 
 /** Account-owned Knowledge routes use one admitted user context and a feature-local repository. */

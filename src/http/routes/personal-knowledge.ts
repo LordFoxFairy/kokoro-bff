@@ -100,7 +100,8 @@ export async function personalKnowledgeRoute(
       fail(405, "method_not_allowed", "Method not allowed")
       return
     }
-    const repository = store === null ? null : "services" in store ? store.services.personalKnowledge : store
+    const legacy = store === null ? null : (store as BffBusinessStore & { services?: { personalKnowledge?: PersonalKnowledgeRepository } })
+    const repository = store === null ? null : "personalKnowledge" in store ? store.personalKnowledge ?? null : legacy?.services?.personalKnowledge ?? (store as PersonalKnowledgeRepository)
     if (!repository) {
       fail(503, "knowledge_unavailable", "Knowledge store is unavailable", method === "GET")
       return

@@ -9,6 +9,7 @@ import type { SchedulerDispatchReceiptRepository } from "./scheduler-dispatch-re
 import type { ScheduledAgentDispatchRepository } from "./scheduled-agent-dispatch-repository.js"
 import type { ProjectScopeReleaseOutboxRepository } from "./project-scope-release-outbox.js"
 import type { PersonalizationProvider } from "../../modules/account/personalization.provider.js"
+import type { PersonalKnowledgeRepository } from "./personal-knowledge-repository.js"
 
 export type ArtifactAssociation = Readonly<{
   conversationId: string
@@ -31,6 +32,8 @@ export interface ArtifactLibraryRepository {
 export interface BffBusinessStore extends IdempotencyRepository {
   /** Account-owned provider retained only as the raw-server composition seam during C-3 migration. */
   readonly personalizationProvider?: PersonalizationProvider
+  /** Account-owned Knowledge repository retained only as the raw-server composition seam during C-3 migration. */
+  readonly personalKnowledge?: PersonalKnowledgeRepository
   readonly submittedAgentRuns?: import("./submitted-agent-run-reader.js").SubmittedAgentRunReader
   readonly projectExecutionBindings?: import("./project-execution-binding-reader.js").ProjectExecutionBindingReader
   readonly artifactLibrary?: ArtifactLibraryRepository

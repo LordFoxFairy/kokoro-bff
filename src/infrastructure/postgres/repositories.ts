@@ -39,6 +39,7 @@ import { PostgresProjectScopeReleaseOutboxRepository } from "./project-scope-rel
 import type { ProjectScopeReleaseOutboxRepository } from "../../application/ports/project-scope-release-outbox.js"
 import { PostgresSkillShareRepository } from "./skill-share-repository.js"
 import type { SkillShareRepository } from "../../application/ports/skill-share-repository.js"
+import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
 
 export { PENDING_RECEIPT_STATUS }
 export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/idempotency-repository.js"
@@ -63,6 +64,7 @@ export class PostgresBffRepositories {
   public readonly projectScopeReleaseOutbox: ProjectScopeReleaseOutboxRepository
   public readonly skillShares: SkillShareRepository
   public readonly personalizationProvider: PostgresPersonalizationRepository
+  public readonly personalKnowledge: PersonalKnowledgeRepository
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
@@ -86,6 +88,7 @@ export class PostgresBffRepositories {
     this.projectScopeReleaseOutbox = new PostgresProjectScopeReleaseOutboxRepository(this.database)
     this.skillShares = new PostgresSkillShareRepository(this.database)
     this.personalizationProvider = new PostgresPersonalizationRepository(this.database)
+    this.personalKnowledge = new PostgresPersonalKnowledgeRepository(this.database)
     this.services = new BffApplicationServices(
       this.projects,
       this.scheduled,
@@ -103,7 +106,6 @@ export class PostgresBffRepositories {
         }
       },
       (tenant, subject, conversation, artifact) => artifactLibrary.findSkillHandoff(tenant, subject, conversation, artifact),
-      new PostgresPersonalKnowledgeRepository(this.database),
     )
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)
