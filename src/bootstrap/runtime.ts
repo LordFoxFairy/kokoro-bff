@@ -43,6 +43,7 @@ import { ScheduledAgentTerminalSource } from "../infrastructure/clients/agent/sc
 import { PostgresBffRepositories } from "../infrastructure/postgres/repositories.js"
 import type { RequestContext } from "../domain/request-context.js"
 import type { PersonalizationProvider } from "../modules/account/personalization.provider.js"
+import type { ChatApplicationService } from "../application/chat-service.js"
 import { SessionAdmissionClient } from "../auth/session-admission.client.js"
 import type { SessionAdmission } from "../auth/session-admission.types.js"
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
@@ -105,6 +106,8 @@ export type BffServerComposition = {
   businessStore: BffBusinessStore | null
   /** Feature-owned account personalization provider; legacy composition is only a test/runtime fallback. */
   personalizationProvider: PersonalizationProvider | null
+  /** Chat-owned archive/share provider; global store fallback is transitional. */
+  chatService: ChatApplicationService | null
   scheduledTaskReader: ScheduledTaskReadService | null
   sessionAdmission: SessionAdmission
   skillListAdmission: SkillListAdmission
@@ -150,6 +153,7 @@ export type BffCompositionOptions = {
   /** Supplying null is an explicit test composition; omitted means real persistence. */
   businessStore?: BffBusinessStore | null
   personalizationProvider?: PersonalizationProvider | null
+  chatService?: ChatApplicationService | null
   sessionAdmission?: SessionAdmission
   skillListAdmission?: SkillListAdmission
   openAppManagementAdmission?: OpenAppManagementAdmission
@@ -299,6 +303,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         })()
   const personalizationProvider =
     options.personalizationProvider !== undefined ? options.personalizationProvider : (businessStore?.personalizationProvider ?? null)
+  const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.chatService ?? businessStore?.services.chat ?? null)
   const scheduledTaskReader =
     businessStore === null
       ? null
@@ -683,6 +688,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     installationClient,
     businessStore,
     personalizationProvider,
+    chatService,
     scheduledTaskReader,
     sessionAdmission,
     appSkillBindingClient,

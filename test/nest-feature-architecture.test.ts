@@ -43,6 +43,26 @@ test("AccountModule owns the SessionAdmission provider consumed by the transitio
   assert.match(legacyModule, /imports: \[AccountModule\]/u)
 })
 
+test("ChatModule owns the archive/share adapters and chat provider", async () => {
+  const [chatModule, middleware, nativeRoute, server, legacyModule] = await Promise.all([
+    readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/chat/chat.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/chat-native.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
+  ])
+  assert.match(chatModule, /provide: CHAT_SERVICE/u)
+  assert.match(chatModule, /ChatMiddleware/u)
+  assert.match(chatModule, /forRoutes\(\{ path: "\*", method: RequestMethod\.ALL \}\)/u)
+  assert.match(middleware, /handleChatNativeRequest/u)
+  assert.match(nativeRoute, /archivedTasksRoute/u)
+  assert.match(nativeRoute, /sharedTasksRoute/u)
+  assert.match(server, /handleChatNativeRequest/u)
+  assert.doesNotMatch(server, /await archivedTasksRoute\(/u)
+  assert.doesNotMatch(server, /await sharedTasksRoute\(/u)
+  assert.doesNotMatch(legacyModule, /v1\/account\/(?:archived-tasks|shared-tasks)/u)
+})
+
 async function fileExists(relativePath: string): Promise<boolean> {
   try {
     await readFile(path.join(root, relativePath))

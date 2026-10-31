@@ -17,8 +17,6 @@ import { projectExecutionBindingRoute } from "../http/routes/project-execution-b
 import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 
-import { archivedTasksRoute } from "../http/routes/archived-tasks.js"
-import { sharedTasksRoute } from "../http/routes/shared-tasks.js"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
 import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
 import { customApiOperation, customApiRoute } from "../http/routes/custom-api.js"
@@ -87,6 +85,7 @@ import { liveMoriBusiness } from "../http/routes/music.js"
 import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamKey } from "../http/routes/routing.js"
 import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { handleSystemNativeRequest } from "../http/routes/system-native.js"
+import { handleChatNativeRequest } from "../http/routes/chat-native.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
 import { liveModelConfigurationAdmin } from "../http/routes/model-configuration-admin.js"
 import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
@@ -119,17 +118,6 @@ export async function handleBffRequest(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
-  if (
-    (request.method === "GET" && (request.url === "/v1/account/archived-tasks" || request.url?.startsWith("/v1/account/archived-tasks?"))) ||
-    ((request.method === "GET" || request.method === "POST") && /^\/v1\/sessions\/[^/]+\/(?:archive|restore)(?:\?|$)/u.test(request.url ?? ""))
-  ) {
-    await archivedTasksRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.services.chat, id)
-    return
-  }
-  if (request.method === "GET" && (request.url === "/v1/account/shared-tasks" || request.url?.startsWith("/v1/account/shared-tasks?"))) {
-    await sharedTasksRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.services.chat, id)
-    return
-  }
   if ((request.url ?? "").split("?", 1)[0] === "/internal/v1/model-admissions" || (request.url ?? "").startsWith("/internal/v1/model-admissions/")) {
     await agentModelAdmissionRoute(request, response, config, composition.businessStore?.submittedAgentRuns ?? null)
     return
@@ -1364,6 +1352,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   const composition = createBffComposition(config, options)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
     const handler = handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider)
+      .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
       .then((handled) => (handled ? true : handleSystemNativeRequest(request, response, config)))
       .then((handled) => {
         if (handled) return
