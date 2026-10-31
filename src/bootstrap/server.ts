@@ -1099,10 +1099,11 @@ export type BffServer = Server & {
 export function createBffServer(config: BffConfig = loadConfig(), options: BffServerOptions = {}): BffServer {
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
-  const projectResourceUpload = composition.businessStore === null || composition.projectService === null
+  const projectResourceProjectReader = composition.projectService ?? composition.businessStore?.services?.projects
+  const projectResourceUpload = composition.businessStore === null || typeof projectResourceProjectReader?.find !== "function"
     ? null
     : {
-        find: composition.projectService.find.bind(composition.projectService),
+        find: projectResourceProjectReader.find.bind(projectResourceProjectReader),
         receipts: composition.businessStore,
         idempotency: composition.idempotency,
       }
