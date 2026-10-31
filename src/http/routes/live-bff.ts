@@ -104,11 +104,6 @@ export async function liveBffBusiness(
         await reply(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ project }, context.requestId), context, idempotency, mutation)
         return true
       }
-      if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "instruction-revisions" && method === "GET") {
-        const revisions = await store.services.projects.revisions(ownerScope, projectId)
-        await reply(response, revisions === null ? 404 : 200, revisions === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ items: revisions }, context.requestId), context, idempotency, mutation)
-        return true
-      }
       if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "tasks" && method === "GET") {
         const tasks = await store.services.projects.tasks(ownerScope, projectId)
         if (tasks === null) {
