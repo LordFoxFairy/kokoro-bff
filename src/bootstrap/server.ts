@@ -36,7 +36,7 @@ import { skillCoverRoute } from "../http/routes/skill-cover.js"
 import { publishedSkillPackageInspectionRoute } from "../http/routes/skill-download.js"
 import { startSkillRequestBudget, skillRequestRemaining, skillDraftsRoute } from "../http/routes/skill-drafts.js"
 import { skillAdminRoute } from "../http/routes/skill-admin.js"
-import { personalizationRoute } from "../http/routes/personalization.js"
+import { handlePersonalizationRequest } from "../http/routes/personalization.js"
 import { projectRenameRoute } from "../http/routes/project-rename.js"
 import { projectDeleteRoute } from "../http/routes/project-delete.js"
 import { projectDeletionStatusRoute } from "../http/routes/project-deletion-status.js"
@@ -110,6 +110,10 @@ import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-ski
 import { skillPackageInspectionRoute, type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 
+function isPersonalizationRequest(request: IncomingMessage): boolean {
+  return (request.url ?? "").split("?", 1)[0] === "/v1/preferences/personalization"
+}
+
 export async function handleBffRequest(
   request: IncomingMessage,
   response: ServerResponse,
@@ -124,6 +128,10 @@ export async function handleBffRequest(
   response.setHeader("x-request-id", id)
   if ((request.method === "GET" || request.method === "PATCH") && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
     await accountProfileRoute(request, response, config, composition.sessionAdmission, id)
+    return
+  }
+  if (isPersonalizationRequest(request)) {
+    await handlePersonalizationRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider)
     return
   }
   if (
@@ -466,7 +474,6 @@ export async function handleBffRequest(
     businessPath[0] === "preferences" &&
     ((businessPath.length === 2 && ["knowledge", "knowledge-usage"].includes(businessPath[1]!)) ||
       (businessPath.length === 3 && businessPath[1] === "knowledge"))
-  const isPersonalizationPath = businessPath.length === 2 && businessPath[0] === "preferences" && businessPath[1] === "personalization"
   const isProjectRenamePath =
     composition.routeHandler === undefined &&
     request.method === "PATCH" &&
@@ -585,7 +592,6 @@ export async function handleBffRequest(
         isProjectRenamePath ||
         isProjectDeletePath ||
         isProjectDeletionStatusPath ||
-        isPersonalizationPath ||
         isPersonalKnowledgePath
       ) {
         response.setHeader("cache-control", "no-store")
@@ -910,11 +916,6 @@ export async function handleBffRequest(
 
   if (isPersonalKnowledgePath) {
     await personalKnowledgeRoute(request, response, context, composition.businessStore)
-    return
-  }
-
-  if (isPersonalizationPath) {
-    await personalizationRoute(request, response, context, composition.personalizationProvider)
     return
   }
 
@@ -1397,7 +1398,10 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
-    void handleBffRequest(request, response, config, composition).catch(() => {
+    const handler = isPersonalizationRequest(request)
+      ? handlePersonalizationRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider)
+      : handleBffRequest(request, response, config, composition)
+    void handler.catch(() => {
       if (!response.headersSent) {
         if (
           (request.method === "GET" || request.method === "PATCH") &&

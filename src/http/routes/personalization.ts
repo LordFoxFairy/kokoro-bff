@@ -1,9 +1,13 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { performance } from "node:perf_hooks"
 
+import { authorizeUserRequest } from "../../auth/user-admission.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { BffConfig } from "../../config/runtime.js"
 import type { PersonalizationProvider } from "../../modules/account/personalization.provider.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { parsePersonalizationBody } from "../personalization-input.js"
+import { requestId } from "../request.js"
 import { send } from "../response.js"
 
 async function readBody(request: IncomingMessage, signal: AbortSignal): Promise<Buffer> {
@@ -157,6 +161,48 @@ export async function personalizationRoute(
     else failure(503, "personalization_unavailable")
   } catch {
     failure(503, "personalization_unavailable", request.method === "GET")
+  } finally {
+    clearTimeout(timer)
+    request.removeListener("aborted", onAborted)
+    response.removeListener("close", onClosed)
+  }
+}
+
+/** Account feature adapter: admission and the caller-owned provider stay outside the legacy dispatcher. */
+export async function handlePersonalizationRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  provider: PersonalizationProvider | null,
+): Promise<void> {
+  const id = requestId(request)
+  const abort = new AbortController()
+  const timer = setTimeout(() => abort.abort(), Math.min(config.upstreamTimeoutMs, 10_000))
+  const onAborted = (): void => abort.abort()
+  const onClosed = (): void => {
+    if (!response.writableEnded) abort.abort()
+  }
+  request.once("aborted", onAborted)
+  response.once("close", onClosed)
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    if (!admitted.ok) {
+      response.setHeader("x-request-id", id)
+      response.setHeader("cache-control", "no-store")
+      send(
+        response,
+        admitted.status,
+        { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } },
+        admitted.retryAfter,
+      )
+      return
+    }
+    await personalizationRoute(request, response, admitted.context, provider)
+  } catch {
+    if (!response.headersSent && !response.destroyed && !request.aborted)
+      send(response, 503, { error: { code: "personalization_unavailable", message: "Personalization request could not be completed", retryable: true } })
+    else if (!response.writableEnded && !response.destroyed) response.destroy()
   } finally {
     clearTimeout(timer)
     request.removeListener("aborted", onAborted)
