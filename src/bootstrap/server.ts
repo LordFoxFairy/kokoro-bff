@@ -15,7 +15,7 @@ import {
 import { handleSharedPublicRequest, handleSharedReaderRequest } from "../http/routes/shared-native.js"
 import { handleHealthRequest } from "../http/routes/health-native.js"
 import { handleProjectMcpRecommendationsRequest, projectMcpRecommendationsProvider } from "../http/routes/project-mcp-recommendations.js"
-import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
+import { handleAppSkillBindingsRequest } from "../http/routes/app-skill-bindings-native.js"
 import { handleScheduledTaskReadRequest } from "../http/routes/scheduled-task-native.js"
 import { handlePersonalKnowledgeRequest } from "../http/routes/personal-knowledge-native.js"
 import { handleAgentRunsInternalRequest } from "../http/routes/agent-runs-native.js"
@@ -157,7 +157,6 @@ export async function handleBffRequest(
     if (!project) throw new ConnectError("Project not found", Code.NotFound)
     return project.id
   }
-  if (await appSkillBindingsRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillDownloadHandleRoute(request, response, config, composition, id, segments, projectContentAccess)) return
   if (await exactSkillDownloadRoute(request, response, config, composition, id, segments, projectContentAccess)) return
@@ -709,6 +708,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
         client: composition.mcpProjectPublicationClient,
       }))
       .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
+      .then((handled) => handled ? true : handleAppSkillBindingsRequest(request, response, config, composition.sessionAdmission, composition.openAppManagementAdmission, composition.appSkillBindingClient))
       .then((handled) => handled ? true : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization))
       .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.services.chat ?? null))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))

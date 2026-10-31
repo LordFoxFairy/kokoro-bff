@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
 import { bearerToken } from "../../auth/user-admission.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { OpenAppManagementAdmission } from "../../auth/open-app-management-admission.client.js"
+import type { AppSkillBindingClient } from "../../application/app-skill-bindings.types.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import { skillIdSchema } from "../skill-product-input.js"
 import { appSkillBindingQuerySchema, putAppSkillBindingSchema, removeAppSkillBindingSchema } from "../app-skill-binding-input.js"
@@ -17,12 +19,17 @@ import {
 } from "./personal-skill-lifecycle.js"
 
 const count = (request: IncomingMessage, name: string) => request.rawHeaders.filter((value, index) => index % 2 === 0 && value.toLowerCase() === name).length
+export type AppSkillBindingProvider = Readonly<{
+  sessionAdmission: SessionAdmission
+  openAppManagementAdmission: OpenAppManagementAdmission
+  appSkillBindingClient: AppSkillBindingClient | null
+}>
 /** Exact App binding scope is derived from fresh IAM operator qualification, never platform-admin or body identity. */
 export async function appSkillBindingsRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: AppSkillBindingProvider,
   requestId: string,
   pathname: string,
 ): Promise<boolean> {
