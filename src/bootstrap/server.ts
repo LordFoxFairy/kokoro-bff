@@ -34,7 +34,6 @@ import { skillSpecificationReadRoute } from "../http/routes/platform-projection.
 import { handleSkillSpecificationEnabledRequest } from "../http/routes/skill-specification-enabled.js"
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
-import { skillGithubImportRoute } from "../http/routes/skill-github-import.js"
 import { skillAiImportRoute } from "../http/routes/skill-ai-import.js"
 import { skillShareRoute } from "../http/routes/skill-share.js"
 import { handleSkillUsageRequest } from "../http/routes/skill-usage.js"
@@ -92,6 +91,7 @@ import { createBffComposition, type BffCompositionOptions, type BffRouteInput } 
 import { handleSkillDraftRequest } from "../http/routes/skill-draft-native.js"
 import { handleSkillDraftMutationRequest } from "../http/routes/skill-draft-mutations-native.js"
 import { handleSkillCatalogCommandRequest, handleSkillCoverRequest, handleSkillGithubPreviewRequest, handleSkillPackageUploadReadRequest } from "../http/routes/skill-catalog-command-native.js"
+import { handleSkillGithubImportRequest } from "../http/routes/skill-import-native.js"
 import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
@@ -494,10 +494,6 @@ export async function handleBffRequest(
     if (!current.ok || current.context.identity.namespace !== context.identity.namespace || current.context.identity.userId !== context.identity.userId)
       throw new Error("skill_not_found")
     signal.throwIfAborted()
-  }
-  if (businessPath.join("/") === "skills/github/import" && request.method === "POST") {
-    await skillGithubImportRoute(request, response, context, config, composition.businessStore, composition.skillProductClient, readmitSkill)
-    return
   }
   if (businessPath.join("/") === "skills/ai-import" && request.method === "POST") {
     await skillAiImportRoute(request, response, context, config, composition.businessStore, composition.skillProductClient, readmitSkill)
@@ -940,6 +936,11 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           : composition.routeHandler !== undefined
             ? false
             : handleSkillAdminRequest(request, response, config, composition.sessionAdmission, composition.skillAuthorization, composition.skillAdminClient),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : handleSkillGithubImportRequest(request, response, config, composition.sessionAdmission, composition.businessStore, composition.skillProductClient),
       )
       .then((handled) =>
         handled

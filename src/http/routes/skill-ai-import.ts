@@ -10,6 +10,7 @@ import type { JsonValue } from "@bufbuild/protobuf"
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
+import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import { handoffSkillPackage } from "../../application/skill-ai-handoff.js"
 import type { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
 import { assertSkillWireKnown, skillTimestamp } from "../../infrastructure/clients/platform/skill-product-response.js"
@@ -37,7 +38,7 @@ export async function importSkillBytes(
   metadata: import("zod").infer<typeof skillProductInputs.ai>["metadata"],
   provenance: import("zod").infer<typeof skillCreationProvenanceSchema>,
   client: SkillProductConnectClient,
-  store: BffBusinessStore,
+  store: Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt">,
   origin: string,
   signal: AbortSignal,
   deadlineAt: number,
@@ -75,7 +76,7 @@ export async function resumeGithubSkillImport(
   commandId: string,
   selector: import("zod").infer<typeof skillProductInputs.githubImport>,
   client: SkillProductConnectClient,
-  store: BffBusinessStore,
+  store: Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt">,
   origin: string,
   signal: AbortSignal,
   deadlineAt: number,
@@ -140,7 +141,7 @@ async function importSkillPackage(
   commandId: string,
   source: Readonly<{ frozen: Record<string, unknown>; bytes?: Buffer }>,
   client: SkillProductConnectClient,
-  store: BffBusinessStore,
+  store: Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt">,
   origin: string,
   signal: AbortSignal,
   deadlineAt: number,

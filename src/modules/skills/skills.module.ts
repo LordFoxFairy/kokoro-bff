@@ -2,7 +2,7 @@ import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/c
 import { BffConfigModule } from "../../config/config.module.js"
 import { AccountModule } from "../account/account.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
-import { BFF_CONFIG, BFF_POOL, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_USAGE_READER } from "../../common/tokens.js"
+import { BFF_CONFIG, BFF_POOL, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_USAGE_READER } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
 import { PlatformServiceCredentialSource } from "../../infrastructure/clients/platform/platform-service-credential.js"
@@ -16,6 +16,8 @@ import { SkillsMiddleware } from "./skills.middleware.js"
 import type { Pool } from "pg"
 import { readSkillUsage } from "../../infrastructure/postgres/skill-usage-projection.js"
 import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
+import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
+import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 
 @Module({
   imports: [AccountModule, IamRelayModule, BffConfigModule],
@@ -119,8 +121,13 @@ import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
         }
       },
     },
+    {
+      provide: SKILL_IMPORT_RECEIPTS,
+      inject: [BFF_POOL],
+      useFactory: (pool: Pool): Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt"> => new PostgresIdempotencyRepository(pool),
+    },
   ],
-  exports: [SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_USAGE_READER],
+  exports: [SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_USAGE_READER],
 })
 export class SkillsModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { BffConfig } from "../../config/runtime.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
+import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import type { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
 import { skillHandoffResultSchema } from "../../infrastructure/clients/platform/skill-product-schema.js"
 import { importSkillBytes, resumeGithubSkillImport } from "./skill-ai-import.js"
@@ -51,7 +51,7 @@ export async function skillGithubImportRoute(
   response: ServerResponse,
   context: RequestContext,
   config: BffConfig,
-  store: BffBusinessStore | null,
+  store: Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt"> | null,
   client: SkillProductConnectClient | null,
   readmit: (signal: AbortSignal) => Promise<void>,
 ) {
