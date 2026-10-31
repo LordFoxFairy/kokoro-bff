@@ -40,7 +40,7 @@ import { skillShareRoute } from "../http/routes/skill-share.js"
 import { handleSkillUsageRequest } from "../http/routes/skill-usage.js"
 import { handlePublishedSkillPackageRequest } from "../http/routes/skill-published-package-native.js"
 import { startSkillRequestBudget, skillRequestRemaining } from "../http/routes/skill-drafts.js"
-import { skillAdminRoute } from "../http/routes/skill-admin.js"
+import { handleSkillAdminRequest } from "../http/routes/skill-admin-native.js"
 import { handleAccountNativeRequest } from "../http/routes/account-native.js"
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
 import { personalFileUploadRoute } from "../http/routes/personal-file-upload.js"
@@ -563,14 +563,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (
-    businessPath[0] === "admin" &&
-    businessPath[1] === "skills" &&
-    ((request.method === "GET" && [2, 3].includes(businessPath.length)) || (request.method === "POST" && [2, 4].includes(businessPath.length)))
-  ) {
-    await skillAdminRoute(request, response, context, businessPath, composition.skillAdminClient, config.iamBaseUrl)
-    return
-  }
   if (isPersonalKnowledgePath) {
     await personalKnowledgeRoute(request, response, context, composition.businessStore)
     return
@@ -963,6 +955,13 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           : composition.routeHandler !== undefined
             ? false
             : handlePublishedSkillPackageRequest(request, response, config, composition.sessionAdmission, composition.skillProductClient),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleSkillAdminRequest(request, response, config, composition.sessionAdmission, composition.skillAuthorization, composition.skillAdminClient),
       )
       .then((handled) =>
         handled

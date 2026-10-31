@@ -233,6 +233,7 @@ test("SkillsModule owns personal skill-installation admission and client", async
   assert.match(catalogCommandRoute, /handleSkillPackageUploadReadRequest/u)
   assert.match(catalogCommandRoute, /handleSkillCoverRequest/u)
   assert.match(middleware, /handlePublishedSkillPackageRequest/u)
+  assert.match(middleware, /handleSkillAdminRequest/u)
   assert.match(route, /handlePersonalSkillInstallationRequest/u)
   assert.match(usageRoute, /handleSkillUsageRequest/u)
   assert.match(managedRoute, /handleManagedPersonalSkillsRequest/u)
