@@ -35,7 +35,7 @@ export async function projectResourceRoute(
   try {
     if (store === null) throw new ProjectResourceError("business_store_unavailable", 503)
     const scope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
-    const project = await store.services.projects.find(scope, projectRef)
+    const project = await (store.projectService ?? store.services.projects).find(scope, projectRef)
     if (project === null) throw new ProjectResourceError("project_not_found", 404)
     if (new URL(request.url ?? "/", "http://bff.invalid").search !== "") throw new ProjectResourceError("invalid_project_resource", 400)
     const key = idempotencyKey(request)

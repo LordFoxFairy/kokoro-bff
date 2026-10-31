@@ -24,7 +24,7 @@ export function isProjectSkillSelectionRequest(request: IncomingMessage): boolea
 }
 
 export function projectSkillSelectionProvider(store: BffBusinessStore | null): ProjectSkillSelectionProvider | null {
-  const projects = store?.services.projects
+  const projects = store?.projectService ?? store?.services.projects
   if (
     !projects ||
     typeof projects.find !== "function" ||

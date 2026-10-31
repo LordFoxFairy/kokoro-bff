@@ -63,7 +63,7 @@ export async function authorizeChatRequest(
   // Existing Message resources are authorized by their current Conversation owner.
   // The raw Project ref remains a new-command precondition in the locked repository;
   // applying it here would reject an exact replay after a successful Move.
-  if (projectRef !== undefined && (await store.services.projects.find(ownerScope, projectRef)) === null) {
+  if (projectRef !== undefined && (await (store.projectService ?? store.services.projects).find(ownerScope, projectRef)) === null) {
     return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
   }
 

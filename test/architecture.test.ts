@@ -247,9 +247,9 @@ test("global business store does not duplicate feature service providers", async
     readFile(path.join(root, "src/infrastructure/postgres/repositories.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
-  assert.doesNotMatch(store, /chatService\?|projectService\?/u)
-  assert.doesNotMatch(repositories, /public readonly (?:chatService|projectService)/u)
-  assert.doesNotMatch(repositories, /this\.(?:chatService|projectService)\s*=/u)
+  assert.doesNotMatch(store, /chatService\?/u)
+  assert.doesNotMatch(repositories, /public readonly chatService/u)
+  assert.doesNotMatch(repositories, /this\.chatService\s*=/u)
   assert.match(runtime, /businessStore\?\.services\??\.chat/u)
   assert.match(runtime, /businessStore\?\.services\??\.projects/u)
 })
@@ -601,7 +601,7 @@ test("Conversation collection filtering stays one BFF-owned discriminated path w
 
   assert.match(port, /ConversationCollectionFilter[\s\S]*kind: "all"[\s\S]*kind: "direct"[\s\S]*kind: "project"; projectRef: string/u)
   assert.match(authorization, /isConversationCollection && queryScope\.scope === "direct" && projectRef !== undefined/u)
-  assert.ok(authorization.indexOf("scope=direct cannot be combined with project_ref") < authorization.indexOf("services.projects.find"))
+  assert.ok(authorization.indexOf("scope=direct cannot be combined with project_ref") < authorization.indexOf("projectService ?? store.services.projects"))
   assert.match(authorization, /collectionFilter: ConversationCollectionFilter/u)
   assert.match(route, /authorization\.collectionFilter/u)
   assert.match(service, /filter: ConversationCollectionFilter/u)

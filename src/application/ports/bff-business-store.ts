@@ -15,6 +15,7 @@ import type { SkillAiAssociation } from "../skill-ai-handoff.js"
 import type { SkillShareRepository } from "./skill-share-repository.js"
 import type { PublicShareApplicationService } from "../public-share-service.js"
 import type { ScheduledTaskService } from "../scheduled-task-service.js"
+import type { ProjectService } from "../project-service.js"
 
 export type ArtifactAssociation = Readonly<{
   conversationId: string
@@ -48,6 +49,8 @@ export interface BffBusinessStore extends IdempotencyRepository {
   readonly publicShareService?: PublicShareApplicationService
   /** ScheduledTask service retained only as the raw-server composition seam during C-3 migration. */
   readonly scheduledTaskService?: ScheduledTaskService
+  /** Projects owner service retained as a named C-3 seam while legacy consumers drain. */
+  readonly projectService?: ProjectService
   readonly submittedAgentRuns?: import("./submitted-agent-run-reader.js").SubmittedAgentRunReader
   readonly projectExecutionBindings?: import("./project-execution-binding-reader.js").ProjectExecutionBindingReader
   readonly artifactLibrary?: ArtifactLibraryRepository
