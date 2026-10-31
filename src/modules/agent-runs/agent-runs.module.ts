@@ -7,10 +7,11 @@ import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
 import { AgentRunsMiddleware } from "./agent-runs.middleware.js"
 import type { SubmittedAgentRunReader } from "../../application/ports/submitted-agent-run-reader.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
+import { AccountModule } from "../account/account.module.js"
 import { ChatModule } from "../chat/chat.module.js"
 
 @Module({
-  imports: [IamRelayModule, DatabaseModule, ChatModule],
+  imports: [IamRelayModule, DatabaseModule, AccountModule, ChatModule],
   providers: [
     AgentRunsMiddleware,
     {
