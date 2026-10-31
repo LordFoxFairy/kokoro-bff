@@ -944,9 +944,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) =>
         handled
           ? true
-          : composition.routeHandler !== undefined
-            ? false
-            : handleSkillGithubPreviewRequest(request, response, config, composition.sessionAdmission),
+          : handleSkillGithubPreviewRequest(request, response, config, composition.sessionAdmission),
       )
       .then((handled) =>
         handled
