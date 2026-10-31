@@ -1,7 +1,7 @@
 import { handleRunDisplayRequest } from "../http/routes/run-display.js"
 import { messageRegenerationRoute, MessageRegenerationAdmissionError } from "../http/routes/message-regeneration.js"
 import { handleMessageFeedbackRequest } from "../http/routes/message-feedback-native.js"
-import { handleProjectPinRequest } from "../http/routes/project-native.js"
+import { handleProjectCoreReadRequest, handleProjectPinRequest } from "../http/routes/project-native.js"
 import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
 import { projectResourceReadRoute } from "../http/routes/project-resource-read.js"
 import { projectResourceDeleteRoute } from "../http/routes/project-resource-delete.js"
@@ -1282,6 +1282,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       )
       .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
       .then((handled) => (handled ? true : handleMessageFeedbackRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
+      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectCoreReadRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : handleProjectPinRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) =>
         handled

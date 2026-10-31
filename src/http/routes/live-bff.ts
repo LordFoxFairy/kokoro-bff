@@ -7,7 +7,6 @@ import { idempotencyKey } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { reply } from "../response.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
-import { projectData } from "./helpers.js"
 import { scheduledCreateInput, scheduledPatchInput } from "../../application/scheduled/input.js"
 import { scheduledTaskResponse } from "../../application/scheduled/mappers.js"
 import { scheduledTaskId } from "./scheduler.js"
@@ -86,10 +85,6 @@ export async function liveBffBusiness(
   try {
     if (businessPath[0] === "projects") {
       const projectId = businessPath[1]
-      if (businessPath.length === 1 && method === "GET") {
-        await reply(response, 200, ok(projectData(await store.services.projects.list(ownerScope)), context.requestId), context, idempotency, mutation)
-        return true
-      }
       if (businessPath.length === 1 && method === "POST") {
         const name = projectName(json.name)
         if (name === null) {

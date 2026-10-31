@@ -4,18 +4,19 @@ import { BFF_CONFIG, PROJECT_SERVICE, SESSION_ADMISSION } from "../../common/tok
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ProjectPinProvider } from "../../http/routes/project-pin.js"
-import { handleProjectPinRequest } from "../../http/routes/project-native.js"
+import { handleProjectCoreReadRequest, handleProjectPinRequest, type ProjectCoreReadProvider } from "../../http/routes/project-native.js"
 
 @Injectable()
 export class ProjectPinMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(PROJECT_SERVICE) private readonly projectService: ProjectPinProvider,
+    @Inject(PROJECT_SERVICE) private readonly projectService: ProjectPinProvider & ProjectCoreReadProvider,
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
-    void handleProjectPinRequest(request, response, this.config, this.admission, this.projectService)
+    void handleProjectCoreReadRequest(request, response, this.config, this.admission, this.projectService)
+      .then((handled) => handled || handleProjectPinRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

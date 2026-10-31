@@ -2,10 +2,14 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
-import { failure } from "../../contracts/index.js"
+import { failure, ok } from "../../contracts/index.js"
 import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
 import { projectPinRoute, ProjectPinAdmissionError, type ProjectPinProvider } from "./project-pin.js"
+
+export type ProjectCoreReadProvider = Readonly<{
+  list(scope: Readonly<{ tenantId: string; subjectId: string }>): Promise<readonly unknown[]>
+}>
 
 function projectPinPath(request: IncomingMessage): string {
   return (request.url ?? "").split("?", 1)[0] ?? ""
@@ -14,6 +18,50 @@ function projectPinPath(request: IncomingMessage): string {
 export function isProjectPinRequest(request: IncomingMessage): boolean {
   const path = projectPinPath(request)
   return path === "/v1/self/project-pins" || /^\/v1\/projects\/[^/]+\/pin$/u.test(path)
+}
+
+export function isProjectCoreReadRequest(request: IncomingMessage): boolean {
+  return request.method === "GET" && (request.url ?? "").split("?", 1)[0] === "/v1/projects"
+}
+
+/** Projects-owned collection read; the legacy dispatcher no longer owns this path. */
+export async function handleProjectCoreReadRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  projects: ProjectCoreReadProvider | null,
+): Promise<boolean> {
+  if (!isProjectCoreReadRequest(request)) return false
+  const id = requestId(request)
+  response.setHeader("x-request-id", id)
+  const abort = new AbortController()
+  const timer = setTimeout(() => abort.abort(), Math.min(config.upstreamTimeoutMs, 10_000))
+  const onAborted = (): void => abort.abort()
+  const onClosed = (): void => { if (!response.writableEnded) abort.abort() }
+  request.once("aborted", onAborted)
+  response.once("close", onClosed)
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    if (!admitted.ok) {
+      send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+      return true
+    }
+    if (projects === null) {
+      send(response, 503, failure("business_store_not_configured", "Project owner is unavailable", id))
+      return true
+    }
+    const projectsRead = await projects.list({ tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId })
+    if (abort.signal.aborted || response.destroyed || response.writableEnded) return true
+    send(response, 200, ok({ projects: projectsRead }, id))
+  } catch {
+    if (!response.destroyed && !response.writableEnded) send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", id))
+  } finally {
+    clearTimeout(timer)
+    request.removeListener("aborted", onAborted)
+    response.removeListener("close", onClosed)
+  }
+  return true
 }
 
 /** Projects-owned pin adapter; the route keeps its own body, CAS and final-admission checks. */
