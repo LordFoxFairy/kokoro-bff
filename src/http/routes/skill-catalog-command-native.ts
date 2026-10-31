@@ -10,6 +10,7 @@ import { publishSkillRoute } from "./publish-skill.js"
 import { validateSkillDraftRoute } from "./validate-skill-draft.js"
 import { getSkillPackageUploadRoute } from "./get-skill-package-upload.js"
 import { skillCoverRoute } from "./skill-cover.js"
+import { skillGithubPreviewRoute } from "./skill-github-import.js"
 import { requestId } from "../request.js"
 import { send } from "../response.js"
 
@@ -148,6 +149,7 @@ export async function handleSkillCoverRequest(
     }
     const readmit = async (currentSignal: AbortSignal): Promise<void> => {
       const current = await authorizeUserRequest(request, config, admission, id, currentSignal)
+      if (!current.ok && current.status >= 500) throw new Error("skill_dependency_unavailable")
       if (!current.ok || current.context.identity.namespace !== admitted.context.identity.namespace || current.context.identity.userId !== admitted.context.identity.userId)
         throw new Error("skill_not_found")
     }
@@ -155,6 +157,37 @@ export async function handleSkillCoverRequest(
   } catch {
     if (!response.headersSent && !response.destroyed && !response.writableEnded)
       send(response, 503, { error: { code: "skill_dependency_unavailable", message: "Skill cover dependency is unavailable", retryable: true } })
+    else if (!response.writableEnded && !response.destroyed) response.destroy()
+  }
+  return true
+}
+
+/** GitHub preview is a read-only SkillsModule route with a final session recheck. */
+export async function handleSkillGithubPreviewRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+): Promise<boolean> {
+  if (request.method !== "POST" || new URL(request.url ?? "/", "http://bff.local").pathname !== "/v1/skills/github/preview") return false
+  const id = requestId(request)
+  const signal = AbortSignal.timeout(10_000)
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    if (!admitted.ok) {
+      send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+      return true
+    }
+    const readmit = async (currentSignal: AbortSignal): Promise<void> => {
+      const current = await authorizeUserRequest(request, config, admission, id, currentSignal)
+      if (!current.ok && current.status >= 500) throw new Error("skill_dependency_unavailable")
+      if (!current.ok || current.context.identity.namespace !== admitted.context.identity.namespace || current.context.identity.userId !== admitted.context.identity.userId)
+        throw new Error("skill_not_found")
+    }
+    await skillGithubPreviewRoute(request, response, admitted.context, readmit)
+  } catch {
+    if (!response.headersSent && !response.destroyed && !response.writableEnded)
+      send(response, 503, { error: { code: "skill_dependency_unavailable", message: "GitHub Skill dependency is unavailable", retryable: true } })
     else if (!response.writableEnded && !response.destroyed) response.destroy()
   }
   return true

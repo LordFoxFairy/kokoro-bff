@@ -15,6 +15,7 @@ import { handleSkillDraftMutationRequest } from "../../http/routes/skill-draft-m
 import { handleSkillCatalogCommandRequest, handleSkillCoverRequest, handleSkillPackageUploadReadRequest } from "../../http/routes/skill-catalog-command-native.js"
 import { handlePublishedSkillPackageRequest } from "../../http/routes/skill-published-package-native.js"
 import { handleSkillAdminRequest } from "../../http/routes/skill-admin-native.js"
+import { handleSkillGithubPreviewRequest } from "../../http/routes/skill-catalog-command-native.js"
 import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
 import type { CatalogConnectClient } from "../../infrastructure/clients/platform/catalog-connect.js"
 import type { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
@@ -44,6 +45,7 @@ export class SkillsMiddleware implements NestMiddleware {
       .then((handled) => handled || handleSkillCoverRequest(request, response, this.config, this.admission, this.skillAuthorization, this.productClient))
       .then((handled) => handled || handlePublishedSkillPackageRequest(request, response, this.config, this.admission, this.productClient))
       .then((handled) => handled || handleSkillAdminRequest(request, response, this.config, this.admission, this.skillAuthorization, this.adminClient))
+      .then((handled) => handled || handleSkillGithubPreviewRequest(request, response, this.config, this.admission))
       .then((handled) => handled || handlePersonalSkillLifecycleRequest(request, response, this.config, this.admission, this.skillAuthorization, this.draftClient))
       .then((handled) => handled || handleSkillUsageRequest(request, response, this.config, this.admission, this.usageReader))
       .then((handled) => {
