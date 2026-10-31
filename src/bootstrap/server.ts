@@ -1,6 +1,6 @@
 import { handleRunDisplayRequest } from "../http/routes/run-display.js"
 import { messageRegenerationRoute, MessageRegenerationAdmissionError } from "../http/routes/message-regeneration.js"
-import { messageFeedbackRoute, MessageFeedbackAdmissionError } from "../http/routes/message-feedback.js"
+import { handleMessageFeedbackRequest } from "../http/routes/message-feedback-native.js"
 import { handleProjectPinRequest } from "../http/routes/project-native.js"
 import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
 import { projectResourceReadRoute } from "../http/routes/project-resource-read.js"
@@ -307,13 +307,10 @@ export async function handleBffRequest(
     return
   }
   const isConnectorList = !browserPrivateMcp && isConnectorListRequest(businessPath, request.method ?? "GET")
-  const isMessageFeedbackPath =
-    !browserPrivateMcp && businessPath.length === 5 && businessPath[0] === "sessions" && businessPath[2] === "messages" && businessPath[4] === "feedback"
-  const messageFeedbackDeadline = isMessageFeedbackPath ? performance.now() + 10_000 : null
   const isMessageRegenerationPath =
     !browserPrivateMcp && businessPath.length === 5 && businessPath[0] === "sessions" && businessPath[2] === "messages" && businessPath[4] === "regenerate"
   const messageRegenerationDeadline = isMessageRegenerationPath ? performance.now() + 10000 : null
-  const preferenceDeadline = messageFeedbackDeadline ?? messageRegenerationDeadline
+  const preferenceDeadline = messageRegenerationDeadline
   const isProjectMcpRecommendationsPath =
     !browserPrivateMcp && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "mcp-recommendations"
   const isProjectSkillSelectionPath =
@@ -602,15 +599,6 @@ export async function handleBffRequest(
       if (!fresh.ok) throw new MessageRegenerationAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
       if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
         throw new MessageRegenerationAdmissionError(404, "message_not_found")
-    })
-    return
-  }
-  if (isMessageFeedbackPath && messageFeedbackDeadline !== null) {
-    await messageFeedbackRoute(request, response, context, businessPath, composition.businessStore, messageFeedbackDeadline, async (signal) => {
-      const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
-      if (!fresh.ok) throw new MessageFeedbackAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
-      if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
-        throw new MessageFeedbackAdmissionError(404, "message_not_found")
     })
     return
   }
@@ -1325,6 +1313,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
             ),
       )
       .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
+      .then((handled) => (handled ? true : handleMessageFeedbackRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
       .then((handled) => (handled ? true : handleProjectPinRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) =>
         handled

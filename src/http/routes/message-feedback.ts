@@ -1,7 +1,7 @@
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
+import type { ChatApplicationService } from "../../application/chat-service.js"
 import { messageFeedbackId, type MessageFeedback } from "../../application/chat/message-feedback-input.js"
 import { readBodyBeforeDeadline, rawHeaderCount } from "../request-body.js"
 import { send } from "../response.js"
@@ -15,12 +15,15 @@ export class MessageFeedbackAdmissionError extends Error {
     super("Message feedback admission failed")
   }
 }
+
+export type MessageFeedbackProvider = Pick<ChatApplicationService, "readMessageFeedback" | "setMessageFeedback">
+
 export async function messageFeedbackRoute(
   request: IncomingMessage,
   response: ServerResponse,
   context: RequestContext,
   path: readonly string[],
-  store: BffBusinessStore | null,
+  store: MessageFeedbackProvider | null,
   deadlineAt: number,
   currentAdmission: (signal: AbortSignal) => Promise<void>,
 ): Promise<void> {
@@ -105,9 +108,7 @@ export async function messageFeedbackRoute(
       signal: controller.signal,
       deadlineAt,
     }
-    const data = await within(() =>
-      request.method === "GET" ? store.services.chat.readMessageFeedback(input) : store.services.chat.setMessageFeedback({ ...input, feedback }),
-    )
+    const data = await within(() => (request.method === "GET" ? store.readMessageFeedback(input) : store.setMessageFeedback({ ...input, feedback })))
     if (data === null) {
       fail(404, "message_not_found")
       return

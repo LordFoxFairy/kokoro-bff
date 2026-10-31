@@ -5,6 +5,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
 import { handleChatNativeRequest } from "../../http/routes/chat-native.js"
+import { handleMessageFeedbackRequest } from "../../http/routes/message-feedback-native.js"
 
 @Injectable()
 export class ChatMiddleware implements NestMiddleware {
@@ -16,6 +17,7 @@ export class ChatMiddleware implements NestMiddleware {
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleChatNativeRequest(request, response, this.config, this.admission, this.chat)
+      .then((handled) => handled || handleMessageFeedbackRequest(request, response, this.config, this.admission, this.chat))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })
