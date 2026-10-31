@@ -241,6 +241,19 @@ test("BFF composition root stays small and delegates resource routes", async () 
   assert.doesNotMatch(server, /routes\/mock\.js|MockBffStore|MoriMockBffStore/)
 })
 
+test("global business store does not duplicate feature service providers", async () => {
+  const [store, repositories, runtime] = await Promise.all([
+    readFile(path.join(root, "src/application/ports/bff-business-store.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/repositories.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+  ])
+  assert.doesNotMatch(store, /chatService\?|projectService\?/u)
+  assert.doesNotMatch(repositories, /public readonly (?:chatService|projectService)/u)
+  assert.doesNotMatch(repositories, /this\.(?:chatService|projectService)\s*=/u)
+  assert.match(runtime, /businessStore\?\.services\??\.chat/u)
+  assert.match(runtime, /businessStore\?\.services\??\.projects/u)
+})
+
 test("BFF production composition requires the live PostgreSQL and Redis runtime", async () => {
   const [main, runtime, config] = await Promise.all([
     readFile(path.join(root, "src/main.ts"), "utf8"),
