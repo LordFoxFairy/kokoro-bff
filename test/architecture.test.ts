@@ -247,11 +247,14 @@ test("global business store does not duplicate feature service providers", async
     readFile(path.join(root, "src/infrastructure/postgres/repositories.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
-  assert.doesNotMatch(store, /chatService\?/u)
-  assert.doesNotMatch(repositories, /public readonly chatService/u)
-  assert.doesNotMatch(repositories, /this\.chatService\s*=/u)
-  assert.match(runtime, /businessStore\?\.services\??\.chat/u)
-  assert.match(runtime, /businessStore\?\.services\??\.projects/u)
+  assert.match(store, /chatService\?/u)
+  assert.match(store, /chatTurnService\?/u)
+  assert.match(repositories, /public readonly chatService/u)
+  assert.match(repositories, /public readonly chatTurnService/u)
+  assert.match(repositories, /this\.chatService\s*=/u)
+  assert.match(repositories, /this\.chatTurnService\s*=/u)
+  assert.match(runtime, /businessStore\?\.chatService/u)
+  assert.match(runtime, /businessStore\?\.projectService/u)
 })
 
 test("BFF production composition requires the live PostgreSQL and Redis runtime", async () => {
@@ -494,7 +497,7 @@ test("Chat admission commits messages, AG-UI lineage, and Agent delivery before 
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
 
-  assert.match(route, /services\.chatTurns\.submit/u)
+  assert.match(route, /chatTurnService\s*\?\?\s*store\.services\.chatTurns\)\.submit/u)
   assert.doesNotMatch(route, /callAgent|buildAgentLaunch/u)
   assert.doesNotMatch(chatRepository, /commitChatTurn|claimAgentDispatchOutbox/u)
   assert.equal(dispatchRepository.match(/return commitChatTurn\(/gu)?.length, 1)
@@ -547,9 +550,9 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
   assert.match(publicShareRepository, /Public share capability reads/u)
   assert.doesNotMatch(publicShareRepository, /subjectId/u)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
-  assert.match(route, /services\.chat/u)
+  assert.match(route, /chatService\s*\?\?\s*store\.services\.chat/u)
   assert.match(route, /subjectId/u)
-  assert.match(route, /services\.chatTurns\.submit/u)
+  assert.match(route, /chatTurnService\s*\?\?\s*store\.services\.chatTurns\)\.submit/u)
   assert.doesNotMatch(route, /callAgent/u)
   assert.doesNotMatch(route, /Agent.*messages.*GET/u)
   assert.match(sharedRoute, /publicShareSnapshot/u)
@@ -578,7 +581,7 @@ test("private BFF resources use named owner scopes before receipts and keep serv
   assert.match(scheduledRepository, /FOR SHARE/u)
   assert.doesNotMatch(client, /invalidateProjects|projects:\$\{tenant/u)
   assert.match(chatAuthorization, /scope must be omitted, empty, or direct/u)
-  assert.match(chatAuthorization, /services\.chat\.findConversation/u)
+  assert.match(chatAuthorization, /chatService\s*\?\?\s*store\.services\.chat\)\.findConversation/u)
   assert.ok(server.indexOf("authorizeChatRequest") < server.indexOf("mutationTicket("))
   assert.ok(server.indexOf("authorizeLiveBffMutation") < server.indexOf("mutationTicket("))
   assert.match(openapi, /DirectScopeQuery:[\s\S]*enum: \['', direct\]/u)

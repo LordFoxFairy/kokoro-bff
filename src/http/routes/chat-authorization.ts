@@ -77,7 +77,7 @@ export async function authorizeChatRequest(
     const currentConversation =
       conversationId === undefined || conversationId === ""
         ? null
-        : await store.services.chat.findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
+        : await (store.chatService ?? store.services.chat).findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
     if (conversationId === undefined || conversationId === "" || currentConversation === null) {
       return { ok: false, status: 404, code: "session_not_found", message: "Session was not found" }
     }

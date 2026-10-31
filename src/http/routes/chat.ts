@@ -150,7 +150,7 @@ export async function liveChatBusiness(
   const subjectId = context.identity.userId
   const conversationId = businessPath[1] || ""
   const projectRef = authorization.projectRef
-  const chat = store.services.chat
+  const chat = store.chatService ?? store.services.chat
 
   try {
     if (businessPath.length === 5 && businessPath[2] === "messages" && businessPath[4] === "parts" && method === "GET") {
@@ -312,7 +312,7 @@ export async function liveChatBusiness(
       const selectionSignal = AbortSignal.any([selectionAbort.signal, AbortSignal.timeout(10000)])
       let receipt
       try {
-        receipt = await store.services.chatTurns.submit(
+        receipt = await (store.chatTurnService ?? store.services.chatTurns).submit(
           {
             tenantId,
             conversationId,

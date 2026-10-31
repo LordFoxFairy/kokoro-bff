@@ -146,7 +146,7 @@ export async function handleBffRequest(
     if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
       throw new ConnectError("Project not found", Code.NotFound)
     if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
-    const project = await composition.businessStore.services.projects.find(
+    const project = await (composition.businessStore.projectService ?? composition.businessStore.services.projects).find(
       {
         tenantId: context.identity.namespace,
         subjectId: context.identity.userId,
@@ -385,7 +385,7 @@ export async function handleBffRequest(
     }
     signal.throwIfAborted()
     if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
-    const project = await composition.businessStore.services.projects.find(
+    const project = await (composition.businessStore.projectService ?? composition.businessStore.services.projects).find(
       {
         tenantId: context.identity.namespace,
         subjectId: context.identity.userId,
@@ -632,7 +632,7 @@ export async function handleBffRequest(
       composition.agUiRuntime,
       composition.agUiProjector !== undefined,
       chatAuthorization,
-      composition.chatService ?? composition.businessStore?.services?.chat ?? null,
+      composition.chatService ?? composition.businessStore?.chatService ?? composition.businessStore?.services?.chat ?? null,
     )
     return
   }
@@ -691,11 +691,11 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleMcpProjectPublicationRequest(request, response, config, {
         sessionAdmission: composition.sessionAdmission,
         mcpAuthorization: composition.mcpAuthorization,
-        project: composition.projectService ?? composition.businessStore?.services.projects ?? null,
+        project: composition.projectService ?? composition.businessStore?.projectService ?? composition.businessStore?.services.projects ?? null,
         client: composition.mcpProjectPublicationClient,
       }))
       .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
-      .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService ?? composition.businessStore?.services.projects ?? null))
+      .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService ?? composition.businessStore?.projectService ?? composition.businessStore?.services.projects ?? null))
       .then((handled) => handled ? true : handleSkillDownloadRequest(request, response, config, composition.sessionAdmission, composition.skillDownloadHandles, composition.skillSpecificationSource, composition.exactSkillDownloadSource))
       .then((handled) => handled ? true : handleSkillSpecificationRequest(request, response, config, {
         skillListAdmission: composition.skillListAdmission,
@@ -705,7 +705,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       }))
       .then((handled) => handled ? true : handleAppSkillBindingsRequest(request, response, config, composition.sessionAdmission, composition.openAppManagementAdmission, composition.appSkillBindingClient))
       .then((handled) => handled ? true : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization))
-      .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.services.chat ?? null))
+      .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.chatService ?? composition.businessStore?.services.chat ?? null))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
       .then((handled) =>
         handled
@@ -726,8 +726,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
               response,
               config,
               composition.sessionAdmission,
-              composition.businessStore?.submittedAgentRuns && composition.businessStore?.services?.chat
-                ? { submittedAgentRuns: composition.businessStore.submittedAgentRuns, chat: composition.businessStore.services.chat }
+              composition.businessStore?.submittedAgentRuns && (composition.businessStore?.chatService ?? composition.businessStore?.services?.chat)
+                ? { submittedAgentRuns: composition.businessStore.submittedAgentRuns, chat: composition.businessStore.chatService ?? composition.businessStore.services.chat }
                 : null,
             ),
       )

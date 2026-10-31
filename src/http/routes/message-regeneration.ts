@@ -102,7 +102,7 @@ export async function messageRegenerationRoute(
     await within(() => currentAdmission(controller.signal))
     if (!store) throw Error("message_regeneration_unavailable")
     const data = await within(() =>
-      store.services.chatTurns.regenerate({
+      (store.chatTurnService ?? store.services.chatTurns).regenerate({
         tenantId: context.identity.namespace,
         subjectId: context.identity.userId,
         actorId: context.identity.userId,

@@ -44,6 +44,8 @@ import type { ScheduledTaskService } from "../../application/scheduled-task-serv
 import type { ProjectService } from "../../application/project-service.js"
 import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
 import type { SkillUsageReader } from "../../application/agui/skill-usage.js"
+import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ChatTurnApplicationService } from "../../application/chat-turn-service.js"
 
 export { PENDING_RECEIPT_STATUS }
 export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/idempotency-repository.js"
@@ -70,6 +72,8 @@ export class PostgresBffRepositories {
   public readonly publicShareService: PublicShareApplicationService
   public readonly scheduledTaskService: ScheduledTaskService
   public readonly projectService: ProjectService
+  public readonly chatService: ChatApplicationService
+  public readonly chatTurnService: ChatTurnApplicationService
   public readonly personalizationProvider: PostgresPersonalizationRepository
   public readonly personalKnowledge: PersonalKnowledgeRepository
   public readonly skillUsage: SkillUsageReader
@@ -117,6 +121,8 @@ export class PostgresBffRepositories {
     )
     this.projectService = this.services.projects
     this.scheduledTaskService = this.services.scheduledTasks
+    this.chatService = this.services.chat
+    this.chatTurnService = this.services.chatTurns
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)
   }
