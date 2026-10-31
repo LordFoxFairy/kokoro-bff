@@ -150,8 +150,8 @@
     "__Secure-kokoro-issuer."
   ],
   "cookiePaths": {
-    "default": "/iam",
-    "logoutConfirmation": "/iam/oauth2/end-session/confirm"
+    "default": "/",
+    "logoutConfirmation": "/"
   },
   "webInteractionPaths": [
     "/auth/sign-in",

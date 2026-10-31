@@ -841,8 +841,8 @@ test("native 429 and logout security headers survive, while hostile redirect and
           "x-content-type-options": "nosniff",
           pragma: "no-cache",
           "set-cookie": [
-            "kokoro-issuer.session_token.oauth_logout_confirmation=state; Path=/iam/oauth2/end-session/confirm; HttpOnly; SameSite=Lax",
-            "kokoro-issuer.session_token=active; Path=/iam; HttpOnly; SameSite=Lax",
+            "kokoro-issuer.session_token.oauth_logout_confirmation=state; Path=/; HttpOnly; SameSite=Lax",
+            "kokoro-issuer.session_token=active; Path=/; HttpOnly; SameSite=Lax",
           ],
         })
       if (mode === "hostile")

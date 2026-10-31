@@ -14,7 +14,7 @@ test("published browser-private policy is a deterministic read-only projection o
   const bytes = await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url))
   const published = JSON.parse(bytes.toString("utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "63e36a79c7448d4b9e47442df4f5467f230ecf0e9ac702a350cbc92a2c77eb46")
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "5267077fda99ad651cec258a44ffcb393fbdeb761783bb9646bb01856b1cb3bb")
   assert.deepEqual(IAM_RELAY_POLICY.webInteractionPaths, ["/auth/sign-in", "/auth/select-tenant", "/auth/consent", "/iam/interactions/consent"])
   assert.equal(IAM_RELAY_POLICY.version, "2.1.0")
   assert.equal(IAM_RELAY_POLICY.iamOpenapiVersion, "0.7.0")
@@ -58,6 +58,7 @@ test("published browser-private policy is a deterministic read-only projection o
       idempotency: "none",
     },
   ])
+  assert.deepEqual(IAM_RELAY_POLICY.cookiePaths, { default: "/", logoutConfirmation: "/" })
   assert.deepEqual((IAM_RELAY_POLICY as unknown as { invitationLocation?: unknown }).invitationLocation, {
     sourceRoute: "/verify-email",
     path: "/iam/interactions/invitation",
