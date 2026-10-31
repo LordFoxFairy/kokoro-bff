@@ -8,6 +8,7 @@ import { beginSkillPackageUploadRoute } from "./begin-skill-package-upload.js"
 import { completeSkillPackageUploadRoute } from "./complete-skill-package-upload.js"
 import { publishSkillRoute } from "./publish-skill.js"
 import { validateSkillDraftRoute } from "./validate-skill-draft.js"
+import { getSkillPackageUploadRoute } from "./get-skill-package-upload.js"
 import { requestId } from "../request.js"
 import { send } from "../response.js"
 
@@ -71,6 +72,34 @@ export async function handleSkillCatalogCommandRequest(
     } else {
       await publishSkillRoute(request, response, admitted.context, operation.skillId, client, signal)
     }
+  } catch {
+    if (!response.headersSent && !response.destroyed && !response.writableEnded)
+      send(response, 503, { error: { code: "skill_dependency_unavailable", message: "Skill catalog is unavailable", retryable: true } })
+    else if (!response.writableEnded && !response.destroyed) response.destroy()
+  }
+  return true
+}
+
+/** The package-upload reference read shares the SkillsModule session boundary without an action check. */
+export async function handleSkillPackageUploadReadRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  client: CatalogConnectClient | null,
+): Promise<boolean> {
+  if (request.method !== "GET") return false
+  const parts = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean).map(decode)
+  if (parts.length !== 4 || parts[0] !== "v1" || parts[1] !== "skills" || parts[3] !== "package-upload") return false
+  const id = requestId(request)
+  const signal = AbortSignal.timeout(10_000)
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    if (!admitted.ok) {
+      send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+      return true
+    }
+    await getSkillPackageUploadRoute(request, response, admitted.context, parts[2] ?? "", client, signal)
   } catch {
     if (!response.headersSent && !response.destroyed && !response.writableEnded)
       send(response, 503, { error: { code: "skill_dependency_unavailable", message: "Skill catalog is unavailable", retryable: true } })
