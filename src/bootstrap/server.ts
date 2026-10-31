@@ -1,7 +1,7 @@
 import { handleRunDisplayRequest } from "../http/routes/run-display.js"
 import { messageRegenerationRoute, MessageRegenerationAdmissionError } from "../http/routes/message-regeneration.js"
 import { handleMessageFeedbackRequest } from "../http/routes/message-feedback-native.js"
-import { handleProjectCoreReadRequest, handleProjectDeletionStatusRequest, handleProjectPinRequest } from "../http/routes/project-native.js"
+import { handleProjectCoreReadRequest, handleProjectDeletionStatusRequest, handleProjectPinRequest, handleProjectRenameRequest } from "../http/routes/project-native.js"
 import { handleSharedPublicRequest, handleSharedReaderRequest } from "../http/routes/shared-native.js"
 import { handleHealthRequest } from "../http/routes/health-native.js"
 import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
@@ -35,7 +35,6 @@ import { publishedSkillPackageInspectionRoute } from "../http/routes/skill-downl
 import { startSkillRequestBudget, skillRequestRemaining, skillDraftsRoute } from "../http/routes/skill-drafts.js"
 import { skillAdminRoute } from "../http/routes/skill-admin.js"
 import { handleAccountNativeRequest } from "../http/routes/account-native.js"
-import { projectRenameRoute } from "../http/routes/project-rename.js"
 import { projectDeleteRoute } from "../http/routes/project-delete.js"
 import { projectResourceListRoute } from "../http/routes/project-resource-list.js"
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
@@ -325,12 +324,6 @@ export async function handleBffRequest(
     businessPath[0] === "preferences" &&
     ((businessPath.length === 2 && ["knowledge", "knowledge-usage"].includes(businessPath[1]!)) ||
       (businessPath.length === 3 && businessPath[1] === "knowledge"))
-  const isProjectRenamePath =
-    composition.routeHandler === undefined &&
-    request.method === "PATCH" &&
-    businessPath.length === 3 &&
-    businessPath[0] === "projects" &&
-    businessPath[2] === "name"
   const isProjectDeletePath =
     composition.routeHandler === undefined && request.method === "DELETE" && businessPath.length === 2 && businessPath[0] === "projects"
   const isMoveSessionPath =
@@ -434,7 +427,6 @@ export async function handleBffRequest(
         isPlatformProjectionRead ||
         isMcpPersonalOperation ||
         isMoveSessionPath ||
-        isProjectRenamePath ||
         isProjectDeletePath ||
         isPersonalKnowledgePath
       ) {
@@ -740,11 +732,6 @@ export async function handleBffRequest(
       return
     }
   }
-  if (isProjectRenamePath) {
-    await projectRenameRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
-    return
-  }
-
   if (isProjectDeletePath) {
     await projectDeleteRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
     return
@@ -1185,6 +1172,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       )
       .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
       .then((handled) => (handled ? true : handleMessageFeedbackRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
+      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectRenameRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectDeletionStatusRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectCoreReadRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : handleProjectPinRequest(request, response, config, composition.sessionAdmission, composition.projectService)))

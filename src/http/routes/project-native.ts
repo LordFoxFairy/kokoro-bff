@@ -1,9 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { RenameProjectResult } from "../../application/ports/project-repository.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { failure, ok } from "../../contracts/index.js"
 import { isEmptyProjectDeletionRequest, isProjectDeletionId, projectDeletionHeaderValues } from "../project-deletion-input.js"
+import { isCanonicalRenameProjectId, parseProjectRenameName, renameProjectHeaderValues, validRenameProjectKey } from "../project-rename-input.js"
 import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
 import { projectPinRoute, ProjectPinAdmissionError, type ProjectPinProvider } from "./project-pin.js"
@@ -13,6 +15,7 @@ export type ProjectCoreReadProvider = Readonly<{
   find(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<unknown | null>
   revisions(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<readonly unknown[] | null>
   deletion(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string, signal: AbortSignal): Promise<unknown | null>
+  rename(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string, name: string, key: string, signal: AbortSignal): Promise<RenameProjectResult>
 }>
 
 function projectPinPath(request: IncomingMessage): string {
@@ -32,6 +35,107 @@ export function isProjectCoreReadRequest(request: IncomingMessage): boolean {
 export function isProjectDeletionStatusRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
   return request.method === "GET" && /^\/v1\/projects\/[^/]+\/deletion$/u.test(path)
+}
+
+export function isProjectRenameRequest(request: IncomingMessage): boolean {
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  return request.method === "PATCH" && /^\/v1\/projects\/[^/]+\/name$/u.test(path)
+}
+
+async function readProjectRenameBody(request: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string)
+    size += buffer.byteLength
+    if (size > 65_536) throw new Error("PROJECT_RENAME_BODY_TOO_LARGE")
+    chunks.push(buffer)
+  }
+  return Buffer.concat(chunks)
+}
+
+/** Projects-owned rename command; the legacy dispatcher no longer owns this path. */
+export async function handleProjectRenameRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  projects: ProjectCoreReadProvider | null,
+): Promise<boolean> {
+  if (!isProjectRenameRequest(request)) return false
+  const id = requestId(request)
+  const fail = (status: number, code: string, message: string, retryable = false, retryAfter?: string): void =>
+    send(response, status, { error: { code, message, retryable } }, retryAfter)
+  response.setHeader("x-request-id", id)
+  response.setHeader("cache-control", "no-store")
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  const projectId = path.slice("/v1/projects/".length, -"/name".length)
+  if (request.url !== `/v1/projects/${projectId}/name` || !isCanonicalRenameProjectId(projectId)) {
+    fail(400, "invalid_project_rename", "Project rename request is invalid")
+    return true
+  }
+  const keys = renameProjectHeaderValues(request.rawHeaders, "idempotency-key")
+  const key = keys[0]
+  if (keys.length !== 1 || key === undefined || !validRenameProjectKey(key)) {
+    fail(400, keys.length === 0 ? "idempotency_key_required" : "invalid_project_rename", "One valid Idempotency-Key is required")
+    return true
+  }
+  const contentTypes = renameProjectHeaderValues(request.rawHeaders, "content-type")
+  if (contentTypes.length !== 1 || contentTypes[0]?.toLowerCase().split(";", 1)[0]?.trim() !== "application/json") {
+    fail(400, "invalid_project_rename", "Project rename requires one application/json Content-Type")
+    return true
+  }
+  let name: string | null
+  try {
+    name = parseProjectRenameName(await readProjectRenameBody(request))
+  } catch {
+    response.setHeader("connection", "close")
+    request.resume()
+    fail(400, "invalid_project_rename", "Project rename body is invalid")
+    return true
+  }
+  if (name === null) {
+    fail(400, "invalid_project_rename", "Project rename name is invalid")
+    return true
+  }
+  const abort = new AbortController()
+  const timer = setTimeout(() => abort.abort(), Math.min(config.upstreamTimeoutMs, 10_000))
+  const onAborted = (): void => abort.abort()
+  const onClosed = (): void => {
+    if (!response.writableEnded) abort.abort()
+  }
+  request.once("aborted", onAborted)
+  response.once("close", onClosed)
+  if (request.aborted || response.destroyed) abort.abort()
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    if (!admitted.ok) {
+      fail(admitted.status, admitted.code, "BFF user admission failed", admitted.status === 429 || admitted.status === 503, admitted.retryAfter)
+      return true
+    }
+    if (projects === null) {
+      fail(503, "business_store_unavailable", "Project store is unavailable", true)
+      return true
+    }
+    const result = await projects.rename(
+      { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId },
+      projectId,
+      name,
+      key,
+      abort.signal,
+    )
+    if (response.destroyed || response.writableEnded) return true
+    if (result.kind === "renamed") send(response, 200, result.receipt)
+    else if (result.kind === "not_found") fail(404, "project_not_found", "Project was not found")
+    else fail(409, "idempotency_conflict", "Project rename key was used for different input")
+  } catch {
+    if (!response.destroyed && !response.writableEnded) fail(503, "business_store_unavailable", "Project rename result is unavailable", true)
+  } finally {
+    clearTimeout(timer)
+    request.removeListener("aborted", onAborted)
+    response.removeListener("close", onClosed)
+  }
+  return true
 }
 
 /** Projects-owned deletion status read; the legacy dispatcher no longer owns this path. */

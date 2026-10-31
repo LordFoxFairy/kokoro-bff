@@ -4,7 +4,13 @@ import { BFF_CONFIG, PROJECT_SERVICE, SESSION_ADMISSION } from "../../common/tok
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ProjectPinProvider } from "../../http/routes/project-pin.js"
-import { handleProjectCoreReadRequest, handleProjectDeletionStatusRequest, handleProjectPinRequest, type ProjectCoreReadProvider } from "../../http/routes/project-native.js"
+import {
+  handleProjectCoreReadRequest,
+  handleProjectDeletionStatusRequest,
+  handleProjectPinRequest,
+  handleProjectRenameRequest,
+  type ProjectCoreReadProvider,
+} from "../../http/routes/project-native.js"
 
 @Injectable()
 export class ProjectPinMiddleware implements NestMiddleware {
@@ -15,7 +21,8 @@ export class ProjectPinMiddleware implements NestMiddleware {
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
-    void handleProjectDeletionStatusRequest(request, response, this.config, this.admission, this.projectService)
+    void handleProjectRenameRequest(request, response, this.config, this.admission, this.projectService)
+      .then((handled) => handled || handleProjectDeletionStatusRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectPinRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => {
