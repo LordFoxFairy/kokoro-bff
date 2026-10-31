@@ -14,7 +14,7 @@ import {
 } from "../http/routes/project-native.js"
 import { handleSharedPublicRequest, handleSharedReaderRequest } from "../http/routes/shared-native.js"
 import { handleHealthRequest } from "../http/routes/health-native.js"
-import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
+import { handleProjectMcpRecommendationsRequest, projectMcpRecommendationsProvider } from "../http/routes/project-mcp-recommendations.js"
 import { mcpProjectPublicationOperation, mcpProjectPublicationRoute } from "../http/routes/mcp-project-publication.js"
 import { liveAdminMetering, matchMeteringAdmin } from "../http/routes/billing-metering-admin.js"
 import { liveAdminCreditGrant } from "../http/routes/billing-credit-grant-admin.js"
@@ -672,40 +672,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (isProjectMcpRecommendationsPath) {
-    await projectMcpRecommendationsRoute(
-      request,
-      response,
-      context,
-      businessPath,
-      composition.businessStore,
-      composition,
-      async (mcpRead, signal, deadlineAt) => {
-        const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
-        if (!fresh.ok) throw new ProjectMcpRecommendationsAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
-        if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
-          throw new ConnectError("Project not found", Code.NotFound)
-        if (mcpRead) {
-          const checked = await authorizeMcpAction(composition.mcpAuthorization, fresh, "read", signal)
-          if (!checked.ok) throw new ProjectMcpRecommendationsAdmissionError(checked.status, checked.code, checked.retryAfter)
-        }
-        signal.throwIfAborted()
-        if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
-        const project = await composition.businessStore.services.projects.mcpRecommendations({
-          tenantId: context.identity.namespace,
-          subjectId: context.identity.userId,
-          projectId: businessPath[1] ?? "",
-          signal,
-          deadlineAt,
-        })
-        signal.throwIfAborted()
-        if (!project || project.project_id !== businessPath[1]) throw new ConnectError("Project not found", Code.NotFound)
-        return project.project_id
-      },
-    )
-    return
-  }
-
   if (isPersonalKnowledgePath) {
     await personalKnowledgeRoute(request, response, context, composition.businessStore)
     return
@@ -1153,6 +1119,23 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 composition.sessionAdmission,
                 projectSkillSelectionProvider(composition.businessStore),
                 composition.installationClient,
+              ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleProjectMcpRecommendationsRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.mcpAuthorization,
+                projectMcpRecommendationsProvider(composition.businessStore, {
+                  mcpPersonalClient: composition.mcpPersonalClient,
+                  customApiClient: composition.customApiClient,
+                }),
               ),
       )
       .then((handled) =>

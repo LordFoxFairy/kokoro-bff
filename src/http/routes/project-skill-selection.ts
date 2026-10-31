@@ -25,7 +25,14 @@ export function isProjectSkillSelectionRequest(request: IncomingMessage): boolea
 
 export function projectSkillSelectionProvider(store: BffBusinessStore | null): ProjectSkillSelectionProvider | null {
   const projects = store?.services.projects
-  if (!projects) return null
+  if (
+    !projects ||
+    typeof projects.find !== "function" ||
+    typeof projects.skillSelection !== "function" ||
+    typeof projects.replaceSkillSelection !== "function" ||
+    typeof store?.getReceipt !== "function"
+  )
+    return null
   return {
     find: projects.find.bind(projects),
     skillSelection: projects.skillSelection.bind(projects),
