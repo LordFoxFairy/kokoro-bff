@@ -1,7 +1,7 @@
 import { handleRunDisplayRequest } from "../http/routes/run-display.js"
 import { messageRegenerationRoute, MessageRegenerationAdmissionError } from "../http/routes/message-regeneration.js"
 import { handleMessageFeedbackRequest } from "../http/routes/message-feedback-native.js"
-import { handleProjectCoreReadRequest, handleProjectPinRequest } from "../http/routes/project-native.js"
+import { handleProjectCoreReadRequest, handleProjectDeletionStatusRequest, handleProjectPinRequest } from "../http/routes/project-native.js"
 import { handleSharedPublicRequest, handleSharedReaderRequest } from "../http/routes/shared-native.js"
 import { handleHealthRequest } from "../http/routes/health-native.js"
 import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
@@ -37,7 +37,6 @@ import { skillAdminRoute } from "../http/routes/skill-admin.js"
 import { handleAccountNativeRequest } from "../http/routes/account-native.js"
 import { projectRenameRoute } from "../http/routes/project-rename.js"
 import { projectDeleteRoute } from "../http/routes/project-delete.js"
-import { projectDeletionStatusRoute } from "../http/routes/project-deletion-status.js"
 import { projectResourceListRoute } from "../http/routes/project-resource-list.js"
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
 import { personalFileUploadRoute } from "../http/routes/personal-file-upload.js"
@@ -334,12 +333,6 @@ export async function handleBffRequest(
     businessPath[2] === "name"
   const isProjectDeletePath =
     composition.routeHandler === undefined && request.method === "DELETE" && businessPath.length === 2 && businessPath[0] === "projects"
-  const isProjectDeletionStatusPath =
-    composition.routeHandler === undefined &&
-    request.method === "GET" &&
-    businessPath.length === 3 &&
-    businessPath[0] === "projects" &&
-    businessPath[2] === "deletion"
   const isMoveSessionPath =
     composition.routeHandler === undefined &&
     request.method === "POST" &&
@@ -443,7 +436,6 @@ export async function handleBffRequest(
         isMoveSessionPath ||
         isProjectRenamePath ||
         isProjectDeletePath ||
-        isProjectDeletionStatusPath ||
         isPersonalKnowledgePath
       ) {
         response.setHeader("cache-control", "no-store")
@@ -755,11 +747,6 @@ export async function handleBffRequest(
 
   if (isProjectDeletePath) {
     await projectDeleteRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
-    return
-  }
-
-  if (isProjectDeletionStatusPath) {
-    await projectDeletionStatusRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
     return
   }
 
@@ -1198,6 +1185,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       )
       .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
       .then((handled) => (handled ? true : handleMessageFeedbackRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
+      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectDeletionStatusRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectCoreReadRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : handleProjectPinRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) =>

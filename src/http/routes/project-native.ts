@@ -3,6 +3,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { failure, ok } from "../../contracts/index.js"
+import { isEmptyProjectDeletionRequest, isProjectDeletionId, projectDeletionHeaderValues } from "../project-deletion-input.js"
 import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
 import { projectPinRoute, ProjectPinAdmissionError, type ProjectPinProvider } from "./project-pin.js"
@@ -11,6 +12,7 @@ export type ProjectCoreReadProvider = Readonly<{
   list(scope: Readonly<{ tenantId: string; subjectId: string }>): Promise<readonly unknown[]>
   find(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<unknown | null>
   revisions(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<readonly unknown[] | null>
+  deletion(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string, signal: AbortSignal): Promise<unknown | null>
 }>
 
 function projectPinPath(request: IncomingMessage): string {
@@ -25,6 +27,77 @@ export function isProjectPinRequest(request: IncomingMessage): boolean {
 export function isProjectCoreReadRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
   return request.method === "GET" && (path === "/v1/projects" || /^\/v1\/projects\/[^/]+$/u.test(path) || /^\/v1\/projects\/[^/]+\/instruction-revisions$/u.test(path))
+}
+
+export function isProjectDeletionStatusRequest(request: IncomingMessage): boolean {
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  return request.method === "GET" && /^\/v1\/projects\/[^/]+\/deletion$/u.test(path)
+}
+
+/** Projects-owned deletion status read; the legacy dispatcher no longer owns this path. */
+export async function handleProjectDeletionStatusRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  projects: ProjectCoreReadProvider | null,
+): Promise<boolean> {
+  if (!isProjectDeletionStatusRequest(request)) return false
+  const id = requestId(request)
+  const fail = (status: number, code: string, message: string, retryable = false, retryAfter?: string): void =>
+    send(response, status, { error: { code, message, retryable } }, retryAfter)
+  response.setHeader("x-request-id", id)
+  response.setHeader("cache-control", "no-store")
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  const projectId = path.slice("/v1/projects/".length, -"/deletion".length)
+  if (
+    request.url !== `/v1/projects/${projectId}/deletion` ||
+    !isProjectDeletionId(projectId) ||
+    !isEmptyProjectDeletionRequest(request, false) ||
+    projectDeletionHeaderValues(request.rawHeaders, "idempotency-key").length !== 0
+  ) {
+    fail(400, "invalid_project_deletion_request", "Project deletion status request is invalid")
+    return true
+  }
+  const abort = new AbortController()
+  const timer = setTimeout(() => abort.abort(), Math.min(config.upstreamTimeoutMs, 10_000))
+  const onAborted = (): void => abort.abort()
+  const onClosed = (): void => {
+    if (!response.writableEnded) abort.abort()
+  }
+  request.once("aborted", onAborted)
+  response.once("close", onClosed)
+  if (request.aborted || response.destroyed) abort.abort()
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    if (!admitted.ok) {
+      fail(admitted.status, admitted.code, "BFF user admission failed", admitted.status === 429 || admitted.status === 503, admitted.retryAfter)
+      return true
+    }
+    if (projects === null) {
+      fail(503, "business_store_unavailable", "Project deletion status is unavailable", true)
+      return true
+    }
+    const resource = await projects.deletion(
+      {
+        tenantId: admitted.context.identity.namespace,
+        subjectId: admitted.context.identity.userId,
+      },
+      projectId,
+      abort.signal,
+    )
+    if (response.destroyed || response.writableEnded) return true
+    if (resource === null) fail(404, "project_not_found", "Project was not found")
+    else send(response, 200, { data: resource })
+  } catch {
+    if (!response.destroyed && !response.writableEnded)
+      fail(503, "business_store_unavailable", "Project deletion status is unavailable", true)
+  } finally {
+    clearTimeout(timer)
+    request.removeListener("aborted", onAborted)
+    response.removeListener("close", onClosed)
+  }
+  return true
 }
 
 /** Projects-owned collection read; the legacy dispatcher no longer owns this path. */
