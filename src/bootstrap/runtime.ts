@@ -45,6 +45,7 @@ import type { RequestContext } from "../domain/request-context.js"
 import type { PersonalizationProvider } from "../modules/account/personalization.provider.js"
 import type { ChatApplicationService } from "../application/chat-service.js"
 import type { ProjectService } from "../application/project-service.js"
+import type { PublicShareApplicationService } from "../application/public-share-service.js"
 import { SessionAdmissionClient } from "../auth/session-admission.client.js"
 import type { SessionAdmission } from "../auth/session-admission.types.js"
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
@@ -111,6 +112,7 @@ export type BffServerComposition = {
   chatService: ChatApplicationService | null
   /** Project-owned pin provider; global store fallback is transitional. */
   projectService: ProjectService | null
+  publicShareService: PublicShareApplicationService | null
   scheduledTaskReader: ScheduledTaskReadService | null
   sessionAdmission: SessionAdmission
   skillListAdmission: SkillListAdmission
@@ -310,6 +312,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.services?.chat ?? null)
   const projectService =
     options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
+  const publicShareService = businessStore?.services?.publicShares ?? null
   const scheduledTaskReader =
     businessStore === null
       ? null
@@ -696,6 +699,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     personalizationProvider,
     chatService,
     projectService,
+    publicShareService,
     scheduledTaskReader,
     sessionAdmission,
     appSkillBindingClient,

@@ -55,10 +55,11 @@ test("IamRelayModule owns the native protocol relay before the transitional disp
 })
 
 test("ChatModule owns the archive/share adapters and chat provider", async () => {
-  const [chatModule, middleware, nativeRoute, feedbackRoute, server, legacyModule] = await Promise.all([
+  const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, server, legacyModule] = await Promise.all([
     readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/chat/chat.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-native.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/shared-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/message-feedback-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
@@ -77,6 +78,10 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
   assert.doesNotMatch(server, /await sharedTasksRoute\(/u)
   assert.doesNotMatch(server, /await messageFeedbackRoute\(/u)
   assert.doesNotMatch(legacyModule, /v1\/account\/(?:archived-tasks|shared-tasks)/u)
+  assert.match(chatModule, /PUBLIC_SHARE_SERVICE/u)
+  assert.match(middleware, /handleSharedPublicRequest/u)
+  assert.match(sharedNativeRoute, /publicShareSnapshot/u)
+  assert.doesNotMatch(server, /segments\[1\] === "shared"/u)
 })
 
 test("ProjectsModule owns the project-pin adapter and provider", async () => {

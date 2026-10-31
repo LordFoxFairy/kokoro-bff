@@ -2,6 +2,7 @@ import { handleRunDisplayRequest } from "../http/routes/run-display.js"
 import { messageRegenerationRoute, MessageRegenerationAdmissionError } from "../http/routes/message-regeneration.js"
 import { handleMessageFeedbackRequest } from "../http/routes/message-feedback-native.js"
 import { handleProjectCoreReadRequest, handleProjectPinRequest } from "../http/routes/project-native.js"
+import { handleSharedPublicRequest, handleSharedReaderRequest } from "../http/routes/shared-native.js"
 import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
 import { projectResourceReadRoute } from "../http/routes/project-resource-read.js"
 import { projectResourceDeleteRoute } from "../http/routes/project-resource-delete.js"
@@ -55,16 +56,13 @@ import {
   withSkillActionAdmission,
 } from "../auth/user-admission.js"
 import { localSkillImportRoute } from "../http/routes/local-skill-import.js"
-import { failure, ok } from "../contracts/index.js"
-import { publicShareSnapshot } from "../application/public-share-service.js"
+import { failure } from "../contracts/index.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
 import {
   mutationFingerprint,
-  authorizeServerOnly,
   idempotencyKey,
   isMutation,
   pathOf,
-  queryOf,
   readBody,
   requestBodyJson,
   requestId,
@@ -153,69 +151,6 @@ export async function handleBffRequest(
       service: "kokoro-bff",
       mode: config.mode,
     })
-    return
-  }
-
-  if (segments[0] === "v1" && segments[1] === "shared" && segments.length === 3 && request.method === "GET") {
-    if (!authorizeServerOnly(request, config)) {
-      send(response, config.sharedSecret !== null ? 403 : 401, failure("service_auth_failed", "BFF authentication failed", id))
-      return
-    }
-    const scope = queryOf(request).get("scope")?.trim() || undefined
-    const projectRef = queryOf(request).get("project_ref")?.trim() || undefined
-    if (composition.businessStore?.services.publicShares !== undefined) {
-      const shared = await composition.businessStore.services.publicShares.findActiveShare(segments[2] || "", scope, projectRef)
-      if (shared === null) {
-        send(response, 404, failure("share_not_found", "Share was not found", id))
-        return
-      }
-      const messages = await composition.businessStore.services.publicShares.listMessages(
-        shared.share.shareId,
-        shared.conversation.tenantId,
-        shared.conversation.conversationId,
-        100,
-      )
-      if (messages === null) {
-        send(response, 404, failure("share_not_found", "Share was not found", id))
-        return
-      }
-      const snapshot = publicShareSnapshot({
-        session: {
-          session_id: shared.conversation.conversationId,
-          title: shared.conversation.title,
-          owner_id: shared.conversation.ownerId,
-          created_at: shared.conversation.createdAt.toISOString(),
-          updated_at: shared.conversation.updatedAt.toISOString(),
-        },
-        ...(messages.messages.length === 0 ? {} : { messages: messages.messages }),
-      })
-      if (snapshot === null) {
-        send(response, 503, failure("share_projection_invalid", "Share projection is invalid", id))
-        return
-      }
-      send(response, 200, ok(snapshot, id))
-      return
-    }
-    if (composition.sharedSessionReader === undefined) {
-      send(response, 503, failure("share_projection_not_configured", "Share projection is not configured", id))
-      return
-    }
-    const session = composition.sharedSessionReader.findSharedSession(segments[2] || "", scope, projectRef)
-    if (session === undefined) {
-      send(response, 404, failure("share_not_found", "Share was not found", id))
-      return
-    }
-    const detail = composition.sharedSessionReader.readSession(session.session_id, scope, projectRef)
-    if (detail === undefined) {
-      send(response, 404, failure("share_not_found", "Share was not found", id))
-      return
-    }
-    const snapshot = publicShareSnapshot(detail)
-    if (snapshot === null) {
-      send(response, 503, failure("share_projection_invalid", "Share projection is invalid", id))
-      return
-    }
-    send(response, 200, ok(snapshot, id))
     return
   }
 
@@ -1255,6 +1190,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   const composition = createBffComposition(config, options)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
     const handler = handleIamRelayRequest(request, response, config)
+      .then((handled) => handled ? true : composition.routeHandler === undefined ? handleSharedPublicRequest(request, response, config, composition.publicShareService) : false)
+      .then((handled) => handled ? true : handleSharedReaderRequest(request, response, config, composition.sharedSessionReader))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
       .then((handled) =>
         handled
