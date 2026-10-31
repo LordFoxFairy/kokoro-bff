@@ -10,6 +10,7 @@ import type { ScheduledAgentDispatchRepository } from "./scheduled-agent-dispatc
 import type { ProjectScopeReleaseOutboxRepository } from "./project-scope-release-outbox.js"
 import type { PersonalizationProvider } from "../../modules/account/personalization.provider.js"
 import type { ChatApplicationService } from "../chat-service.js"
+import type { ProjectService } from "../project-service.js"
 
 export type ArtifactAssociation = Readonly<{
   conversationId: string
@@ -34,6 +35,8 @@ export interface BffBusinessStore extends IdempotencyRepository {
   readonly personalizationProvider?: PersonalizationProvider
   /** Chat-owned archive/share provider retained only as the raw-server composition seam during C-3 migration. */
   readonly chatService?: ChatApplicationService
+  /** Project-owned pin provider retained only as the raw-server composition seam during C-3 migration. */
+  readonly projectService?: ProjectService
   readonly submittedAgentRuns?: import("./submitted-agent-run-reader.js").SubmittedAgentRunReader
   readonly projectExecutionBindings?: import("./project-execution-binding-reader.js").ProjectExecutionBindingReader
   readonly artifactLibrary?: ArtifactLibraryRepository

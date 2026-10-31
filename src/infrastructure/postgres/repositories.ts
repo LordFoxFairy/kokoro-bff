@@ -64,6 +64,7 @@ export class PostgresBffRepositories {
   public readonly skillShares: SkillShareRepository
   public readonly personalizationProvider: PostgresPersonalizationRepository
   public readonly chatService: BffApplicationServices["chat"]
+  public readonly projectService: BffApplicationServices["projects"]
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
@@ -107,6 +108,7 @@ export class PostgresBffRepositories {
       new PostgresPersonalKnowledgeRepository(this.database),
     )
     this.chatService = this.services.chat
+    this.projectService = this.services.projects
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)
   }

@@ -1,7 +1,7 @@
 import { runDisplayRoute, RunDisplayAdmissionError } from "../http/routes/run-display.js"
 import { messageRegenerationRoute, MessageRegenerationAdmissionError } from "../http/routes/message-regeneration.js"
 import { messageFeedbackRoute, MessageFeedbackAdmissionError } from "../http/routes/message-feedback.js"
-import { projectPinRoute, ProjectPinAdmissionError } from "../http/routes/project-pin.js"
+import { handleProjectPinRequest } from "../http/routes/project-native.js"
 import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
 import { projectResourceReadRoute } from "../http/routes/project-resource-read.js"
 import { projectResourceDeleteRoute } from "../http/routes/project-resource-delete.js"
@@ -321,11 +321,6 @@ export async function handleBffRequest(
     return
   }
   const isConnectorList = !browserPrivateMcp && isConnectorListRequest(businessPath, request.method ?? "GET")
-  const isProjectPinPath =
-    !browserPrivateMcp &&
-    ((businessPath.length === 2 && businessPath[0] === "self" && businessPath[1] === "project-pins") ||
-      (businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "pin"))
-  const projectPinDeadline = isProjectPinPath ? performance.now() + 10_000 : null
   const isMessageFeedbackPath =
     !browserPrivateMcp && businessPath.length === 5 && businessPath[0] === "sessions" && businessPath[2] === "messages" && businessPath[4] === "feedback"
   const messageFeedbackDeadline = isMessageFeedbackPath ? performance.now() + 10_000 : null
@@ -335,7 +330,7 @@ export async function handleBffRequest(
   const isRunDisplayPath =
     !browserPrivateMcp && businessPath.length === 5 && businessPath[0] === "sessions" && businessPath[2] === "runs" && businessPath[4] === "display"
   const runDisplayDeadline = isRunDisplayPath ? performance.now() + 5000 : null
-  const preferenceDeadline = projectPinDeadline ?? messageFeedbackDeadline ?? messageRegenerationDeadline ?? runDisplayDeadline
+  const preferenceDeadline = messageFeedbackDeadline ?? messageRegenerationDeadline ?? runDisplayDeadline
   const isProjectMcpRecommendationsPath =
     !browserPrivateMcp && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "mcp-recommendations"
   const isProjectSkillSelectionPath =
@@ -642,15 +637,6 @@ export async function handleBffRequest(
       if (!fresh.ok) throw new MessageFeedbackAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
       if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
         throw new MessageFeedbackAdmissionError(404, "message_not_found")
-    })
-    return
-  }
-  if (isProjectPinPath && projectPinDeadline !== null) {
-    await projectPinRoute(request, response, context, businessPath, composition.businessStore, projectPinDeadline, async (signal) => {
-      const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
-      if (!fresh.ok) throw new ProjectPinAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
-      if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
-        throw new ProjectPinAdmissionError(404, "project_not_found")
     })
     return
   }
@@ -1353,6 +1339,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
     const handler = handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider)
       .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
+      .then((handled) => (handled ? true : handleProjectPinRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : handleSystemNativeRequest(request, response, config)))
       .then((handled) => {
         if (handled) return

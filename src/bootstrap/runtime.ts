@@ -44,6 +44,7 @@ import { PostgresBffRepositories } from "../infrastructure/postgres/repositories
 import type { RequestContext } from "../domain/request-context.js"
 import type { PersonalizationProvider } from "../modules/account/personalization.provider.js"
 import type { ChatApplicationService } from "../application/chat-service.js"
+import type { ProjectService } from "../application/project-service.js"
 import { SessionAdmissionClient } from "../auth/session-admission.client.js"
 import type { SessionAdmission } from "../auth/session-admission.types.js"
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
@@ -108,6 +109,8 @@ export type BffServerComposition = {
   personalizationProvider: PersonalizationProvider | null
   /** Chat-owned archive/share provider; global store fallback is transitional. */
   chatService: ChatApplicationService | null
+  /** Project-owned pin provider; global store fallback is transitional. */
+  projectService: ProjectService | null
   scheduledTaskReader: ScheduledTaskReadService | null
   sessionAdmission: SessionAdmission
   skillListAdmission: SkillListAdmission
@@ -154,6 +157,7 @@ export type BffCompositionOptions = {
   businessStore?: BffBusinessStore | null
   personalizationProvider?: PersonalizationProvider | null
   chatService?: ChatApplicationService | null
+  projectService?: ProjectService | null
   sessionAdmission?: SessionAdmission
   skillListAdmission?: SkillListAdmission
   openAppManagementAdmission?: OpenAppManagementAdmission
@@ -304,6 +308,8 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const personalizationProvider =
     options.personalizationProvider !== undefined ? options.personalizationProvider : (businessStore?.personalizationProvider ?? null)
   const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.chatService ?? businessStore?.services?.chat ?? null)
+  const projectService =
+    options.projectService !== undefined ? options.projectService : (businessStore?.projectService ?? businessStore?.services?.projects ?? null)
   const scheduledTaskReader =
     businessStore === null
       ? null
@@ -689,6 +695,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     businessStore,
     personalizationProvider,
     chatService,
+    projectService,
     scheduledTaskReader,
     sessionAdmission,
     appSkillBindingClient,

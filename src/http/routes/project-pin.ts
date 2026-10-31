@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
+import type { ProjectService } from "../../application/project-service.js"
 import { projectPinId, projectPinInstant } from "../../domain/project/pin.js"
 import { parseProjectPinInput, parseProjectPinQuery, encodeProjectPinCursor } from "../project-pin-input.js"
 import { readBodyBeforeDeadline, rawHeaderCount } from "../request-body.js"
@@ -16,12 +16,15 @@ export class ProjectPinAdmissionError extends Error {
     super("Project pin admission failed")
   }
 }
+
+export type ProjectPinProvider = Pick<ProjectService, "listPins" | "setPin">
+
 export async function projectPinRoute(
   request: IncomingMessage,
   response: ServerResponse,
   context: RequestContext,
   path: readonly string[],
-  store: BffBusinessStore | null,
+  store: ProjectPinProvider | null,
   deadlineAt: number,
   currentAdmission: (signal: AbortSignal) => Promise<void>,
 ): Promise<void> {
@@ -95,7 +98,7 @@ export async function projectPinRoute(
     if (!store) throw new Error("project_pin_unavailable")
     let data: unknown
     if (query) {
-      const result = await within(() => store.services.projects.listPins({ ...scope, ...query, signal: controller.signal, deadlineAt }))
+      const result = await within(() => store.listPins({ ...scope, ...query, signal: controller.signal, deadlineAt }))
       if (result === null) {
         fail(404, "project_not_found")
         return
@@ -120,7 +123,7 @@ export async function projectPinRoute(
         throw new Error("project_pin_unavailable")
       data = { items, next_cursor: position ? encodeProjectPinCursor(position, scope, query.limit) : null }
     } else {
-      const result = await within(() => store.services.projects.setPin({ ...scope, projectId: projectId!, isPinned, signal: controller.signal, deadlineAt }))
+      const result = await within(() => store.setPin({ ...scope, projectId: projectId!, isPinned, signal: controller.signal, deadlineAt }))
       if (result === null) {
         fail(404, "project_not_found")
         return

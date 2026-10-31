@@ -63,6 +63,21 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
   assert.doesNotMatch(legacyModule, /v1\/account\/(?:archived-tasks|shared-tasks)/u)
 })
 
+test("ProjectsModule owns the project-pin adapter and provider", async () => {
+  const [projectsModule, middleware, nativeRoute, server] = await Promise.all([
+    readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/projects/project-pin.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/project-native.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+  ])
+  assert.match(projectsModule, /provide: PROJECT_SERVICE/u)
+  assert.match(projectsModule, /ProjectPinMiddleware/u)
+  assert.match(middleware, /handleProjectPinRequest/u)
+  assert.match(nativeRoute, /projectPinRoute/u)
+  assert.match(server, /handleProjectPinRequest/u)
+  assert.doesNotMatch(server, /await projectPinRoute\(/u)
+})
+
 async function fileExists(relativePath: string): Promise<boolean> {
   try {
     await readFile(path.join(root, relativePath))
