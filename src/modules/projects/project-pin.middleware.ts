@@ -6,6 +6,7 @@ import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ProjectPinProvider } from "../../http/routes/project-pin.js"
 import {
   handleProjectCoreReadRequest,
+  handleProjectDeleteRequest,
   handleProjectDeletionStatusRequest,
   handleProjectPinRequest,
   handleProjectRenameRequest,
@@ -22,6 +23,7 @@ export class ProjectPinMiddleware implements NestMiddleware {
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleProjectRenameRequest(request, response, this.config, this.admission, this.projectService)
+      .then((handled) => handled || handleProjectDeleteRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectDeletionStatusRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectPinRequest(request, response, this.config, this.admission, this.projectService))

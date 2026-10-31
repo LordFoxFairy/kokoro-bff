@@ -1669,7 +1669,7 @@ R276 方案的 BFF 本地边界已在当前工作树实现：专用 DELETE/statu
 - 精确 retention/最终 Project 与 Conversation 墓碑物理 purge 时限尚无批准事实，保持未决；本切片不猜期限、不加 purge
   worker，也不以 retention 未定阻塞逻辑删除。
 - 后继 machine/source/test 最窄集合：`contract/openapi/v1/openapi.yaml`、契约 provenance/checker/既有 contract tests；
-  `src/http/routes/project-delete.ts`、`src/http/routes/project-native.ts`、`src/application/project-service.ts`、
+  `src/http/routes/project-native.ts`、`src/application/project-service.ts`、
   `src/application/ports/project-repository.ts`、`src/infrastructure/postgres/project-repository.ts`、现 Conversation same-client
   helper、现 Scheduler repository/outbox 接缝、具名 Storage release worker 与 `src/bootstrap/server.ts`；canonical SQL 与真实 PG/
   HTTP/owner tests。任何额外文件须在实现前重新过放置门。

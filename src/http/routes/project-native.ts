@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { RenameProjectResult } from "../../application/ports/project-repository.js"
+import type { DeleteProjectResult, RenameProjectResult } from "../../application/ports/project-repository.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { failure, ok } from "../../contracts/index.js"
-import { isEmptyProjectDeletionRequest, isProjectDeletionId, projectDeletionHeaderValues } from "../project-deletion-input.js"
+import { isEmptyProjectDeletionRequest, isProjectDeletionId, projectDeletionHeaderValues, validProjectDeletionKey } from "../project-deletion-input.js"
 import { isCanonicalRenameProjectId, parseProjectRenameName, renameProjectHeaderValues, validRenameProjectKey } from "../project-rename-input.js"
 import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
@@ -16,6 +16,13 @@ export type ProjectCoreReadProvider = Readonly<{
   revisions(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<readonly unknown[] | null>
   deletion(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string, signal: AbortSignal): Promise<unknown | null>
   rename(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string, name: string, key: string, signal: AbortSignal): Promise<RenameProjectResult>
+  delete(
+    scope: Readonly<{ tenantId: string; subjectId: string }>,
+    projectId: string,
+    key: string,
+    requestId: string,
+    signal: AbortSignal,
+  ): Promise<DeleteProjectResult>
 }>
 
 function projectPinPath(request: IncomingMessage): string {
@@ -130,6 +137,80 @@ export async function handleProjectRenameRequest(
     else fail(409, "idempotency_conflict", "Project rename key was used for different input")
   } catch {
     if (!response.destroyed && !response.writableEnded) fail(503, "business_store_unavailable", "Project rename result is unavailable", true)
+  } finally {
+    clearTimeout(timer)
+    request.removeListener("aborted", onAborted)
+    response.removeListener("close", onClosed)
+  }
+  return true
+}
+
+export function isProjectDeleteRequest(request: IncomingMessage): boolean {
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  return request.method === "DELETE" && /^\/v1\/projects\/[^/]+$/u.test(path)
+}
+
+/** Projects-owned delete command; the legacy dispatcher no longer owns this path. */
+export async function handleProjectDeleteRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  projects: ProjectCoreReadProvider | null,
+): Promise<boolean> {
+  if (!isProjectDeleteRequest(request)) return false
+  const id = requestId(request)
+  const fail = (status: number, code: string, message: string, retryable = false, retryAfter?: string): void =>
+    send(response, status, { error: { code, message, retryable } }, retryAfter)
+  response.setHeader("x-request-id", id)
+  response.setHeader("cache-control", "no-store")
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  const projectId = path.slice("/v1/projects/".length)
+  const keys = projectDeletionHeaderValues(request.rawHeaders, "idempotency-key")
+  const key = keys[0]
+  if (request.url !== `/v1/projects/${projectId}` || !isProjectDeletionId(projectId) || !isEmptyProjectDeletionRequest(request, true)) {
+    fail(400, "invalid_project_deletion_request", "Project deletion request is invalid")
+    return true
+  }
+  if (keys.length !== 1 || key === undefined || !validProjectDeletionKey(key)) {
+    fail(400, keys.length === 0 ? "idempotency_key_required" : "invalid_idempotency_key", "One valid Idempotency-Key is required")
+    return true
+  }
+  const abort = new AbortController()
+  const timer = setTimeout(() => abort.abort(), Math.min(config.upstreamTimeoutMs, 10_000))
+  const onAborted = (): void => abort.abort()
+  const onClosed = (): void => {
+    if (!response.writableEnded) abort.abort()
+  }
+  request.once("aborted", onAborted)
+  response.once("close", onClosed)
+  if (request.aborted || response.destroyed) abort.abort()
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    if (!admitted.ok) {
+      fail(admitted.status, admitted.code, "BFF user admission failed", admitted.status === 429 || admitted.status === 503, admitted.retryAfter)
+      return true
+    }
+    if (projects === null) {
+      fail(503, "business_store_unavailable", "Project deletion is unavailable", true)
+      return true
+    }
+    const result = await projects.delete(
+      { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId },
+      projectId,
+      key,
+      id,
+      abort.signal,
+    )
+    if (response.destroyed || response.writableEnded) return true
+    if (result.kind === "accepted") {
+      response.setHeader("location", result.location)
+      send(response, 202, { data: result.resource })
+    } else if (result.kind === "not_found") fail(404, "project_not_found", "Project was not found")
+    else if (result.kind === "in_progress") fail(409, "idempotency_in_progress", "Project deletion is in progress", true)
+    else fail(409, "idempotency_conflict", "Idempotency key was used for different input")
+  } catch {
+    if (!response.destroyed && !response.writableEnded) fail(503, "business_store_unavailable", "Project deletion is unavailable", true)
   } finally {
     clearTimeout(timer)
     request.removeListener("aborted", onAborted)
