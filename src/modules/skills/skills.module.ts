@@ -2,7 +2,7 @@ import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/c
 import { BffConfigModule } from "../../config/config.module.js"
 import { AccountModule } from "../account/account.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
-import { BFF_CONFIG, BFF_POOL, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_USAGE_READER } from "../../common/tokens.js"
+import { BFF_CONFIG, BFF_DATABASE, BFF_POOL, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
 import { PlatformServiceCredentialSource } from "../../infrastructure/clients/platform/platform-service-credential.js"
@@ -19,9 +19,17 @@ import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import { ChatModule } from "../chat/chat.module.js"
+import { DatabaseModule } from "../../common/database/database.module.js"
+import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
+import { PostgresSkillShareRepository } from "../../infrastructure/postgres/skill-share-repository.js"
+import { SkillSpecificationService } from "../../application/skill-specification.js"
+import type { SkillSpecificationSource } from "../../application/skill-specification.types.js"
+import { PlatformSkillSpecificationFacade } from "../../infrastructure/clients/platform/skill-specification-facade.js"
+import { PlatformProjectionHttpClient } from "../../infrastructure/clients/platform/projection-http.js"
+import { IamPublisherProfileClient } from "../../infrastructure/clients/iam-publisher-profile.js"
 
 @Module({
-  imports: [AccountModule, ChatModule, IamRelayModule, BffConfigModule],
+  imports: [AccountModule, ChatModule, DatabaseModule, IamRelayModule, BffConfigModule],
   providers: [
     SkillsMiddleware,
     {
@@ -127,8 +135,32 @@ import { ChatModule } from "../chat/chat.module.js"
       inject: [BFF_POOL],
       useFactory: (pool: Pool): Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt"> => new PostgresIdempotencyRepository(pool),
     },
+    {
+      provide: SKILL_SHARE_REPOSITORY,
+      inject: [BFF_DATABASE],
+      useFactory: (database: PostgresBffDatabase): PostgresSkillShareRepository => new PostgresSkillShareRepository(database),
+    },
+    {
+      provide: SKILL_SPECIFICATION_SOURCE,
+      inject: [BFF_CONFIG, SKILL_PRODUCT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_USAGE_READER],
+      useFactory: (
+        config: BffConfig,
+        product: SkillProductConnectClient | null,
+        installations: SkillInstallationConnectClient | null,
+        usage: (tenant: string, refs: readonly string[]) => Promise<Map<string, SkillUsageResult>>,
+      ): SkillSpecificationSource | null => {
+        if (!product || !installations || !config.platformProjection?.baseUrl || !config.platformProjection.credentialFile || !config.iamBaseUrl) return null
+        const projection = new PlatformProjectionHttpClient(config.platformProjection.baseUrl, config.platformProjection.credentialFile, config.platformProjection.timeoutMs)
+        return new SkillSpecificationService({
+          owner: new PlatformSkillSpecificationFacade({ product, installations, projection }),
+          profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
+          usage,
+          objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
+        })
+      },
+    },
   ],
-  exports: [SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_USAGE_READER],
+  exports: [SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER],
 })
 export class SkillsModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

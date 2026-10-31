@@ -34,7 +34,6 @@ import { skillSpecificationReadRoute } from "../http/routes/platform-projection.
 import { handleSkillSpecificationEnabledRequest } from "../http/routes/skill-specification-enabled.js"
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
-import { skillShareRoute } from "../http/routes/skill-share.js"
 import { handleSkillUsageRequest } from "../http/routes/skill-usage.js"
 import { handlePublishedSkillPackageRequest } from "../http/routes/skill-published-package-native.js"
 import { startSkillRequestBudget, skillRequestRemaining } from "../http/routes/skill-drafts.js"
@@ -92,6 +91,7 @@ import { handleSkillDraftMutationRequest } from "../http/routes/skill-draft-muta
 import { handleSkillCatalogCommandRequest, handleSkillCoverRequest, handleSkillGithubPreviewRequest, handleSkillPackageUploadReadRequest } from "../http/routes/skill-catalog-command-native.js"
 import { handleSkillGithubImportRequest } from "../http/routes/skill-import-native.js"
 import { handleSkillAiImportRequest } from "../http/routes/skill-ai-import-native.js"
+import { handleSkillShareRequest } from "../http/routes/skill-share-native.js"
 import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
@@ -486,24 +486,6 @@ export async function handleBffRequest(
   }
   if (isMcpPersonalOperation) {
     await mcpPersonalRoute(request, response, config, composition, admission, businessPath)
-    return
-  }
-  if (
-    businessPath[0] === "skill-shares" &&
-    ((businessPath.length === 1 && request.method === "POST") ||
-      (businessPath.length === 2 && ["GET", "DELETE"].includes(request.method ?? "")) ||
-      (businessPath.length === 3 && businessPath[2] === "skill" && request.method === "GET"))
-  ) {
-    await skillShareRoute(
-      request,
-      response,
-      { ...context, humanBearer: admission.bearerToken },
-      businessPath,
-      composition.businessStore?.skillShares,
-      composition.skillProductClient,
-      config.iamRelay?.webOrigin,
-      composition.skillSpecificationSource,
-    )
     return
   }
   const meteringKind = matchMeteringAdmin(request.method ?? "", businessPath)
@@ -942,6 +924,19 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
               composition.businessStore,
               composition.businessStore?.skillAiAssociation ?? null,
               composition.skillProductClient,
+            ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : handleSkillShareRequest(
+              request,
+              response,
+              config,
+              composition.sessionAdmission,
+              composition.businessStore?.skillShares,
+              composition.skillProductClient,
+              composition.skillSpecificationSource,
             ),
       )
       .then((handled) =>

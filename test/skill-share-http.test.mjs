@@ -186,8 +186,12 @@ test("Skill Share HTTP requires current exact qualification before create and re
 
 test("Skill Share composition uses the validated browser origin, not an invented HTTPS domain", async () => {
   const { readFile } = await import("node:fs/promises")
-  const source = await readFile(new URL("../src/bootstrap/server.ts", import.meta.url), "utf8")
-  assert.match(source, /composition\.skillProductClient,\s*config\.iamRelay\?\.webOrigin,/u)
+  const [server, nativeRoute] = await Promise.all([
+    readFile(new URL("../src/bootstrap/server.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/http/routes/skill-share-native.ts", import.meta.url), "utf8"),
+  ])
+  assert.match(server, /handleSkillShareRequest/u)
+  assert.match(nativeRoute, /config\.iamRelay\?\.webOrigin/u)
 })
 
 test("Skill Share POST without a trusted public origin fails before owner inspection or share creation", async () => {
