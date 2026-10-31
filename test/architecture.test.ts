@@ -889,12 +889,13 @@ test("Library file handling has no retired Storage HTTP or BFF shadow Asset tabl
 })
 
 test("current administrator qualification belongs only to admitted user context and the IAM boundary", async () => {
-  const [context, admissionTypes, admission, client, server] = await Promise.all([
+  const [context, admissionTypes, admission, client, server, accountNative] = await Promise.all([
     readFile(path.join(root, "src/domain/request-context.ts"), "utf8"),
     readFile(path.join(root, "src/auth/session-admission.types.ts"), "utf8"),
     readFile(path.join(root, "src/auth/user-admission.ts"), "utf8"),
     readFile(path.join(root, "src/auth/session-admission.client.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/account-native.ts"), "utf8"),
   ])
   assert.doesNotMatch(context.split("export type AdmittedUserRequestContext")[0], /platformAdmin/u)
   assert.match(context, /AdmittedUserRequestContext = RequestContext & \{\s+platformAdmin: boolean\s+\}/u)
@@ -904,7 +905,8 @@ test("current administrator qualification belongs only to admitted user context 
   assert.match(admission, /platformAdmin: result\.platformAdmin/u)
   assert.match(client, /platformAdmin: parsed\.data\.data\.platform_admin/u)
   assert.doesNotMatch(client, /platform_admin\s*\?\?|decodeJwt|jwtDecode/u)
-  assert.match(server, /platform_admin: context\.platformAdmin/u)
+  assert.match(accountNative, /platform_admin: admitted\.context\.platformAdmin/u)
+  assert.doesNotMatch(server, /businessPath\[0\] === "me"/u)
 })
 
 test("R257 personalization stays caller-owned and bypasses generic receipt dispatch without another service", async () => {

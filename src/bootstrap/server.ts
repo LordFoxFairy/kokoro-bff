@@ -962,35 +962,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (businessPath.length === 1 && businessPath[0] === "me") {
-    response.setHeader("x-request-id", id)
-    if (request.method !== "GET" || (request.url !== "/v1/me" && !(request.url ?? "").startsWith("/v1/me?"))) {
-      send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
-      return
-    }
-    if (request.url !== "/v1/me") {
-      send(response, 400, failure("current_user_query_invalid", "Current user request must not contain query parameters", id))
-      return
-    }
-    if ((request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0") || request.headers["transfer-encoding"] !== undefined) {
-      send(response, 400, failure("current_user_body_rejected", "Current user request must not contain a body", id))
-      return
-    }
-    send(
-      response,
-      200,
-      ok(
-        {
-          user_id: context.identity.userId,
-          tenant_id: context.identity.namespace,
-          platform_admin: context.platformAdmin,
-        },
-        id,
-      ),
-    )
-    return
-  }
-
   if (composition.routeHandler === undefined && businessPath[0] === "admin") {
     if (await liveModelConfigurationAdmin(request, response, config, context, businessPath, adminOperationDeadline)) return
     await liveModelRoutingAdmin(request, response, config, context, businessPath)
