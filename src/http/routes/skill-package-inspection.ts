@@ -27,6 +27,11 @@ const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
 const RESPONSE_LIMIT = 1024 * 1024
 
 export type ProjectSkillContentAccess = (projectId: string, context: RequestContext, signal: AbortSignal) => Promise<string | null>
+export type SkillPackageInspectionProvider = Readonly<{
+  client: SkillPackageInspectionConnectClient | null
+  installations: SkillInstallationConnectClient | null
+  access?: ProjectSkillContentAccess
+}>
 type Operation = Readonly<{ kind: "managed" | "installation" | "project"; targetId: string; projectId?: string }>
 
 function operationFor(path: string[]): Operation | null {
@@ -117,6 +122,7 @@ export async function skillPackageInspectionRoute(
   requestId: string,
   path: string[],
   project?: Readonly<{ access: ProjectSkillContentAccess; installations: SkillInstallationConnectClient | null }>,
+  packageClient?: SkillPackageInspectionConnectClient | null,
 ): Promise<void> {
   const operation = operationFor(path)
   if (operation === null || !active(request, response)) return
@@ -186,7 +192,7 @@ export async function skillPackageInspectionRoute(
       failIfActive(503, "skill_package_dependency_unavailable", "Skill package dependency is unavailable", true)
       return
     }
-    let client = clients.get(config)
+    let client = packageClient ?? clients.get(config)
     if (client === undefined) {
       client = new SkillPackageInspectionConnectClient(projection.baseUrl, projection.credentialFile, projection.timeoutMs)
       clients.set(config, client)

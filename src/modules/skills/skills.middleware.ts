@@ -1,6 +1,6 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { APP_SKILL_BINDING_CLIENT, BFF_CONFIG, OPEN_APP_MANAGEMENT_ADMISSION, SESSION_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_AI_ASSOCIATION, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER } from "../../common/tokens.js"
+import { APP_SKILL_BINDING_CLIENT, BFF_CONFIG, OPEN_APP_MANAGEMENT_ADMISSION, SESSION_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_AI_ASSOCIATION, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
@@ -22,6 +22,7 @@ import { handleSkillShareRequest } from "../../http/routes/skill-share-native.js
 import { handleSkillLocalImportRequest } from "../../http/routes/skill-local-import-native.js"
 import { handleAppSkillBindingsRequest } from "../../http/routes/app-skill-bindings-native.js"
 import { handleSkillSpecificationRequest } from "../../http/routes/skill-specification-native.js"
+import { handleSkillPackageInspectionRequest } from "../../http/routes/skill-package-inspection-native.js"
 import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
 import type { CatalogConnectClient } from "../../infrastructure/clients/platform/catalog-connect.js"
 import type { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
@@ -35,6 +36,7 @@ import type { OpenAppManagementAdmission } from "../../auth/open-app-management-
 import type { AppSkillBindingClient } from "../../application/app-skill-bindings.types.js"
 import type { SkillListAdmission } from "../../auth/skill-list-admission.client.js"
 import type { SkillDownloadHandles } from "../../application/skill-download-handles.js"
+import type { SkillPackageInspectionConnectClient } from "../../infrastructure/clients/platform/skill-package-inspection-connect.js"
 
 @Injectable()
 export class SkillsMiddleware implements NestMiddleware {
@@ -56,15 +58,20 @@ export class SkillsMiddleware implements NestMiddleware {
     @Inject(APP_SKILL_BINDING_CLIENT) private readonly appSkillBindingClient: AppSkillBindingClient | null,
     @Inject(SKILL_LIST_ADMISSION) private readonly skillListAdmission: SkillListAdmission,
     @Inject(SKILL_DOWNLOAD_HANDLES) private readonly skillDownloadHandles: SkillDownloadHandles,
+    @Inject(SKILL_PACKAGE_INSPECTION_CLIENT) private readonly packageInspectionClient: SkillPackageInspectionConnectClient | null,
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
-    void handleSkillSpecificationRequest(request, response, this.config, {
+    void handleSkillPackageInspectionRequest(request, response, this.config, this.admission, {
+      client: this.packageInspectionClient,
+      installations: this.client,
+    }, null)
+      .then((handled) => handled || handleSkillSpecificationRequest(request, response, this.config, {
       skillListAdmission: this.skillListAdmission,
       skillSpecificationSource: this.skillSpecification,
       sessionAdmission: this.admission,
       skillDownloadHandles: this.skillDownloadHandles,
-    })
+    }))
       .then((handled) => handled || handleAppSkillBindingsRequest(request, response, this.config, this.admission, this.openAppManagementAdmission, this.appSkillBindingClient))
       .then((handled) => handled || handlePersonalSkillInstallationRequest(request, response, this.config, this.admission, this.skillAuthorization, this.client))
       .then((handled) => handled || handleManagedPersonalSkillsRequest(request, response, this.config, this.admission))

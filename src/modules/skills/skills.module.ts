@@ -2,7 +2,7 @@ import { Inject, Injectable, MiddlewareConsumer, Module, NestModule, OnApplicati
 import { BffConfigModule } from "../../config/config.module.js"
 import { AccountModule } from "../account/account.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
-import { APP_SKILL_BINDING_CLIENT, BFF_CONFIG, BFF_DATABASE, BFF_POOL, OPEN_APP_MANAGEMENT_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER } from "../../common/tokens.js"
+import { APP_SKILL_BINDING_CLIENT, BFF_CONFIG, BFF_DATABASE, BFF_POOL, OPEN_APP_MANAGEMENT_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
 import { PlatformServiceCredentialSource } from "../../infrastructure/clients/platform/platform-service-credential.js"
@@ -31,6 +31,7 @@ import { OpenAppManagementAdmissionClient } from "../../auth/open-app-management
 import { AppSkillBindingConnectClient } from "../../infrastructure/clients/platform/app-skill-binding-connect.js"
 import { SkillListAdmissionClient } from "../../auth/skill-list-admission.client.js"
 import { SkillDownloadHandles } from "../../application/skill-download-handles.js"
+import { SkillPackageInspectionConnectClient } from "../../infrastructure/clients/platform/skill-package-inspection-connect.js"
 
 @Injectable()
 class SkillsRuntime implements OnApplicationShutdown {
@@ -56,6 +57,13 @@ class SkillsRuntime implements OnApplicationShutdown {
       }),
     },
     { provide: SKILL_DOWNLOAD_HANDLES, useFactory: (): SkillDownloadHandles => new SkillDownloadHandles() },
+    {
+      provide: SKILL_PACKAGE_INSPECTION_CLIENT,
+      inject: [BFF_CONFIG],
+      useFactory: (config: BffConfig): SkillPackageInspectionConnectClient | null => config.platformProjection?.baseUrl && config.platformProjection.credentialFile
+        ? new SkillPackageInspectionConnectClient(config.platformProjection.baseUrl, config.platformProjection.credentialFile, config.platformProjection.timeoutMs)
+        : null,
+    },
     {
       provide: OPEN_APP_MANAGEMENT_ADMISSION,
       inject: [BFF_CONFIG],
@@ -206,7 +214,7 @@ class SkillsRuntime implements OnApplicationShutdown {
       },
     },
   ],
-  exports: [APP_SKILL_BINDING_CLIENT, OPEN_APP_MANAGEMENT_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER],
+  exports: [APP_SKILL_BINDING_CLIENT, OPEN_APP_MANAGEMENT_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER],
 })
 export class SkillsModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
