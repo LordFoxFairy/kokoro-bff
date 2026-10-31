@@ -11,6 +11,7 @@ import {
   handleProjectPinRequest,
   handleProjectRenameRequest,
   handleProjectResourceListRequest,
+  handleProjectResourceDeleteRequest,
   type ProjectCoreReadProvider,
 } from "../../http/routes/project-native.js"
 
@@ -26,6 +27,7 @@ export class ProjectPinMiddleware implements NestMiddleware {
     void handleProjectRenameRequest(request, response, this.config, this.admission, this.projectService)
       .then((handled) => handled || handleProjectDeleteRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectDeletionStatusRequest(request, response, this.config, this.admission, this.projectService))
+      .then((handled) => handled || handleProjectResourceDeleteRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectResourceListRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectPinRequest(request, response, this.config, this.admission, this.projectService))

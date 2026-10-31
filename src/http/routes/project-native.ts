@@ -3,6 +3,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { DeleteProjectResult, RenameProjectResult } from "../../application/ports/project-repository.js"
 import { ProjectResourceError } from "../../application/project-resource.error.js"
+import { ProjectResourceAccessClient } from "../../infrastructure/clients/storage/project-resource-access.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { failure, ok } from "../../contracts/index.js"
 import { isEmptyProjectDeletionRequest, isProjectDeletionId, projectDeletionHeaderValues, validProjectDeletionKey } from "../project-deletion-input.js"
@@ -55,6 +56,82 @@ export function isProjectRenameRequest(request: IncomingMessage): boolean {
 export function isProjectResourceListRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
   return request.method === "GET" && /^\/v1\/projects\/[^/]+\/resources$/u.test(path)
+}
+
+export function isProjectResourceDeleteRequest(request: IncomingMessage): boolean {
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  return request.method === "DELETE" && /^\/v1\/projects\/[^/]+\/resources\/[^/]+$/u.test(path)
+}
+
+/** Projects-owned resource delete command; the legacy dispatcher no longer owns this path. */
+export async function handleProjectResourceDeleteRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  projects: ProjectCoreReadProvider | null,
+  clientFactory: (storage: NonNullable<BffConfig["storage"]>, context: { tenantId: string; subjectId: string; projectId: string; requestId: string }) => Pick<ProjectResourceAccessClient, "delete"> = (storage, context) =>
+    new ProjectResourceAccessClient(storage, context),
+): Promise<boolean> {
+  if (!isProjectResourceDeleteRequest(request)) return false
+  const id = requestId(request)
+  response.setHeader("x-request-id", id)
+  const abort = new AbortController()
+  const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(10_000)])
+  const onAborted = (): void => abort.abort()
+  const onClosed = (): void => {
+    if (!response.writableEnded) abort.abort()
+  }
+  request.once("aborted", onAborted)
+  response.once("close", onClosed)
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    if (!admitted.ok) {
+      send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+      return true
+    }
+    const url = new URL(request.url ?? "/", "http://bff.local")
+    const match = /^\/v1\/projects\/([^/]+)\/resources\/([^/]+)$/u.exec(url.pathname)
+    if (match?.[1] === undefined || match[2] === undefined) throw new ProjectResourceError("invalid_project_resource", 400)
+    let projectRef: string
+    let assetId: string
+    try {
+      projectRef = decodeURIComponent(match[1])
+      assetId = decodeURIComponent(match[2])
+    } catch {
+      throw new ProjectResourceError("invalid_project_resource", 400)
+    }
+    if (
+      request.url !== `/v1/projects/${encodeURIComponent(projectRef)}/resources/${encodeURIComponent(assetId)}` ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(projectRef) ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(assetId) ||
+      !isEmptyProjectDeletionRequest(request, true) ||
+      request.headers["content-type"] !== undefined
+    )
+      throw new ProjectResourceError("invalid_project_resource", 400)
+    const keys = projectDeletionHeaderValues(request.rawHeaders, "idempotency-key")
+    const key = keys[0]
+    if (keys.length !== 1 || key === undefined || !/^[\x21-\x7e]{1,191}$/u.test(key))
+      throw new ProjectResourceError("invalid_project_resource", 400)
+    if (projects === null) throw new ProjectResourceError("business_store_unavailable", 503, true)
+    const scope = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }
+    const project = await projects.find(scope, projectRef)
+    if (project === null) throw new ProjectResourceError("project_not_found", 404)
+    if (typeof project !== "object" || project === null || !("id" in project) || typeof project.id !== "string")
+      throw new ProjectResourceError("project_resource_delete_unknown", 503, true)
+    if (config.storage === undefined) throw new ProjectResourceError("storage_projection_not_configured", 503, true)
+    const result = await clientFactory(config.storage, { ...scope, projectId: project.id, requestId: id }).delete(assetId, key, signal)
+    signal.throwIfAborted()
+    if (!response.destroyed) send(response, 200, ok(result, id))
+  } catch (error) {
+    if (response.destroyed || response.writableEnded) return true
+    const known = error instanceof ProjectResourceError ? error : new ProjectResourceError("project_resource_delete_unknown", 503, true)
+    send(response, known.status, failure(known.code, "Project resource deletion did not complete", id))
+  } finally {
+    request.removeListener("aborted", onAborted)
+    response.removeListener("close", onClosed)
+  }
+  return true
 }
 
 /** Projects-owned resource collection read; the legacy dispatcher no longer owns this path. */

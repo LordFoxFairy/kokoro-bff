@@ -6,7 +6,7 @@ import { create, toBinary } from "@bufbuild/protobuf"
 import { ProjectResourceAccessClient } from "../src/infrastructure/clients/storage/project-resource-access.ts"
 import { StorageService } from "../src/generated/storage-connect/kokoro/storage/v3/storage_pb.ts"
 import { ErrorDetailSchema, ErrorCode } from "../src/generated/storage-connect/kokoro/common/v1/common_pb.ts"
-import { projectResourceDeleteRoute } from "../src/http/routes/project-resource-delete.ts"
+import { handleProjectResourceDeleteRequest } from "../src/http/routes/project-native.ts"
 const storage = { baseUrl: "http://storage.test", secret: "fixture-secret", objectOrigin: "http://objects.test" }
 const context = { tenantId: "tenant-1", subjectId: "subject-1", projectId: "project-1", requestId: "request-1" }
 const committed = { assetId: "asset-1", deletedAt: { seconds: 1700000000n, nanos: 123000000 }, replayed: false }
@@ -132,6 +132,34 @@ function res() {
   return r
 }
 const auth = { requestId: "request-1", identity: { namespace: "tenant-1", userId: "subject-1" } }
+
+async function projectResourceDeleteRoute(request, response, config, context, _projectRef, _assetId, store, clientFactory) {
+  request.headers = {
+    ...request.headers,
+    authorization: `Bearer ${context.identity.namespace}:${context.identity.userId}`,
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": "web-secret",
+    "x-request-id": context.requestId,
+  }
+  request.rawHeaders = [
+    ...request.rawHeaders,
+    "authorization", request.headers.authorization,
+    "x-kokoro-service", "web-bff",
+    "x-kokoro-internal-secret", "web-secret",
+    "x-request-id", context.requestId,
+  ]
+  const provider = {
+    list: async () => [],
+    find: (scope, ref) => store.services.projects.find(scope, ref),
+    revisions: async () => [],
+    deletion: async () => null,
+    rename: async () => ({ kind: "conflict" }),
+    delete: async () => ({ kind: "not_found" }),
+  }
+  const nativeConfig = { ...config, tenantId: context.identity.namespace, sharedSecret: "web-secret", upstreamTimeoutMs: 10_000, iamBaseUrl: null }
+  const admission = { verify: async ({ token }) => { const [namespace, userId] = token.split(":"); return { ok: true, identity: { namespace, userId } } } }
+  return handleProjectResourceDeleteRequest(request, response, nativeConfig, admission, provider, clientFactory)
+}
 
 test("DELETE rechecks current ownership before every replay and never substitutes scope release", async () => {
   let owned = true
