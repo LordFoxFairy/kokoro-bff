@@ -57,7 +57,6 @@ import {
   mcpActionForRequest,
   authorizeSkillAction,
   skillActionForRequest,
-  withSkillActionAdmission,
 } from "../auth/user-admission.js"
 import { localSkillImportRoute } from "../http/routes/local-skill-import.js"
 import { failure } from "../contracts/index.js"
@@ -100,9 +99,7 @@ import { publishSkillRoute } from "../http/routes/publish-skill.js"
 import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
-import { createPersonalSkillVersionRoute } from "../http/routes/create-personal-skill-version.js"
-import { deletePersonalSkillSeriesRoute } from "../http/routes/delete-personal-skill-series.js"
-import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-skill.js"
+import { handlePersonalSkillLifecycleRequest } from "../http/routes/personal-skill-lifecycle-native.js"
 import { skillPackageInspectionRoute, type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 import { handleIamRelayRequest } from "../modules/iam-relay/iam-relay.middleware.js"
@@ -274,47 +271,6 @@ export async function handleBffRequest(
     })
     return
   }
-  if (request.method === "DELETE" && businessPath.length === 3 && businessPath[0] === "self" && businessPath[1] === "skills") {
-    await deletePersonalSkillSeriesRoute(
-      request,
-      response,
-      config,
-      withSkillActionAdmission(composition.sessionAdmission, composition.skillAuthorization, "delete_series", config.tenantId),
-      id,
-      businessPath[2] ?? "",
-      composition.skillDraftClient,
-    )
-    return
-  }
-  const isCreatePersonalSkillVersion =
-    request.method === "POST" && businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "versions"
-  if (isCreatePersonalSkillVersion) {
-    await createPersonalSkillVersionRoute(
-      request,
-      response,
-      config,
-      withSkillActionAdmission(composition.sessionAdmission, composition.skillAuthorization, "create_version", config.tenantId),
-      id,
-      businessPath[2] ?? "",
-      composition.skillDraftClient,
-    )
-    return
-  }
-  const isWithdrawPersonalSkill =
-    request.method === "POST" && businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "withdraw"
-  if (isWithdrawPersonalSkill) {
-    await withdrawPersonalSkillRoute(
-      request,
-      response,
-      config,
-      withSkillActionAdmission(composition.sessionAdmission, composition.skillAuthorization, "withdraw", config.tenantId),
-      id,
-      businessPath[2] ?? "",
-      composition.skillDraftClient,
-    )
-    return
-  }
-
   const isPersonalKnowledgePath =
     businessPath[0] === "preferences" &&
     ((businessPath.length === 2 && ["knowledge", "knowledge-usage"].includes(businessPath[1]!)) ||
@@ -1092,6 +1048,20 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           : composition.routeHandler !== undefined
             ? false
             : handleSkillUsageRequest(request, response, config, composition.sessionAdmission, composition.businessStore?.services.skillUsage),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handlePersonalSkillLifecycleRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.skillAuthorization,
+                composition.skillDraftClient,
+              ),
       )
       .then((handled) =>
         handled
