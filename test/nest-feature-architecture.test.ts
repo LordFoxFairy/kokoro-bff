@@ -30,6 +30,19 @@ test("scheduled-task state reader port is owned by its feature module", async ()
   assert.equal(await fileExists("src/application/ports/scheduled-task-state-reader.ts"), false)
 })
 
+test("AccountModule owns the SessionAdmission provider consumed by the transitional runtime", async () => {
+  const [accountModule, runtime, legacyModule] = await Promise.all([
+    readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
+  ])
+  assert.match(accountModule, /provide: SESSION_ADMISSION/u)
+  assert.match(accountModule, /exports: \[[^\]]*SESSION_ADMISSION/u)
+  assert.match(runtime, /Inject\(SESSION_ADMISSION\)/u)
+  assert.match(runtime, /sessionAdmission/u)
+  assert.match(legacyModule, /imports: \[AccountModule\]/u)
+})
+
 async function fileExists(relativePath: string): Promise<boolean> {
   try {
     await readFile(path.join(root, relativePath))

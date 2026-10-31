@@ -1,7 +1,8 @@
 import { Inject, Injectable, OnApplicationShutdown, OnModuleInit } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
-import { BFF_CONFIG } from "../../common/tokens.js"
+import { BFF_CONFIG, SESSION_ADMISSION } from "../../common/tokens.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { createBffComposition, type BffServerComposition } from "../../bootstrap/runtime.js"
 import { handleBffRequest } from "../../bootstrap/server.js"
 
@@ -9,8 +10,11 @@ import { handleBffRequest } from "../../bootstrap/server.js"
 export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown {
   private readonly composition: BffServerComposition
 
-  public constructor(@Inject(BFF_CONFIG) private readonly config: BffConfig) {
-    this.composition = createBffComposition(config)
+  public constructor(
+    @Inject(BFF_CONFIG) private readonly config: BffConfig,
+    @Inject(SESSION_ADMISSION) sessionAdmission: SessionAdmission,
+  ) {
+    this.composition = createBffComposition(config, { sessionAdmission })
   }
 
   public onModuleInit(): void {
