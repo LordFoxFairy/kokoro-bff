@@ -97,7 +97,7 @@ import { beginSkillPackageUploadRoute } from "../http/routes/begin-skill-package
 import { completeSkillPackageUploadRoute } from "../http/routes/complete-skill-package-upload.js"
 import { validateSkillDraftRoute } from "../http/routes/validate-skill-draft.js"
 import { publishSkillRoute } from "../http/routes/publish-skill.js"
-import { handleProjectSkillInstallationRequest, skillInstallationRoute } from "../http/routes/skill-installations.js"
+import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { managedPersonalSkillsRoute } from "../http/routes/managed-personal-skills.js"
 import { createPersonalSkillVersionRoute } from "../http/routes/create-personal-skill-version.js"
@@ -682,27 +682,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (businessPath[0] === "skill-installations") {
-    const routeAbort = new AbortController()
-    const abortRoute = (): void => routeAbort.abort()
-    request.once("aborted", abortRoute)
-    response.once("close", abortRoute)
-    await skillInstallationRoute(
-      request,
-      response,
-      context,
-      businessPath,
-      composition.installationClient,
-      routeAbort.signal,
-      config.iamBaseUrl,
-      undefined,
-    ).finally(() => {
-      request.removeListener("aborted", abortRoute)
-      response.removeListener("close", abortRoute)
-    })
-    return
-  }
-
   if (businessPath.length === 3 && businessPath[0] === "skills" && ["enable", "disable"].includes(businessPath[2] ?? "")) {
     send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
     return
@@ -1118,6 +1097,20 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 config,
                 composition.sessionAdmission,
                 projectSkillSelectionProvider(composition.businessStore),
+                composition.installationClient,
+              ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handlePersonalSkillInstallationRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.skillAuthorization,
                 composition.installationClient,
               ),
       )

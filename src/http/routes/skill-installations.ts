@@ -104,6 +104,65 @@ export function isProjectSkillInstallationRequest(request: IncomingMessage): boo
   return /^\/v1\/projects\/[^/]+\/skill-installations(?:\/[^?]*)?(?:\?|$)/u.test(url) && !/^\/v1\/projects\/[^/]+\/skill-installations\/[^/]+\/package(?:\?|$)/u.test(url)
 }
 
+export function isPersonalSkillInstallationRequest(request: IncomingMessage): boolean {
+  const url = request.url ?? ""
+  return /^\/v1\/skill-installations(?:\/[^?]*)?(?:\?|$)/u.test(url)
+}
+
+export async function handlePersonalSkillInstallationRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  skillAuthorization: Pick<SkillAuthorizationClient, "check">,
+  client: SkillInstallationConnectClient | null,
+): Promise<boolean> {
+  if (!isPersonalSkillInstallationRequest(request)) return false
+  const id = requestId(request)
+  const signal = AbortSignal.timeout(10_000)
+  response.setHeader("x-request-id", id)
+  response.setHeader("cache-control", "no-store")
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    if (!admitted.ok) {
+      send(response, admitted.status, {
+        error: {
+          code: admitted.code,
+          message: "BFF user admission failed",
+          retryable: admitted.status === 429 || admitted.status === 503,
+        },
+      }, admitted.retryAfter)
+      return true
+    }
+    const parts = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean)
+    if (parts.length < 2 || parts[0] !== "v1" || parts[1] !== "skill-installations") throw new ConnectError("Skill path invalid", Code.InvalidArgument)
+    const skillPath = parts.slice(1).map((value) => decodeURIComponent(value))
+    const action = skillActionForRequest(request.method ?? "GET", skillPath)
+    if (action !== null) {
+      const checked = await authorizeSkillAction(skillAuthorization, admitted, action, signal)
+      if (!checked.ok) {
+        send(response, checked.status, failure(checked.code, "Skill action admission failed", checked.status === 429 || checked.status >= 500))
+        return true
+      }
+    }
+    await skillInstallationRoute(request, response, admitted.context, skillPath, client, signal, config.iamBaseUrl)
+  } catch (error) {
+    if (response.writableEnded || response.destroyed) return true
+    const status =
+      error instanceof ConnectError && error.code === Code.InvalidArgument
+        ? 400
+        : error instanceof ConnectError && error.code === Code.PermissionDenied
+          ? 403
+          : 503
+    send(
+      response,
+      status,
+      failure(status === 400 ? "invalid_skill_installation_request" : status === 403 ? "permission_denied" : "skill_installation_dependency_unavailable", "Skill installation request failed", status === 503),
+    )
+  }
+  return true
+}
+
 export async function handleProjectSkillInstallationRequest(
   request: IncomingMessage,
   response: ServerResponse,

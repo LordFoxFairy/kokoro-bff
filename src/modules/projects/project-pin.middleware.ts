@@ -4,9 +4,9 @@ import {
   BFF_CONFIG,
   BFF_POOL,
   PROJECT_SERVICE,
-  PROJECT_SKILL_INSTALLATION_CLIENT,
   PROJECT_SKILL_SELECTION_PROVIDER,
   SKILL_AUTHORIZATION,
+  SKILL_INSTALLATION_CLIENT,
   SESSION_ADMISSION,
 } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
@@ -48,7 +48,7 @@ export class ProjectPinMiddleware implements NestMiddleware {
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(PROJECT_SERVICE) private readonly projectService: ProjectPinProvider & ProjectCoreReadProvider,
     @Inject(PROJECT_SKILL_SELECTION_PROVIDER) private readonly projectSkillSelection: ProjectSkillSelectionProvider,
-    @Inject(PROJECT_SKILL_INSTALLATION_CLIENT) private readonly installationClient: SkillInstallationConnectClient | null,
+    @Inject(SKILL_INSTALLATION_CLIENT) private readonly installationClient: SkillInstallationConnectClient | null,
     @Inject(SKILL_AUTHORIZATION) private readonly skillAuthorization: Pick<SkillAuthorizationClient, "check">,
     @Inject(BFF_POOL) pool: Pool,
   ) {
