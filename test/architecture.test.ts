@@ -247,13 +247,13 @@ test("global business store does not duplicate feature service providers", async
     readFile(path.join(root, "src/infrastructure/postgres/repositories.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
-  assert.match(store, /chatService\?/u)
+  assert.doesNotMatch(store, /chatService\?/u)
   assert.doesNotMatch(store, /chatTurnService\?/u)
-  assert.match(repositories, /public readonly chatService/u)
+  assert.doesNotMatch(repositories, /public readonly chatService/u)
   assert.doesNotMatch(repositories, /public readonly chatTurnService/u)
-  assert.match(repositories, /this\.chatService\s*=/u)
+  assert.doesNotMatch(repositories, /this\.chatService\s*=/u)
   assert.doesNotMatch(repositories, /this\.chatTurnService\s*=/u)
-  assert.match(runtime, /businessStore\?\.chatService/u)
+  assert.match(runtime, /businessStore\?\.services\?\.chat/u)
   assert.match(runtime, /businessStore\?\.projectService/u)
 })
 

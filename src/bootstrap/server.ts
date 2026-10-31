@@ -635,7 +635,7 @@ export async function handleBffRequest(
       composition.agUiRuntime,
       composition.agUiProjector !== undefined,
       chatAuthorization,
-      composition.chatService ?? composition.businessStore?.chatService ?? composition.businessStore?.services?.chat ?? null,
+      composition.chatService ?? composition.businessStore?.services?.chat ?? null,
     )
     return
   }
@@ -717,7 +717,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       }))
       .then((handled) => handled ? true : handleAppSkillBindingsRequest(request, response, config, composition.sessionAdmission, composition.openAppManagementAdmission, composition.appSkillBindingClient))
       .then((handled) => handled ? true : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization))
-      .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.chatService ?? composition.businessStore?.services.chat ?? null))
+      .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.services.chat ?? null))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
       .then((handled) => handled ? true : composition.routeHandler !== undefined ? false : handleMoriRequest(request, response, config, composition.sessionAdmission, { entries: composition.idempotency, ...(composition.businessStore === null ? {} : { persistent: composition.businessStore }) }))
       .then((handled) =>
@@ -739,8 +739,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
               response,
               config,
               composition.sessionAdmission,
-              composition.businessStore?.submittedAgentRuns && (composition.businessStore?.chatService ?? composition.businessStore?.services?.chat)
-                ? { submittedAgentRuns: composition.businessStore.submittedAgentRuns, chat: composition.businessStore.chatService ?? composition.businessStore.services.chat }
+              composition.businessStore?.submittedAgentRuns && composition.businessStore?.services?.chat
+                ? { submittedAgentRuns: composition.businessStore.submittedAgentRuns, chat: composition.businessStore.services.chat }
                 : null,
             ),
       )
