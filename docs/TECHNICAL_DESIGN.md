@@ -1,3 +1,30 @@
+## 2026-10-31 C-2 BFF NestJS 收敛设计门（已批准，源码迁移未完成）
+
+### 当前基线
+
+`src/main.ts` 当前仍通过 `createBffServer()` 启动；`src/bootstrap/server.ts` 集中 raw `node:http` listener、路径分派、认证入口、owner proxy 与错误映射；`src/bootstrap/runtime.ts` 集中配置、PostgreSQL/Redis、owner clients、业务 store、AG-UI projector/outbox 与 worker。`BffBusinessStore`、`BffApplicationServices`、`PostgresBffRepositories` 是当前 global locator/composition，不作为目标结构保留。C-1 已删除所有 schema-evolution CLI/runner/tests，BFF 继续只接受 fresh-only canonical schema。
+
+### 目标结构
+
+- `src/main.ts` 只调用 `NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false, bufferLogs: true })`，绑定唯一 listener。
+- `src/app.module.ts` 是唯一 composition root；`config`、`common/database`、`common/redis`、`common/lifecycle` 管理配置、连接、readiness 与 drain。
+- 业务按 capability 建立 Nest modules：`health`、`chat`/`agui`、`projects`、`scheduled-tasks`、`account`、`skills`、`mcp`、`billing`、`system`/`iam-relay`、`music`。
+- Controller 只处理 wire、raw body/context、pipe 和 error mapping；Service 负责业务用例/授权/事务；复杂查询或事务隔离才使用 feature-owned Repository；generated owner clients 作为 integration providers。
+- PostgreSQL `database/schema.sql`、OpenAPI、generated client、AG-UI wire、权限、幂等、取消、outbox、lease、replay 继续沿现有 owner contract，不新增第二份 DTO/SQL/schema。
+
+### Repository/Service 取舍
+
+保留 Chat、Project、ScheduledTask、Idempotency、AG-UI ledger/outbox 等真实复杂边界；简单 owner projection 直接由 feature Service 注入 generated client。删除 global store locator、万能 `BaseRepository`、跨 feature deep import 和重复 Service/Repository 包装。跨 module 只能使用显式 `imports/exports` provider。
+
+### 切换与删除顺序
+
+1. 先加入 Nest 12 runtime dependencies、`AppModule`/lifecycle architecture gate 和 provider contracts。
+2. 将 health/system/iam-relay、account/mcp、chat/agui、projects/scheduled-tasks、skills、billing/music 依次迁移到 feature modules；每片保留原 `/v1`、`/internal/v1`、`/iam` contract 和定向正/负测试。
+3. 每个 feature 切换后删除旧 dispatcher 中对应分支，不新增 alias、双读/双写或第二 listener。
+4. 最后一片完成并重跑完整 gates 后，删除 `src/bootstrap/server.ts`、`src/bootstrap/runtime.ts`、`BffBusinessStore`、`BffApplicationServices`、`PostgresBffRepositories`。
+
+实施计划：Root `docs/superpowers/plans/2026-10-31-task-a-bff-nestjs-convergence.md`；跨仓裁决：Root `docs/kokoro-handbook/decisions/ADR-036-bff-nestjs-convergence.md`。本设计门只批准目标与顺序，不把当前未迁移源码冒称 NestJS 已完成。
+
 ## 2026-10-29 Custom API 选择冻结与私有恢复（候选）
 
 已固定 Agent `f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87` HTTP8.10，OpenAPI SHA256 `af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e`；原生成入口派生18份client/validator/profile并验证两次字节一致，新数组按owner profile_id唯一且嵌套项strict，不手改生成物。
