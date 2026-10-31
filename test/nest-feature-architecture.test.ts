@@ -230,13 +230,15 @@ test("AgentRunsModule owns the run-display adapter and provider seam", async () 
 })
 
 test("McpModule owns MCP route admission and candidate clients", async () => {
-  const [mcpModule, middleware, route, connectorRoute, adminMiddleware, adminRoute, server] = await Promise.all([
+  const [mcpModule, middleware, route, connectorRoute, adminMiddleware, adminRoute, publicationMiddleware, publicationRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/mcp/mcp.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/mcp/project-mcp-recommendations.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/project-mcp-recommendations.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/connector-list-native.ts"), "utf8"),
     readFile(path.join(root, "src/modules/mcp/mcp-admin.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/mcp-admin-native.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/mcp/mcp-project-publication.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/mcp-project-publication-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(mcpModule, /PROJECT_MCP_RECOMMENDATIONS_PROVIDER/u)
@@ -253,10 +255,16 @@ test("McpModule owns MCP route admission and candidate clients", async () => {
   assert.match(adminRoute, /mcpProviderAdminRoute/u)
   assert.match(adminRoute, /mcpPackageAdminRoute/u)
   assert.match(server, /handleMcpAdminRequest/u)
+  assert.match(mcpModule, /MCP_PROJECT_PUBLICATION_CLIENT/u)
+  assert.match(mcpModule, /McpProjectPublicationMiddleware/u)
+  assert.match(publicationMiddleware, /handleMcpProjectPublicationRequest/u)
+  assert.match(publicationRoute, /mcpProjectPublicationRoute/u)
+  assert.match(server, /handleMcpProjectPublicationRequest/u)
   assert.match(route, /handleProjectMcpRecommendationsRequest/u)
   assert.match(server, /handleProjectMcpRecommendationsRequest/u)
   assert.doesNotMatch(server, /await projectMcpRecommendationsRoute\(/u)
   assert.doesNotMatch(server, /await mcp(?:Provider|Package)AdminRoute\(/u)
+  assert.doesNotMatch(server, /await mcpProjectPublicationRoute\(/u)
 })
 
 test("SkillsModule owns personal skill-installation admission and client", async () => {

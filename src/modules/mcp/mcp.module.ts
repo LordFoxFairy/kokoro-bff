@@ -5,6 +5,7 @@ import {
   MCP_AUTHORIZATION,
   MCP_PACKAGE_ADMIN_CLIENT,
   MCP_PERSONAL_CLIENT,
+  MCP_PROJECT_PUBLICATION_CLIENT,
   MCP_PROVIDER_ADMIN_CLIENT,
   PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
   PROJECT_SERVICE,
@@ -15,11 +16,13 @@ import { PlatformServiceCredentialSource } from "../../infrastructure/clients/pl
 import { McpPersonalConnectClient } from "../../infrastructure/clients/platform/mcp-personal-connect.js"
 import { McpPackageAdminConnectClient } from "../../infrastructure/clients/platform/mcp-package-admin-connect.js"
 import { McpProviderAdminConnectClient } from "../../infrastructure/clients/platform/mcp-provider-admin-connect.js"
+import { McpProjectPublicationConnectClient } from "../../infrastructure/clients/platform/mcp-project-publication-connect.js"
 import { CustomApiConnectClient } from "../../infrastructure/clients/platform/custom-api-connect.js"
 import type { ProjectService } from "../../application/project-service.js"
 import { ProjectMcpRecommendationsMiddleware } from "./project-mcp-recommendations.middleware.js"
 import { ConnectorListMiddleware } from "./connector-list.middleware.js"
 import { McpAdminMiddleware } from "./mcp-admin.middleware.js"
+import { McpProjectPublicationMiddleware } from "./mcp-project-publication.middleware.js"
 import type { ProjectMcpRecommendationsProvider } from "../../http/routes/project-mcp-recommendations.js"
 import { AccountModule } from "../account/account.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
@@ -50,14 +53,25 @@ class McpAdminRuntime implements OnApplicationShutdown {
   }
 }
 
+@Injectable()
+class McpProjectPublicationRuntime implements OnApplicationShutdown {
+  public constructor(@Inject(MCP_PROJECT_PUBLICATION_CLIENT) private readonly client: McpProjectPublicationConnectClient | null) {}
+
+  public onApplicationShutdown(): void {
+    this.client?.close?.()
+  }
+}
+
 @Module({
   imports: [AccountModule, IamRelayModule, ProjectsModule, BffConfigModule],
   providers: [
     ProjectMcpRecommendationsMiddleware,
     ConnectorListMiddleware,
     McpAdminMiddleware,
+    McpProjectPublicationMiddleware,
     ProjectMcpRecommendationsRuntime,
     McpAdminRuntime,
+    McpProjectPublicationRuntime,
     {
       provide: MCP_AUTHORIZATION,
       inject: [BFF_CONFIG],
@@ -97,13 +111,21 @@ class McpAdminRuntime implements OnApplicationShutdown {
         ? new McpPackageAdminConnectClient(config.mcpProviderAdmin.baseUrl, new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"))
         : null,
     },
+    {
+      provide: MCP_PROJECT_PUBLICATION_CLIENT,
+      inject: [BFF_CONFIG],
+      useFactory: (config: BffConfig): McpProjectPublicationConnectClient | null => config.mcpPersonal
+        ? new McpProjectPublicationConnectClient(config.mcpPersonal.baseUrl, new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"))
+        : null,
+    },
   ],
-  exports: [MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, MCP_PROVIDER_ADMIN_CLIENT, MCP_PACKAGE_ADMIN_CLIENT, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
+  exports: [MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, MCP_PROVIDER_ADMIN_CLIENT, MCP_PACKAGE_ADMIN_CLIENT, MCP_PROJECT_PUBLICATION_CLIENT, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
 })
 export class McpModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
     consumer.apply(ProjectMcpRecommendationsMiddleware).forRoutes({ path: "v1/projects/:projectId/mcp-recommendations", method: RequestMethod.ALL })
     consumer.apply(ConnectorListMiddleware).forRoutes({ path: "v1/connector.list", method: RequestMethod.GET })
     consumer.apply(McpAdminMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
+    consumer.apply(McpProjectPublicationMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
   }
 }

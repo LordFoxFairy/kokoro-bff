@@ -15,7 +15,6 @@ import {
 import { handleSharedPublicRequest, handleSharedReaderRequest } from "../http/routes/shared-native.js"
 import { handleHealthRequest } from "../http/routes/health-native.js"
 import { handleProjectMcpRecommendationsRequest, projectMcpRecommendationsProvider } from "../http/routes/project-mcp-recommendations.js"
-import { mcpProjectPublicationOperation, mcpProjectPublicationRoute } from "../http/routes/mcp-project-publication.js"
 import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
 import { handleScheduledTaskReadRequest } from "../http/routes/scheduled-task-native.js"
 import { handlePersonalKnowledgeRequest } from "../http/routes/personal-knowledge-native.js"
@@ -26,6 +25,7 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
 import { customApiOperation, customApiRoute } from "../http/routes/custom-api.js"
 import { handleMcpAdminRequest } from "../http/routes/mcp-admin-native.js"
+import { handleMcpProjectPublicationRequest } from "../http/routes/mcp-project-publication-native.js"
 import { handleConnectorListRequest } from "../http/routes/connector-list-native.js"
 import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
 import { handleSkillSpecificationEnabledRequest } from "../http/routes/skill-specification-enabled.js"
@@ -208,17 +208,11 @@ export async function handleBffRequest(
     (businessPath[0] === "admin" && businessPath[1] === "skills") ||
     (businessPath[0] === "self" && businessPath[1] === "skills")
   if (hasSkillsBudget) startSkillRequestBudget(request)
-  const projectPublicationOperation = browserPrivateMcp ? mcpProjectPublicationOperation(businessPath, request.method ?? "GET") : null
-  const isMcpProjectPublication = projectPublicationOperation !== null
-  const mcpAction = isMcpProjectPublication
-    ? projectPublicationOperation === "list"
-      ? "read"
-      : "manage"
-    : mcpActionForRequest(request.method ?? "GET", businessPath, browserPrivateMcp)
+  const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath, browserPrivateMcp)
   const isMcpPersonalOperation = browserPrivateMcp && mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
   const isCustomApiOperation = browserPrivateMcp && customApiOperation(businessPath, request.method ?? "GET") !== null
   const defersMcpPersonalReadAction = isMcpPersonalOperation && request.method === "GET"
-  if (browserPrivateMcp && !isMcpPersonalOperation && !isCustomApiOperation && !isMcpProjectPublication) {
+  if (browserPrivateMcp && !isMcpPersonalOperation && !isCustomApiOperation) {
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
   }
@@ -376,7 +370,6 @@ export async function handleBffRequest(
   if (
     hasMcpBudget &&
     !isMcpPersonalOperation &&
-    !isMcpProjectPublication &&
     !isProjectMcpRecommendationsPath &&
     (request.method !== "GET" || businessPath[0] === "self")
   ) {
@@ -416,41 +409,6 @@ export async function handleBffRequest(
     signal.throwIfAborted()
     if (!project) throw new ConnectError("Project not found", Code.NotFound)
     return project.id
-  }
-  if (isMcpProjectPublication) {
-    await mcpProjectPublicationRoute(
-      request,
-      response,
-      {
-        tenant: context.identity.namespace,
-        subject: context.identity.userId,
-        requestId: context.requestId,
-      },
-      businessPath,
-      composition.mcpProjectPublicationClient,
-      async (projectIds, action, signal) => {
-        const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
-        if (!fresh.ok) throw new ConnectError("Project publication admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
-        if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
-          throw new ConnectError("Project not found", Code.NotFound)
-        const checked = await authorizeMcpAction(composition.mcpAuthorization, fresh, action, signal)
-        if (!checked.ok) throw new ConnectError("MCP action denied", checked.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
-        if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
-        for (const projectId of projectIds) {
-          signal.throwIfAborted()
-          const project = await composition.businessStore.services.projects.find(
-            {
-              tenantId: fresh.context.identity.namespace,
-              subjectId: fresh.context.identity.userId,
-            },
-            projectId,
-          )
-          signal.throwIfAborted()
-          if (!project || project.id !== projectId) throw new ConnectError("Project not found", Code.NotFound)
-        }
-      },
-    )
-    return
   }
   if (isMcpPersonalOperation) {
     await mcpPersonalRoute(request, response, config, composition, admission, businessPath)
@@ -744,6 +702,12 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleAdminIdentityRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleBillingAdminRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleSystemAdminRequest(request, response, config, composition.sessionAdmission))
+      .then((handled) => handled ? true : handleMcpProjectPublicationRequest(request, response, config, {
+        sessionAdmission: composition.sessionAdmission,
+        mcpAuthorization: composition.mcpAuthorization,
+        project: composition.projectService ?? composition.businessStore?.services.projects ?? null,
+        client: composition.mcpProjectPublicationClient,
+      }))
       .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
       .then((handled) => handled ? true : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization))
       .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.services.chat ?? null))
