@@ -20,9 +20,10 @@ import { AccountModule } from "../account/account.module.js"
 import { ChatModule } from "../chat/chat.module.js"
 import { ProjectPinMiddleware } from "./project-pin.middleware.js"
 import type { ProjectSkillSelectionProvider } from "../../http/routes/project-skill-selection.js"
+import { SkillsModule } from "../skills/skills.module.js"
 
 @Module({
-  imports: [AccountModule, ChatModule, DatabaseModule],
+  imports: [AccountModule, ChatModule, DatabaseModule, SkillsModule],
   providers: [
     ProjectPinMiddleware,
     {

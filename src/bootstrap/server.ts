@@ -97,7 +97,7 @@ import { beginSkillPackageUploadRoute } from "../http/routes/begin-skill-package
 import { completeSkillPackageUploadRoute } from "../http/routes/complete-skill-package-upload.js"
 import { validateSkillDraftRoute } from "../http/routes/validate-skill-draft.js"
 import { publishSkillRoute } from "../http/routes/publish-skill.js"
-import { skillInstallationRoute } from "../http/routes/skill-installations.js"
+import { handleProjectSkillInstallationRequest, skillInstallationRoute } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { managedPersonalSkillsRoute } from "../http/routes/managed-personal-skills.js"
 import { createPersonalSkillVersionRoute } from "../http/routes/create-personal-skill-version.js"
@@ -682,7 +682,7 @@ export async function handleBffRequest(
     return
   }
 
-  if (isSkillInstallationPath) {
+  if (businessPath[0] === "skill-installations") {
     const routeAbort = new AbortController()
     const abortRoute = (): void => routeAbort.abort()
     request.once("aborted", abortRoute)
@@ -691,11 +691,11 @@ export async function handleBffRequest(
       request,
       response,
       context,
-      isProjectInstallationPath ? businessPath.slice(2) : businessPath,
+      businessPath,
       composition.installationClient,
       routeAbort.signal,
       config.iamBaseUrl,
-      isProjectInstallationPath ? (signal) => currentProjectAccess(businessPath[1] ?? "", signal) : undefined,
+      undefined,
     ).finally(() => {
       request.removeListener("aborted", abortRoute)
       response.removeListener("close", abortRoute)
@@ -1118,6 +1118,21 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 config,
                 composition.sessionAdmission,
                 projectSkillSelectionProvider(composition.businessStore),
+                composition.installationClient,
+              ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleProjectSkillInstallationRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.skillAuthorization,
+                composition.projectService,
                 composition.installationClient,
               ),
       )
