@@ -25,8 +25,7 @@ export async function handleSharedPublicRequest(
     return true
   }
   if (service === null) {
-    send(response, 503, failure("share_projection_not_configured", "Share projection is not configured", id))
-    return true
+    return false
   }
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
   const shareId = path.slice("/v1/shared/".length)

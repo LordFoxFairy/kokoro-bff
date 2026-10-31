@@ -529,11 +529,11 @@ test("Chat admission commits messages, AG-UI lineage, and Agent delivery before 
 })
 
 test("BFF Chat facts keep owner predicates and isolate public share capability reads", async () => {
-  const [repository, publicShareRepository, route, server, schema] = await Promise.all([
+  const [repository, publicShareRepository, route, sharedRoute, schema] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/public-share-repository.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/shared-native.ts"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
   assert.match(repository, /tenant_id = \$1/u)
@@ -552,8 +552,8 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
   assert.match(route, /services\.chatTurns\.submit/u)
   assert.doesNotMatch(route, /callAgent/u)
   assert.doesNotMatch(route, /Agent.*messages.*GET/u)
-  assert.match(server, /services\.publicShares/u)
-  assert.doesNotMatch(server, /services\.chat\.findActiveShare/u)
+  assert.match(sharedRoute, /publicShareSnapshot/u)
+  assert.doesNotMatch(sharedRoute, /services\.chat\.findActiveShare/u)
   assert.match(schema, /bff_conversation/u)
   assert.match(schema, /bff_message/u)
   assert.match(schema, /bff_share/u)
