@@ -1,19 +1,20 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { RequestContext } from "../../domain/request-context.js"
+import type { ChatApplicationService } from "../../application/chat-service.js"
 import { isCanonicalMoveSessionId, parseMoveSessionInput, singleMoveSessionKey } from "../move-session-input.js"
 import { readBody } from "../request.js"
 import { send } from "../response.js"
 
 const failure = (code: string, message: string, retryable = false) => ({ error: { code, message, retryable } })
+export type ChatMoveProvider = Pick<ChatApplicationService, "moveConversation">
 
 export async function moveSessionRoute(
   request: IncomingMessage,
   response: ServerResponse,
   context: RequestContext,
   conversationId: string,
-  store: BffBusinessStore | null,
+  store: ChatMoveProvider | null,
 ): Promise<void> {
   response.setHeader("x-request-id", context.requestId)
   if (request.method !== "POST" || request.url !== `/v1/sessions/${conversationId}/move` || !isCanonicalMoveSessionId(conversationId)) {
@@ -55,7 +56,7 @@ export async function moveSessionRoute(
   response.once("close", onResponseClosed)
   if (request.aborted || response.destroyed) routeAbort.abort()
   try {
-    const result = await store.services.chat.moveConversation(context, conversationId, input.targetProjectId, key, routeAbort.signal)
+    const result = await store.moveConversation(context, conversationId, input.targetProjectId, key, routeAbort.signal)
     if (response.destroyed) return
     if (result.kind === "moved") send(response, 200, result.receipt)
     else if (result.kind === "not_found") send(response, 404, failure("session_not_found", "Conversation or Project was not found"))

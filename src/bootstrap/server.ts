@@ -91,7 +91,7 @@ import { handleAdminIdentityRequest } from "../http/routes/admin-identity-native
 import { handleBillingAdminRequest } from "../http/routes/billing-admin-native.js"
 import { handleSystemAdminRequest } from "../http/routes/system-admin-native.js"
 import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
-import { moveSessionRoute } from "../http/routes/move-session.js"
+import { handleMoveSessionRequest } from "../http/routes/move-session-native.js"
 import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
 import { handlePersonalSkillLifecycleRequest } from "../http/routes/personal-skill-lifecycle-native.js"
 import { skillPackageInspectionRoute, type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
@@ -484,11 +484,6 @@ export async function handleBffRequest(
     await mcpPersonalRoute(request, response, config, composition, admission, businessPath)
     return
   }
-  if (isMoveSessionPath) {
-    await moveSessionRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
-    return
-  }
-
   if (businessPath.length === 3 && businessPath[0] === "skills" && ["enable", "disable"].includes(businessPath[2] ?? "")) {
     send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
     return
@@ -777,6 +772,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleAdminIdentityRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleBillingAdminRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleSystemAdminRequest(request, response, config, composition.sessionAdmission))
+      .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.services.chat ?? null))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
       .then((handled) =>
         handled

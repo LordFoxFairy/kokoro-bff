@@ -8,6 +8,7 @@ import type { PublicShareApplicationService } from "../../application/public-sha
 import { handleChatNativeRequest } from "../../http/routes/chat-native.js"
 import { handleMessageFeedbackRequest } from "../../http/routes/message-feedback-native.js"
 import { handleSharedPublicRequest } from "../../http/routes/shared-native.js"
+import { handleMoveSessionRequest } from "../../http/routes/move-session-native.js"
 
 @Injectable()
 export class ChatMiddleware implements NestMiddleware {
@@ -22,6 +23,7 @@ export class ChatMiddleware implements NestMiddleware {
     void handleSharedPublicRequest(request, response, this.config, this.publicShare)
       .then((handled) => handled || handleChatNativeRequest(request, response, this.config, this.admission, this.chat))
       .then((handled) => handled || handleMessageFeedbackRequest(request, response, this.config, this.admission, this.chat))
+      .then((handled) => handled || handleMoveSessionRequest(request, response, this.config, this.admission, this.chat))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })
