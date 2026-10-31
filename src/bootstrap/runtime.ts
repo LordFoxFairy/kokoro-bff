@@ -318,7 +318,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       ? null
       : new ScheduledTaskReadService(
           {
-            snapshots: (scope, signal, taskId) => businessStore.services.scheduledTasks.snapshots(scope, signal, taskId),
+            snapshots: (scope, signal, taskId) => (businessStore.scheduledTaskService ?? businessStore.services.scheduledTasks).snapshots(scope, signal, taskId),
           },
           new SchedulerTaskStateReader(
             config.upstreams.scheduler == null || config.schedulerServiceToken === null

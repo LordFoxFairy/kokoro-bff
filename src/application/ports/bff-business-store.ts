@@ -14,6 +14,7 @@ import type { SkillUsageReader } from "../agui/skill-usage.js"
 import type { SkillAiAssociation } from "../skill-ai-handoff.js"
 import type { SkillShareRepository } from "./skill-share-repository.js"
 import type { PublicShareApplicationService } from "../public-share-service.js"
+import type { ScheduledTaskService } from "../scheduled-task-service.js"
 
 export type ArtifactAssociation = Readonly<{
   conversationId: string
@@ -45,6 +46,8 @@ export interface BffBusinessStore extends IdempotencyRepository {
   readonly skillShares?: SkillShareRepository
   /** Chat-owned public share service retained only as the raw-server composition seam during C-3 migration. */
   readonly publicShareService?: PublicShareApplicationService
+  /** ScheduledTask service retained only as the raw-server composition seam during C-3 migration. */
+  readonly scheduledTaskService?: ScheduledTaskService
   readonly submittedAgentRuns?: import("./submitted-agent-run-reader.js").SubmittedAgentRunReader
   readonly projectExecutionBindings?: import("./project-execution-binding-reader.js").ProjectExecutionBindingReader
   readonly artifactLibrary?: ArtifactLibraryRepository

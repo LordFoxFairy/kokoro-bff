@@ -121,7 +121,7 @@ export async function schedulerDispatch(
   if (snapshot === null) {
     let record
     try {
-      record = await businessStore.services.scheduledTasks.findRecord(wire.tenantId, taskId)
+      record = await (businessStore.scheduledTaskService ?? businessStore.services.scheduledTasks).findRecord(wire.tenantId, taskId)
     } catch {
       await releaseUnknown(response, receipts, claim, responseRequestId, "business_store_unavailable", "The BFF business store is unavailable")
       return true
