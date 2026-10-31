@@ -39,7 +39,7 @@ export async function authorizeLiveBffMutation(
   if (businessPath[0] === "scheduled-tasks") {
     if (businessPath.length > 1) {
       const taskId = businessPath[1]
-      if (taskId !== undefined && await store.services.scheduledTasks.find(scope, taskId) === null) {
+      if (taskId !== undefined && await (store.scheduledTaskService ?? store.services.scheduledTasks).find(scope, taskId) === null) {
         return { ok: false, status: 404, code: "scheduled_task_not_found", message: "Scheduled task was not found" }
       }
       return { ok: true }
@@ -121,7 +121,7 @@ export async function liveBffBusiness(
           return true
         }
         const lineage = mutationLineage(context, request)
-        const task = await store.services.scheduledTasks.create(
+        const task = await (store.scheduledTaskService ?? store.services.scheduledTasks).create(
           ownerScope,
           input,
           scheduledTaskId(context, `/${businessPath.join("/")}`, lineage.idempotencyKey),
@@ -141,7 +141,7 @@ export async function liveBffBusiness(
           return true
         }
         const lineage = mutationLineage(context, request)
-        const task = await store.services.scheduledTasks.create(
+        const task = await (store.scheduledTaskService ?? store.services.scheduledTasks).create(
           ownerScope,
           input,
           scheduledTaskId(context, `/${businessPath.join("/")}`, lineage.idempotencyKey),
@@ -156,7 +156,7 @@ export async function liveBffBusiness(
           await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
           return true
         }
-        const task = await store.services.scheduledTasks.update(ownerScope, taskId, patch, mutationLineage(context, request))
+        const task = await (store.scheduledTaskService ?? store.services.scheduledTasks).update(ownerScope, taskId, patch, mutationLineage(context, request))
         if (task === null) {
           await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         } else {
@@ -165,12 +165,12 @@ export async function liveBffBusiness(
         return true
       }
       if (businessPath.length === 2 && taskId !== undefined && method === "DELETE") {
-        const deleted = await store.services.scheduledTasks.delete(ownerScope, taskId, mutationLineage(context, request))
+        const deleted = await (store.scheduledTaskService ?? store.services.scheduledTasks).delete(ownerScope, taskId, mutationLineage(context, request))
         await reply(response, deleted ? 200 : 404, deleted ? ok({ ok: true }, context.requestId) : failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 3 && taskId !== undefined && businessPath[2] === "retry" && method === "POST") {
-        const task = await store.services.scheduledTasks.update(ownerScope, taskId, { status: "active", enabled: true }, mutationLineage(context, request))
+        const task = await (store.scheduledTaskService ?? store.services.scheduledTasks).update(ownerScope, taskId, { status: "active", enabled: true }, mutationLineage(context, request))
         if (task === null) {
           await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         } else {
