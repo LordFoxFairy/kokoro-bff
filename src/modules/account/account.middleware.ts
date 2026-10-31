@@ -1,10 +1,12 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, SESSION_ADMISSION } from "../../common/tokens.js"
+import { BFF_CONFIG, PERSONAL_KNOWLEDGE_REPOSITORY, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { PERSONALIZATION_PROVIDER, type PersonalizationProvider } from "./personalization.provider.js"
 import { handleAccountNativeRequest } from "../../http/routes/account-native.js"
+import { handlePersonalKnowledgeRequest } from "../../http/routes/personal-knowledge-native.js"
+import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
 
 /** Account-owned routes terminate here; unrelated traffic continues to the transitional dispatcher. */
 @Injectable()
@@ -13,10 +15,12 @@ export class AccountMiddleware implements NestMiddleware {
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(PERSONALIZATION_PROVIDER) private readonly personalizationProvider: PersonalizationProvider,
+    @Inject(PERSONAL_KNOWLEDGE_REPOSITORY) private readonly knowledgeRepository: PersonalKnowledgeRepository,
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
-    void handleAccountNativeRequest(request, response, this.config, this.admission, this.personalizationProvider)
+    void handlePersonalKnowledgeRequest(request, response, this.config, this.admission, this.knowledgeRepository)
+      .then((handled) => handled || handleAccountNativeRequest(request, response, this.config, this.admission, this.personalizationProvider))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

@@ -37,6 +37,7 @@ test("AccountModule owns the SessionAdmission provider consumed by the transitio
     readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
   ])
   assert.match(accountModule, /provide: SESSION_ADMISSION/u)
+  assert.match(accountModule, /PERSONAL_KNOWLEDGE_REPOSITORY/u)
   assert.match(accountModule, /exports: \[[^\]]*SESSION_ADMISSION/u)
   assert.match(runtime, /Inject\(SESSION_ADMISSION\)/u)
   assert.match(runtime, /sessionAdmission/u)

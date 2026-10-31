@@ -21,7 +21,7 @@ import { liveAdminCreditGrant } from "../http/routes/billing-credit-grant-admin.
 import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { handleScheduledTaskReadRequest } from "../http/routes/scheduled-task-native.js"
-import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
+import { handlePersonalKnowledgeRequest } from "../http/routes/personal-knowledge-native.js"
 import { handleAgentRunsInternalRequest } from "../http/routes/agent-runs-native.js"
 import { handleProjectSkillSelectionRequest, projectSkillSelectionProvider } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
@@ -546,11 +546,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (isPersonalKnowledgePath) {
-    await personalKnowledgeRoute(request, response, context, composition.businessStore)
-    return
-  }
-
   if (isMoveSessionPath) {
     await moveSessionRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
     return
@@ -959,6 +954,13 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           : composition.routeHandler !== undefined
             ? false
             : handleSkillLocalImportRequest(request, response, config, composition.sessionAdmission, composition.skillAuthorization, composition.localSkillImportClient),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handlePersonalKnowledgeRequest(request, response, config, composition.sessionAdmission, composition.businessStore),
       )
       .then((handled) =>
         handled
