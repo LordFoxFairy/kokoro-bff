@@ -78,6 +78,21 @@ test("ProjectsModule owns the project-pin adapter and provider", async () => {
   assert.doesNotMatch(server, /await projectPinRoute\(/u)
 })
 
+test("ScheduledTasksModule owns the current-state read adapter and provider", async () => {
+  const [scheduledModule, middleware, nativeRoute, server] = await Promise.all([
+    readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-task-read.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/scheduled-task-native.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+  ])
+  assert.match(scheduledModule, /provide: SCHEDULED_TASK_READ_SERVICE/u)
+  assert.match(scheduledModule, /ScheduledTaskReadMiddleware/u)
+  assert.match(middleware, /handleScheduledTaskReadRequest/u)
+  assert.match(nativeRoute, /scheduledTaskReadRoute/u)
+  assert.match(server, /handleScheduledTaskReadRequest/u)
+  assert.doesNotMatch(server, /await scheduledTaskReadRoute\(/u)
+})
+
 async function fileExists(relativePath: string): Promise<boolean> {
   try {
     await readFile(path.join(root, relativePath))

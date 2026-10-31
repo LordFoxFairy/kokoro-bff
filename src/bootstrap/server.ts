@@ -10,7 +10,7 @@ import { liveAdminMetering, matchMeteringAdmin } from "../http/routes/billing-me
 import { liveAdminCreditGrant } from "../http/routes/billing-credit-grant-admin.js"
 import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
-import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
+import { handleScheduledTaskReadRequest } from "../http/routes/scheduled-task-native.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
 import { agentModelAdmissionRoute } from "../http/routes/model-admission.js"
 import { projectExecutionBindingRoute } from "../http/routes/project-execution-binding.js"
@@ -638,18 +638,6 @@ export async function handleBffRequest(
       if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
         throw new MessageFeedbackAdmissionError(404, "message_not_found")
     })
-    return
-  }
-  if (composition.routeHandler === undefined && request.method === "GET" && businessPath[0] === "scheduled-tasks" && businessPath.length <= 2) {
-    await scheduledTaskReadRoute(
-      request,
-      response,
-      context,
-      composition.scheduledTaskReader,
-      businessPath[1],
-      (signal) => authorizeUserRequest(request, config, composition.sessionAdmission, id, signal),
-      config.upstreamTimeoutMs,
-    )
     return
   }
   const currentProjectAccess = async (projectRef: string, signal: AbortSignal): Promise<string> => {
@@ -1340,6 +1328,13 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
     const handler = handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider)
       .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
       .then((handled) => (handled ? true : handleProjectPinRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleScheduledTaskReadRequest(request, response, config, composition.sessionAdmission, composition.scheduledTaskReader),
+      )
       .then((handled) => (handled ? true : handleSystemNativeRequest(request, response, config)))
       .then((handled) => {
         if (handled) return
