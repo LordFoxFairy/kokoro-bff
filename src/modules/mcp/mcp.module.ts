@@ -3,6 +3,7 @@ import { BffConfigModule } from "../../config/config.module.js"
 import {
   BFF_CONFIG,
   MCP_AUTHORIZATION,
+  MCP_PERSONAL_CLIENT,
   PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
   PROJECT_SERVICE,
 } from "../../common/tokens.js"
@@ -13,6 +14,7 @@ import { McpPersonalConnectClient } from "../../infrastructure/clients/platform/
 import { CustomApiConnectClient } from "../../infrastructure/clients/platform/custom-api-connect.js"
 import type { ProjectService } from "../../application/project-service.js"
 import { ProjectMcpRecommendationsMiddleware } from "./project-mcp-recommendations.middleware.js"
+import { ConnectorListMiddleware } from "./connector-list.middleware.js"
 import type { ProjectMcpRecommendationsProvider } from "../../http/routes/project-mcp-recommendations.js"
 import { AccountModule } from "../account/account.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
@@ -34,6 +36,7 @@ class ProjectMcpRecommendationsRuntime implements OnApplicationShutdown {
   imports: [AccountModule, IamRelayModule, ProjectsModule, BffConfigModule],
   providers: [
     ProjectMcpRecommendationsMiddleware,
+    ConnectorListMiddleware,
     ProjectMcpRecommendationsRuntime,
     {
       provide: MCP_AUTHORIZATION,
@@ -42,11 +45,8 @@ class ProjectMcpRecommendationsRuntime implements OnApplicationShutdown {
     },
     {
       provide: PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
-      inject: [BFF_CONFIG, PROJECT_SERVICE],
-      useFactory: (config: BffConfig, project: ProjectService): ProjectMcpRecommendationsProvider => {
-        const mcpPersonalClient = config.mcpPersonal
-          ? new McpPersonalConnectClient(config.mcpPersonal.baseUrl, new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"))
-          : null
+      inject: [BFF_CONFIG, PROJECT_SERVICE, MCP_PERSONAL_CLIENT],
+      useFactory: (config: BffConfig, project: ProjectService, mcpPersonalClient: McpPersonalConnectClient | null): ProjectMcpRecommendationsProvider => {
         const customApiClient = config.customApi
           ? new CustomApiConnectClient(config.customApi.baseUrl, new PlatformServiceCredentialSource(config.customApi.credentialFile, "custom_api_personal"))
           : null
@@ -56,11 +56,19 @@ class ProjectMcpRecommendationsRuntime implements OnApplicationShutdown {
         }
       },
     },
+    {
+      provide: MCP_PERSONAL_CLIENT,
+      inject: [BFF_CONFIG],
+      useFactory: (config: BffConfig): McpPersonalConnectClient | null => config.mcpPersonal
+        ? new McpPersonalConnectClient(config.mcpPersonal.baseUrl, new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"))
+        : null,
+    },
   ],
-  exports: [MCP_AUTHORIZATION, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
+  exports: [MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
 })
 export class McpModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
     consumer.apply(ProjectMcpRecommendationsMiddleware).forRoutes({ path: "v1/projects/:projectId/mcp-recommendations", method: RequestMethod.ALL })
+    consumer.apply(ConnectorListMiddleware).forRoutes({ path: "v1/connector.list", method: RequestMethod.GET })
   }
 }

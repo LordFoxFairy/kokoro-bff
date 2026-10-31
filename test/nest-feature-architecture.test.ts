@@ -230,15 +230,20 @@ test("AgentRunsModule owns the run-display adapter and provider seam", async () 
 })
 
 test("McpModule owns project MCP recommendation admission and candidate clients", async () => {
-  const [mcpModule, middleware, route, server] = await Promise.all([
+  const [mcpModule, middleware, route, connectorRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/mcp/mcp.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/mcp/project-mcp-recommendations.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/project-mcp-recommendations.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/connector-list-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(mcpModule, /PROJECT_MCP_RECOMMENDATIONS_PROVIDER/u)
   assert.match(mcpModule, /MCP_AUTHORIZATION/u)
   assert.match(middleware, /handleProjectMcpRecommendationsRequest/u)
+  assert.match(mcpModule, /MCP_PERSONAL_CLIENT/u)
+  assert.match(mcpModule, /ConnectorListMiddleware/u)
+  assert.match(connectorRoute, /handleConnectorListRequest/u)
+  assert.match(server, /handleConnectorListRequest/u)
   assert.match(route, /handleProjectMcpRecommendationsRequest/u)
   assert.match(server, /handleProjectMcpRecommendationsRequest/u)
   assert.doesNotMatch(server, /await projectMcpRecommendationsRoute\(/u)

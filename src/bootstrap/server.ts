@@ -27,7 +27,7 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
 import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
 import { customApiOperation, customApiRoute } from "../http/routes/custom-api.js"
-import { connectorListFailure, connectorListRoute, isConnectorListRequest } from "../http/routes/connector-list.js"
+import { handleConnectorListRequest } from "../http/routes/connector-list-native.js"
 import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
 import { handleSkillSpecificationEnabledRequest } from "../http/routes/skill-specification-enabled.js"
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
@@ -193,7 +193,6 @@ export async function handleBffRequest(
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
   }
-  const isConnectorList = !browserPrivateMcp && isConnectorListRequest(businessPath, request.method ?? "GET")
   const isMessageRegenerationPath =
     !browserPrivateMcp && businessPath.length === 5 && businessPath[0] === "sessions" && businessPath[2] === "messages" && businessPath[4] === "regenerate"
   const messageRegenerationDeadline = isMessageRegenerationPath ? performance.now() + 10000 : null
@@ -332,16 +331,6 @@ export async function handleBffRequest(
   })
   if (!admission.ok) {
     if (!response.destroyed) {
-      if (isConnectorList) {
-        connectorListFailure(
-          response,
-          admission.status,
-          id,
-          admission.status === 401 ? "Unauthenticated" : admission.status === 403 ? "PermissionDenied" : "Unavailable",
-          "Connector list access is unavailable",
-        )
-        return
-      }
       response.setHeader("x-request-id", id)
       if (
         hasMcpBudget ||
@@ -383,10 +372,6 @@ export async function handleBffRequest(
           retryable: true,
         },
       })
-    return
-  }
-  if (isConnectorList) {
-    await connectorListRoute(request, response, config, composition, admission.context)
     return
   }
   if (isMcpPackageAdminOperation) {
@@ -772,6 +757,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleAdminIdentityRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleBillingAdminRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleSystemAdminRequest(request, response, config, composition.sessionAdmission))
+      .then((handled) => handled ? true : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization))
       .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.services.chat ?? null))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
       .then((handled) =>

@@ -13,6 +13,12 @@ export function isConnectorListRequest(path: readonly string[], method: string):
   return method === "GET" && path.length === 1 && path[0] === "connector.list"
 }
 
+export type ConnectorListProvider = Readonly<{
+  mcpPersonalClient: NonNullable<BffServerComposition["mcpPersonalClient"]> | null
+  sessionAdmission: BffServerComposition["sessionAdmission"]
+  mcpAuthorization: BffServerComposition["mcpAuthorization"]
+}>
+
 export function connectorListFailure(response: ServerResponse, status: number, requestId: string, code: string, message: string): void {
   if (!response.destroyed && !response.writableEnded) {
     response.setHeader("cache-control", "no-store")
@@ -60,7 +66,7 @@ export async function connectorListRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: ConnectorListProvider,
   context: AdmittedUserRequestContext,
 ): Promise<void> {
   const requestId = context.requestId
