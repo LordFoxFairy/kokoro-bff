@@ -62,6 +62,7 @@ export async function handleAccountNativeRequest(
     const segments = pathOf(request)
     const businessPath = segments.slice(1)
     if (businessPath[0] === "me") {
+      response.setHeader("x-request-id", id)
       if (request.method !== "GET") {
         send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
         return true
@@ -83,6 +84,7 @@ export async function handleAccountNativeRequest(
           tenant_id: admitted.context.identity.namespace,
           platform_admin: admitted.context.platformAdmin,
         },
+        meta: { request_id: id },
       })
       return true
     }

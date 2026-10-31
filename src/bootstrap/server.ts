@@ -86,7 +86,7 @@ import { liveOwnerBusiness } from "../http/routes/owner.js"
 import { liveMoriBusiness } from "../http/routes/music.js"
 import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamKey } from "../http/routes/routing.js"
 import { schedulerDispatch } from "../http/routes/scheduler.js"
-import { runtimeManifest } from "../http/routes/runtime-manifest.js"
+import { handleSystemNativeRequest } from "../http/routes/system-native.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
 import { liveModelConfigurationAdmin } from "../http/routes/model-configuration-admin.js"
 import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
@@ -313,11 +313,6 @@ export async function handleBffRequest(
   const browserPrivateMcp = segments[0] === "browser" && segments[1] === "v1"
   if (!browserPrivateMcp && segments[0] !== "v1") {
     send(response, 404, failure("route_not_found", "Use the versioned /v1 business API", id))
-    return
-  }
-
-  if (!browserPrivateMcp && segments.length === 3 && segments[1] === "system" && segments[2] === "runtime-manifest" && request.method === "GET") {
-    await runtimeManifest(request, response, config, id)
     return
   }
 
@@ -1368,10 +1363,12 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
-    const handler = handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider).then((handled) => {
-      if (handled) return
-      return handleBffRequest(request, response, config, composition)
-    })
+    const handler = handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider)
+      .then((handled) => (handled ? true : handleSystemNativeRequest(request, response, config)))
+      .then((handled) => {
+        if (handled) return
+        return handleBffRequest(request, response, config, composition)
+      })
     void handler.catch(() => {
       if (!response.headersSent) {
         if (
