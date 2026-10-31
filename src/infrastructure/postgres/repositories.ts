@@ -67,6 +67,7 @@ export class PostgresBffRepositories {
   public readonly personalizationProvider: PostgresPersonalizationRepository
   public readonly personalKnowledge: PersonalKnowledgeRepository
   public readonly skillUsage: SkillUsageReader
+  public readonly skillAiAssociation: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<import("../../application/skill-ai-handoff.js").SkillAiAssociation | null>
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
@@ -99,6 +100,7 @@ export class PostgresBffRepositories {
         client.release()
       }
     }
+    this.skillAiAssociation = (tenant, subject, conversation, artifact) => artifactLibrary.findSkillHandoff(tenant, subject, conversation, artifact)
     this.services = new BffApplicationServices(
       this.projects,
       this.scheduled,
@@ -107,7 +109,6 @@ export class PostgresBffRepositories {
       agentDispatchOutbox,
       new Sha256StableIdGenerator(),
       this.skillShares,
-      (tenant, subject, conversation, artifact) => artifactLibrary.findSkillHandoff(tenant, subject, conversation, artifact),
     )
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)

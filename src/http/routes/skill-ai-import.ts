@@ -405,8 +405,9 @@ export async function skillAiImportRoute(
       throw new ConnectError("Invalid request", Code.InvalidArgument)
     const commandId = skillCommandId(request, context, "ai-import")
     const input = parseSkillProductInput("ai", await readBody(request, 65_536))
-    if (!store?.services.skillAiAssociation || !client || !config.storage) throw new ConnectError("Skill dependencies unavailable", Code.Unavailable)
-    const association = await store.services.skillAiAssociation(context.identity.namespace, context.identity.userId, input.conversation_id, input.artifact_ref)
+    const associationReader = store?.skillAiAssociation ?? (store as (BffBusinessStore & { services?: { skillAiAssociation?: BffBusinessStore["skillAiAssociation"] } }) | null)?.services?.skillAiAssociation
+    if (!associationReader || !client || !config.storage) throw new ConnectError("Skill dependencies unavailable", Code.Unavailable)
+    const association = await associationReader(context.identity.namespace, context.identity.userId, input.conversation_id, input.artifact_ref)
     if (!association) throw new ConnectError("No successful immutable artifact", Code.NotFound)
     const storage = new FinalArtifactClient(config.storage, {
       tenantId: context.identity.namespace,
@@ -431,7 +432,7 @@ export async function skillAiImportRoute(
     )
     try {
       const bytes = await readFile(spool.path)
-      const fresh = await store.services.skillAiAssociation(context.identity.namespace, context.identity.userId, input.conversation_id, input.artifact_ref)
+      const fresh = await associationReader(context.identity.namespace, context.identity.userId, input.conversation_id, input.artifact_ref)
       const current = await storage.get(association, signal)
       if (JSON.stringify(fresh) !== JSON.stringify(association) || JSON.stringify(current) !== JSON.stringify(item))
         throw new ConnectError("Artifact no longer admitted", Code.NotFound)
