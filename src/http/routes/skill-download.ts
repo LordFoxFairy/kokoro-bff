@@ -1,6 +1,9 @@
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { BffConfig } from "../../config/runtime.js"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { SkillDownloadHandles } from "../../application/skill-download-handles.js"
+import type { ExactSkillDownloadSource } from "../../application/exact-skill-download.js"
+import type { SkillSpecificationSource } from "../../application/skill-specification.types.js"
 import { spoolVerifiedArtifact } from "../../infrastructure/clients/storage/artifact-download-transfer.js"
 import { skillRequestRemaining } from "./skill-drafts.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
@@ -16,6 +19,13 @@ import { assertSkillReadRequest, runSkillRoute } from "./skill-drafts.js"
 import { send } from "../response.js"
 import type { ProjectSkillContentAccess } from "./skill-package-inspection.js"
 import type { ExactSkillDownloadQualifier } from "../../application/exact-skill-download.js"
+
+export type SkillDownloadProvider = Readonly<{
+  sessionAdmission: SessionAdmission
+  skillDownloadHandles: SkillDownloadHandles
+  skillSpecificationSource: SkillSpecificationSource | null
+  exactSkillDownloadSource: ExactSkillDownloadSource | null
+}>
 export async function publishedSkillPackageInspectionRoute(
   request: IncomingMessage,
   response: ServerResponse,
@@ -53,7 +63,7 @@ export async function skillDownloadHandleRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: SkillDownloadProvider,
   requestId: string,
   path: string[],
   projectAccess?: ProjectSkillContentAccess,
@@ -227,7 +237,7 @@ export async function exactSkillDownloadRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: SkillDownloadProvider,
   requestId: string,
   path: string[],
   projectAccess?: ProjectSkillContentAccess,
