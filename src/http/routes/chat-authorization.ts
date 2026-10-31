@@ -1,10 +1,10 @@
 import type { IncomingMessage } from "node:http"
 
 import { parseMessageCreateRequest } from "../../application/chat/message-create-input.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { ConversationCollectionFilter } from "../../application/ports/chat-repository.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { queryOf } from "../request.js"
+import { projectServiceOf, chatServiceOf, type ChatBusinessProvider } from "./chat-business-provider.js"
 
 export type ChatAuthorization =
   | Readonly<{ ok: true; projectRef?: string; collectionFilter?: ConversationCollectionFilter }>
@@ -39,7 +39,7 @@ export async function authorizeChatRequest(
   context: RequestContext,
   businessPath: readonly string[],
   json: Readonly<Record<string, unknown>>,
-  store: BffBusinessStore,
+  store: ChatBusinessProvider,
 ): Promise<ChatAuthorization | null> {
   if (businessPath[0] !== "sessions") return null
   const queryScope = privateChatQuery(request)
@@ -63,7 +63,7 @@ export async function authorizeChatRequest(
   // Existing Message resources are authorized by their current Conversation owner.
   // The raw Project ref remains a new-command precondition in the locked repository;
   // applying it here would reject an exact replay after a successful Move.
-  if (projectRef !== undefined && (await (store.projectService ?? store.services.projects).find(ownerScope, projectRef)) === null) {
+  if (projectRef !== undefined && (await projectServiceOf(store).find(ownerScope, projectRef)) === null) {
     return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
   }
 
@@ -77,7 +77,7 @@ export async function authorizeChatRequest(
     const currentConversation =
       conversationId === undefined || conversationId === ""
         ? null
-        : await (store.chatService ?? store.services.chat).findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
+        : await chatServiceOf(store).findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
     if (conversationId === undefined || conversationId === "" || currentConversation === null) {
       return { ok: false, status: 404, code: "session_not_found", message: "Session was not found" }
     }

@@ -125,6 +125,7 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
   assert.match(middleware, /handleChatNativeRequest/u)
   assert.match(middleware, /handleMessageFeedbackRequest/u)
   assert.match(middleware, /handleMessageRegenerationRequest/u)
+  assert.match(middleware, /handleChatBusinessReadRequest/u)
   assert.match(middleware, /handleMoveSessionRequest/u)
   assert.match(nativeRoute, /archivedTasksRoute/u)
   assert.match(nativeRoute, /sharedTasksRoute/u)

@@ -497,7 +497,7 @@ test("Chat admission commits messages, AG-UI lineage, and Agent delivery before 
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
 
-  assert.match(route, /chatTurnService\s*\?\?\s*store\.services\.chatTurns\)\.submit/u)
+  assert.match(route, /chatTurnServiceOf\(store\)\.submit/u)
   assert.doesNotMatch(route, /callAgent|buildAgentLaunch/u)
   assert.doesNotMatch(chatRepository, /commitChatTurn|claimAgentDispatchOutbox/u)
   assert.equal(dispatchRepository.match(/return commitChatTurn\(/gu)?.length, 1)
@@ -550,9 +550,9 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
   assert.match(publicShareRepository, /Public share capability reads/u)
   assert.doesNotMatch(publicShareRepository, /subjectId/u)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
-  assert.match(route, /chatService\s*\?\?\s*store\.services\.chat/u)
+  assert.match(route, /chatServiceOf\(store\)/u)
   assert.match(route, /subjectId/u)
-  assert.match(route, /chatTurnService\s*\?\?\s*store\.services\.chatTurns\)\.submit/u)
+  assert.match(route, /chatTurnServiceOf\(store\)\.submit/u)
   assert.doesNotMatch(route, /callAgent/u)
   assert.doesNotMatch(route, /Agent.*messages.*GET/u)
   assert.match(sharedRoute, /publicShareSnapshot/u)
@@ -581,7 +581,7 @@ test("private BFF resources use named owner scopes before receipts and keep serv
   assert.match(scheduledRepository, /FOR SHARE/u)
   assert.doesNotMatch(client, /invalidateProjects|projects:\$\{tenant/u)
   assert.match(chatAuthorization, /scope must be omitted, empty, or direct/u)
-  assert.match(chatAuthorization, /chatService\s*\?\?\s*store\.services\.chat\)\.findConversation/u)
+  assert.match(chatAuthorization, /chatServiceOf\(store\)\.findConversation/u)
   assert.ok(server.indexOf("authorizeChatRequest") < server.indexOf("mutationTicket("))
   assert.ok(server.indexOf("authorizeLiveBffMutation") < server.indexOf("mutationTicket("))
   assert.match(openapi, /DirectScopeQuery:[\s\S]*enum: \['', direct\]/u)
@@ -604,7 +604,7 @@ test("Conversation collection filtering stays one BFF-owned discriminated path w
 
   assert.match(port, /ConversationCollectionFilter[\s\S]*kind: "all"[\s\S]*kind: "direct"[\s\S]*kind: "project"; projectRef: string/u)
   assert.match(authorization, /isConversationCollection && queryScope\.scope === "direct" && projectRef !== undefined/u)
-  assert.ok(authorization.indexOf("scope=direct cannot be combined with project_ref") < authorization.indexOf("projectService ?? store.services.projects"))
+  assert.ok(authorization.indexOf("scope=direct cannot be combined with project_ref") < authorization.indexOf("projectServiceOf(store)"))
   assert.match(authorization, /collectionFilter: ConversationCollectionFilter/u)
   assert.match(route, /authorization\.collectionFilter/u)
   assert.match(service, /filter: ConversationCollectionFilter/u)

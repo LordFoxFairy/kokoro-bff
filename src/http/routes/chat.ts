@@ -5,7 +5,6 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { idempotencyKey, queryOf } from "../request.js"
@@ -15,6 +14,7 @@ import type { AuthorizedChatRequest } from "./chat-authorization.js"
 import { parseChatProcessPageInput } from "../chat-process-page-input.js"
 import { parseChatMessagePartsInput } from "../chat-message-parts-input.js"
 import type { PrivateMessageReadContext } from "../../application/ports/chat-repository.js"
+import { chatServiceOf, chatTurnServiceOf, type ChatBusinessProvider } from "./chat-business-provider.js"
 
 function pageInput(request: IncomingMessage, defaultLimit: number): { limit: number; cursor: string | null } | null {
   const query = queryOf(request)
@@ -139,7 +139,7 @@ export async function liveChatBusiness(
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,
-  store: BffBusinessStore,
+  store: ChatBusinessProvider,
   authorization: AuthorizedChatRequest,
   installationClient?: SkillInstallationConnectClient | null,
   projectAccess?: (projectId: string, signal: AbortSignal) => Promise<string>,
@@ -150,7 +150,7 @@ export async function liveChatBusiness(
   const subjectId = context.identity.userId
   const conversationId = businessPath[1] || ""
   const projectRef = authorization.projectRef
-  const chat = store.chatService ?? store.services.chat
+  const chat = chatServiceOf(store)
 
   try {
     if (businessPath.length === 5 && businessPath[2] === "messages" && businessPath[4] === "parts" && method === "GET") {
@@ -312,7 +312,7 @@ export async function liveChatBusiness(
       const selectionSignal = AbortSignal.any([selectionAbort.signal, AbortSignal.timeout(10000)])
       let receipt
       try {
-        receipt = await (store.chatTurnService ?? store.services.chatTurns).submit(
+        receipt = await chatTurnServiceOf(store).submit(
           {
             tenantId,
             conversationId,
