@@ -17,10 +17,6 @@ export function bffOwnedBusinessPath(segments: string[]): boolean {
   return segments[0] === "projects" || segments[0] === "scheduled-tasks" || segments[0] === "sessions"
 }
 
-export function isMoriBusinessPath(segments: string[]): boolean {
-  return segments[0] === "mori"
-}
-
 export function configuredUpstream(config: BffConfig, owner: string): string | null {
   return config.upstreams[owner] ?? null
 }
