@@ -109,9 +109,7 @@ export async function handleBffRequest(
   const rawPathname = new URL(request.url || "/", "http://bff.local").pathname
   const isRawSkillPackageInspection =
     request.method === "GET" &&
-    (/^\/v1\/self\/skills\/[^/]+\/package$/u.test(rawPathname) ||
-      /^\/v1\/skill-installations\/[^/]+\/package$/u.test(rawPathname) ||
-      /^\/v1\/projects\/[^/]+\/skill-installations\/[^/]+\/package$/u.test(rawPathname))
+    /^\/v1\/projects\/[^/]+\/skill-installations\/[^/]+\/package$/u.test(rawPathname)
   let segments: string[]
   try {
     segments = pathOf(request)
@@ -227,9 +225,7 @@ export async function handleBffRequest(
   }
   const isSkillPackageInspection =
     isRawSkillPackageInspection &&
-    ((businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "package") ||
-      (businessPath.length === 3 && businessPath[0] === "skill-installations" && businessPath[2] === "package") ||
-      (businessPath.length === 5 && businessPath[0] === "projects" && businessPath[2] === "skill-installations" && businessPath[4] === "package"))
+    businessPath.length === 5 && businessPath[0] === "projects" && businessPath[2] === "skill-installations" && businessPath[4] === "package"
   if (isSkillPackageInspection) {
     await skillPackageInspectionRoute(request, response, config, composition.sessionAdmission, id, businessPath, {
       access: projectContentAccess,
