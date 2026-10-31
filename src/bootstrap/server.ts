@@ -37,7 +37,7 @@ import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-
 import { skillGithubImportRoute, skillGithubPreviewRoute } from "../http/routes/skill-github-import.js"
 import { skillAiImportRoute } from "../http/routes/skill-ai-import.js"
 import { skillShareRoute } from "../http/routes/skill-share.js"
-import { skillUsageRoute } from "../http/routes/skill-usage.js"
+import { handleSkillUsageRequest } from "../http/routes/skill-usage.js"
 import { skillCoverRoute } from "../http/routes/skill-cover.js"
 import { publishedSkillPackageInspectionRoute } from "../http/routes/skill-download.js"
 import { startSkillRequestBudget, skillRequestRemaining, skillDraftsRoute } from "../http/routes/skill-drafts.js"
@@ -586,10 +586,6 @@ export async function handleBffRequest(
     )
     return
   }
-  if (businessPath.length === 2 && businessPath[0] === "skills" && businessPath[1] === "usage" && request.method === "POST") {
-    await skillUsageRoute(request, response, context, composition.businessStore?.services.skillUsage)
-    return
-  }
   if (businessPath.length === 3 && businessPath[0] === "skills" && businessPath[2] === "package" && request.method === "GET") {
     await publishedSkillPackageInspectionRoute(request, response, context, businessPath[1]!, composition.skillProductClient)
     return
@@ -1089,6 +1085,13 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 projectSkillSelectionProvider(composition.businessStore),
                 composition.installationClient,
               ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleSkillUsageRequest(request, response, config, composition.sessionAdmission, composition.businessStore?.services.skillUsage),
       )
       .then((handled) =>
         handled

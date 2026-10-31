@@ -1,11 +1,15 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { ConnectError, Code } from "@connectrpc/connect"
+import type { BffConfig } from "../../config/runtime.js"
+import { authorizeUserRequest } from "../../auth/user-admission.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
 import { parseSkillProductInput } from "../skill-product-input.js"
 import { runSkillRoute } from "./skill-drafts.js"
 import { readSkillBody as readBody } from "./skill-drafts.js"
 import { send } from "../response.js"
+import { requestId } from "../request.js"
 export async function skillUsageRoute(
   request: IncomingMessage,
   response: ServerResponse,
@@ -42,4 +46,24 @@ export async function skillUsageRoute(
     signal.throwIfAborted()
     send(response, 200, { data: { items } })
   })
+}
+
+export async function handleSkillUsageRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  reader: ((tenant: string, refs: readonly string[]) => Promise<Map<string, SkillUsageResult>>) | undefined,
+): Promise<boolean> {
+  const pathname = new URL(request.url ?? "/", "http://bff.local").pathname
+  if (pathname !== "/v1/skills/usage" || request.method !== "POST") return false
+  const id = requestId(request)
+  const signal = AbortSignal.timeout(10_000)
+  const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+  if (!admitted.ok) {
+    send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+    return true
+  }
+  await skillUsageRoute(request, response, admitted.context, reader)
+  return true
 }
