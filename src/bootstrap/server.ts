@@ -23,7 +23,7 @@ import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/m
 import { handleScheduledTaskReadRequest } from "../http/routes/scheduled-task-native.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
 import { handleAgentRunsInternalRequest } from "../http/routes/agent-runs-native.js"
-import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
+import { handleProjectSkillSelectionRequest, projectSkillSelectionProvider } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
@@ -706,13 +706,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (isProjectSkillSelectionPath) {
-    await projectSkillSelectionRoute(request, response, context, composition.businessStore, composition.installationClient, (signal) =>
-      currentProjectAccess(businessPath[1] ?? "", signal),
-    )
-    return
-  }
-
   if (isPersonalKnowledgePath) {
     await personalKnowledgeRoute(request, response, context, composition.businessStore)
     return
@@ -1148,6 +1141,20 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceListRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectCoreReadRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : handleProjectPinRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleProjectSkillSelectionRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                projectSkillSelectionProvider(composition.businessStore),
+                composition.installationClient,
+              ),
+      )
       .then((handled) =>
         handled
           ? true

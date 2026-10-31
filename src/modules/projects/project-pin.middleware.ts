@@ -1,11 +1,24 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, BFF_POOL, PROJECT_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
+import {
+  BFF_CONFIG,
+  BFF_POOL,
+  PROJECT_SERVICE,
+  PROJECT_SKILL_INSTALLATION_CLIENT,
+  PROJECT_SKILL_SELECTION_PROVIDER,
+  SESSION_ADMISSION,
+} from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { Pool } from "pg"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
 import type { ProjectPinProvider } from "../../http/routes/project-pin.js"
+import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
+import {
+  handleProjectSkillSelectionRequest,
+  isProjectSkillSelectionRequest,
+  type ProjectSkillSelectionProvider,
+} from "../../http/routes/project-skill-selection.js"
 import {
   handleProjectCoreReadRequest,
   handleProjectDeleteRequest,
@@ -31,13 +44,18 @@ export class ProjectPinMiddleware implements NestMiddleware {
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(PROJECT_SERVICE) private readonly projectService: ProjectPinProvider & ProjectCoreReadProvider,
+    @Inject(PROJECT_SKILL_SELECTION_PROVIDER) private readonly projectSkillSelection: ProjectSkillSelectionProvider,
+    @Inject(PROJECT_SKILL_INSTALLATION_CLIENT) private readonly installationClient: SkillInstallationConnectClient | null,
     @Inject(BFF_POOL) pool: Pool,
   ) {
     this.projectResourceReceipts = new PostgresIdempotencyRepository(pool)
   }
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
-    void handleProjectRenameRequest(request, response, this.config, this.admission, this.projectService)
+    void (isProjectSkillSelectionRequest(request)
+      ? handleProjectSkillSelectionRequest(request, response, this.config, this.admission, this.projectSkillSelection, this.installationClient)
+      : Promise.resolve(false))
+      .then((handled) => handled || handleProjectRenameRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectDeleteRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectDeletionStatusRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectResourceDeleteRequest(request, response, this.config, this.admission, this.projectService))
