@@ -203,17 +203,21 @@ test("McpModule owns project MCP recommendation admission and candidate clients"
 })
 
 test("SkillsModule owns personal skill-installation admission and client", async () => {
-  const [skillsModule, middleware, route, server] = await Promise.all([
+  const [skillsModule, middleware, route, managedRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/skills/skills.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/skills/skills.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/skill-installations.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/managed-personal-skills.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(skillsModule, /SKILL_INSTALLATION_CLIENT/u)
   assert.match(skillsModule, /SKILL_AUTHORIZATION/u)
   assert.match(middleware, /handlePersonalSkillInstallationRequest/u)
+  assert.match(middleware, /handleManagedPersonalSkillsRequest/u)
   assert.match(route, /handlePersonalSkillInstallationRequest/u)
+  assert.match(managedRoute, /handleManagedPersonalSkillsRequest/u)
   assert.match(server, /handlePersonalSkillInstallationRequest/u)
+  assert.match(server, /handleManagedPersonalSkillsRequest/u)
   assert.doesNotMatch(server, /await skillInstallationRoute\(/u)
 })
 

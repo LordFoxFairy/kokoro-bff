@@ -6,6 +6,7 @@ import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import { handlePersonalSkillInstallationRequest } from "../../http/routes/skill-installations.js"
+import { handleManagedPersonalSkillsRequest } from "../../http/routes/managed-personal-skills.js"
 
 @Injectable()
 export class SkillsMiddleware implements NestMiddleware {
@@ -18,6 +19,7 @@ export class SkillsMiddleware implements NestMiddleware {
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handlePersonalSkillInstallationRequest(request, response, this.config, this.admission, this.skillAuthorization, this.client)
+      .then((handled) => handled || handleManagedPersonalSkillsRequest(request, response, this.config, this.admission))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

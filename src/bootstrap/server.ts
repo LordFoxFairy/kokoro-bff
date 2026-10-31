@@ -99,7 +99,7 @@ import { validateSkillDraftRoute } from "../http/routes/validate-skill-draft.js"
 import { publishSkillRoute } from "../http/routes/publish-skill.js"
 import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
-import { managedPersonalSkillsRoute } from "../http/routes/managed-personal-skills.js"
+import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
 import { createPersonalSkillVersionRoute } from "../http/routes/create-personal-skill-version.js"
 import { deletePersonalSkillSeriesRoute } from "../http/routes/delete-personal-skill-series.js"
 import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-skill.js"
@@ -273,15 +273,6 @@ export async function handleBffRequest(
       access: projectContentAccess,
       installations: composition.installationClient,
     })
-    return
-  }
-  const isManagedPersonalSkillRead =
-    request.method === "GET" &&
-    ((businessPath.length === 2 && businessPath[0] === "self" && businessPath[1] === "skills") ||
-      (businessPath.length === 3 && businessPath[0] === "self" && businessPath[1] === "skills") ||
-      (businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "versions"))
-  if (isManagedPersonalSkillRead) {
-    await managedPersonalSkillsRoute(request, response, config, composition.sessionAdmission, id, businessPath)
     return
   }
   if (request.method === "DELETE" && businessPath.length === 3 && businessPath[0] === "self" && businessPath[1] === "skills") {
@@ -1099,6 +1090,13 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 projectSkillSelectionProvider(composition.businessStore),
                 composition.installationClient,
               ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleManagedPersonalSkillsRequest(request, response, config, composition.sessionAdmission),
       )
       .then((handled) =>
         handled

@@ -9,7 +9,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import { zGetSelfManagedSkillPath, zListSelfManagedSkillsQuery, zListSelfSkillVersionsQuery } from "../../generated/platform-http/zod.gen.js"
 import type { ListSelfManagedSkillsData } from "../../generated/platform-http/types.gen.js"
 import { PlatformProjectionHttpClient, type ManagedPersonalSkillOperation } from "../../infrastructure/clients/platform/projection-http.js"
-import { queryOf } from "../request.js"
+import { queryOf, requestId } from "../request.js"
 import { send } from "../response.js"
 
 const clients = new WeakMap<BffConfig, PlatformProjectionHttpClient>()
@@ -238,4 +238,27 @@ export async function managedPersonalSkillsRoute(
     request.removeListener("aborted", abort)
     response.removeListener("close", close)
   }
+}
+
+export async function handleManagedPersonalSkillsRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+): Promise<boolean> {
+  const rawPath = new URL(request.url ?? "/", "http://bff.local").pathname
+  if (!rawPath.startsWith("/v1/self/skills")) return false
+  const segments = rawPath
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment)
+      } catch {
+        return segment
+      }
+    })
+  if (operationFor(segments.slice(1)) === null) return false
+  await managedPersonalSkillsRoute(request, response, config, admission, requestId(request), segments.slice(1))
+  return true
 }
