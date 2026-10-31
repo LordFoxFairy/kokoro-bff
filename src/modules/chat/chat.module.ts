@@ -1,6 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
-import { BFF_DATABASE, CHAT_SERVICE, PUBLIC_SHARE_SERVICE } from "../../common/tokens.js"
+import { BFF_DATABASE, CHAT_SERVICE, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION } from "../../common/tokens.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import { PostgresChatRepository } from "../../infrastructure/postgres/chat-repository.js"
 import { PostgresPublicShareRepository } from "../../infrastructure/postgres/public-share-repository.js"
@@ -8,6 +8,8 @@ import { ChatApplicationService } from "../../application/chat-service.js"
 import { PublicShareApplicationService } from "../../application/public-share-service.js"
 import { AccountModule } from "../account/account.module.js"
 import { ChatMiddleware } from "./chat.middleware.js"
+import { PostgresConversationArtifactLibrary } from "../../infrastructure/postgres/conversation-artifact-library.js"
+import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
 
 @Module({
   imports: [AccountModule, DatabaseModule],
@@ -23,8 +25,16 @@ import { ChatMiddleware } from "./chat.middleware.js"
       inject: [BFF_DATABASE],
       useFactory: (database: PostgresBffDatabase): PublicShareApplicationService => new PublicShareApplicationService(new PostgresPublicShareRepository(database)),
     },
+    {
+      provide: SKILL_AI_ASSOCIATION,
+      inject: [BFF_DATABASE],
+      useFactory: (database: PostgresBffDatabase): ((tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>) => {
+        const library = new PostgresConversationArtifactLibrary(database)
+        return library.findSkillHandoff.bind(library)
+      },
+    },
   ],
-  exports: [CHAT_SERVICE, PUBLIC_SHARE_SERVICE],
+  exports: [CHAT_SERVICE, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION],
 })
 export class ChatModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

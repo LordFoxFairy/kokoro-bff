@@ -34,7 +34,6 @@ import { skillSpecificationReadRoute } from "../http/routes/platform-projection.
 import { handleSkillSpecificationEnabledRequest } from "../http/routes/skill-specification-enabled.js"
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
-import { skillAiImportRoute } from "../http/routes/skill-ai-import.js"
 import { skillShareRoute } from "../http/routes/skill-share.js"
 import { handleSkillUsageRequest } from "../http/routes/skill-usage.js"
 import { handlePublishedSkillPackageRequest } from "../http/routes/skill-published-package-native.js"
@@ -92,6 +91,7 @@ import { handleSkillDraftRequest } from "../http/routes/skill-draft-native.js"
 import { handleSkillDraftMutationRequest } from "../http/routes/skill-draft-mutations-native.js"
 import { handleSkillCatalogCommandRequest, handleSkillCoverRequest, handleSkillGithubPreviewRequest, handleSkillPackageUploadReadRequest } from "../http/routes/skill-catalog-command-native.js"
 import { handleSkillGithubImportRequest } from "../http/routes/skill-import-native.js"
+import { handleSkillAiImportRequest } from "../http/routes/skill-ai-import-native.js"
 import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
@@ -486,17 +486,6 @@ export async function handleBffRequest(
   }
   if (isMcpPersonalOperation) {
     await mcpPersonalRoute(request, response, config, composition, admission, businessPath)
-    return
-  }
-  const readmitSkill = async (signal: AbortSignal): Promise<void> => {
-    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
-    if (!current.ok && current.status >= 500) throw new Error("skill_dependency_unavailable")
-    if (!current.ok || current.context.identity.namespace !== context.identity.namespace || current.context.identity.userId !== context.identity.userId)
-      throw new Error("skill_not_found")
-    signal.throwIfAborted()
-  }
-  if (businessPath.join("/") === "skills/ai-import" && request.method === "POST") {
-    await skillAiImportRoute(request, response, context, config, composition.businessStore, composition.skillProductClient, readmitSkill)
     return
   }
   if (
@@ -941,6 +930,19 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
         handled
           ? true
           : handleSkillGithubImportRequest(request, response, config, composition.sessionAdmission, composition.businessStore, composition.skillProductClient),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : handleSkillAiImportRequest(
+              request,
+              response,
+              config,
+              composition.sessionAdmission,
+              composition.businessStore,
+              composition.businessStore?.skillAiAssociation ?? null,
+              composition.skillProductClient,
+            ),
       )
       .then((handled) =>
         handled

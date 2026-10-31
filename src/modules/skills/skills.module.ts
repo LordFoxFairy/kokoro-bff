@@ -18,9 +18,10 @@ import { readSkillUsage } from "../../infrastructure/postgres/skill-usage-projec
 import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
+import { ChatModule } from "../chat/chat.module.js"
 
 @Module({
-  imports: [AccountModule, IamRelayModule, BffConfigModule],
+  imports: [AccountModule, ChatModule, IamRelayModule, BffConfigModule],
   providers: [
     SkillsMiddleware,
     {

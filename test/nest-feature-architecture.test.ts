@@ -80,6 +80,7 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
   assert.doesNotMatch(server, /await messageFeedbackRoute\(/u)
   assert.doesNotMatch(legacyModule, /v1\/account\/(?:archived-tasks|shared-tasks)/u)
   assert.match(chatModule, /PUBLIC_SHARE_SERVICE/u)
+  assert.match(chatModule, /SKILL_AI_ASSOCIATION/u)
   assert.match(middleware, /handleSharedPublicRequest/u)
   assert.match(sharedNativeRoute, /publicShareSnapshot/u)
   assert.doesNotMatch(server, /segments\[1\] === "shared"/u)
@@ -204,7 +205,7 @@ test("McpModule owns project MCP recommendation admission and candidate clients"
 })
 
 test("SkillsModule owns personal skill-installation admission and client", async () => {
-  const [skillsModule, middleware, route, managedRoute, enabledRoute, usageRoute, lifecycleRoute, draftRoute, draftMutationsRoute, catalogCommandRoute, importRoute, server] = await Promise.all([
+  const [skillsModule, middleware, route, managedRoute, enabledRoute, usageRoute, lifecycleRoute, draftRoute, draftMutationsRoute, catalogCommandRoute, importRoute, aiImportRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/skills/skills.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/skills/skills.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/skill-installations.ts"), "utf8"),
@@ -216,6 +217,7 @@ test("SkillsModule owns personal skill-installation admission and client", async
     readFile(path.join(root, "src/http/routes/skill-draft-mutations-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/skill-catalog-command-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/skill-import-native.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/skill-ai-import-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(skillsModule, /SKILL_INSTALLATION_CLIENT/u)
@@ -240,6 +242,8 @@ test("SkillsModule owns personal skill-installation admission and client", async
   assert.match(catalogCommandRoute, /handleSkillGithubPreviewRequest/u)
   assert.match(middleware, /handleSkillGithubImportRequest/u)
   assert.match(importRoute, /handleSkillGithubImportRequest/u)
+  assert.match(middleware, /handleSkillAiImportRequest/u)
+  assert.match(aiImportRoute, /handleSkillAiImportRequest/u)
   assert.match(middleware, /handleSkillLocalImportRequest/u)
   assert.match(route, /handlePersonalSkillInstallationRequest/u)
   assert.match(usageRoute, /handleSkillUsageRequest/u)
@@ -249,7 +253,9 @@ test("SkillsModule owns personal skill-installation admission and client", async
   assert.match(server, /handleManagedPersonalSkillsRequest/u)
   assert.match(server, /handleSkillSpecificationEnabledRequest/u)
   assert.match(server, /handleSkillGithubImportRequest/u)
+  assert.match(server, /handleSkillAiImportRequest/u)
   assert.doesNotMatch(server, /await skillGithubImportRoute\(/u)
+  assert.doesNotMatch(server, /await skillAiImportRoute\(/u)
   assert.doesNotMatch(server, /await skillInstallationRoute\(/u)
 })
 

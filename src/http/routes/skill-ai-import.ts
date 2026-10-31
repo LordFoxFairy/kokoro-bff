@@ -9,8 +9,8 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import type { JsonValue } from "@bufbuild/protobuf"
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
+import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
 import { handoffSkillPackage } from "../../application/skill-ai-handoff.js"
 import type { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
 import { assertSkillWireKnown, skillTimestamp } from "../../infrastructure/clients/platform/skill-product-response.js"
@@ -30,6 +30,18 @@ import { runSkillRoute, skillCommandId, skillMetadataWire } from "./skill-drafts
 import { readSkillBody as readBody } from "./skill-drafts.js"
 import { send } from "../response.js"
 
+export type SkillImportReceipts = Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt">
+export type SkillAiImportStore = SkillImportReceipts & { skillAiAssociation: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null> }
+
+export function composeSkillAiImportStore(receipts: SkillImportReceipts, associationReader: SkillAiImportStore["skillAiAssociation"]): SkillAiImportStore {
+  return {
+    getReceipt: receipts.getReceipt.bind(receipts),
+    claimReceipt: receipts.claimReceipt.bind(receipts),
+    compareAndSetReceipt: receipts.compareAndSetReceipt.bind(receipts),
+    skillAiAssociation: associationReader,
+  }
+}
+
 /** Fresh imports still verify real bytes before the shared exact owner chain. */
 export async function importSkillBytes(
   context: RequestContext,
@@ -38,7 +50,7 @@ export async function importSkillBytes(
   metadata: import("zod").infer<typeof skillProductInputs.ai>["metadata"],
   provenance: import("zod").infer<typeof skillCreationProvenanceSchema>,
   client: SkillProductConnectClient,
-  store: Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt">,
+  store: SkillImportReceipts,
   origin: string,
   signal: AbortSignal,
   deadlineAt: number,
@@ -76,7 +88,7 @@ export async function resumeGithubSkillImport(
   commandId: string,
   selector: import("zod").infer<typeof skillProductInputs.githubImport>,
   client: SkillProductConnectClient,
-  store: Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt">,
+  store: SkillImportReceipts,
   origin: string,
   signal: AbortSignal,
   deadlineAt: number,
@@ -141,7 +153,7 @@ async function importSkillPackage(
   commandId: string,
   source: Readonly<{ frozen: Record<string, unknown>; bytes?: Buffer }>,
   client: SkillProductConnectClient,
-  store: Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt">,
+  store: SkillImportReceipts,
   origin: string,
   signal: AbortSignal,
   deadlineAt: number,
@@ -397,7 +409,7 @@ export async function skillAiImportRoute(
   response: ServerResponse,
   context: RequestContext,
   config: BffConfig,
-  store: BffBusinessStore | null,
+  store: SkillAiImportStore | null,
   client: SkillProductConnectClient | null,
   readmit: (signal: AbortSignal) => Promise<void>,
 ) {
@@ -406,9 +418,8 @@ export async function skillAiImportRoute(
       throw new ConnectError("Invalid request", Code.InvalidArgument)
     const commandId = skillCommandId(request, context, "ai-import")
     const input = parseSkillProductInput("ai", await readBody(request, 65_536))
-    const associationReader = store?.skillAiAssociation ?? (store as (BffBusinessStore & { services?: { skillAiAssociation?: BffBusinessStore["skillAiAssociation"] } }) | null)?.services?.skillAiAssociation
-    if (!store || !associationReader || !client || !config.storage) throw new ConnectError("Skill dependencies unavailable", Code.Unavailable)
-    const association = await associationReader(context.identity.namespace, context.identity.userId, input.conversation_id, input.artifact_ref)
+    if (!store || !client || !config.storage) throw new ConnectError("Skill dependencies unavailable", Code.Unavailable)
+    const association = await store.skillAiAssociation(context.identity.namespace, context.identity.userId, input.conversation_id, input.artifact_ref)
     if (!association) throw new ConnectError("No successful immutable artifact", Code.NotFound)
     const storage = new FinalArtifactClient(config.storage, {
       tenantId: context.identity.namespace,
@@ -433,7 +444,7 @@ export async function skillAiImportRoute(
     )
     try {
       const bytes = await readFile(spool.path)
-      const fresh = await associationReader(context.identity.namespace, context.identity.userId, input.conversation_id, input.artifact_ref)
+      const fresh = await store.skillAiAssociation(context.identity.namespace, context.identity.userId, input.conversation_id, input.artifact_ref)
       const current = await storage.get(association, signal)
       if (JSON.stringify(fresh) !== JSON.stringify(association) || JSON.stringify(current) !== JSON.stringify(item))
         throw new ConnectError("Artifact no longer admitted", Code.NotFound)
