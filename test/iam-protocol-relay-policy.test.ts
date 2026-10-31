@@ -68,9 +68,9 @@ test("published browser-private policy is a deterministic read-only projection o
   })
 })
 
-test("vendored IAM 0.15.0 contract and generated-client manifest pin the execution owner bytes", async () => {
-  const ownerCommit = "4db7012a85752071f5fd30b9a5a3b4977e9dd4f3"
-  const expectedDigest = "db46bc6a3f0e821f0a6e94f7ee9f75a80d8e92cfbbe5ae5c1ca612d0b2754600"
+test("vendored IAM 0.18.0 contract and generated-client manifest pin the execution owner bytes", async () => {
+  const ownerCommit = "497900ab6ec7274c800f1889cc06c993662dd9d6"
+  const expectedDigest = "399e994f93c7f007103d642d866b90edf2457c479e2da2da767d81633198ad62"
   const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
   assert.notEqual(vendor, null)
   assert.equal(createHash("sha256").update(vendor!).digest("hex"), expectedDigest)
@@ -88,14 +88,14 @@ test("vendored IAM 0.15.0 contract and generated-client manifest pin the executi
   ).catch(() => null)
   assert.equal(retiredAdmissionVendor, null, "retired 0.7 admission vendor path must be removed")
   const contract = JSON.parse(vendor!.toString("utf8")) as { info?: { version?: string } }
-  assert.equal(contract.info?.version, "0.15.0")
+  assert.equal(contract.info?.version, "0.18.0")
   const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8")) as {
     owner?: { repository_commit?: string; contract_version?: string; contract_sha256?: string }
   }
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: ownerCommit,
-    contract_version: "0.15.0",
+    contract_version: "0.18.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: expectedDigest,
   })

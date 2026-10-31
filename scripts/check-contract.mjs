@@ -206,6 +206,7 @@ export function inspectOpenApiGovernance(source) {
     const formalIamPermission = new Map([
       ["GET /v1/account/sessions listAccountSessions", "iam:account-session.read"],
       ["DELETE /v1/account/sessions/{session_id} revokeAccountSession", "iam:account-session.revoke"],
+      ["GET /v1/account/profile readAccountProfile", "iam:account-profile.read"],
       ["PATCH /v1/account/profile updateAccountProfile", "iam:account-profile.write"],
     ]).get(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)
     if (permission !== undefined && permission !== formalIamPermission && !/^(?:anonymous|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/u.test(permission)) {

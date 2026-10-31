@@ -238,6 +238,12 @@ export function projectContentParentInventory(inventory) {
 }
 
 export function messageActionsParentInventory(inventory) {
+  const accountProfileReads = inventory.filter((item) => item.operation_id === "readAccountProfile")
+  if (accountProfileReads.length > 0) {
+    if (accountProfileReads.length !== 1 || accountProfileReads[0]?.method !== "GET" || accountProfileReads[0]?.path !== "/v1/account/profile")
+      throw Error("Account profile inventory drift")
+    inventory = inventory.filter((item) => item.operation_id !== "readAccountProfile")
+  }
   const ids = new Set(["getMessageFeedback", "setMessageFeedback", "regenerateLatestAssistantMessage", "getSessionRunDisplay"])
   if (!inventory.some((item) => ids.has(item.operation_id))) return inventory
   if (hash(JSON.stringify(inventory)) !== "897c955e41a256651924315c603d81aada274f9d8f94b20e784de0fd3d11a078" || inventory.length !== 199)

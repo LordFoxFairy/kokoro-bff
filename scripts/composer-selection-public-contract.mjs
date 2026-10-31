@@ -1,6 +1,24 @@
 // Build/test-only exact additive private snapshot change; no runtime downgrade.
 import { createHash } from "node:crypto"
 const hash = (source) => createHash("sha256").update(source).digest("hex")
+
+const accountProfileCurrentSha256 = "35a86f91e44beb1aeb6b17eca41d3bfdc79f11a43633662113a1778b4fab6082"
+const accountProfileParentSha256 = "ea0031103488daa1fcc0cca45fdd13f4d4061546ac4525c745ec47105649f7e7"
+
+export function restorePublic2818AccountProfileContract(source) {
+  if (!/^  version: 28\.18\.0$/mu.test(source)) return source
+  if (hash(source) !== accountProfileCurrentSha256) throw Error("Account profile Public28.18 child drift")
+  const pathMatch = source.match(/^  \/v1\/account\/profile:\n    get:[\s\S]*?(?=    patch:)/mu)
+  const schemaMatch = source.match(/^    AccountProfileReadResponse:\n[\s\S]*?(?=    AccountProfileError400:)/mu)
+  if (pathMatch === null || schemaMatch === null) throw Error("Account profile Public28.18 exact delta drift")
+  const parent = source
+    .replace(pathMatch[0], "  /v1/account/profile:\n")
+    .replace(schemaMatch[0], "")
+    .replace(/^  version: 28\.18\.0$/mu, "  version: 28.17.0")
+  if (hash(parent) !== accountProfileParentSha256) throw Error("Account profile Public28.17 parent drift")
+  return parent
+}
+
 export function restorePublic2815ComposerSelectionContract(source) {
   source = restorePublic2816CustomApiSelectionContract(source)
   if (!/^  version: 28\.16\.0$/mu.test(source)) return source
@@ -15,6 +33,7 @@ export function restorePublic2815ComposerSelectionContract(source) {
 
 // The API selection adds only two optional safe-ref fields; all parent bytes remain fixed.
 export function restorePublic2816CustomApiSelectionContract(source) {
+  source = restorePublic2818AccountProfileContract(source)
   if (!/^  version: 28\.17\.0$/mu.test(source)) return source
   if (hash(source) !== "ea0031103488daa1fcc0cca45fdd13f4d4061546ac4525c745ec47105649f7e7") throw Error("Custom API selection Public28.17 child drift")
   for (const field of [
