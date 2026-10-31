@@ -38,7 +38,7 @@ import { skillGithubImportRoute, skillGithubPreviewRoute } from "../http/routes/
 import { skillAiImportRoute } from "../http/routes/skill-ai-import.js"
 import { skillShareRoute } from "../http/routes/skill-share.js"
 import { handleSkillUsageRequest } from "../http/routes/skill-usage.js"
-import { publishedSkillPackageInspectionRoute } from "../http/routes/skill-download.js"
+import { handlePublishedSkillPackageRequest } from "../http/routes/skill-published-package-native.js"
 import { startSkillRequestBudget, skillRequestRemaining } from "../http/routes/skill-drafts.js"
 import { skillAdminRoute } from "../http/routes/skill-admin.js"
 import { handleAccountNativeRequest } from "../http/routes/account-native.js"
@@ -538,10 +538,6 @@ export async function handleBffRequest(
     )
     return
   }
-  if (businessPath.length === 3 && businessPath[0] === "skills" && businessPath[2] === "package" && request.method === "GET") {
-    await publishedSkillPackageInspectionRoute(request, response, context, businessPath[1]!, composition.skillProductClient)
-    return
-  }
   const meteringKind = matchMeteringAdmin(request.method ?? "", businessPath)
   if (meteringKind !== null) {
     await liveAdminMetering(
@@ -960,6 +956,13 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 composition.skillAuthorization,
                 composition.skillProductClient,
               ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handlePublishedSkillPackageRequest(request, response, config, composition.sessionAdmission, composition.skillProductClient),
       )
       .then((handled) =>
         handled
