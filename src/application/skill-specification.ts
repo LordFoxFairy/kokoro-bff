@@ -4,6 +4,7 @@ import type { RequestContext } from "../domain/request-context.js"
 import type { PublicSkillListContext } from "./skill-specification.types.js"
 import type { ProjectOwnerScope } from "./ports/project-repository.js"
 import type { BffApplicationServices } from "./services.js"
+import type { SkillUsageReader } from "./agui/skill-usage.js"
 import type { SkillDownloadBinding } from "./skill-download-handles.js"
 import type {
   SkillDownloadFact,
@@ -79,7 +80,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
           signal: AbortSignal,
         ): Promise<Map<string, SkillPublisherProfileFact>>
       }>
-      usage?: BffApplicationServices["skillUsage"]
+      usage?: SkillUsageReader
       projects?: Pick<BffApplicationServices["projects"], "find">
       objectOrigin: string | null
     },

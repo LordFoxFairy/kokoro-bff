@@ -1,6 +1,5 @@
 import type { SkillAiAssociation } from "./skill-ai-handoff.js"
 import type { SkillShareRepository } from "./ports/skill-share-repository.js"
-import type { SkillUsageResult } from "./agui/skill-usage.js"
 import type { ProjectRepository } from "./ports/project-repository.js"
 import type { ScheduledTaskRepository } from "./ports/scheduled-task-repository.js"
 import type { ChatRepository } from "./ports/chat-repository.js"
@@ -29,7 +28,6 @@ export class BffApplicationServices {
     agentDispatchOutbox: AgentDispatchOutboxRepository,
     stableIdGenerator: StableIdGenerator,
     public readonly skillShares?: SkillShareRepository,
-    public readonly skillUsage?: (tenant: string, refs: readonly string[]) => Promise<Map<string, SkillUsageResult>>,
     public readonly skillAiAssociation?: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>,
   ) {
     this.projects = new ProjectService(projects)

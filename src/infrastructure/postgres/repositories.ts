@@ -40,6 +40,7 @@ import type { ProjectScopeReleaseOutboxRepository } from "../../application/port
 import { PostgresSkillShareRepository } from "./skill-share-repository.js"
 import type { SkillShareRepository } from "../../application/ports/skill-share-repository.js"
 import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
+import type { SkillUsageReader } from "../../application/agui/skill-usage.js"
 
 export { PENDING_RECEIPT_STATUS }
 export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/idempotency-repository.js"
@@ -65,6 +66,7 @@ export class PostgresBffRepositories {
   public readonly skillShares: SkillShareRepository
   public readonly personalizationProvider: PostgresPersonalizationRepository
   public readonly personalKnowledge: PersonalKnowledgeRepository
+  public readonly skillUsage: SkillUsageReader
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
@@ -89,6 +91,14 @@ export class PostgresBffRepositories {
     this.skillShares = new PostgresSkillShareRepository(this.database)
     this.personalizationProvider = new PostgresPersonalizationRepository(this.database)
     this.personalKnowledge = new PostgresPersonalKnowledgeRepository(this.database)
+    this.skillUsage = async (tenant, refs) => {
+      const client = await this.database.pool.connect()
+      try {
+        return await readSkillUsage(client, tenant, refs)
+      } finally {
+        client.release()
+      }
+    }
     this.services = new BffApplicationServices(
       this.projects,
       this.scheduled,
@@ -97,14 +107,6 @@ export class PostgresBffRepositories {
       agentDispatchOutbox,
       new Sha256StableIdGenerator(),
       this.skillShares,
-      async (tenant, refs) => {
-        const client = await this.database.pool.connect()
-        try {
-          return await readSkillUsage(client, tenant, refs)
-        } finally {
-          client.release()
-        }
-      },
       (tenant, subject, conversation, artifact) => artifactLibrary.findSkillHandoff(tenant, subject, conversation, artifact),
     )
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))

@@ -516,7 +516,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
               }),
               ...(businessStore?.services.projects === undefined ? {} : { projects: businessStore.services.projects }),
               profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
-              ...(businessStore?.services.skillUsage === undefined ? {} : { usage: businessStore.services.skillUsage }),
+              ...(businessStore?.skillUsage === undefined ? {} : { usage: businessStore.skillUsage }),
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
             })
           : null,
