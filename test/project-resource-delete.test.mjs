@@ -133,7 +133,7 @@ function res() {
 }
 const auth = { requestId: "request-1", identity: { namespace: "tenant-1", userId: "subject-1" } }
 
-async function projectResourceDeleteRoute(request, response, config, context, _projectRef, _assetId, store, clientFactory) {
+async function invokeProjectResourceDelete(request, response, config, context, _projectRef, _assetId, store, clientFactory) {
   request.headers = {
     ...request.headers,
     authorization: `Bearer ${context.identity.namespace}:${context.identity.userId}`,
@@ -178,12 +178,12 @@ test("DELETE rechecks current ownership before every replay and never substitute
     },
   })
   const first = res()
-  await projectResourceDeleteRoute(req(), first, { storage }, auth, "slug", "asset-1", store, factory)
+  await invokeProjectResourceDelete(req(), first, { storage }, auth, "slug", "asset-1", store, factory)
   assert.equal(first.statusCode, 200)
   assert.equal(calls[0].scope.projectId, "project-1")
   owned = false
   const revoked = res()
-  await projectResourceDeleteRoute(req(), revoked, { storage }, auth, "slug", "asset-1", store, factory)
+  await invokeProjectResourceDelete(req(), revoked, { storage }, auth, "slug", "asset-1", store, factory)
   assert.equal(revoked.statusCode, 404)
   assert.equal(calls.length, 1)
   for (const r of [
@@ -192,7 +192,7 @@ test("DELETE rechecks current ownership before every replay and never substitute
     Object.assign(req(), { rawHeaders: ["Idempotency-Key", "a", "Idempotency-Key", "b"] }),
   ]) {
     const rejected = res()
-    await projectResourceDeleteRoute(r, rejected, { storage }, auth, "slug", "asset-1", store, factory)
+    await invokeProjectResourceDelete(r, rejected, { storage }, auth, "slug", "asset-1", store, factory)
     assert.equal(rejected.statusCode, 400)
   }
   assert.equal(calls.length, 1)
@@ -207,7 +207,7 @@ test("canceled old Project deletion cannot publish a late acknowledgement", asyn
   const response = res()
   const store = { services: { projects: { find: async () => ({ id: "project-1" }) } } }
   const factory = () => ({ delete: async () => pending })
-  const operation = projectResourceDeleteRoute(request, response, { storage }, auth, "slug", "asset-1", store, factory)
+  const operation = invokeProjectResourceDelete(request, response, { storage }, auth, "slug", "asset-1", store, factory)
   await new Promise((resolve) => setImmediate(resolve))
   response.destroyed = true
   response.emit("close")
