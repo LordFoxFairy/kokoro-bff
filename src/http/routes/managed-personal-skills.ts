@@ -246,6 +246,7 @@ export async function handleManagedPersonalSkillsRequest(
   config: BffConfig,
   admission: SessionAdmission,
 ): Promise<boolean> {
+  if (request.method !== "GET") return false
   const rawPath = new URL(request.url ?? "/", "http://bff.local").pathname
   if (!rawPath.startsWith("/v1/self/skills")) return false
   const segments = rawPath
