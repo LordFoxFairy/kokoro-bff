@@ -38,7 +38,6 @@ import { skillGithubImportRoute, skillGithubPreviewRoute } from "../http/routes/
 import { skillAiImportRoute } from "../http/routes/skill-ai-import.js"
 import { skillShareRoute } from "../http/routes/skill-share.js"
 import { handleSkillUsageRequest } from "../http/routes/skill-usage.js"
-import { skillCoverRoute } from "../http/routes/skill-cover.js"
 import { publishedSkillPackageInspectionRoute } from "../http/routes/skill-download.js"
 import { startSkillRequestBudget, skillRequestRemaining } from "../http/routes/skill-drafts.js"
 import { skillAdminRoute } from "../http/routes/skill-admin.js"
@@ -92,7 +91,7 @@ import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 import { handleSkillDraftRequest } from "../http/routes/skill-draft-native.js"
 import { handleSkillDraftMutationRequest } from "../http/routes/skill-draft-mutations-native.js"
-import { handleSkillCatalogCommandRequest, handleSkillPackageUploadReadRequest } from "../http/routes/skill-catalog-command-native.js"
+import { handleSkillCatalogCommandRequest, handleSkillCoverRequest, handleSkillPackageUploadReadRequest } from "../http/routes/skill-catalog-command-native.js"
 import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
@@ -543,25 +542,6 @@ export async function handleBffRequest(
     await publishedSkillPackageInspectionRoute(request, response, context, businessPath[1]!, composition.skillProductClient)
     return
   }
-  if (
-    businessPath[0] === "skills" &&
-    ((businessPath.length === 3 && businessPath[2] === "cover" && request.method === "GET") ||
-      (businessPath.length === 3 && businessPath[2] === "cover-upload" && ["GET", "POST"].includes(request.method ?? "")) ||
-      (businessPath.length === 4 && businessPath[2] === "cover-upload" && businessPath[3] === "complete" && request.method === "POST"))
-  ) {
-    await skillCoverRoute(
-      request,
-      response,
-      context,
-      businessPath[1]!,
-      businessPath[2] === "cover" ? "cover" : request.method === "GET" ? "get" : businessPath.length === 4 ? "complete" : "begin",
-      composition.skillProductClient,
-      config.storage?.objectOrigin ?? null,
-      readmitSkill,
-    )
-    return
-  }
-
   const meteringKind = matchMeteringAdmin(request.method ?? "", businessPath)
   if (meteringKind !== null) {
     await liveAdminMetering(
@@ -966,6 +946,20 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           : composition.routeHandler !== undefined
             ? false
             : handleSkillPackageUploadReadRequest(request, response, config, composition.sessionAdmission, composition.skillDraftClient),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleSkillCoverRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.skillAuthorization,
+                composition.skillProductClient,
+              ),
       )
       .then((handled) =>
         handled

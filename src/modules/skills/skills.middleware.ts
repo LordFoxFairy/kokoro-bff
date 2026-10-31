@@ -12,7 +12,7 @@ import { handleSkillUsageRequest } from "../../http/routes/skill-usage.js"
 import { handlePersonalSkillLifecycleRequest } from "../../http/routes/personal-skill-lifecycle-native.js"
 import { handleSkillDraftRequest } from "../../http/routes/skill-draft-native.js"
 import { handleSkillDraftMutationRequest } from "../../http/routes/skill-draft-mutations-native.js"
-import { handleSkillCatalogCommandRequest, handleSkillPackageUploadReadRequest } from "../../http/routes/skill-catalog-command-native.js"
+import { handleSkillCatalogCommandRequest, handleSkillCoverRequest, handleSkillPackageUploadReadRequest } from "../../http/routes/skill-catalog-command-native.js"
 import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
 import type { CatalogConnectClient } from "../../infrastructure/clients/platform/catalog-connect.js"
 import type { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
@@ -37,6 +37,7 @@ export class SkillsMiddleware implements NestMiddleware {
       .then((handled) => handled || handleSkillDraftMutationRequest(request, response, this.config, this.admission, this.skillAuthorization, this.productClient))
       .then((handled) => handled || handleSkillCatalogCommandRequest(request, response, this.config, this.admission, this.skillAuthorization, this.draftClient))
       .then((handled) => handled || handleSkillPackageUploadReadRequest(request, response, this.config, this.admission, this.draftClient))
+      .then((handled) => handled || handleSkillCoverRequest(request, response, this.config, this.admission, this.skillAuthorization, this.productClient))
       .then((handled) => handled || handlePersonalSkillLifecycleRequest(request, response, this.config, this.admission, this.skillAuthorization, this.draftClient))
       .then((handled) => handled || handleSkillUsageRequest(request, response, this.config, this.admission, this.usageReader))
       .then((handled) => {

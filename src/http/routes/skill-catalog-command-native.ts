@@ -9,6 +9,7 @@ import { completeSkillPackageUploadRoute } from "./complete-skill-package-upload
 import { publishSkillRoute } from "./publish-skill.js"
 import { validateSkillDraftRoute } from "./validate-skill-draft.js"
 import { getSkillPackageUploadRoute } from "./get-skill-package-upload.js"
+import { skillCoverRoute } from "./skill-cover.js"
 import { requestId } from "../request.js"
 import { send } from "../response.js"
 
@@ -103,6 +104,57 @@ export async function handleSkillPackageUploadReadRequest(
   } catch {
     if (!response.headersSent && !response.destroyed && !response.writableEnded)
       send(response, 503, { error: { code: "skill_dependency_unavailable", message: "Skill catalog is unavailable", retryable: true } })
+    else if (!response.writableEnded && !response.destroyed) response.destroy()
+  }
+  return true
+}
+
+/** Cover reads and upload commands share the SkillsModule product client and fresh admission. */
+export async function handleSkillCoverRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  skillAuthorization: Pick<SkillAuthorizationClient, "check">,
+  client: import("../../infrastructure/clients/platform/skill-product-connect.js").SkillProductConnectClient | null,
+): Promise<boolean> {
+  const parts = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean).map(decode)
+  if (parts[0] !== "v1" || parts[1] !== "skills") return false
+  let operation: "cover" | "get" | "begin" | "complete"
+  let action: "begin_upload" | "complete_upload" | null = null
+  if (parts.length === 4 && parts[3] === "cover" && request.method === "GET") operation = "cover"
+  else if (parts.length === 4 && parts[3] === "cover-upload" && request.method === "GET") operation = "get"
+  else if (parts.length === 4 && parts[3] === "cover-upload" && request.method === "POST") {
+    operation = "begin"
+    action = "begin_upload"
+  } else if (parts.length === 5 && parts[3] === "cover-upload" && parts[4] === "complete" && request.method === "POST") {
+    operation = "complete"
+    action = "complete_upload"
+  } else return false
+  const id = requestId(request)
+  const signal = AbortSignal.timeout(10_000)
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    if (!admitted.ok) {
+      send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+      return true
+    }
+    if (action !== null) {
+      const checked = await authorizeSkillAction(skillAuthorization, admitted, action, signal)
+      if (!checked.ok) {
+        send(response, checked.status, { error: { code: checked.code, message: "Skill action admission failed", retryable: checked.status === 429 || checked.status === 503 } })
+        return true
+      }
+    }
+    const readmit = async (currentSignal: AbortSignal): Promise<void> => {
+      const current = await authorizeUserRequest(request, config, admission, id, currentSignal)
+      if (!current.ok || current.context.identity.namespace !== admitted.context.identity.namespace || current.context.identity.userId !== admitted.context.identity.userId)
+        throw new Error("skill_not_found")
+    }
+    await skillCoverRoute(request, response, admitted.context, parts[2] ?? "", operation, client, config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null, readmit)
+  } catch {
+    if (!response.headersSent && !response.destroyed && !response.writableEnded)
+      send(response, 503, { error: { code: "skill_dependency_unavailable", message: "Skill cover dependency is unavailable", retryable: true } })
     else if (!response.writableEnded && !response.destroyed) response.destroy()
   }
   return true
