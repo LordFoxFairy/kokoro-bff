@@ -514,7 +514,7 @@ export async function handleBffRequest(
       response,
       { ...context, humanBearer: admission.bearerToken },
       businessPath,
-      composition.businessStore?.services.skillShares,
+      composition.businessStore?.skillShares,
       composition.skillProductClient,
       config.iamRelay?.webOrigin,
       composition.skillSpecificationSource,

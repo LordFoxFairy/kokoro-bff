@@ -108,7 +108,6 @@ export class PostgresBffRepositories {
       publicShares,
       agentDispatchOutbox,
       new Sha256StableIdGenerator(),
-      this.skillShares,
     )
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)

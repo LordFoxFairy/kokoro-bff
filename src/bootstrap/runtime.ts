@@ -524,7 +524,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     exactSkillDownloadSource:
       options.exactSkillDownloadSource !== undefined
         ? options.exactSkillDownloadSource
-        : skillProductClient && installationClient && projectionClient && businessStore?.services.skillShares
+        : skillProductClient && installationClient && projectionClient && businessStore?.skillShares
           ? new ExactSkillDownloadService({
               handles: skillDownloadHandles,
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
@@ -665,7 +665,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                 return exactManagedRecord(id, result.data)
               },
               share: async (id, context, signal, deadlineAt) => {
-                const share = await businessStore.services.skillShares!.findActive(context.identity.namespace, id)
+                const share = await businessStore.skillShares!.findActive(context.identity.namespace, id)
                 if (!share) return null
                 signal.throwIfAborted()
                 const raw = await skillProductClient.inspect(

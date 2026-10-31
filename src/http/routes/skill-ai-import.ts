@@ -406,7 +406,7 @@ export async function skillAiImportRoute(
     const commandId = skillCommandId(request, context, "ai-import")
     const input = parseSkillProductInput("ai", await readBody(request, 65_536))
     const associationReader = store?.skillAiAssociation ?? (store as (BffBusinessStore & { services?: { skillAiAssociation?: BffBusinessStore["skillAiAssociation"] } }) | null)?.services?.skillAiAssociation
-    if (!associationReader || !client || !config.storage) throw new ConnectError("Skill dependencies unavailable", Code.Unavailable)
+    if (!store || !associationReader || !client || !config.storage) throw new ConnectError("Skill dependencies unavailable", Code.Unavailable)
     const association = await associationReader(context.identity.namespace, context.identity.userId, input.conversation_id, input.artifact_ref)
     if (!association) throw new ConnectError("No successful immutable artifact", Code.NotFound)
     const storage = new FinalArtifactClient(config.storage, {

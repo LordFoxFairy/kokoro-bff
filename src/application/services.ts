@@ -1,4 +1,3 @@
-import type { SkillShareRepository } from "./ports/skill-share-repository.js"
 import type { ProjectRepository } from "./ports/project-repository.js"
 import type { ScheduledTaskRepository } from "./ports/scheduled-task-repository.js"
 import type { ChatRepository } from "./ports/chat-repository.js"
@@ -26,7 +25,6 @@ export class BffApplicationServices {
     publicShares: PublicShareRepository,
     agentDispatchOutbox: AgentDispatchOutboxRepository,
     stableIdGenerator: StableIdGenerator,
-    public readonly skillShares?: SkillShareRepository,
   ) {
     this.projects = new ProjectService(projects)
     this.scheduledTasks = new ScheduledTaskService(scheduledTasks)

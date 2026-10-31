@@ -12,6 +12,7 @@ import type { PersonalizationProvider } from "../../modules/account/personalizat
 import type { PersonalKnowledgeRepository } from "./personal-knowledge-repository.js"
 import type { SkillUsageReader } from "../agui/skill-usage.js"
 import type { SkillAiAssociation } from "../skill-ai-handoff.js"
+import type { SkillShareRepository } from "./skill-share-repository.js"
 
 export type ArtifactAssociation = Readonly<{
   conversationId: string
@@ -40,6 +41,7 @@ export interface BffBusinessStore extends IdempotencyRepository {
   readonly skillUsage?: SkillUsageReader
   /** Skills AI artifact association retained only as the raw-server composition seam during C-3 migration. */
   readonly skillAiAssociation?: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>
+  readonly skillShares?: SkillShareRepository
   readonly submittedAgentRuns?: import("./submitted-agent-run-reader.js").SubmittedAgentRunReader
   readonly projectExecutionBindings?: import("./project-execution-binding-reader.js").ProjectExecutionBindingReader
   readonly artifactLibrary?: ArtifactLibraryRepository
