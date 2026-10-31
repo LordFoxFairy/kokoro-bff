@@ -9,11 +9,11 @@ import {
   handleProjectRenameRequest,
   handleProjectResourceListRequest,
   handleProjectResourceDeleteRequest,
+  handleProjectResourceReadRequest,
 } from "../http/routes/project-native.js"
 import { handleSharedPublicRequest, handleSharedReaderRequest } from "../http/routes/shared-native.js"
 import { handleHealthRequest } from "../http/routes/health-native.js"
 import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
-import { projectResourceReadRoute } from "../http/routes/project-resource-read.js"
 import { mcpProjectPublicationOperation, mcpProjectPublicationRoute } from "../http/routes/mcp-project-publication.js"
 import { liveAdminMetering, matchMeteringAdmin } from "../http/routes/billing-metering-admin.js"
 import { liveAdminCreditGrant } from "../http/routes/billing-credit-grant-admin.js"
@@ -718,18 +718,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (
-    composition.routeHandler === undefined &&
-    businessPath[0] === "projects" &&
-    businessPath[2] === "resources" &&
-    businessPath[1] !== undefined &&
-    businessPath[3] !== undefined
-  ) {
-    if (request.method === "GET" && (businessPath.length === 4 || (businessPath.length === 5 && businessPath[4] === "download"))) {
-      await projectResourceReadRoute(request, response, config, context, businessPath[1], businessPath[3], businessPath.length === 5, composition.businessStore)
-      return
-    }
-  }
   if (isMoveSessionPath) {
     await moveSessionRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
     return
@@ -1158,6 +1146,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectDeleteRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectDeletionStatusRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceDeleteRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
+      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceReadRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceListRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectCoreReadRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : handleProjectPinRequest(request, response, config, composition.sessionAdmission, composition.projectService)))

@@ -175,14 +175,14 @@ test("metadata route freshly checks owner and canonical Project before any Stora
       "slug",
       "asset-1",
       false,
-      store,
+      store.services.projects,
       factory,
     )
     assert.equal(res.statusCode, 404)
   }
   assert.equal(calls.length, 0)
   const res = response()
-  await projectResourceReadRoute(request("GET", "/v1/projects/slug/resources/asset-1"), res, { storage }, context, "slug", "asset-1", false, store, factory)
+  await projectResourceReadRoute(request("GET", "/v1/projects/slug/resources/asset-1"), res, { storage }, context, "slug", "asset-1", false, store.services.projects, factory)
   assert.equal(res.statusCode, 200)
   assert.equal(calls[0].projectId, "project-1")
   for (const suffix of ["?scope_id=forged", "?download=true"]) {
@@ -195,11 +195,45 @@ test("metadata route freshly checks owner and canonical Project before any Stora
       "slug",
       "asset-1",
       false,
-      store,
+      store.services.projects,
       factory,
     )
     assert.equal(bad.statusCode, 400)
   }
+})
+
+test("Projects feature handler owns item metadata reads without entering the legacy dispatcher", async () => {
+  const { handleProjectResourceReadRequest } = await import("../src/http/routes/project-native.ts")
+  const calls = []
+  const req = request("GET", "/v1/projects/slug/resources/asset-1")
+  req.headers = {
+    authorization: "Bearer user",
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": "web-secret",
+    origin: "https://web.example",
+  }
+  req.rawHeaders = [
+    "Authorization", "Bearer user",
+    "X-Kokoro-Service", "web-bff",
+    "X-Kokoro-Internal-Secret", "web-secret",
+    "X-Kokoro-Request-Id", "request-1",
+  ]
+  const res = response()
+  const handled = await handleProjectResourceReadRequest(
+    req,
+    res,
+    { storage, tenantId: "tenant-1", sharedSecret: "web-secret" },
+    { verify: async ({ token }) => ({ ok: true, identity: { namespace: "tenant-1", userId: token === "user" ? "subject-1" : "other" } }) },
+    { find: store.services.projects.find },
+    (_config, scope) => {
+      calls.push(scope)
+      return { get: async () => ({ asset_id: "asset-1" }) }
+    },
+  )
+  assert.equal(handled, true)
+  assert.equal(res.statusCode, 200)
+  assert.equal(JSON.parse(res.body).data.resource.asset_id, "asset-1")
+  assert.deepEqual(calls, [{ tenantId: "tenant-1", subjectId: "subject-1", projectId: "project-1", requestId: "request-1" }])
 })
 
 export { fixture, request, response, context, store, storage, scope, bytes, sha }
@@ -265,7 +299,7 @@ test("Project attachment downloads exceed the old personal 1MiB cap, remain comp
     }
   }
   const server = createServer((request, response) => {
-    void projectResourceReadRoute(request, response, { storage }, context, "slug", "asset-1", true, ownStore, factory, spooler)
+    void projectResourceReadRoute(request, response, { storage }, context, "slug", "asset-1", true, ownStore.services.projects, factory, spooler)
   })
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
@@ -304,7 +338,7 @@ test("Project ownership cancellation wins over a store response which has not se
     settle = resolve
   })
   const result = currentResourceProject(
-    { services: { projects: { find: () => pending } } },
+    { find: () => pending },
     { tenantId: "tenant-1", subjectId: "subject-1" },
     "project-1",
     abort.signal,

@@ -13,6 +13,7 @@ import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
 import { StorageUploadClient } from "../../infrastructure/clients/storage/client.js"
 import { projectPinRoute, ProjectPinAdmissionError, type ProjectPinProvider } from "./project-pin.js"
+import { projectResourceReadRoute, type ProjectResourceReadClientFactory, type ProjectResourceReadSpooler } from "./project-resource-read.js"
 
 export type ProjectCoreReadProvider = Readonly<{
   list(scope: Readonly<{ tenantId: string; subjectId: string }>): Promise<readonly unknown[]>
@@ -27,6 +28,10 @@ export type ProjectCoreReadProvider = Readonly<{
     requestId: string,
     signal: AbortSignal,
   ): Promise<DeleteProjectResult>
+}>
+
+export type ProjectResourceReadProvider = Readonly<{
+  find(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<unknown | null>
 }>
 
 function projectPinPath(request: IncomingMessage): string {
@@ -61,6 +66,66 @@ export function isProjectResourceListRequest(request: IncomingMessage): boolean 
 export function isProjectResourceDeleteRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
   return request.method === "DELETE" && /^\/v1\/projects\/[^/]+\/resources\/[^/]+$/u.test(path)
+}
+
+export function isProjectResourceReadRequest(request: IncomingMessage): boolean {
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  return request.method === "GET" && /^\/v1\/projects\/[^/]+\/resources\/[^/]+(?:\/download)?$/u.test(path)
+}
+
+/** Projects-owned resource metadata/download read; the legacy dispatcher no longer owns this path. */
+export async function handleProjectResourceReadRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  projects: ProjectResourceReadProvider | null,
+  clientFactory?: ProjectResourceReadClientFactory,
+  spooler?: ProjectResourceReadSpooler,
+): Promise<boolean> {
+  if (!isProjectResourceReadRequest(request)) return false
+  const id = requestId(request)
+  response.setHeader("x-request-id", id)
+  const signal = AbortSignal.timeout(10_000)
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    if (!admitted.ok) {
+      send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+      return true
+    }
+    const path = (request.url ?? "").split("?", 1)[0] ?? ""
+    const match = /^\/v1\/projects\/([^/]+)\/resources\/([^/]+)(\/download)?$/u.exec(path)
+    if (match?.[1] === undefined || match[2] === undefined || projects === null) {
+      send(response, 400, failure("invalid_project_resource", "Project resource request is invalid", id))
+      return true
+    }
+    let projectRef: string
+    let assetId: string
+    try {
+      projectRef = decodeURIComponent(match[1])
+      assetId = decodeURIComponent(match[2])
+    } catch {
+      send(response, 400, failure("invalid_project_resource", "Project resource request is invalid", id))
+      return true
+    }
+    await projectResourceReadRoute(
+      request,
+      response,
+      config,
+      { requestId: id, identity: admitted.context.identity },
+      projectRef,
+      assetId,
+      match[3] === "/download",
+      projects,
+      clientFactory,
+      spooler,
+    )
+    return true
+  } catch {
+    if (!response.headersSent && !response.writableEnded && !response.destroyed)
+      send(response, 503, failure("storage_unavailable", "Project resource could not be read", id))
+    return true
+  }
 }
 
 /** Projects-owned resource delete command; the legacy dispatcher no longer owns this path. */

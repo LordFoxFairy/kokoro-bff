@@ -2,7 +2,6 @@ import { currentResourceProject } from "../project-resource-access.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import { ProjectResourceError } from "../../application/project-resource.error.js"
 import { ProjectResourceAccessClient } from "../../infrastructure/clients/storage/project-resource-access.js"
 import { spoolVerifiedArtifact, type VerifiedArtifactSpool } from "../../infrastructure/clients/storage/artifact-download-transfer.js"
@@ -10,8 +9,15 @@ import { failure, ok } from "../../contracts/index.js"
 import { isEmptyProjectDeletionRequest } from "../project-deletion-input.js"
 import { writeVerifiedDownload } from "../verified-download.js"
 import { send } from "../response.js"
+import type { ProjectResourceProjectReader } from "../project-resource-access.js"
 
 type Scope = { tenantId: string; subjectId: string; projectId: string; requestId: string }
+export type ProjectResourceReadClientFactory = (
+  config: NonNullable<BffConfig["storage"]>,
+  scope: Scope,
+) => Pick<ProjectResourceAccessClient, "get" | "downloadReference">
+export type ProjectResourceReadSpooler = typeof spoolVerifiedArtifact
+
 export async function projectResourceReadRoute(
   request: IncomingMessage,
   response: ServerResponse,
@@ -20,8 +26,8 @@ export async function projectResourceReadRoute(
   projectRef: string,
   assetId: string,
   download: boolean,
-  store: BffBusinessStore | null,
-  clientFactory: (config: NonNullable<BffConfig["storage"]>, scope: Scope) => Pick<ProjectResourceAccessClient, "get" | "downloadReference"> = (cfg, scope) =>
+  store: ProjectResourceProjectReader | null,
+  clientFactory: ProjectResourceReadClientFactory = (cfg, scope) =>
     new ProjectResourceAccessClient(cfg, scope),
   spooler: typeof spoolVerifiedArtifact = spoolVerifiedArtifact,
 ): Promise<void> {
