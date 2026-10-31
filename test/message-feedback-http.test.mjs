@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { createBffServer } from "../src/bootstrap/server.ts"
-import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
+import { createBffServer } from "../dist/bootstrap/server.js"
+import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 async function fixture(t) {
