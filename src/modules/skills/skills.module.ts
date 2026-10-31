@@ -2,7 +2,7 @@ import { Inject, Injectable, MiddlewareConsumer, Module, NestModule, OnApplicati
 import { BffConfigModule } from "../../config/config.module.js"
 import { AccountModule } from "../account/account.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
-import { APP_SKILL_BINDING_CLIENT, BFF_CONFIG, BFF_DATABASE, BFF_POOL, OPEN_APP_MANAGEMENT_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER } from "../../common/tokens.js"
+import { APP_SKILL_BINDING_CLIENT, BFF_CONFIG, BFF_DATABASE, BFF_POOL, OPEN_APP_MANAGEMENT_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_EXACT_DOWNLOAD_SOURCE, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
 import { PlatformServiceCredentialSource } from "../../infrastructure/clients/platform/platform-service-credential.js"
@@ -25,13 +25,18 @@ import { PostgresSkillShareRepository } from "../../infrastructure/postgres/skil
 import { SkillSpecificationService } from "../../application/skill-specification.js"
 import type { SkillSpecificationSource } from "../../application/skill-specification.types.js"
 import { PlatformSkillSpecificationFacade } from "../../infrastructure/clients/platform/skill-specification-facade.js"
-import { PlatformProjectionHttpClient } from "../../infrastructure/clients/platform/projection-http.js"
 import { IamPublisherProfileClient } from "../../infrastructure/clients/iam-publisher-profile.js"
 import { OpenAppManagementAdmissionClient } from "../../auth/open-app-management-admission.client.js"
 import { AppSkillBindingConnectClient } from "../../infrastructure/clients/platform/app-skill-binding-connect.js"
 import { SkillListAdmissionClient } from "../../auth/skill-list-admission.client.js"
 import { SkillDownloadHandles } from "../../application/skill-download-handles.js"
 import { SkillPackageInspectionConnectClient } from "../../infrastructure/clients/platform/skill-package-inspection-connect.js"
+import { ExactSkillDownloadService, exactInstallationRecord, exactManagedRecord } from "../../application/exact-skill-download.js"
+import type { ExactSkillDownloadSource } from "../../application/exact-skill-download.js"
+import { projectInstallation } from "../../infrastructure/clients/platform/skill-installation-response.js"
+import { assertSkillWireKnown, skillTimestamp } from "../../infrastructure/clients/platform/skill-product-response.js"
+import { projectSkillPackageInspectionResponse } from "../../infrastructure/clients/platform/skill-package-inspection-response.js"
+import { PlatformProjectionHttpClient } from "../../infrastructure/clients/platform/projection-http.js"
 
 @Injectable()
 class SkillsRuntime implements OnApplicationShutdown {
@@ -63,6 +68,54 @@ class SkillsRuntime implements OnApplicationShutdown {
       useFactory: (config: BffConfig): SkillPackageInspectionConnectClient | null => config.platformProjection?.baseUrl && config.platformProjection.credentialFile
         ? new SkillPackageInspectionConnectClient(config.platformProjection.baseUrl, config.platformProjection.credentialFile, config.platformProjection.timeoutMs)
         : null,
+    },
+    {
+      provide: SKILL_EXACT_DOWNLOAD_SOURCE,
+      inject: [BFF_CONFIG, SKILL_PRODUCT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_DOWNLOAD_HANDLES],
+      useFactory: (
+        config: BffConfig,
+        product: SkillProductConnectClient | null,
+        installations: SkillInstallationConnectClient | null,
+        shares: PostgresSkillShareRepository,
+        handles: SkillDownloadHandles,
+      ): ExactSkillDownloadSource | null => {
+        if (!product || !installations || !shares || !config.platformProjection?.baseUrl || !config.platformProjection.credentialFile || !config.iamBaseUrl) return null
+        const projection = new PlatformProjectionHttpClient(config.platformProjection.baseUrl, config.platformProjection.credentialFile, config.platformProjection.timeoutMs)
+        return new ExactSkillDownloadService({
+          handles,
+          objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
+          installation: async (id, context, signal) => exactInstallationRecord(id, projectInstallation((await installations.get({ requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, installationId: id }, signal)).installation)),
+          managed: async (id, context, signal, deadlineAt) => {
+            const result = await projection.readManagedPersonalSkill("managedSkill", context.identity.namespace, context.identity.userId, context.requestId, { skillId: id }, signal, deadlineAt)
+            if (!result.ok) {
+              if (result.status === 404) return null
+              if (result.status === 502) throw new Error("skill_response_invalid")
+              throw new Error("skill_dependency_unavailable")
+            }
+            return exactManagedRecord(id, result.data)
+          },
+          share: async (id, context, signal, deadlineAt) => {
+            const share = await shares.findActive(context.identity.namespace, id)
+            if (!share) return null
+            const raw = await product.inspect({ requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef: share.sourceRef }, signal, deadlineAt)
+            assertSkillWireKnown(raw)
+            const value = projectSkillPackageInspectionResponse(raw, { sourceRef: share.sourceRef })
+            return { sourceRef: value.source_ref, revision: value.revision }
+          },
+          download: async (sourceRef, context, signal, deadlineAt) => {
+            const value = await product.download({ requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef }, signal, deadlineAt)
+            assertSkillWireKnown(value)
+            return {
+              sourceRef: value.sourceRef?.value ?? "",
+              revision: value.revision.toString(),
+              filename: value.filename,
+              sizeBytes: value.sizeBytes,
+              contentSha256: value.contentSha256,
+              transfer: { url: value.transferReference?.url ?? "", method: value.transferReference?.method ?? "", requiredHeaders: value.transferReference?.requiredHeaders ?? {}, expiresAt: skillTimestamp(value.transferReference?.expiresAt) },
+            }
+          },
+        })
+      },
     },
     {
       provide: OPEN_APP_MANAGEMENT_ADMISSION,
@@ -214,7 +267,7 @@ class SkillsRuntime implements OnApplicationShutdown {
       },
     },
   ],
-  exports: [APP_SKILL_BINDING_CLIENT, OPEN_APP_MANAGEMENT_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER],
+  exports: [APP_SKILL_BINDING_CLIENT, OPEN_APP_MANAGEMENT_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_EXACT_DOWNLOAD_SOURCE, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER],
 })
 export class SkillsModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

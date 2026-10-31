@@ -29,6 +29,7 @@ import { handleMcpProjectPublicationRequest } from "../http/routes/mcp-project-p
 import { handleConnectorListRequest } from "../http/routes/connector-list-native.js"
 import { handleSkillSpecificationRequest } from "../http/routes/skill-specification-native.js"
 import { handleSkillPackageInspectionRequest } from "../http/routes/skill-package-inspection-native.js"
+import { handleSkillDownloadRequest } from "../http/routes/skill-download-native.js"
 import { handleSkillSpecificationEnabledRequest } from "../http/routes/skill-specification-enabled.js"
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
@@ -695,6 +696,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       }))
       .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
       .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService ?? composition.businessStore?.services.projects ?? null))
+      .then((handled) => handled ? true : handleSkillDownloadRequest(request, response, config, composition.sessionAdmission, composition.skillDownloadHandles, composition.skillSpecificationSource, composition.exactSkillDownloadSource))
       .then((handled) => handled ? true : handleSkillSpecificationRequest(request, response, config, {
         skillListAdmission: composition.skillListAdmission,
         skillSpecificationSource: composition.skillSpecificationSource,
