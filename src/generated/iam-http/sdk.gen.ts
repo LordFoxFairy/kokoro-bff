@@ -36,6 +36,9 @@ import type {
   ListTenantRolesData,
   ListTenantRolesErrors,
   ListTenantRolesResponses,
+  ReadAccountProfileData,
+  ReadAccountProfileErrors,
+  ReadAccountProfileResponses,
   RejectTenantInvitationData,
   RejectTenantInvitationErrors,
   RejectTenantInvitationResponses,
@@ -82,6 +85,7 @@ import {
   zListTenantInvitationsResponse,
   zListTenantMembersResponse,
   zListTenantRolesResponse,
+  zReadAccountProfileResponse,
   zRejectTenantInvitationResponse,
   zRemoveTenantMemberResponse,
   zReplaceTenantMemberRolesResponse,
@@ -162,6 +166,22 @@ export const verifyOpenAppManagementAuthorization = <ThrowOnError extends boolea
       },
     ],
     url: "/internal/v1/open-app-registrations/{app_id}/management-authorizations/verify",
+    ...options,
+  })
+
+export const readAccountProfile = <ThrowOnError extends boolean = false>(
+  options?: Options<ReadAccountProfileData, ThrowOnError>,
+): RequestResult<ReadAccountProfileResponses, ReadAccountProfileErrors, ThrowOnError> =>
+  (options?.client ?? client).get<ReadAccountProfileResponses, ReadAccountProfileErrors, ThrowOnError>({
+    responseValidator: async (data) => await zReadAccountProfileResponse.parseAsync(data),
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/internal/v1/account/profile",
     ...options,
   })
 

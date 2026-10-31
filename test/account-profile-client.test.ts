@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { afterEach, test } from "node:test"
-import { requestIamAccountProfile } from "../src/infrastructure/clients/iam-account-profile.ts"
-import type { AccountProfileInput } from "../src/infrastructure/clients/iam-account-profile.types.ts"
+import { requestIamAccountProfile, requestIamAccountProfileRead } from "../src/infrastructure/clients/iam-account-profile.ts"
+import type { AccountProfileInput, AccountProfileReadInput } from "../src/infrastructure/clients/iam-account-profile.types.ts"
 const original = globalThis.fetch
 afterEach(() => {
   globalThis.fetch = original
@@ -21,6 +21,53 @@ const input = (extra: Partial<AccountProfileInput> = {}): AccountProfileInput =>
 const ack = () => ({ data: { subject: "subject", name: "新 名" } })
 const response = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   Response.json(body, { status, headers: { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "profile-client", ...headers } })
+const readInput = (extra: Partial<AccountProfileReadInput> = {}): AccountProfileReadInput => ({
+  baseUrl: "http://iam.test",
+  token: "delegated",
+  requestId: "profile-client",
+  expectedSubject: "subject",
+  deadlineAt: performance.now() + 500,
+  signal: new AbortController().signal,
+  maxResponseBytes: 1048576,
+  ...extra,
+})
+const readAck = () => ({ data: { subject: "subject", name: "Current", email: "user@example.test", email_verified: true } })
+
+test("generated GET forwards the admitted bearer and canonical profile projection", async () => {
+  globalThis.fetch = async (req) => {
+    const r = req as Request
+    assert.equal(r.url, "http://iam.test/internal/v1/account/profile")
+    assert.equal(r.method, "GET")
+    assert.equal(r.headers.get("authorization"), "Bearer delegated")
+    assert.equal(r.headers.get("cookie"), null)
+    assert.equal(await r.text(), "")
+    return response(readAck())
+  }
+  assert.deepEqual(await requestIamAccountProfileRead(readInput()), { ok: true, data: readAck().data })
+})
+
+test("native GET forwards only the allowlisted cookie, fixed origin and direct credential", async () => {
+  globalThis.fetch = async (req) => {
+    const r = req as Request
+    assert.equal(r.headers.get("authorization"), "Bearer direct")
+    assert.equal(r.headers.get("cookie"), "kokoro-issuer.session_token=session")
+    assert.equal(r.headers.get("origin"), "https://iam.test")
+    return response(readAck())
+  }
+  assert.deepEqual(
+    await requestIamAccountProfileRead(readInput({ token: "direct", cookie: "kokoro-issuer.session_token=session", origin: "https://iam.test" })),
+    { ok: true, data: readAck().data },
+  )
+})
+
+for (const body of [
+  { data: { subject: "foreign", name: "Current", email: "user@example.test", email_verified: true } },
+  { data: { subject: "subject", name: "Current", email: "user@example.test", email_verified: true, secret: "leak" } },
+])
+  test("GET rejects non-canonical owner profile response", async () => {
+    globalThis.fetch = async () => response(body)
+    assert.deepEqual(await requestIamAccountProfileRead(readInput()), { ok: false, status: 502, code: "account_profile_response_invalid" })
+  })
 test("normal generated PATCH forwards exact CAS and admitted bearer once", async () => {
   let calls = 0
   globalThis.fetch = async (req) => {

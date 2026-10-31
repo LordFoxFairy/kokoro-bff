@@ -92,6 +92,31 @@ test("profile PATCH preserves exact name and CAS through Product bearer without 
   assert.equal(seen[0].headers["idempotency-key"], undefined)
 })
 
+test("profile GET preserves the admitted subject and returns the owner projection without a body", async (t) => {
+  const { base, seen } = await fixture(t, { data: { subject: "user-one", name: "Current", email: "user@example.test", email_verified: true } })
+  const response = await fetch(`${base}/v1/account/profile`, { method: "GET", headers })
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { data: { subject: "user-one", name: "Current", email: "user@example.test", email_verified: true } })
+  assert.equal(seen.length, 1)
+  assert.equal(seen[0].method, "GET")
+  assert.equal(seen[0].path, "/internal/v1/account/profile")
+  assert.equal(seen[0].headers.authorization, "Bearer account-token")
+  assert.equal(seen[0].body, undefined)
+  assert.equal(response.headers.get("cache-control"), "no-store")
+})
+
+test("profile GET rejects query, body and replay metadata before owner I/O", async (t) => {
+  const { base, seen } = await fixture(t, { data: { subject: "user-one", name: "Current", email: "user@example.test", email_verified: true } })
+  for (const [url, init] of [
+    [`${base}/v1/account/profile?query=1`, { method: "GET", headers }],
+    [`${base}/v1/account/profile`, { method: "GET", headers: { ...headers, "idempotency-key": "replay" } }],
+  ]) {
+    const r = await fetch(url, init)
+    assert.equal(r.status, 400, url)
+  }
+  assert.equal(seen.length, 0)
+})
+
 const patch = (base, body, extra = {}) =>
   fetch(`${base}/v1/account/profile`, { method: "PATCH", headers: { ...headers, "content-type": "application/json", ...extra }, body })
 test("anonymous and rejected Product admission never call owner and have plain errors", async (t) => {

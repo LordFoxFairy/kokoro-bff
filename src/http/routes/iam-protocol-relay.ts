@@ -49,6 +49,16 @@ const INVITATION_ERROR_MESSAGES: Readonly<Record<IamErrorCode, string>> = {
   PAYLOAD_TOO_LARGE: "Invitation request was invalid",
   RATE_LIMITED: "Too many invitation requests",
   DEPENDENCY_UNAVAILABLE: "Invitation service is unavailable",
+  native_session_request_invalid: "Invitation request was invalid",
+  native_session_missing: "Authentication is required",
+  native_session_invalid: "Authentication is required",
+  native_session_revoked: "Authentication is required",
+  native_session_expired: "Authentication is required",
+  native_session_origin_forbidden: "Invitation request was not permitted",
+  native_session_csrf_failed: "Invitation request was not permitted",
+  native_session_rate_limited: "Too many invitation requests",
+  native_session_service_unavailable: "Invitation service is unavailable",
+  native_session_deadline_exceeded: "Invitation service is unavailable",
   INTERNAL: "Invitation service is unavailable",
 }
 

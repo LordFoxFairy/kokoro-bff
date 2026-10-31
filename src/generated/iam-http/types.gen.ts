@@ -27,6 +27,16 @@ export type ApiErrorResponse = {
       | "PAYLOAD_TOO_LARGE"
       | "RATE_LIMITED"
       | "DEPENDENCY_UNAVAILABLE"
+      | "native_session_request_invalid"
+      | "native_session_missing"
+      | "native_session_invalid"
+      | "native_session_revoked"
+      | "native_session_expired"
+      | "native_session_origin_forbidden"
+      | "native_session_csrf_failed"
+      | "native_session_rate_limited"
+      | "native_session_service_unavailable"
+      | "native_session_deadline_exceeded"
       | "INTERNAL"
     message: string
     retryable: boolean
@@ -240,6 +250,61 @@ export type VerifyOpenAppManagementAuthorizationResponses = {
 }
 
 export type VerifyOpenAppManagementAuthorizationResponse = VerifyOpenAppManagementAuthorizationResponses[keyof VerifyOpenAppManagementAuthorizationResponses]
+
+export type ReadAccountProfileData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path?: never
+  query?: never
+  url: "/internal/v1/account/profile"
+}
+
+export type ReadAccountProfileErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type ReadAccountProfileError = ReadAccountProfileErrors[keyof ReadAccountProfileErrors]
+
+export type ReadAccountProfileResponses = {
+  200: {
+    data: {
+      subject: string
+      name: string
+      email: string
+      email_verified: boolean
+    }
+  }
+}
+
+export type ReadAccountProfileResponse = ReadAccountProfileResponses[keyof ReadAccountProfileResponses]
 
 export type UpdateAccountProfileData = {
   body: {
@@ -500,6 +565,16 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -532,6 +607,16 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -564,6 +649,16 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -596,6 +691,16 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -628,6 +733,16 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -660,6 +775,16 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -692,6 +817,16 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -724,6 +859,16 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -786,6 +931,16 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -818,6 +973,16 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -850,6 +1015,16 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -882,6 +1057,16 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -914,6 +1099,16 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -946,6 +1141,16 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -978,6 +1183,16 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1010,6 +1225,16 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1069,6 +1294,16 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1101,6 +1336,16 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1133,6 +1378,16 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1165,6 +1420,16 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1197,6 +1462,16 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1229,6 +1504,16 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1261,6 +1546,16 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1293,6 +1588,16 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "native_session_request_invalid"
+        | "native_session_missing"
+        | "native_session_invalid"
+        | "native_session_revoked"
+        | "native_session_expired"
+        | "native_session_origin_forbidden"
+        | "native_session_csrf_failed"
+        | "native_session_rate_limited"
+        | "native_session_service_unavailable"
+        | "native_session_deadline_exceeded"
         | "INTERNAL"
       message: string
       retryable: boolean

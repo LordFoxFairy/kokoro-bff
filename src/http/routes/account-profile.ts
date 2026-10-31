@@ -2,8 +2,8 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest, ownerSessionAuth } from "../../auth/user-admission.js"
-import { requestIamAccountProfile } from "../../infrastructure/clients/iam-account-profile.js"
-import { accountProfileMetadataValid, parseAccountProfileBody } from "../account-profile-input.js"
+import { requestIamAccountProfile, requestIamAccountProfileRead } from "../../infrastructure/clients/iam-account-profile.js"
+import { accountProfileMetadataValid, accountProfileReadMetadataValid, parseAccountProfileBody } from "../account-profile-input.js"
 import { send } from "../response.js"
 
 /** One request lifetime, reusing the normal Product admission and no BFF mutation store. */
@@ -46,7 +46,8 @@ export async function accountProfileRoute(
   }
   try {
     active()
-    if (!accountProfileMetadataValid(request)) {
+    const read = request.method === "GET"
+    if (!(read ? accountProfileReadMetadataValid(request) : accountProfileMetadataValid(request))) {
       failure(400, "account_profile_input_invalid")
       return
     }
@@ -60,6 +61,26 @@ export async function accountProfileRoute(
       return
     }
     const ownerAuth = await bounded(ownerSessionAuth(request, config, admitted, abort.signal))
+    if (read) {
+      const result = await bounded(
+        requestIamAccountProfileRead({
+          expectedSubject: admitted.context.identity.userId,
+          baseUrl: config.iamBaseUrl,
+          ...ownerAuth,
+          requestId,
+          signal: abort.signal,
+          deadlineAt,
+          maxResponseBytes: config.upstreamMaxResponseBytes,
+        }),
+      )
+      if (!result.ok) {
+        failure(result.status, result.code, result.retryAfter)
+        return
+      }
+      active()
+      send(response, 200, { data: result.data })
+      return
+    }
     const body = await bounded(
       new Promise<Buffer>((resolve, reject) => {
         const chunks: Buffer[] = []

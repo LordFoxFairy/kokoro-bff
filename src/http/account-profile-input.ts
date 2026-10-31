@@ -10,6 +10,16 @@ export function accountProfileMetadataValid(request: IncomingMessage): boolean {
   return true
 }
 
+/** Read is deliberately bodyless: exact path, no query, identity encoding and no replay key. */
+export function accountProfileReadMetadataValid(request: IncomingMessage): boolean {
+  if (request.method !== "GET" || request.url !== "/v1/account/profile" || request.headers["idempotency-key"] !== undefined) return false
+  const values = (name: string) => request.rawHeaders.filter((_value, index) => index % 2 === 0 && request.rawHeaders[index]?.toLowerCase() === name).length
+  if (values("content-type") > 1 || values("content-encoding") > 1 || values("content-length") > 1 || values("transfer-encoding") > 1) return false
+  if (request.headers["transfer-encoding"] !== undefined || request.headers["content-encoding"] !== undefined) return false
+  const contentLength = request.headers["content-length"]
+  return contentLength === undefined || contentLength === "0"
+}
+
 export function parseAccountProfileBody(raw: Uint8Array): { name: string; expected_name: string } | null {
   try {
     // Syntax validation precedes the narrow token proof. Unlike the global codec,

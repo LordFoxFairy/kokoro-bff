@@ -122,7 +122,7 @@ export async function handleBffRequest(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
-  if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
+  if ((request.method === "GET" || request.method === "PATCH") && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
     await accountProfileRoute(request, response, config, composition.sessionAdmission, id)
     return
   }
@@ -1382,7 +1382,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
     void handleBffRequest(request, response, config, composition).catch(() => {
       if (!response.headersSent) {
-        if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
+        if ((request.method === "GET" || request.method === "PATCH") && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
           response.setHeader("x-request-id", requestId(request))
           send(response, 500, { error: { code: "internal_error", message: "The BFF encountered an internal error", retryable: false } })
         } else if (

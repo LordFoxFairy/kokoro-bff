@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.17.0
+  version: 28.18.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -1357,6 +1357,132 @@ paths:
             minLength: 1
             maxLength: 255
   /v1/account/profile:
+    get:
+      tags:
+        - Account Profile
+      operationId: readAccountProfile
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: none
+      x-kokoro-permission: iam:account-profile.read
+      summary: Read current Product user profile
+      description: Current admitted Product user projection. The request has no query, body, or replay key and the response is never cacheable.
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      responses:
+        '200':
+          description: Owner-confirmed current subject and profile fields
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileReadResponse'
+        '400':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError400'
+        '401':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError401'
+        '403':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError403'
+        '429':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Retry-After:
+              schema:
+                type: string
+                pattern: ^[1-9][0-9]{0,4}$
+                description: Validated delta seconds from1 through86400.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError429'
+        '502':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError502'
+        '503':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError503'
     patch:
       tags:
         - Account Profile
@@ -17072,6 +17198,30 @@ components:
               minLength: 1
             name:
               type: string
+    AccountProfileReadResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - subject
+            - name
+            - email
+            - email_verified
+          properties:
+            subject:
+              type: string
+              minLength: 1
+            name:
+              type: string
+            email:
+              type: string
+            email_verified:
+              type: boolean
     AccountProfileError400:
       type: object
       additionalProperties: false

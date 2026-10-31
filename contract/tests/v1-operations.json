@@ -37,6 +37,11 @@
       "operation_id": "revokeAccountSession"
     },
     {
+      "method": "GET",
+      "path": "/v1/account/profile",
+      "operation_id": "readAccountProfile"
+    },
+    {
       "method": "PATCH",
       "path": "/v1/account/profile",
       "operation_id": "updateAccountProfile"

@@ -27,6 +27,16 @@ export const zApiErrorResponse = z
           "PAYLOAD_TOO_LARGE",
           "RATE_LIMITED",
           "DEPENDENCY_UNAVAILABLE",
+          "native_session_request_invalid",
+          "native_session_missing",
+          "native_session_invalid",
+          "native_session_revoked",
+          "native_session_expired",
+          "native_session_origin_forbidden",
+          "native_session_csrf_failed",
+          "native_session_rate_limited",
+          "native_session_service_unavailable",
+          "native_session_deadline_exceeded",
           "INTERNAL",
         ]),
         message: z.string().min(1),
@@ -123,6 +133,22 @@ export const zVerifyOpenAppManagementAuthorizationResponse = z.object({
     tenant_id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
     app_id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
     client_id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+  }),
+})
+
+export const zReadAccountProfileHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zReadAccountProfileResponse = z.object({
+  data: z.object({
+    subject: z.string().min(1),
+    name: z.string(),
+    email: z.string(),
+    email_verified: z.boolean(),
   }),
 })
 
