@@ -312,7 +312,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.services?.chat ?? null)
   const projectService =
     options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
-  const publicShareService = businessStore?.services?.publicShares ?? null
+  const publicShareService = businessStore?.publicShareService ?? null
   const scheduledTaskReader =
     businessStore === null
       ? null

@@ -39,6 +39,7 @@ import { PostgresProjectScopeReleaseOutboxRepository } from "./project-scope-rel
 import type { ProjectScopeReleaseOutboxRepository } from "../../application/ports/project-scope-release-outbox.js"
 import { PostgresSkillShareRepository } from "./skill-share-repository.js"
 import type { SkillShareRepository } from "../../application/ports/skill-share-repository.js"
+import { PublicShareApplicationService } from "../../application/public-share-service.js"
 import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
 import type { SkillUsageReader } from "../../application/agui/skill-usage.js"
 
@@ -64,6 +65,7 @@ export class PostgresBffRepositories {
   public readonly artifactLibrary: ArtifactLibraryRepository
   public readonly projectScopeReleaseOutbox: ProjectScopeReleaseOutboxRepository
   public readonly skillShares: SkillShareRepository
+  public readonly publicShareService: PublicShareApplicationService
   public readonly personalizationProvider: PostgresPersonalizationRepository
   public readonly personalKnowledge: PersonalKnowledgeRepository
   public readonly skillUsage: SkillUsageReader
@@ -90,6 +92,7 @@ export class PostgresBffRepositories {
     this.artifactLibrary = artifactLibrary
     this.projectScopeReleaseOutbox = new PostgresProjectScopeReleaseOutboxRepository(this.database)
     this.skillShares = new PostgresSkillShareRepository(this.database)
+    this.publicShareService = new PublicShareApplicationService(publicShares)
     this.personalizationProvider = new PostgresPersonalizationRepository(this.database)
     this.personalKnowledge = new PostgresPersonalKnowledgeRepository(this.database)
     this.skillUsage = async (tenant, refs) => {
@@ -105,7 +108,6 @@ export class PostgresBffRepositories {
       this.projects,
       this.scheduled,
       chat,
-      publicShares,
       agentDispatchOutbox,
       new Sha256StableIdGenerator(),
     )
