@@ -1074,13 +1074,13 @@ export async function handleBffRequest(
     businessPath[1] === "sessions" &&
     ((request.method === "GET" && businessPath.length === 2) || (request.method === "DELETE" && businessPath.length === 3))
   ) {
-    await accountSessionsRoute(request, response, config, context, admission.bearerToken, businessPath)
+    await accountSessionsRoute(request, response, config, context, admission, businessPath)
     return
   }
 
   if (businessPath[0] === "team") {
-    if (request.method === "GET") await liveTeamRead(request, response, config, context, admission.bearerToken, businessPath)
-    else await liveTeamWrite(request, response, config, context, admission.bearerToken, businessPath)
+    if (request.method === "GET") await liveTeamRead(request, response, config, context, admission, businessPath)
+    else await liveTeamWrite(request, response, config, context, admission, businessPath)
     return
   }
 

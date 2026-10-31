@@ -24,6 +24,8 @@ export type TeamReadInput = Readonly<{
   baseUrl: string | null
   tenantId: string
   token: string
+  cookie?: string
+  origin?: string
   kind: TeamReadKind
   limit: number
   cursor: string | null
@@ -123,7 +125,12 @@ export async function readIamTeamPage(input: TeamReadInput): Promise<TeamReadRes
   try {
     const response = await fetch(target, {
       method: "GET",
-      headers: { accept: "application/json", authorization: `Bearer ${input.token}`, "x-request-id": requestId },
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${input.token}`,
+        "x-request-id": requestId,
+        ...(input.cookie === undefined || input.origin === undefined ? {} : { cookie: input.cookie, origin: input.origin }),
+      },
       redirect: "manual",
       cache: "no-store",
       signal: abort.signal,
@@ -163,6 +170,8 @@ export type TeamWriteInput = Readonly<{
   baseUrl: string | null
   tenantId: string
   token: string
+  cookie?: string
+  origin?: string
   kind: TeamWriteKind
   resourceId: string | null
   body: Readonly<Record<string, unknown>> | null
@@ -236,6 +245,7 @@ export async function writeIamTeam(input: TeamWriteInput): Promise<TeamWriteResu
         accept: "application/json",
         authorization: `Bearer ${input.token}`,
         "x-request-id": requestId,
+        ...(input.cookie === undefined || input.origin === undefined ? {} : { cookie: input.cookie, origin: input.origin }),
         ...(input.body === null ? {} : { "content-type": "application/json" }),
       },
       ...(input.body === null ? {} : { body: JSON.stringify(input.body) }),

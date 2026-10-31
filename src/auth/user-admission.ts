@@ -4,6 +4,7 @@ import type { BffConfig } from "../config/runtime.js"
 import type { AdmittedUserRequestContext } from "../domain/request-context.js"
 import type { SessionAdmission } from "./session-admission.types.js"
 import { admitBrowserService } from "./browser-service-credential.policy.js"
+import { readIamSessionAdmissionCredential } from "./iam-session-admission-credential.js"
 
 const NATIVE_COOKIE_NAMES = new Set([
   "kokoro-issuer.session_token",
@@ -19,6 +20,13 @@ const NATIVE_COOKIE_NAMES = new Set([
 export type UserAdmissionResult =
   | Readonly<{ ok: true; context: AdmittedUserRequestContext; bearerToken: string }>
   | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
+
+/** Authentication material for IAM owner calls after one BFF admission. */
+export type OwnerSessionAuth = Readonly<{
+  token: string
+  cookie?: string
+  origin?: string
+}>
 
 function authorizationValues(request: IncomingMessage): string[] {
   const values: string[] = []
@@ -86,6 +94,30 @@ export async function authorizeUserRequest(
     // Native admission intentionally has no user bearer. The empty value keeps
     // legacy owner-call ports fail-closed until their native equivalents land.
     bearerToken: nativeConfigured && typeof admission.verifyNative === "function" ? "" : bearerToken(request)!,
+  }
+}
+
+/**
+ * Materialize the owner-side transport credential only for feature routes that
+ * have a native-session IAM contract. Legacy bearer consumers keep their exact
+ * admitted token; native consumers receive the allowlisted cookie plus the
+ * fixed IAM Web origin and the BFF direct credential.
+ */
+export async function ownerSessionAuth(
+  request: IncomingMessage,
+  config: BffConfig,
+  admission: Extract<UserAdmissionResult, { ok: true }>,
+  signal: AbortSignal,
+): Promise<OwnerSessionAuth> {
+  if (admission.bearerToken !== "") return { token: admission.bearerToken }
+  const cookie = nativeSessionCookie(request)
+  const origin = config.iamWebOrigin ?? config.iamRelay?.webOrigin ?? null
+  const credentialFile = config.iamSessionAdmissionCredentialFile ?? null
+  if (cookie === null || origin === null || credentialFile === null) throw new Error("native_owner_auth_unavailable")
+  return {
+    token: await readIamSessionAdmissionCredential(credentialFile, config.tenantId, signal),
+    cookie,
+    origin,
   }
 }
 

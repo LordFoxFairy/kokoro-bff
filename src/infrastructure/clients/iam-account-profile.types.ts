@@ -2,6 +2,8 @@
 export type AccountProfileInput = Readonly<{
   baseUrl: string | null
   token: string
+  cookie?: string
+  origin?: string
   requestId: string
   signal: AbortSignal
   deadlineAt: number

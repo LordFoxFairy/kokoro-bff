@@ -86,7 +86,12 @@ export async function requestIamAccountProfile(input: AccountProfileInput): Prom
   try {
     const operation = async (): Promise<AccountProfileResult> => {
       const client = createClient({ baseUrl: input.baseUrl!, fetch: boundedFetch })
-      const headers = { authorization: `Bearer ${input.token}`, "x-request-id": input.requestId, accept: "application/json" }
+      const headers = {
+        authorization: `Bearer ${input.token}`,
+        "x-request-id": input.requestId,
+        accept: "application/json",
+        ...(input.cookie === undefined || input.origin === undefined ? {} : { cookie: input.cookie, origin: input.origin }),
+      }
       // Override the generated validator at the official pre-strip boundary.
       const responseValidator = async (raw: unknown) => {
         const parsed = zUpdateAccountProfileResponse.safeParse(raw)
