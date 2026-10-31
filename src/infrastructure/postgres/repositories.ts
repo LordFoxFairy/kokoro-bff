@@ -62,6 +62,7 @@ export class PostgresBffRepositories {
   public readonly artifactLibrary: ArtifactLibraryRepository
   public readonly projectScopeReleaseOutbox: ProjectScopeReleaseOutboxRepository
   public readonly skillShares: SkillShareRepository
+  public readonly personalizationProvider: PostgresPersonalizationRepository
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
@@ -84,6 +85,7 @@ export class PostgresBffRepositories {
     this.artifactLibrary = artifactLibrary
     this.projectScopeReleaseOutbox = new PostgresProjectScopeReleaseOutboxRepository(this.database)
     this.skillShares = new PostgresSkillShareRepository(this.database)
+    this.personalizationProvider = new PostgresPersonalizationRepository(this.database)
     this.services = new BffApplicationServices(
       this.projects,
       this.scheduled,
@@ -91,7 +93,6 @@ export class PostgresBffRepositories {
       publicShares,
       agentDispatchOutbox,
       new Sha256StableIdGenerator(),
-      new PostgresPersonalizationRepository(this.database),
       this.skillShares,
       async (tenant, refs) => {
         const client = await this.database.pool.connect()

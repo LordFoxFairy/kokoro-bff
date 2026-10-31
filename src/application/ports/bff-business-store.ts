@@ -8,6 +8,7 @@ import type { AgentCancellationOutboxRepository } from "./agent-cancellation-out
 import type { SchedulerDispatchReceiptRepository } from "./scheduler-dispatch-receipt-repository.js"
 import type { ScheduledAgentDispatchRepository } from "./scheduled-agent-dispatch-repository.js"
 import type { ProjectScopeReleaseOutboxRepository } from "./project-scope-release-outbox.js"
+import type { PersonalizationProvider } from "../../modules/account/personalization.provider.js"
 
 export type ArtifactAssociation = Readonly<{
   conversationId: string
@@ -28,6 +29,8 @@ export interface ArtifactLibraryRepository {
 
 /** Runtime port consumed by BFF routes; PostgreSQL is one infrastructure implementation. */
 export interface BffBusinessStore extends IdempotencyRepository {
+  /** Account-owned provider retained only as the raw-server composition seam during C-3 migration. */
+  readonly personalizationProvider?: PersonalizationProvider
   readonly submittedAgentRuns?: import("./submitted-agent-run-reader.js").SubmittedAgentRunReader
   readonly projectExecutionBindings?: import("./project-execution-binding-reader.js").ProjectExecutionBindingReader
   readonly artifactLibrary?: ArtifactLibraryRepository

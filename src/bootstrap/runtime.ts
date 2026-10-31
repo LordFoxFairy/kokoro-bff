@@ -298,7 +298,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
           throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime")
         })()
   const personalizationProvider =
-    options.personalizationProvider !== undefined ? options.personalizationProvider : (businessStore?.services.personalization ?? null)
+    options.personalizationProvider !== undefined ? options.personalizationProvider : (businessStore?.personalizationProvider ?? null)
   const scheduledTaskReader =
     businessStore === null
       ? null
