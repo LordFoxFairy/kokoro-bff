@@ -108,24 +108,28 @@ test("MusicModule owns the Mori owner adapter and idempotency seam", async () =>
 })
 
 test("ChatModule owns the archive/share adapters and chat provider", async () => {
-  const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, server, legacyModule] = await Promise.all([
+  const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, regenerationNativeRoute, server, legacyModule] = await Promise.all([
     readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/chat/chat.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/shared-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/message-feedback-native.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/message-regeneration-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
   ])
   assert.match(chatModule, /provide: CHAT_SERVICE/u)
+  assert.match(chatModule, /CHAT_TURN_SERVICE/u)
   assert.match(chatModule, /ChatMiddleware/u)
   assert.match(chatModule, /forRoutes\(\{ path: "\*", method: RequestMethod\.ALL \}\)/u)
   assert.match(middleware, /handleChatNativeRequest/u)
   assert.match(middleware, /handleMessageFeedbackRequest/u)
+  assert.match(middleware, /handleMessageRegenerationRequest/u)
   assert.match(middleware, /handleMoveSessionRequest/u)
   assert.match(nativeRoute, /archivedTasksRoute/u)
   assert.match(nativeRoute, /sharedTasksRoute/u)
   assert.match(feedbackRoute, /messageFeedbackRoute/u)
+  assert.match(regenerationNativeRoute, /messageRegenerationRoute/u)
   assert.match(server, /handleChatNativeRequest/u)
   assert.match(server, /handleMessageFeedbackRequest/u)
   assert.doesNotMatch(server, /await archivedTasksRoute\(/u)

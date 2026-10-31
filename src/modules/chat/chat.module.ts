@@ -1,6 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
-import { BFF_DATABASE, CHAT_SERVICE, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION } from "../../common/tokens.js"
+import { BFF_DATABASE, CHAT_SERVICE, CHAT_TURN_SERVICE, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION } from "../../common/tokens.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import { PostgresChatRepository } from "../../infrastructure/postgres/chat-repository.js"
 import { PostgresPublicShareRepository } from "../../infrastructure/postgres/public-share-repository.js"
@@ -10,9 +10,10 @@ import { AccountModule } from "../account/account.module.js"
 import { ChatMiddleware } from "./chat.middleware.js"
 import { PostgresConversationArtifactLibrary } from "../../infrastructure/postgres/conversation-artifact-library.js"
 import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
+import { AgentDispatchModule } from "../agent-dispatch/agent-dispatch.module.js"
 
 @Module({
-  imports: [AccountModule, DatabaseModule],
+  imports: [AccountModule, DatabaseModule, AgentDispatchModule],
   providers: [
     ChatMiddleware,
     {
@@ -34,7 +35,7 @@ import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
       },
     },
   ],
-  exports: [CHAT_SERVICE, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION],
+  exports: [CHAT_SERVICE, CHAT_TURN_SERVICE, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION],
 })
 export class ChatModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

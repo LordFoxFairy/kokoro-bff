@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
+import type { ChatTurnApplicationService } from "../../application/chat-turn-service.js"
 import { messageFeedbackId } from "../../application/chat/message-feedback-input.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import { idempotencyKey } from "../request.js"
@@ -16,12 +16,16 @@ export class MessageRegenerationAdmissionError extends Error {
     super("Regeneration admission failed")
   }
 }
+export type MessageRegenerationStore = Readonly<{
+  chatTurnService?: Pick<ChatTurnApplicationService, "regenerate">
+  services?: Readonly<{ chatTurns: Pick<ChatTurnApplicationService, "regenerate"> }>
+}>
 export async function messageRegenerationRoute(
   request: IncomingMessage,
   response: ServerResponse,
   context: RequestContext,
   path: readonly string[],
-  store: BffBusinessStore | null,
+  store: MessageRegenerationStore | null,
   deadlineAt: number,
   currentAdmission: (signal: AbortSignal) => Promise<void>,
 ): Promise<void> {
@@ -101,8 +105,10 @@ export async function messageRegenerationRoute(
     if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 0) invalid()
     await within(() => currentAdmission(controller.signal))
     if (!store) throw Error("message_regeneration_unavailable")
+    const chatTurns = store.chatTurnService ?? store.services?.chatTurns
+    if (!chatTurns) throw Error("message_regeneration_unavailable")
     const data = await within(() =>
-      (store.chatTurnService ?? store.services.chatTurns).regenerate({
+      chatTurns.regenerate({
         tenantId: context.identity.namespace,
         subjectId: context.identity.userId,
         actorId: context.identity.userId,
