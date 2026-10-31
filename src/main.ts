@@ -1,5 +1,8 @@
+import "reflect-metadata"
+import { NestFactory } from "@nestjs/core"
+import { AppModule } from "./app.module.js"
 import { loadConfig } from "./config/runtime.js"
-import { createBffServer, type BffServer } from "./bootstrap/server.js"
+import type { BffServer } from "./bootstrap/server.js"
 
 export { createBffServer } from "./bootstrap/server.js"
 
@@ -38,11 +41,17 @@ export function installBffSignalHandlers(server: ShutdownServer, options: Readon
   process.on("SIGTERM", terminate)
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+export async function bootstrapNest(): Promise<void> {
   const config = loadConfig()
-  const server = createBffServer(config)
-  installBffSignalHandlers(server)
-  server.listen(config.port, config.host, () => {
-    console.log(`kokoro-bff ${config.mode} listening on http://${config.host}:${config.port}`)
+  const app = await NestFactory.create(AppModule, { bodyParser: false, bufferLogs: true })
+  app.enableShutdownHooks()
+  await app.listen(config.port, config.host)
+  console.log(`kokoro-bff ${config.mode} listening on http://${config.host}:${config.port}`)
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  void bootstrapNest().catch((error: unknown) => {
+    process.stderr.write(`kokoro-bff startup failed: ${error instanceof Error ? error.message : String(error)}\n`)
+    process.exitCode = 1
   })
 }

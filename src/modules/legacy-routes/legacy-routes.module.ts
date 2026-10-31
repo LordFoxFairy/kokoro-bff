@@ -1,0 +1,10 @@
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common"
+import { LegacyRoutesMiddleware } from "./legacy-routes.middleware.js"
+import { LegacyRoutesRuntime } from "./legacy-routes.runtime.js"
+
+@Module({ providers: [LegacyRoutesRuntime], exports: [LegacyRoutesRuntime] })
+export class LegacyRoutesModule implements NestModule {
+  public configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(LegacyRoutesMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
+  }
+}

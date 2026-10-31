@@ -1,0 +1,38 @@
+import { Inject, Injectable, OnApplicationShutdown, OnModuleInit } from "@nestjs/common"
+import type { IncomingMessage, ServerResponse } from "node:http"
+import type { BffConfig } from "../../config/runtime.js"
+import { BFF_CONFIG } from "../../common/tokens.js"
+import { createBffComposition, type BffServerComposition } from "../../bootstrap/runtime.js"
+import { handleBffRequest } from "../../bootstrap/server.js"
+
+@Injectable()
+export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown {
+  private readonly composition: BffServerComposition
+
+  public constructor(@Inject(BFF_CONFIG) private readonly config: BffConfig) {
+    this.composition = createBffComposition(config)
+  }
+
+  public onModuleInit(): void {
+    this.composition.agUiProjector?.start()
+    this.composition.scheduledTaskDispatcher?.start()
+    this.composition.agentDispatchDispatcher?.start()
+    this.composition.scheduledAgentDispatcher?.start()
+    this.composition.scheduledAgentTerminalConsumer?.start()
+    this.composition.agentCancellationDispatcher?.start()
+    this.composition.projectScopeReleaseDispatcher?.start()
+  }
+
+  public async use(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    await handleBffRequest(request, response, this.config, this.composition)
+  }
+
+  public async close(): Promise<void> {
+    await this.composition.stopWorkers()
+    await this.composition.close()
+  }
+
+  public async onApplicationShutdown(): Promise<void> {
+    await this.close()
+  }
+}

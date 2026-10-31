@@ -14,7 +14,7 @@ async function visit(directory, relative = "") {
     }
     if (!entry.name.endsWith(".ts")) continue
     const source = await readFile(entryPath, "utf8")
-    if (source.includes("/adapters/") || source.includes("/modules/")) {
+    if (source.includes("/adapters/") || source.includes("/legacy-modules/")) {
       errors.push(`${entryRelative}: legacy adapters/modules import`)
     }
     if (/\bSELECT\s+\*/u.test(source)) {

@@ -110,7 +110,7 @@ import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-ski
 import { skillPackageInspectionRoute, type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 
-async function handle(
+export async function handleBffRequest(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
@@ -1380,7 +1380,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
-    void handle(request, response, config, composition).catch(() => {
+    void handleBffRequest(request, response, config, composition).catch(() => {
       if (!response.headersSent) {
         if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
           response.setHeader("x-request-id", requestId(request))

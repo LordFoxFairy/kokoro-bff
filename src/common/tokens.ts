@@ -1,0 +1,4 @@
+export const BFF_CONFIG = Symbol("BFF_CONFIG")
+export const BFF_DATABASE = Symbol("BFF_DATABASE")
+export const BFF_POOL = Symbol("BFF_POOL")
+export const BFF_REDIS = Symbol("BFF_REDIS")
