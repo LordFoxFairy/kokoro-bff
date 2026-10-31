@@ -1,6 +1,6 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, SESSION_ADMISSION, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_USAGE_READER } from "../../common/tokens.js"
+import { BFF_CONFIG, SESSION_ADMISSION, SKILL_AUTHORIZATION, SKILL_DRAFT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_USAGE_READER } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
@@ -11,8 +11,10 @@ import { handleSkillSpecificationEnabledRequest } from "../../http/routes/skill-
 import { handleSkillUsageRequest } from "../../http/routes/skill-usage.js"
 import { handlePersonalSkillLifecycleRequest } from "../../http/routes/personal-skill-lifecycle-native.js"
 import { handleSkillDraftRequest } from "../../http/routes/skill-draft-native.js"
+import { handleSkillDraftMutationRequest } from "../../http/routes/skill-draft-mutations-native.js"
 import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
 import type { CatalogConnectClient } from "../../infrastructure/clients/platform/catalog-connect.js"
+import type { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
 
 @Injectable()
 export class SkillsMiddleware implements NestMiddleware {
@@ -21,6 +23,7 @@ export class SkillsMiddleware implements NestMiddleware {
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(SKILL_AUTHORIZATION) private readonly skillAuthorization: Pick<SkillAuthorizationClient, "check">,
     @Inject(SKILL_DRAFT_CLIENT) private readonly draftClient: CatalogConnectClient | null,
+    @Inject(SKILL_PRODUCT_CLIENT) private readonly productClient: SkillProductConnectClient | null,
     @Inject(SKILL_INSTALLATION_CLIENT) private readonly client: SkillInstallationConnectClient | null,
     @Inject(SKILL_USAGE_READER) private readonly usageReader: (tenant: string, refs: readonly string[]) => Promise<Map<string, SkillUsageResult>>,
   ) {}
@@ -30,6 +33,7 @@ export class SkillsMiddleware implements NestMiddleware {
       .then((handled) => handled || handleManagedPersonalSkillsRequest(request, response, this.config, this.admission))
       .then((handled) => handled || handleSkillSpecificationEnabledRequest(request, response, this.config, this.admission, this.client))
       .then((handled) => handled || handleSkillDraftRequest(request, response, this.config, this.admission, this.skillAuthorization, this.draftClient))
+      .then((handled) => handled || handleSkillDraftMutationRequest(request, response, this.config, this.admission, this.skillAuthorization, this.productClient))
       .then((handled) => handled || handlePersonalSkillLifecycleRequest(request, response, this.config, this.admission, this.skillAuthorization, this.draftClient))
       .then((handled) => handled || handleSkillUsageRequest(request, response, this.config, this.admission, this.usageReader))
       .then((handled) => {

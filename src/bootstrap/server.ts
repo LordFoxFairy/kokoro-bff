@@ -40,7 +40,7 @@ import { skillShareRoute } from "../http/routes/skill-share.js"
 import { handleSkillUsageRequest } from "../http/routes/skill-usage.js"
 import { skillCoverRoute } from "../http/routes/skill-cover.js"
 import { publishedSkillPackageInspectionRoute } from "../http/routes/skill-download.js"
-import { startSkillRequestBudget, skillRequestRemaining, skillDraftsRoute } from "../http/routes/skill-drafts.js"
+import { startSkillRequestBudget, skillRequestRemaining } from "../http/routes/skill-drafts.js"
 import { skillAdminRoute } from "../http/routes/skill-admin.js"
 import { handleAccountNativeRequest } from "../http/routes/account-native.js"
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
@@ -91,6 +91,7 @@ import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
 import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 import { handleSkillDraftRequest } from "../http/routes/skill-draft-native.js"
+import { handleSkillDraftMutationRequest } from "../http/routes/skill-draft-mutations-native.js"
 import { getSkillPackageUploadRoute } from "../http/routes/get-skill-package-upload.js"
 import { beginSkillPackageUploadRoute } from "../http/routes/begin-skill-package-upload.js"
 import { completeSkillPackageUploadRoute } from "../http/routes/complete-skill-package-upload.js"
@@ -598,22 +599,6 @@ export async function handleBffRequest(
     await skillAdminRoute(request, response, context, businessPath, composition.skillAdminClient, config.iamBaseUrl)
     return
   }
-  if (
-    businessPath[0] === "skills" &&
-    businessPath.length === 3 &&
-    ((businessPath[2] === "draft" && request.method === "PATCH") || (["discard", "audience"].includes(businessPath[2]!) && request.method === "POST"))
-  ) {
-    await skillDraftsRoute(
-      request,
-      response,
-      context,
-      businessPath[1]!,
-      businessPath[2] === "draft" ? "update" : (businessPath[2] as "discard" | "audience"),
-      composition.skillProductClient,
-    )
-    return
-  }
-
   if (isPersonalKnowledgePath) {
     await personalKnowledgeRoute(request, response, context, composition.businessStore)
     return
@@ -1037,6 +1022,20 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 composition.sessionAdmission,
                 composition.skillAuthorization,
                 composition.skillDraftClient,
+              ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleSkillDraftMutationRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.skillAuthorization,
+                composition.skillProductClient,
               ),
       )
       .then((handled) =>
