@@ -5,15 +5,14 @@ import { readAccountProfile, updateAccountProfile } from "../../generated/iam-ht
 import { zApiErrorResponse, zReadAccountProfileResponse, zUpdateAccountProfileResponse } from "../../generated/iam-http/zod.gen.js"
 import type { AccountProfileInput, AccountProfileReadInput, AccountProfileReadResult, AccountProfileResult } from "./iam-account-profile.types.js"
 
-type AccountProfileTransportInput = Pick<AccountProfileReadInput, "baseUrl" | "token" | "cookie" | "origin" | "requestId" | "signal" | "deadlineAt" | "maxResponseBytes">
+type AccountProfileTransportInput = Pick<
+  AccountProfileReadInput,
+  "baseUrl" | "token" | "cookie" | "origin" | "requestId" | "signal" | "deadlineAt" | "maxResponseBytes"
+>
 
-type AccountProfileTransportResult<T> =
-  | Readonly<{ ok: true; value: AccountProfileOwnerResult<T> }>
-  | Readonly<{ ok: false; reason: "unavailable" | "invalid" }>
+type AccountProfileTransportResult<T> = Readonly<{ ok: true; value: AccountProfileOwnerResult<T> }> | Readonly<{ ok: false; reason: "unavailable" | "invalid" }>
 
-type AccountProfileOwnerResult<T> =
-  | { data: T; error: undefined; response?: Response }
-  | { data: undefined; error: unknown; response?: Response }
+type AccountProfileOwnerResult<T> = { data: T; error: undefined; response?: Response } | { data: undefined; error: unknown; response?: Response }
 
 async function withAccountProfileTransport<T>(
   input: AccountProfileTransportInput,
@@ -107,7 +106,11 @@ async function withAccountProfileTransport<T>(
   }
 }
 
-function mapAccountProfileError(result: { response?: Response; error?: unknown }, unavailable: string, invalid: string): AccountProfileResult | AccountProfileReadResult {
+function mapAccountProfileError(
+  result: { response?: Response; error?: unknown },
+  unavailable: string,
+  invalid: string,
+): AccountProfileResult | AccountProfileReadResult {
   if (result.response === undefined) return { ok: false, status: 503, code: unavailable }
   const status = result.response.status
   const parsed = zApiErrorResponse.safeParse(result.error)
@@ -128,21 +131,26 @@ function mapAccountProfileError(result: { response?: Response; error?: unknown }
 /** One absolute request budget, including uncooperative transport and body reads. */
 export async function requestIamAccountProfile(input: AccountProfileInput): Promise<AccountProfileResult> {
   const transport = await withAccountProfileTransport(input, async (client) => {
-      const headers = {
-        authorization: `Bearer ${input.token}`,
-        "x-request-id": input.requestId,
-        accept: "application/json",
-        ...(input.cookie === undefined || input.origin === undefined ? {} : { cookie: input.cookie, origin: input.origin }),
-      }
-      // Override the generated validator at the official pre-strip boundary.
-      const responseValidator = async (raw: unknown) => {
-        const parsed = zUpdateAccountProfileResponse.safeParse(raw)
-        if (!parsed.success || !isDeepStrictEqual(raw, parsed.data)) throw new Error("account_profile_response")
-        return parsed.data
-      }
-      return updateAccountProfile({ client, headers, body: { name: input.name, expected_name: input.expected_name }, responseValidator })
-    })
-  if (!transport.ok) return { ok: false, status: transport.reason === "unavailable" ? 503 : 502, code: transport.reason === "unavailable" ? "account_profile_unavailable" : "account_profile_response_invalid" }
+    const headers = {
+      authorization: `Bearer ${input.token}`,
+      "x-request-id": input.requestId,
+      accept: "application/json",
+      ...(input.cookie === undefined || input.origin === undefined ? {} : { cookie: input.cookie, origin: input.origin }),
+    }
+    // Override the generated validator at the official pre-strip boundary.
+    const responseValidator = async (raw: unknown) => {
+      const parsed = zUpdateAccountProfileResponse.safeParse(raw)
+      if (!parsed.success || !isDeepStrictEqual(raw, parsed.data)) throw new Error("account_profile_response")
+      return parsed.data
+    }
+    return updateAccountProfile({ client, headers, body: { name: input.name, expected_name: input.expected_name }, responseValidator })
+  })
+  if (!transport.ok)
+    return {
+      ok: false,
+      status: transport.reason === "unavailable" ? 503 : 502,
+      code: transport.reason === "unavailable" ? "account_profile_unavailable" : "account_profile_response_invalid",
+    }
   const result = transport.value
   if (result.response?.status === 200) {
     const parsed = zUpdateAccountProfileResponse.safeParse(result.data)
@@ -177,7 +185,12 @@ export async function requestIamAccountProfileRead(input: AccountProfileReadInpu
     }
     return readAccountProfile({ client, headers, responseValidator })
   })
-  if (!transport.ok) return { ok: false, status: transport.reason === "unavailable" ? 503 : 502, code: transport.reason === "unavailable" ? "account_profile_unavailable" : "account_profile_response_invalid" }
+  if (!transport.ok)
+    return {
+      ok: false,
+      status: transport.reason === "unavailable" ? 503 : 502,
+      code: transport.reason === "unavailable" ? "account_profile_unavailable" : "account_profile_response_invalid",
+    }
   const result = transport.value
   if (result.response?.status === 200) {
     const parsed = zReadAccountProfileResponse.safeParse(result.data)

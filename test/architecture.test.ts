@@ -81,11 +81,16 @@ function assertSingleSchemaInstaller(scripts: Record<string, string>, sourceFile
 async function readSchemaBoundarySources(): Promise<SourceFile[]> {
   const sources: SourceFile[] = []
   for (const relativeDirectory of ["src", "scripts"]) {
-    const files = await readdir(path.join(root, relativeDirectory), { recursive: true })
+    const files = await readdir(path.join(root, relativeDirectory), {
+      recursive: true,
+    })
     for (const file of files) {
       if (typeof file !== "string" || !/\.[cm]?[jt]s$/u.test(file)) continue
       const relativePath = `${relativeDirectory}/${file}`
-      sources.push({ relativePath, source: await readFile(path.join(root, relativePath), "utf8") })
+      sources.push({
+        relativePath,
+        source: await readFile(path.join(root, relativePath), "utf8"),
+      })
     }
   }
   return sources
@@ -257,7 +262,9 @@ test("BFF runtime delegates canonical schema installation to the single declared
     readFile(path.join(root, "package.json"), "utf8"),
     readSchemaBoundarySources(),
   ])
-  const packageJson = JSON.parse(packageSource) as { scripts?: Record<string, string> }
+  const packageJson = JSON.parse(packageSource) as {
+    scripts?: Record<string, string>
+  }
 
   assert.equal(main.includes("ALTER TABLE"), false)
   assert.equal(main.includes("CREATE TABLE"), false)
@@ -740,7 +747,11 @@ test("BFF consumes the pinned Platform HTTP projection without owning its data",
   ])
   const manifest = JSON.parse(manifestSource) as {
     status: string
-    owner: { repository_commit: string; contract_version: string; contract_sha256: string }
+    owner: {
+      repository_commit: string
+      contract_version: string
+      contract_sha256: string
+    }
   }
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.owner.repository_commit, "8cfead647856ef54ec851a3bebe169a3ca14d212")
@@ -798,7 +809,9 @@ test("Scheduler control and receiver implement distinct owner boundaries and dur
   assert.match(config, /paramsStructure:\s*"grouped"/u)
   assert.match(config, /responseStyle:\s*"fields"/u)
   assert.match(config, /validator:\s*\{\s*response:\s*"zod"\s*\}/u)
-  for (const file of await readdir(path.join(root, "src"), { recursive: true })) {
+  for (const file of await readdir(path.join(root, "src"), {
+    recursive: true,
+  })) {
     if (!file.endsWith(".ts") || file.startsWith("generated/")) continue
     const source = await readFile(path.join(root, "src", file), "utf8")
     if (["infrastructure/clients/scheduler/control-client.ts", "infrastructure/clients/scheduler/webhook-contract.ts"].includes(file)) continue
@@ -898,15 +911,24 @@ test("R257 personalization stays caller-owned and bypasses generic receipt dispa
   const route = await readFile(path.join(root, "src/http/routes/personalization.ts"), "utf8")
   const repository = await readFile(path.join(root, "src/infrastructure/postgres/personalization-repository.ts"), "utf8")
   const provider = await readFile(path.join(root, "src/modules/account/personalization.provider.ts"), "utf8")
-  const server = await readFile(path.join(root, "src/bootstrap/server.ts"), "utf8")
+  const [server, middleware, accountModule, legacyModule] = await Promise.all([
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/account/personalization.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
+  ])
   assert.match(route, /context\.identity\.namespace/u)
   assert.match(route, /context\.identity\.userId/u)
-  assert.doesNotMatch(route, /platformAdmin|ownerIdentityHeaders|localStorage|mutationTicket/u)
+  assert.doesNotMatch(route, /BffBusinessStore|platformAdmin|ownerIdentityHeaders|localStorage|mutationTicket/u)
   assert.match(provider, /export interface PersonalizationProvider/u)
   assert.match(provider, /PERSONALIZATION_PROVIDER/u)
   assert.doesNotMatch(provider, /from ["'](?:pg|redis|node:http)["']/u)
   assert.doesNotMatch(repository, /bff_idempotency_receipt|kokoro_iam|kokoro_system|\.redis\./u)
-  assert.ok(server.indexOf("await personalizationRoute(") < server.indexOf("const mutationRequired ="))
+  assert.match(server, /composition\.personalizationProvider/u)
+  assert.match(middleware, /authorizeUserRequest/u)
+  assert.match(middleware, /personalizationRoute/u)
+  assert.match(accountModule, /AccountPersonalizationMiddleware/u)
+  assert.match(legacyModule, /v1\/preferences\/personalization/u)
 })
 
 test("shared tasks stays in the existing Chat owner without a new pool or capability projection", async () => {

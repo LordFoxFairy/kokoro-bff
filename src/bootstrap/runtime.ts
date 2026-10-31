@@ -42,6 +42,7 @@ import { ScheduledAgentDispatchDelivery } from "../infrastructure/clients/agent/
 import { ScheduledAgentTerminalSource } from "../infrastructure/clients/agent/scheduled-terminal-source.js"
 import { PostgresBffRepositories } from "../infrastructure/postgres/repositories.js"
 import type { RequestContext } from "../domain/request-context.js"
+import type { PersonalizationProvider } from "../modules/account/personalization.provider.js"
 import { SessionAdmissionClient } from "../auth/session-admission.client.js"
 import type { SessionAdmission } from "../auth/session-admission.types.js"
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
@@ -102,6 +103,8 @@ export type BffServerComposition = {
   skillDraftClient: CatalogConnectClient | null
   installationClient: SkillInstallationConnectClient | null
   businessStore: BffBusinessStore | null
+  /** Feature-owned account personalization provider; legacy composition is only a test/runtime fallback. */
+  personalizationProvider: PersonalizationProvider | null
   scheduledTaskReader: ScheduledTaskReadService | null
   sessionAdmission: SessionAdmission
   skillListAdmission: SkillListAdmission
@@ -146,6 +149,7 @@ export type BffCompositionOptions = {
   installationClient?: SkillInstallationConnectClient | null
   /** Supplying null is an explicit test composition; omitted means real persistence. */
   businessStore?: BffBusinessStore | null
+  personalizationProvider?: PersonalizationProvider | null
   sessionAdmission?: SessionAdmission
   skillListAdmission?: SkillListAdmission
   openAppManagementAdmission?: OpenAppManagementAdmission
@@ -293,11 +297,15 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : (() => {
           throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime")
         })()
+  const personalizationProvider =
+    options.personalizationProvider !== undefined ? options.personalizationProvider : (businessStore?.services.personalization ?? null)
   const scheduledTaskReader =
     businessStore === null
       ? null
       : new ScheduledTaskReadService(
-          { snapshots: (scope, signal, taskId) => businessStore.services.scheduledTasks.snapshots(scope, signal, taskId) },
+          {
+            snapshots: (scope, signal, taskId) => businessStore.services.scheduledTasks.snapshots(scope, signal, taskId),
+          },
           new SchedulerTaskStateReader(
             config.upstreams.scheduler == null || config.schedulerServiceToken === null
               ? null
@@ -517,7 +525,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                       ) => {
                         signal.throwIfAborted()
                         const project = await businessStore.services.projects.find(
-                          { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+                          {
+                            tenantId: context.identity.namespace,
+                            subjectId: context.identity.userId,
+                          },
                           projectId,
                         )
                         signal.throwIfAborted()
@@ -535,7 +546,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                         if (!("projectRef" in owner) || owner.projectRef !== projectId) throw new Error("skill_response_invalid")
                         const record = exactInstallationRecord(installationId, projectInstallation(owner.installation))
                         const current = await businessStore.services.projects.find(
-                          { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+                          {
+                            tenantId: context.identity.namespace,
+                            subjectId: context.identity.userId,
+                          },
                           projectId,
                         )
                         signal.throwIfAborted()
@@ -549,7 +563,13 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                         deadlineAt: number,
                       ) => {
                         const value = await projectContentClient.downloadProject(
-                          { projectId, installationId, requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId },
+                          {
+                            projectId,
+                            installationId,
+                            requestId: context.requestId,
+                            tenant: context.identity.namespace,
+                            subject: context.identity.userId,
+                          },
                           signal,
                           deadlineAt,
                         )
@@ -662,6 +682,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     skillAdminClient,
     installationClient,
     businessStore,
+    personalizationProvider,
     scheduledTaskReader,
     sessionAdmission,
     appSkillBindingClient,

@@ -5,6 +5,7 @@ import { BFF_CONFIG, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { createBffComposition, type BffServerComposition } from "../../bootstrap/runtime.js"
 import { handleBffRequest } from "../../bootstrap/server.js"
+import { PERSONALIZATION_PROVIDER, type PersonalizationProvider } from "../account/personalization.provider.js"
 
 @Injectable()
 export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown {
@@ -13,8 +14,13 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) sessionAdmission: SessionAdmission,
+    @Inject(PERSONALIZATION_PROVIDER)
+    personalizationProvider: PersonalizationProvider,
   ) {
-    this.composition = createBffComposition(config, { sessionAdmission })
+    this.composition = createBffComposition(config, {
+      sessionAdmission,
+      personalizationProvider,
+    })
   }
 
   public onModuleInit(): void {

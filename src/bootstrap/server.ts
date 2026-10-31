@@ -266,7 +266,11 @@ export async function handleBffRequest(
     if (!fresh.ok) {
       if (fresh.retryAfter !== undefined) response.setHeader("retry-after", fresh.retryAfter)
       send(response, fresh.status, {
-        error: { code: fresh.code, message: "Current user admission is required", retryable: fresh.status === 429 || fresh.status >= 500 },
+        error: {
+          code: fresh.code,
+          message: "Current user admission is required",
+          retryable: fresh.status === 429 || fresh.status >= 500,
+        },
       })
       return null
     }
@@ -274,7 +278,10 @@ export async function handleBffRequest(
       throw new ConnectError("Project not found", Code.NotFound)
     if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
     const project = await composition.businessStore.services.projects.find(
-      { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+      {
+        tenantId: context.identity.namespace,
+        subjectId: context.identity.userId,
+      },
       projectRef,
     )
     signal.throwIfAborted()
@@ -698,7 +705,10 @@ export async function handleBffRequest(
     signal.throwIfAborted()
     if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
     const project = await composition.businessStore.services.projects.find(
-      { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+      {
+        tenantId: context.identity.namespace,
+        subjectId: context.identity.userId,
+      },
       projectRef,
     )
     signal.throwIfAborted()
@@ -709,7 +719,11 @@ export async function handleBffRequest(
     await mcpProjectPublicationRoute(
       request,
       response,
-      { tenant: context.identity.namespace, subject: context.identity.userId, requestId: context.requestId },
+      {
+        tenant: context.identity.namespace,
+        subject: context.identity.userId,
+        requestId: context.requestId,
+      },
       businessPath,
       composition.mcpProjectPublicationClient,
       async (projectIds, action, signal) => {
@@ -723,7 +737,10 @@ export async function handleBffRequest(
         for (const projectId of projectIds) {
           signal.throwIfAborted()
           const project = await composition.businessStore.services.projects.find(
-            { tenantId: fresh.context.identity.namespace, subjectId: fresh.context.identity.userId },
+            {
+              tenantId: fresh.context.identity.namespace,
+              subjectId: fresh.context.identity.userId,
+            },
             projectId,
           )
           signal.throwIfAborted()
@@ -897,7 +914,7 @@ export async function handleBffRequest(
   }
 
   if (isPersonalizationPath) {
-    await personalizationRoute(request, response, context, composition.businessStore)
+    await personalizationRoute(request, response, context, composition.personalizationProvider)
     return
   }
 
@@ -1382,9 +1399,18 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
     void handleBffRequest(request, response, config, composition).catch(() => {
       if (!response.headersSent) {
-        if ((request.method === "GET" || request.method === "PATCH") && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
+        if (
+          (request.method === "GET" || request.method === "PATCH") &&
+          (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))
+        ) {
           response.setHeader("x-request-id", requestId(request))
-          send(response, 500, { error: { code: "internal_error", message: "The BFF encountered an internal error", retryable: false } })
+          send(response, 500, {
+            error: {
+              code: "internal_error",
+              message: "The BFF encountered an internal error",
+              retryable: false,
+            },
+          })
         } else if (
           (request.method === "GET" && (request.url === "/v1/account/archived-tasks" || request.url?.startsWith("/v1/account/archived-tasks?"))) ||
           ((request.method === "GET" || request.method === "POST") && /^\/v1\/sessions\/[^/]+\/(?:archive|restore)(?:\?|$)/u.test(request.url ?? ""))
@@ -1399,7 +1425,13 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           })
         } else if (request.method === "GET" && (request.url === "/v1/account/shared-tasks" || request.url?.startsWith("/v1/account/shared-tasks?"))) {
           response.setHeader("x-request-id", requestId(request))
-          send(response, 503, { error: { code: "shared_tasks_unavailable", message: "shared_tasks_unavailable", retryable: true } })
+          send(response, 503, {
+            error: {
+              code: "shared_tasks_unavailable",
+              message: "shared_tasks_unavailable",
+              retryable: true,
+            },
+          })
         } else send(response, 500, failure("internal_error", "The BFF encountered an internal error", requestId(request)))
       } else response.destroy()
     })

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { performance } from "node:perf_hooks"
 
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
+import type { PersonalizationProvider } from "../../modules/account/personalization.provider.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { parsePersonalizationBody } from "../personalization-input.js"
 import { send } from "../response.js"
@@ -54,7 +54,7 @@ export async function personalizationRoute(
   request: IncomingMessage,
   response: ServerResponse,
   context: RequestContext,
-  store: BffBusinessStore | null,
+  provider: PersonalizationProvider | null,
 ): Promise<void> {
   const deadline = performance.now() + 5000
   const abort = new AbortController()
@@ -70,7 +70,13 @@ export async function personalizationRoute(
   response.setHeader("cache-control", "no-store")
   const failure = (status: number, code: string, retryable = false): void => {
     if (!request.aborted && !response.destroyed && !response.writableEnded)
-      send(response, status, { error: { code, message: "Personalization request could not be completed", retryable } })
+      send(response, status, {
+        error: {
+          code,
+          message: "Personalization request could not be completed",
+          retryable,
+        },
+      })
   }
   try {
     if (request.url !== "/v1/preferences/personalization") {
@@ -90,12 +96,15 @@ export async function personalizationRoute(
         failure(400, "invalid_personalization_request")
         return
       }
-      if (store === null) {
+      if (provider === null) {
         failure(503, "personalization_unavailable", true)
         return
       }
-      const result = await store.services.personalization.read(
-        { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+      const result = await provider.read(
+        {
+          tenantId: context.identity.namespace,
+          subjectId: context.identity.userId,
+        },
         { deadline, signal: abort.signal },
       )
       if (request.aborted || response.destroyed || response.writableEnded) return
@@ -124,14 +133,21 @@ export async function personalizationRoute(
       failure(400, "invalid_personalization_request")
       return
     }
-    if (store === null || abort.signal.aborted) {
+    if (provider === null || abort.signal.aborted) {
       failure(503, "personalization_unavailable")
       return
     }
-    const result = await store.services.personalization.replace({ tenantId: context.identity.namespace, subjectId: context.identity.userId }, replacement, {
-      deadline,
-      signal: abort.signal,
-    })
+    const result = await provider.replace(
+      {
+        tenantId: context.identity.namespace,
+        subjectId: context.identity.userId,
+      },
+      replacement,
+      {
+        deadline,
+        signal: abort.signal,
+      },
+    )
     if (request.aborted || response.destroyed || response.writableEnded) return
     if (result.kind === "saved" && !abort.signal.aborted) send(response, 200, { data: result.snapshot })
     else if (result.kind === "saved") failure(503, "personalization_save_unknown")
