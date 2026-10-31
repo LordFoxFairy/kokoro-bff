@@ -4,7 +4,7 @@
 
 ## 本人回答操作（2026-10-28，Root 核准候选）
 
-`routes/message-feedback.ts` 提供本人 exact assistant 的自然 GET／PUT 偏好；`message-regeneration.ts` 复用 ChatTurn/outbox，按可信旧输入及选择建立新 Run 和内部输入镜像，所有产品消息读取在 SQL 限额前隐藏镜像，私有回答保 source 关联。两具名 schema evolver 只加偏好表／Message 关联，旧行不回填；Root 授权隔离 PG 校验，不代表正常 DDL／发行。三面设计与原公共合同完整逆证见现入口。
+`routes/message-feedback.ts` 提供本人 exact assistant 的自然 GET／PUT 偏好；`message-regeneration.ts` 复用 ChatTurn/outbox，按可信旧输入及选择建立新 Run 和内部输入镜像，所有产品消息读取在 SQL 限额前隐藏镜像，私有回答保 source 关联。数据库只接受 `database/schema.sql` 的 fresh-only 安装；旧 schema-evolution 命令与测试已删除，三面设计与原公共合同完整逆证见现入口。
 
 ## Immediate Stop startup bridge（2026-10-28，候选）
 
@@ -24,13 +24,13 @@
 
 ## 个人 Project pin（2026-10-27，本地候选，未应用库）
 
-`domain/project/pin.ts`／`http/project-pin-input.ts`／`routes/project-pin.ts` 只接 self 列表与 exact canonical Project 状态 PUT；Session／subject 生命周期、限时／闭集和自然幂等沿本次三面 D0。`postgres/project-pin.ts` 复用具名 Project 端口与 parent 锁，原 `project-delete.ts` 同墓碑事务清个人关联；原 Project wire／updated_at 不变。canonical 新关系表／两索引、ready／fresh 和 `project-pin-schema-catalog.mjs` 的 exact target／实际 catalog 比对闭合，具名 evolution 仅供 Root 显式操作，不是启动安装或迁移框架。`pnpm test:project-pin` 为纯／自有 loopback 入口，`test:project-pin:integration` 仅 Root 指定独占临时 PG，未运行资源测试不称通过。Public28.5／194 的完整28.4父字节和旧192 inventory保持；正式交付／正常配对归 Root。
+`domain/project/pin.ts`／`http/project-pin-input.ts`／`routes/project-pin.ts` 只接 self 列表与 exact canonical Project 状态 PUT；Session／subject 生命周期、限时／闭集和自然幂等沿本次三面 D0。`postgres/project-pin.ts` 复用具名 Project 端口与 parent 锁，原 `project-delete.ts` 同墓碑事务清个人关联；原 Project wire／updated_at 不变。canonical 新关系表／两索引、ready／fresh 和 `project-pin-schema-catalog.mjs` 的 exact target／实际 catalog 比对闭合；schema-evolution 命令与测试已删除，安装仍只走 fresh-only `db:apply-schema`。`pnpm test:project-pin` 为纯／自有 loopback 入口，`test:project-pin:integration` 仅 Root 指定独占临时 PG，未运行资源测试不称通过。Public28.5／194 的完整28.4父字节和旧192 inventory保持；正式交付／正常配对归 Root。
 
 ## Project MCP 推荐配置（2026-10-27，本地候选）
 
 `src/domain/project/mcp-recommendations.ts`定义三种strict稳定ref和canonical集合；`src/http/routes/project-mcp-recommendations.ts`仅接exact `/v1/projects/{projectId}/mcp-recommendations` GET/PUT。metadata candidate reader复用现provider/本人connector/Custom API安全GET，最多4并发、只校新增项；`src/infrastructure/postgres/project-mcp-recommendations.ts`提供有界当前读与parent锁CAS/no-op，不建receipt/journal/outbox。bootstrap当前Project准入同样走此有界reader，不走旧finder。
 
-canonical两列及具名 `scripts/evolve-project-mcp-recommendations-schema.mjs`仅在本run独占临时PG验证；public28.2/192和 `scripts/project-mcp-recommendations-public-contract.mjs`保完整28.1/190及SQL父proof，旧oracle不更新。新增具名tests通过现package脚本接入；三面D1记录当前事实、失效引用与自然幂等恢复。未正常DDL/服务切换，App消费者与Custom API运行映射后继OPEN。
+canonical两列仅由 `database/schema.sql` fresh-only 安装；原 `scripts/evolve-project-mcp-recommendations-schema.mjs` 与对应 schema-evolution 测试已删除。public28.2/192和 `scripts/project-mcp-recommendations-public-contract.mjs`保完整28.1/190及SQL父proof，旧oracle不更新。新增业务 tests 通过现 package 脚本接入；三面D1记录当前事实、失效引用与自然幂等恢复。未正常DDL/服务切换，App消费者与Custom API运行映射后继OPEN。
 
 ## MCP 已绑定图标独立媒体读取（2026-10-26）
 

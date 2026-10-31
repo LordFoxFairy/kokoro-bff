@@ -202,4 +202,4 @@ Project resources can be reloaded with `GET /v1/projects/{projectId}/resources?l
 
 ### Agent 7.3 待核对失败码的既有库配对
 
-Public23.1只追加 `model_settlement_pending`（不可自动重试），不改变真实结算规则。新库继续用原fresh-only installer；非空旧owner须在备份及恢复演练后显式运行 `KOKORO_BFF_POSTGRES_URL=... pnpm db:evolve-agent-failure check` / `apply`，仅接纳精确旧或目标CHECK，绝不清库。此入口不随服务启动自动执行。正常激活须与固定Agent7.3和App消费者配对，具体当前状态见 `docs/CURRENT.md`；组件测试通过不代表正常整链已验收。
+Public23.1只追加 `model_settlement_pending`（不可自动重试），不改变真实结算规则。新库继续用原 fresh-only installer；旧 schema-evolution CLI 与测试已删除，非空旧 owner 不再由 BFF 运行时承接，必须先完成 clean-slate 数据重建。正常激活须与固定 Agent7.3 和 App 消费者配对，具体当前状态见 `docs/CURRENT.md`；组件测试通过不代表正常整链已验收。

@@ -1,3 +1,9 @@
+## 2026-10-31 C-1 clean-slate cleanup（已实施，BFF NestJS 收敛未开始）
+
+BFF 仅保留空 `kokoro_bff` owner schema 的 `db:apply-schema` fresh-only 安装入口；全部 schema-evolution CLI、事务 runner 与对应演进 integration tests 已删除，package、architecture oracle 与当前反馈／Project Pin 测试不再引用。非空旧 owner 不由 BFF 兼容承接，必须先完成 clean-slate 数据重建。App 已删除 `cancelledRuns` HMR 迁移、Conversation hash URL、无序 snapshot activity fallback 与 legacy final proof folding；Agent 已删除按旧 `mcp/tools.py` digest 推断 `legacy_failed` 的展示分支，保留当前 frozen recipe authority。
+
+C-1 定向验证：BFF `pnpm typecheck`、`pnpm build`、`pnpm lint`、`pnpm format:check` 通过，完整 `pnpm test` 为 2301 pass／2 skip／0 fail（真实 PG 条件测试按资源门禁跳过）；App lint 与 6 个受影响 Vitest 文件 72 项通过，typecheck 仍有既有 `app-frame-main-surface.tsx` `onReconnect` 类型错误；Agent ruff 与 130 项 display/contract/http 单测通过。BFF NestJS 收敛、Repository 取舍与业务重写留在 C-2/C-3。
+
 ## 2026-10-29 Custom API 安全选择发送/恢复（候选，正常未启用）
 
 Public28.17新增可选 safe profile_id/expected_state_version 引用，固定消费 Agent HTTP8.10 f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87。原提交 digest/outbox 深冻结、unknown重试、再生成复制与私有snapshot回读承接同一选择；省略/空数组保持旧digest/payload字节，严格拒绝重复ID、坏版本和额外字段。不新增Schema、Platform调用、权限或Share字段。

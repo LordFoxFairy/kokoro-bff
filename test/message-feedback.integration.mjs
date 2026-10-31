@@ -3,11 +3,10 @@ import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import pg from "pg"
 import { applyCanonicalSchema, loadCanonicalSchema } from "../scripts/apply-schema.mjs"
-import { evolveMessageFeedbackSchema as evolve } from "../scripts/evolve-message-feedback-schema.mjs"
 import { PostgresChatRepository } from "../src/infrastructure/postgres/chat-repository.ts"
 const databaseUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const integration = databaseUrl ? test : test.skip
-integration("real PG feedback fresh/evolution, exact owner noops, abort and parent deletion preserve Messages", { timeout: 30000 }, async (t) => {
+integration("real PG feedback, exact owner noops, abort and parent deletion preserve Messages", { timeout: 30000 }, async (t) => {
   assert.match(new URL(databaseUrl).pathname, /^\/kokoro_bff_feedback_[0-9a-f]{32}$/u, "fresh owned feedback database only")
   const pool = new pg.Pool({ connectionString: databaseUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 6 })
   try {
@@ -45,17 +44,6 @@ integration("real PG feedback fresh/evolution, exact owner noops, abort and pare
     const preference = async () =>
       (await pool.query("SELECT to_jsonb(f) AS row,xmin::text AS xmin FROM bff_message_feedback f WHERE tenant_id=$1 AND message_id=$2", [tenantId, messageId]))
         .rows
-    await t.test("additive install is repeatable, exact, and old rows survive", async () => {
-      await pool.query("DROP TABLE bff_message_feedback")
-      assert.equal((await evolve({ mode: "check", databaseUrl })).state, "update_required")
-      assert.equal((await evolve({ mode: "apply", databaseUrl })).state, "updated")
-      assert.equal((await evolve({ mode: "apply", databaseUrl })).state, "current")
-      assert.deepEqual(await originals(), before)
-      await pool.query("ALTER TABLE bff_message_feedback ADD COLUMN unwanted TEXT")
-      assert.equal((await evolve({ mode: "check", databaseUrl })).state, "invalid_schema")
-      await pool.query("ALTER TABLE bff_message_feedback DROP COLUMN unwanted")
-      assert.equal((await evolve({ mode: "check", databaseUrl })).state, "current")
-    })
     await t.test("up/down/clear and concurrent equal values keep timestamp and xmin on noop", async () => {
       assert.equal((await read()).feedback, null)
       await Promise.all([put("up"), put("up")])

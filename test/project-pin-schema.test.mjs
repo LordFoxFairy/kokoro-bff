@@ -14,13 +14,11 @@ test("canonical pin relation is one minimal subject association and restores the
   assert.throws(() => restoreProjectPinSchema(sql.replace("name TEXT NOT NULL", "name TEXT")))
 })
 
-test("pin schema operator accepts only its exact canonical target and rejects requests before any connection", async () => {
+test("pin schema catalog accepts only its exact canonical target", async () => {
   const { projectPinDefinitions } = await import("../scripts/project-pin-schema-catalog.mjs")
-  const { evolveProjectPinSchema } = await import("../scripts/evolve-project-pin-schema.mjs")
   const sql = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
   assert.match(projectPinDefinitions(sql), /bff_project_pin/)
   assert.throws(() => projectPinDefinitions(sql.replace("pinned_at TIMESTAMPTZ(3)", "pinned_at TEXT")))
-  assert.equal((await evolveProjectPinSchema({ mode: "drop", databaseUrl: "invalid" })).state, "invalid_request")
 })
 
 test("catalog equality includes the actual index access method, not just identical index keys", async () => {
