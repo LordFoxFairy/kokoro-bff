@@ -25,6 +25,11 @@ test("feature controllers do not receive transport or database primitives", asyn
   }
 })
 
+test("scheduled-task state reader port is owned by its feature module", async () => {
+  assert.equal(await fileExists("src/modules/scheduled-tasks/scheduled-task-state-reader.ts"), true)
+  assert.equal(await fileExists("src/application/ports/scheduled-task-state-reader.ts"), false)
+})
+
 async function fileExists(relativePath: string): Promise<boolean> {
   try {
     await readFile(path.join(root, relativePath))
