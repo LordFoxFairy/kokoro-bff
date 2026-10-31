@@ -16,8 +16,6 @@ import { handleSharedPublicRequest, handleSharedReaderRequest } from "../http/ro
 import { handleHealthRequest } from "../http/routes/health-native.js"
 import { handleProjectMcpRecommendationsRequest, projectMcpRecommendationsProvider } from "../http/routes/project-mcp-recommendations.js"
 import { mcpProjectPublicationOperation, mcpProjectPublicationRoute } from "../http/routes/mcp-project-publication.js"
-import { liveAdminMetering, matchMeteringAdmin } from "../http/routes/billing-metering-admin.js"
-import { liveAdminCreditGrant } from "../http/routes/billing-credit-grant-admin.js"
 import { appSkillBindingsRoute } from "../http/routes/app-skill-bindings.js"
 import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { handleScheduledTaskReadRequest } from "../http/routes/scheduled-task-native.js"
@@ -92,6 +90,7 @@ import { handleSkillGithubImportRequest } from "../http/routes/skill-import-nati
 import { handleSkillAiImportRequest } from "../http/routes/skill-ai-import-native.js"
 import { handleSkillShareRequest } from "../http/routes/skill-share-native.js"
 import { handleAdminIdentityRequest } from "../http/routes/admin-identity-native.js"
+import { handleBillingAdminRequest } from "../http/routes/billing-admin-native.js"
 import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationRequest } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
@@ -184,13 +183,11 @@ export async function handleBffRequest(
   const businessPath = browserPrivateMcp ? segments.slice(2) : segments.slice(1)
   const adminOperationDeadline =
     !browserPrivateMcp &&
-    ((request.method === "GET" &&
+    request.method === "GET" &&
       businessPath.length === 4 &&
       businessPath[0] === "admin" &&
       businessPath[1] === "model-providers" &&
-      businessPath[3] === "upstream-models") ||
-      (request.method === "POST" && businessPath.join("/") === "admin/billing/credit-grants") ||
-      matchMeteringAdmin(request.method ?? "", businessPath) !== null)
+      businessPath[3] === "upstream-models"
       ? Date.now() + Math.min(config.upstreamTimeoutMs, 10_000)
       : undefined
   if (!browserPrivateMcp && businessPath[0] === "self" && businessPath[1] === "mcp") {
@@ -488,26 +485,6 @@ export async function handleBffRequest(
     await mcpPersonalRoute(request, response, config, composition, admission, businessPath)
     return
   }
-  const meteringKind = matchMeteringAdmin(request.method ?? "", businessPath)
-  if (meteringKind !== null) {
-    await liveAdminMetering(
-      request,
-      response,
-      config,
-      context,
-      admission.bearerToken,
-      composition.sessionAdmission,
-      meteringKind,
-      adminOperationDeadline ?? Date.now(),
-    )
-    return
-  }
-
-  if (request.method === "POST" && businessPath.join("/") === "admin/billing/credit-grants") {
-    await liveAdminCreditGrant(request, response, config, context, admission.bearerToken, composition.sessionAdmission, adminOperationDeadline ?? Date.now())
-    return
-  }
-
   if (isMoveSessionPath) {
     await moveSessionRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
     return
@@ -805,6 +782,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : composition.routeHandler === undefined ? handleSharedPublicRequest(request, response, config, composition.publicShareService) : false)
       .then((handled) => handled ? true : handleSharedReaderRequest(request, response, config, composition.sharedSessionReader))
       .then((handled) => handled ? true : handleAdminIdentityRequest(request, response, config, composition.sessionAdmission))
+      .then((handled) => handled ? true : handleBillingAdminRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
       .then((handled) =>
         handled

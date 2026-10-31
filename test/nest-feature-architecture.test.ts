@@ -62,6 +62,21 @@ test("IamRelayModule owns the native protocol relay before the transitional disp
   assert.doesNotMatch(server, /startsWith\("\/iam"\)/u)
 })
 
+test("BillingModule owns administrator credit and metering routes", async () => {
+  const [moduleSource, middleware, nativeRoute, server] = await Promise.all([
+    readFile(path.join(root, "src/modules/billing/billing.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/billing/billing-admin.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/billing-admin-native.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+  ])
+  assert.match(moduleSource, /BillingAdminMiddleware/u)
+  assert.match(middleware, /handleBillingAdminRequest/u)
+  assert.match(nativeRoute, /handleBillingAdminRequest/u)
+  assert.match(server, /handleBillingAdminRequest/u)
+  assert.doesNotMatch(server, /await liveAdminCreditGrant\(/u)
+  assert.doesNotMatch(server, /await liveAdminMetering\(/u)
+})
+
 test("ChatModule owns the archive/share adapters and chat provider", async () => {
   const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, server, legacyModule] = await Promise.all([
     readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),
