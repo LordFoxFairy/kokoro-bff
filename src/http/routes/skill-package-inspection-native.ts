@@ -7,7 +7,7 @@ import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { requestId } from "../request.js"
 import { skillPackageInspectionRoute, type SkillPackageInspectionProvider } from "./skill-package-inspection.js"
 
-const PATH = /^\/v1\/(?:self\/skills\/[^/]+\/package|skill-installations\/[^/]+\/package)$/u
+const PATH = /^\/v1\/(?:self\/skills\/[^/]+\/package|skill-installations\/[^/]+\/package|projects\/[^/]+\/skill-installations\/[^/]+\/package)$/u
 
 export async function handleSkillPackageInspectionRequest(
   request: IncomingMessage,
@@ -19,6 +19,8 @@ export async function handleSkillPackageInspectionRequest(
 ): Promise<boolean> {
   const url = new URL(request.url ?? "/", "http://bff.local")
   if (request.method !== "GET" || !PATH.test(url.pathname)) return false
+  const projectPath = url.pathname.startsWith("/v1/projects/")
+  if (projectPath && project === null) return false
   const id = requestId(request)
   response.setHeader("x-request-id", id)
   const access = async (projectRef: string, context: { requestId: string; identity: { namespace: string; userId: string } }, signal: AbortSignal): Promise<string | null> => {

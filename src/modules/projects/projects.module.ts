@@ -14,6 +14,7 @@ import { ProjectService } from "../../application/project-service.js"
 import { AccountModule } from "../account/account.module.js"
 import { ChatModule } from "../chat/chat.module.js"
 import { ProjectPinMiddleware } from "./project-pin.middleware.js"
+import { ProjectSkillPackageInspectionMiddleware } from "./project-skill-package-inspection.middleware.js"
 import type { ProjectSkillSelectionProvider } from "../../http/routes/project-skill-selection.js"
 import { SkillsModule } from "../skills/skills.module.js"
 
@@ -21,6 +22,7 @@ import { SkillsModule } from "../skills/skills.module.js"
   imports: [AccountModule, ChatModule, DatabaseModule, SkillsModule],
   providers: [
     ProjectPinMiddleware,
+    ProjectSkillPackageInspectionMiddleware,
     {
       provide: PROJECT_SERVICE,
       inject: [BFF_DATABASE],
@@ -45,5 +47,6 @@ import { SkillsModule } from "../skills/skills.module.js"
 export class ProjectsModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
     consumer.apply(ProjectPinMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
+    consumer.apply(ProjectSkillPackageInspectionMiddleware).forRoutes({ path: "*", method: RequestMethod.GET })
   }
 }

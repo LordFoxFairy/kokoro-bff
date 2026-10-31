@@ -127,15 +127,18 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
 })
 
 test("ProjectsModule owns the project-pin adapter and provider", async () => {
-  const [projectsModule, middleware, nativeRoute, server, liveBff] = await Promise.all([
+  const [projectsModule, middleware, nativeRoute, packageMiddleware, server, liveBff] = await Promise.all([
     readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-pin.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/project-native.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/projects/project-skill-package-inspection.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/live-bff.ts"), "utf8"),
   ])
   assert.match(projectsModule, /provide: PROJECT_SERVICE/u)
   assert.match(projectsModule, /ProjectPinMiddleware/u)
+  assert.match(projectsModule, /ProjectSkillPackageInspectionMiddleware/u)
+  assert.match(packageMiddleware, /handleSkillPackageInspectionRequest/u)
   assert.match(middleware, /handleProjectPinRequest/u)
   assert.match(middleware, /handleProjectDeletionStatusRequest/u)
   assert.match(middleware, /handleProjectRenameRequest/u)

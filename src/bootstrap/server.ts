@@ -94,7 +94,7 @@ import { handlePersonalSkillInstallationRequest, handleProjectSkillInstallationR
 import { handleMoveSessionRequest } from "../http/routes/move-session-native.js"
 import { handleManagedPersonalSkillsRequest } from "../http/routes/managed-personal-skills.js"
 import { handlePersonalSkillLifecycleRequest } from "../http/routes/personal-skill-lifecycle-native.js"
-import { skillPackageInspectionRoute, type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
+import { type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 import { handleIamRelayRequest } from "../modules/iam-relay/iam-relay.middleware.js"
 
@@ -222,16 +222,6 @@ export async function handleBffRequest(
     startMcpRequestBudget(request, 10_000)
     response.setHeader("cache-control", "no-store")
     response.setHeader("x-request-id", id)
-  }
-  const isSkillPackageInspection =
-    isRawSkillPackageInspection &&
-    businessPath.length === 5 && businessPath[0] === "projects" && businessPath[2] === "skill-installations" && businessPath[4] === "package"
-  if (isSkillPackageInspection) {
-    await skillPackageInspectionRoute(request, response, config, composition.sessionAdmission, id, businessPath, {
-      access: projectContentAccess,
-      installations: composition.installationClient,
-    })
-    return
   }
   const isPersonalKnowledgePath =
     businessPath[0] === "preferences" &&
@@ -704,7 +694,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
         client: composition.mcpProjectPublicationClient,
       }))
       .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
-      .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, null))
+      .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService ?? composition.businessStore?.services.projects ?? null))
       .then((handled) => handled ? true : handleSkillSpecificationRequest(request, response, config, {
         skillListAdmission: composition.skillListAdmission,
         skillSpecificationSource: composition.skillSpecificationSource,
