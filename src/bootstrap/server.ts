@@ -31,7 +31,7 @@ import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes
 import { customApiOperation, customApiRoute } from "../http/routes/custom-api.js"
 import { connectorListFailure, connectorListRoute, isConnectorListRequest } from "../http/routes/connector-list.js"
 import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
-import { skillSpecificationEnabledRoute } from "../http/routes/skill-specification-enabled.js"
+import { handleSkillSpecificationEnabledRequest } from "../http/routes/skill-specification-enabled.js"
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
 import { skillGithubImportRoute, skillGithubPreviewRoute } from "../http/routes/skill-github-import.js"
@@ -169,7 +169,6 @@ export async function handleBffRequest(
   }
   if (await appSkillBindingsRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
-  if (await skillSpecificationEnabledRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillDownloadHandleRoute(request, response, config, composition, id, segments, projectContentAccess)) return
   if (await exactSkillDownloadRoute(request, response, config, composition, id, segments, projectContentAccess)) return
   if (
@@ -1097,6 +1096,19 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           : composition.routeHandler !== undefined
             ? false
             : handleManagedPersonalSkillsRequest(request, response, config, composition.sessionAdmission),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleSkillSpecificationEnabledRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.installationClient,
+              ),
       )
       .then((handled) =>
         handled

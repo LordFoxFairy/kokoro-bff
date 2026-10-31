@@ -7,6 +7,7 @@ import type { SkillAuthorizationClient } from "../../auth/skill-authorization.cl
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import { handlePersonalSkillInstallationRequest } from "../../http/routes/skill-installations.js"
 import { handleManagedPersonalSkillsRequest } from "../../http/routes/managed-personal-skills.js"
+import { handleSkillSpecificationEnabledRequest } from "../../http/routes/skill-specification-enabled.js"
 
 @Injectable()
 export class SkillsMiddleware implements NestMiddleware {
@@ -20,6 +21,7 @@ export class SkillsMiddleware implements NestMiddleware {
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handlePersonalSkillInstallationRequest(request, response, this.config, this.admission, this.skillAuthorization, this.client)
       .then((handled) => handled || handleManagedPersonalSkillsRequest(request, response, this.config, this.admission))
+      .then((handled) => handled || handleSkillSpecificationEnabledRequest(request, response, this.config, this.admission, this.client))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

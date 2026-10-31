@@ -9,10 +9,12 @@ import { setSkillEnabledDigest } from "../../infrastructure/clients/platform/ski
 import { projectInstallationAck } from "../../infrastructure/clients/platform/skill-installation-response.js"
 import { exactIdempotencyKey, installationCommandId } from "../skill-installation-input.js"
 import { send } from "../response.js"
+import { requestId } from "../request.js"
 import { setSkillInstallationEnabledRequestSchema } from "../skill-specification-schema.js"
 import { readSkillBody, skillRequestRemaining, startSkillRequestBudget } from "./skill-drafts.js"
 
 const path = "/skill.v1.SkillOptionalService/SetSkillInstallationEnabled"
+type SkillEnabledComposition = Pick<BffServerComposition, "sessionAdmission" | "installationClient">
 
 function idempotencyKey(request: IncomingMessage): string {
   const values = request.rawHeaders.flatMap((name, index) =>
@@ -61,7 +63,7 @@ export async function skillSpecificationEnabledRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: SkillEnabledComposition,
   requestId: string,
   pathname: string,
 ): Promise<boolean> {
@@ -148,4 +150,23 @@ export async function skillSpecificationEnabledRoute(
     response.removeListener("close", abort)
   }
   return true
+}
+
+export async function handleSkillSpecificationEnabledRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: BffServerComposition["sessionAdmission"],
+  installationClient: BffServerComposition["installationClient"],
+): Promise<boolean> {
+  const pathname = new URL(request.url ?? "/", "http://bff.local").pathname
+  if (pathname !== path) return false
+  return skillSpecificationEnabledRoute(
+    request,
+    response,
+    config,
+    { sessionAdmission: admission, installationClient },
+    requestId(request),
+    pathname,
+  )
 }
