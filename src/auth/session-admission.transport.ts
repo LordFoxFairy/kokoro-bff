@@ -19,6 +19,14 @@ export type SessionAdmissionTransportInput = Readonly<{
   signal: AbortSignal
 }>
 
+export type NativeSessionAdmissionTransportInput = Readonly<{
+  credential: string
+  cookie: string
+  origin: string
+  requestId: string
+  signal: AbortSignal
+}>
+
 export type SessionAdmissionTransportResponse = Readonly<{
   status: number
   headers: Headers
@@ -64,12 +72,27 @@ export class SessionAdmissionTransport {
 
   public request(input: SessionAdmissionTransportInput): Promise<SessionAdmissionTransportResponse> {
     const target = new URL("/internal/v1/session-authorizations/verify", `${this.baseUrl.replace(/\/+$/u, "")}/`)
-    return this.send(input, target, null)
+    return this.send({ ...input, authorization: `Bearer ${input.token}` }, target, null)
+  }
+
+  public requestNativeSession(input: NativeSessionAdmissionTransportInput): Promise<SessionAdmissionTransportResponse> {
+    const target = new URL("/internal/v1/native-session-admission/verify", `${this.baseUrl.replace(/\/+$/u, "")}/`)
+    return this.send(
+      {
+        requestId: input.requestId,
+        signal: input.signal,
+        authorization: `Bearer ${input.credential}`,
+        cookie: input.cookie,
+        origin: input.origin,
+      },
+      target,
+      null,
+    )
   }
 
   public requestSkillListIdentity(input: SessionAdmissionTransportInput): Promise<SessionAdmissionTransportResponse> {
     const target = new URL("/internal/v1/skill-list-identities/verify", `${this.baseUrl.replace(/\/+$/u, "")}/`)
-    return this.send(input, target, null)
+    return this.send({ ...input, authorization: `Bearer ${input.token}` }, target, null)
   }
 
   public requestOpenAppManagement(input: SessionAdmissionTransportInput & Readonly<{ appId: string }>): Promise<SessionAdmissionTransportResponse> {
@@ -77,20 +100,30 @@ export class SessionAdmissionTransport {
       `/internal/v1/open-app-registrations/${encodeURIComponent(input.appId)}/management-authorizations/verify`,
       `${this.baseUrl.replace(/\/+$/u, "")}/`,
     )
-    return this.send(input, target, null)
+    return this.send({ ...input, authorization: `Bearer ${input.token}` }, target, null)
   }
 
   public requestSkillAuthorization(input: SkillAuthorizationInput): Promise<SessionAdmissionTransportResponse> {
     const target = new URL(`/internal/v1/tenants/${encodeURIComponent(input.tenantId)}/skill-authorizations/check`, `${this.baseUrl.replace(/\/+$/u, "")}/`)
-    return this.send(input, target, JSON.stringify({ action: input.action }))
+    return this.send({ ...input, authorization: `Bearer ${input.token}` }, target, JSON.stringify({ action: input.action }))
   }
 
   public requestMcpAuthorization(input: McpAuthorizationInput): Promise<SessionAdmissionTransportResponse> {
     const target = new URL("/internal/v1/authorization/check", `${this.baseUrl.replace(/\/+$/u, "")}/`)
-    return this.send(input, target, JSON.stringify({ resource: input.resource, action: input.action }))
+    return this.send({ ...input, authorization: `Bearer ${input.token}` }, target, JSON.stringify({ resource: input.resource, action: input.action }))
   }
 
-  private send(input: SessionAdmissionTransportInput, target: URL, body: string | null): Promise<SessionAdmissionTransportResponse> {
+  private send(
+    input: Readonly<{
+      requestId: string
+      signal: AbortSignal
+      authorization: string
+      cookie?: string
+      origin?: string
+    }>,
+    target: URL,
+    body: string | null,
+  ): Promise<SessionAdmissionTransportResponse> {
     const requestFn = target.protocol === "https:" ? httpsRequest : httpRequest
     return new Promise((resolve, reject) => {
       let settled = false
@@ -134,10 +167,12 @@ export class SessionAdmissionTransport {
             maxHeaderSize: this.maxResponseBytes,
             headers: {
               accept: "application/json",
-              authorization: `Bearer ${input.token}`,
+              authorization: input.authorization,
               "content-length": String(body === null ? 0 : Buffer.byteLength(body)),
               ...(body === null ? {} : { "content-type": "application/json" }),
               "x-request-id": input.requestId,
+              ...(input.cookie === undefined ? {} : { cookie: input.cookie }),
+              ...(input.origin === undefined ? {} : { origin: input.origin }),
             },
           },
           (response) => {

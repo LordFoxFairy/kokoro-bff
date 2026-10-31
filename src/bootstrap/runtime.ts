@@ -190,6 +190,9 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     options.sessionAdmission ??
     new SessionAdmissionClient({
       baseUrl: config.iamBaseUrl,
+      credentialFile: config.iamSessionAdmissionCredentialFile,
+      webOrigin: config.iamWebOrigin ?? config.iamRelay?.webOrigin,
+      tenantId: config.tenantId,
       timeoutMs: config.upstreamTimeoutMs,
       maxResponseBytes: config.upstreamMaxResponseBytes,
     })

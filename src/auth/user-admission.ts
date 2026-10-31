@@ -5,6 +5,17 @@ import type { AdmittedUserRequestContext } from "../domain/request-context.js"
 import type { SessionAdmission } from "./session-admission.types.js"
 import { admitBrowserService } from "./browser-service-credential.policy.js"
 
+const NATIVE_COOKIE_NAMES = new Set([
+  "kokoro-issuer.session_token",
+  "kokoro-issuer.session_data",
+  "kokoro-issuer.dont_remember",
+  "kokoro-issuer.session_token.oauth_logout_confirmation",
+  "__Secure-kokoro-issuer.session_token",
+  "__Secure-kokoro-issuer.session_data",
+  "__Secure-kokoro-issuer.dont_remember",
+  "__Secure-kokoro-issuer.session_token.oauth_logout_confirmation",
+])
+
 export type UserAdmissionResult =
   | Readonly<{ ok: true; context: AdmittedUserRequestContext; bearerToken: string }>
   | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
@@ -24,6 +35,25 @@ export function bearerToken(request: IncomingMessage): string | null {
   return match?.[1] ?? null
 }
 
+/** Return one canonical allowlisted IAM cookie header; browser/Product cookies never cross the boundary. */
+export function nativeSessionCookie(request: IncomingMessage): string | null {
+  const values: string[] = []
+  for (let index = 0; index < request.rawHeaders.length; index += 2) {
+    if (request.rawHeaders[index]?.toLowerCase() === "cookie") values.push(request.rawHeaders[index + 1] ?? "")
+  }
+  if (values.length !== 1) return null
+  const parsed = new Map<string, string>()
+  for (const part of values[0]!.split(";")) {
+    const separator = part.indexOf("=")
+    if (separator <= 0) return null
+    const name = part.slice(0, separator).trim()
+    const value = part.slice(separator + 1).trim()
+    if (!NATIVE_COOKIE_NAMES.has(name) || value.length === 0 || parsed.has(name)) return null
+    parsed.set(name, value)
+  }
+  return [...parsed].map(([name, value]) => `${name}=${value}`).join("; ") || null
+}
+
 export async function authorizeUserRequest(
   request: IncomingMessage,
   config: BffConfig,
@@ -33,14 +63,30 @@ export async function authorizeUserRequest(
 ): Promise<UserAdmissionResult> {
   if (admitBrowserService(request, config, { kind: "business" }) === null) return { ok: false, status: 403, code: "service_auth_failed" }
 
-  const token = bearerToken(request)
-  if (token === null) return { ok: false, status: 401, code: "session_authentication_required" }
   const fixedTenantId = config.tenantId?.trim()
   if (!fixedTenantId) return { ok: false, status: 503, code: "product_tenant_not_configured" }
-  const result = await admission.verify({ token, requestId, signal })
+  const cookie = nativeSessionCookie(request)
+  const origin = request.headers.origin?.trim() ?? ""
+  const nativeConfigured = config.iamSessionAdmissionCredentialFile != null && (config.iamWebOrigin ?? config.iamRelay?.webOrigin) != null
+  const result =
+    nativeConfigured && typeof admission.verifyNative === "function"
+      ? cookie === null
+        ? ({ ok: false, status: 401, code: "session_authentication_required" } as const)
+        : await admission.verifyNative({ cookie, origin, requestId, signal })
+      : await (async () => {
+          const token = bearerToken(request)
+          if (token === null) return { ok: false, status: 401, code: "session_authentication_required" } as const
+          return admission.verify({ token, requestId, signal })
+        })()
   if (!result.ok) return result
   if (result.identity.namespace !== fixedTenantId) return { ok: false, status: 403, code: "product_tenant_forbidden" }
-  return { ok: true, context: { requestId, identity: result.identity, platformAdmin: result.platformAdmin }, bearerToken: token }
+  return {
+    ok: true,
+    context: { requestId, identity: result.identity, platformAdmin: result.platformAdmin },
+    // Native admission intentionally has no user bearer. The empty value keeps
+    // legacy owner-call ports fail-closed until their native equivalents land.
+    bearerToken: nativeConfigured && typeof admission.verifyNative === "function" ? "" : bearerToken(request)!,
+  }
 }
 
 /** Human admission is fresh for every Skill command and Skills admin read. */

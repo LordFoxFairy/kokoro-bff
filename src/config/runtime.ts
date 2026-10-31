@@ -67,6 +67,9 @@ export type BffConfig = {
   domain: string
   tenantId: string | null
   iamBaseUrl: string | null
+  /** Native first-party session admission inputs; optional on transitional fixtures. */
+  iamWebOrigin?: string | null
+  iamSessionAdmissionCredentialFile?: string | null
   iamRelay?: Readonly<{
     publicIssuerUrl: string
     webOrigin: string
@@ -394,6 +397,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     throw new Error("Storage requires base URL, object origin and independent BFF Storage secret")
   if (storageSecret !== null && !/^[\x21-\x7e]+$/u.test(storageSecret)) throw new Error("Storage secret must be a visible ASCII header value")
   const relay = iamRelayConfig(env)
+  const iamWebOrigin = optionalOrigin(env.KOKORO_IAM_WEB_ORIGIN, "KOKORO_IAM_WEB_ORIGIN")
   for (const retired of ["KOKORO_BFF_PLATFORM_CATALOG_CREDENTIALS_FILE", "KOKORO_BFF_SKILLS_ADMIN_CREDENTIAL_FILE"]) {
     if (env[retired] !== undefined) throw new Error(`retired OAuth credential configuration: ${retired}; configure the explicit service credential file`)
   }
@@ -410,6 +414,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     domain,
     tenantId: env.KOKORO_TENANT_ID?.trim() || null,
     iamBaseUrl: optionalOrigin(env.KOKORO_IAM_BASE_URL),
+    iamWebOrigin,
+    iamSessionAdmissionCredentialFile: env.KOKORO_BFF_IAM_SESSION_ADMISSION_CREDENTIAL_FILE?.trim() || null,
     ...(relay === undefined ? {} : { iamRelay: relay }),
     ...(storageBase !== null && storageOrigin !== null && storageSecret !== null
       ? {

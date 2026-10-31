@@ -23,6 +23,9 @@ import type { SessionAdmission } from "../../auth/session-admission.types.js"
       useFactory: (config: BffConfig): SessionAdmission =>
         new SessionAdmissionClient({
           baseUrl: config.iamBaseUrl,
+          credentialFile: config.iamSessionAdmissionCredentialFile,
+          webOrigin: config.iamWebOrigin ?? config.iamRelay?.webOrigin,
+          tenantId: config.tenantId,
           timeoutMs: config.upstreamTimeoutMs,
           maxResponseBytes: config.upstreamMaxResponseBytes,
         }),

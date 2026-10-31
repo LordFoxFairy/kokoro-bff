@@ -1,17 +1,41 @@
 import { randomUUID } from "node:crypto"
+import { z } from "zod"
 
 import { zApiErrorResponse, zVerifySessionAuthorizationResponse } from "../generated/iam-http/zod.gen.js"
-import type { SessionAdmission, SessionAdmissionInput, SessionAdmissionResult } from "./session-admission.types.js"
+import type { NativeSessionAdmissionInput, SessionAdmission, SessionAdmissionInput, SessionAdmissionResult } from "./session-admission.types.js"
 import { SessionAdmissionTransport } from "./session-admission.transport.js"
+import { readIamSessionAdmissionCredential } from "./iam-session-admission-credential.js"
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u
 const RETRY_AFTER_PATTERN = /^[1-9][0-9]{0,4}$/u
 
 export type SessionAdmissionClientOptions = Readonly<{
   baseUrl: string | null
+  credentialFile?: string | null | undefined
+  webOrigin?: string | null | undefined
+  tenantId?: string | null | undefined
   timeoutMs: number
   maxResponseBytes: number
 }>
+
+const nativeSuccess = z.strictObject({
+  data: z.strictObject({
+    subject_id: z.string().min(1),
+    tenant_id: z.string().min(1),
+    session_id: z.string().min(1),
+    permissions: z.array(z.string().min(1)),
+    session_expires_at: z.iso.datetime({ offset: true }),
+  }),
+  meta: z.strictObject({ request_id: z.string().min(1), contract_version: z.literal("1.0.0") }),
+})
+const nativeError = z.strictObject({
+  error: z.strictObject({
+    code: z.string().min(1),
+    message: z.string().min(1),
+    retryable: z.boolean(),
+    details: z.array(z.unknown()),
+  }),
+})
 
 function unavailable(): SessionAdmissionResult {
   return { ok: false, status: 503, code: "iam_admission_unavailable" }
@@ -49,8 +73,14 @@ function retryAfter(headers: Headers): string | null {
 
 export class SessionAdmissionClient implements SessionAdmission {
   private readonly transport: SessionAdmissionTransport | null
+  private readonly credentialFile: string | null
+  private readonly webOrigin: string | null
+  private readonly tenantId: string | null
 
   public constructor(options: SessionAdmissionClientOptions) {
+    this.credentialFile = options.credentialFile ?? null
+    this.webOrigin = options.webOrigin ?? null
+    this.tenantId = options.tenantId ?? null
     this.transport =
       options.baseUrl === null
         ? null
@@ -87,6 +117,38 @@ export class SessionAdmissionClient implements SessionAdmission {
           ...(header === null ? {} : { retryAfter: header }),
         }
       }
+      return unavailable()
+    } catch {
+      return unavailable()
+    }
+  }
+
+  public async verifyNative(input: NativeSessionAdmissionInput): Promise<SessionAdmissionResult> {
+    if (this.transport === null || this.credentialFile === null || this.webOrigin === null) return unavailable()
+    if (input.origin !== this.webOrigin) return { ok: false, status: 403, code: "session_forbidden" }
+    try {
+      const credential = await readIamSessionAdmissionCredential(this.credentialFile, this.tenantId, input.signal)
+      const response = await this.transport.requestNativeSession({ ...input, credential, requestId: controlledRequestId(input.requestId) })
+      if (!validResponseHeaders(response.headers)) return unavailable()
+      const body = parseJson(response.body)
+      if (body === null) return unavailable()
+      if (response.status === 200) {
+        const parsed = nativeSuccess.safeParse(body)
+        if (!parsed.success) return unavailable()
+        return {
+          ok: true,
+          identity: { namespace: parsed.data.data.tenant_id, userId: parsed.data.data.subject_id },
+          platformAdmin: parsed.data.data.permissions.includes("platform.admin"),
+        }
+      }
+      if (!zApiErrorResponse.safeParse(body).success && !nativeError.safeParse(body).success) return unavailable()
+      if (response.status === 401) return { ok: false, status: 401, code: "session_invalid" }
+      if (response.status === 403) return { ok: false, status: 403, code: "session_forbidden" }
+      if (response.status === 429) {
+        const header = retryAfter(response.headers)
+        return { ok: false, status: 429, code: "session_rate_limited", ...(header === null ? {} : { retryAfter: header }) }
+      }
+      if (response.status === 504) return { ok: false, status: 503, code: "iam_admission_unavailable" }
       return unavailable()
     } catch {
       return unavailable()
