@@ -3,6 +3,7 @@ import { messageRegenerationRoute, MessageRegenerationAdmissionError } from "../
 import { handleMessageFeedbackRequest } from "../http/routes/message-feedback-native.js"
 import { handleProjectCoreReadRequest, handleProjectPinRequest } from "../http/routes/project-native.js"
 import { handleSharedPublicRequest, handleSharedReaderRequest } from "../http/routes/shared-native.js"
+import { handleHealthRequest } from "../http/routes/health-native.js"
 import { projectMcpRecommendationsRoute, ProjectMcpRecommendationsAdmissionError } from "../http/routes/project-mcp-recommendations.js"
 import { projectResourceReadRoute } from "../http/routes/project-resource-read.js"
 import { projectResourceDeleteRoute } from "../http/routes/project-resource-delete.js"
@@ -131,29 +132,6 @@ export async function handleBffRequest(
     })
     return
   }
-  if (segments.length === 1 && segments[0] === "healthz" && request.method === "GET") {
-    send(response, 200, {
-      status: "ok",
-      service: "kokoro-bff",
-      mode: config.mode,
-    })
-    return
-  }
-  if (segments.length === 1 && segments[0] === "readyz" && request.method === "GET") {
-    const ready =
-      (await composition
-        .readiness()
-        .then(() => true)
-        .catch(() => false)) &&
-      (!config.agentEnabled || configuredUpstream(config, "agents") !== null)
-    send(response, ready ? 200 : 503, {
-      status: "ok",
-      service: "kokoro-bff",
-      mode: config.mode,
-    })
-    return
-  }
-
   if (segments[0] === "internal" && segments[1] === "bff" && segments[2] === "scheduled-tasks" && segments[3] === "dispatch" && segments.length === 4) {
     await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency)
     return
@@ -1189,7 +1167,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
-    const handler = handleIamRelayRequest(request, response, config)
+    const handler = handleHealthRequest(request, response, config, composition.readiness)
+      .then((handled) => handled ? true : handleIamRelayRequest(request, response, config))
       .then((handled) => handled ? true : composition.routeHandler === undefined ? handleSharedPublicRequest(request, response, config, composition.publicShareService) : false)
       .then((handled) => handled ? true : handleSharedReaderRequest(request, response, config, composition.sharedSessionReader))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
