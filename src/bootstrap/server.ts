@@ -70,6 +70,7 @@ import { normalizeUpstreamResponse } from "../infrastructure/clients/upstream-re
 import { proxyUpstream } from "../upstream.js"
 import { liveAgentSession } from "../http/routes/agent.js"
 import { liveChatBusiness } from "../http/routes/chat.js"
+import type { ChatBusinessProvider } from "../http/routes/chat-business-provider.js"
 import { authorizeLiveBffMutation, liveBffBusiness } from "../http/routes/live-bff.js"
 import { scheduledCreateInput } from "../application/scheduled/input.js"
 import type { ScheduledTaskCreateInput } from "../application/ports/scheduled-task-repository.js"
@@ -480,9 +481,18 @@ export async function handleBffRequest(
     }
   }
   let chatAuthorization: ChatAuthorization | null = null
+  const chatService = composition.chatService ?? composition.businessStore?.services?.chat
+  const projectService = composition.projectService ?? composition.businessStore?.services?.projects
+  const chatProvider: ChatBusinessProvider = {
+    ...(chatService === undefined || chatService === null ? {} : { chatService }),
+    ...(composition.businessStore?.services?.chatTurns === undefined ? {} : { chatTurnService: composition.businessStore.services.chatTurns }),
+    ...(projectService === undefined || projectService === null ? {} : { projectService }),
+    ...(composition.businessStore?.services === undefined ? {} : { services: composition.businessStore.services }),
+    ...(composition.businessStore?.agUiConsumers === undefined ? {} : { agUiConsumers: composition.businessStore.agUiConsumers }),
+  }
   if (composition.routeHandler === undefined && composition.businessStore !== null) {
     try {
-      chatAuthorization = await authorizeChatRequest(request, context, businessPath, json, composition.businessStore)
+      chatAuthorization = await authorizeChatRequest(request, context, businessPath, json, chatProvider)
       if (chatAuthorization !== null && !chatAuthorization.ok) {
         send(response, chatAuthorization.status, failure(chatAuthorization.code, chatAuthorization.message, id))
         return
@@ -615,7 +625,7 @@ export async function handleBffRequest(
         json,
         mutation,
         composition.idempotency,
-        composition.businessStore,
+        chatProvider,
         chatAuthorization,
         composition.installationClient,
         currentProjectAccess,

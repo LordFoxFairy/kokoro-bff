@@ -582,6 +582,8 @@ test("private BFF resources use named owner scopes before receipts and keep serv
   assert.doesNotMatch(client, /invalidateProjects|projects:\$\{tenant/u)
   assert.match(chatAuthorization, /scope must be omitted, empty, or direct/u)
   assert.match(chatAuthorization, /chatServiceOf\(store\)\.findConversation/u)
+  assert.match(server, /ChatBusinessProvider/u)
+  assert.match(server, /chatProvider/u)
   assert.ok(server.indexOf("authorizeChatRequest") < server.indexOf("mutationTicket("))
   assert.ok(server.indexOf("authorizeLiveBffMutation") < server.indexOf("mutationTicket("))
   assert.match(openapi, /DirectScopeQuery:[\s\S]*enum: \['', direct\]/u)
