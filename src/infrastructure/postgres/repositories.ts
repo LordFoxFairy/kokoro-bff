@@ -41,7 +41,6 @@ import { PostgresSkillShareRepository } from "./skill-share-repository.js"
 import type { SkillShareRepository } from "../../application/ports/skill-share-repository.js"
 import { PublicShareApplicationService } from "../../application/public-share-service.js"
 import type { ScheduledTaskService } from "../../application/scheduled-task-service.js"
-import type { ProjectService } from "../../application/project-service.js"
 import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
 import type { SkillUsageReader } from "../../application/agui/skill-usage.js"
 
@@ -69,7 +68,6 @@ export class PostgresBffRepositories {
   public readonly skillShares: SkillShareRepository
   public readonly publicShareService: PublicShareApplicationService
   public readonly scheduledTaskService: ScheduledTaskService
-  public readonly projectService: ProjectService
   public readonly personalizationProvider: PostgresPersonalizationRepository
   public readonly personalKnowledge: PersonalKnowledgeRepository
   public readonly skillUsage: SkillUsageReader
@@ -115,7 +113,6 @@ export class PostgresBffRepositories {
       agentDispatchOutbox,
       new Sha256StableIdGenerator(),
     )
-    this.projectService = this.services.projects
     this.scheduledTaskService = this.services.scheduledTasks
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)

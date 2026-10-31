@@ -249,12 +249,16 @@ test("global business store does not duplicate feature service providers", async
   ])
   assert.doesNotMatch(store, /chatService\?/u)
   assert.doesNotMatch(store, /chatTurnService\?/u)
+  assert.doesNotMatch(store, /projectService\?/u)
   assert.doesNotMatch(repositories, /public readonly chatService/u)
   assert.doesNotMatch(repositories, /public readonly chatTurnService/u)
+  assert.doesNotMatch(repositories, /public readonly projectService/u)
   assert.doesNotMatch(repositories, /this\.chatService\s*=/u)
   assert.doesNotMatch(repositories, /this\.chatTurnService\s*=/u)
+  assert.doesNotMatch(repositories, /this\.projectService\s*=/u)
   assert.match(runtime, /businessStore\?\.services\?\.chat/u)
-  assert.match(runtime, /businessStore\?\.projectService/u)
+  assert.match(runtime, /businessStore\?\.services\?\.projects/u)
+  assert.doesNotMatch(runtime, /businessStore\?\.projectService/u)
 })
 
 test("BFF production composition requires the live PostgreSQL and Redis runtime", async () => {

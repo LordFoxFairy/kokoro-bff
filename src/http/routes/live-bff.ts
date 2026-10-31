@@ -30,7 +30,7 @@ export async function authorizeLiveBffMutation(
 
   if (businessPath[0] === "projects" && businessPath.length > 1) {
     const projectId = businessPath[1]
-    if (projectId !== undefined && await (store.projectService ?? store.services.projects).find(scope, projectId) === null) {
+    if (projectId !== undefined && await store.services.projects.find(scope, projectId) === null) {
       return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
     }
     return { ok: true }
@@ -48,7 +48,7 @@ export async function authorizeLiveBffMutation(
       if (scheduledCreate === null) {
         return { ok: false, status: 400, code: "invalid_scheduled_task", message: "Scheduled task fields are invalid" }
       }
-    if (scheduledCreate.projectId !== undefined && await (store.projectService ?? store.services.projects).find(scope, scheduledCreate.projectId) === null) {
+    if (scheduledCreate.projectId !== undefined && await store.services.projects.find(scope, scheduledCreate.projectId) === null) {
         return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
       }
     }
@@ -91,7 +91,7 @@ export async function liveBffBusiness(
           await reply(response, 400, failure("invalid_project", "Project name is required", context.requestId), context, idempotency, mutation)
           return true
         }
-        const project = await (store.projectService ?? store.services.projects).create(ownerScope, name, typeof json.description === "string" ? json.description : "")
+      const project = await store.services.projects.create(ownerScope, name, typeof json.description === "string" ? json.description : "")
         await reply(response, 200, ok({ project }, context.requestId), context, idempotency, mutation)
         return true
       }
@@ -100,12 +100,12 @@ export async function liveBffBusiness(
           await reply(response, 400, failure("invalid_project_instruction", "Project instruction must be a string", context.requestId), context, idempotency, mutation)
           return true
         }
-        const project = await (store.projectService ?? store.services.projects).updateInstruction(ownerScope, projectId, json.instruction)
+      const project = await store.services.projects.updateInstruction(ownerScope, projectId, json.instruction)
         await reply(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ project }, context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "tasks" && method === "GET") {
-        const tasks = await (store.projectService ?? store.services.projects).tasks(ownerScope, projectId)
+      const tasks = await store.services.projects.tasks(ownerScope, projectId)
         if (tasks === null) {
           await reply(response, 404, failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
         } else {

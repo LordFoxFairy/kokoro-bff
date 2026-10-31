@@ -42,7 +42,7 @@ export function projectMcpRecommendationsProvider(
   store: BffBusinessStore | null,
   clients: RecommendationCandidateClients,
 ): ProjectMcpRecommendationsProvider | null {
-  const project = store?.projectService ?? store?.services.projects
+  const project = store?.services.projects
   if (!project) return null
   return {
     project,
@@ -200,7 +200,7 @@ export async function projectMcpRecommendationsRoute(
         ? store
         : store?.services?.projects === undefined
           ? null
-          : store.projectService ?? store.services.projects
+          : store.services.projects
     if (!projectStore) throw new Error("project_owner_unavailable")
     const query = { tenantId: context.identity.namespace, subjectId: context.identity.userId, projectId: path[1]!, signal: controller.signal, deadlineAt }
     const raw = await within(projectStore.mcpRecommendations(query))

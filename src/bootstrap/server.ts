@@ -123,7 +123,7 @@ function projectContentAccessForRequest(
     }
     if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
       throw new ConnectError("Project not found", Code.NotFound)
-    const owner = composition.projectService ?? composition.businessStore?.projectService ?? composition.businessStore?.services.projects
+    const owner = composition.projectService ?? composition.businessStore?.services.projects
     if (!owner) throw new ConnectError("Project owner unavailable", Code.Unavailable)
     const project = await owner.find(
       {
@@ -394,7 +394,7 @@ export async function handleBffRequest(
     }
     signal.throwIfAborted()
     if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
-    const project = await (composition.businessStore.projectService ?? composition.businessStore.services.projects).find(
+    const project = await composition.businessStore.services.projects.find(
       {
         tenantId: context.identity.namespace,
         subjectId: context.identity.userId,
@@ -703,11 +703,11 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleMcpProjectPublicationRequest(request, response, config, {
         sessionAdmission: composition.sessionAdmission,
         mcpAuthorization: composition.mcpAuthorization,
-        project: composition.projectService ?? composition.businessStore?.projectService ?? composition.businessStore?.services.projects ?? null,
+        project: composition.projectService ?? composition.businessStore?.services.projects ?? null,
         client: composition.mcpProjectPublicationClient,
       }))
       .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
-      .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService ?? composition.businessStore?.projectService ?? composition.businessStore?.services.projects ?? null))
+      .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService ?? composition.businessStore?.services.projects ?? null))
       .then((handled) => handled ? true : handleSkillDownloadRequest(
         request,
         response,

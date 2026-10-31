@@ -311,7 +311,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     options.personalizationProvider !== undefined ? options.personalizationProvider : (businessStore?.personalizationProvider ?? null)
   const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.services?.chat ?? null)
   const projectService =
-    options.projectService !== undefined ? options.projectService : (businessStore?.projectService ?? businessStore?.services?.projects ?? null)
+    options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
   const publicShareService = businessStore?.publicShareService ?? null
   const scheduledTaskReader =
     businessStore === null
@@ -514,7 +514,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                 installations: installationClient,
                 projection: projectionClient!,
               }),
-              ...(businessStore?.projectService === undefined ? {} : { projects: businessStore.projectService }),
+              ...(businessStore?.services?.projects === undefined ? {} : { projects: businessStore.services.projects }),
               profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
               ...(businessStore?.skillUsage === undefined ? {} : { usage: businessStore.skillUsage }),
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
@@ -538,7 +538,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                         signal: AbortSignal,
                       ) => {
                         signal.throwIfAborted()
-                        const project = await (businessStore.projectService ?? businessStore.services.projects).find(
+                        const project = await businessStore.services.projects.find(
                           {
                             tenantId: context.identity.namespace,
                             subjectId: context.identity.userId,
@@ -559,7 +559,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                         )
                         if (!("projectRef" in owner) || owner.projectRef !== projectId) throw new Error("skill_response_invalid")
                         const record = exactInstallationRecord(installationId, projectInstallation(owner.installation))
-                        const current = await (businessStore.projectService ?? businessStore.services.projects).find(
+                        const current = await businessStore.services.projects.find(
                           {
                             tenantId: context.identity.namespace,
                             subjectId: context.identity.userId,
