@@ -95,11 +95,6 @@ export async function liveBffBusiness(
         await reply(response, 200, ok({ project }, context.requestId), context, idempotency, mutation)
         return true
       }
-      if (businessPath.length === 2 && projectId !== undefined && method === "GET") {
-        const project = await store.services.projects.find(ownerScope, projectId)
-        await reply(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ project }, context.requestId), context, idempotency, mutation)
-        return true
-      }
       if (businessPath.length === 2 && projectId !== undefined && method === "PATCH") {
         if (typeof json.instruction !== "string") {
           await reply(response, 400, failure("invalid_project_instruction", "Project instruction must be a string", context.requestId), context, idempotency, mutation)

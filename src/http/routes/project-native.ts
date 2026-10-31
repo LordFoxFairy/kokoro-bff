@@ -9,6 +9,7 @@ import { projectPinRoute, ProjectPinAdmissionError, type ProjectPinProvider } fr
 
 export type ProjectCoreReadProvider = Readonly<{
   list(scope: Readonly<{ tenantId: string; subjectId: string }>): Promise<readonly unknown[]>
+  find(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<unknown | null>
 }>
 
 function projectPinPath(request: IncomingMessage): string {
@@ -21,7 +22,8 @@ export function isProjectPinRequest(request: IncomingMessage): boolean {
 }
 
 export function isProjectCoreReadRequest(request: IncomingMessage): boolean {
-  return request.method === "GET" && (request.url ?? "").split("?", 1)[0] === "/v1/projects"
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  return request.method === "GET" && (path === "/v1/projects" || /^\/v1\/projects\/[^/]+$/u.test(path))
 }
 
 /** Projects-owned collection read; the legacy dispatcher no longer owns this path. */
@@ -51,7 +53,16 @@ export async function handleProjectCoreReadRequest(
       send(response, 503, failure("business_store_not_configured", "Project owner is unavailable", id))
       return true
     }
-    const projectsRead = await projects.list({ tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId })
+    const scope = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }
+    const path = (request.url ?? "").split("?", 1)[0] ?? ""
+    const projectId = path === "/v1/projects" ? null : path.slice("/v1/projects/".length)
+    if (projectId !== null) {
+      const project = await projects.find(scope, projectId)
+      if (abort.signal.aborted || response.destroyed || response.writableEnded) return true
+      send(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", id) : ok({ project }, id))
+      return true
+    }
+    const projectsRead = await projects.list(scope)
     if (abort.signal.aborted || response.destroyed || response.writableEnded) return true
     send(response, 200, ok({ projects: projectsRead }, id))
   } catch {

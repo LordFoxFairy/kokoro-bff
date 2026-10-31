@@ -96,6 +96,7 @@ test("ProjectsModule owns the project-pin adapter and provider", async () => {
   assert.match(server, /handleProjectPinRequest/u)
   assert.doesNotMatch(server, /await projectPinRoute\(/u)
   assert.doesNotMatch(liveBff, /businessPath\[0\] === "projects"[\s\S]{0,200}method === "GET"/u)
+  assert.doesNotMatch(liveBff, /businessPath\.length === 2[\s\S]{0,120}projectId !== undefined && method === "GET"/u)
 })
 
 test("ScheduledTasksModule owns the current-state read adapter and provider", async () => {
