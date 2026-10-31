@@ -19,7 +19,6 @@ import { Code, ConnectError } from "@connectrpc/connect"
 
 import { archivedTasksRoute } from "../http/routes/archived-tasks.js"
 import { sharedTasksRoute } from "../http/routes/shared-tasks.js"
-import { accountProfileRoute } from "../http/routes/account-profile.js"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
 import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
 import { customApiOperation, customApiRoute } from "../http/routes/custom-api.js"
@@ -36,7 +35,7 @@ import { skillCoverRoute } from "../http/routes/skill-cover.js"
 import { publishedSkillPackageInspectionRoute } from "../http/routes/skill-download.js"
 import { startSkillRequestBudget, skillRequestRemaining, skillDraftsRoute } from "../http/routes/skill-drafts.js"
 import { skillAdminRoute } from "../http/routes/skill-admin.js"
-import { handlePersonalizationRequest } from "../http/routes/personalization.js"
+import { handleAccountNativeRequest } from "../http/routes/account-native.js"
 import { projectRenameRoute } from "../http/routes/project-rename.js"
 import { projectDeleteRoute } from "../http/routes/project-delete.js"
 import { projectDeletionStatusRoute } from "../http/routes/project-deletion-status.js"
@@ -89,8 +88,6 @@ import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamK
 import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { runtimeManifest } from "../http/routes/runtime-manifest.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
-import { accountSessionsRoute } from "../http/routes/account-sessions.js"
-import { liveTeamRead, liveTeamWrite } from "../http/routes/team.js"
 import { liveModelConfigurationAdmin } from "../http/routes/model-configuration-admin.js"
 import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
 import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
@@ -110,10 +107,6 @@ import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-ski
 import { skillPackageInspectionRoute, type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 
-function isPersonalizationRequest(request: IncomingMessage): boolean {
-  return (request.url ?? "").split("?", 1)[0] === "/v1/preferences/personalization"
-}
-
 export async function handleBffRequest(
   request: IncomingMessage,
   response: ServerResponse,
@@ -126,14 +119,6 @@ export async function handleBffRequest(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
-  if ((request.method === "GET" || request.method === "PATCH") && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
-    await accountProfileRoute(request, response, config, composition.sessionAdmission, id)
-    return
-  }
-  if (isPersonalizationRequest(request)) {
-    await handlePersonalizationRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider)
-    return
-  }
   if (
     (request.method === "GET" && (request.url === "/v1/account/archived-tasks" || request.url?.startsWith("/v1/account/archived-tasks?"))) ||
     ((request.method === "GET" || request.method === "POST") && /^\/v1\/sessions\/[^/]+\/(?:archive|restore)(?:\?|$)/u.test(request.url ?? ""))
@@ -1087,21 +1072,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (
-    businessPath[0] === "account" &&
-    businessPath[1] === "sessions" &&
-    ((request.method === "GET" && businessPath.length === 2) || (request.method === "DELETE" && businessPath.length === 3))
-  ) {
-    await accountSessionsRoute(request, response, config, context, admission, businessPath)
-    return
-  }
-
-  if (businessPath[0] === "team") {
-    if (request.method === "GET") await liveTeamRead(request, response, config, context, admission, businessPath)
-    else await liveTeamWrite(request, response, config, context, admission, businessPath)
-    return
-  }
-
   if (composition.routeHandler === undefined && businessPath[0] === "admin") {
     if (await liveModelConfigurationAdmin(request, response, config, context, businessPath, adminOperationDeadline)) return
     await liveModelRoutingAdmin(request, response, config, context, businessPath)
@@ -1398,9 +1368,10 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
-    const handler = isPersonalizationRequest(request)
-      ? handlePersonalizationRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider)
-      : handleBffRequest(request, response, config, composition)
+    const handler = handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider).then((handled) => {
+      if (handled) return
+      return handleBffRequest(request, response, config, composition)
+    })
     void handler.catch(() => {
       if (!response.headersSent) {
         if (

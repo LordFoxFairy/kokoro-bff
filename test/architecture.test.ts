@@ -913,7 +913,7 @@ test("R257 personalization stays caller-owned and bypasses generic receipt dispa
   const provider = await readFile(path.join(root, "src/modules/account/personalization.provider.ts"), "utf8")
   const [server, middleware, accountModule, legacyModule] = await Promise.all([
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/account/personalization.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/account/account.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
   ])
@@ -925,9 +925,9 @@ test("R257 personalization stays caller-owned and bypasses generic receipt dispa
   assert.doesNotMatch(provider, /from ["'](?:pg|redis|node:http)["']/u)
   assert.doesNotMatch(repository, /bff_idempotency_receipt|kokoro_iam|kokoro_system|\.redis\./u)
   assert.match(server, /composition\.personalizationProvider/u)
-  assert.match(middleware, /handlePersonalizationRequest/u)
-  assert.match(accountModule, /AccountPersonalizationMiddleware/u)
-  assert.match(legacyModule, /v1\/preferences\/personalization/u)
+  assert.match(middleware, /handleAccountNativeRequest/u)
+  assert.match(accountModule, /AccountMiddleware/u)
+  assert.doesNotMatch(legacyModule, /v1\/preferences\/personalization/u)
 })
 
 test("shared tasks stays in the existing Chat owner without a new pool or capability projection", async () => {

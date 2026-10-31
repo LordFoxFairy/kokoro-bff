@@ -12,11 +12,7 @@ export class LegacyRoutesModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
     consumer
       .apply(LegacyRoutesMiddleware)
-      .exclude(
-        { path: "healthz", method: RequestMethod.GET },
-        { path: "readyz", method: RequestMethod.GET },
-        { path: "v1/preferences/personalization", method: RequestMethod.ALL },
-      )
+      .exclude({ path: "healthz", method: RequestMethod.GET }, { path: "readyz", method: RequestMethod.GET })
       .forRoutes({ path: "*", method: RequestMethod.ALL })
   }
 }
