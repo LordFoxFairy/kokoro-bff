@@ -6,6 +6,17 @@ import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import type { BffConfig } from "../src/config/runtime.ts"
 import { createLiveTestBffServer } from "./doubles/server.ts"
 import { musicOwnerRoute, projectMoriResponse, projectMoriEventStream } from "../dist/infrastructure/clients/mori/owner-route.js"
+import { MusicMiddleware } from "../dist/modules/music/music.middleware.js"
+import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
+import type { SessionAdmission } from "../src/auth/session-admission.types.ts"
+
+function featureServer(configuration: BffConfig, admission: SessionAdmission, entries = new Map()): Server {
+  const middleware = new MusicMiddleware(configuration, admission, { entries })
+  return createServer((request, response) => middleware.use(request, response, () => {
+    response.writeHead(404)
+    response.end()
+  }))
+}
 
 const servers: Server[] = []
 
@@ -65,6 +76,59 @@ afterEach(async () => {
 })
 
 describe("Mori Music owner adapter", () => {
+  it("feature middleware re-admits receipt replay and rejects changed intent without a second owner command", async () => {
+    let calls = 0
+    const owner = await listen(createServer(async (request, response) => {
+      for await (const _chunk of request) { /* consume the original command */ }
+      calls++
+      assert.equal(request.url, "/internal/bff/mori/projects/project_123/generations")
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { generation_ref: "generation_1", status: "queued" } }))
+    }))
+    const admission = new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } })
+    const entries = new Map()
+    const base = await listen(featureServer(config({ upstreams: { ...config().upstreams, music: owner } }), admission, entries))
+    const init = { method: "POST", headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "native-generation" }, body: JSON.stringify({ prompt: "original" }) }
+    const first = await fetch(`${base}/v1/mori/projects/project_123/generations`, init)
+    assert.equal(first.status, 200)
+    const original = await first.json()
+    const replay = await fetch(`${base}/v1/mori/projects/project_123/generations`, init)
+    assert.deepEqual(await replay.json(), original)
+    const changed = await fetch(`${base}/v1/mori/projects/project_123/generations`, { ...init, body: JSON.stringify({ prompt: "changed" }) })
+    assert.equal(changed.status, 409)
+    admission.deny("test-session", { ok: false, status: 401, code: "session_invalid" })
+    const revoked = await fetch(`${base}/v1/mori/projects/project_123/generations`, init)
+    assert.equal(revoked.status, 401)
+    assert.equal(calls, 1)
+    assert.equal(admission.calls.length, 4)
+  })
+
+  it("feature middleware cancels held admission and discards its late acceptance before receipts or owner commands", async () => {
+    let release!: (value: Awaited<ReturnType<SessionAdmission["verify"]>>) => void
+    let admittedSignal!: AbortSignal
+    let entered!: () => void
+    const entry = new Promise<void>((resolve) => { entered = resolve })
+    const entries = new Map()
+    const base = await listen(featureServer(config(), { verify: ({ signal }) => {
+      admittedSignal = signal
+      entered()
+      return new Promise((resolve) => { release = resolve })
+    } }, entries))
+    const abort = new AbortController()
+    const pending = fetch(`${base}/v1/mori/projects/project_123/generations`, { method: "POST", headers: { ...authHeaders(), "idempotency-key": "held" }, body: "{}", signal: abort.signal }).catch(() => null)
+    await entry
+    const cancelled = new Promise<void>((resolve) => admittedSignal.addEventListener("abort", () => resolve(), { once: true }))
+    abort.abort()
+    await pending
+    try {
+      await Promise.race([cancelled, new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("caller cancellation was not propagated")), 300))])
+    } finally {
+      release({ ok: true, identity: { namespace: "ns_test", userId: "user_test" }, platformAdmin: false })
+    }
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(entries.size, 0)
+  })
+
   it("maps only documented Mori routes to the internal Music owner path", () => {
     const route = musicOwnerRoute(
       ["mori", "projects", "project_123", "candidates"],

@@ -92,6 +92,21 @@ test("SystemModule owns administrator model configuration and routing routes", a
   assert.doesNotMatch(server, /await liveModelRoutingAdmin\(/u)
 })
 
+test("MusicModule owns the Mori owner adapter and idempotency seam", async () => {
+  const [moduleSource, middleware, nativeRoute, server] = await Promise.all([
+    readFile(path.join(root, "src/modules/music/music.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/music/music.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/music-native.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+  ])
+  assert.match(moduleSource, /MUSIC_IDEMPOTENCY/u)
+  assert.match(moduleSource, /MusicMiddleware/u)
+  assert.match(middleware, /handleMoriRequest/u)
+  assert.match(nativeRoute, /liveMoriBusiness/u)
+  assert.match(server, /handleMoriRequest/u)
+  assert.doesNotMatch(server, /isMoriBusinessPath|liveMoriBusiness/u)
+})
+
 test("ChatModule owns the archive/share adapters and chat provider", async () => {
   const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, server, legacyModule] = await Promise.all([
     readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),

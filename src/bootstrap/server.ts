@@ -75,8 +75,8 @@ import { scheduledCreateInput } from "../application/scheduled/input.js"
 import type { ScheduledTaskCreateInput } from "../application/ports/scheduled-task-repository.js"
 import { authorizeChatRequest, type ChatAuthorization } from "../http/routes/chat-authorization.js"
 import { liveOwnerBusiness } from "../http/routes/owner.js"
-import { liveMoriBusiness } from "../http/routes/music.js"
-import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamKey } from "../http/routes/routing.js"
+import { handleMoriRequest } from "../http/routes/music-native.js"
+import { configuredUpstream, bffOwnedBusinessPath, upstreamKey } from "../http/routes/routing.js"
 import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { handleSystemNativeRequest } from "../http/routes/system-native.js"
 import { handleChatNativeRequest } from "../http/routes/chat-native.js"
@@ -435,8 +435,7 @@ export async function handleBffRequest(
     composition.routeHandler === undefined &&
     key === null &&
     !isPlatformProjectionRead &&
-    !bffOwnedBusinessPath(businessPath) &&
-    !isMoriBusinessPath(businessPath)
+    !bffOwnedBusinessPath(businessPath)
   ) {
     send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
     return
@@ -601,10 +600,6 @@ export async function handleBffRequest(
     return
   }
 
-  if (isMoriBusinessPath(businessPath)) {
-    await liveMoriBusiness(request, response, config, context, businessPath, body, mutation, composition.idempotency)
-    return
-  }
   if (businessPath[0] === "sessions") {
     if (
       composition.businessStore !== null &&
@@ -723,6 +718,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization))
       .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.chatService ?? composition.businessStore?.services.chat ?? null))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
+      .then((handled) => handled ? true : composition.routeHandler !== undefined ? false : handleMoriRequest(request, response, config, composition.sessionAdmission, { entries: composition.idempotency, ...(composition.businessStore === null ? {} : { persistent: composition.businessStore }) }))
       .then((handled) =>
         handled
           ? true
