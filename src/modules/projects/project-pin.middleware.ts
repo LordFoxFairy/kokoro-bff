@@ -1,8 +1,10 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, PROJECT_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
+import { BFF_CONFIG, BFF_POOL, PROJECT_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { Pool } from "pg"
+import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
 import type { ProjectPinProvider } from "../../http/routes/project-pin.js"
 import {
   handleProjectCoreReadRequest,
@@ -13,22 +15,37 @@ import {
   handleProjectResourceListRequest,
   handleProjectResourceDeleteRequest,
   handleProjectResourceReadRequest,
+  handleProjectResourceUploadRequest,
   type ProjectCoreReadProvider,
 } from "../../http/routes/project-native.js"
 
 @Injectable()
 export class ProjectPinMiddleware implements NestMiddleware {
+  private readonly projectResourceReceipts: PostgresIdempotencyRepository
+  private readonly projectResourceIdempotency = new Map<
+    string,
+    import("../../application/idempotency.js").IdempotencyEntry
+  >()
+
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(PROJECT_SERVICE) private readonly projectService: ProjectPinProvider & ProjectCoreReadProvider,
-  ) {}
+    @Inject(BFF_POOL) pool: Pool,
+  ) {
+    this.projectResourceReceipts = new PostgresIdempotencyRepository(pool)
+  }
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleProjectRenameRequest(request, response, this.config, this.admission, this.projectService)
       .then((handled) => handled || handleProjectDeleteRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectDeletionStatusRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectResourceDeleteRequest(request, response, this.config, this.admission, this.projectService))
+      .then((handled) => handled || handleProjectResourceUploadRequest(request, response, this.config, this.admission, {
+        find: this.projectService.find.bind(this.projectService),
+        receipts: this.projectResourceReceipts,
+        idempotency: this.projectResourceIdempotency,
+      }))
       .then((handled) => handled || handleProjectResourceReadRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectResourceListRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.projectService))

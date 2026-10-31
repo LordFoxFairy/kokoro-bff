@@ -10,6 +10,7 @@ import {
   handleProjectResourceListRequest,
   handleProjectResourceDeleteRequest,
   handleProjectResourceReadRequest,
+  handleProjectResourceUploadRequest,
 } from "../http/routes/project-native.js"
 import { handleSharedPublicRequest, handleSharedReaderRequest } from "../http/routes/shared-native.js"
 import { handleHealthRequest } from "../http/routes/health-native.js"
@@ -47,7 +48,6 @@ import { personalFileUploadRoute } from "../http/routes/personal-file-upload.js"
 import { personalFileDownloadRoute } from "../http/routes/personal-file-download.js"
 import { libraryArtifactRoute } from "../http/routes/library-artifact.js"
 import { libraryArtifactDownloadRoute } from "../http/routes/library-artifact-download.js"
-import { projectResourceRoute } from "../http/routes/project-resource.js"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
 import { loadConfig, type BffConfig } from "../config/runtime.js"
@@ -964,17 +964,6 @@ export async function handleBffRequest(
   if (
     composition.routeHandler === undefined &&
     method === "POST" &&
-    businessPath.length === 3 &&
-    businessPath[0] === "projects" &&
-    businessPath[1] !== undefined &&
-    businessPath[2] === "resources"
-  ) {
-    await projectResourceRoute(request, response, config, context, businessPath[1], body ?? Buffer.alloc(0), composition.businessStore, composition.idempotency)
-    return
-  }
-  if (
-    composition.routeHandler === undefined &&
-    method === "POST" &&
     businessPath.length === 2 &&
     businessPath[0] === "library" &&
     businessPath[1] === "files"
@@ -1110,6 +1099,13 @@ export type BffServer = Server & {
 export function createBffServer(config: BffConfig = loadConfig(), options: BffServerOptions = {}): BffServer {
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
+  const projectResourceUpload = composition.businessStore === null || composition.projectService === null
+    ? null
+    : {
+        find: composition.projectService.find.bind(composition.projectService),
+        receipts: composition.businessStore,
+        idempotency: composition.idempotency,
+      }
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
     const handler = handleHealthRequest(request, response, config, composition.readiness)
       .then((handled) => handled ? true : handleIamRelayRequest(request, response, config))
@@ -1146,6 +1142,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectDeleteRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectDeletionStatusRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceDeleteRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
+      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceUploadRequest(request, response, config, composition.sessionAdmission, projectResourceUpload)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceReadRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceListRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectCoreReadRequest(request, response, config, composition.sessionAdmission, composition.projectService)))

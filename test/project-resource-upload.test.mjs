@@ -130,6 +130,50 @@ function fixture() {
   return { receipts, calls, input, store, storage, context, asset }
 }
 
+test("Projects feature handler owns resource upload with persistent receipt recovery", async () => {
+  const { createServer } = await import("node:http")
+  const { once } = await import("node:events")
+  const { handleProjectResourceUploadRequest } = await moduleAt("http/routes/project-native")
+  assert.equal(typeof handleProjectResourceUploadRequest, "function")
+  const f = fixture()
+  const server = createServer((request, response) => {
+    void handleProjectResourceUploadRequest(
+      request,
+      response,
+      { tenantId: "tenant-1", sharedSecret: "web-secret", storage: {} },
+      { verify: async () => ({ ok: true, identity: { namespace: "tenant-1", userId: "subject-1" } }) },
+      {
+        find: async () => ({ id: "project-1" }),
+        receipts: f.store,
+        idempotency: new Map(),
+      },
+      () => f.storage,
+    ).catch(() => undefined)
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const url = `http://127.0.0.1:${server.address().port}/v1/projects/slug/resources`
+  try {
+    const form = new FormData()
+    form.append("files", new File([f.input.bytes], f.input.filename, { type: f.input.mimeType }))
+    const result = await fetch(url, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer user",
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "web-secret",
+        "idempotency-key": "upload-key",
+      },
+      body: form,
+    })
+    assert.equal(result.status, 200)
+    assert.equal((await result.json()).data.resources[0].asset_id, "asset-1")
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
 test("durable upload checkpoint allows reconstructed service to recover completed upload without a second asset", async () => {
   const { uploadProjectResource } = await moduleAt("application/project-resource-upload")
   const f = fixture()

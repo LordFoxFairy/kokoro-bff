@@ -1,7 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
+import type { RequestContext } from "../../domain/request-context.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { DeleteProjectResult, RenameProjectResult } from "../../application/ports/project-repository.js"
+import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
+import { mutationTicket, type IdempotencyEntry } from "../../application/idempotency.js"
+import { uploadProjectResource, projectResourceFingerprint } from "../../application/project-resource-upload.js"
+import type { ProjectResourceStorage } from "../../application/project-resource.types.js"
 import { ProjectResourceError } from "../../application/project-resource.error.js"
 import { ProjectResourceAccessClient } from "../../infrastructure/clients/storage/project-resource-access.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
@@ -9,8 +14,9 @@ import { failure, ok } from "../../contracts/index.js"
 import { isEmptyProjectDeletionRequest, isProjectDeletionId, projectDeletionHeaderValues, validProjectDeletionKey } from "../project-deletion-input.js"
 import { isCanonicalRenameProjectId, parseProjectRenameName, renameProjectHeaderValues, validRenameProjectKey } from "../project-rename-input.js"
 import { projectResourceListInput } from "../project-resource-list-input.js"
-import { pathOf, requestId } from "../request.js"
-import { send } from "../response.js"
+import { idempotencyKey, pathOf, readBody, requestId } from "../request.js"
+import { reply, send } from "../response.js"
+import { parseProjectResource } from "../project-resource-input.js"
 import { StorageUploadClient } from "../../infrastructure/clients/storage/client.js"
 import { projectPinRoute, ProjectPinAdmissionError, type ProjectPinProvider } from "./project-pin.js"
 import { projectResourceReadRoute, type ProjectResourceReadClientFactory, type ProjectResourceReadSpooler } from "./project-resource-read.js"
@@ -32,6 +38,11 @@ export type ProjectCoreReadProvider = Readonly<{
 
 export type ProjectResourceReadProvider = Readonly<{
   find(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<unknown | null>
+}>
+
+export type ProjectResourceUploadProvider = ProjectResourceReadProvider & Readonly<{
+  receipts: IdempotencyRepository
+  idempotency: Map<string, IdempotencyEntry>
 }>
 
 function projectPinPath(request: IncomingMessage): string {
@@ -71,6 +82,79 @@ export function isProjectResourceDeleteRequest(request: IncomingMessage): boolea
 export function isProjectResourceReadRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
   return request.method === "GET" && /^\/v1\/projects\/[^/]+\/resources\/[^/]+(?:\/download)?$/u.test(path)
+}
+
+export function isProjectResourceUploadRequest(request: IncomingMessage): boolean {
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  return request.method === "POST" && /^\/v1\/projects\/[^/]+\/resources$/u.test(path)
+}
+
+/** Projects-owned resource upload; the legacy dispatcher no longer owns this path. */
+export async function handleProjectResourceUploadRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  projects: ProjectResourceUploadProvider | null,
+  clientFactory: (storage: NonNullable<BffConfig["storage"]>, context: { tenantId: string; subjectId: string; projectId: string; key: string; requestId: string }) => ProjectResourceStorage = (storage, context) =>
+    new StorageUploadClient(storage, context),
+): Promise<boolean> {
+  if (!isProjectResourceUploadRequest(request)) return false
+  const id = requestId(request)
+  response.setHeader("x-request-id", id)
+  const cancellation = new AbortController()
+  const cancel = (): void => {
+    if (!response.writableEnded) cancellation.abort()
+  }
+  request.once("aborted", cancel)
+  response.once("close", cancel)
+  const signal = AbortSignal.any([cancellation.signal, AbortSignal.timeout(45_000)])
+  let mutation: import("../../application/idempotency.js").MutationTicket | null = null
+  let admittedContext: RequestContext | null = null
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    if (!admitted.ok) {
+      send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+      return true
+    }
+    admittedContext = admitted.context
+    if (projects === null) throw new ProjectResourceError("business_store_unavailable", 503, true)
+    const path = (request.url ?? "").split("?", 1)[0] ?? ""
+    const match = /^\/v1\/projects\/([^/]+)\/resources$/u.exec(path)
+    if (match?.[1] === undefined || request.url !== path) throw new ProjectResourceError("invalid_project_resource", 400)
+    let projectRef: string
+    try { projectRef = decodeURIComponent(match[1]) }
+    catch { throw new ProjectResourceError("invalid_project_resource", 400) }
+    const project = await projects.find({ tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }, projectRef)
+    if (project === null) throw new ProjectResourceError("project_not_found", 404)
+    if (typeof project !== "object" || project === null || !("id" in project) || typeof project.id !== "string")
+      throw new ProjectResourceError("resource_upload_unavailable", 503, true)
+    const keys = projectDeletionHeaderValues(request.rawHeaders, "idempotency-key")
+    const key = idempotencyKey(request)
+    if (keys.length !== 1 || key === null || keys[0] !== key || key.length > 191 || !/^[\x21-\x7e]+$/u.test(key))
+      throw new ProjectResourceError("invalid_idempotency_key", 400)
+    const body = await readBody(request)
+    const input = await parseProjectResource(request.headers["content-type"] ?? "", body)
+    const context = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId, projectId: project.id, key, requestId: id }
+    const ticket = await mutationTicket(key, "POST", `/projects/${project.id}/resources`, admitted.context, projectResourceFingerprint(input), projects.idempotency, projects.receipts)
+    if (ticket.replay !== null) {
+      send(response, ticket.replay.status, ticket.replay.body)
+      return true
+    }
+    if (ticket.conflict || ticket.pending) throw new ProjectResourceError(ticket.conflict ? "idempotency_conflict" : "idempotency_in_progress", 409)
+    mutation = ticket.ticket
+    if (config.storage === undefined) throw new ProjectResourceError("storage_projection_not_configured", 503, true)
+    const resource = await uploadProjectResource(context, input, projects.receipts, clientFactory(config.storage, context), signal)
+    await reply(response, 200, ok({ resources: [resource] }, id), admitted.context, projects.idempotency, mutation)
+  } catch (error) {
+    const known = error instanceof ProjectResourceError ? error : new ProjectResourceError("resource_upload_unavailable", 503, true)
+    if (admittedContext === null || projects === null) send(response, known.status, failure(known.code, "Project resource upload did not complete", id))
+    else await reply(response, known.status, failure(known.code, "Project resource upload did not complete", id), admittedContext, projects.idempotency, mutation)
+  } finally {
+    request.off("aborted", cancel)
+    response.off("close", cancel)
+  }
+  return true
 }
 
 /** Projects-owned resource metadata/download read; the legacy dispatcher no longer owns this path. */
