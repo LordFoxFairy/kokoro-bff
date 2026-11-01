@@ -55,7 +55,7 @@ import { ScheduledAgentDispatcher } from "../application/scheduled-agent-dispatc
 import { ScheduledAgentTerminalConsumer } from "../application/scheduled-agent-terminal-consumer.js"
 import { ScheduledAgentDispatchDelivery } from "../infrastructure/clients/agent/scheduled-dispatch-delivery.js"
 import { ScheduledAgentTerminalSource } from "../infrastructure/clients/agent/scheduled-terminal-source.js"
-import { PostgresBffRepositories } from "../infrastructure/postgres/repositories.js"
+import { createPostgresBffOwnerResources } from "../infrastructure/postgres/repositories.js"
 import type { RequestContext } from "../domain/request-context.js"
 import type { PersonalizationProvider } from "../modules/account/personalization.provider.js"
 import type { ChatApplicationService } from "../application/chat-service.js"
@@ -394,7 +394,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const businessStore = explicitlySuppliedStore
     ? (options.businessStore ?? null)
     : config.postgresUrl !== null && config.redisUrl !== null
-      ? new PostgresBffRepositories(config.postgresUrl, config.redisUrl)
+      ? createPostgresBffOwnerResources(config.postgresUrl, config.redisUrl)
       : (() => {
           throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime")
         })()

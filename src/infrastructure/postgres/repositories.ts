@@ -15,9 +15,9 @@ import {
   type ReceiptCasResult,
   type ReceiptClaim,
 } from "../../application/ports/idempotency-repository.js"
+import type { ScheduledTaskOutboxRepository } from "../../application/scheduled/scheduled-task-outbox-repository.js"
 import type { ProjectRepository } from "../../application/projects/project-repository.js"
 import type { ScheduledTaskRepository } from "../../application/scheduled/scheduled-task-repository.js"
-import type { ScheduledTaskOutboxRepository } from "../../application/scheduled/scheduled-task-outbox-repository.js"
 import { ProjectService } from "../../application/project-service.js"
 import { ScheduledTaskService } from "../../application/scheduled-task-service.js"
 import { ChatApplicationService } from "../../application/chat-service.js"
@@ -49,11 +49,130 @@ export { PENDING_RECEIPT_STATUS }
 export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/idempotency-repository.js"
 export type { ScheduledTaskRecord } from "../../application/scheduled/scheduled-task-repository.js"
 
+/**
+ * Named resources owned by the BFF PostgreSQL boundary.
+ *
+ * Bootstrap consumes these resources by owner name instead of depending on a
+ * repository aggregate. The database and idempotency handles remain here only
+ * as infrastructure/test seams; application modules receive their own named
+ * ports below.
+ */
+export type PostgresBffOwnerResources = {
+  readonly database: PostgresBffDatabase
+  readonly idempotency: IdempotencyRepository
+  readonly projectService: ProjectService
+  readonly scheduledTaskService: ScheduledTaskService
+  readonly chatService: ChatApplicationService
+  readonly chatTurnService: ChatTurnApplicationService
+  readonly agUi: AgUiProjectionService
+  readonly agUiConsumers: AgUiProjectionConsumerRepository
+  readonly scheduledTaskOutbox: ScheduledTaskOutboxRepository
+  readonly agentDispatchOutbox: AgentDispatchOutboxRepository
+  readonly submittedAgentRuns: SubmittedAgentRunReader
+  readonly projectExecutionBindings: ProjectExecutionBindingReader
+  readonly agentCancellationOutbox: AgentCancellationOutboxRepository
+  readonly schedulerDispatchReceipts: SchedulerDispatchReceiptRepository
+  readonly scheduledAgentDispatch: ScheduledAgentDispatchRepository
+  readonly artifactLibrary: ArtifactLibraryRepository
+  readonly projectScopeReleaseOutbox: ProjectScopeReleaseOutboxRepository
+  readonly skillShares: SkillShareRepository
+  readonly publicShareService: PublicShareApplicationService
+  readonly personalKnowledge: PersonalKnowledgeRepository
+  readonly skillUsage: SkillUsageReader
+  readonly skillAiAssociation: (
+    tenant: string,
+    subject: string,
+    conversation: string,
+    artifact: string,
+  ) => Promise<import("../../application/skill-ai-handoff.js").SkillAiAssociation | null>
+  ready(): Promise<void>
+  close(): Promise<void>
+  getReceipt(scope: string): Promise<PersistentReceipt | null>
+  claimReceipt(scope: string, fingerprint: string): Promise<ReceiptClaim>
+  putReceipt(scope: string, receipt: PersistentReceipt): Promise<void>
+  compareAndSetReceipt(
+    scope: string,
+    fingerprint: string,
+    expected: PersistentReceipt,
+    replacement: PersistentReceipt,
+  ): Promise<ReceiptCasResult>
+  releaseReceipt(scope: string, fingerprint: string): Promise<void>
+}
+
+/** Construct the production BFF owner-resource graph. */
+export function createPostgresBffOwnerResources(postgresUrl: string, redisUrl: string): PostgresBffOwnerResources {
+  const database = new PostgresBffDatabase(postgresUrl, redisUrl)
+  const idempotency = new PostgresIdempotencyRepository(database.pool)
+  const projects: ProjectRepository = new PostgresProjectRepository(database)
+  const scheduled: ScheduledTaskRepository & ScheduledTaskOutboxRepository = new PostgresScheduledTaskRepository(database)
+  const chat = new PostgresChatRepository(database)
+  const publicShares = new PostgresPublicShareRepository(database)
+  const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
+  const agentCancellationOutbox = new PostgresAgentCancellationOutboxRepository(database)
+  const schedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(database.pool)
+  const scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository(database)
+  const artifactLibrary = new PostgresConversationArtifactLibrary(database)
+  const projectScopeReleaseOutbox = new PostgresProjectScopeReleaseOutboxRepository(database)
+  const skillShares = new PostgresSkillShareRepository(database)
+  const publicShareService = new PublicShareApplicationService(publicShares)
+  const personalKnowledge = new PostgresPersonalKnowledgeRepository(database)
+  const skillUsage: SkillUsageReader = async (tenant, refs) => {
+    const client = await database.pool.connect()
+    try {
+      return await readSkillUsage(client, tenant, refs)
+    } finally {
+      client.release()
+    }
+  }
+  const skillAiAssociation = (tenant: string, subject: string, conversation: string, artifact: string) =>
+    artifactLibrary.findSkillHandoff(tenant, subject, conversation, artifact)
+  const projectService = new ProjectService(projects)
+  const scheduledTaskService = new ScheduledTaskService(scheduled)
+  const chatService = new ChatApplicationService(chat)
+  const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+  const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(database))
+  const agUiConsumers = new PostgresAgUiConsumerRepository(database)
+
+  return {
+    database,
+    idempotency,
+    projectService,
+    scheduledTaskService,
+    chatService,
+    chatTurnService,
+    agUi,
+    agUiConsumers,
+    scheduledTaskOutbox: scheduled,
+    agentDispatchOutbox,
+    submittedAgentRuns: agentDispatchOutbox,
+    projectExecutionBindings: agentDispatchOutbox,
+    agentCancellationOutbox,
+    schedulerDispatchReceipts,
+    scheduledAgentDispatch,
+    artifactLibrary,
+    projectScopeReleaseOutbox,
+    skillShares,
+    publicShareService,
+    personalKnowledge,
+    skillUsage,
+    skillAiAssociation,
+    ready: () => database.ready(),
+    close: () => database.close(),
+    getReceipt: (scope) => idempotency.getReceipt(scope),
+    claimReceipt: (scope, fingerprint) => idempotency.claimReceipt(scope, fingerprint),
+    putReceipt: (scope, receipt) => idempotency.putReceipt(scope, receipt),
+    compareAndSetReceipt: (scope, fingerprint, expected, replacement) => idempotency.compareAndSetReceipt(scope, fingerprint, expected, replacement),
+    releaseReceipt: (scope, fingerprint) => idempotency.releaseReceipt(scope, fingerprint),
+  }
+}
+
+/**
+ * Raw/integration compatibility wrapper for tests that still need the historic
+ * aggregate shape. Production bootstrap uses createPostgresBffOwnerResources.
+ */
 export class PostgresBffRepositories {
   private readonly database: PostgresBffDatabase
   private readonly idempotency: IdempotencyRepository
-  private readonly projects: ProjectRepository
-  private readonly scheduled: ScheduledTaskRepository
   /** Feature-owned application services exposed as named seams for bootstrap. */
   public readonly projectService: ProjectService
   public readonly scheduledTaskService: ScheduledTaskService
@@ -74,46 +193,37 @@ export class PostgresBffRepositories {
   public readonly publicShareService: PublicShareApplicationService
   public readonly personalKnowledge: PersonalKnowledgeRepository
   public readonly skillUsage: SkillUsageReader
-  public readonly skillAiAssociation: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<import("../../application/skill-ai-handoff.js").SkillAiAssociation | null>
+  public readonly skillAiAssociation: (
+    tenant: string,
+    subject: string,
+    conversation: string,
+    artifact: string,
+  ) => Promise<import("../../application/skill-ai-handoff.js").SkillAiAssociation | null>
 
   public constructor(postgresUrl: string, redisUrl: string) {
-    this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
-    this.idempotency = new PostgresIdempotencyRepository(this.database.pool)
-    this.projects = new PostgresProjectRepository(this.database)
-    const scheduled = new PostgresScheduledTaskRepository(this.database)
-    const chat = new PostgresChatRepository(this.database)
-    const publicShares = new PostgresPublicShareRepository(this.database)
-    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(this.database)
-    const agentCancellationOutbox = new PostgresAgentCancellationOutboxRepository(this.database)
-    this.scheduled = scheduled
-    this.scheduledTaskOutbox = scheduled
-    this.agentDispatchOutbox = agentDispatchOutbox
-    this.submittedAgentRuns = agentDispatchOutbox
-    this.projectExecutionBindings = agentDispatchOutbox
-    this.agentCancellationOutbox = agentCancellationOutbox
-    this.schedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(this.database.pool)
-    this.scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository(this.database)
-    const artifactLibrary = new PostgresConversationArtifactLibrary(this.database)
-    this.artifactLibrary = artifactLibrary
-    this.projectScopeReleaseOutbox = new PostgresProjectScopeReleaseOutboxRepository(this.database)
-    this.skillShares = new PostgresSkillShareRepository(this.database)
-    this.publicShareService = new PublicShareApplicationService(publicShares)
-    this.personalKnowledge = new PostgresPersonalKnowledgeRepository(this.database)
-    this.skillUsage = async (tenant, refs) => {
-      const client = await this.database.pool.connect()
-      try {
-        return await readSkillUsage(client, tenant, refs)
-      } finally {
-        client.release()
-      }
-    }
-    this.skillAiAssociation = (tenant, subject, conversation, artifact) => artifactLibrary.findSkillHandoff(tenant, subject, conversation, artifact)
-    this.projectService = new ProjectService(this.projects)
-    this.scheduledTaskService = new ScheduledTaskService(this.scheduled)
-    this.chatService = new ChatApplicationService(chat)
-    this.chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
-    this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
-    this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)
+    const resources = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+    this.database = resources.database
+    this.idempotency = resources.idempotency
+    this.projectService = resources.projectService
+    this.scheduledTaskService = resources.scheduledTaskService
+    this.chatService = resources.chatService
+    this.chatTurnService = resources.chatTurnService
+    this.agUi = resources.agUi
+    this.agUiConsumers = resources.agUiConsumers
+    this.scheduledTaskOutbox = resources.scheduledTaskOutbox
+    this.agentDispatchOutbox = resources.agentDispatchOutbox
+    this.submittedAgentRuns = resources.submittedAgentRuns
+    this.projectExecutionBindings = resources.projectExecutionBindings
+    this.agentCancellationOutbox = resources.agentCancellationOutbox
+    this.schedulerDispatchReceipts = resources.schedulerDispatchReceipts
+    this.scheduledAgentDispatch = resources.scheduledAgentDispatch
+    this.artifactLibrary = resources.artifactLibrary
+    this.projectScopeReleaseOutbox = resources.projectScopeReleaseOutbox
+    this.skillShares = resources.skillShares
+    this.publicShareService = resources.publicShareService
+    this.personalKnowledge = resources.personalKnowledge
+    this.skillUsage = resources.skillUsage
+    this.skillAiAssociation = resources.skillAiAssociation
   }
 
   public ready(): Promise<void> {

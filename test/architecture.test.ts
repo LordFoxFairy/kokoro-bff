@@ -263,7 +263,8 @@ test("BFF production composition requires the live PostgreSQL and Redis runtime"
     readFile(path.join(root, "src/config/runtime.ts"), "utf8"),
   ])
   assert.doesNotMatch(main, /infrastructure\/mock|new\s+(?:Mock|MoriMock)/u)
-  assert.match(runtime, /PostgresBffRepositories/u)
+  assert.match(runtime, /createPostgresBffOwnerResources/u)
+  assert.doesNotMatch(runtime, /new\s+PostgresBffRepositories/u)
   assert.match(runtime, /postgresUrl/u)
   assert.match(runtime, /redisUrl/u)
   assert.match(runtime, /required|not configured/u)
