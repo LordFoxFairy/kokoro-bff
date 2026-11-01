@@ -1,7 +1,6 @@
 import type { AgUiProjectionService } from "../agui/project-session-events.js"
 import type { AgUiProjectionConsumerRepository } from "../agui/ports/agui-projection-repository.js"
 import type { IdempotencyRepository } from "./idempotency-repository.js"
-import type { BffApplicationServices } from "../services.js"
 import type { ScheduledTaskOutboxRepository } from "./scheduled-task-outbox-repository.js"
 import type { AgentDispatchOutboxRepository } from "./agent-dispatch-outbox-repository.js"
 import type { AgentCancellationOutboxRepository } from "./agent-cancellation-outbox-repository.js"
@@ -45,7 +44,6 @@ export interface BffBusinessStore extends IdempotencyRepository {
   readonly submittedAgentRuns?: import("./submitted-agent-run-reader.js").SubmittedAgentRunReader
   readonly projectExecutionBindings?: import("./project-execution-binding-reader.js").ProjectExecutionBindingReader
   readonly artifactLibrary?: ArtifactLibraryRepository
-  readonly services: BffApplicationServices
   readonly agUi: AgUiProjectionService
   /** Durable source-consumer control plane exposed by the live store. */
   readonly agUiConsumers?: AgUiProjectionConsumerRepository

@@ -5,7 +5,6 @@ import { authorizeMcpAction, authorizeUserRequest } from "../../auth/user-admiss
 import type { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { ProjectService } from "../../application/project-service.js"
 import { decodeProjectMcpRecommendations, recommendationIdentity, projectMcpId } from "../../domain/project/mcp-recommendations.js"
 import {
@@ -39,10 +38,9 @@ export function isProjectMcpRecommendationsRequest(request: IncomingMessage): bo
 }
 
 export function projectMcpRecommendationsProvider(
-  store: BffBusinessStore | null,
+  project: ProjectService | null,
   clients: RecommendationCandidateClients,
 ): ProjectMcpRecommendationsProvider | null {
-  const project = store?.services?.projects
   if (!project) return null
   return {
     project,
@@ -117,7 +115,7 @@ export async function projectMcpRecommendationsRoute(
   response: ServerResponse,
   context: RequestContext,
   path: readonly string[],
-  store: Pick<ProjectService, "mcpRecommendations" | "replaceMcpRecommendations"> | BffBusinessStore | null,
+  store: Pick<ProjectService, "mcpRecommendations" | "replaceMcpRecommendations"> | null,
   clients: RecommendationCandidateClients,
   currentAccess: (mcpRead: boolean, signal: AbortSignal, deadlineAt: number) => Promise<string>,
 ): Promise<void> {
@@ -195,13 +193,8 @@ export async function projectMcpRecommendationsRoute(
       if (!input) invalid()
     }
     await access()
-    const projectStore =
-      store && "mcpRecommendations" in store
-        ? store
-        : store?.services?.projects === undefined
-          ? null
-          : store.services?.projects
-    if (!projectStore) throw new Error("project_owner_unavailable")
+    if (!store) throw new Error("project_owner_unavailable")
+    const projectStore = store
     const query = { tenantId: context.identity.namespace, subjectId: context.identity.userId, projectId: path[1]!, signal: controller.signal, deadlineAt }
     const raw = await within(projectStore.mcpRecommendations(query))
     controller.signal.throwIfAborted()

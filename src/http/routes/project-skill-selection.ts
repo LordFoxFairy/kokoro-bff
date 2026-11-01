@@ -4,7 +4,6 @@ import type { BffConfig } from "../../config/runtime.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { IdempotencyRepository, PersistentReceipt } from "../../application/ports/idempotency-repository.js"
 import type { ProjectService } from "../../application/project-service.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
@@ -23,21 +22,24 @@ export function isProjectSkillSelectionRequest(request: IncomingMessage): boolea
   return ["GET", "PUT"].includes(request.method ?? "") && /^\/v1\/projects\/[^/]+\/skill-selection(?:\?|$)/u.test(request.url ?? "")
 }
 
-export function projectSkillSelectionProvider(store: BffBusinessStore | null): ProjectSkillSelectionProvider | null {
-  const projects = store?.services?.projects
+export function projectSkillSelectionProvider(
+  projects: ProjectService | null,
+  receipts: Pick<IdempotencyRepository, "getReceipt"> | null,
+): ProjectSkillSelectionProvider | null {
   if (
     !projects ||
     typeof projects.find !== "function" ||
     typeof projects.skillSelection !== "function" ||
     typeof projects.replaceSkillSelection !== "function" ||
-    typeof store?.getReceipt !== "function"
+    !receipts ||
+    typeof receipts.getReceipt !== "function"
   )
     return null
   return {
     find: projects.find.bind(projects),
     skillSelection: projects.skillSelection.bind(projects),
     replaceSkillSelection: projects.replaceSkillSelection.bind(projects),
-    getReceipt: store.getReceipt.bind(store),
+    getReceipt: receipts.getReceipt.bind(receipts),
   }
 }
 

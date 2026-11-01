@@ -19,6 +19,10 @@ import type { ProjectRepository } from "../../application/ports/project-reposito
 import type { ScheduledTaskRepository } from "../../application/ports/scheduled-task-repository.js"
 import type { ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
 import { BffApplicationServices } from "../../application/services.js"
+import { ProjectService } from "../../application/project-service.js"
+import { ScheduledTaskService } from "../../application/scheduled-task-service.js"
+import { ChatApplicationService } from "../../application/chat-service.js"
+import { ChatTurnApplicationService } from "../../application/chat-turn-service.js"
 import { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import { PostgresAgUiProjectionRepository } from "./agui-projection-repository.js"
 import { PostgresAgUiConsumerRepository } from "./agui-consumer-repository.js"
@@ -51,6 +55,15 @@ export class PostgresBffRepositories {
   private readonly idempotency: IdempotencyRepository
   private readonly projects: ProjectRepository
   private readonly scheduled: ScheduledTaskRepository
+  /**
+   * Feature-owned application services exposed as named seams for the live
+   * composition root. `services` remains only as a compatibility view for
+   * integration fixtures while callers migrate to these explicit owners.
+   */
+  public readonly projectService: ProjectService
+  public readonly scheduledTaskService: ScheduledTaskService
+  public readonly chatService: ChatApplicationService
+  public readonly chatTurnService: ChatTurnApplicationService
   public readonly services: BffApplicationServices
   public readonly agUi: AgUiProjectionService
   public readonly agUiConsumers: AgUiProjectionConsumerRepository
@@ -108,6 +121,10 @@ export class PostgresBffRepositories {
       agentDispatchOutbox,
       new Sha256StableIdGenerator(),
     )
+    this.projectService = this.services.projects
+    this.scheduledTaskService = this.services.scheduledTasks
+    this.chatService = this.services.chat
+    this.chatTurnService = this.services.chatTurns
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)
   }

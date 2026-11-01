@@ -381,12 +381,20 @@ export async function handleBffRequest(
   }
   const context = admission.context
   if (isMessageRegenerationPath && messageRegenerationDeadline !== null) {
-    await messageRegenerationRoute(request, response, context, businessPath, composition.businessStore, messageRegenerationDeadline, async (signal) => {
+    await messageRegenerationRoute(
+      request,
+      response,
+      context,
+      businessPath,
+      composition.chatTurnService === null ? null : { chatTurnService: composition.chatTurnService },
+      messageRegenerationDeadline,
+      async (signal) => {
       const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
       if (!fresh.ok) throw new MessageRegenerationAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
       if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
         throw new MessageRegenerationAdmissionError(404, "message_not_found")
-    })
+      },
+    )
     return
   }
   const currentProjectAccess = async (projectRef: string, signal: AbortSignal): Promise<string> => {
@@ -488,8 +496,8 @@ export async function handleBffRequest(
     }
   }
   let chatAuthorization: ChatAuthorization | null = null
-  const chatService = composition.chatService ?? composition.businessStore?.services?.chat
-  const projectService = composition.projectService ?? composition.businessStore?.services?.projects
+  const chatService = composition.chatService
+  const projectService = composition.projectService
   const chatProvider: ChatBusinessProvider = {
     ...(chatService === undefined || chatService === null ? {} : { chatService }),
     ...(composition.chatTurnService === null ? {} : { chatTurnService: composition.chatTurnService }),
@@ -621,7 +629,7 @@ export async function handleBffRequest(
       composition.agUiRuntime,
       composition.agUiProjector !== undefined,
       chatAuthorization,
-      composition.chatService ?? composition.businessStore?.services?.chat ?? null,
+      composition.chatService,
     )
     return
   }
@@ -657,7 +665,7 @@ export type BffServer = Server & {
 export function createBffServer(config: BffConfig = loadConfig(), options: BffServerOptions = {}): BffServer {
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
-  const projectResourceProjectReader = composition.projectService ?? composition.businessStore?.services?.projects
+  const projectResourceProjectReader = composition.projectService
   const projectResourceUpload = composition.businessStore === null || typeof projectResourceProjectReader?.find !== "function"
     ? null
     : {
@@ -676,11 +684,11 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleMcpProjectPublicationRequest(request, response, config, {
         sessionAdmission: composition.sessionAdmission,
         mcpAuthorization: composition.mcpAuthorization,
-        project: composition.projectService ?? composition.businessStore?.services?.projects ?? null,
+        project: composition.projectService,
         client: composition.mcpProjectPublicationClient,
       }))
       .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
-      .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService ?? composition.businessStore?.services?.projects ?? null))
+      .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService))
       .then((handled) => handled ? true : handleSkillDownloadRequest(
         request,
         response,
@@ -699,7 +707,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       }))
       .then((handled) => handled ? true : handleAppSkillBindingsRequest(request, response, config, composition.sessionAdmission, composition.openAppManagementAdmission, composition.appSkillBindingClient))
       .then((handled) => handled ? true : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization))
-      .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.services?.chat ?? null))
+      .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
       .then((handled) => handled ? true : composition.routeHandler !== undefined ? false : handleMoriRequest(request, response, config, composition.sessionAdmission, { entries: composition.idempotency, ...(composition.businessStore === null ? {} : { persistent: composition.businessStore }) }))
       .then((handled) =>
@@ -721,8 +729,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
               response,
               config,
               composition.sessionAdmission,
-              composition.businessStore?.submittedAgentRuns && composition.businessStore?.services?.chat
-                ? { submittedAgentRuns: composition.businessStore.submittedAgentRuns, chat: composition.businessStore.services?.chat }
+              composition.businessStore?.submittedAgentRuns && composition.chatService
+                ? { submittedAgentRuns: composition.businessStore.submittedAgentRuns, chat: composition.chatService }
                 : null,
             ),
       )
@@ -748,7 +756,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 response,
                 config,
                 composition.sessionAdmission,
-                composition.projectSkillSelectionProvider ?? projectSkillSelectionProvider(composition.businessStore),
+                composition.projectSkillSelectionProvider ?? projectSkillSelectionProvider(composition.projectService, composition.businessStore),
                 composition.installationClient,
               ),
       )
@@ -958,7 +966,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 config,
                 composition.sessionAdmission,
                 composition.mcpAuthorization,
-                composition.projectMcpRecommendationsProvider ?? projectMcpRecommendationsProvider(composition.businessStore, {
+                composition.projectMcpRecommendationsProvider ?? projectMcpRecommendationsProvider(composition.projectService, {
                   mcpPersonalClient: composition.mcpPersonalClient,
                   customApiClient: composition.customApiClient,
                 }),

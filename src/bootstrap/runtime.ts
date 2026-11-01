@@ -211,6 +211,19 @@ export type BffCompositionOptions = {
   }
 }
 
+/**
+ * The live PostgreSQL store exposes named owner services while the legacy
+ * aggregate view is retained only by integration fixtures. Keeping this
+ * seam local to bootstrap prevents the aggregate from becoming a runtime
+ * application port again.
+ */
+type BffOwnerServiceStore = BffBusinessStore & {
+  readonly chatService?: ChatApplicationService
+  readonly chatTurnService?: ChatTurnApplicationService
+  readonly projectService?: ProjectService
+  readonly scheduledTaskService?: ScheduledTaskService
+}
+
 function createAgUiRuntime(config: BffConfig): AgUiSessionRuntime {
   return new AgUiSessionRuntime({
     connections: {
@@ -336,6 +349,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : (() => {
           throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime")
         })()
+  const ownerServiceStore = businessStore as BffOwnerServiceStore | null
   const personalizationProvider =
     options.personalizationProvider !== undefined ? options.personalizationProvider : null
   const personalKnowledgeRepository =
@@ -346,15 +360,14 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     options.skillShareRepository !== undefined
       ? options.skillShareRepository
       : (skillShareRepositoryFromBusinessStore(businessStore) ?? null)
-  const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.services?.chat ?? null)
-  const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (businessStore?.services?.chatTurns ?? null)
-  const projectService = options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
-  const scheduledTaskService = options.scheduledTaskService !== undefined ? options.scheduledTaskService : (businessStore?.services?.scheduledTasks ?? null)
+  const chatService = options.chatService !== undefined ? options.chatService : (ownerServiceStore?.chatService ?? null)
+  const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (ownerServiceStore?.chatTurnService ?? null)
+  const projectService = options.projectService !== undefined ? options.projectService : (ownerServiceStore?.projectService ?? null)
+  const scheduledTaskService = options.scheduledTaskService !== undefined ? options.scheduledTaskService : (ownerServiceStore?.scheduledTaskService ?? null)
   const publicShareService =
     options.publicShareService !== undefined
       ? options.publicShareService
-      : (businessStore?.publicShareService ??
-        ((businessStore?.services as unknown as { publicShares?: PublicShareApplicationService } | undefined)?.publicShares ?? null))
+      : (businessStore?.publicShareService ?? null)
   const scheduledTaskReader =
     options.scheduledTaskReader !== undefined
       ? options.scheduledTaskReader

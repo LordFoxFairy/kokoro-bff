@@ -25,9 +25,7 @@ function matches(path: readonly string[], method: string): boolean {
 }
 
 export function skillShareRepositoryFromBusinessStore(store: BffBusinessStore | null): SkillShareRepository | undefined {
-  if (store?.skillShares !== undefined) return store.skillShares
-  const services = store?.services as unknown as { skillShares?: SkillShareRepository } | undefined
-  return services?.skillShares
+  return store?.skillShares
 }
 
 /** Skill share lifecycle is owned by SkillsModule and reuses the existing projection boundary. */

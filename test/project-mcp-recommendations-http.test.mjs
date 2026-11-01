@@ -41,7 +41,7 @@ async function fixture(t, patch = {}) {
   }
   const server = createServer((req, res) => {
     startMcpRequestBudget(req, patch.budget ?? 1000)
-    void projectMcpRecommendationsRoute(req, res, context, ["projects", "project", "mcp-recommendations"], { services }, clients, async (read, signal) => {
+    void projectMcpRecommendationsRoute(req, res, context, ["projects", "project", "mcp-recommendations"], services.projects, clients, async (read, signal) => {
       calls.access.push(read)
       if (patch.access) return patch.access(calls.access.length, read, signal)
       return "project"
@@ -203,20 +203,18 @@ async function bootstrapFixture(t, { denyMcp = false } = {}) {
       businessStore: {
         ready: async () => {},
         close: async () => {},
-        services: {
-          projects: {
-            find: async (scope, id) => {
-              assert.fail("recommendation bootstrap must not fall back to the unbounded legacy Project finder")
-            },
-            mcpRecommendations: async () => structuredClone(state),
-            replaceMcpRecommendations: async (q) => {
-              calls.writes++
-              assert.equal(q.tenantId, "tenant")
-              assert.equal(q.subjectId, "subject")
-              if (q.expectedStateVersion !== state.state_version) return { kind: "precondition_failed" }
-              state = { project_id: "project", recommendations: q.recommendations, state_version: String(Number(state.state_version) + 1) }
-              return { kind: "replaced", data: structuredClone(state) }
-            },
+        projectService: {
+          find: async (scope, id) => {
+            assert.fail("recommendation bootstrap must not fall back to the unbounded legacy Project finder")
+          },
+          mcpRecommendations: async () => structuredClone(state),
+          replaceMcpRecommendations: async (q) => {
+            calls.writes++
+            assert.equal(q.tenantId, "tenant")
+            assert.equal(q.subjectId, "subject")
+            if (q.expectedStateVersion !== state.state_version) return { kind: "precondition_failed" }
+            state = { project_id: "project", recommendations: q.recommendations, state_version: String(Number(state.state_version) + 1) }
+            return { kind: "replaced", data: structuredClone(state) }
           },
         },
       },
