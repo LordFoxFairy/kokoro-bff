@@ -16,6 +16,8 @@ import {
   PUBLIC_SHARE_SERVICE,
   SCHEDULED_TASK_DISPATCHER,
   SCHEDULED_TASK_READ_SERVICE,
+  SCHEDULED_AGENT_DISPATCHER,
+  SCHEDULED_AGENT_TERMINAL_CONSUMER,
   SESSION_ADMISSION,
   SKILL_AI_ASSOCIATION,
   SKILL_EXACT_DOWNLOAD_SOURCE,
@@ -45,6 +47,8 @@ import type { AgentCancellationOutboxDispatcher } from "../../application/agent-
 import type { AgUiProjectorRunner } from "../../application/agui/projector.js"
 import type { ScheduledTaskOutboxDispatcher } from "../../application/scheduled-task-outbox-dispatcher.js"
 import type { ProjectScopeReleaseOutboxDispatcher } from "../../application/project-scope-release-outbox-dispatcher.js"
+import type { ScheduledAgentDispatcher } from "../../application/scheduled-agent-dispatcher.js"
+import type { ScheduledAgentTerminalConsumer } from "../../application/scheduled-agent-terminal-consumer.js"
 
 @Injectable()
 export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown {
@@ -91,6 +95,10 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
     scheduledTaskDispatcher: ScheduledTaskOutboxDispatcher | null,
     @Inject(PROJECT_SCOPE_RELEASE_DISPATCHER)
     projectScopeReleaseDispatcher: ProjectScopeReleaseOutboxDispatcher | null,
+    @Inject(SCHEDULED_AGENT_DISPATCHER)
+    scheduledAgentDispatcher: ScheduledAgentDispatcher | null,
+    @Inject(SCHEDULED_AGENT_TERMINAL_CONSUMER)
+    scheduledAgentTerminalConsumer: ScheduledAgentTerminalConsumer | null,
   ) {
     this.composition = createBffComposition(config, {
       sessionAdmission,
@@ -113,12 +121,12 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
       agUiProjector,
       scheduledTaskDispatcher,
       projectScopeReleaseDispatcher,
+      scheduledAgentDispatcher,
+      scheduledAgentTerminalConsumer,
     })
   }
 
   public onModuleInit(): void {
-    this.composition.scheduledAgentDispatcher?.start()
-    this.composition.scheduledAgentTerminalConsumer?.start()
   }
 
   public async use(request: IncomingMessage, response: ServerResponse): Promise<void> {

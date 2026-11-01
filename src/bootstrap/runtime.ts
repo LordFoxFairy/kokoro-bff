@@ -194,8 +194,8 @@ export type BffCompositionOptions = {
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher | null
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher | null
   agentCancellationDispatcher?: AgentCancellationOutboxDispatcher | null
-  scheduledAgentDispatcher?: ScheduledAgentDispatcher
-  scheduledAgentTerminalConsumer?: ScheduledAgentTerminalConsumer
+  scheduledAgentDispatcher?: ScheduledAgentDispatcher | null
+  scheduledAgentTerminalConsumer?: ScheduledAgentTerminalConsumer | null
   projectScopeReleaseDispatcher?: ProjectScopeReleaseOutboxDispatcher | null
   readiness?: () => Promise<void>
   close?: () => Promise<void>
@@ -395,26 +395,28 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : new AgentCancellationOutboxDispatcher(businessStore.agentCancellationOutbox, new AgentCancellationDelivery(config), {
           workerId: `bff-agent-cancellation-${process.pid}-${randomUUID()}`,
         })
-  const scheduledAgentDispatcher =
-    options.scheduledAgentDispatcher ??
-    (!config.agentEnabled || config.upstreams.agents === null || businessStore?.scheduledAgentDispatch === undefined
+  const explicitlySuppliedScheduledAgentDispatcher = Object.prototype.hasOwnProperty.call(options, "scheduledAgentDispatcher")
+  const scheduledAgentDispatcher = explicitlySuppliedScheduledAgentDispatcher
+    ? (options.scheduledAgentDispatcher ?? undefined)
+    : !config.agentEnabled || config.upstreams.agents === null || businessStore?.scheduledAgentDispatch === undefined
       ? undefined
       : new ScheduledAgentDispatcher(businessStore.scheduledAgentDispatch, new ScheduledAgentDispatchDelivery(config), {
           workerId: `bff-scheduled-agent-${process.pid}-${randomUUID()}`,
           concurrency: 4,
           settlementReserveMs: 500,
           onError: scheduledWorkerLog,
-        }))
-  const scheduledAgentTerminalConsumer =
-    options.scheduledAgentTerminalConsumer ??
-    (!config.agentEnabled || config.upstreams.agents === null || businessStore?.scheduledAgentDispatch === undefined
+        })
+  const explicitlySuppliedScheduledAgentTerminalConsumer = Object.prototype.hasOwnProperty.call(options, "scheduledAgentTerminalConsumer")
+  const scheduledAgentTerminalConsumer = explicitlySuppliedScheduledAgentTerminalConsumer
+    ? (options.scheduledAgentTerminalConsumer ?? undefined)
+    : !config.agentEnabled || config.upstreams.agents === null || businessStore?.scheduledAgentDispatch === undefined
       ? undefined
       : new ScheduledAgentTerminalConsumer(businessStore.scheduledAgentDispatch, new ScheduledAgentTerminalSource(config, config.upstreams.agents as string), {
           workerId: `bff-scheduled-terminal-${process.pid}-${randomUUID()}`,
           concurrency: 4,
           settlementReserveMs: 500,
           onError: scheduledWorkerLog,
-        }))
+        })
   const agentBaseUrl = config.upstreams.agents ?? null
   const explicitlySuppliedAgUiProjector = Object.prototype.hasOwnProperty.call(options, "agUiProjector")
   const agUiProjector = explicitlySuppliedAgUiProjector

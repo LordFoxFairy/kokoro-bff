@@ -1,6 +1,15 @@
 import { Inject, Injectable, Module, MiddlewareConsumer, NestModule, OnApplicationShutdown, OnModuleInit, RequestMethod } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
-import { BFF_CONFIG, BFF_DATABASE, SCHEDULED_TASK_DISPATCHER, SCHEDULED_TASK_OUTBOX, SCHEDULED_TASK_READ_SERVICE } from "../../common/tokens.js"
+import {
+  BFF_CONFIG,
+  BFF_DATABASE,
+  SCHEDULED_AGENT_DISPATCHER,
+  SCHEDULED_AGENT_DISPATCH_REPOSITORY,
+  SCHEDULED_AGENT_TERMINAL_CONSUMER,
+  SCHEDULED_TASK_DISPATCHER,
+  SCHEDULED_TASK_OUTBOX,
+  SCHEDULED_TASK_READ_SERVICE,
+} from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import { PostgresScheduledTaskRepository } from "../../infrastructure/postgres/scheduled-task-repository.js"
@@ -10,21 +19,39 @@ import { ScheduledTaskReadService } from "../../application/scheduled-task-read-
 import { ScheduledTaskOutboxDispatcher } from "../../application/scheduled-task-outbox-dispatcher.js"
 import { SchedulerOutboxDelivery } from "../../infrastructure/clients/scheduler/outbox-delivery.js"
 import type { ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
+import type { ScheduledAgentDispatchRepository } from "../../application/ports/scheduled-agent-dispatch-repository.js"
+import { PostgresScheduledAgentDispatchRepository } from "../../infrastructure/postgres/scheduled-agent-dispatch-repository.js"
+import { ScheduledAgentDispatcher } from "../../application/scheduled-agent-dispatcher.js"
+import { ScheduledAgentTerminalConsumer } from "../../application/scheduled-agent-terminal-consumer.js"
+import { ScheduledAgentDispatchDelivery } from "../../infrastructure/clients/agent/scheduled-dispatch-delivery.js"
+import { ScheduledAgentTerminalSource } from "../../infrastructure/clients/agent/scheduled-terminal-source.js"
 import { AgentRunsModule } from "../agent-runs/agent-runs.module.js"
 import { AccountModule } from "../account/account.module.js"
 import { ProjectsModule } from "../projects/projects.module.js"
 import { ScheduledTaskReadMiddleware } from "./scheduled-task-read.middleware.js"
 import { randomUUID } from "node:crypto"
 
+function scheduledWorkerLog(event: { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }): void {
+  process.stderr.write(`${JSON.stringify({ service: "kokoro-bff", ...event })}\n`)
+}
+
 @Injectable()
 class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdown {
-  public constructor(@Inject(SCHEDULED_TASK_DISPATCHER) private readonly dispatcher: ScheduledTaskOutboxDispatcher | null) {}
+  public constructor(
+    @Inject(SCHEDULED_TASK_DISPATCHER) private readonly dispatcher: ScheduledTaskOutboxDispatcher | null,
+    @Inject(SCHEDULED_AGENT_DISPATCHER) private readonly agentDispatcher: ScheduledAgentDispatcher | null,
+    @Inject(SCHEDULED_AGENT_TERMINAL_CONSUMER) private readonly terminalConsumer: ScheduledAgentTerminalConsumer | null,
+  ) {}
 
   public onModuleInit(): void {
     this.dispatcher?.start()
+    this.agentDispatcher?.start()
+    this.terminalConsumer?.start()
   }
 
   public async onApplicationShutdown(): Promise<void> {
+    await this.terminalConsumer?.stop()
+    await this.agentDispatcher?.stop()
     await this.dispatcher?.stop()
   }
 }
@@ -61,9 +88,49 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdow
           workerId: `bff-scheduled-outbox-${process.pid}-${randomUUID()}`,
         }),
     },
+    {
+      provide: SCHEDULED_AGENT_DISPATCH_REPOSITORY,
+      inject: [BFF_DATABASE],
+      useFactory: (database: PostgresBffDatabase): ScheduledAgentDispatchRepository => new PostgresScheduledAgentDispatchRepository(database),
+    },
+    {
+      provide: SCHEDULED_AGENT_DISPATCHER,
+      inject: [SCHEDULED_AGENT_DISPATCH_REPOSITORY, BFF_CONFIG],
+      useFactory: (repository: ScheduledAgentDispatchRepository, config: BffConfig): ScheduledAgentDispatcher | null => {
+        const baseUrl = config.upstreams.agents ?? null
+        if (!config.agentEnabled || baseUrl === null) return null
+        return new ScheduledAgentDispatcher(repository, new ScheduledAgentDispatchDelivery(config), {
+          workerId: `bff-scheduled-agent-${process.pid}-${randomUUID()}`,
+          concurrency: 4,
+          settlementReserveMs: 500,
+          onError: scheduledWorkerLog,
+        })
+      },
+    },
+    {
+      provide: SCHEDULED_AGENT_TERMINAL_CONSUMER,
+      inject: [SCHEDULED_AGENT_DISPATCH_REPOSITORY, BFF_CONFIG],
+      useFactory: (repository: ScheduledAgentDispatchRepository, config: BffConfig): ScheduledAgentTerminalConsumer | null => {
+        const baseUrl = config.upstreams.agents ?? null
+        if (!config.agentEnabled || baseUrl === null) return null
+        return new ScheduledAgentTerminalConsumer(repository, new ScheduledAgentTerminalSource(config, baseUrl), {
+          workerId: `bff-scheduled-terminal-${process.pid}-${randomUUID()}`,
+          concurrency: 4,
+          settlementReserveMs: 500,
+          onError: scheduledWorkerLog,
+        })
+      },
+    },
     ScheduledTaskWorkerLifecycle,
   ],
-  exports: [SCHEDULED_TASK_READ_SERVICE, SCHEDULED_TASK_OUTBOX, SCHEDULED_TASK_DISPATCHER],
+  exports: [
+    SCHEDULED_TASK_READ_SERVICE,
+    SCHEDULED_TASK_OUTBOX,
+    SCHEDULED_TASK_DISPATCHER,
+    SCHEDULED_AGENT_DISPATCH_REPOSITORY,
+    SCHEDULED_AGENT_DISPATCHER,
+    SCHEDULED_AGENT_TERMINAL_CONSUMER,
+  ],
 })
 export class ScheduledTasksModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
