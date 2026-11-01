@@ -19,12 +19,12 @@ import { headerString, readBody, requestBodyJson, requestId } from "../request.j
 export type SchedulerDispatchProvider = Readonly<{
   schedulerDispatchReceipts: NonNullable<BffBusinessStore["schedulerDispatchReceipts"]>
   scheduledTasks: Pick<ScheduledTaskService, "findRecord">
-  scheduledAgentDispatch: ScheduledAgentDispatchRepository
+  scheduledAgentDispatch?: ScheduledAgentDispatchRepository
 }>
 
 export function isSchedulerDispatchRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
-  return path === "/internal/v1/bff/scheduled-tasks/dispatch"
+  return path === "/internal/bff/scheduled-tasks/dispatch"
 }
 
 export function scheduledTaskId(context: RequestContext, path: string, key: string): string {
@@ -77,12 +77,12 @@ export async function schedulerDispatch(
   const provider: SchedulerDispatchProvider | null = source === null
     ? null
     : "services" in source
-      ? source.schedulerDispatchReceipts === undefined || source.scheduledAgentDispatch === undefined
+      ? source.schedulerDispatchReceipts === undefined
         ? null
         : {
             schedulerDispatchReceipts: source.schedulerDispatchReceipts,
             scheduledTasks: source.services.scheduledTasks,
-            scheduledAgentDispatch: source.scheduledAgentDispatch,
+            ...(source.scheduledAgentDispatch === undefined ? {} : { scheduledAgentDispatch: source.scheduledAgentDispatch }),
           }
       : source
   const receipts = provider?.schedulerDispatchReceipts
@@ -236,6 +236,10 @@ export async function schedulerDispatch(
   }
 
   const dispatch = provider.scheduledAgentDispatch
+  if (dispatch === undefined) {
+    await releaseUnknown(response, receipts, claim, responseRequestId, "business_store_unavailable", "The BFF business store is unavailable")
+    return true
+  }
   const accepted = { status: 202, body: ok({ task_id: snapshot.taskId, run_id: snapshot.launch.receipt.run_id }, responseRequestId) }
   const result = await dispatch.accept({
     claim,

@@ -5,6 +5,7 @@ import {
   BFF_DATABASE,
   BFF_POOL,
   SCHEDULER_DISPATCH_RECEIPTS,
+  SCHEDULED_TASK_IDEMPOTENCY,
   SCHEDULED_AGENT_DISPATCHER,
   SCHEDULED_AGENT_DISPATCH_REPOSITORY,
   SCHEDULED_AGENT_TERMINAL_CONSUMER,
@@ -34,10 +35,13 @@ import { AccountModule } from "../account/account.module.js"
 import { ProjectsModule } from "../projects/projects.module.js"
 import { ScheduledTaskReadMiddleware } from "./scheduled-task-read.middleware.js"
 import { SchedulerDispatchMiddleware } from "./scheduler-dispatch.middleware.js"
+import { ScheduledTaskMutationMiddleware } from "./scheduled-task-mutation.middleware.js"
 import { ScheduledTaskService } from "../../application/scheduled-task-service.js"
 import { PostgresSchedulerDispatchReceiptRepository } from "../../infrastructure/postgres/scheduler-dispatch-receipt-repository.js"
 import type { SchedulerDispatchReceiptRepository } from "../../application/ports/scheduler-dispatch-receipt-repository.js"
 import type { Pool } from "pg"
+import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
+import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import { randomUUID } from "node:crypto"
 
 function scheduledWorkerLog(event: { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }): void {
@@ -70,6 +74,7 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdow
   providers: [
     ScheduledTaskReadMiddleware,
     SchedulerDispatchMiddleware,
+    ScheduledTaskMutationMiddleware,
     {
       provide: SCHEDULED_TASK_REPOSITORY,
       inject: [BFF_DATABASE],
@@ -84,6 +89,11 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdow
       provide: SCHEDULER_DISPATCH_RECEIPTS,
       inject: [BFF_POOL],
       useFactory: (pool: Pool): SchedulerDispatchReceiptRepository => new PostgresSchedulerDispatchReceiptRepository(pool),
+    },
+    {
+      provide: SCHEDULED_TASK_IDEMPOTENCY,
+      inject: [BFF_POOL],
+      useFactory: (pool: Pool): IdempotencyRepository => new PostgresIdempotencyRepository(pool),
     },
     {
       provide: SCHEDULED_TASK_READ_SERVICE,
@@ -161,6 +171,7 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdow
 })
 export class ScheduledTasksModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(ScheduledTaskMutationMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(SchedulerDispatchMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(ScheduledTaskReadMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
   }
