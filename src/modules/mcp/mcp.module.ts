@@ -23,6 +23,7 @@ import { ProjectMcpRecommendationsMiddleware } from "./project-mcp-recommendatio
 import { ConnectorListMiddleware } from "./connector-list.middleware.js"
 import { McpAdminMiddleware } from "./mcp-admin.middleware.js"
 import { McpProjectPublicationMiddleware } from "./mcp-project-publication.middleware.js"
+import { PlatformProjectionMiddleware } from "./platform-projection.middleware.js"
 import type { ProjectMcpRecommendationsProvider } from "../../http/routes/project-mcp-recommendations.js"
 import { AccountModule } from "../account/account.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
@@ -69,6 +70,7 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
     ConnectorListMiddleware,
     McpAdminMiddleware,
     McpProjectPublicationMiddleware,
+    PlatformProjectionMiddleware,
     ProjectMcpRecommendationsRuntime,
     McpAdminRuntime,
     McpProjectPublicationRuntime,
@@ -123,6 +125,7 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
 })
 export class McpModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(PlatformProjectionMiddleware).forRoutes({ path: "*", method: RequestMethod.GET })
     consumer.apply(ProjectMcpRecommendationsMiddleware).forRoutes({ path: "v1/projects/:projectId/mcp-recommendations", method: RequestMethod.ALL })
     consumer.apply(ConnectorListMiddleware).forRoutes({ path: "v1/connector.list", method: RequestMethod.GET })
     consumer.apply(McpAdminMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })

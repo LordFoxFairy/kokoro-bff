@@ -42,6 +42,15 @@ const clients = new WeakMap<BffConfig, PlatformProjectionHttpClient>()
 const connectionQueryKeys = new Set(["connection_id", "provider_key", "limit", "cursor"])
 const mcpQueryKeys = new Set(["provider_key", "limit", "cursor"])
 
+export function platformProjectionRequest(request: IncomingMessage): boolean {
+  try {
+    const path = new URL(request.url ?? "/", "http://bff.local").pathname
+    return request.method === "GET" && (path === "/v1/mcp/servers" || path === "/v1/mcp/connections")
+  } catch {
+    return false
+  }
+}
+
 function operationFor(path: string[], method: string): ProjectionOperation | null {
   if (method !== "GET") return null
   if (path.length === 2 && path[0] === "mcp" && path[1] === "servers") return "mcp"

@@ -375,22 +375,29 @@ test("AguiModule owns the projector lifecycle", async () => {
   assert.match(runtime, /explicitlySuppliedAgUiProjector/u)
 })
 
-test("McpModule owns MCP route admission and candidate clients", async () => {
-  const [mcpModule, middleware, route, connectorRoute, adminMiddleware, adminRoute, publicationMiddleware, publicationRoute, server] = await Promise.all([
+test("McpModule owns MCP projections, route admission and candidate clients", async () => {
+  const [mcpModule, middleware, route, connectorRoute, projectionMiddleware, projectionRoute, adminMiddleware, adminRoute, publicationMiddleware, publicationRoute, server, owner] = await Promise.all([
     readFile(path.join(root, "src/modules/mcp/mcp.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/mcp/project-mcp-recommendations.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/project-mcp-recommendations.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/connector-list-native.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/mcp/platform-projection.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/platform-projection.ts"), "utf8"),
     readFile(path.join(root, "src/modules/mcp/mcp-admin.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/mcp-admin-native.ts"), "utf8"),
     readFile(path.join(root, "src/modules/mcp/mcp-project-publication.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/mcp-project-publication-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/owner.ts"), "utf8"),
   ])
   assert.match(mcpModule, /PROJECT_MCP_RECOMMENDATIONS_PROVIDER/u)
   assert.match(mcpModule, /MCP_AUTHORIZATION/u)
   assert.match(middleware, /handleProjectMcpRecommendationsRequest/u)
   assert.match(mcpModule, /MCP_PERSONAL_CLIENT/u)
+  assert.match(mcpModule, /PlatformProjectionMiddleware/u)
+  assert.match(projectionMiddleware, /livePlatformProjectionRead/u)
+  assert.match(projectionRoute, /platformProjectionRequest/u)
+  assert.match(server, /livePlatformProjectionRead/u)
   assert.match(mcpModule, /ConnectorListMiddleware/u)
   assert.match(connectorRoute, /handleConnectorListRequest/u)
   assert.match(server, /handleConnectorListRequest/u)
@@ -411,6 +418,7 @@ test("McpModule owns MCP route admission and candidate clients", async () => {
   assert.doesNotMatch(server, /await projectMcpRecommendationsRoute\(/u)
   assert.doesNotMatch(server, /await mcp(?:Provider|Package)AdminRoute\(/u)
   assert.doesNotMatch(server, /await mcpProjectPublicationRoute\(/u)
+  assert.doesNotMatch(owner, /livePlatformProjectionRead/u)
 })
 
 test("SkillsModule owns personal skill-installation admission and client", async () => {

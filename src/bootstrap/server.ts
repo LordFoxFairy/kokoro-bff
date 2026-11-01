@@ -75,9 +75,10 @@ import { authorizeScheduledTaskMutation, handleScheduledTaskMutationBusiness, sc
 import { scheduledCreateInput } from "../application/scheduled/input.js"
 import type { ScheduledTaskCreateInput } from "../application/ports/scheduled-task-repository.js"
 import { authorizeChatRequest, type ChatAuthorization } from "../http/routes/chat-authorization.js"
-import { liveOwnerBusiness } from "../http/routes/owner.js"
+import { handleRetiredOwnerBusiness } from "../http/routes/retired-owner-native.js"
 import { billingPersonalRequest, handleBillingPersonalBusiness } from "../http/routes/billing-personal-native.js"
 import { handleSystemModelCatalogBusiness, systemModelCatalogRequest } from "../http/routes/system-model-catalog-native.js"
+import { livePlatformProjectionRead, platformProjectionRequest } from "../http/routes/platform-projection.js"
 import { handleProjectMutationBusiness, projectMutation } from "../http/routes/project-mutation-native.js"
 import { handleMoriRequest } from "../http/routes/music-native.js"
 import { configuredUpstream, bffOwnedBusinessPath, upstreamKey } from "../http/routes/routing.js"
@@ -626,6 +627,7 @@ export async function handleBffRequest(
 
   if (billingPersonalRequest(request) && await handleBillingPersonalBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency)) return
   if (systemModelCatalogRequest(request) && await handleSystemModelCatalogBusiness(request, response, config, context, composition.idempotency, mutation)) return
+  if (platformProjectionRequest(request) && await livePlatformProjectionRead(request, response, config, context, businessPath)) return
 
   if (businessPath[0] === "sessions") {
     if (
@@ -665,7 +667,7 @@ export async function handleBffRequest(
     )
     return
   }
-  if (await liveOwnerBusiness(request, response, config, context, businessPath, mutation, composition.idempotency)) return
+  if (await handleRetiredOwnerBusiness(request, response, context, composition.idempotency, mutation)) return
   if (upstreamBase === null) {
     await reply(
       response,

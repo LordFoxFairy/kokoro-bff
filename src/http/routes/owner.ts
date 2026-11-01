@@ -1,16 +1,13 @@
-import type { IncomingMessage, ServerResponse } from "node:http"
+import type { IncomingMessage } from "node:http"
 
 import type { BffConfig } from "../../config/runtime.js"
 import { failure } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
 import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
-import { reply } from "../response.js"
 import { normalizeSystemUpstreamResponse, normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
 import { incomingHeaders } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import type { LiveOwnerResult } from "./types.js"
-import { livePlatformProjectionRead } from "./platform-projection.js"
 export async function liveOwnerRequest(
   request: IncomingMessage,
   config: BffConfig,
@@ -43,40 +40,3 @@ export async function liveOwnerRequest(
   }
 }
 
-export async function liveOwnerBusiness(
-  request: IncomingMessage,
-  response: ServerResponse,
-  config: BffConfig,
-  context: RequestContext,
-  businessPath: string[],
-  mutation: MutationTicket | null,
-  idempotency: Map<string, IdempotencyEntry>,
-): Promise<boolean> {
-  if (await livePlatformProjectionRead(request, response, config, context, businessPath)) return true
-
-  if (businessPath[0] === "system") {
-    await reply(
-      response,
-      503,
-      failure("system_projection_not_configured", "This System operation is not exposed by the BFF owner adapter", context.requestId),
-      context,
-      idempotency,
-      mutation,
-    )
-    return true
-  }
-
-  if (businessPath[0] === "skills") {
-    await reply(
-      response,
-      503,
-      failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", context.requestId),
-      context,
-      idempotency,
-      mutation,
-    )
-    return true
-  }
-
-  return false
-}

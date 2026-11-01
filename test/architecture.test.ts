@@ -208,9 +208,9 @@ test("BFF keeps contract, application, client, and repository boundaries explici
 })
 
 test("Platform projection generated types stay behind one facade and old Capability transport is absent", async () => {
-  const ownerRoute = await readFile(path.join(root, "src/http/routes/owner.ts"), "utf8")
-  assert.match(ownerRoute, /livePlatformProjectionRead/u)
-  assert.doesNotMatch(ownerRoute, /requestCapability|capability-http/u)
+  const projectionRoute = await readFile(path.join(root, "src/http/routes/platform-projection.ts"), "utf8")
+  assert.match(projectionRoute, /livePlatformProjectionRead/u)
+  assert.doesNotMatch(projectionRoute, /requestCapability|capability-http/u)
   const sources = await readSchemaBoundarySources()
   const generatedImporters = sources
     .filter(({ relativePath, source }) => relativePath.startsWith("src/") && /generated\/platform-http/u.test(source))
@@ -236,7 +236,7 @@ test("BFF composition root stays small and delegates resource routes", async () 
   assert.ok(main.split("\n").length < 80, "src/main.ts must remain a thin entry point")
   assert.match(main, /bootstrap\/server\.js/)
   assert.match(server, /routes\/agent\.js/)
-  assert.match(server, /routes\/owner\.js/)
+  assert.match(server, /routes\/system-model-catalog-native\.js/)
   assert.match(server, /routes\/scheduler\.js/)
   assert.doesNotMatch(server, /routes\/mock\.js|MockBffStore|MoriMockBffStore/)
 })
