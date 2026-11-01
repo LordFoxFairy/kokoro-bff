@@ -37,6 +37,9 @@ import type { SkillAiAssociation } from "../application/skill-ai-handoff.js"
 import type { SkillShareRepository } from "../application/ports/skill-share-repository.js"
 import type { SubmittedAgentRunReader } from "../application/ports/submitted-agent-run-reader.js"
 import type { ProjectExecutionBindingReader } from "../application/ports/project-execution-binding-reader.js"
+import type { SchedulerDispatchReceiptRepository } from "../application/ports/scheduler-dispatch-receipt-repository.js"
+import type { ScheduledAgentDispatchRepository } from "../application/ports/scheduled-agent-dispatch-repository.js"
+import type { ArtifactLibraryRepository } from "../application/ports/artifact-library-repository.js"
 import { ScheduledTaskOutboxDispatcher } from "../application/scheduled-task-outbox-dispatcher.js"
 import { AgentDispatchOutboxDispatcher } from "../application/agent-dispatch-outbox-dispatcher.js"
 import { AgentCancellationOutboxDispatcher } from "../application/agent-cancellation-outbox-dispatcher.js"
@@ -150,6 +153,9 @@ export type BffServerComposition = {
   /** AgentRuns-owned readers supplied explicitly to raw internal/display routes. */
   submittedAgentRuns: SubmittedAgentRunReader | null
   projectExecutionBindings: ProjectExecutionBindingReader | null
+  schedulerDispatchReceipts: SchedulerDispatchReceiptRepository | null
+  scheduledAgentDispatch: ScheduledAgentDispatchRepository | null
+  artifactLibrary: ArtifactLibraryRepository | null
   agUiProjector?: AgUiProjectorRunner
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher
@@ -210,6 +216,9 @@ export type BffCompositionOptions = {
   agUiConsumers?: AgUiProjectionConsumerRepository | null
   submittedAgentRuns?: SubmittedAgentRunReader | null
   projectExecutionBindings?: ProjectExecutionBindingReader | null
+  schedulerDispatchReceipts?: SchedulerDispatchReceiptRepository | null
+  scheduledAgentDispatch?: ScheduledAgentDispatchRepository | null
+  artifactLibrary?: ArtifactLibraryRepository | null
   agUiProjector?: AgUiProjectorRunner | null
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher | null
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher | null
@@ -379,6 +388,9 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const agUiProjection = options.agUiProjection !== undefined ? options.agUiProjection : (businessStore?.agUi ?? null)
   const submittedAgentRuns = options.submittedAgentRuns !== undefined ? options.submittedAgentRuns : (businessStore?.submittedAgentRuns ?? null)
   const projectExecutionBindings = options.projectExecutionBindings !== undefined ? options.projectExecutionBindings : (businessStore?.projectExecutionBindings ?? null)
+  const schedulerDispatchReceipts = options.schedulerDispatchReceipts !== undefined ? options.schedulerDispatchReceipts : (businessStore?.schedulerDispatchReceipts ?? null)
+  const scheduledAgentDispatch = options.scheduledAgentDispatch !== undefined ? options.scheduledAgentDispatch : (businessStore?.scheduledAgentDispatch ?? null)
+  const artifactLibrary = options.artifactLibrary !== undefined ? options.artifactLibrary : (businessStore?.artifactLibrary ?? null)
   const chatService = options.chatService !== undefined ? options.chatService : (ownerServiceStore?.chatService ?? null)
   const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (ownerServiceStore?.chatTurnService ?? null)
   const projectService = options.projectService !== undefined ? options.projectService : (ownerServiceStore?.projectService ?? null)
@@ -442,9 +454,9 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const explicitlySuppliedScheduledAgentDispatcher = Object.prototype.hasOwnProperty.call(options, "scheduledAgentDispatcher")
   const scheduledAgentDispatcher = explicitlySuppliedScheduledAgentDispatcher
     ? (options.scheduledAgentDispatcher ?? undefined)
-    : !config.agentEnabled || config.upstreams.agents === null || businessStore?.scheduledAgentDispatch === undefined
+    : !config.agentEnabled || config.upstreams.agents === null || scheduledAgentDispatch === null
       ? undefined
-      : new ScheduledAgentDispatcher(businessStore.scheduledAgentDispatch, new ScheduledAgentDispatchDelivery(config), {
+      : new ScheduledAgentDispatcher(scheduledAgentDispatch, new ScheduledAgentDispatchDelivery(config), {
           workerId: `bff-scheduled-agent-${process.pid}-${randomUUID()}`,
           concurrency: 4,
           settlementReserveMs: 500,
@@ -453,9 +465,9 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const explicitlySuppliedScheduledAgentTerminalConsumer = Object.prototype.hasOwnProperty.call(options, "scheduledAgentTerminalConsumer")
   const scheduledAgentTerminalConsumer = explicitlySuppliedScheduledAgentTerminalConsumer
     ? (options.scheduledAgentTerminalConsumer ?? undefined)
-    : !config.agentEnabled || config.upstreams.agents === null || businessStore?.scheduledAgentDispatch === undefined
+    : !config.agentEnabled || config.upstreams.agents === null || scheduledAgentDispatch === null
       ? undefined
-      : new ScheduledAgentTerminalConsumer(businessStore.scheduledAgentDispatch, new ScheduledAgentTerminalSource(config, config.upstreams.agents as string), {
+      : new ScheduledAgentTerminalConsumer(scheduledAgentDispatch, new ScheduledAgentTerminalSource(config, config.upstreams.agents as string), {
           workerId: `bff-scheduled-terminal-${process.pid}-${randomUUID()}`,
           concurrency: 4,
           settlementReserveMs: 500,
@@ -599,7 +611,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
               }),
               ...(projectService === null ? {} : { projects: projectService }),
               profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
-              ...(businessStore?.skillUsage === undefined ? {} : { usage: businessStore.skillUsage }),
+              ...(skillUsageReader === null ? {} : { usage: skillUsageReader }),
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
             })
           : null,
@@ -815,6 +827,9 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     agUiConsumers,
     submittedAgentRuns,
     projectExecutionBindings,
+    schedulerDispatchReceipts,
+    scheduledAgentDispatch,
+    artifactLibrary,
     ...(agUiProjector === undefined ? {} : { agUiProjector }),
     ...(scheduledTaskDispatcher === undefined ? {} : { scheduledTaskDispatcher }),
     ...(agentDispatchDispatcher === undefined ? {} : { agentDispatchDispatcher }),

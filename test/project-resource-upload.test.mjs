@@ -419,17 +419,13 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
       KOKORO_STORAGE_OBJECT_ORIGIN: objects,
       KOKORO_BFF_STORAGE_SECRET: "storage-secret",
     })
-    const store = {
-      ...f.store,
-      services: {
-        projects: {
-          async find(scope) {
-            assert.deepEqual(scope, { tenantId: "tenant-1", subjectId: "subject-1" })
-            return allowed ? { id: "project-1" } : null
-          },
-        },
+    const projectService = {
+      async find(scope) {
+        assert.deepEqual(scope, { tenantId: "tenant-1", subjectId: "subject-1" })
+        return allowed ? { id: "project-1" } : null
       },
     }
+    const store = { ...f.store }
     let failFinalReceipt = true
     const persist = store.putReceipt
     store.putReceipt = async (key, receipt) => {
@@ -442,6 +438,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
     const bff = await listen(
       createBffServer(config, {
         businessStore: store,
+        projectService,
         readiness: async () => {},
         sessionAdmission: {
           async verify() {

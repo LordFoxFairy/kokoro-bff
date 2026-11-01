@@ -165,11 +165,11 @@ export async function handleBffRequest(
     return
   }
   if (segments[0] === "internal" && segments[1] === "bff" && segments[2] === "scheduled-tasks" && segments[3] === "dispatch" && segments.length === 4) {
-    const schedulerProvider = composition.businessStore?.schedulerDispatchReceipts !== undefined && composition.scheduledTaskService !== null
+    const schedulerProvider = composition.schedulerDispatchReceipts !== null && composition.scheduledTaskService !== null
       ? {
-          schedulerDispatchReceipts: composition.businessStore.schedulerDispatchReceipts,
+          schedulerDispatchReceipts: composition.schedulerDispatchReceipts,
           scheduledTasks: composition.scheduledTaskService,
-          ...(composition.businessStore.scheduledAgentDispatch === undefined ? {} : { scheduledAgentDispatch: composition.businessStore.scheduledAgentDispatch }),
+          ...(composition.scheduledAgentDispatch === null ? {} : { scheduledAgentDispatch: composition.scheduledAgentDispatch }),
         }
       : null
     await schedulerDispatch(request, response, config, schedulerProvider, composition.idempotency)
@@ -525,7 +525,7 @@ export async function handleBffRequest(
   }
   if (composition.routeHandler === undefined && libraryRequest(request)) {
     await handleLibraryRequest(request, response, config, context, {
-      ...(composition.businessStore?.artifactLibrary === undefined ? {} : { artifactLibrary: composition.businessStore.artifactLibrary }),
+      ...(composition.artifactLibrary === null ? {} : { artifactLibrary: composition.artifactLibrary }),
       receipts: composition.businessStore,
       idempotency: composition.idempotency,
     }, body ?? Buffer.alloc(0))
