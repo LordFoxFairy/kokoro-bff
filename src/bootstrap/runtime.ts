@@ -60,6 +60,7 @@ import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scop
 import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
 import type { LocalSkillImportClient } from "../http/routes/local-skill-import.js"
 import type { ProjectSkillSelectionProvider } from "../http/routes/project-skill-selection.js"
+import type { ProjectMcpRecommendationsProvider } from "../http/routes/project-mcp-recommendations.js"
 import { LocalSkillImportConnectClient } from "../infrastructure/clients/platform/local-skill-import-connect.js"
 import { ExactSkillDownloadService, exactInstallationRecord, exactManagedRecord, type ExactSkillDownloadSource } from "../application/exact-skill-download.js"
 import { projectInstallation } from "../infrastructure/clients/platform/skill-installation-response.js"
@@ -125,6 +126,7 @@ export type BffServerComposition = {
   /** Project-owned pin provider; global store fallback is transitional. */
   projectService: ProjectService | null
   projectSkillSelectionProvider: ProjectSkillSelectionProvider | null
+  projectMcpRecommendationsProvider: ProjectMcpRecommendationsProvider | null
   publicShareService: PublicShareApplicationService | null
   scheduledTaskReader: ScheduledTaskReadService | null
   sessionAdmission: SessionAdmission
@@ -178,6 +180,7 @@ export type BffCompositionOptions = {
   chatService?: ChatApplicationService | null
   projectService?: ProjectService | null
   projectSkillSelectionProvider?: ProjectSkillSelectionProvider | null
+  projectMcpRecommendationsProvider?: ProjectMcpRecommendationsProvider | null
   publicShareService?: PublicShareApplicationService | null
   scheduledTaskReader?: ScheduledTaskReadService | null
   chatTurnService?: ChatTurnApplicationService | null
@@ -733,6 +736,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     chatService,
     projectService,
     projectSkillSelectionProvider: options.projectSkillSelectionProvider ?? null,
+    projectMcpRecommendationsProvider: options.projectMcpRecommendationsProvider ?? null,
     publicShareService,
     chatTurnService,
     scheduledTaskReader,

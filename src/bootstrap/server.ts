@@ -987,7 +987,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 config,
                 composition.sessionAdmission,
                 composition.mcpAuthorization,
-                projectMcpRecommendationsProvider(composition.businessStore, {
+                composition.projectMcpRecommendationsProvider ?? projectMcpRecommendationsProvider(composition.businessStore, {
                   mcpPersonalClient: composition.mcpPersonalClient,
                   customApiClient: composition.customApiClient,
                 }),
