@@ -7,7 +7,7 @@ import type {
   SchedulerDispatchReceiptRepository,
   SchedulerDispatchResponse,
   SchedulerDispatchSnapshot,
-} from "../../application/ports/scheduler-dispatch-receipt-repository.js"
+} from "../../application/scheduled/scheduler-dispatch-receipt-repository.js"
 import { isRecord } from "../../domain/json.js"
 
 const PENDING_STATUS = 102

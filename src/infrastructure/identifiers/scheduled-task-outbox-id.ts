@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 
-import type { StableIdGenerator } from "../../application/ports/stable-id-generator.js"
+import type { StableIdGenerator } from "../../application/scheduled/stable-id-generator.js"
 import {
   scheduledTaskOutboxIdentityMaterial,
   type ScheduledTaskOutboxOperation,

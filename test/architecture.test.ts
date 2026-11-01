@@ -137,7 +137,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/scheduled/scheduled-task-repository.ts",
     "src/application/scheduled/scheduled-task-outbox-repository.ts",
     "src/application/scheduled/scheduled-task-outbox-delivery.ts",
-    "src/application/ports/scheduler-dispatch-receipt-repository.ts",
+    "src/application/scheduled/scheduler-dispatch-receipt-repository.ts",
     "src/application/scheduled-task-outbox-dispatcher.ts",
     "src/application/scheduled/input.ts",
     "src/application/scheduled/mappers.ts",

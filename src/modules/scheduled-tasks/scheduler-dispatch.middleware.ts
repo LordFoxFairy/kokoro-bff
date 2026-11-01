@@ -3,8 +3,8 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import { BFF_CONFIG, SCHEDULED_AGENT_DISPATCH_REPOSITORY, SCHEDULED_TASK_SERVICE, SCHEDULER_DISPATCH_RECEIPTS } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { ScheduledTaskService } from "../../application/scheduled-task-service.js"
-import type { SchedulerDispatchReceiptRepository } from "../../application/ports/scheduler-dispatch-receipt-repository.js"
-import type { ScheduledAgentDispatchRepository } from "../../application/ports/scheduled-agent-dispatch-repository.js"
+import type { SchedulerDispatchReceiptRepository } from "../../application/scheduled/scheduler-dispatch-receipt-repository.js"
+import type { ScheduledAgentDispatchRepository } from "../../application/scheduled/scheduled-agent-dispatch-repository.js"
 import { schedulerDispatch } from "../../http/routes/scheduler.js"
 
 @Injectable()

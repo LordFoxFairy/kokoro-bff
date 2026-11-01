@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import type { ReplaySessionEventsData } from "../../../generated/agent-http/types.gen.js"
 import type { BffConfig } from "../../../config/runtime.js"
-import type { ScheduledAgentConsumerLease } from "../../../application/ports/scheduled-agent-dispatch-repository.js"
+import type { ScheduledAgentConsumerLease } from "../../../application/scheduled/scheduled-agent-dispatch-repository.js"
 import type { ScheduledAgentSourcePage, ScheduledAgentSourceReader } from "../../../application/scheduled-agent-terminal-consumer.js"
 import { proxyUpstream } from "../../../upstream.js"
 import { parseAgentHttpJson, parseReplayPage } from "./http-wire.js"

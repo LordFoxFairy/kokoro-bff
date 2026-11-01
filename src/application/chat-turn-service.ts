@@ -8,7 +8,7 @@ import {
   type AgentDispatchReceipt,
 } from "../domain/chat/agent-dispatch.js"
 import type { AgentDispatchOutboxRepository } from "./agent-dispatch/agent-dispatch-outbox-repository.js"
-import type { StableIdGenerator } from "./ports/stable-id-generator.js"
+import type { StableIdGenerator } from "./scheduled/stable-id-generator.js"
 
 export class ChatTurnApplicationService {
   public constructor(

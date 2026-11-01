@@ -11,7 +11,7 @@ import type {
   AgentDispatchOutboxRepository,
   CommitChatTurn,
 } from "../dist/application/agent-dispatch/agent-dispatch-outbox-repository.js"
-import type { StableIdGenerator } from "../dist/application/ports/stable-id-generator.js"
+import type { StableIdGenerator } from "../dist/application/scheduled/stable-id-generator.js"
 import type { AgentDispatchCommand, AgentDispatchLease, AgentDispatchReceipt } from "../dist/domain/chat/agent-dispatch.js"
 
 class Sha256TestIdGenerator implements StableIdGenerator {

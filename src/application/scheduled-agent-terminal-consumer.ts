@@ -1,4 +1,4 @@
-import type { ScheduledAgentConsumerLease, ScheduledAgentDispatchRepository } from "./ports/scheduled-agent-dispatch-repository.js"
+import type { ScheduledAgentConsumerLease, ScheduledAgentDispatchRepository } from "./scheduled/scheduled-agent-dispatch-repository.js"
 import type { ScheduledAgentSourceEvent } from "../domain/scheduled-task/agent-dispatch.js"
 export type ScheduledAgentSourcePage = {
   events: readonly ScheduledAgentSourceEvent[]

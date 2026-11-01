@@ -27,7 +27,7 @@ import type {
   ScheduledTaskRepository,
 } from "../../application/scheduled/scheduled-task-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
-import type { StableIdGenerator } from "../../application/ports/stable-id-generator.js"
+import type { StableIdGenerator } from "../../application/scheduled/stable-id-generator.js"
 import { scheduledTaskOutboxId, Sha256StableIdGenerator } from "../identifiers/scheduled-task-outbox-id.js"
 
 type ScheduledTaskRow = {
