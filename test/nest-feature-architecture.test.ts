@@ -375,8 +375,8 @@ test("AguiModule owns the projector lifecycle", async () => {
   assert.match(runtime, /explicitlySuppliedAgUiProjector/u)
 })
 
-test("McpModule owns MCP projections, route admission and candidate clients", async () => {
-  const [mcpModule, middleware, route, connectorRoute, projectionMiddleware, projectionRoute, adminMiddleware, adminRoute, publicationMiddleware, publicationRoute, server, owner] = await Promise.all([
+test("McpModule owns MCP projections, custom API route admission and candidate clients", async () => {
+  const [mcpModule, middleware, route, connectorRoute, projectionMiddleware, projectionRoute, adminMiddleware, adminRoute, publicationMiddleware, publicationRoute, customMiddleware, customRoute, server, owner] = await Promise.all([
     readFile(path.join(root, "src/modules/mcp/mcp.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/mcp/project-mcp-recommendations.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/project-mcp-recommendations.ts"), "utf8"),
@@ -387,6 +387,8 @@ test("McpModule owns MCP projections, route admission and candidate clients", as
     readFile(path.join(root, "src/http/routes/mcp-admin-native.ts"), "utf8"),
     readFile(path.join(root, "src/modules/mcp/mcp-project-publication.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/mcp-project-publication-native.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/mcp/custom-api.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/custom-api.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/owner-request.ts"), "utf8"),
   ])
@@ -413,6 +415,11 @@ test("McpModule owns MCP projections, route admission and candidate clients", as
   assert.match(publicationMiddleware, /handleMcpProjectPublicationRequest/u)
   assert.match(publicationRoute, /mcpProjectPublicationRoute/u)
   assert.match(server, /handleMcpProjectPublicationRequest/u)
+  assert.match(mcpModule, /CUSTOM_API_CLIENT/u)
+  assert.match(mcpModule, /CustomApiMiddleware/u)
+  assert.match(customMiddleware, /customApiRoute/u)
+  assert.match(customRoute, /customApiOperation/u)
+  assert.match(server, /customApiRoute\(request, response, composition\.customApiClient/u)
   assert.match(route, /handleProjectMcpRecommendationsRequest/u)
   assert.match(server, /handleProjectMcpRecommendationsRequest/u)
   assert.doesNotMatch(server, /await projectMcpRecommendationsRoute\(/u)

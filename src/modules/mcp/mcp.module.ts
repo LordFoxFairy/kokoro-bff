@@ -6,6 +6,7 @@ import {
   MCP_PACKAGE_ADMIN_CLIENT,
   MCP_PERSONAL_CLIENT,
   MCP_PROJECT_PUBLICATION_CLIENT,
+  CUSTOM_API_CLIENT,
   MCP_PROVIDER_ADMIN_CLIENT,
   PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
   PROJECT_SERVICE,
@@ -25,6 +26,7 @@ import { McpAdminMiddleware } from "./mcp-admin.middleware.js"
 import { McpProjectPublicationMiddleware } from "./mcp-project-publication.middleware.js"
 import { PlatformProjectionMiddleware } from "./platform-projection.middleware.js"
 import { McpPersonalMiddleware } from "./mcp-personal.middleware.js"
+import { CustomApiMiddleware, type CustomApiClient } from "./custom-api.middleware.js"
 import type { ProjectMcpRecommendationsProvider } from "../../http/routes/project-mcp-recommendations.js"
 import { AccountModule } from "../account/account.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
@@ -73,9 +75,17 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
     McpProjectPublicationMiddleware,
     PlatformProjectionMiddleware,
     McpPersonalMiddleware,
+    CustomApiMiddleware,
     ProjectMcpRecommendationsRuntime,
     McpAdminRuntime,
     McpProjectPublicationRuntime,
+    {
+      provide: CUSTOM_API_CLIENT,
+      inject: [BFF_CONFIG],
+      useFactory: (config: BffConfig): CustomApiClient | null => config.customApi
+        ? new CustomApiConnectClient(config.customApi.baseUrl, new PlatformServiceCredentialSource(config.customApi.credentialFile, "custom_api_personal"))
+        : null,
+    },
     {
       provide: MCP_AUTHORIZATION,
       inject: [BFF_CONFIG],
@@ -83,11 +93,8 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
     },
     {
       provide: PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
-      inject: [BFF_CONFIG, PROJECT_SERVICE, MCP_PERSONAL_CLIENT],
-      useFactory: (config: BffConfig, project: ProjectService, mcpPersonalClient: McpPersonalConnectClient | null): ProjectMcpRecommendationsProvider => {
-        const customApiClient = config.customApi
-          ? new CustomApiConnectClient(config.customApi.baseUrl, new PlatformServiceCredentialSource(config.customApi.credentialFile, "custom_api_personal"))
-          : null
+      inject: [PROJECT_SERVICE, MCP_PERSONAL_CLIENT, CUSTOM_API_CLIENT],
+      useFactory: (project: ProjectService, mcpPersonalClient: McpPersonalConnectClient | null, customApiClient: CustomApiClient | null): ProjectMcpRecommendationsProvider => {
         return {
           project,
           clients: { mcpPersonalClient, customApiClient },
@@ -123,12 +130,13 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
         : null,
     },
   ],
-  exports: [MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, MCP_PROVIDER_ADMIN_CLIENT, MCP_PACKAGE_ADMIN_CLIENT, MCP_PROJECT_PUBLICATION_CLIENT, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
+  exports: [MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, MCP_PROVIDER_ADMIN_CLIENT, MCP_PACKAGE_ADMIN_CLIENT, MCP_PROJECT_PUBLICATION_CLIENT, CUSTOM_API_CLIENT, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
 })
 export class McpModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
     consumer.apply(PlatformProjectionMiddleware).forRoutes({ path: "*", method: RequestMethod.GET })
     consumer.apply(McpPersonalMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
+    consumer.apply(CustomApiMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(ProjectMcpRecommendationsMiddleware).forRoutes({ path: "v1/projects/:projectId/mcp-recommendations", method: RequestMethod.ALL })
     consumer.apply(ConnectorListMiddleware).forRoutes({ path: "v1/connector.list", method: RequestMethod.GET })
     consumer.apply(McpAdminMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })

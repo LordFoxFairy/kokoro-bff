@@ -359,7 +359,7 @@ export async function handleBffRequest(
     return
   }
   if (isCustomApiOperation) {
-    await customApiRoute(request, response, composition, admission.context, id, businessPath)
+    await customApiRoute(request, response, composition.customApiClient, admission.context, id, businessPath)
     return
   }
   if (

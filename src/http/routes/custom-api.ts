@@ -3,9 +3,9 @@ import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { z } from "zod"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
 import type { AdmittedUserRequestContext } from "../../domain/request-context.js"
 import type { CustomApiInput, CustomApiOperation } from "../../infrastructure/clients/platform/custom-api-binding.js"
+import type { CustomApiConnectClient } from "../../infrastructure/clients/platform/custom-api-connect.js"
 import { send } from "../response.js"
 import { connectorCommandFault } from "../../infrastructure/clients/platform/connector-command-fault.js"
 
@@ -127,7 +127,7 @@ function ownerFault(error: unknown, operation: CustomApiOperation): { status: nu
 export async function customApiRoute(
   request: IncomingMessage,
   response: ServerResponse,
-  composition: BffServerComposition,
+  client: Pick<CustomApiConnectClient, "execute"> | null,
   context: AdmittedUserRequestContext,
   requestId: string,
   path: string[],
@@ -203,7 +203,6 @@ export async function customApiRoute(
         })
       }
     }
-    const client = composition.customApiClient
     if (client === null) {
       failure(response, 503, "custom_api_dependency_unavailable", true)
       return
