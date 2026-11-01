@@ -5689,15 +5689,15 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    const project = await store.services.projects.create(scope, "Selection test", "")
-    const other = await store.services.projects.create(scope, "Other project", "")
-    const save = (ids, key) => store.services.projects.replaceSkillSelection(scope, project.id, ids, key, signal)
+    const project = await store.projectService.create(scope, "Selection test", "")
+    const other = await store.projectService.create(scope, "Other project", "")
+    const save = (ids, key) => store.projectService.replaceSkillSelection(scope, project.id, ids, key, signal)
     assert.equal((await save(["installation_a"], "first-default")).kind, "replaced")
     assert.equal((await save(["installation_b"], "second-default")).kind, "replaced")
     assert.deepEqual((await save(["installation_a"], "first-default")).receipt.data.installation_ids, ["installation_a"])
-    assert.deepEqual((await store.services.projects.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
+    assert.deepEqual((await store.projectService.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
     assert.equal((await save(["installation_c"], "first-default")).kind, "conflict")
-    assert.equal(await store.services.projects.skillSelection({ ...scope, subjectId: "other-owner" }, project.id), null)
+    assert.equal(await store.projectService.skillSelection({ ...scope, subjectId: "other-owner" }, project.id), null)
     const fault = `selection_fault_${randomUUID().replaceAll("-", "")}`
     const faultScope = JSON.stringify([tenant, subject, "project.skill-selection:v1", project.id, "rollback-default"])
     await pool.query(`CREATE FUNCTION ${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
@@ -5706,7 +5706,7 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
     try {
       await pool.query(`CREATE TRIGGER ${fault} BEFORE INSERT ON bff_idempotency_receipt FOR EACH ROW EXECUTE FUNCTION ${fault}()`)
       await assert.rejects(save(["installation_failed"], "rollback-default"), /selection_receipt_failure/)
-      assert.deepEqual((await store.services.projects.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
+      assert.deepEqual((await store.projectService.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
       assert.equal((await pool.query("SELECT 1 FROM bff_idempotency_receipt WHERE scope=$1", [faultScope])).rowCount, 0)
     } finally {
       await pool.query(`DROP TRIGGER IF EXISTS ${fault} ON bff_idempotency_receipt`)

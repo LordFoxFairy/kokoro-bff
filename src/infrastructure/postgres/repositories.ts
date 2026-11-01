@@ -61,7 +61,6 @@ export class PostgresBffRepositories {
   public readonly chatTurnService: ChatTurnApplicationService
   /** Compatibility view for legacy integration fixtures; production code never reads it. */
   public readonly services: Readonly<{
-    projects: ProjectService
     chat: ChatApplicationService
     chatTurns: ChatTurnApplicationService
   }>
@@ -119,7 +118,6 @@ export class PostgresBffRepositories {
     this.chatService = new ChatApplicationService(chat)
     this.chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
     this.services = {
-      projects: this.projectService,
       chat: this.chatService,
       chatTurns: this.chatTurnService,
     }

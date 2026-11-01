@@ -150,7 +150,7 @@ async function invokeProjectResourceDelete(request, response, config, context, _
   ]
   const provider = {
     list: async () => [],
-    find: (scope, ref) => store.services.projects.find(scope, ref),
+    find: (scope, ref) => store.projectService.find(scope, ref),
     revisions: async () => [],
     deletion: async () => null,
     rename: async () => ({ kind: "conflict" }),
@@ -165,10 +165,8 @@ test("DELETE rechecks current ownership before every replay and never substitute
   let owned = true
   const calls = []
   const store = {
-    services: {
-      projects: {
-        find: async (scope, id) => (owned && scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && id === "slug" ? { id: "project-1" } : null),
-      },
+    projectService: {
+      find: async (scope, id) => (owned && scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && id === "slug" ? { id: "project-1" } : null),
     },
   }
   const factory = (_cfg, scope) => ({
@@ -205,7 +203,7 @@ test("canceled old Project deletion cannot publish a late acknowledgement", asyn
   })
   const request = req()
   const response = res()
-  const store = { services: { projects: { find: async () => ({ id: "project-1" }) } } }
+  const store = { projectService: { find: async () => ({ id: "project-1" }) } }
   const factory = () => ({ delete: async () => pending })
   const operation = invokeProjectResourceDelete(request, response, { storage }, auth, "slug", "asset-1", store, factory)
   await new Promise((resolve) => setImmediate(resolve))

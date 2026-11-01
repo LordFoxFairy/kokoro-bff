@@ -151,12 +151,6 @@ const store = {
     find: async (scope, ref) =>
       scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ["slug", "project-1"].includes(ref) ? { id: "project-1" } : null,
   },
-  services: {
-    projects: {
-      find: async (scope, ref) =>
-        scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ["slug", "project-1"].includes(ref) ? { id: "project-1" } : null,
-    },
-  },
 }
 
 test("metadata route freshly checks owner and canonical Project before any Storage call", async () => {
@@ -179,14 +173,14 @@ test("metadata route freshly checks owner and canonical Project before any Stora
       "slug",
       "asset-1",
       false,
-      store.services.projects,
+      store.projectService,
       factory,
     )
     assert.equal(res.statusCode, 404)
   }
   assert.equal(calls.length, 0)
   const res = response()
-  await projectResourceReadRoute(request("GET", "/v1/projects/slug/resources/asset-1"), res, { storage }, context, "slug", "asset-1", false, store.services.projects, factory)
+  await projectResourceReadRoute(request("GET", "/v1/projects/slug/resources/asset-1"), res, { storage }, context, "slug", "asset-1", false, store.projectService, factory)
   assert.equal(res.statusCode, 200)
   assert.equal(calls[0].projectId, "project-1")
   for (const suffix of ["?scope_id=forged", "?download=true"]) {
@@ -199,7 +193,7 @@ test("metadata route freshly checks owner and canonical Project before any Stora
       "slug",
       "asset-1",
       false,
-      store.services.projects,
+      store.projectService,
       factory,
     )
     assert.equal(bad.statusCode, 400)
@@ -228,7 +222,7 @@ test("Projects feature handler owns item metadata reads without entering the leg
     res,
     { storage, tenantId: "tenant-1", sharedSecret: "web-secret" },
     { verify: async ({ token }) => ({ ok: true, identity: { namespace: "tenant-1", userId: token === "user" ? "subject-1" : "other" } }) },
-    { find: store.services.projects.find },
+    { find: store.projectService.find },
     (_config, scope) => {
       calls.push(scope)
       return { get: async () => ({ asset_id: "asset-1" }) }
@@ -282,12 +276,10 @@ test("Project attachment downloads exceed the old personal 1MiB cap, remain comp
   let revoked = false
   let reads = 0
   const ownStore = {
-    services: {
-      projects: {
-        find: async () => {
-          reads++
-          return revoked && reads % 2 === 0 ? null : { id: "project-1" }
-        },
+    projectService: {
+      find: async () => {
+        reads++
+        return revoked && reads % 2 === 0 ? null : { id: "project-1" }
       },
     },
   }
@@ -303,7 +295,7 @@ test("Project attachment downloads exceed the old personal 1MiB cap, remain comp
     }
   }
   const server = createServer((request, response) => {
-    void projectResourceReadRoute(request, response, { storage }, context, "slug", "asset-1", true, ownStore.services.projects, factory, spooler)
+    void projectResourceReadRoute(request, response, { storage }, context, "slug", "asset-1", true, ownStore.projectService, factory, spooler)
   })
   server.listen(0, "127.0.0.1")
   await once(server, "listening")

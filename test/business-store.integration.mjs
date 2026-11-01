@@ -1630,8 +1630,8 @@ async function r241Fixture(t, observeDeletionSignal) {
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
     if (observeDeletionSignal !== undefined) {
-      const readDeletion = store.services.projects.deletion.bind(store.services.projects)
-      store.services.projects.deletion = (scope, projectId, signal) => {
+      const readDeletion = store.projectService.deletion.bind(store.projectService)
+      store.projectService.deletion = (scope, projectId, signal) => {
         observeDeletionSignal(signal)
         return readDeletion(scope, projectId, signal)
       }
