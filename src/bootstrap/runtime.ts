@@ -29,7 +29,7 @@ import { AgUiSessionRuntime } from "../application/agui/session-runtime.js"
 import type { AgUiProjectionService } from "../application/agui/project-session-events.js"
 import { AgUiProjectorRunner } from "../application/agui/projector.js"
 import type { IdempotencyEntry, MutationTicket } from "../application/idempotency.js"
-import type { BffBusinessStore } from "../application/ports/bff-business-store.js"
+import type { IdempotencyRepository } from "../application/ports/idempotency-repository.js"
 import type { PersonalKnowledgeRepository } from "../application/ports/personal-knowledge-repository.js"
 import type { SkillUsageReader } from "../application/agui/skill-usage.js"
 import type { AgUiProjectionConsumerRepository } from "../application/agui/ports/agui-projection-repository.js"
@@ -106,6 +106,12 @@ export type BffRouteInput = {
 /** A deliberately explicit test seam; production composition leaves it unset. */
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
+/** Bootstrap-only persistence seam; feature resources cross the boundary by owner name. */
+type BffRuntimeStore = IdempotencyRepository & {
+  ready(): Promise<void>
+  close(): Promise<void>
+}
+
 export type BffServerComposition = {
   mcpProjectPublicationClient: McpProjectPublicationClient | null
   mcpPersonalClient:
@@ -125,7 +131,7 @@ export type BffServerComposition = {
   skillAdminClient: SkillAdminConnectClient | null
   skillDraftClient: CatalogConnectClient | null
   installationClient: SkillInstallationConnectClient | null
-  businessStore: BffBusinessStore | null
+  businessStore: BffRuntimeStore | null
   /** Feature-owned account personalization provider; legacy composition is only a test/runtime fallback. */
   personalizationProvider: PersonalizationProvider | null
   personalKnowledgeRepository: PersonalKnowledgeRepository | null
@@ -196,7 +202,7 @@ export type BffCompositionOptions = {
   skillDraftClient?: CatalogConnectClient | null
   installationClient?: SkillInstallationConnectClient | null
   /** Supplying null is an explicit test composition; omitted means real persistence. */
-  businessStore?: BffBusinessStore | null
+  businessStore?: BffRuntimeStore | null
   personalizationProvider?: PersonalizationProvider | null
   personalKnowledgeRepository?: PersonalKnowledgeRepository | null
   skillUsageReader?: SkillUsageReader | null
@@ -241,10 +247,10 @@ export type BffCompositionOptions = {
 
 /**
  * Infrastructure resources are resolved only at the bootstrap boundary.
- * The application-facing BffBusinessStore stays limited to receipts and
- * lifecycle, while feature resources cross the raw-server boundary by name.
+ * Feature resources cross the raw-server boundary by owner-specific name;
+ * the runtime store itself is not an application port.
  */
-type BffInfrastructureStore = BffBusinessStore & {
+type BffInfrastructureStore = BffRuntimeStore & {
   readonly personalKnowledge?: PersonalKnowledgeRepository
   readonly skillUsage?: SkillUsageReader
   readonly skillAiAssociation?: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>

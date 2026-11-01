@@ -242,16 +242,15 @@ test("BFF composition root stays small and delegates resource routes", async () 
 })
 
 test("global business store does not duplicate feature service providers", async () => {
-  const [store, repositories, runtime] = await Promise.all([
-    readFile(path.join(root, "src/application/ports/bff-business-store.ts"), "utf8"),
+  const [repositories, runtime] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/repositories.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
-  assert.doesNotMatch(store, /BffApplicationServices|services\s*:/u)
+  assert.equal(await exists("src/application/ports/bff-business-store.ts"), false)
   assert.equal(await exists("src/application/services.ts"), false)
-  assert.doesNotMatch(store, /personalizationProvider\?/u)
   assert.doesNotMatch(repositories, /public readonly personalizationProvider/u)
   assert.doesNotMatch(repositories, /this\.personalizationProvider\s*=/u)
+  assert.match(runtime, /type BffRuntimeStore = IdempotencyRepository/u)
   assert.doesNotMatch(runtime, /businessStore\?\.services/u)
   assert.match(runtime, /infrastructureStore\?\.chatService/u)
   assert.match(runtime, /infrastructureStore\?\.projectService/u)
