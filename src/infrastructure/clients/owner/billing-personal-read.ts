@@ -1,5 +1,5 @@
 import { createClient } from "../../../generated/billing-http/client/client.gen.js"
-import { getMyCreditAccount, getMyCreditLedger, openMyCreditAccount } from "../../../generated/billing-http/sdk.gen.js"
+import { getMyCreditAccount, getMyCreditLedger } from "../../../generated/billing-http/sdk.gen.js"
 import type { CreditAccount, CreditLedgerResponse } from "../../../generated/billing-http/types.gen.js"
 import { zErrorResponse } from "../../../generated/billing-http/zod.gen.js"
 import type { BffConfig } from "../../../config/runtime.js"
@@ -12,8 +12,6 @@ export type BillingPersonalReadResult<T> =
       status: 403 | 404 | 502 | 503
       code: "billing_account_disabled" | "billing_account_not_found" | "upstream_response_invalid" | "billing_unavailable"
     }>
-
-type PersonalIdentity = Readonly<{ tenant: string; subject: string }>
 
 function unavailable<T>(): BillingPersonalReadResult<T> {
   return { ok: false, status: 503, code: "billing_unavailable" }
@@ -38,6 +36,8 @@ function u1(value: string, maxCodePoints: number): string | null {
   }
   return `u1.${Buffer.from(value, "utf8").toString("base64url")}`
 }
+
+type PersonalIdentity = Readonly<{ tenant: string; subject: string }>
 
 export function billingPersonalIdentity(context: RequestContext): PersonalIdentity | null {
   const tenant = u1(context.identity.namespace, 191)
@@ -95,7 +95,7 @@ async function request<T>(
   config: BffConfig,
   context: RequestContext,
   signal: AbortSignal,
-  operation: "account" | "ledger" | "open",
+  operation: "account" | "ledger",
   query?: Readonly<{ limit: number; cursor?: string }>,
 ): Promise<BillingPersonalReadResult<T>> {
   const baseUrl = config.upstreams.billing ?? null
@@ -118,22 +118,14 @@ async function request<T>(
   }
   try {
     const result =
-      operation === "open"
-        ? await openMyCreditAccount({ client, headers, body: {}, signal: outboundSignal })
-        : operation === "account"
-          ? await getMyCreditAccount({ client, headers, signal: outboundSignal })
-          : await getMyCreditLedger({ client, headers, query: query!, signal: outboundSignal })
+      operation === "account"
+        ? await getMyCreditAccount({ client, headers, signal: outboundSignal })
+        : await getMyCreditLedger({ client, headers, query: query!, signal: outboundSignal })
     const status = result.response?.status
     if (status === 200 && result.data !== undefined) return { ok: true, data: result.data.data as T }
-    if (status === 403 && operation === "open") {
-      const parsed = zErrorResponse.safeParse(result.error)
-      if (parsed.success && parsed.data.error.code === "billing.credit_account_disabled" && !parsed.data.error.retryable)
-        return { ok: false, status: 403, code: "billing_account_disabled" }
-      return unavailable()
-    }
     if (status === 404) {
       const parsed = zErrorResponse.safeParse(result.error)
-      if (operation !== "open" && parsed.success && parsed.data.error.code === "billing.credit_account_not_found" && !parsed.data.error.retryable) {
+      if (parsed.success && parsed.data.error.code === "billing.credit_account_not_found" && !parsed.data.error.retryable) {
         return { ok: false, status: 404, code: "billing_account_not_found" }
       }
       return invalidResponse()
@@ -156,12 +148,4 @@ export function readBillingCreditLedger(
   signal: AbortSignal,
 ): Promise<BillingPersonalReadResult<CreditLedgerResponse["data"]>> {
   return request(config, context, signal, "ledger", query)
-}
-
-export function initializeBillingCreditAccount(
-  config: BffConfig,
-  context: RequestContext,
-  signal: AbortSignal,
-): Promise<BillingPersonalReadResult<CreditAccount>> {
-  return request(config, context, signal, "open")
 }

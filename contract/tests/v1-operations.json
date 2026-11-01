@@ -3,6 +3,21 @@
   "operations": [
     {
       "method": "GET",
+      "path": "/v1/projects/{projectId}/mcp-recommendations",
+      "operation_id": "getProjectMcpRecommendations"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/{projectId}/mcp-recommendations",
+      "operation_id": "replaceProjectMcpRecommendations"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/scheduled-task-runs",
+      "operation_id": "listScheduledTaskRuns"
+    },
+    {
+      "method": "GET",
       "path": "/v1/account/archived-tasks",
       "operation_id": "listOwnedArchivedTasks"
     },
@@ -152,6 +167,21 @@
       "operation_id": "listSessions"
     },
     {
+      "method": "GET",
+      "path": "/v1/admin/billing/metering/pricing",
+      "operation_id": "getAdminMeteringPricing"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/billing/metering/rate-revisions",
+      "operation_id": "publishAdminMeteringRate"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/billing/metering/policy-revisions",
+      "operation_id": "publishAdminMeteringPolicy"
+    },
+    {
       "method": "POST",
       "path": "/v1/admin/billing/credit-grants",
       "operation_id": "createAdminCreditGrant"
@@ -273,6 +303,16 @@
     },
     {
       "method": "GET",
+      "path": "/v1/self/project-pins",
+      "operation_id": "listSelfProjectPins"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/{projectId}/pin",
+      "operation_id": "setProjectPin"
+    },
+    {
+      "method": "GET",
       "path": "/v1/projects",
       "operation_id": "listProjects"
     },
@@ -385,6 +425,21 @@
       "method": "GET",
       "path": "/v1/projects/{projectId}/instruction-revisions",
       "operation_id": "listProjectInstructionRevisions"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/resources/{asset_id}",
+      "operation_id": "getProjectResource"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/{projectId}/resources/{asset_id}",
+      "operation_id": "deleteProjectResource"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/resources/{asset_id}/download",
+      "operation_id": "downloadProjectResource"
     },
     {
       "method": "GET",
@@ -510,6 +565,11 @@
       "method": "DELETE",
       "path": "/v1/skill-installations/{installation_id}",
       "operation_id": "removePersonalSkillInstallation"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/package",
+      "operation_id": "getProjectSkillInstallationPackage"
     },
     {
       "method": "GET",
@@ -923,58 +983,8 @@
     },
     {
       "method": "GET",
-      "path": "/v1/admin/billing/metering/pricing",
-      "operation_id": "getAdminMeteringPricing"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/admin/billing/metering/rate-revisions",
-      "operation_id": "publishAdminMeteringRate"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/admin/billing/metering/policy-revisions",
-      "operation_id": "publishAdminMeteringPolicy"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/projects/{projectId}/resources/{asset_id}",
-      "operation_id": "getProjectResource"
-    },
-    {
-      "method": "DELETE",
-      "path": "/v1/projects/{projectId}/resources/{asset_id}",
-      "operation_id": "deleteProjectResource"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/projects/{projectId}/resources/{asset_id}/download",
-      "operation_id": "downloadProjectResource"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/projects/{projectId}/mcp-recommendations",
-      "operation_id": "getProjectMcpRecommendations"
-    },
-    {
-      "method": "PUT",
-      "path": "/v1/projects/{projectId}/mcp-recommendations",
-      "operation_id": "replaceProjectMcpRecommendations"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/self/project-pins",
-      "operation_id": "listSelfProjectPins"
-    },
-    {
-      "method": "PUT",
-      "path": "/v1/projects/{projectId}/pin",
-      "operation_id": "setProjectPin"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/package",
-      "operation_id": "getProjectSkillInstallationPackage"
+      "path": "/v1/sessions/{id}/runs/{runId}/display",
+      "operation_id": "getSessionRunDisplay"
     },
     {
       "method": "GET",
@@ -990,11 +1000,6 @@
       "method": "POST",
       "path": "/v1/sessions/{id}/messages/{messageId}/regenerate",
       "operation_id": "regenerateLatestAssistantMessage"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/sessions/{id}/runs/{runId}/display",
-      "operation_id": "getSessionRunDisplay"
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { restoreIntegrationSchema } from "./task-b-bff-integration-public-contract.mjs"
 import { createHash } from "node:crypto"
 const hash = (value) => createHash("sha256").update(value).digest("hex")
 const column =
@@ -22,6 +23,7 @@ export function messageFinalAnswerDefinitions(schema) {
 }
 
 export function restoreFinalAnswerSchema(schema) {
+  if (schema.includes("CREATE TABLE IF NOT EXISTS bff_scheduled_rss_poll")) schema = restoreIntegrationSchema(schema, "approved")
   if (!schema.includes("MESSAGE-FINAL-ANSWER-COLUMN-BEGIN")) return schema
   if (hash(schema) !== "8444edf810bba34c55a10d3ea56a266be605898f269327b16e4f51b713039043") throw Error("Final answer complete SQL child drift")
   const definitions = messageFinalAnswerDefinitions(schema)

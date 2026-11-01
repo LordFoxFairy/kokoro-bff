@@ -1,3 +1,4 @@
+import { restoreScheduledRunsParent } from "../../scripts/scheduled-task-runs-public-contract.mjs"
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createServer } from "node:http"

@@ -1,4 +1,4 @@
-import type { ScheduledCalendar } from "./calendar.js"
+import type { ScheduledTrigger } from "./trigger.js"
 export type { ScheduledTaskFrequency } from "./calendar.js"
 export type ScheduledTaskStatus = "active" | "paused" | "failed"
 
@@ -9,7 +9,8 @@ export type ScheduledTaskStatus = "active" | "paused" | "failed"
  * wall-clock rule remains a string paired with an IANA timezone; it is not
  * converted to a server-local timezone.
  */
-export type ScheduledTaskFact = ScheduledCalendar & {
+export type ScheduledTaskFact = ScheduledTrigger & {
+  triggerEpoch: string
   id: string
   projectId?: string
   title: string

@@ -1,0 +1,7 @@
+{
+  "parent_source_sha256": "ac649109f7b394ab894d17352c5f9f106e24e1cbf94e74672569333190adfab5",
+  "parent_ordered_inventory_sha256": "9f3135ddca3df44ed4aa65d8ae971d608ae8c9b2b54962f6c94b207d153808f2",
+  "path_block_sha256": "30531e0e8b0a992308986b06f2fd2aa849f17bba1adc568c405f67117212bef5",
+  "schema_block_sha256": "9bf92f75d80825c454e21d89c1dfadd0ac1a7d4b7f4c7f2e5042ffc1ac11726d",
+  "note": "Exact additive Public19.2 inverse proof; runtime uses owner OpenAPI, not this proof."
+}

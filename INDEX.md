@@ -1,3 +1,9 @@
+## 2026-11-02 正式双父整合入口
+
+基线 b3289f4a 与正常源 8395b44 正在正式整合。唯一 Public29.0 契约共200操作，保原199且仅新增运行记录。`scripts/task-b-bff-integration-public-contract.mjs`、`contract/tests/task-b-bff-integration.json` 和对应测试只用于有限双父完整原文、有序 inventory 与 SQL 逆证；旧 oracle 不重签，也不作为运行兼容层。
+
+积分初始化统一到严格 PUT 路由；项目下载统一到正式 `/download`，保原 spool/metadata/delete，移植首次 IAM 前的20秒预算、两次有界 Project 资格读取与迟到清理。原 AA 冲突中的 PostgreSQL lease 风险完整保存在 `test/project-resource-checkout-budget.test.mjs`。正常资源与数据库未变；最终隔离集成、旧 RSS 库升级、App 配对及正常旅程由 Root 收口。
+
 ## 2026-11-01 具名非空库演进工具
 
 - `scripts/evolve-message-parts-schema.mjs`：沿既有 regeneration/final 精确定义识别固定parts父及完整后继，不放宽任意旧形状。
@@ -109,7 +115,17 @@ Public20/165 的唯一wire增量在 `AdminModelRevision`；原 `src/infrastructu
 
 ## 2026-10-19 集成证明入口
 
-唯一当前 Public19/165：`contract/openapi/v1/openapi.yaml`。`scripts/verify-closure-integration-contract.mjs` 与 `test/contract/closure-integration.test.mjs` 验证两个批准父全文/有序操作、当前wire与仅新增归档Schema；历史proof不是运行时兼容层。现有业务组件与owner不扩展。
+唯一当前机器契约为 Public19.1/166 未发布候选：`contract/openapi/v1/openapi.yaml`；只新增项目资源下载。`scripts/project-resource-download-public-contract.mjs` 验证新增面并完整逆恢复原 Public19/165，再由 `scripts/verify-closure-integration-contract.mjs` 与 `test/contract/closure-integration.test.mjs` 验证两个批准父全文/有序操作。历史 proof 不重签，也不是运行时兼容层。项目下载已形成源码候选，但未正常激活或发行，详见 `docs/CURRENT.md`。
+
+### 2026-10-20 项目资源下载契约、受界实现与行为验证
+
+- `src/http/routes/project-resource-download.ts`：新 canonical GET 的入口/当前 IAM、strict selector/原始与解码 alias、两次本人 active Project 与私有二进制响应。只按固定结构分别解码 selector，接受 Web 标准组件编码，拒绝 encoded slash/traversal/双编码与结构 alias；`bootstrap/server.ts` 仅为此入口新增 IAM 前分流。
+- `src/application/asset-download-budget.ts`：普通 ASSET 单一绝对期限和取消/late settle fence。`http/file-download-disposition.ts`：两个普通 ASSET route 的安全 attachment 文件名。
+- `src/infrastructure/postgres/project-resource-access.ts`：required signal/deadline 下的现本人 active Project canonical ID 读取、短只读事务与 exact client 收尾；port/service/repository 仅接线，旧 findProject 不改。共享 Pool 原等待语义保持；caller 绝对期限与底层 pending 分开，late checkout 一次正常 release/零 SQL，不冒称公开 connect 支持单次取消。
+- `src/infrastructure/clients/storage/asset-download.ts`、`asset-download-transfer.ts`、`asset-download.types.ts`、`asset-download.error.ts`：可信 personal/project 普通 ASSET 共享读取、元数据/签名引用、真实 EOF/1MiB/长度/SHA。旧两个 personal 实现已 Trash 退休，无兼容 alias；个人 route 迁移但原 wire/PermissionDenied 隐藏语义保持，Artifact 未改。
+- `test/project-resource-download.test.mjs`：真实 source HTTP/Connect 受控对端；`asset-download-budget.test.mjs`、`project-resource-access.test.mjs`：非合作等待/晚结果/精确 lease unit；个人原用例保留，追加有限取消与错误映射。`project-resource-access.integration.mjs` 已随原14文件串行清单在独占 PostgreSQL/Redis 夹具通过；完整清单371PASS/0FAIL/0SKIP包含24项受控unit，正常资源下载与Web整链仍待接入。
+
+原第一阶段合法200/实际503与个人三非合作 RED 证据完整保留；第二阶段当前结果、未执行门和不可变发行限制见 CURRENT，不把受控对端或源码存在称为正常产品下载已可用。
 
 ### 2026-10-18 MCP 管理HTTP入口
 
@@ -325,3 +341,43 @@ Platform Connect 固定消费 receipt metadata profile；`src/infrastructure/cli
 `src/infrastructure/postgres/message-parts-read.ts` 负责 private snapshot/list 的只读 ref 与独立 parts GET：同一受界 RR 租约、当前本人/direct/Project 与原 scope 绑定、decimal revision、公有 opaque watermark、409 显式重读、4096 Unicode scalar 分页和完整 envelope 1 MiB。唯一 legacy 候选须同 Run/latest assistant、dispatch 与完整 retained public/source ledger 证明，取消/GC 不伪造正文或写旧行。`src/http/chat-message-parts-input.ts` 只解具名 GET query；路由与 service 复用原 Chat owner，Shared/command ACK 保持原 DTO。`test/chat-message-parts-read.test.ts` 静态导入现 default Chat suite；`test/message-parts-read.integration.mjs` 仅接受 Root 的具名空临时库，真实 PostgreSQL 验收与正常组合由 Root 执行。
 
 Legacy 空完成恢复仅重建固定 raw Agent empty-wire 候选并复用原 canonical source digest；完整 SHA 精确匹配才折叠空串，索引差只作候选而非源序号不变量。空 ID 后续重开拒绝，delivery 仅具名非 parts 事件；所有原只读、scope、retention 与总预算守卫保持。
+
+## 8395 分支历史证据（待本次整合复验）
+
+## I6 RSS 安全 HTTPS reader（2026-10-23，源码候选待独审）
+
+`readRssFeed({url,signal})`仅返回完整有界bytes；显式内部factory供受控测试，生产固定node DNS/HTTPS和公网地址策略。新增`rss-feed-address.ts`拥有URL/BlockList策略，`rss-feed-reader.ts`拥有单pin、TLS、10秒总期限/5秒idle、16KiB头/1MiB正文及取消释放。没有配置覆盖、外网feed访问、公开接口、SQL、poll或Web激活。后继唯一编排调用点仍为计划中的`application/rss-poll-service.ts`，成功后再交现parser/conditions与持久事务。
+
+根外CDATA窄修同时检查sax `onopencdata`和`oncdata`：空CDATA不产生后一个事件，只有前一个检查可拒空输入；原92内核断言正文保持，根内CDATA仍正常。可执行stub定向RED为29项1PASS/28FAIL；首轮实现184项182PASS/2空CDATA FAIL后按Root裁决修复。首次全组stub因accepted等待未到而终止，保留原日志，不冒完成RED。
+
+自有loopback TLS factory仅映射已验证public pin，保Host/SNI/证书校验；该证据不代表公网可达。实际5秒idle与10秒drip总期限、错SAN、取消socket、启动时环境代理trap及响应边界纳入专项。准确终态计数、命令和全输入保护见A/测试验收/i6-rss-reader-worker-v1.json。未执行build/default/full/contract聚合、DB/Redis或正常Browser；新sax锁的旧生成provenance仍待Root后续聚合门，不在此片重生成。没有hix-code-review通过结论。
+
+## I6 内核 XML 语义窄修（2026-10-23，待独审）
+
+已修复独审P2：实体前literal CRLF/CR归一LF、实体CR保真；声明仅XML S、固定关键字和standalone值严格小写，仅UTF-8 encoding值可大小写折叠。所有解码属性（包括namespace/未知/字符引用）含TAB/LF/CR即整份拒绝，这是明确的支持子集，不声称完整XML属性归一。guid/id保留XML解码后精确值已由Root裁决；64KiB指投影文本字段和全属性，不限制未知扩展单字段，仍受1MiB/深度/节点总界。
+
+原58内核和37架构测试断言保持；新增行为RED为92项61PASS/31FAIL，修后92PASS。终态命令、哈希与保护见A/测试验收/i6-rss-kernel-worker-v2.json；v1日志/manifest原样保留。未开启reader/网络/资源/poll/Web。
+
+## I6 RSS 解析与条件内核（2026-10-23，候选）
+
+新增RSS2/Atom严格解析和闭合文本条件，尚未注册RSS接口或接入网络、Scheduler poll、持久去重、执行队列及Web。`src/infrastructure/clients/rss-feed-parser.ts`拥有sax解析/稳定摘要；`src/domain/scheduled-task/rss-feed.ts`仅只读条目类型，`rss-conditions.ts`拥有纯条件验证与匹配。后继唯一消费点为计划中的`application/rss-poll-service.ts`，本片不创建空入口或伪订阅。
+
+固定sax1.6.1/@types/sax1.2.7，安装禁scripts；官方registry integrity与lock一致。受控纯门和失败记录见CURRENT；不将内核通过称为完整RSS可用。公开契约19.3/168、SQL、生成物、owner pins和其它业务保持原字节。
+
+## I5 本人积分账户初始化
+
+- `src/http/billing-credit-account-input.ts`：严格目标、header、4096B 空 JSON 完整 EOF。
+- `src/http/routes/billing-credit-account.ts`：一个绝对预算、首末 IAM、可信本人和公开响应。
+- `src/infrastructure/clients/owner/billing-credit-account.ts`：唯一正规四操作 SDK 中的 PUT 与未知结果单次 GET，严格原始响应。
+- `src/infrastructure/clients/owner/billing-personal-identity.ts`：原 read 的 u1 算法唯一复用，读 transport 不变。
+- `scripts/billing-credit-account-public-contract.mjs`、`contract/tests/billing-credit-account.json`：Public19.3 完整逆回19.2原字节与167有序操作。
+- `test/billing-credit-account-{input,client,http,contract}.test.*`：受控HTTP与机器负控；真实owner/PG与正常激活由主控后验。
+
+## 2026-10-21 运行metadata读取入口
+
+当前机器契约为未发行 Public19.2/167 候选，新增面由 `scripts/scheduled-task-runs-public-contract.mjs` 精确逆回原19.1/166，再进入项目下载与双父原证明。
+
+- `src/application/scheduled-task-runs.types.ts` / `src/application/scheduled-task-run-projector.ts` / `src/application/scheduled-task-runs-service.ts`：窄read port、严格源事实投影及双快照编排。
+- `src/http/scheduled-task-runs-input.ts` / `src/http/routes/scheduled-task-runs.ts`：strict query/str1游标、entry总预算及两次IAM；server在通用准入前精确分派。
+- `src/infrastructure/postgres/scheduled-task-runs.ts`：当前资格在LIMIT前、L+1与最多两终态、PG字节守卫；复用原ArchiveSqlLease，不修改归档职责。
+- 六个具名行为/HTTP/真实PG测试与`test/contract/scheduled-task-runs.test.mjs`覆盖本片。正常服务/前端pin不在此交付切换，结果见CURRENT。

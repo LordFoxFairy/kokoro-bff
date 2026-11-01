@@ -1,3 +1,4 @@
+import { restoreIntegrationParent } from "../scripts/task-b-bff-integration-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { mkdtemp, readFile, mkdir, writeFile, rm, access, realpath } from "node:fs/promises"
@@ -44,7 +45,7 @@ test("both current generator modes reject a full legacy owner blob rather than p
 
 test("Public tool adjunct delta restores every original Public28.10 byte, including feedback and regeneration", async () => {
   const { restorePublic2810ToolFactsContract } = await import("../scripts/project-pin-public-contract.mjs")
-  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const raw = restoreIntegrationParent(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"), "approved")
   const parent = restorePublic2810ToolFactsContract(raw)
   assert.equal(createHash("sha256").update(parent).digest("hex"), "9e6a8dddea847ecfd2905f378f4f76022b6cc49a1a4352a2e7abb4e73b3f1328")
   for (const bad of [
@@ -75,7 +76,7 @@ test("formal Agent tool facts restore the complete HTTP8.3 before the older stri
 
 test("private activity details restore the exact complete Public28.11 parent, without broadening Chat or Share", async () => {
   const { restorePublic2811ActivityDetailsContract } = await import("../scripts/project-pin-public-contract.mjs")
-  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const raw = restoreIntegrationParent(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"), "approved")
   assert.match(raw, /^  version: 28\.17\.0$/mu)
   const parent = restorePublic2811ActivityDetailsContract(raw)
   assert.equal(createHash("sha256").update(parent).digest("hex"), "4d93ec15e2931768afafffb2101039b1da64757ea48c760d16ef88aa8753db16")
@@ -87,7 +88,7 @@ test("formal Agent8.7 details and Public28.13 use the same closed private schema
   const { load } = await import("js-yaml")
   const raw = await readFile(new URL("openapi.json", vendor), "utf8")
   const owner = JSON.parse(raw)
-  const published = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  const published = load(restoreIntegrationParent(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"), "approved"))
   assert.deepEqual(published.components.schemas.RunDisplay.properties.activity_details, owner.components.schemas.RunDisplay.properties.activity_details)
   const parent = restoreAgent84ActivityDetailsRaw(raw)
   assert.equal(createHash("sha256").update(parent).digest("hex"), "239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52")
@@ -106,7 +107,7 @@ test("action title and capability description retain exact previous public and A
   const { restorePublic2812ActionDisplayContract } = await import("../scripts/project-pin-public-contract.mjs")
   const { restoreAgent85ActionDisplayRaw } = await import("../scripts/generate-agent-http-client.mjs")
   const { load } = await import("js-yaml")
-  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const raw = restoreIntegrationParent(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"), "approved")
   const agentRaw = await readFile(new URL("openapi.json", vendor), "utf8")
   const agent = JSON.parse(agentRaw),
     pub = load(raw)

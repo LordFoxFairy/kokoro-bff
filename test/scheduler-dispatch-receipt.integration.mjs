@@ -364,6 +364,8 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
     tenant_id: tenant,
     task_id: taskId,
     task_revision: 1,
+    trigger_kind: "calendar",
+    trigger_epoch: "1",
     owner_id: owner,
     prompt: "frozen prompt",
     auto_approve: false,
@@ -412,6 +414,7 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
       {
         title: "Receiver fixture",
         prompt: body.prompt,
+        triggerKind: "calendar",
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",
@@ -521,6 +524,7 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
       {
         title: "Rollback",
         prompt: "go",
+        triggerKind: "calendar",
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",
@@ -567,7 +571,7 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
     }
     const prepared = await store.schedulerDispatchReceipts.prepareSnapshot(claimed.claim, preparedSnapshot)
     await pool.query(
-      `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES($1,$2,$3,$4,'2026-09-01T12:00:00.123456789Z',$5,'conflict-request','conflict-key',$6,'conflict-run','bff:conflict','{}')`,
+      `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES('calendar',1,1,$1,$2,$3,$4,'2026-09-01T12:00:00.123456789Z',$5,'conflict-request','conflict-key',$6,'conflict-run','bff:conflict','{}')`,
       [`conflict-${suffix}`, tenant, taskId, occurrence, owner, "8".repeat(64)],
     )
     await assert.rejects(
@@ -624,6 +628,7 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
         {
           title: "Race",
           prompt: "go",
+          triggerKind: "calendar",
           frequency: "daily",
           time: "08:00",
           timezone: "UTC",
@@ -769,7 +774,17 @@ async function r66LifecycleFixture(context) {
   const schedule = `kokoro.scheduled.${taskId}`
   const occurrence = "2026-09-01T12:00:00.123456789Z"
   const key = `lifecycle-${suffix}`
-  const body = { tenant_id: tenant, task_id: taskId, task_revision: 1, owner_id: owner, prompt: "go", auto_approve: false, timezone: "UTC" }
+  const body = {
+    tenant_id: tenant,
+    task_id: taskId,
+    task_revision: 1,
+    trigger_kind: "calendar",
+    trigger_epoch: "1",
+    owner_id: owner,
+    prompt: "go",
+    auto_approve: false,
+    timezone: "UTC",
+  }
   const scopes = new Set()
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
@@ -831,6 +846,7 @@ async function r66LifecycleFixture(context) {
     {
       title: "Lifecycle",
       prompt: "go",
+      triggerKind: "calendar",
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
@@ -947,7 +963,7 @@ receiverIntegrationTest("cadence-only change rejects unprepared old callbacks an
   const changed = await fixture.store.services.scheduledTasks.update(
     { tenantId: fixture.tenant, subjectId: fixture.owner },
     fixture.taskId,
-    { frequency: "weekly", time: "08:00", timezone: "UTC", weekdays: [1] },
+    { triggerKind: "calendar", frequency: "weekly", time: "08:00", timezone: "UTC", weekdays: [1] },
     { tenantId: fixture.tenant, actorId: fixture.owner, requestId: `${fixture.key}-change`, idempotencyKey: `${fixture.key}-change` },
   )
   assert.equal(changed.revision, 2)

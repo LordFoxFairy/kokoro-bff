@@ -89,8 +89,17 @@ async function withBoundedTransaction<T>(
     throw error
   }
   client.on("error", onClientError)
-  const query = <Row extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>> =>
-    within(() => client!.query<Row>(text, values))
+  const query = async <Row extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>> => {
+    try {
+      return await within(() => client!.query<Row>(text, values))
+    } catch (error) {
+      if (error instanceof DatabaseError && error.code === "57014") {
+        destroyClient = true
+        throw new Error("PROJECT_SCOPE_RELEASE_CANCELLED", { cause: error })
+      }
+      throw error
+    }
+  }
   const transaction: BoundedTransaction = {
     query,
     begin: async () => {

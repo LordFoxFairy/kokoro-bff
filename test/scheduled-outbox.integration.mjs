@@ -33,7 +33,7 @@ integrationTest("explicit calendars persist exact selections, frozen once instan
     const weekly = await repository.updateScheduledTask(
       scope,
       monthly.id,
-      { frequency: "weekly", time: "09:30", timezone: "UTC", weekdays: [6, 1] },
+      { triggerKind: "calendar", frequency: "weekly", time: "09:30", timezone: "UTC", weekdays: [6, 1] },
       lineage(suffix, "switch-week", suffix),
     )
     assert.deepEqual(weekly.weekdays, [1, 6])
@@ -43,7 +43,7 @@ integrationTest("explicit calendars persist exact selections, frozen once instan
     assert.equal(once.localDate, "2030-01-01")
     assert.equal(once.runAt.toISOString(), "2030-01-01T02:15:00.000Z")
     const snapshot = (await pool.query("SELECT payload FROM bff_scheduled_task_outbox WHERE tenant_id=$1 AND task_id=$2", [suffix, once.id])).rows[0].payload
-    assert.equal(snapshot.schema_version, 4)
+    assert.equal(snapshot.schema_version, 5)
     assert.equal(snapshot.task.run_at, once.runAt.toISOString())
     now = new Date("2031-01-01T00:00:00Z")
     assert.deepEqual(await repository.createScheduledTask(scope, input, once.id, lineage(suffix, "create-once", suffix)), once)
@@ -52,7 +52,7 @@ integrationTest("explicit calendars persist exact selections, frozen once instan
     let latest = once
     for (const [index, patch] of [
       { title: "After due" },
-      { frequency: "once", localDate: input.localDate, timezone: input.timezone, time: input.time },
+      { triggerKind: "calendar", frequency: "once", localDate: input.localDate, timezone: input.timezone, time: input.time },
       { enabled: false, status: "paused" },
       { enabled: true, status: "active" },
     ].entries()) {
@@ -75,7 +75,7 @@ integrationTest("explicit calendars persist exact selections, frozen once instan
       repository.updateScheduledTask(
         scope,
         once.id,
-        { frequency: "once", time: input.time, timezone: input.timezone, localDate: "2030-01-02" },
+        { triggerKind: "calendar", frequency: "once", time: input.time, timezone: input.timezone, localDate: "2030-01-02" },
         lineage(suffix, "different-past", suffix),
       ),
       /ONCE_NOT_FUTURE/u,
@@ -116,6 +116,8 @@ function taskInput(suffix, overrides = {}) {
   return {
     title: `Review ${suffix}`,
     prompt: `Review the project for ${suffix}.`,
+    triggerKind: "calendar",
+    triggerEpoch: "1",
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
@@ -250,7 +252,7 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     const updatedAgain = await repository.updateScheduledTask(
       coreScope,
       taskId,
-      { frequency: "daily", time: "09:00", timezone: "UTC", expiresAt: new Date("2026-09-05T00:00:00.000Z") },
+      { triggerKind: "calendar", frequency: "daily", time: "09:00", timezone: "UTC", expiresAt: new Date("2026-09-05T00:00:00.000Z") },
       secondUpdateLineage,
     )
     assert.equal(updatedAgain?.revision, 3)
@@ -464,7 +466,7 @@ integrationTest("Command success is lease-fenced and cannot alter current task f
       assert.deepEqual(persisted.weekdays, weekdays)
       assert.equal(Object.hasOwn(persisted, "next_run_at"), false)
       const pending = await pool.query("SELECT payload FROM bff_scheduled_task_outbox WHERE tenant_id=$1 AND status='pending'", [tenants.explicit])
-      assert.equal(pending.rows[0].payload.schema_version, 4)
+      assert.equal(pending.rows[0].payload.schema_version, 5)
       assert.deepEqual(pending.rows[0].payload.task.weekdays, weekdays)
       assert.equal(Object.hasOwn(pending.rows[0].payload.task, "next_run_at"), false)
     })
@@ -478,7 +480,7 @@ integrationTest("Command success is lease-fenced and cannot alter current task f
       assert.equal(persisted.weekdays, null)
       assert.equal(Object.hasOwn(persisted, "next_run_at"), false)
       const pending = await pool.query("SELECT payload FROM bff_scheduled_task_outbox WHERE tenant_id=$1 AND status='pending'", [tenants.omitted])
-      assert.equal(pending.rows[0].payload.schema_version, 4)
+      assert.equal(pending.rows[0].payload.schema_version, 5)
       assert.equal(Object.hasOwn(pending.rows[0].payload.task, "recurrence_anchor_at"), false)
       assert.equal(Object.hasOwn(pending.rows[0].payload.task, "next_run_at"), false)
     })
@@ -528,7 +530,7 @@ integrationTest("Command success is lease-fenced and cannot alter current task f
       const current = await repository.updateScheduledTask(
         scope,
         taskId,
-        { frequency: "daily", time: "09:00", timezone: "UTC" },
+        { triggerKind: "calendar", frequency: "daily", time: "09:00", timezone: "UTC" },
         lineage(tenants.stale, `replace-${suffix}`, suffix),
       )
       assert.equal(current.revision, 2)

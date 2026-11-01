@@ -9,6 +9,8 @@ it("maps explicit calendars to generic recurring rules or a frozen once instant"
   const { tsImport } = await import("tsx/esm/api")
   const { buildSchedulerSchedule: build } = await tsImport("../src/infrastructure/clients/scheduler/schedule.ts", import.meta.url)
   const base = {
+    triggerKind: "calendar" as const,
+    triggerEpoch: "1",
     id: "scheduled_calendar",
     title: "Calendar",
     prompt: "Review",
@@ -43,6 +45,8 @@ async function listen(server: ReturnType<typeof createServer>): Promise<string> 
 
 describe("BFF Scheduler control mapping", () => {
   const daily = {
+    triggerKind: "calendar" as const,
+    triggerEpoch: "1",
     id: "scheduled_fixture",
     projectId: "project_fixture",
     title: "Daily review",
@@ -65,6 +69,8 @@ describe("BFF Scheduler control mapping", () => {
       url: "http://bff.test/internal/bff/scheduled-tasks/dispatch",
       method: "POST",
       body: {
+        trigger_kind: "calendar",
+        trigger_epoch: "1",
         tenant_id: "tenant_fixture",
         task_id: "scheduled_fixture",
         task_revision: 1,
@@ -85,6 +91,8 @@ describe("BFF Scheduler control mapping", () => {
   it("maps selected weekdays without an anchor, returns them to readers, and pauses inactive tasks", async () => {
     const weekly = {
       ...daily,
+      triggerKind: "calendar" as const,
+      triggerEpoch: "1",
       id: "scheduled_weekly",
       frequency: "weekly" as const,
       time: "23:30",
@@ -349,6 +357,8 @@ it("binds current task state to the complete delivered definition, not a frozen 
   const { tsImport } = await import("tsx/esm/api")
   const { SchedulerTaskStateReader } = await tsImport("../src/infrastructure/clients/scheduler/task-state-reader.ts", import.meta.url)
   const task = {
+    triggerKind: "calendar" as const,
+    triggerEpoch: "1",
     id: "scheduled_current",
     title: "Once",
     prompt: "Review",
@@ -411,6 +421,8 @@ it("reads only settled exact-revision schedules and rejects a changed task after
   const { tsImport } = await import("tsx/esm/api")
   const { ScheduledTaskReadService } = await tsImport("../src/application/scheduled-task-read-service.ts", import.meta.url)
   const task = {
+    triggerKind: "calendar" as const,
+    triggerEpoch: "1",
     id: "scheduled_current",
     title: "Review",
     prompt: "Review",
@@ -465,6 +477,8 @@ it("bounds current list fanout and cancels in-flight queries before starting que
   const { tsImport } = await import("tsx/esm/api")
   const { ScheduledTaskReadService } = await tsImport("../src/application/scheduled-task-read-service.ts", import.meta.url)
   const task = {
+    triggerKind: "calendar",
+    triggerEpoch: "1",
     id: "scheduled",
     title: "Review",
     prompt: "Review",
@@ -538,6 +552,8 @@ it("enforces one monotonic current-read deadline even before the abort timer can
   const { tsImport } = await import("tsx/esm/api")
   const { ScheduledTaskReadService } = await tsImport("../src/application/scheduled-task-read-service.ts", import.meta.url)
   const task = {
+    triggerKind: "calendar",
+    triggerEpoch: "1",
     id: "scheduled",
     title: "Review",
     prompt: "Review",

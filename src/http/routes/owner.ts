@@ -13,7 +13,7 @@ import type { IdempotencyEntry, MutationTicket } from "../../application/idempot
 import type { LiveOwnerResult } from "./types.js"
 import { livePlatformProjectionRead } from "./platform-projection.js"
 import { readBillingCatalog } from "../../infrastructure/clients/owner/billing-catalog.js"
-import { readBillingCreditAccount, readBillingCreditLedger, initializeBillingCreditAccount } from "../../infrastructure/clients/owner/billing-personal-read.js"
+import { readBillingCreditAccount, readBillingCreditLedger } from "../../infrastructure/clients/owner/billing-personal-read.js"
 
 function billingLedgerQuery(request: IncomingMessage): Readonly<{ limit: number; cursor?: string }> | null {
   const query = queryOf(request)
@@ -37,14 +37,9 @@ async function billingPersonalRead(
   json: Record<string, unknown>,
   idempotency: Map<string, IdempotencyEntry>,
 ): Promise<boolean> {
-  const initializing = request.method === "PUT" && businessPath.join("/") === "billing/credit-account"
-  if (
-    !initializing &&
-    (request.method !== "GET" || businessPath[0] !== "billing" || businessPath.length !== 2 || !["summary", "ledger"].includes(businessPath[1] ?? ""))
-  ) {
+  if (request.method !== "GET" || businessPath[0] !== "billing" || businessPath.length !== 2 || !["summary", "ledger"].includes(businessPath[1] ?? ""))
     return false
-  }
-  if (Object.keys(json).length !== 0 || (businessPath[1] === "summary" && queryOf(request).size !== 0) || (initializing && (request.url ?? "").includes("?"))) {
+  if (Object.keys(json).length !== 0 || (businessPath[1] === "summary" && queryOf(request).size !== 0)) {
     await reply(response, 400, failure("invalid_query_parameter", "Billing read parameters are invalid", context.requestId), context, idempotency, null)
     return true
   }
@@ -62,9 +57,8 @@ async function billingPersonalRead(
   response.once("close", onClose)
   if (request.aborted || response.destroyed) abort.abort()
   try {
-    const result = initializing
-      ? await initializeBillingCreditAccount(config, context, abort.signal)
-      : businessPath[1] === "summary"
+    const result =
+      businessPath[1] === "summary"
         ? await readBillingCreditAccount(config, context, abort.signal)
         : await readBillingCreditLedger(config, context, ledgerQuery!, abort.signal)
     if (response.destroyed) return true

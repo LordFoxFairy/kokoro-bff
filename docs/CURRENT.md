@@ -1,3 +1,17 @@
+## 2026-11-02 B-15 正式分叉整合候选（未激活）
+
+物理基线 b3289f4a 与正常源8395b44正在保双父整合。当前唯一 canonical Public29.0/200操作，原199完整保留且只新增 listScheduledTaskRuns；RSS 必填 trigger_kind 按 breaking major 表达。固定 owner pins 不变，lock 只恢复原 sax1.6.1/@types1.2.7。有限双父原文、有序 inventory 与 SQL 逆证仅用于 build/test，旧 RSS20 与 System20 不混同，旧 oracle 不重签。
+
+初始化收敛唯一 PUT：首次 IAM 前的总预算、1500ms 对账预留、未知写结果仅一次 GET 核实、最终 IAM 和严格 owner 响应；identity 仍由 billing-personal-read 导出。下载保正式 `/download`、1GiB/两个 spool、原 metadata/delete 接口，移植20秒总预算、两次有界 PG 当前资格、取消与迟到 spool 清理；旧 `/content` 不公开。原 PostgreSQL lease 独有风险测试完整保留为 `test/project-resource-checkout-budget.test.mjs`。
+
+本次整合阶段 Node22.22.2：完整 contract:check 1553 PASS/0 SKIP；初始化与双父证明103 PASS，旧 closure7 PASS，新双父证明与 PG-checkout13 PASS。独审发现共享 spool 在不合作 fetch 时占位及迟到 body 未取消，69/70日志分别真实RED；原 spool 复用有限预算并退休迟到 body后，abort/idle/total 两槽恢复及同步 abort 竞态2 PASS，个人/项目/技能下载相关82 PASS/0 SKIP，format/typecheck/lint/diffcheck通过。先前默认完整2757项有9失败的原日志保留，均已定向修复；最终停写组合仍须 Root 重跑默认全门，不把定向结果冒最终默认通过。
+
+Root停写复核（2026-11-02）：142路径冻结摘要逐项一致，最终独审无确定P0–P2；完整默认2756 PASS/3原条件SKIP/0失败（361.71秒，含正式build），contract阶段1553 PASS/0 SKIP，最终格式/类型/lint通过。原9失败和P2 RED原日志保留，不冒首次全绿。
+
+正常BFF owner一致性只读快照实际备份并恢复到新建专属临时库，32表全行摘要一致；仅在该副本执行八个正式具名入口，每步check/apply/check/apply得到update_required/updated/current/current，code=ok且cleanup=complete，逐步原32表旧列全值摘要保持。原RSS1条任务、1条poll、10条seen等历史行均纳入摘要；不声称所有pending/unknown状态矩阵已重演。升级后与正式installer的全新34表canonical比较：首次raw catalog因3个既有CHECK的AND括号分组不同而失败，原失败留存；这3对表达式在专属库TEMP事务内由PostgreSQL分别重新解析后结果逐字相同，其他catalog原始内容一致，独审确认无掩盖差异。没有删除业务约束、重写旧payload或用宽松字符串归一换绿。
+
+仍为未激活候选；正常库未DDL/业务写入，App Public29配对、最终停写恢复点及正常业务旅程待后继验收。备份恢复和升级只发生于专属测试副本，不声称正常已升级或可部署。以下历史完成报告不能代替本组合验收。
+
 ## 2026-11-01 B-15 具名旧库演进候选（未正常激活）
 
 基线853ca9a，仅离线工具/测试与必要说明。parts原工具对当前canonical在连库前invalid_schema的RED已复现；现复用正式 regeneration/final 精确定义反投影，保原BASE/TARGET摘要，只有精确旧态可加三列/CHECK，完整parts/regen/final态为current。新增 `db:evolve-dispatch-execution check|apply`，只追加现canonical的execution_project_ref与execution_context_retired_at两nullable列；表/索引精确父保护、部分安装及未知形状拒绝，不回填payload或旧执行authority。public/internal/canonical/runtime/依赖保持原字节。
@@ -2230,3 +2244,95 @@ Platform Connect 固定 ac56a1f8e9491e3e8383bff833b0f9f771fae3b1 receipt error p
 从 `origin/main@5dc86e4` 独立实现，未带入模型候选三笔提交。原67项基线通过；新增独有风险及原授权测试RED5→GREEN，最终相关75 PASS。Public19.0.1仅补该GET描述，165操作、wire、参数和owner pins不变；原Public19完整SHA、双父proof与inventory原字节保持。独审发现描述逆回可被移到其他块的漏洞，已绑定目标GET并补RED→GREEN负控，复核关闭。
 
 Node22：format/lint/types、完整contract852 PASS、architecture36 PASS及build通过；默认并发全量1499 PASS/1 FAIL/3原资源SKIP，唯一失败是原模型管理5ms预算测试在到owner前超时（503正确、预期ownerCalls=1实际0），本片未修改该测试/产品。相同完整文件清单以`node --import tsx --test --test-concurrency=1`固定并发再次验收1500 PASS/0 FAIL/3原资源SKIP，断言/超时/skip不变；最终format/lint再次通过，704份非文档输入冻结零漂移。保留首失败，不宣称修复模型时序问题。无数据库/Redis变更，未重载正常服务或进行模型/工具/积分操作；正常 owner 链与 App/Admin 完整旅程仍需后续配对，不以受控 HTTP/Connect 证据冒整产品闭环。App自身登录刷新JSON500另记，未夹入本BFF修复。
+
+## 8395 分支历史证据（待本次整合复验）
+
+## I6 runtime review-fix candidate (2026-10-23)
+
+Calendar-to-calendar edits, pause, task deletion and Project deletion retain the existing calendar dispatch lifecycle. Prior RSS revisions and either trigger-kind transition retire only known-never-sent rows; leased, admitted and admission-unknown rows retain their original identities. Both dispatch ID and run ID must match before clearing active scope.
+
+Non-once outbox payloads reject an own run_at field. Additional real-PG oracles are written in the existing RSS integration suite for opposing claim/pause locks, Project eligibility, exact active release, recovery after deletion, epoch round-trips, two 200-item batches and authoritative details/run projection. The same logical nanosecond baseline is a controlled test query-result seam after real clock SQL; actual PostgreSQL now and observed_at are unchanged. These new PG assertions are not yet executed by the implementation writer; Root owns resource verification. Public20, canonical SQL and package remain unchanged.
+
+## I6 RSS 持久运行时离线候选（2026-10-23）
+
+已接显式 calendar/rss、epoch 字符串、v5 outbox、minutely UTC 唤醒、RSS v3 receipt、锁外读取/解析/整批 launch 预检、PG claim/settle 与原 dispatch 队列。新定义不缺省 calendar，旧 v2 calendar 终态 receipt 保持原响应。RSS 实际发现时间独立于逻辑纳秒排序键；没有启动网络轮询器、正常服务或 Agent。
+
+当前只完成离线实现与具名门，准确命令/失败/保护见 i6-rss-persistence-runtime-worker-v1.json。新增真实 PG integration 仅写入未执行：baseline/重放、容量与永久 seen 限额优先级、真实锁重叠、source epoch/unknown、取消重试与已提交丢 ACK、100k 退休与 timeout 原子回滚均待 Root 在自有 fresh fixture 验证。完整 default/build/资源/公网 feed/浏览器/模型未执行，不能宣称 RSS 产品可用。
+
+## I6 RSS 机器契约与 canonical SQL 候选（2026-10-23，运行时未实施）
+
+唯一Public20已落入canonical；168个operation原顺序不变，最外层proof完整逆回19.3原字节后委托旧门。新current测试直接读取20，覆盖创建/PATCH互斥分支、七field十operator与OR/AND界、不可变mutation与独立Details、RSS实际发现时间以及新/旧面篡改拒绝；旧billing测试仅loader逆投影，正文不变。SQL仅fresh canonical，task排他CHECK用显式非空与IS TRUE闭合三值逻辑；poll/seen/dispatch/lease字段及索引已声明。1000未完成为task锁内跨epoch事务计数，不伪造行CHECK；100000 seen退休成本尚未实测。
+
+本片准确命令与保护见A/测试验收/i6-rss-trigger-contract-worker-v1.json；新增断言在旧19.3为0PASS/4FAIL，最终具名结果以manifest为准。未运行PG安装、持久poll、完整测试/build、正常Browser或模型；运行时src、105 generated及固定owner artifact原字节保持。Redocly通过但保留warning，schema资源测试跳过不当通过。
+
+## 2026-10-23 I6：reader前置验收，持久RSS设计门进行中
+
+BFF 9fac同一功能分支未提交；内核/安全reader冻结独审无确定P1/P2，Root187专项/37架构/types/lint通过。八个正规generator仅刷新新sax锁SHA，105 generated文件字节不变。原contract聚合1042PASS/0FAIL（65.116秒）、原默认1885PASS/0FAIL/3原资源SKIP（48.579秒），均含原build成功，773输入首末精确。证据i6-reader-full-root-v1.json。历史RED/失败保留；未做公网feed/PG持久poll/模型验收。
+
+当前三设计前缀已定Public20 calendar/rss真实互斥、持久poll/seen、原dispatch队列、epoch/fence/原子receipt、逻辑顺序与实际发现时间；机器contract/SQL尚待同设计收敛与验证，运行时未实施，不能当RSS产品已启用。正常3314/各owner/schema保持，Agent关闭，Skills/MCP业务未改。下一实施限定本BFF同功能分支、无新Git授权。
+
+## I6 RSS 安全 HTTPS reader（2026-10-23，源码候选待独审）
+
+`readRssFeed({url,signal})`仅返回完整有界bytes；显式内部factory供受控测试，生产固定node DNS/HTTPS和公网地址策略。新增`rss-feed-address.ts`拥有URL/BlockList策略，`rss-feed-reader.ts`拥有单pin、TLS、10秒总期限/5秒idle、16KiB头/1MiB正文及取消释放。没有配置覆盖、外网feed访问、公开接口、SQL、poll或Web激活。后继唯一编排调用点仍为计划中的`application/rss-poll-service.ts`，成功后再交现parser/conditions与持久事务。
+
+根外CDATA窄修同时检查sax `onopencdata`和`oncdata`：空CDATA不产生后一个事件，只有前一个检查可拒空输入；原92内核断言正文保持，根内CDATA仍正常。可执行stub定向RED为29项1PASS/28FAIL；首轮实现184项182PASS/2空CDATA FAIL后按Root裁决修复。首次全组stub因accepted等待未到而终止，保留原日志，不冒完成RED。
+
+自有loopback TLS factory仅映射已验证public pin，保Host/SNI/证书校验；该证据不代表公网可达。实际5秒idle与10秒drip总期限、错SAN、取消socket、启动时环境代理trap及响应边界纳入专项。准确终态计数、命令和全输入保护见A/测试验收/i6-rss-reader-worker-v1.json。未执行build/default/full/contract聚合、DB/Redis或正常Browser；新sax锁的旧生成provenance仍待Root后续聚合门，不在此片重生成。没有hix-code-review通过结论。
+
+## I6 RSS reader 当前阶段（2026-10-23，待实现）
+
+内核v2已通过Root92项/37架构/types/lint与独审原两P2闭合。根外CDATA P3将在reader片窄修。安全HTTPS读取按三设计当前前缀准备，尚无网络/持久poll/Web可用结论；新sax锁变化引起的生成provenance待聚合门核验，不冒全部门通过。
+
+## I6 内核 XML 语义窄修（2026-10-23，待独审）
+
+已修复独审P2：实体前literal CRLF/CR归一LF、实体CR保真；声明仅XML S、固定关键字和standalone值严格小写，仅UTF-8 encoding值可大小写折叠。所有解码属性（包括namespace/未知/字符引用）含TAB/LF/CR即整份拒绝，这是明确的支持子集，不声称完整XML属性归一。guid/id保留XML解码后精确值已由Root裁决；64KiB指投影文本字段和全属性，不限制未知扩展单字段，仍受1MiB/深度/节点总界。
+
+原58内核和37架构测试断言保持；新增行为RED为92项61PASS/31FAIL，修后92PASS。终态命令、哈希与保护见A/测试验收/i6-rss-kernel-worker-v2.json；v1日志/manifest原样保留。未开启reader/网络/资源/poll/Web。
+
+## I6 RSS 内核独审当前状态（2026-10-23）
+
+Root复验58内核/37架构及types/lint通过，但独审发现声明语法与XML行尾两P2，尚未修正关闭。后续窄修按三设计当前前缀执行；原GREEN与失败报告保留。依赖toolchain路径的Node22.22.2与Root当前Homebrew22.23.2分别记录，不混写版本。
+
+## I6 RSS 内核候选实现（2026-10-23，等待Root独审）
+
+已实现纯RSS2/Atom1.0解析及10文本运算符、最多8 OR组/16 AND规则。parser位于`infrastructure/clients/rss-feed-parser.ts`，domain/rss-feed仅Entry类型；conditions仍纯domain。整份拒绝DTD/XXE/XInclude/非法XML字符、重复attribute/root、坏尾或超限；稳定ID、相同重复合并/冲突整份拒绝；输出冻结。未接网络/HTTP/SQL/定时poll/持久seen/outbox/Web，不执行模型，不声称RSS产品完成。
+
+终态纯门：58项内核测试PASS/0SKIP，37项architecture PASS，direct tsc --noEmit、lint和改动路径Prettier均exit0。未执行旧rm build、默认全测或contract聚合。
+
+历史RED：缺文件/初次错误工作目录属于setup失败，不作行为证据。可执行空内核stub为36测试21PASS/15FAIL；真实parser后55测试48PASS/7FAIL证明literal非法XML字符缺口，修复后全通过；重复XML declaration另有56PASS/1FAIL→修复记录。所有日志保留A/测试验收/i6-rss-kernel-*，最终精确命令/计数见冻结manifest，不把中间collection失败当功能RED。
+
+依赖固定sax1.6.1/@types/sax1.2.7，--ignore-scripts；官方registry两integrity与lock完全相等，仅新增这两包与既有Node类型引用。原架构门拒domain crypto后已按裁决移动parser；lint/architecture的旧整字符串/modules/检查改为真正模块引用，新增静态/动态/require负控和namespace数据正控，原domain职责门保留。完整默认/资源测试、网络reader和正常Browser均未执行，本片不涉及这些效果；hix-code-review未执行，不冒指定评审通过。
+
+## I6 RSS 读取/匹配内核（2026-10-23，实施前）
+
+BFF基线9fac77d，工作区此前clean。三设计已明确现owner内的严格RSS2/Atom解析、closed文本条件与后继DNS固定HTTPS边界；尚未安装依赖、实施或运行测试。Public19.3/168、SQL/generated/所有既有业务保持。RSS定义持久化、poll/去重/执行、Web仍未实现，模型授权硬拒绝未被绕过。
+
+## I5 BFF 初始化切片验收（2026-10-21；尚未正常激活）
+
+Public19.3/168 固定 Billing158579f8 的正规v1四操作SDK。独立只读审查未发现确定P1/P2；原167操作与19.2全文、旧GET行为及历史断言均保留。格式/lint/types/direct build/架构均通过，原默认清单1697PASS/0FAIL/3资源SKIP，原contract:test完整清单1042PASS/0FAIL；聚合契约前置检查全部通过，Redocly保留44warnings。构建使用fresh dist移Trash后原tsc，测试包装仅把自有临时目录/当前PID套接字清理改为Trash，不改断言、时限或网络行为；原包装失败记录保留。
+
+真实 Node22 BFF→Node24 Billing src/main→自有fresh PostgreSQL 的9组场景全部通过，含并发重放、非零余额/generation/timestamps保持、disabled、已提交写丢ACK后只读恢复及最终撤权。原数据库catalog与仓库输入精确保持。IAM仍是受控admission，此验收不代表正常JWT、Web消费者或浏览器完成；完整资源integration未全部运行。无正常schema/账户/积分、支付/grant/Agent效果。本切片尚未提交或激活，消费者须固定后续已提交契约再接入。
+
+## 2026-10-21 I5 积分初始化消费者设计（尚未实现）
+
+已确认 Billing main158579f8 具备正规v1零余额初始化，自此不再以旧3f5缺接口为当前结论。本仓当前仍ef2ddca/Public19.2三GET consumer；新片目标Public19.3/168及隐藏初始化的显式PUT边界，三设计已写，先RED后实现。支付/grant/Skills/MCP不动，不修改正常服务/数据库；未获新Git动作授权。当前无本片测试/工程或真实PG通过声明，后继结果覆盖本段实施状态。
+
+## 2026-10-21 I4 运行更新 metadata 读取（源码候选，正常服务与Web未切换）
+
+BFF 拥有 ScheduledTask、dispatch 及已核验复制事件；Agent 仍是执行事件唯一生产方。先交付全局运行列表及可选 task_id 过滤，不虚构运行摘要、输出详情或会话链接。HTTP7 固定 artifact 的 payload_json 没有 run.completed / assistant.completed 机器 schema；摘要/输出及立即测试不在本切片完成范围。
+
+当前Public19.2/167候选已实现metadata读取及exact terminal partial索引：当前owner/parent资格在LIMIT前，原9位顺序keyset、L+1与最多两终态，源identity/digest/time/generated校验与PG/HTTP字节界；两次IAM和完整页快照共享单一5秒绝对预算。ArchiveSqlLease原行为保持，晚checkout精确回收、在途自有lease退休。没有新增执行/审批能力、摘要或输出详情。
+
+本片先在真实HTTP观察到4FAIL/1PASS（未实现入口；旧通用IAM10秒），同例转绿。前轮具名新行为与架构99PASS，最终完整门再含合法Unicode maxLength边界；原调度/归档/项目与个人下载具名回归143PASS。自有fresh PG安装及六子项计7PASS/0SKIP，覆盖资格/纳秒分页、终态冲突/字节界、双快照变化、饱和late checkout零SQL、准确blocked backend退休与池恢复；未访问Redis或正常schema，精确回收自有夹具，原数据库OID保留。完整default/contract第一轮各有历史schema oracle遇获准新增index的一项FAIL，原日志保留；初始化精确剥唯一新增block后原全文assert保持。最终固定Node22.22.2直接tsc、format/lint/typecheck、11依赖contract check、公开lint/semantic/governance均通过；公开lint有44条warnings，不归称全部旧问题。完整default为1602PASS/0FAIL/3原SKIP（55.254秒），contract为947PASS/0FAIL/0SKIP（54.909秒）。两个完整命令仅去掉会永久删除dist的build前缀，已先直接tsc，原文件列表保留并追加本片用例；未重复执行原14文件真实PG/Redis完整套件。当前无Git动作，不宣称已可提交。旧I3验收只绑定已保留739输入快照，不能当作本片独审通过；正常服务/Schema与Web正式pin未切换。
+
+## 2026-10-21 项目资源下载：实现及 owner 验证通过，Web 整链待接入
+
+当前源码为 Public19.1.0/166 候选，仅新增项目资源下载 GET；原 Public19 的165个操作继续通过完整逆证验证。项目入口已实现当前 IAM 准入、两次本人 active Project 检查、canonical scope、ASSET/CLEAN、单一20秒截止点、1MiB上限、完整 EOF/长度/SHA 与私有附件响应。个人下载复用普通 ASSET 实现并保留原 wire 与错误隐藏；Artifact 实现保持。
+
+固定 Node22.22.2 的 build、format:check、lint、typecheck 均 exit0；完整 contract 为875PASS/0FAIL/0SKIP，完整 default 为1530PASS/0FAIL/3SKIP。原14文件串行 PostgreSQL/Redis 集成清单最终为371PASS/0FAIL/0SKIP（115.636秒），其中含24项受控 DatabaseError unit，不能把371项全部称为真实数据库测试。两测试命令只移除已单独完成的 build 前缀，原完整文件清单不变。最终生产与测试源码绑定冻结 b7e553590727786cb4165719fe1a58d8c82d7a011162aad5e9a239683710667f；后续仅更新文档。
+
+历史失败保留：v1为341PASS/6FAIL，v2为346PASS/1FAIL，v3为346PASS/1FAIL，均0SKIP。五项共享 Pool 旧回归通过撤销本片新增的全局1000ms连接期限修正，不改变其他调用者的等待语义；旧5ms租约准备改为可验证的未过期租约和精确过期夹具，原回收/fence/sticky断言保留。v3暴露的R285 SQL取消分类已在私有 query 修正：仅真实 DatabaseError 57014归受界取消并销毁准确checkout，COMMIT仍保留UNKNOWN及原cause，其他错误不吞。新增unit真实RED为11PASS/13FAIL，修后24PASS/0FAIL；原R285和旧租约用例也在最终完整清单通过。原始失败日志与收据保留在仓库外验收记录中。
+
+具名 Project 读取的 caller 绝对预算、晚 checkout一次归还及零SQL已验证；公开 Pool.connect不支持单次取消，因此不保证不合作持有者下的pending物理退队时刻。项目发送前重验不是跨服务原子撤权，Storage签名引用仍有其原有失效窗口。受控HTTP/Connect与unit证据不代替真实Storage和浏览器完整下载。
+
+最终源码已完成独立只读审查，未发现确定P1/P2；审查与上述工程/资源验证是不同证据。正常BFF进程尚未切入本候选，Web尚未实现项目文件下载按钮/传输；完整首页目标仍未完成。消费者须先固定已审owner commit与artifact digest再接入，不能以本地候选文件或手改generated代替不可变来源。

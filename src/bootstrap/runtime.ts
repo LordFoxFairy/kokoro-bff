@@ -4,6 +4,10 @@ import { AppSkillBindingConnectClient } from "../infrastructure/clients/platform
 import type { AppSkillBindingClient } from "../application/app-skill-bindings.types.js"
 import { OpenAppManagementAdmissionClient, type OpenAppManagementAdmission } from "../auth/open-app-management-admission.client.js"
 import { SkillListAdmissionClient, type SkillListAdmission } from "../auth/skill-list-admission.client.js"
+import { RssPollService } from "../application/rss-poll-service.js"
+import { readRssFeed } from "../infrastructure/clients/rss-feed-reader.js"
+import { parseRssFeed } from "../infrastructure/clients/rss-feed-parser.js"
+import { freezeRssLaunch } from "../infrastructure/clients/agent/rss-launch.js"
 import { McpPackageAdminConnectClient } from "../infrastructure/clients/platform/mcp-package-admin-connect.js"
 import { ScheduledTaskReadService } from "../application/scheduled-task-read-service.js"
 import { SchedulerTaskStateReader } from "../infrastructure/clients/scheduler/task-state-reader.js"
@@ -102,6 +106,7 @@ export type BffServerComposition = {
   skillDraftClient: CatalogConnectClient | null
   installationClient: SkillInstallationConnectClient | null
   businessStore: BffBusinessStore | null
+  rssPollService: RssPollService | null
   scheduledTaskReader: ScheduledTaskReadService | null
   sessionAdmission: SessionAdmission
   skillListAdmission: SkillListAdmission
@@ -290,6 +295,9 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : (() => {
           throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime")
         })()
+  const rssPollService = businessStore?.rssPoll
+    ? new RssPollService({ repository: businessStore.rssPoll, read: readRssFeed, parse: parseRssFeed, freezeLaunch: freezeRssLaunch })
+    : null
   const scheduledTaskReader =
     businessStore === null
       ? null
@@ -660,6 +668,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     installationClient,
     businessStore,
     scheduledTaskReader,
+    rssPollService,
     sessionAdmission,
     appSkillBindingClient,
     openAppManagementAdmission:

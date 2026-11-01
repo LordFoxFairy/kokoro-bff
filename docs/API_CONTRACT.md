@@ -1,3 +1,12 @@
+## 2026-11-01 Public29 分叉整合（Root 已批准，候选）
+
+下载复核修正：原共享 spool 自身承接 transferSignal 与既有有限预算 race；上游 fetch 不合作时仍释放已获两名额，迟到 response.body 必须取消且取消不等待。同步取消跨 response 回传边界也退休 body；不新增路由 race、不改 wire / 数据表 / 原字节校验。
+
+
+唯一公开源整合批准28.17的199操作及旧RSS20已有的trigger分支，新增唯一listScheduledTaskRuns，目标200操作需原生成器核验。RSS Create/Task/Details/RunItem必填trigger_kind及calendar/rss closed union是breaking，正式发行29.0；不借28.17版本号冒兼容。下载仅保/download，不恢复/content别名；积分仅一条PUT，不重复operation ID。所有现A私有parts/display/feedback/regeneration、模型revision/资金及技能API原语义保留。
+
+独立build/test双父逆证固定853全文SHA ea0031103488daa1fcc0cca45fdd13f4d4061546ac4525c745ec47105649f7e7与旧RSS20 SHA6574930b3a893a208596e6f27c2f9e09122e759d111a7fdbf2d54c294efc0e8f，精确恢复后进入各原oracle，不让版本不匹配原样返回当通过。初始化保strict空JSON/重复键/正文预算、首末同主体、单10秒deadline、未知PUT最多一次GET核实及取消；下载保持批准资源权限/公开响应边界。实际正式生成与契约门结果后填，不把本设计或旧分支通过当新版本验收。消费者等待正式owner提交及固定artifact，正常旧页面不加兼容假字段。
+
 ## 2026-11-01 旧库具名工具（B-15，无网络契约变化）
 
 现 Public28.17、internal、generated 与全部 HTTP 操作保持原字节。新增 `pnpm db:evolve-dispatch-execution check|apply`，与既有具名入口一样只接一个模式参数、显式 `KOKORO_BFF_POSTGRES_URL`，拒系统库、非owner schema、注入 options 和多余参数。结果闭集为 state/code/cleanup/duration_ms，CLI额外固定operation；unknown 退出4，只允许后继独立 check 核实，不自动重试 apply，不回显URL或原始数据库异常。check含事务锁与 TEMP catalog probe，不是只读SQL连接入口。
@@ -1511,7 +1520,7 @@ Storage ErrorDetail/Connect/status/header一致性必须固定验证：InvalidAr
 
 机器先按8.4/101目标新增两个closed操作及完整前置错误，原99wire不动；具名预算接缝设计已由Root裁决；只有Storage新commit正式发布、Root另准源范围后才进入source阶段，实际期限/取消门仍须通过。字段细节只在本仓唯一OpenAPI形成机器事实，不建立副本/alias/通用删除协议。
 
-Root最终补充裁决：现 `src/infrastructure/postgres/client.ts` 唯一Pool仅增加 `connectionTimeoutMillis: 1000`，有限约束底层connect与pending队列，堵住仅race/late-release仍可能无界等待；不改全局query_timeout/statement_timeout、max、credentials，不创建新Pool。此为D0目标并非源码已支持。保留五新普通文件和三现port/service/repository接缝；真实完整旧回归及pool饱和、SQL锁、取消、late acquire/连接故障门必须验证无泄漏及取消后零Storage IO。
+Root后续裁决（I3全量真实集成发现共享Pool回归）：撤销此前新增全局 `connectionTimeoutMillis:1000` 的决定，保留唯一共享Pool原有等待语义及所有既有业务期限。pg-pool公开connect无per-call取消；具名Project读取以required signal和绝对deadline终止本次调用，迟到取得的exact client仅正常release一次且零SQL，活动SQL取消只销毁自有lease。其他持有者永不归还时，不保证底层pending物理退队时刻，不冒称已取消connect；实际连接归还后的晚lease/池恢复须真实验证。不改全局query_timeout/statement_timeout、max、credentials，不创建第二Pool；取消后零Storage IO及原完整回归门保持。
 
 <!-- R261-BFF-FILE-DELETE-API-END -->
 
@@ -3471,3 +3480,111 @@ Existing collection GET/POST stay unchanged. New public beta operations are GET 
 DELETE accepts exactly one existing-format Idempotency-Key and an empty request with no query; it returns data={asset_id,deleted_at,replayed} only after validating the Storage logical-deletion receipt. It is irreversible project Asset deletion, not unlink or guaranteed physical object removal. A lost ACK resumes the identical scoped owner command; its original key can replay after the Asset is no longer visible. A different key on an absent Asset yields 404. No automatic new command or signed URL persistence is allowed. GET is idempotency=none; DELETE idempotency=required. All operations retain current public ErrorEnvelope/RequestMeta conventions.
 
 400 malformed selector/query/framing/key; 401/403 current admission; 404 invisible Project/scoped Asset; 409 trusted owner conflict/digest mismatch (untrusted or in-progress conflict is not a confirmed rejection); 413 declared download above the existing spool capacity; 429 rate limit; 502 invalid owner response/reference/integrity; 503 dependency/deadline/unknown. Existing 300-second presigned URL validity is not an immediate-revocation promise. Metadata does not itself prove downloaded bytes. Actual browser preview formats remain a later consumer decision, never raw active HTML/SVG execution.
+
+## 8395 分支历史证据（非本次验收）
+
+## I6 runtime review-fix candidate (2026-10-23)
+
+Calendar-to-calendar edits, pause, task deletion and Project deletion retain the existing calendar dispatch lifecycle. Prior RSS revisions and either trigger-kind transition retire only known-never-sent rows; leased, admitted and admission-unknown rows retain their original identities. Both dispatch ID and run ID must match before clearing active scope.
+
+Non-once outbox payloads reject an own run_at field. Additional real-PG oracles are written in the existing RSS integration suite for opposing claim/pause locks, Project eligibility, exact active release, recovery after deletion, epoch round-trips, two 200-item batches and authoritative details/run projection. The same logical nanosecond baseline is a controlled test query-result seam after real clock SQL; actual PostgreSQL now and observed_at are unchanged. These new PG assertions are not yet executed by the implementation writer; Root owns resource verification. Public20, canonical SQL and package remain unchanged.
+
+## I6 RSS 运行时消费状态（2026-10-23，尚未发行）
+
+当前离线候选按唯一 Public20 实现 required trigger_kind，不引入旧输入 fallback；mutation 仍只返回定义，RSS Details 单独返回 feed 事实，RSS RunItem 以 observed_at 表达实际发现时间且 scheduled_for=null。内部 v5 epoch 为规范十进制字符串。Scheduler RSS callback 返回真实 poll summary，不构造 run_id；旧 calendar v2 terminal 响应原样重放。canonical/artifact 未在本运行时片改写，Web 仍不得提前消费未发行源码。
+
+### I6 机器契约候选状态（2026-10-23）
+
+current20已落盘，新增目标测试直接读20；完整raw逆恢复19.3后再委托旧billing/历史oracle。168有序清单保持，不提前发行Web pin。条件的maxLength仅为字符侧上界，1024 UTF8字节仍需parseRssConditions；URL2048 UTF8字节和固定安全策略同理。机器门通过不代表当前运行时已接受RSS；运行时仍待下一卡，不可将历史19.3服务当20验收。
+
+## I6 RSS trigger：唯一 Public20.0.0（2026-10-23，当前设计；尚未发行）
+
+唯一事实源仍contract/openapi/v1/openapi.yaml；在19.3原168有序operation不变的基础上，只演进ScheduledTask、请求/详情与ScheduledTaskRunItem相关schemas及version。完整19.3原字节可逆证明，历史proof/hash/安全断言保留，新normalizer先逆回19.3再执行原历史门。没有新连接器/Skills API或第二contract。
+
+create与mutation task为flat calendar/rss union，required trigger_kind=calendar|rss；calendar必须frequency/time/timezone并保四周期规则，禁止feed_url/conditions；rss必须feed_url/conditions且禁止frequency/time/timezone/weekdays/month_days/local_date，next_run_at恒null。URL与条件使用现reader policy/parseRssConditions（<=8 OR组，每组1..16 AND；[]不过滤，10种文本operator/7 field，空值operator禁止value，其余非空<=1024UTF8字节）。不接收用户regex或宽松未知字段。通用title/prompt/project/expiry/approval/enabled/status沿现语义。
+
+PATCH仅公共字段可独立变更；任何trigger字段出现必须给完整闭合分支及trigger_kind，禁止半更新或混合分支；不缺省calendar、不伪daily。kind或规范URL改变重置当前feed baseline并递增内部epoch，不回放历史；其余修改保seen，未发送旧revision按数据规则失效。mutation ACK是不可变定义，不含feed_state/last_checked_at/next_check_at/error_code。
+
+Details采用单独闭合对象，在定义字段之外required scheduling_state；RSS还required feed_state=initializing|active|backoff|limit_reached、last_checked_at/next_check_at为date-time|null、error_code为closed code|null，均为当前BFF poll事实。calendar禁止四个feed字段，next_run_at仍Scheduler权威事实；RSS next_run_at=null，不能冒下一次poll为计划执行时刻。registration pending/failed与feed状态分别表达，不把入队/读取成功写成执行成功。closed error_code使用reader固定9码及feed_invalid/queue_full/launch_too_large/limit_reached，不回传URL/正文/异常。
+
+ScheduledTaskRunItem required trigger_kind；calendar保原scheduled_for且禁止observed_at；rss scheduled_for=null，required observed_at真实DB发现时间，绝不把逻辑排队key或publisher日期当发现事实。state/terminal_event_at与内部二元cursor不变；当前身份/Project资格及单一1MiB响应边界保持。Web在owner完成并提交后固定20artifact，按kind展示时间，不能提前手抄未提交工作树。
+
+内部task outbox唯一v5冻结真实trigger；RSS Scheduler固定每分钟cron/UTC仅传输唤醒。callback body冻结tenant/task/owner/project/revision/kind/epoch；URL/prompt/conditions不得自报。Scheduler固定3bb/3.0接受HTTP2xx且有界丢弃response body，RSS可202 {poll_id,outcome,observed_count,enqueued_count}，不返回假run_id；outcome闭集baseline/enqueued/unchanged/not_due/backoff/limit_reached/ineligible，计数0..200。旧calendar receipt v2重放原结果，RSSv3明确rss_poll快照与固定摘要。同scope/digest终态重放零网络，不同digest409；并发pending425、claim丢失/DB依赖503；不把网络poll失败伪执行失败。
+
+readRssFeed/parseRssFeed/conditions包内接口沿下方已验内核；公共20和持久功能此时仍是设计，不能标已可用。原聚合1042、默认1885/3资源SKIP和reader187证明前置保留行为，不代表新20运行时通过。
+
+## I6 RSS 安全 HTTPS reader（2026-10-23，源码候选待独审）
+
+`readRssFeed({url,signal})`仅返回完整有界bytes；显式内部factory供受控测试，生产固定node DNS/HTTPS和公网地址策略。新增`rss-feed-address.ts`拥有URL/BlockList策略，`rss-feed-reader.ts`拥有单pin、TLS、10秒总期限/5秒idle、16KiB头/1MiB正文及取消释放。没有配置覆盖、外网feed访问、公开接口、SQL、poll或Web激活。后继唯一编排调用点仍为计划中的`application/rss-poll-service.ts`，成功后再交现parser/conditions与持久事务。
+
+根外CDATA窄修同时检查sax `onopencdata`和`oncdata`：空CDATA不产生后一个事件，只有前一个检查可拒空输入；原92内核断言正文保持，根内CDATA仍正常。可执行stub定向RED为29项1PASS/28FAIL；首轮实现184项182PASS/2空CDATA FAIL后按Root裁决修复。首次全组stub因accepted等待未到而终止，保留原日志，不冒完成RED。
+
+自有loopback TLS factory仅映射已验证public pin，保Host/SNI/证书校验；该证据不代表公网可达。实际5秒idle与10秒drip总期限、错SAN、取消socket、启动时环境代理trap及响应边界纳入专项。准确终态计数、命令和全输入保护见A/测试验收/i6-rss-reader-worker-v1.json。未执行build/default/full/contract聚合、DB/Redis或正常Browser；新sax锁的旧生成provenance仍待Root后续聚合门，不在此片重生成。没有hix-code-review通过结论。
+
+## I6 RSS HTTPS reader 包内接口（2026-10-23，实施前）
+
+唯一生产函数infrastructure/clients/rss-feed-reader.ts::readRssFeed(input: Readonly<{url:string;signal:AbortSignal}>): Promise<Uint8Array>，替代早期位置参数草稿，不保留alias。返回完整有界raw bytes，调用者再调用parser；不承诺此函数已匹配/持久化/启动任务。网络测试factory为包内显式接缝，不是HTTP/配置能力，生产入口始终固定node依赖和安全策略。地址策略模块只供该reader和纯测试使用，不复制公共DTO。
+
+错误闭集采用rss_feed_url_invalid、rss_feed_address_forbidden、rss_feed_dns_unavailable、rss_feed_dns_busy、rss_feed_unavailable、rss_feed_timeout、rss_feed_cancelled、rss_feed_response_invalid、rss_feed_too_large；message仅受控code，不透出URL/host/body/底层error。具体边界、取消与真实受控TLS oracle见TECHNICAL_DESIGN当前reader节。Public19.3/168、全部owner pins/generated保持；reader没有可注册的路由或SQL输入。根外CDATA窄修仍只rss_feed_invalid，不新增对外字段。
+
+## I6 XML 语义修正（2026-10-23，实施前）
+
+包内parse签名、固定rss_feed_invalid及Public19.3/168保持。literal行尾在实体解析前按XML归一；opaque ID其余字符保真。声明只接受XML S及正确小写关键字/standalone，UTF-8 encoding值可大小写不敏感。作为本片受支持输入子集，所有已解码属性值含TAB/LF/CR均整份拒绝（含字符引用及未知/ns属性）。64KiB只约束投影文本字段及所有属性值；未知文本仍有1MiB全输入界。详细语义以TECHNICAL_DESIGN本节为准，不增加HTTP/SQL边界。
+
+## I6 RSS 内核包内接口（2026-10-23，未公开）
+
+与TECHNICAL_DESIGN同片：Public19.3/168、所有公开operations/owner pins/generated原字节不变，无RSS HTTP endpoint已发布。`infrastructure/clients/rss-feed-parser.ts::parseRssFeed(bytes: Uint8Array): readonly RssFeedEntry[]`整份成功或抛出仅受控code的RssFeedError；不在异常中带URL、XML或用户文本。Entry含identity/title/summary/content/authors/categories/link/domain/publishedAt/updatedAt/enclosures，未出现字段为空串、空数组或null，不以placeholder补事实。身份、解析上限与冲突规则遵TECHNICAL_DESIGN。
+
+`parseRssConditions(value: unknown): RssConditionGroups`执行closed完整验证，`matchesRssConditions(entry, groups): boolean`只接受其归一化结果且保持无副作用；无规则true，OR-of-AND完整验证后匹配。每项closed `{field,operator,value?}`，空值运算符无value，其余必有非空value。首片不接正则/date/numeric规则，不把未支持运算符当false或删除规则。返回及参数不泄漏sax类型。
+
+后继 `readRssFeed({url,signal})`返回同一严格快照；每次读取独立总deadline，生产DNS策略不可由HTTP输入覆盖，测试resolver/transport仅测试夹具注入。尚未完成安全网络、配置持久化、Scheduler poll、entry inbox/执行、Web消费或正常验收；内核green不能标记RSS已可使用。
+
+## I5 BFF 初始化切片验收（2026-10-21；尚未正常激活）
+
+Public19.3/168 固定 Billing158579f8 的正规v1四操作SDK。独立只读审查未发现确定P1/P2；原167操作与19.2全文、旧GET行为及历史断言均保留。格式/lint/types/direct build/架构均通过，原默认清单1697PASS/0FAIL/3资源SKIP，原contract:test完整清单1042PASS/0FAIL；聚合契约前置检查全部通过，Redocly保留44warnings。构建使用fresh dist移Trash后原tsc，测试包装仅把自有临时目录/当前PID套接字清理改为Trash，不改断言、时限或网络行为；原包装失败记录保留。
+
+真实 Node22 BFF→Node24 Billing src/main→自有fresh PostgreSQL 的9组场景全部通过，含并发重放、非零余额/generation/timestamps保持、disabled、已提交写丢ACK后只读恢复及最终撤权。原数据库catalog与仓库输入精确保持。IAM仍是受控admission，此验收不代表正常JWT、Web消费者或浏览器完成；完整资源integration未全部运行。无正常schema/账户/积分、支付/grant/Agent效果。本切片尚未提交或激活，消费者须固定后续已提交契约再接入。
+
+## 2026-10-21 I5 本人积分账户隐藏初始化（设计门；实现与激活待验）
+
+需求仍是首页与关联设置的真实功能；此片补本人积分页首次进入时的零余额初始化。正常 Manus 用量计费只展示余额、明细与升级，没有账户开户业务入口。旧显式开户草稿不构成本片产品要求；历史失败与原测试字节先保留，消费者阶段以更严格的隐藏初始化旅程覆盖其真实 owner 复读保障。Skills/MCP、支付、充值、grant、Agent 执行均不在修改面。
+
+### 唯一 public 增量
+
+唯一机器事实源 contract/openapi/v1/openapi.yaml，目标 Public19.3.0 / 168 operations，只新增 PUT /v1/billing/credit-account（operationId initializeBillingCreditAccount）；已有 summary/ledger wire 与只读行为不变。x-kokoro-owner=kokoro-bff、visibility=public、stability=beta、idempotency=inherent、permission=billing.credit_account.initialize。该 permission 是治理标签，当前 IAM 没有新增逐操作 grant，不虚构权限注册；实际为当次合法 Product session admission + owner delegated-self 五因素。
+
+required application/json 闭合空对象 {}，可带 utf-8 charset；原始 URI 必须 exact path，无任何 query（含裸?）、fragment/encoded alias/trailing slash。拒未知/重复headers、idempotency-key、content-encoding、非法长度/大于4096B、重复 JSON key、数组/null/任何own key/坏UTF8，完整 EOF 后才准 owner I/O。非法输入400 billing_credit_account_input_invalid（不retry）。
+
+200复用既有 BillingSummaryResponse 与实际 active owner snapshot，不要求余额为0；已有账户可非零且不得重置。不新增余额事实或token字段。错误闭集：首/末IAM保持 session_authentication_required/session_invalid 401；service_auth_failed/session_forbidden/product_tenant_forbidden 403；session_rate_limited 429及原有严格Retry-After；product_tenant_not_configured/iam_admission_unavailable 503。owner正式disabled映射403 billing_account_disabled/retryable=false；owner协议坏为502 upstream_response_invalid/false；依赖/配置/未知结果/身份变化/总预算耗尽为503 billing_unavailable/true。所有响应 no-store、当前BFF x-request-id，长度由同一JSON发送确定；不得透传 owner cookie/location/内部身份/异常、把owner认证失败当用户401/403或把不存在当已初始化。
+
+内部只增加固定 owner PUT /v1/billing/me/credit-account（openMyCreditAccount），恢复复用同一SDK GET；source tuple 是 158579f8 / 4.0.0-experimental.3 / f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe。只单一pin，不保留旧v2或fallback。response/未知写/单一预算见TECHNICAL_DESIGN本节；complete inverse证明前167操作/所有Schema字节不变。Web同源隐藏调用是后继消费者切片，此刻不冒页面已接通。
+
+## 2026-10-21 I4 运行更新 metadata 读取（源码候选已实现，正常激活与独审待后继）
+
+BFF 拥有 ScheduledTask、dispatch 及已核验复制事件；Agent 仍是执行事件唯一生产方。先交付全局运行列表及可选 task_id 过滤，不虚构运行摘要、输出详情或会话链接。HTTP7 固定 artifact 的 payload_json 没有 run.completed / assistant.completed 机器 schema；摘要/输出及立即测试不在本切片完成范围。
+
+### 唯一公开契约与消费者
+
+唯一机器事实源 contract/openapi/v1/openapi.yaml，候选19.2.0在19.1原166操作上只增 GET /v1/scheduled-task-runs；不改变既有 scheduled CRUD、retry 或下载。该GET无body/idempotency/身份selector，受信tenant/subject来自IAM；可选task_id精确过滤、limit默认20最大100、cursor最大2048，拒未知/重复query、非规范UTF8/数值和请求体。
+
+返回闭合 data={items,next_cursor}；item仅task_id、title（当前名）、project_ref（当前scope）、run_id、scheduled_for（不可变9位UTC计划时间）、state、terminal_event_at(nullable)。不能把计划时间当真实开始，不能把admitted写成已开始，不能编造summary/output或使用scheduled:<id>构造会话跳转。查询任务不可见与不存在统一404；全局仅已确认不合资格省略，依赖未知整次503。页错误时消费者清空/隐藏该query先前结果，scope/filter变化立即退休旧结果；成功空页不等于依赖故障。
+
+游标版本str1，绑定tenant、subject、task_id或null、limit、固定sort profile与9位原occurrence_order_key/dispatch_id；使用C UTF8字节序DESC二元keyset，不经过JS Date毫秒降精度。编码不授予权限，每页重验；limit+1决定是否有下页，no refill loop。live分页无跨页快照，晚到低于cursor可见于后页、新到高于cursor须刷新；终态更新不改变顺序。传输成功最多1MiB，no-store/x-request-id；稳定闭合错误按机器契约。任何局部坏行/终态冲突不成功部分响应。
+
+Web当前正式固定19.0不更新；owner须完成审查并明确获准本地提交，消费者才固定commit/digest正规生成。当前19.2只是本owner未发行候选，不使Web提前消费当前工作树，也不将缺摘要视为整个目标完成。
+
+## 2026-10-20 项目单资源下载（I3 Public19.1 未发布候选）
+
+唯一机器事实仍在 `contract/openapi/v1/openapi.yaml`，本轮候选为 19.1.0/166，只增加 GET `/v1/projects/{projectId}/resources/{asset_id}/content`，operationId `downloadProjectResource`，owner kokoro-bff/public/beta/idempotency none/permission project.resource.read。原 165 operation 和个人/Artifact 下载的 wire 不变。源码候选已实现；正常接入和不可变发行尚未完成，消费者不得编辑 vendor/generated 冒作发布。
+
+现服务 envelope、唯一 Bearer 和 IAM 当前 Product tenant/subject 先准入。Project 使用现 ID/slug 解析，但仅 `tenant_id + owner_id + deleted_at IS NULL` 当前本人 active 谓词有权；不存在成员 ACL。原始/解码 alias 不作第二入口，无 query/body/Transfer-Encoding，asset selector 1..191 ASCII 单段。Storage 只能见可信 canonical project ID 与当前 subject/tenant，不采纳 browser scope/subject header。
+
+只有完整校验的 ASSET/CLEAN 二进制才 200：两 RPC asset/SHA/size/MIME 一致、对象引用 origin/method/expiry/headers 合规、不跟重定向、不转发凭据/cookie、最多 1048576 bytes、真实 EOF/精确长度/SHA 匹配，发送前重验同 canonical Project 当前 owner。成功含 Content-Type/Length、安全 attachment Content-Disposition、Cache-Control:no-store、Referrer-Policy:no-referrer、X-Content-Type-Options:nosniff 和 x-request-id，不输出 Storage URL 或部分 200。
+
+400 为非法请求；IAM 原 401/403/429/503 保持，429 只接受原受界 Retry-After。404 为不可见/失效 Project 或 exact project ASSET 缺失/不 CLEAN；502 为坏 owner metadata/reference/bytes；503 为 PG/Storage/总预算不可用，Storage 服务 credential/policy 错误不映射用户 401。错误统一原 ErrorEnvelope，不包含 SQL、签名 URL、secret 或其他 scope 元数据。个人内部 client 泛化不改变其原有错误隐藏行为。
+
+唯一绝对 20000 ms 从 IAM 前开始，覆盖 IAM、两次 Project SQL 读取、双 RPC、fetch、真实 EOF、final recheck 与有限取消清理，每步不重置。required signal/deadline 的 `findActiveResourceProjectId` 沿既有 Project port/service/repository 和新普通 project-resource-access 实现，exact client/late acquire 收尾；非合作依赖须 race/吸收晚结果，过期后无新 IO/200。无网络跨 DB 锁，最后重验并非跨 owner 原子撤权；已签引用保留 Storage 原最多约 300 秒窗口。
+
+治理脚本从新增 path/版本精确恢复 Public19 原全文 SHA955412b680bf7a2529c4c35f553ff272d7361769ea95bb441ba820b552ffc564，并保原 165 顺序、closure-integration.json 与两个父历史证明；inventory 只用既有正规 generator。本阶段合法当前 HTTP503/upstream_not_configured/期望200是入口 RED，后继分支不能据此称覆盖；personal 非合作 fetch/read/cancel 为有限观察 RED，完整旧前缀/Artifact 断言不动。
+
+第二阶段实现上述唯一新增 GET，raw/decoded/absolute-form 候选 alias 被同一严格入口拒绝，不进入通用 fallback；不扩公开路径或修改旧 owner 契约。HTTP 受控对端已覆盖当前 IAM、canonical/slug、两次本人 active 检查、私有头、ASSET/CLEAN、origin/元数据/真实 EOF/长度/SHA、取消和真实 20 秒入口期限。该证据不包含正常服务激活或浏览器下载；真实 PG lease 与全门由 Root 后继独立执行。机器版本和 166 inventory/历史逆证保持第一阶段冻结不变，仍是未发行候选。

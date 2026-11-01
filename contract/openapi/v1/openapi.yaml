@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.17.0
+  version: 29.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -172,6 +172,179 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ProjectMcpRecommendationsError503' }
   # PROJECT-MCP-RECOMMENDATIONS-PATHS-END
+  /v1/scheduled-task-runs:
+    get:
+      tags:
+        - Scheduled
+      operationId: listScheduledTaskRuns
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: scheduled_task.read
+      summary: List current-owner scheduled task run metadata
+      description: >-
+        Live current-owner pages, task and same-owner undeleted Project eligibility before LIMIT. Optional task_id uses
+        the same projection; missing or unavailable task is privacy-preserving 404. Immutable scheduled_for is the
+        original nine-fraction UTC occurrence_order_key, ordered DESC then dispatch_id in PostgreSQL C UTF8 byte order
+        DESC. Cursor binds tenant, subject, task_id, limit and sort profile; it is not authority and provides no
+        cross-page snapshot. Late lower keys may enter following pages; new higher keys need refresh. A single
+        min(upstreamTimeoutMs,5000 ms) absolute budget starts before initial IAM admission and covers final IAM plus the
+        second bounded PG snapshot; changes fail the whole page, without refill or cross-service atomic revocation claims.
+        pending is dispatch queue state; admission_unknown may already be admitted; admitted is Launch ACK, not observed
+        run.started. run_id is preallocated. terminal_event_at is Agent event time, not a claimed execution duration.
+        Strict exact-run terminal identity, digest and time checks; duplicate/missing/bad terminal or source >65536 UTF8
+        bytes, payload_json >16384 bytes, metadata/output >1048576 bytes fail 503, never partial/truncated success. These
+        are BFF read budgets, not Agent contract limits. No summary/output or fabricated chat link. On errors consumers
+        retire previous query data. No request body, repeated/unknown query, identity selector or Idempotency-Key.
+      parameters:
+        - name: task_id
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+      responses:
+        '200':
+          description: Bounded current-owner run metadata
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsResponse'
+        '400':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError400'
+        '401':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError401'
+        '403':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError403'
+        '404':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError404'
+        '429':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+            Retry-After:
+              schema:
+                type: string
+                pattern: ^[1-9][0-9]{0,4}$
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError429'
+        '500':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError500'
+        '503':
+          description: Closed run-list failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskRunsError503'
   /v1/account/archived-tasks:
     get:
       tags:
@@ -5214,7 +5387,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: project.resource.read
       summary: Download a completely verified Project resource attachment
-      description: Fresh scoped Asset and download reference must agree on exact identity, SHA-256, size and MIME. Complete private spool size/SHA verification precedes success. Existing limits remain 1073741824 bytes and two shared spool slots, with bounded transfer and cleanup; no personal or Artifact authorization is reused. No query/body, redirects, signed URL or internal credential is exposed.
+      description: Fresh scoped Asset and download reference must agree on exact identity, SHA-256, size and MIME. Complete private spool size/SHA verification precedes success. Existing limits remain 1073741824 bytes and two shared spool slots, with bounded transfer and cleanup; no personal or Artifact authorization is reused. No query/body, redirects, signed URL or internal credential is exposed. One 20000 ms absolute budget starts before IAM admission and covers both current Project reads, Storage metadata/reference, complete EOF verification and response transfer. Cancellation fences non-cooperative dependencies; late private spools are disposed without publishing bytes.
       responses:
         '200':
           description: Complete verified private attachment
@@ -23377,6 +23550,93 @@ components:
       additionalProperties: false
       properties:
         installation_ids: { $ref: '#/components/schemas/ProjectSkillInstallationIds' }
+    ScheduledRssCondition:
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - operator
+      properties:
+        field:
+          type: string
+          enum:
+            - title
+            - summary
+            - content
+            - author
+            - category
+            - link
+            - domain
+        operator:
+          type: string
+          enum:
+            - contains
+            - not_contains
+            - equals
+            - not_equals
+            - starts_with
+            - not_starts_with
+            - ends_with
+            - not_ends_with
+            - is_empty
+            - is_not_empty
+        value:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          description: At most 1024 UTF-8 bytes, additionally enforced by parseRssConditions. JSON Schema maxLength counts characters, not bytes.
+      oneOf:
+        - properties:
+            operator:
+              enum:
+                - contains
+                - not_contains
+                - equals
+                - not_equals
+                - starts_with
+                - not_starts_with
+                - ends_with
+                - not_ends_with
+          required:
+            - value
+        - properties:
+            operator:
+              enum:
+                - is_empty
+                - is_not_empty
+          not:
+            anyOf:
+              - required:
+                  - value
+    ScheduledRssConditions:
+      type: array
+      maxItems: 8
+      description: OR groups of AND rules. Empty outer array means no filtering. Regex/date/numeric rules are unsupported and rejected.
+      items:
+        type: array
+        minItems: 1
+        maxItems: 16
+        items:
+          $ref: '#/components/schemas/ScheduledRssCondition'
+    ScheduledRssErrorCode:
+      type:
+        - string
+        - 'null'
+      enum:
+        - null
+        - rss_feed_url_invalid
+        - rss_feed_address_forbidden
+        - rss_feed_dns_unavailable
+        - rss_feed_dns_busy
+        - rss_feed_unavailable
+        - rss_feed_timeout
+        - rss_feed_cancelled
+        - rss_feed_response_invalid
+        - rss_feed_too_large
+        - feed_invalid
+        - queue_full
+        - launch_too_large
+        - limit_reached
     ScheduledTaskWeekdays:
       type: array
       minItems: 1
@@ -23396,63 +23656,634 @@ components:
       format: date
       pattern: '^\d{4}-\d{2}-\d{2}$'
       description: Calendar date in the selected IANA timezone. Gaps are rejected and repeated times use the earlier instant.
+    ScheduledTaskRunItem:
+      type: object
+      additionalProperties: false
+      required:
+        - task_id
+        - title
+        - project_ref
+        - run_id
+        - scheduled_for
+        - state
+        - terminal_event_at
+        - trigger_kind
+      properties:
+        task_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        title:
+          type: string
+        project_ref:
+          type:
+            - string
+            - 'null'
+        run_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        scheduled_for:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$
+        state:
+          type: string
+          enum:
+            - pending
+            - admission_unknown
+            - admitted
+            - dispatch_failed
+            - completed
+            - cancelled
+            - failed
+        terminal_event_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$
+        trigger_kind:
+          type: string
+          enum:
+            - calendar
+            - rss
+        observed_at:
+          type: string
+          format: date-time
+          description: Actual DB observation instant for an RSS item, not publisher time or the logical internal queue order key.
+      oneOf:
+        - properties:
+            trigger_kind:
+              const: calendar
+            scheduled_for:
+              type: string
+              format: date-time
+              pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$
+          not:
+            anyOf:
+              - required:
+                  - observed_at
+        - properties:
+            trigger_kind:
+              const: rss
+            scheduled_for:
+              type: 'null'
+          required:
+            - observed_at
+    ScheduledTaskRunsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - items
+            - next_cursor
+          properties:
+            items:
+              type: array
+              maxItems: 100
+              items:
+                $ref: '#/components/schemas/ScheduledTaskRunItem'
+            next_cursor:
+              type:
+                - string
+                - 'null'
+              minLength: 1
+              maxLength: 2048
+    ScheduledTaskRunsError400:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - scheduled_task_runs_input_invalid
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    ScheduledTaskRunsError401:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - session_authentication_required
+                - session_invalid
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    ScheduledTaskRunsError403:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - service_auth_failed
+                - session_forbidden
+                - product_tenant_forbidden
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    ScheduledTaskRunsError404:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - scheduled_task_not_found
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    ScheduledTaskRunsError429:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - session_rate_limited
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: true
+    ScheduledTaskRunsError500:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - internal_error
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    ScheduledTaskRunsError503:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - product_tenant_not_configured
+                - iam_admission_unavailable
+                - scheduled_task_runs_unavailable
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: true
     ScheduledTask:
       type: object
-      required: [id, title, prompt, frequency, time, timezone, next_run_at, auto_approve, enabled, status]
+      required:
+        - id
+        - title
+        - prompt
+        - next_run_at
+        - auto_approve
+        - enabled
+        - status
+        - trigger_kind
       additionalProperties: false
-      description: Immutable mutation snapshot. Original snapshots remain unchanged; only requests valid under this contract replay them. Retired request shapes are rejected before receipt claim; read current details before editing.
+      description: Immutable calendar/rss definition snapshot. No mutable poll/feed state appears in mutation ACKs; read current details after replay.
       properties:
-        id: { type: string }
-        project_id: { type: string }
-        title: { type: string }
-        prompt: { type: string }
-        frequency: { type: string, enum: [daily, weekly, monthly, once] }
-        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
-        timezone: { type: string, minLength: 1 }
-        weekdays: { $ref: '#/components/schemas/ScheduledTaskWeekdays' }
-        month_days: { $ref: '#/components/schemas/ScheduledTaskMonthDays' }
-        local_date: { $ref: '#/components/schemas/ScheduledTaskLocalDate' }
-        next_run_at: { type: [string, 'null'], format: date-time }
-        scheduling_state: { type: string, enum: [pending, active, paused, exhausted, failed] }
-        expires_at: { type: string, format: date-time }
-        auto_approve: { type: boolean }
-        enabled: { type: boolean }
-        status: { type: string, enum: [active, paused, failed] }
+        id:
+          type: string
+        project_id:
+          type: string
+        title:
+          type: string
+        prompt:
+          type: string
+        frequency:
+          type: string
+          enum:
+            - daily
+            - weekly
+            - monthly
+            - once
+        time:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+        timezone:
+          type: string
+          minLength: 1
+        weekdays:
+          $ref: '#/components/schemas/ScheduledTaskWeekdays'
+        month_days:
+          $ref: '#/components/schemas/ScheduledTaskMonthDays'
+        local_date:
+          $ref: '#/components/schemas/ScheduledTaskLocalDate'
+        next_run_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        auto_approve:
+          type: boolean
+        enabled:
+          type: boolean
+        status:
+          type: string
+          enum:
+            - active
+            - paused
+            - failed
+        trigger_kind:
+          type: string
+          enum:
+            - calendar
+            - rss
+        feed_url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: >-
+            Normalized HTTPS/443 FQDN URL, at most 2048 UTF-8 bytes. Runtime must apply the fixed production rss-feed-address policy (including empty userinfo
+            syntax, fragment, raw whitespace, special domains and all-DNS public-address rejection); maxLength alone is not the byte/security check.
+        conditions:
+          $ref: '#/components/schemas/ScheduledRssConditions'
+      oneOf:
+        - properties:
+            trigger_kind:
+              const: calendar
+          required:
+            - trigger_kind
+            - frequency
+            - time
+            - timezone
+          not:
+            anyOf:
+              - required:
+                  - feed_url
+              - required:
+                  - conditions
+          oneOf:
+            - properties:
+                frequency:
+                  const: daily
+              not:
+                anyOf:
+                  - required:
+                      - weekdays
+                  - required:
+                      - month_days
+                  - required:
+                      - local_date
+            - properties:
+                frequency:
+                  const: weekly
+              required:
+                - weekdays
+              not:
+                anyOf:
+                  - required:
+                      - month_days
+                  - required:
+                      - local_date
+            - properties:
+                frequency:
+                  const: monthly
+              required:
+                - month_days
+              not:
+                anyOf:
+                  - required:
+                      - weekdays
+                  - required:
+                      - local_date
+            - properties:
+                frequency:
+                  const: once
+              required:
+                - local_date
+              not:
+                anyOf:
+                  - required:
+                      - weekdays
+                  - required:
+                      - month_days
+        - properties:
+            trigger_kind:
+              const: rss
+            next_run_at:
+              type: 'null'
+          required:
+            - trigger_kind
+            - feed_url
+            - conditions
+          not:
+            anyOf:
+              - required:
+                  - frequency
+              - required:
+                  - time
+              - required:
+                  - timezone
+              - required:
+                  - weekdays
+              - required:
+                  - month_days
+              - required:
+                  - local_date
     ScheduledTaskDetails:
       type: object
-      required: [scheduling_state]
-      description: Current scheduling lifecycle, distinct from immutable mutation ACKs and Agent execution outcomes. next_run_at is authoritative only for active scheduling; dependency failure returns 503.
-      allOf:
-        - $ref: '#/components/schemas/ScheduledTask'
+      required:
+        - id
+        - title
+        - prompt
+        - next_run_at
+        - auto_approve
+        - enabled
+        - status
+        - trigger_kind
+        - scheduling_state
+      additionalProperties: false
+      description: >-
+        Closed current lifecycle projection, independent from mutation ACKs. RSS next_run_at is null; feed dates are actual BFF poll facts, never calendar execution
+        times.
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        title:
+          type: string
+        prompt:
+          type: string
+        frequency:
+          type: string
+          enum:
+            - daily
+            - weekly
+            - monthly
+            - once
+        time:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+        timezone:
+          type: string
+          minLength: 1
+        weekdays:
+          $ref: '#/components/schemas/ScheduledTaskWeekdays'
+        month_days:
+          $ref: '#/components/schemas/ScheduledTaskMonthDays'
+        local_date:
+          $ref: '#/components/schemas/ScheduledTaskLocalDate'
+        next_run_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        auto_approve:
+          type: boolean
+        enabled:
+          type: boolean
+        status:
+          type: string
+          enum:
+            - active
+            - paused
+            - failed
+        trigger_kind:
+          type: string
+          enum:
+            - calendar
+            - rss
+        feed_url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: >-
+            Normalized HTTPS/443 FQDN URL, at most 2048 UTF-8 bytes. Runtime must apply the fixed production rss-feed-address policy (including empty userinfo
+            syntax, fragment, raw whitespace, special domains and all-DNS public-address rejection); maxLength alone is not the byte/security check.
+        conditions:
+          $ref: '#/components/schemas/ScheduledRssConditions'
+        scheduling_state:
+          type: string
+          enum:
+            - pending
+            - active
+            - paused
+            - exhausted
+            - failed
+        feed_state:
+          type: string
+          enum:
+            - initializing
+            - active
+            - backoff
+            - limit_reached
+        last_checked_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        next_check_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        error_code:
+          $ref: '#/components/schemas/ScheduledRssErrorCode'
       oneOf:
-      - properties:
-          frequency: { const: daily }
-        not:
-          anyOf:
-            - required: [weekdays]
-            - required: [month_days]
-            - required: [local_date]
-      - properties:
-          frequency: { const: weekly }
-        required: [weekdays]
-        not:
-          anyOf:
-            - required: [month_days]
-            - required: [local_date]
-      - properties:
-          frequency: { const: monthly }
-        required: [month_days]
-        not:
-          anyOf:
-            - required: [weekdays]
-            - required: [local_date]
-      - properties:
-          frequency: { const: once }
-        required: [local_date]
-        not:
-          anyOf:
-            - required: [weekdays]
-            - required: [month_days]
+        - properties:
+            trigger_kind:
+              const: calendar
+          required:
+            - trigger_kind
+            - frequency
+            - time
+            - timezone
+          not:
+            anyOf:
+              - required:
+                  - feed_url
+              - required:
+                  - conditions
+              - required:
+                  - feed_state
+              - required:
+                  - last_checked_at
+              - required:
+                  - next_check_at
+              - required:
+                  - error_code
+          oneOf:
+            - properties:
+                frequency:
+                  const: daily
+              not:
+                anyOf:
+                  - required:
+                      - weekdays
+                  - required:
+                      - month_days
+                  - required:
+                      - local_date
+            - properties:
+                frequency:
+                  const: weekly
+              required:
+                - weekdays
+              not:
+                anyOf:
+                  - required:
+                      - month_days
+                  - required:
+                      - local_date
+            - properties:
+                frequency:
+                  const: monthly
+              required:
+                - month_days
+              not:
+                anyOf:
+                  - required:
+                      - weekdays
+                  - required:
+                      - local_date
+            - properties:
+                frequency:
+                  const: once
+              required:
+                - local_date
+              not:
+                anyOf:
+                  - required:
+                      - weekdays
+                  - required:
+                      - month_days
+        - properties:
+            trigger_kind:
+              const: rss
+            next_run_at:
+              type: 'null'
+          required:
+            - trigger_kind
+            - feed_url
+            - conditions
+            - feed_state
+            - last_checked_at
+            - next_check_at
+            - error_code
+          not:
+            anyOf:
+              - required:
+                  - frequency
+              - required:
+                  - time
+              - required:
+                  - timezone
+              - required:
+                  - weekdays
+              - required:
+                  - month_days
+              - required:
+                  - local_date
     ScheduledTaskDetailResponse:
       type: object
       required: [data, meta]
@@ -23487,109 +24318,299 @@ components:
         meta: { $ref: '#/components/schemas/RequestMeta' }
     CreateScheduledTaskRequest:
       type: object
-      required: [title, prompt, frequency, time, timezone]
+      required:
+        - title
+        - prompt
+        - trigger_kind
       additionalProperties: false
       properties:
         project_id:
           type: string
           minLength: 1
-          pattern: '^\S(?:[\s\S]*\S)?(?![\s\S])'
+          pattern: ^\S(?:[\s\S]*\S)?(?![\s\S])
           description: Exact nonempty visible Project ID or slug; leading and trailing whitespace are rejected, not trimmed.
-        title: { type: string }
-        prompt: { type: string }
-        frequency: { type: string, enum: [daily, weekly, monthly, once] }
-        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
-        timezone: { type: string, minLength: 1 }
-        weekdays: { $ref: '#/components/schemas/ScheduledTaskWeekdays' }
-        month_days: { $ref: '#/components/schemas/ScheduledTaskMonthDays' }
-        local_date: { $ref: '#/components/schemas/ScheduledTaskLocalDate' }
-        expires_at: { type: string, format: date-time }
-        auto_approve: { type: boolean }
+        title:
+          type: string
+        prompt:
+          type: string
+        frequency:
+          type: string
+          enum:
+            - daily
+            - weekly
+            - monthly
+            - once
+        time:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+        timezone:
+          type: string
+          minLength: 1
+        weekdays:
+          $ref: '#/components/schemas/ScheduledTaskWeekdays'
+        month_days:
+          $ref: '#/components/schemas/ScheduledTaskMonthDays'
+        local_date:
+          $ref: '#/components/schemas/ScheduledTaskLocalDate'
+        expires_at:
+          type: string
+          format: date-time
+        auto_approve:
+          type: boolean
+        trigger_kind:
+          type: string
+          enum:
+            - calendar
+            - rss
+        feed_url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: >-
+            Normalized HTTPS/443 FQDN URL, at most 2048 UTF-8 bytes. Runtime must apply the fixed production rss-feed-address policy (including empty userinfo
+            syntax, fragment, raw whitespace, special domains and all-DNS public-address rejection); maxLength alone is not the byte/security check.
+        conditions:
+          $ref: '#/components/schemas/ScheduledRssConditions'
       oneOf:
-      - properties:
-          frequency: { const: daily }
-        not:
-          anyOf:
-            - required: [weekdays]
-            - required: [month_days]
-            - required: [local_date]
-      - properties:
-          frequency: { const: weekly }
-        required: [weekdays]
-        not:
-          anyOf:
-            - required: [month_days]
-            - required: [local_date]
-      - properties:
-          frequency: { const: monthly }
-        required: [month_days]
-        not:
-          anyOf:
-            - required: [weekdays]
-            - required: [local_date]
-      - properties:
-          frequency: { const: once }
-        required: [local_date]
-        not:
-          anyOf:
-            - required: [weekdays]
-            - required: [month_days]
+        - properties:
+            trigger_kind:
+              const: calendar
+          required:
+            - trigger_kind
+            - frequency
+            - time
+            - timezone
+          not:
+            anyOf:
+              - required:
+                  - feed_url
+              - required:
+                  - conditions
+          oneOf:
+            - properties:
+                frequency:
+                  const: daily
+              not:
+                anyOf:
+                  - required:
+                      - weekdays
+                  - required:
+                      - month_days
+                  - required:
+                      - local_date
+            - properties:
+                frequency:
+                  const: weekly
+              required:
+                - weekdays
+              not:
+                anyOf:
+                  - required:
+                      - month_days
+                  - required:
+                      - local_date
+            - properties:
+                frequency:
+                  const: monthly
+              required:
+                - month_days
+              not:
+                anyOf:
+                  - required:
+                      - weekdays
+                  - required:
+                      - local_date
+            - properties:
+                frequency:
+                  const: once
+              required:
+                - local_date
+              not:
+                anyOf:
+                  - required:
+                      - weekdays
+                  - required:
+                      - month_days
+        - properties:
+            trigger_kind:
+              const: rss
+          required:
+            - trigger_kind
+            - feed_url
+            - conditions
+          not:
+            anyOf:
+              - required:
+                  - frequency
+              - required:
+                  - time
+              - required:
+                  - timezone
+              - required:
+                  - weekdays
+              - required:
+                  - month_days
+              - required:
+                  - local_date
     ScheduledTaskPatchRequest:
       type: object
       additionalProperties: false
       properties:
-        title: { type: string }
-        prompt: { type: string }
-        frequency: { type: string, enum: [daily, weekly, monthly, once] }
-        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
-        timezone: { type: string, minLength: 1 }
-        weekdays: { $ref: '#/components/schemas/ScheduledTaskWeekdays' }
-        month_days: { $ref: '#/components/schemas/ScheduledTaskMonthDays' }
-        local_date: { $ref: '#/components/schemas/ScheduledTaskLocalDate' }
-        expires_at: { type: [string, 'null'], format: date-time }
-        auto_approve: { type: boolean }
-        enabled: { type: boolean }
-        status: { type: string, enum: [active, paused, failed] }
+        title:
+          type: string
+        prompt:
+          type: string
+        frequency:
+          type: string
+          enum:
+            - daily
+            - weekly
+            - monthly
+            - once
+        time:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+        timezone:
+          type: string
+          minLength: 1
+        weekdays:
+          $ref: '#/components/schemas/ScheduledTaskWeekdays'
+        month_days:
+          $ref: '#/components/schemas/ScheduledTaskMonthDays'
+        local_date:
+          $ref: '#/components/schemas/ScheduledTaskLocalDate'
+        expires_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        auto_approve:
+          type: boolean
+        enabled:
+          type: boolean
+        status:
+          type: string
+          enum:
+            - active
+            - paused
+            - failed
+        trigger_kind:
+          type: string
+          enum:
+            - calendar
+            - rss
+        feed_url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: >-
+            Normalized HTTPS/443 FQDN URL, at most 2048 UTF-8 bytes. Runtime must apply the fixed production rss-feed-address policy (including empty userinfo
+            syntax, fragment, raw whitespace, special domains and all-DNS public-address rejection); maxLength alone is not the byte/security check.
+        conditions:
+          $ref: '#/components/schemas/ScheduledRssConditions'
       allOf:
         - if:
             anyOf:
-              - required: [frequency]
-              - required: [time]
-              - required: [timezone]
-              - required: [weekdays]
-              - required: [month_days]
-              - required: [local_date]
+              - required:
+                  - trigger_kind
+              - required:
+                  - frequency
+              - required:
+                  - time
+              - required:
+                  - timezone
+              - required:
+                  - weekdays
+              - required:
+                  - month_days
+              - required:
+                  - local_date
+              - required:
+                  - feed_url
+              - required:
+                  - conditions
           then:
-            required: [frequency, time, timezone]
             oneOf:
               - properties:
-                  frequency: { const: daily }
+                  trigger_kind:
+                    const: calendar
+                required:
+                  - trigger_kind
+                  - frequency
+                  - time
+                  - timezone
                 not:
                   anyOf:
-                    - required: [weekdays]
-                    - required: [month_days]
-                    - required: [local_date]
+                    - required:
+                        - feed_url
+                    - required:
+                        - conditions
+                oneOf:
+                  - properties:
+                      frequency:
+                        const: daily
+                    not:
+                      anyOf:
+                        - required:
+                            - weekdays
+                        - required:
+                            - month_days
+                        - required:
+                            - local_date
+                  - properties:
+                      frequency:
+                        const: weekly
+                    required:
+                      - weekdays
+                    not:
+                      anyOf:
+                        - required:
+                            - month_days
+                        - required:
+                            - local_date
+                  - properties:
+                      frequency:
+                        const: monthly
+                    required:
+                      - month_days
+                    not:
+                      anyOf:
+                        - required:
+                            - weekdays
+                        - required:
+                            - local_date
+                  - properties:
+                      frequency:
+                        const: once
+                    required:
+                      - local_date
+                    not:
+                      anyOf:
+                        - required:
+                            - weekdays
+                        - required:
+                            - month_days
               - properties:
-                  frequency: { const: weekly }
-                required: [weekdays]
+                  trigger_kind:
+                    const: rss
+                required:
+                  - trigger_kind
+                  - feed_url
+                  - conditions
                 not:
                   anyOf:
-                    - required: [month_days]
-                    - required: [local_date]
-              - properties:
-                  frequency: { const: monthly }
-                required: [month_days]
-                not:
-                  anyOf:
-                    - required: [weekdays]
-                    - required: [local_date]
-              - properties:
-                  frequency: { const: once }
-                required: [local_date]
-                not:
-                  anyOf:
-                    - required: [weekdays]
-                    - required: [month_days]
+                    - required:
+                        - frequency
+                    - required:
+                        - time
+                    - required:
+                        - timezone
+                    - required:
+                        - weekdays
+                    - required:
+                        - month_days
+                    - required:
+                        - local_date
     McpConnectionProjection:
       type: object
       required: [connection_id, connector_id, server_id, provider_key, transport, status]

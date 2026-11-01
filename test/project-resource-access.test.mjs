@@ -149,6 +149,11 @@ const context = { requestId: "request-1", identity: { namespace: "tenant-1", use
 const store = {
   services: {
     projects: {
+      findActiveResourceProjectId: async (scope, ref, signal, deadlineAt) => {
+        assert.ok(signal instanceof AbortSignal)
+        assert.ok(Number.isFinite(deadlineAt))
+        return scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ["slug", "project-1"].includes(ref) ? "project-1" : null
+      },
       find: async (scope, ref) =>
         scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ["slug", "project-1"].includes(ref) ? { id: "project-1" } : null,
     },
@@ -246,9 +251,11 @@ test("Project attachment downloads exceed the old personal 1MiB cap, remain comp
   const ownStore = {
     services: {
       projects: {
-        find: async () => {
+        findActiveResourceProjectId: async (_scope, _ref, signal, deadlineAt) => {
+          assert.ok(signal instanceof AbortSignal)
+          assert.ok(Number.isFinite(deadlineAt))
           reads++
-          return revoked && reads % 2 === 0 ? null : { id: "project-1" }
+          return revoked && reads % 2 === 0 ? null : "project-1"
         },
       },
     },

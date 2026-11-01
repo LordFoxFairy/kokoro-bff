@@ -2,6 +2,8 @@ import { createHash } from "node:crypto"
 import { mkdtemp, open, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { performance } from "node:perf_hooks"
+import { withinAssetDownloadBudget } from "../../../application/asset-download-budget.js"
 import { ProjectResourceError } from "../../../application/project-resource.error.js"
 
 export type ArtifactDownloadReference = Readonly<{ url: string; method: string; requiredHeaders: Record<string, string>; expiresAt: number }>
@@ -100,9 +102,20 @@ export async function spoolVerifiedArtifact(
   }
   try {
     transferSignal.throwIfAborted()
-    const response = await fetcher(url, { method: "GET", redirect: "manual", credentials: "omit", signal: transferSignal })
-    transferSignal.throwIfAborted()
+    const response = await withinAssetDownloadBudget(
+      transferSignal,
+      performance.now() + timings.totalMs,
+      () => fetcher(url, { method: "GET", redirect: "manual", credentials: "omit", signal: transferSignal }),
+      (late) => {
+        try {
+          void late.body?.cancel().catch(() => undefined)
+        } catch {
+          // A late response is still owned here, but must never retain a spool slot.
+        }
+      },
+    )
     body = response.body
+    transferSignal.throwIfAborted()
     if (response.status !== 200)
       throw new ProjectResourceError(
         response.status >= 500 ? "storage_unavailable" : "storage_response_invalid",

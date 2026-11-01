@@ -63,7 +63,7 @@
     "pnpm": "11.25.0",
     "typescript": "5.9.3"
   },
-  "lockfile_sha256": "491c0325ad3d397a17979c1ee75315c407ec33c465117d135c509cca645e5028",
+  "lockfile_sha256": "56f0ca5e41944e4030b106a0780390560497f9b266419445b246aa45c94549ed",
   "build_policy_sha256": "b9cab84f3d70bbbd4712d0131e208eb8e267c154ed5879092d34bf0ccc3d2e9e",
   "generated": [
     {

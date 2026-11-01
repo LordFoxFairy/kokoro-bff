@@ -1,3 +1,7 @@
+import { isBillingCreditAccountCandidate } from "../http/billing-credit-account-input.js"
+import { billingCreditAccountRoute } from "../http/routes/billing-credit-account.js"
+import { isScheduledTaskRunsCandidate } from "../http/scheduled-task-runs-input.js"
+import { scheduledTaskRunsRoute } from "../http/routes/scheduled-task-runs.js"
 import { runDisplayRoute, RunDisplayAdmissionError } from "../http/routes/run-display.js"
 import { messageRegenerationRoute, MessageRegenerationAdmissionError } from "../http/routes/message-regeneration.js"
 import { messageFeedbackRoute, MessageFeedbackAdmissionError } from "../http/routes/message-feedback.js"
@@ -41,6 +45,7 @@ import { projectRenameRoute } from "../http/routes/project-rename.js"
 import { projectDeleteRoute } from "../http/routes/project-delete.js"
 import { projectDeletionStatusRoute } from "../http/routes/project-deletion-status.js"
 import { projectResourceListRoute } from "../http/routes/project-resource-list.js"
+import { isProjectResourceDownloadCandidate, projectResourceDownloadRoute } from "../http/routes/project-resource-download.js"
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
 import { personalFileUploadRoute } from "../http/routes/personal-file-upload.js"
 import { personalFileDownloadRoute } from "../http/routes/personal-file-download.js"
@@ -122,6 +127,18 @@ async function handle(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
+  if (isBillingCreditAccountCandidate(request)) {
+    await billingCreditAccountRoute(request, response, config, composition.sessionAdmission, id)
+    return
+  }
+  if (isScheduledTaskRunsCandidate(request)) {
+    await scheduledTaskRunsRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.scheduledTaskRuns, id)
+    return
+  }
+  if (isProjectResourceDownloadCandidate(request)) {
+    await projectResourceDownloadRoute(request, response, config, composition.sessionAdmission, composition.businessStore, id)
+    return
+  }
   if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
     await accountProfileRoute(request, response, config, composition.sessionAdmission, id)
     return
@@ -257,7 +274,7 @@ async function handle(
   }
 
   if (segments[0] === "internal" && segments[1] === "bff" && segments[2] === "scheduled-tasks" && segments[3] === "dispatch" && segments.length === 4) {
-    await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency)
+    await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency, composition.rssPollService)
     return
   }
   const projectContentAccess: ProjectSkillContentAccess = async (projectRef, context, signal) => {
@@ -908,8 +925,8 @@ async function handle(
     businessPath[1] !== undefined &&
     businessPath[3] !== undefined
   ) {
-    if (request.method === "GET" && (businessPath.length === 4 || (businessPath.length === 5 && businessPath[4] === "download"))) {
-      await projectResourceReadRoute(request, response, config, context, businessPath[1], businessPath[3], businessPath.length === 5, composition.businessStore)
+    if (request.method === "GET" && businessPath.length === 4) {
+      await projectResourceReadRoute(request, response, config, context, businessPath[1], businessPath[3], false, composition.businessStore)
       return
     }
     if (request.method === "DELETE" && businessPath.length === 4) {

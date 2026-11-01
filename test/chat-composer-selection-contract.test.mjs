@@ -1,3 +1,4 @@
+import { restoreIntegrationParent } from "../scripts/task-b-bff-integration-public-contract.mjs"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
@@ -6,7 +7,7 @@ import { load } from "js-yaml"
 import { restorePublic2815ComposerSelectionContract, restorePublic2816CustomApiSelectionContract } from "../scripts/composer-selection-public-contract.mjs"
 
 test("composer selection is private-only and preserves the exact parent contract and submission semantics", async () => {
-  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const raw = restoreIntegrationParent(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"), "approved")
   assert.equal(
     createHash("sha256").update(restorePublic2815ComposerSelectionContract(raw)).digest("hex"),
     "8a56966d2d9a4a380b29dadeb9f79f5db8ef9975e8e2bbac4b1748ef03a70234",
@@ -24,7 +25,7 @@ test("composer selection is private-only and preserves the exact parent contract
 })
 
 test("Custom API safe refs are optional, closed, versioned and private, with exact Public28.16 parent preservation", async () => {
-  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const raw = restoreIntegrationParent(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"), "approved")
   assert.equal(
     createHash("sha256").update(restorePublic2816CustomApiSelectionContract(raw)).digest("hex"),
     "82485c2b7be17ad04f56d3656a58b42ea8d308c9dc22db5807a09ab706418a77",

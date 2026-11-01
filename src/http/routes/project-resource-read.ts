@@ -1,3 +1,4 @@
+import { withinAssetDownloadBudget } from "../../application/asset-download-budget.js"
 import { currentResourceProject } from "../project-resource-access.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
@@ -24,6 +25,7 @@ export async function projectResourceReadRoute(
   clientFactory: (config: NonNullable<BffConfig["storage"]>, scope: Scope) => Pick<ProjectResourceAccessClient, "get" | "downloadReference"> = (cfg, scope) =>
     new ProjectResourceAccessClient(cfg, scope),
   spooler: typeof spoolVerifiedArtifact = spoolVerifiedArtifact,
+  budget?: Readonly<{ signal: AbortSignal; deadlineAt: number }>,
 ): Promise<void> {
   const abort = new AbortController()
   const cancel = (): void => {
@@ -34,7 +36,13 @@ export async function projectResourceReadRoute(
   response.setHeader("x-request-id", context.requestId)
   response.setHeader("referrer-policy", "no-referrer")
   response.setHeader("x-content-type-options", "nosniff")
-  const admission = AbortSignal.any([abort.signal, AbortSignal.timeout(download ? 120_000 : 10_000)])
+  const deadlineAt = budget?.deadlineAt ?? performance.now() + (download ? 20_000 : 10_000)
+  const admission = AbortSignal.any([
+    abort.signal,
+    ...(budget ? [budget.signal] : []),
+    AbortSignal.timeout(Math.max(1, Math.ceil(deadlineAt - performance.now()))),
+  ])
+  const bounded = <T>(start: () => Promise<T>, retireLate?: (value: T) => void) => withinAssetDownloadBudget(admission, deadlineAt, start, retireLate)
   let spool: VerifiedArtifactSpool | null = null
   try {
     if (
@@ -48,30 +56,35 @@ export async function projectResourceReadRoute(
     )
       throw new ProjectResourceError("invalid_project_resource", 400)
     const scope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
-    const projectId = await currentResourceProject(store, scope, projectRef, admission)
+    const projectId = await currentResourceProject(store, scope, projectRef, admission, download ? deadlineAt : undefined)
     if (config.storage === undefined) throw new ProjectResourceError("storage_projection_not_configured", 503, true)
     const client = clientFactory(config.storage, { ...scope, projectId, requestId: context.requestId })
-    const item = await client.get(assetId, admission)
+    const item = await bounded(() => client.get(assetId, admission))
     admission.throwIfAborted()
     if (!download) {
       if (!response.destroyed) send(response, 200, ok({ resource: item }, context.requestId))
       return
     }
-    const reference = await client.downloadReference(item, admission)
+    const reference = await bounded(() => client.downloadReference(item, admission))
     admission.throwIfAborted()
     try {
-      spool = await spooler(reference, Number(item.size_bytes), item.content_sha256, config.storage.objectOrigin, abort.signal)
+      spool = await bounded(
+        () => spooler(reference, Number(item.size_bytes), item.content_sha256, config.storage!.objectOrigin, admission),
+        (late) => {
+          void late.cleanup().catch(() => undefined)
+        },
+      )
     } catch (error) {
       if (error instanceof ProjectResourceError && error.code === "artifact_download_busy")
         throw new ProjectResourceError("project_resource_download_busy", 503, true)
       throw error
     }
-    abort.signal.throwIfAborted()
-    const currentProjectId = await currentResourceProject(store, scope, projectId, AbortSignal.any([abort.signal, AbortSignal.timeout(10_000)]))
-    abort.signal.throwIfAborted()
+    admission.throwIfAborted()
+    const currentProjectId = await currentResourceProject(store, scope, projectId, admission, deadlineAt)
+    admission.throwIfAborted()
     if (currentProjectId !== projectId) throw new ProjectResourceError("project_not_found", 404)
     if (!response.destroyed)
-      await writeVerifiedDownload(response, spool, { filename: item.filename, mimeType: item.mime_type, requestId: context.requestId }, abort.signal)
+      await writeVerifiedDownload(response, spool, { filename: item.filename, mimeType: item.mime_type, requestId: context.requestId }, admission)
   } catch (error) {
     if (response.headersSent) {
       response.destroy()

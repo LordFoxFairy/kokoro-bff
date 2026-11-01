@@ -1,3 +1,4 @@
+import { restoreIntegrationBaseline } from "./task-b-bff-integration-public-contract.mjs"
 import { restoreFinalAnswerSchema } from "./message-final-answer-schema.mjs"
 import { restorePublic2813FinalAnswerContract } from "./final-answer-public-contract.mjs"
 // Build/test-only complete Public28.5→28.4 inverse. Never imported by production.
@@ -238,6 +239,7 @@ export function projectContentParentInventory(inventory) {
 }
 
 export function messageActionsParentInventory(inventory) {
+  if (inventory.length === 200) inventory = restoreIntegrationBaseline(inventory, "approved")
   const ids = new Set(["getMessageFeedback", "setMessageFeedback", "regenerateLatestAssistantMessage", "getSessionRunDisplay"])
   if (!inventory.some((item) => ids.has(item.operation_id))) return inventory
   if (hash(JSON.stringify(inventory)) !== "897c955e41a256651924315c603d81aada274f9d8f94b20e784de0fd3d11a078" || inventory.length !== 199)
