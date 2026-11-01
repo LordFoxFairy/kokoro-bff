@@ -86,17 +86,25 @@ test("BillingModule owns personal and administrator billing routes", async () =>
   assert.doesNotMatch(server, /await liveAdminMetering\(/u)
 })
 
-test("SystemModule owns administrator model configuration and routing routes", async () => {
-  const [moduleSource, middleware, nativeRoute, server] = await Promise.all([
+test("SystemModule owns model catalog and administrator configuration/routing routes", async () => {
+  const [moduleSource, middleware, modelMiddleware, modelRoute, nativeRoute, server, owner] = await Promise.all([
     readFile(path.join(root, "src/modules/system/system.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/system/system.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/system/system-model-catalog.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/system-model-catalog-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/system-admin-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/owner.ts"), "utf8"),
   ])
   assert.match(moduleSource, /AccountModule/u)
+  assert.match(moduleSource, /SystemModelCatalogMiddleware/u)
   assert.match(middleware, /handleSystemAdminRequest/u)
+  assert.match(modelMiddleware, /SystemModelCatalogMiddleware/u)
+  assert.match(modelRoute, /handleSystemModelCatalogBusiness/u)
   assert.match(nativeRoute, /handleSystemAdminRequest/u)
   assert.match(server, /handleSystemAdminRequest/u)
+  assert.match(server, /handleSystemModelCatalogBusiness/u)
+  assert.doesNotMatch(owner, /modelCatalogData|businessPath\.length === 1 && businessPath\[0\] === "models"/u)
   assert.doesNotMatch(server, /await liveModelConfigurationAdmin\(/u)
   assert.doesNotMatch(server, /await liveModelRoutingAdmin\(/u)
 })
