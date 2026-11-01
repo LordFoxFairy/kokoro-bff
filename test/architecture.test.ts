@@ -134,9 +134,9 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/chat/chat-repository.ts",
     "src/application/ports/agent-dispatch-outbox-repository.ts",
     "src/application/ports/agent-dispatch-delivery.ts",
-    "src/application/ports/scheduled-task-repository.ts",
-    "src/application/ports/scheduled-task-outbox-repository.ts",
-    "src/application/ports/scheduled-task-outbox-delivery.ts",
+    "src/application/scheduled/scheduled-task-repository.ts",
+    "src/application/scheduled/scheduled-task-outbox-repository.ts",
+    "src/application/scheduled/scheduled-task-outbox-delivery.ts",
     "src/application/ports/scheduler-dispatch-receipt-repository.ts",
     "src/application/scheduled-task-outbox-dispatcher.ts",
     "src/application/scheduled/input.ts",
@@ -565,7 +565,7 @@ test("private BFF resources use named owner scopes before receipts and keep serv
   const [projectPort, projectRepository, scheduledPort, scheduledRepository, chatAuthorization, server, client, openapi, schema] = await Promise.all([
     readFile(path.join(root, "src/application/projects/project-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/project-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/application/ports/scheduled-task-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/scheduled/scheduled-task-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-authorization.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
@@ -657,7 +657,7 @@ test("Conversation Move keeps one PostgreSQL implementation and a bounded driver
 test("ScheduledTask mutations use an owner-scoped transactional outbox and fenced dispatcher", async () => {
   const [scheduledRepository, outboxRepository, dispatcher, delivery, controlClient, mutationRoute, schema] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/application/ports/scheduled-task-outbox-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/scheduled/scheduled-task-outbox-repository.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled-task-outbox-dispatcher.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/clients/scheduler/outbox-delivery.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/clients/scheduler/control-client.ts"), "utf8"),

@@ -23,7 +23,7 @@ import { SchedulerTaskStateReader } from "../../infrastructure/clients/scheduler
 import { ScheduledTaskReadService } from "../../application/scheduled-task-read-service.js"
 import { ScheduledTaskOutboxDispatcher } from "../../application/scheduled-task-outbox-dispatcher.js"
 import { SchedulerOutboxDelivery } from "../../infrastructure/clients/scheduler/outbox-delivery.js"
-import type { ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
+import type { ScheduledTaskOutboxRepository } from "../../application/scheduled/scheduled-task-outbox-repository.js"
 import type { ScheduledAgentDispatchRepository } from "../../application/ports/scheduled-agent-dispatch-repository.js"
 import { PostgresScheduledAgentDispatchRepository } from "../../infrastructure/postgres/scheduled-agent-dispatch-repository.js"
 import { ScheduledAgentDispatcher } from "../../application/scheduled-agent-dispatcher.js"

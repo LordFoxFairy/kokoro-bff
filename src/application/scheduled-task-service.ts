@@ -7,7 +7,7 @@ import type {
   ScheduledTaskRecord,
   ScheduledTaskReadSnapshot,
   ScheduledTaskRepository,
-} from "./ports/scheduled-task-repository.js"
+} from "./scheduled/scheduled-task-repository.js"
 
 /** Scheduled-task use cases. Fact and outbound command commit together; delivery is asynchronous. */
 export class ScheduledTaskService {

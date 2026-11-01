@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util"
 import type { ScheduledTaskStateReader, ScheduledTaskCurrentState } from "../../../modules/scheduled-tasks/scheduled-task-state-reader.js"
-import type { ScheduledTaskOwnerScope } from "../../../application/ports/scheduled-task-repository.js"
+import type { ScheduledTaskOwnerScope } from "../../../application/scheduled/scheduled-task-repository.js"
 import type { ScheduledTaskFact } from "../../../domain/scheduled-task/task.js"
 import { decodeSchedulerCurrent, type SchedulerControlClient } from "./control-client.js"
 import { buildSchedulerSchedule } from "./schedule.js"

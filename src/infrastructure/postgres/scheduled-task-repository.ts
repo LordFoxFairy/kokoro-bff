@@ -16,7 +16,7 @@ import {
   type ScheduledTaskOutboxTask,
 } from "../../domain/scheduled-task/outbox.js"
 import { utcDate, type ScheduledTaskFact } from "../../domain/scheduled-task/task.js"
-import type { ScheduledTaskOutboxClaimInput, ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
+import type { ScheduledTaskOutboxClaimInput, ScheduledTaskOutboxRepository } from "../../application/scheduled/scheduled-task-outbox-repository.js"
 import type {
   ScheduledTaskCreateInput,
   ScheduledTaskMutationLineage,
@@ -25,7 +25,7 @@ import type {
   ScheduledTaskRecord,
   ScheduledTaskReadSnapshot,
   ScheduledTaskRepository,
-} from "../../application/ports/scheduled-task-repository.js"
+} from "../../application/scheduled/scheduled-task-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
 import type { StableIdGenerator } from "../../application/ports/stable-id-generator.js"
 import { scheduledTaskOutboxId, Sha256StableIdGenerator } from "../identifiers/scheduled-task-outbox-id.js"

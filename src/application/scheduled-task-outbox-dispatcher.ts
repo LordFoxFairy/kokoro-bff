@@ -1,6 +1,6 @@
 import { scheduledTaskRetryDelayMs, type ScheduledTaskOutboxCommand } from "../domain/scheduled-task/outbox.js"
-import type { ScheduledTaskOutboxDeliveryPort } from "./ports/scheduled-task-outbox-delivery.js"
-import type { ScheduledTaskOutboxRepository } from "./ports/scheduled-task-outbox-repository.js"
+import type { ScheduledTaskOutboxDeliveryPort } from "./scheduled/scheduled-task-outbox-delivery.js"
+import type { ScheduledTaskOutboxRepository } from "./scheduled/scheduled-task-outbox-repository.js"
 
 export type ScheduledTaskOutboxDispatcherOptions = {
   workerId: string

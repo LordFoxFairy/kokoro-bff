@@ -363,6 +363,31 @@ test("ProjectsModule owns project-scope release worker lifecycle", async () => {
   assert.match(runtime, /explicitlySuppliedProjectScopeReleaseDispatcher/u)
 })
 
+test("ScheduledTask repository and outbox ports are feature-local", async () => {
+  for (const file of [
+    "src/application/scheduled/scheduled-task-repository.ts",
+    "src/application/scheduled/scheduled-task-outbox-repository.ts",
+    "src/application/scheduled/scheduled-task-outbox-delivery.ts",
+  ]) assert.equal(await fileExists(file), true, `${file} must exist`)
+  for (const file of [
+    "src/application/ports/scheduled-task-repository.ts",
+    "src/application/ports/scheduled-task-outbox-repository.ts",
+    "src/application/ports/scheduled-task-outbox-delivery.ts",
+  ]) assert.equal(await fileExists(file), false, `${file} must stay deleted`)
+  const [moduleSource, service, dispatcher, repository, delivery] = await Promise.all([
+    readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),
+    readFile(path.join(root, "src/application/scheduled-task-service.ts"), "utf8"),
+    readFile(path.join(root, "src/application/scheduled-task-outbox-dispatcher.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/clients/scheduler/outbox-delivery.ts"), "utf8"),
+  ])
+  assert.match(moduleSource, /application\/scheduled\/scheduled-task-outbox-repository\.js/u)
+  assert.match(service, /scheduled\/scheduled-task-repository\.js/u)
+  assert.match(dispatcher, /scheduled\/scheduled-task-outbox-(?:repository|delivery)\.js/u)
+  assert.match(repository, /application\/scheduled\/scheduled-task-(?:repository|outbox-repository)\.js/u)
+  assert.match(delivery, /application\/scheduled\/scheduled-task-outbox-delivery\.js/u)
+})
+
 test("ScheduledTasksModule owns the current-state read adapter and provider", async () => {
   const [scheduledModule, middleware, nativeRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),

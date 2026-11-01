@@ -40,7 +40,7 @@ import type { ProjectExecutionBindingReader } from "../application/agent-runs/pr
 import type { SchedulerDispatchReceiptRepository } from "../application/ports/scheduler-dispatch-receipt-repository.js"
 import type { ScheduledAgentDispatchRepository } from "../application/ports/scheduled-agent-dispatch-repository.js"
 import type { ArtifactLibraryRepository } from "../application/account/artifact-library-repository.js"
-import type { ScheduledTaskOutboxRepository } from "../application/ports/scheduled-task-outbox-repository.js"
+import type { ScheduledTaskOutboxRepository } from "../application/scheduled/scheduled-task-outbox-repository.js"
 import type { AgentDispatchOutboxRepository } from "../application/ports/agent-dispatch-outbox-repository.js"
 import type { AgentCancellationOutboxRepository } from "../application/ports/agent-cancellation-outbox-repository.js"
 import type { ProjectScopeReleaseOutboxRepository } from "../application/projects/project-scope-release-outbox.js"

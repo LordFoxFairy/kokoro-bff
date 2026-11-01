@@ -16,8 +16,8 @@ import {
   type ReceiptClaim,
 } from "../../application/ports/idempotency-repository.js"
 import type { ProjectRepository } from "../../application/projects/project-repository.js"
-import type { ScheduledTaskRepository } from "../../application/ports/scheduled-task-repository.js"
-import type { ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
+import type { ScheduledTaskRepository } from "../../application/scheduled/scheduled-task-repository.js"
+import type { ScheduledTaskOutboxRepository } from "../../application/scheduled/scheduled-task-outbox-repository.js"
 import { ProjectService } from "../../application/project-service.js"
 import { ScheduledTaskService } from "../../application/scheduled-task-service.js"
 import { ChatApplicationService } from "../../application/chat-service.js"
@@ -47,7 +47,7 @@ import type { SkillUsageReader } from "../../application/agui/skill-usage.js"
 
 export { PENDING_RECEIPT_STATUS }
 export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/idempotency-repository.js"
-export type { ScheduledTaskRecord } from "../../application/ports/scheduled-task-repository.js"
+export type { ScheduledTaskRecord } from "../../application/scheduled/scheduled-task-repository.js"
 
 export class PostgresBffRepositories {
   private readonly database: PostgresBffDatabase
