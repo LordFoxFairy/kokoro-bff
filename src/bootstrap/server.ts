@@ -625,7 +625,7 @@ export async function handleBffRequest(
       json,
       mutation,
       composition.idempotency,
-      composition.businessStore?.agUi ?? null,
+      composition.agUiProjection,
       composition.agUiRuntime,
       composition.agUiProjector !== undefined,
       chatAuthorization,
