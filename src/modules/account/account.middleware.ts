@@ -7,7 +7,7 @@ import { PERSONALIZATION_PROVIDER, type PersonalizationProvider } from "./person
 import { handleAccountNativeRequest } from "../../http/routes/account-native.js"
 import { handlePersonalKnowledgeRequest } from "../../http/routes/personal-knowledge-native.js"
 import { handleAdminIdentityRequest } from "../../http/routes/admin-identity-native.js"
-import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
+import type { PersonalKnowledgeRepository } from "../../application/account/personal-knowledge-repository.js"
 
 /** Account-owned routes terminate here; unrelated traffic continues to the transitional dispatcher. */
 @Injectable()

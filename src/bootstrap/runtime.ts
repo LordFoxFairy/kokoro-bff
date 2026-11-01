@@ -30,7 +30,7 @@ import type { AgUiProjectionService } from "../application/agui/project-session-
 import { AgUiProjectorRunner } from "../application/agui/projector.js"
 import type { IdempotencyEntry, MutationTicket } from "../application/idempotency.js"
 import type { IdempotencyRepository } from "../application/ports/idempotency-repository.js"
-import type { PersonalKnowledgeRepository } from "../application/ports/personal-knowledge-repository.js"
+import type { PersonalKnowledgeRepository } from "../application/account/personal-knowledge-repository.js"
 import type { SkillUsageReader } from "../application/agui/skill-usage.js"
 import type { AgUiProjectionConsumerRepository } from "../application/agui/ports/agui-projection-repository.js"
 import type { SkillAiAssociation } from "../application/skill-ai-handoff.js"

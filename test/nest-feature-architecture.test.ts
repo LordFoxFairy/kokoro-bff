@@ -203,6 +203,21 @@ test("Skills share capability port is feature-local", async () => {
   assert.match(runtime, /application\/skills\/skill-share-repository\.js/u)
 })
 
+test("Account personal-knowledge repository port is feature-local", async () => {
+  assert.equal(await fileExists("src/application/account/personal-knowledge-repository.ts"), true)
+  assert.equal(await fileExists("src/application/ports/personal-knowledge-repository.ts"), false)
+  const [middleware, route, repository, runtime] = await Promise.all([
+    readFile(path.join(root, "src/modules/account/account.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/personal-knowledge-native.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/personal-knowledge-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+  ])
+  assert.match(middleware, /application\/account\/personal-knowledge-repository\.js/u)
+  assert.match(route, /application\/account\/personal-knowledge-repository\.js/u)
+  assert.match(repository, /application\/account\/personal-knowledge-repository\.js/u)
+  assert.match(runtime, /application\/account\/personal-knowledge-repository\.js/u)
+})
+
 test("ProjectsModule owns the project command/read adapters and provider", async () => {
   const [projectsModule, accessModule, middleware, mutationMiddleware, nativeRoute, packageMiddleware, downloadMiddleware, server] = await Promise.all([
     readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),

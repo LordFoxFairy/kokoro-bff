@@ -42,7 +42,7 @@ import type { ProjectScopeReleaseOutboxRepository } from "../../application/port
 import { PostgresSkillShareRepository } from "./skill-share-repository.js"
 import type { SkillShareRepository } from "../../application/skills/skill-share-repository.js"
 import { PublicShareApplicationService } from "../../application/public-share-service.js"
-import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
+import type { PersonalKnowledgeRepository } from "../../application/account/personal-knowledge-repository.js"
 import type { SkillUsageReader } from "../../application/agui/skill-usage.js"
 
 export { PENDING_RECEIPT_STATUS }

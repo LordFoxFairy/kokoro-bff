@@ -1,5 +1,5 @@
 import { strictParseRawJson } from "../infrastructure/raw-json.js"
-import type { PersonalKnowledgeFields } from "../application/ports/personal-knowledge-repository.js"
+import type { PersonalKnowledgeFields } from "../application/account/personal-knowledge-repository.js"
 export const KNOWLEDGE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
 export function knowledgeText(value: unknown, limit: number, nonblank = true): value is string {
   return (
