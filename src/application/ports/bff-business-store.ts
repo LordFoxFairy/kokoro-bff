@@ -8,7 +8,6 @@ import type { AgentCancellationOutboxRepository } from "./agent-cancellation-out
 import type { SchedulerDispatchReceiptRepository } from "./scheduler-dispatch-receipt-repository.js"
 import type { ScheduledAgentDispatchRepository } from "./scheduled-agent-dispatch-repository.js"
 import type { ProjectScopeReleaseOutboxRepository } from "./project-scope-release-outbox.js"
-import type { PersonalizationProvider } from "../../modules/account/personalization.provider.js"
 import type { PersonalKnowledgeRepository } from "./personal-knowledge-repository.js"
 import type { SkillUsageReader } from "../agui/skill-usage.js"
 import type { SkillAiAssociation } from "../skill-ai-handoff.js"
@@ -34,8 +33,6 @@ export interface ArtifactLibraryRepository {
 
 /** Runtime port consumed by BFF routes; PostgreSQL is one infrastructure implementation. */
 export interface BffBusinessStore extends IdempotencyRepository {
-  /** Account-owned provider retained only as the raw-server composition seam during C-3 migration. */
-  readonly personalizationProvider?: PersonalizationProvider
   /** Account-owned Knowledge repository retained only as the raw-server composition seam during C-3 migration. */
   readonly personalKnowledge?: PersonalKnowledgeRepository
   /** Skills usage projection retained only as the raw-server composition seam during C-3 migration. */

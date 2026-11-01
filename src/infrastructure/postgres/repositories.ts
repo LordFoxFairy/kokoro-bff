@@ -1,6 +1,5 @@
 import { PostgresPersonalKnowledgeRepository } from "./personal-knowledge-repository.js"
 import { readSkillUsage } from "./skill-usage-projection.js"
-import { PostgresPersonalizationRepository } from "./personalization-repository.js"
 import { PostgresBffDatabase } from "./client.js"
 import { PostgresIdempotencyRepository } from "./idempotency-repository.js"
 import { PostgresProjectRepository } from "./project-repository.js"
@@ -66,7 +65,6 @@ export class PostgresBffRepositories {
   public readonly projectScopeReleaseOutbox: ProjectScopeReleaseOutboxRepository
   public readonly skillShares: SkillShareRepository
   public readonly publicShareService: PublicShareApplicationService
-  public readonly personalizationProvider: PostgresPersonalizationRepository
   public readonly personalKnowledge: PersonalKnowledgeRepository
   public readonly skillUsage: SkillUsageReader
   public readonly skillAiAssociation: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<import("../../application/skill-ai-handoff.js").SkillAiAssociation | null>
@@ -93,7 +91,6 @@ export class PostgresBffRepositories {
     this.projectScopeReleaseOutbox = new PostgresProjectScopeReleaseOutboxRepository(this.database)
     this.skillShares = new PostgresSkillShareRepository(this.database)
     this.publicShareService = new PublicShareApplicationService(publicShares)
-    this.personalizationProvider = new PostgresPersonalizationRepository(this.database)
     this.personalKnowledge = new PostgresPersonalKnowledgeRepository(this.database)
     this.skillUsage = async (tenant, refs) => {
       const client = await this.database.pool.connect()

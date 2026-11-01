@@ -308,7 +308,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
           throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime")
         })()
   const personalizationProvider =
-    options.personalizationProvider !== undefined ? options.personalizationProvider : (businessStore?.personalizationProvider ?? null)
+    options.personalizationProvider !== undefined ? options.personalizationProvider : null
   const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.services?.chat ?? null)
   const projectService =
     options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
