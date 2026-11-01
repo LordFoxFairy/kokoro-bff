@@ -54,9 +54,10 @@ test("Chat direct title/share/delete mutations use feature-owned idempotency", a
       return true
     },
   }
+  const projects = { find: async () => ({ id: "project-1" }) }
   const entries = new Map()
   const server = createServer((request, response) => {
-    void handleChatMutationRequest(request, response, config, admission, chat, entries, null).then((handled) => {
+    void handleChatMutationRequest(request, response, config, admission, chat, projects, entries, null).then((handled) => {
       if (!handled && !response.writableEnded) {
         response.writeHead(404)
         response.end()
@@ -91,5 +92,5 @@ test("Chat direct title/share/delete mutations use feature-owned idempotency", a
   assert.equal((await request("/v1/sessions/session/share", "POST", undefined, "share-1")).status, 200)
   assert.equal((await request("/v1/sessions/session/share", "DELETE", undefined, "revoke-1")).status, 200)
   assert.equal((await request("/v1/sessions/session", "DELETE", undefined, "delete-1")).status, 200)
-  assert.equal((await request("/v1/sessions/session/title?project_ref=project-1", "PATCH", { title: "Scoped" }, "scoped-1")).status, 404)
+  assert.equal((await request("/v1/sessions/session/title?project_ref=project-1", "PATCH", { title: "Scoped" }, "scoped-1")).status, 200)
 })

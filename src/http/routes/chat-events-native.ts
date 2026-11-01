@@ -2,29 +2,29 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ProjectService } from "../../application/project-service.js"
 import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
 import type { AgUiProjectionConsumerRepository } from "../../application/agui/ports/agui-projection-repository.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
 import { liveAgentSession } from "./agent.js"
-import { pathOf, queryOf, requestId } from "../request.js"
+import { pathOf, requestId } from "../request.js"
 import { failure } from "../../contracts/index.js"
 import { send } from "../response.js"
 
-function directChatEventsPath(request: IncomingMessage): boolean {
+function chatEventsPath(request: IncomingMessage): boolean {
   try {
     const path = pathOf(request)
     if (request.method !== "GET" || path[0] !== "v1" || path[1] !== "sessions" || path.length !== 4 || path[3] !== "events") return false
-    const projectRef = queryOf(request).get("project_ref")?.trim()
-    return projectRef === undefined || projectRef === ""
+    return true
   } catch {
     return false
   }
 }
 
 export function isChatEventsNativeRequest(request: IncomingMessage): boolean {
-  return directChatEventsPath(request)
+  return chatEventsPath(request)
 }
 
 /** Chat-owned direct AG-UI events stream with feature-local projection and consumer providers. */
@@ -34,12 +34,13 @@ export async function handleChatEventsRequest(
   config: BffConfig,
   admission: SessionAdmission,
   chat: ChatApplicationService,
+  projects: ProjectService,
   projection: AgUiProjectionService,
   consumers: AgUiProjectionConsumerRepository,
   runtime: AgUiSessionRuntime,
   sourceProjectionActive: boolean,
 ): Promise<boolean> {
-  if (!directChatEventsPath(request)) return false
+  if (!chatEventsPath(request)) return false
   const id = requestId(request)
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000))
@@ -48,7 +49,7 @@ export async function handleChatEventsRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, {}, { chatService: chat })
+    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, {}, { chatService: chat, projectService: projects })
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))

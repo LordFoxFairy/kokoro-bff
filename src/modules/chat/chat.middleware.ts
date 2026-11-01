@@ -1,6 +1,6 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { AGUI_PROJECTION, AGUI_PROJECTION_CONSUMERS, AGUI_RUNTIME, AGUI_SOURCE_PROJECTION_ACTIVE, BFF_CONFIG, CHAT_IDEMPOTENCY, CHAT_SERVICE, CHAT_TURN_SERVICE, PUBLIC_SHARE_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
+import { AGUI_PROJECTION, AGUI_PROJECTION_CONSUMERS, AGUI_RUNTIME, AGUI_SOURCE_PROJECTION_ACTIVE, BFF_CONFIG, CHAT_IDEMPOTENCY, CHAT_SERVICE, CHAT_TURN_SERVICE, PROJECT_SERVICE, PUBLIC_SHARE_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
@@ -19,6 +19,7 @@ import { handleChatEventsRequest } from "../../http/routes/chat-events-native.js
 import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import type { AgUiProjectionConsumerRepository } from "../../application/agui/ports/agui-projection-repository.js"
 import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
+import type { ProjectService } from "../../application/project-service.js"
 
 @Injectable()
 export class ChatMiddleware implements NestMiddleware {
@@ -28,6 +29,7 @@ export class ChatMiddleware implements NestMiddleware {
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(CHAT_SERVICE) private readonly chat: ChatApplicationService,
+    @Inject(PROJECT_SERVICE) private readonly projects: ProjectService,
     @Inject(CHAT_TURN_SERVICE) private readonly chatTurns: ChatTurnApplicationService,
     @Inject(PUBLIC_SHARE_SERVICE) private readonly publicShare: PublicShareApplicationService,
     @Inject(CHAT_IDEMPOTENCY) private readonly chatIdempotency: IdempotencyRepository,
@@ -44,8 +46,8 @@ export class ChatMiddleware implements NestMiddleware {
       .then((handled) => handled || handleMessageFeedbackRequest(request, response, this.config, this.admission, this.chat))
       .then((handled) => handled || handleMessageRegenerationRequest(request, response, this.config, this.admission, this.chatTurns))
       .then((handled) => handled || handleMoveSessionRequest(request, response, this.config, this.admission, this.chat))
-      .then((handled) => handled || handleChatMutationRequest(request, response, this.config, this.admission, this.chat, this.idempotency, this.chatIdempotency))
-      .then((handled) => handled || handleChatEventsRequest(request, response, this.config, this.admission, this.chat, this.agUiProjection, this.agUiConsumers, this.agUiRuntime, this.sourceProjectionActive))
+      .then((handled) => handled || handleChatMutationRequest(request, response, this.config, this.admission, this.chat, this.projects, this.idempotency, this.chatIdempotency))
+      .then((handled) => handled || handleChatEventsRequest(request, response, this.config, this.admission, this.chat, this.projects, this.agUiProjection, this.agUiConsumers, this.agUiRuntime, this.sourceProjectionActive))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

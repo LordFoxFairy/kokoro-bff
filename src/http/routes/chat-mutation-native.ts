@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ProjectService } from "../../application/project-service.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
 import { mutationTicket } from "../../application/idempotency.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
@@ -10,13 +11,12 @@ import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
 import { liveChatBusiness } from "./chat.js"
 import type { ChatBusinessProvider } from "./chat-business-provider.js"
-import { idempotencyKey, mutationFingerprint, pathOf, queryOf, readBody, requestBodyJson, requestId, requiresIdempotency } from "../request.js"
+import { idempotencyKey, mutationFingerprint, pathOf, readBody, requestBodyJson, requestId, requiresIdempotency } from "../request.js"
 import { send } from "../response.js"
 
-function directChatMutationPath(request: IncomingMessage): boolean {
+function chatMutationPath(request: IncomingMessage): boolean {
   const path = pathOf(request)
   if (path[0] !== "v1" || path[1] !== "sessions" || path.length !== 4) return false
-  if (queryOf(request).get("project_ref")?.trim() !== undefined && queryOf(request).get("project_ref")?.trim() !== "") return false
   return (
     (path[3] === "title" && request.method === "PATCH") ||
     (path[3] === "share" && ["POST", "DELETE"].includes(request.method ?? "")) ||
@@ -24,13 +24,12 @@ function directChatMutationPath(request: IncomingMessage): boolean {
   )
 }
 
-export function isChatDirectMutationRequest(request: IncomingMessage): boolean {
+export function isChatMutationRequest(request: IncomingMessage): boolean {
   try {
     const path = pathOf(request)
     if (path[0] !== "v1" || path[1] !== "sessions") return false
-    if (path.length === 3 && request.method === "DELETE")
-      return queryOf(request).get("project_ref")?.trim() === "" || queryOf(request).get("project_ref") === null
-    return directChatMutationPath(request)
+    if (path.length === 3 && request.method === "DELETE") return true
+    return chatMutationPath(request)
   } catch {
     return false
   }
@@ -47,10 +46,11 @@ export async function handleChatMutationRequest(
   config: BffConfig,
   admission: SessionAdmission,
   chat: ChatApplicationService,
+  projects: ProjectService,
   idempotency: Map<string, IdempotencyEntry>,
   persistent: IdempotencyRepository | null,
 ): Promise<boolean> {
-  if (!isChatDirectMutationRequest(request)) return false
+  if (!isChatMutationRequest(request)) return false
   const id = requestId(request)
   const abort = new AbortController()
   const onAborted = (): void => abort.abort()
@@ -69,7 +69,7 @@ export async function handleChatMutationRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const provider: ChatBusinessProvider = { chatService: chat }
+    const provider: ChatBusinessProvider = { chatService: chat, projectService: projects }
     const authorization = await authorizeChatRequest(request, admitted.context, businessPath, json, provider)
     if (authorization === null) return false
     if (!authorization.ok) {
