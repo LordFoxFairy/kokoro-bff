@@ -190,7 +190,7 @@ export type BffCompositionOptions = {
   appSkillBindingClient?: AppSkillBindingClient | null
   idempotency?: Map<string, IdempotencyEntry>
   agUiRuntime?: AgUiSessionRuntime
-  agUiProjector?: AgUiProjectorRunner
+  agUiProjector?: AgUiProjectorRunner | null
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher | null
   agentCancellationDispatcher?: AgentCancellationOutboxDispatcher | null
@@ -415,9 +415,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
           onError: scheduledWorkerLog,
         }))
   const agentBaseUrl = config.upstreams.agents ?? null
-  const agUiProjector =
-    options.agUiProjector ??
-    (config.agentEnabled && agentBaseUrl !== null && businessStore?.agUiConsumers !== undefined
+  const explicitlySuppliedAgUiProjector = Object.prototype.hasOwnProperty.call(options, "agUiProjector")
+  const agUiProjector = explicitlySuppliedAgUiProjector
+    ? (options.agUiProjector ?? undefined)
+    : config.agentEnabled && agentBaseUrl !== null && businessStore?.agUiConsumers !== undefined
       ? new AgUiProjectorRunner(
           businessStore.agUi,
           businessStore.agUiConsumers,
@@ -441,7 +442,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
             cursorTombstoneRetentionMs: config.agUi.cursorTombstoneRetentionMs,
           },
         )
-      : undefined)
+      : undefined
   const projectScopeReleaseDispatcher =
     options.projectScopeReleaseDispatcher ??
     (config.storage === undefined || businessStore?.projectScopeReleaseOutbox === undefined

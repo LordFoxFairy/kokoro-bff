@@ -1,5 +1,5 @@
-import { Module } from "@nestjs/common"
-import { BFF_CONFIG, BFF_DATABASE, AGUI_PROJECTION, AGUI_PROJECTION_CONSUMERS, AGUI_RUNTIME, AGUI_SOURCE_PROJECTION_ACTIVE } from "../../common/tokens.js"
+import { Inject, Injectable, Module, OnApplicationShutdown, OnModuleInit } from "@nestjs/common"
+import { AGUI_PROJECTION, AGUI_PROJECTION_CONSUMERS, AGUI_PROJECTOR, AGUI_RUNTIME, AGUI_SOURCE_PROJECTION_ACTIVE, BFF_CONFIG, BFF_DATABASE } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { DatabaseModule } from "../../common/database/database.module.js"
 import { RedisModule } from "../../common/redis/redis.module.js"
@@ -8,6 +8,22 @@ import { PostgresAgUiProjectionRepository } from "../../infrastructure/postgres/
 import { PostgresAgUiConsumerRepository } from "../../infrastructure/postgres/agui-consumer-repository.js"
 import { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
+import { AgUiProjectorRunner } from "../../application/agui/projector.js"
+import { AgentAgUiSourceReader } from "../../infrastructure/clients/agent/projector-source.js"
+import { randomUUID } from "node:crypto"
+
+@Injectable()
+class AguiProjectorLifecycle implements OnModuleInit, OnApplicationShutdown {
+  public constructor(@Inject(AGUI_PROJECTOR) private readonly projector: AgUiProjectorRunner | null) {}
+
+  public onModuleInit(): void {
+    this.projector?.start()
+  }
+
+  public async onApplicationShutdown(): Promise<void> {
+    await this.projector?.stop()
+  }
+}
 
 @Module({
   imports: [RedisModule, DatabaseModule],
@@ -45,7 +61,43 @@ import { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
       inject: [BFF_CONFIG],
       useFactory: (config: BffConfig): boolean => config.agentEnabled && config.upstreams.agents !== null,
     },
+    {
+      provide: AGUI_PROJECTOR,
+      inject: [BFF_CONFIG, AGUI_PROJECTION, AGUI_PROJECTION_CONSUMERS],
+      useFactory: (
+        config: BffConfig,
+        projection: AgUiProjectionService,
+        consumers: PostgresAgUiConsumerRepository,
+      ): AgUiProjectorRunner | null => {
+        const baseUrl = config.upstreams.agents ?? null
+        if (!config.agentEnabled || baseUrl === null) return null
+        return new AgUiProjectorRunner(
+          projection,
+          consumers,
+          new AgentAgUiSourceReader(config, baseUrl, {
+            maxAttempts: config.agUi.projectorSourceMaxAttempts,
+            leaseSettlementReserveMs: config.agUi.projectorLeaseSettlementReserveMs,
+          }),
+          {
+            workerId: `bff-agui-projector-${process.pid}-${randomUUID()}`,
+            maxConsumersPerCycle: config.agUi.projectorMaxConsumersPerCycle,
+            sourcePageSize: config.agUi.projectorSourcePageSize,
+            maxPagesPerConsumer: config.agUi.projectorMaxPagesPerConsumer,
+            leaseDurationMs: config.agUi.projectorLeaseDurationMs,
+            pollIntervalMs: config.agUi.projectorPollIntervalMs,
+            errorBackoffMs: config.agUi.projectorErrorBackoffMs,
+            errorBackoffMaxMs: config.agUi.projectorErrorBackoffMaxMs,
+            errorBackoffJitterPercent: config.agUi.projectorErrorBackoffJitterPercent,
+            retentionMs: config.agUi.retentionMs,
+            gcIntervalMs: config.agUi.gcIntervalMs,
+            gcBatchSize: config.agUi.gcBatchSize,
+            cursorTombstoneRetentionMs: config.agUi.cursorTombstoneRetentionMs,
+          },
+        )
+      },
+    },
+    AguiProjectorLifecycle,
   ],
-  exports: [AGUI_PROJECTION, AGUI_PROJECTION_CONSUMERS, AGUI_RUNTIME, AGUI_SOURCE_PROJECTION_ACTIVE],
+  exports: [AGUI_PROJECTION, AGUI_PROJECTION_CONSUMERS, AGUI_PROJECTOR, AGUI_RUNTIME, AGUI_SOURCE_PROJECTION_ACTIVE],
 })
 export class AguiModule {}

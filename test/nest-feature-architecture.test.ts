@@ -299,6 +299,22 @@ test("AgentDispatchModule owns Agent outbox worker lifecycle", async () => {
   assert.match(runtime, /explicitlySuppliedAgentCancellationDispatcher/u)
 })
 
+test("AguiModule owns the projector lifecycle", async () => {
+  const [aguiModule, legacyModule, legacyRuntime, runtime] = await Promise.all([
+    readFile(path.join(root, "src/modules/agui/agui.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+  ])
+  assert.match(aguiModule, /provide: AGUI_PROJECTOR/u)
+  assert.match(aguiModule, /AguiProjectorLifecycle/u)
+  assert.match(aguiModule, /AgentAgUiSourceReader/u)
+  assert.match(legacyModule, /AguiModule/u)
+  assert.match(legacyRuntime, /AGUI_PROJECTOR/u)
+  assert.doesNotMatch(legacyRuntime, /this\.composition\.agUiProjector\?\.start\(\)/u)
+  assert.match(runtime, /explicitlySuppliedAgUiProjector/u)
+})
+
 test("McpModule owns MCP route admission and candidate clients", async () => {
   const [mcpModule, middleware, route, connectorRoute, adminMiddleware, adminRoute, publicationMiddleware, publicationRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/mcp/mcp.module.ts"), "utf8"),
