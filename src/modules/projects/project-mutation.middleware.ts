@@ -12,26 +12,11 @@ import type { ProjectService } from "../../application/project-service.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
-import { failure, ok } from "../../contracts/index.js"
+import { failure } from "../../contracts/index.js"
 import { mutationTicket } from "../../application/idempotency.js"
 import { idempotencyKey, mutationFingerprint, pathOf, readBody, requestBodyJson, requestId } from "../../http/request.js"
-import { reply, send } from "../../http/response.js"
-import { projectName } from "../../domain/project/name.js"
-
-type ProjectMutation = Readonly<{ kind: "create" } | { kind: "instruction"; projectId: string }>
-
-function projectMutation(request: IncomingMessage): ProjectMutation | null {
-  let path: string[]
-  try {
-    path = pathOf(request)
-  } catch {
-    return null
-  }
-  if (path[0] !== "v1" || path[1] !== "projects") return null
-  if (request.method === "POST" && path.length === 2) return { kind: "create" }
-  if (request.method === "PATCH" && path.length === 3 && path[2] !== undefined && path[2] !== "") return { kind: "instruction", projectId: path[2] }
-  return null
-}
+import { send } from "../../http/response.js"
+import { handleProjectMutationBusiness, projectMutation } from "../../http/routes/project-mutation-native.js"
 
 /** Projects-owned create/instruction commands; unrelated traffic continues to the next feature. */
 @Injectable()
@@ -51,13 +36,13 @@ export class ProjectMutationMiddleware implements NestMiddleware {
       next()
       return
     }
-    void this.handle(request, response, route).catch(() => {
+    void this.handle(request, response).catch(() => {
       if (!response.headersSent && !response.writableEnded && !response.destroyed)
         send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", requestId(request)))
     })
   }
 
-  private async handle(request: IncomingMessage, response: ServerResponse, route: ProjectMutation): Promise<void> {
+  private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const id = requestId(request)
     response.setHeader("x-request-id", id)
     const abort = new AbortController()
@@ -67,14 +52,12 @@ export class ProjectMutationMiddleware implements NestMiddleware {
     request.once("aborted", close)
     response.once("close", close)
     let mutation: import("../../application/idempotency.js").MutationTicket | null = null
-    let context: import("../../domain/request-context.js").RequestContext | null = null
     try {
       const admitted = await authorizeUserRequest(request, this.config, this.admission, id, abort.signal)
       if (!admitted.ok) {
         send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
         return
       }
-      context = admitted.context
       const body = await readBody(request)
       const json = requestBodyJson(request, body)
       if (json === null) {
@@ -109,39 +92,9 @@ export class ProjectMutationMiddleware implements NestMiddleware {
         return
       }
       mutation = ticket.ticket
-      const scope = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }
-      if (route.kind === "create") {
-        const name = projectName(json.name)
-        if (name === null) {
-          await reply(response, 400, failure("invalid_project", "Project name is required", id), admitted.context, this.idempotency, mutation)
-          return
-        }
-        const project = await this.projects.create(scope, name, typeof json.description === "string" ? json.description : "")
-        await reply(response, 200, ok({ project }, id), admitted.context, this.idempotency, mutation)
-        return
-      }
-      if (typeof json.instruction !== "string") {
-        await reply(response, 400, failure("invalid_project_instruction", "Project instruction must be a string", id), admitted.context, this.idempotency, mutation)
-        return
-      }
-      const project = await this.projects.updateInstruction(scope, route.projectId, json.instruction)
-      await reply(
-        response,
-        project === null ? 404 : 200,
-        project === null ? failure("project_not_found", "Project was not found", id) : ok({ project }, id),
-        admitted.context,
-        this.idempotency,
-        mutation,
-      )
+      await handleProjectMutationBusiness(request, response, admitted.context, this.projects, json, mutation, this.idempotency)
     } catch (error) {
-      if (mutation !== null && context !== null) {
-        const mapped = error instanceof Error && error.message === "PROJECT_SLUG_CONFLICT"
-          ? { status: 409, body: failure("project_exists", "A project with this slug already exists", id) }
-          : error instanceof Error && error.message === "PROJECT_NOT_FOUND"
-            ? { status: 404, body: failure("project_not_found", "Project was not found", id) }
-            : { status: 503, body: failure("business_store_unavailable", "The BFF business store is unavailable", id) }
-        await reply(response, mapped.status, mapped.body, context, this.idempotency, mutation).catch(() => undefined)
-      } else if (!response.headersSent && !response.writableEnded && !response.destroyed) {
+      if (!response.headersSent && !response.writableEnded && !response.destroyed) {
         send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", id))
       }
     } finally {

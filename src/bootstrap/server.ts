@@ -76,6 +76,7 @@ import { scheduledCreateInput } from "../application/scheduled/input.js"
 import type { ScheduledTaskCreateInput } from "../application/ports/scheduled-task-repository.js"
 import { authorizeChatRequest, type ChatAuthorization } from "../http/routes/chat-authorization.js"
 import { liveOwnerBusiness } from "../http/routes/owner.js"
+import { handleProjectMutationBusiness, projectMutation } from "../http/routes/project-mutation-native.js"
 import { handleMoriRequest } from "../http/routes/music-native.js"
 import { configuredUpstream, bffOwnedBusinessPath, upstreamKey } from "../http/routes/routing.js"
 import { schedulerDispatch } from "../http/routes/scheduler.js"
@@ -608,6 +609,11 @@ export async function handleBffRequest(
       await reply(response, 404, failure("bff_route_not_found", "Business route was not found", id), context, composition.idempotency, mutation)
     }
     return
+  }
+
+  if (composition.businessStore !== null && projectMutation(request) !== null) {
+    const projectOwner = composition.projectService ?? composition.businessStore.services.projects
+    if (projectOwner !== undefined && await handleProjectMutationBusiness(request, response, context, projectOwner, json, mutation, composition.idempotency)) return
   }
 
   if (businessPath[0] === "sessions") {

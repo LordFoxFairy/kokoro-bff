@@ -10,7 +10,6 @@ import type { IdempotencyEntry, MutationTicket } from "../../application/idempot
 import { scheduledCreateInput, scheduledPatchInput } from "../../application/scheduled/input.js"
 import { scheduledTaskResponse } from "../../application/scheduled/mappers.js"
 import { scheduledTaskId } from "./scheduler.js"
-import { projectName } from "../../domain/project/name.js"
 
 export type LiveBffAuthorization =
   | Readonly<{ ok: true }>
@@ -85,25 +84,6 @@ export async function liveBffBusiness(
   try {
     if (businessPath[0] === "projects") {
       const projectId = businessPath[1]
-      if (businessPath.length === 1 && method === "POST") {
-        const name = projectName(json.name)
-        if (name === null) {
-          await reply(response, 400, failure("invalid_project", "Project name is required", context.requestId), context, idempotency, mutation)
-          return true
-        }
-      const project = await store.services.projects.create(ownerScope, name, typeof json.description === "string" ? json.description : "")
-        await reply(response, 200, ok({ project }, context.requestId), context, idempotency, mutation)
-        return true
-      }
-      if (businessPath.length === 2 && projectId !== undefined && method === "PATCH") {
-        if (typeof json.instruction !== "string") {
-          await reply(response, 400, failure("invalid_project_instruction", "Project instruction must be a string", context.requestId), context, idempotency, mutation)
-          return true
-        }
-      const project = await store.services.projects.updateInstruction(ownerScope, projectId, json.instruction)
-        await reply(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ project }, context.requestId), context, idempotency, mutation)
-        return true
-      }
       if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "scheduled-tasks" && method === "POST") {
         const input = scheduledCreateInput(json, projectId)
         if (input === null) {
