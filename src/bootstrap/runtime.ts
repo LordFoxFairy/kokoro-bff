@@ -60,7 +60,7 @@ import { PlatformServiceCredentialSource } from "../infrastructure/clients/platf
 import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
 import type { LocalSkillImportClient } from "../http/routes/local-skill-import.js"
-import { skillShareRepositoryFromBusinessStore } from "../http/routes/skill-share-native.js"
+import { skillShareRepositoryFromStore } from "../http/routes/skill-share-native.js"
 import type { ProjectSkillSelectionProvider } from "../http/routes/project-skill-selection.js"
 import type { ProjectMcpRecommendationsProvider } from "../http/routes/project-mcp-recommendations.js"
 import { LocalSkillImportConnectClient } from "../infrastructure/clients/platform/local-skill-import-connect.js"
@@ -359,7 +359,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const skillShareRepository =
     options.skillShareRepository !== undefined
       ? options.skillShareRepository
-      : (skillShareRepositoryFromBusinessStore(businessStore) ?? null)
+      : (skillShareRepositoryFromStore(businessStore) ?? null)
   const chatService = options.chatService !== undefined ? options.chatService : (ownerServiceStore?.chatService ?? null)
   const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (ownerServiceStore?.chatTurnService ?? null)
   const projectService = options.projectService !== undefined ? options.projectService : (ownerServiceStore?.projectService ?? null)
