@@ -71,7 +71,7 @@ import { authorizeScheduledTaskMutation, handleScheduledTaskMutationBusiness, sc
 import { scheduledCreateInput } from "../application/scheduled/input.js"
 import type { ScheduledTaskCreateInput } from "../application/scheduled/scheduled-task-repository.js"
 import { authorizeChatRequest, type ChatAuthorization } from "../http/routes/chat-authorization.js"
-import { handleRetiredOwnerBusiness } from "../http/routes/retired-owner-native.js"
+import { handleRetiredOwnerRawRequest } from "../http/routes/retired-owner-native.js"
 import { billingPersonalRequest, handleBillingPersonalBusiness } from "../http/routes/billing-personal-native.js"
 import { handleSystemModelCatalogBusiness, systemModelCatalogRequest } from "../http/routes/system-model-catalog-native.js"
 import { livePlatformProjectionRead, platformProjectionRequest } from "../http/routes/platform-projection.js"
@@ -648,7 +648,6 @@ export async function handleBffRequest(
     )
     return
   }
-  if (await handleRetiredOwnerBusiness(request, response, context, composition.idempotency, mutation)) return
   if (upstreamBase === null) {
     await reply(
       response,
@@ -1056,6 +1055,13 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
             : handleScheduledTaskReadRequest(request, response, config, composition.sessionAdmission, composition.scheduledTaskReader),
       )
       .then((handled) => (handled ? true : handleSystemNativeRequest(request, response, config)))
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleRetiredOwnerRawRequest(request, response, config, composition.sessionAdmission),
+      )
       .then((handled) =>
         handled
           ? true

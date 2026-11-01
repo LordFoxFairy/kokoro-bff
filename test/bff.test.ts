@@ -1516,4 +1516,45 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(ownerCalls, 0)
     assert.equal(receipts.size, 0)
   })
+
+  it("terminates unknown System and Skills paths in the raw feature adapter while preserving compatibility 404s", async () => {
+    const owner = createServer((_request, response) => {
+      response.statusCode = 200
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { unexpected: true } }))
+    })
+    const ownerBase = await listen(owner)
+    const base = await listen(
+      liveServer(
+        config({ upstreams: { ...config().upstreams, system: ownerBase, platform: ownerBase } }),
+        {
+          skillAuthorization: { check: async () => ({ ok: true }) },
+        },
+      ),
+    )
+
+    for (const [path, code] of [
+      ["/v1/system/unknown", "system_projection_not_configured"],
+      ["/v1/skills/quota", "platform_operation_not_available"],
+    ] as const) {
+      const response = await fetch(`${base}${path}`, { headers: authHeaders() })
+      assert.equal(response.status, 503, path)
+      assert.equal(((await response.json()) as { error: { code: string } }).error.code, code, path)
+    }
+
+    for (const [path, init] of [
+      ["/v1/skills/missing", { method: "GET" }],
+      ["/v1/skills/missing/download", { method: "GET" }],
+      ["/v1/skills/missing/enable", { method: "POST", headers: { "idempotency-key": "raw-compat-enable" } }],
+    ] as const) {
+      const response = await fetch(`${base}${path}`, { ...init, headers: { ...authHeaders(), ...init.headers } })
+      assert.equal(response.status, 404, path)
+      assert.equal(((await response.json()) as { error: { code: string } }).error.code, path.endsWith("/enable") ? "bff_route_not_found" : "route_not_found", path)
+    }
+
+    const fixtureBase = await listen(testServer(config()))
+    const fixture = await fetch(`${fixtureBase}/v1/system/unknown`, { headers: authHeaders() })
+    assert.equal(fixture.status, 404)
+    assert.equal(((await fixture.json()) as { error: { code: string } }).error.code, "bff_route_not_found")
+  })
 })
