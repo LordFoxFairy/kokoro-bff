@@ -88,7 +88,7 @@ import { handleSkillDraftMutationRequest } from "../http/routes/skill-draft-muta
 import { handleSkillCatalogCommandRequest, handleSkillCoverRequest, handleSkillGithubPreviewRequest, handleSkillPackageUploadReadRequest } from "../http/routes/skill-catalog-command-native.js"
 import { handleSkillGithubImportRequest } from "../http/routes/skill-import-native.js"
 import { handleSkillAiImportRequest } from "../http/routes/skill-ai-import-native.js"
-import { handleSkillShareRequest, skillShareRepositoryFromBusinessStore } from "../http/routes/skill-share-native.js"
+import { handleSkillShareRequest } from "../http/routes/skill-share-native.js"
 import { handleAdminIdentityRequest } from "../http/routes/admin-identity-native.js"
 import { handleBillingAdminRequest } from "../http/routes/billing-admin-native.js"
 import { handleSystemAdminRequest } from "../http/routes/system-admin-native.js"
@@ -854,7 +854,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
               response,
               config,
               composition.sessionAdmission,
-              skillShareRepositoryFromBusinessStore(composition.businessStore),
+              composition.skillShareRepository ?? undefined,
               composition.skillProductClient,
               composition.skillSpecificationSource,
             ),

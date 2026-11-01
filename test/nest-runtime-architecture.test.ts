@@ -74,4 +74,7 @@ test("transitional runtime receives Skill usage from SkillsModule instead of onl
   assert.match(legacyRuntime, /SKILL_AI_ASSOCIATION/u)
   assert.match(runtime, /skillAiAssociation/u)
   assert.match(server, /composition\.skillAiAssociation/u)
+  assert.match(legacyRuntime, /SKILL_SHARE_REPOSITORY/u)
+  assert.match(runtime, /skillShareRepository/u)
+  assert.match(server, /composition\.skillShareRepository/u)
 })

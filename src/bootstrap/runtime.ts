@@ -32,6 +32,7 @@ import type { BffBusinessStore } from "../application/ports/bff-business-store.j
 import type { PersonalKnowledgeRepository } from "../application/ports/personal-knowledge-repository.js"
 import type { SkillUsageReader } from "../application/agui/skill-usage.js"
 import type { SkillAiAssociation } from "../application/skill-ai-handoff.js"
+import type { SkillShareRepository } from "../application/ports/skill-share-repository.js"
 import { ScheduledTaskOutboxDispatcher } from "../application/scheduled-task-outbox-dispatcher.js"
 import { AgentDispatchOutboxDispatcher } from "../application/agent-dispatch-outbox-dispatcher.js"
 import { AgentCancellationOutboxDispatcher } from "../application/agent-cancellation-outbox-dispatcher.js"
@@ -114,6 +115,7 @@ export type BffServerComposition = {
   personalKnowledgeRepository: PersonalKnowledgeRepository | null
   skillUsageReader: SkillUsageReader | null
   skillAiAssociation: ((tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>) | null
+  skillShareRepository: SkillShareRepository | null
   /** Chat-owned archive/share provider; global store fallback is transitional. */
   chatService: ChatApplicationService | null
   /** Project-owned pin provider; global store fallback is transitional. */
@@ -167,6 +169,7 @@ export type BffCompositionOptions = {
   personalKnowledgeRepository?: PersonalKnowledgeRepository | null
   skillUsageReader?: SkillUsageReader | null
   skillAiAssociation?: ((tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>) | null
+  skillShareRepository?: SkillShareRepository | null
   chatService?: ChatApplicationService | null
   projectService?: ProjectService | null
   sessionAdmission?: SessionAdmission
@@ -322,6 +325,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     options.personalKnowledgeRepository !== undefined ? options.personalKnowledgeRepository : (businessStore?.personalKnowledge ?? null)
   const skillUsageReader = options.skillUsageReader !== undefined ? options.skillUsageReader : (businessStore?.skillUsage ?? null)
   const skillAiAssociation = options.skillAiAssociation !== undefined ? options.skillAiAssociation : (businessStore?.skillAiAssociation ?? null)
+  const skillShareRepository = options.skillShareRepository !== undefined ? options.skillShareRepository : (businessStore?.skillShares ?? null)
   const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.services?.chat ?? null)
   const projectService =
     options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
@@ -713,6 +717,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     personalKnowledgeRepository,
     skillUsageReader,
     skillAiAssociation,
+    skillShareRepository,
     chatService,
     projectService,
     publicShareService,
