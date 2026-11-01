@@ -45,7 +45,7 @@ export class ChatMiddleware implements NestMiddleware {
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleSharedPublicRequest(request, response, this.config, this.publicShare)
       .then((handled) => handled || handleChatNativeRequest(request, response, this.config, this.admission, this.chat))
-      .then((handled) => handled || handleChatBusinessReadRequest(request, response, this.config, this.admission, this.chat))
+      .then((handled) => handled || handleChatBusinessReadRequest(request, response, this.config, this.admission, this.chat, this.projects))
       .then((handled) => handled || handleMessageFeedbackRequest(request, response, this.config, this.admission, this.chat))
       .then((handled) => handled || handleMessageRegenerationRequest(request, response, this.config, this.admission, this.chatTurns))
       .then((handled) => handled || handleMoveSessionRequest(request, response, this.config, this.admission, this.chat))

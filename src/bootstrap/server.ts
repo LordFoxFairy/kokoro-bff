@@ -754,7 +754,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
             ),
       )
       .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
-      .then((handled) => (handled ? true : handleChatBusinessReadRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
+      .then((handled) => (handled ? true : handleChatBusinessReadRequest(request, response, config, composition.sessionAdmission, composition.chatService, composition.projectService)))
       .then((handled) => (handled ? true : handleMessageFeedbackRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectRenameRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectDeleteRequest(request, response, config, composition.sessionAdmission, composition.projectService)))

@@ -61,6 +61,45 @@ test("Chat business read middleware owns direct collection reads without Project
   assert.equal(calls[0][1], "owner")
 })
 
+test("Chat business read middleware owns project-scoped collection reads with the Project owner", async () => {
+  const admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "owner" } })
+  const calls = []
+  const chat = {
+    listConversations: async (...args) => {
+      calls.push(["chat", ...args])
+      return { items: [], next_cursor: null }
+    },
+  }
+  const projects = {
+    find: async (...args) => {
+      calls.push(["project", ...args])
+      return { id: "project-1" }
+    },
+  }
+  const server = createServer((request, response) => {
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, projects).then((handled) => {
+      if (!handled) {
+        response.writeHead(404)
+        response.end()
+      }
+    })
+  })
+  servers.push(server)
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const port = server.address().port
+  const response = await fetch(`http://127.0.0.1:${port}/v1/sessions?project_ref=project-1`, {
+    headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret", authorization: "Bearer session" },
+  })
+  assert.equal(response.status, 200)
+  assert.deepEqual((await response.json()).data, { items: [], next_cursor: null })
+  assert.equal(calls[0][0], "project")
+  assert.equal(calls[0][1].tenantId, "tenant")
+  assert.equal(calls[0][1].subjectId, "owner")
+  assert.equal(calls[0][2], "project-1")
+  assert.equal(calls[1][0], "chat")
+})
+
 test("Chat business read middleware rechecks the session owner before serving a snapshot", async () => {
   const admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "owner" } })
   const calls = []

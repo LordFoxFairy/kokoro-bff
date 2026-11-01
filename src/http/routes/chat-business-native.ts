@@ -3,6 +3,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ProjectService } from "../../application/project-service.js"
 import { failure } from "../../contracts/index.js"
 import { pathOf, queryOf, requestId } from "../request.js"
 import { send } from "../response.js"
@@ -20,7 +21,7 @@ export function isChatBusinessReadRequest(request: IncomingMessage): boolean {
     (path.length === 6 && path[3] === "messages" && path[5] === "parts") ||
     (path.length === 6 && path[3] === "runs" && path[5] === "process")
   if (!valid) return false
-  return (queryOf(request).get("project_ref")?.trim() ?? "") === ""
+  return true
 }
 
 /** Chat-owned direct reads with feature-local admission and application-service dependencies. */
@@ -30,6 +31,7 @@ export async function handleChatBusinessReadRequest(
   config: BffConfig,
   admission: SessionAdmission,
   chat: ChatApplicationService | null,
+  projects: ProjectService | null = null,
 ): Promise<boolean> {
   if (!isChatBusinessReadRequest(request)) return false
   const id = requestId(request)
@@ -51,7 +53,15 @@ export async function handleChatBusinessReadRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, {}, { chatService: chat })
+    const projectRef = queryOf(request).get("project_ref")?.trim() ?? ""
+    if (projectRef !== "" && projects === null) return false
+    const authorization = await authorizeChatRequest(
+      request,
+      admitted.context,
+      businessPath,
+      {},
+      projects === null ? { chatService: chat } : { chatService: chat, projectService: projects },
+    )
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))
