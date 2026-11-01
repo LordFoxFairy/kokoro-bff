@@ -44,7 +44,7 @@ test("AccountModule owns the SessionAdmission provider consumed by the transitio
   assert.match(accountModule, /exports: \[[^\]]*SESSION_ADMISSION/u)
   assert.match(runtime, /Inject\(SESSION_ADMISSION\)/u)
   assert.match(runtime, /sessionAdmission/u)
-  assert.match(legacyModule, /imports: \[AccountModule\]/u)
+  assert.match(legacyModule, /imports: \[AccountModule(?:,|\])/u)
   assert.match(middleware, /handleAdminIdentityRequest/u)
   assert.match(nativeRoute, /handleAdminIdentityRequest/u)
   assert.match(server, /handleAdminIdentityRequest/u)
