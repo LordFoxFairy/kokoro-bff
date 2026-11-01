@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from "pg"
-import type { SharedTaskItem, SharedTasksPosition, SharedTasksRead } from "../../application/ports/chat-repository.js"
+import type { SharedTaskItem, SharedTasksPosition, SharedTasksRead } from "../../application/chat/chat-repository.js"
 
 /** One owner query on one leased client; cancellation never ends the shared pool. */
 export async function listOwnedSharedTasks(

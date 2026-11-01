@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg"
-import type { PrivateMessageRead } from "../../application/ports/chat-repository.js"
+import type { PrivateMessageRead } from "../../application/chat/chat-repository.js"
 
 type Scope = Readonly<{ tenantId: string; subjectId: string; conversationId: string }>
 type TerminalRow = {

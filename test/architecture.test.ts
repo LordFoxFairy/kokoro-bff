@@ -131,7 +131,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/ports/idempotency-repository.ts",
     "src/application/account/artifact-library-repository.ts",
     "src/application/ports/project-repository.ts",
-    "src/application/ports/chat-repository.ts",
+    "src/application/chat/chat-repository.ts",
     "src/application/ports/agent-dispatch-outbox-repository.ts",
     "src/application/ports/agent-dispatch-delivery.ts",
     "src/application/ports/scheduled-task-repository.ts",
@@ -595,7 +595,7 @@ test("private BFF resources use named owner scopes before receipts and keep serv
 
 test("Conversation collection filtering stays one BFF-owned discriminated path without resource authorization drift", async () => {
   const [port, authorization, route, service, repository, openapi] = await Promise.all([
-    readFile(path.join(root, "src/application/ports/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/chat/chat-repository.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-authorization.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
     readFile(path.join(root, "src/application/chat-service.ts"), "utf8"),

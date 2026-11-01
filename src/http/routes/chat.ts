@@ -13,7 +13,7 @@ import { parseMessageCreateRequest } from "../../application/chat/message-create
 import type { AuthorizedChatRequest } from "./chat-authorization.js"
 import { parseChatProcessPageInput } from "../chat-process-page-input.js"
 import { parseChatMessagePartsInput } from "../chat-message-parts-input.js"
-import type { PrivateMessageReadContext } from "../../application/ports/chat-repository.js"
+import type { PrivateMessageReadContext } from "../../application/chat/chat-repository.js"
 import { chatServiceOf, chatTurnServiceOf, type ChatBusinessProvider } from "./chat-business-provider.js"
 
 function pageInput(request: IncomingMessage, defaultLimit: number): { limit: number; cursor: string | null } | null {

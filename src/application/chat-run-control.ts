@@ -1,4 +1,4 @@
-import type { ChatExecutionHead } from "./ports/chat-repository.js"
+import type { ChatExecutionHead } from "./chat/chat-repository.js"
 
 /** Read-only admission policy. The owner remains the final authority after this snapshot. */
 export function resumeControlFailure(

@@ -1,7 +1,7 @@
 import type { IncomingMessage } from "node:http"
 
 import { parseMessageCreateRequest } from "../../application/chat/message-create-input.js"
-import type { ConversationCollectionFilter } from "../../application/ports/chat-repository.js"
+import type { ConversationCollectionFilter } from "../../application/chat/chat-repository.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { queryOf } from "../request.js"
 import { projectServiceOf, chatServiceOf, type ChatBusinessProvider } from "./chat-business-provider.js"

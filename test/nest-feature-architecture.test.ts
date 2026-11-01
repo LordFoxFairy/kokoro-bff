@@ -186,6 +186,21 @@ test("Chat public-share capability port is feature-local", async () => {
   assert.match(repository, /application\/chat\/public-share-repository\.js/u)
 })
 
+test("Chat repository port is feature-local", async () => {
+  assert.equal(await fileExists("src/application/chat/chat-repository.ts"), true)
+  assert.equal(await fileExists("src/application/ports/chat-repository.ts"), false)
+  const [service, route, repository, publicShare] = await Promise.all([
+    readFile(path.join(root, "src/application/chat-service.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/public-share-repository.ts"), "utf8"),
+  ])
+  assert.match(service, /chat\/chat-repository\.js/u)
+  assert.match(route, /application\/chat\/chat-repository\.js/u)
+  assert.match(repository, /application\/chat\/chat-repository\.js/u)
+  assert.match(publicShare, /application\/chat\/chat-repository\.js/u)
+})
+
 test("Skills share capability port is feature-local", async () => {
   assert.equal(await fileExists("src/application/skills/skill-share-repository.ts"), true)
   assert.equal(await fileExists("src/application/ports/skill-share-repository.ts"), false)

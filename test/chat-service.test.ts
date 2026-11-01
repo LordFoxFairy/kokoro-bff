@@ -7,7 +7,7 @@ import { ChatApplicationService } from "../dist/application/chat-service.js"
 import { authorizeChatRequest } from "../dist/http/routes/chat-authorization.js"
 import { liveChatBusiness } from "../dist/http/routes/chat.js"
 import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
-import type { ChatRepository, ConversationCollectionFilter, ConversationPage } from "../src/application/ports/chat-repository.ts"
+import type { ChatRepository, ConversationCollectionFilter, ConversationPage } from "../src/application/chat/chat-repository.ts"
 
 const collectionContext = { requestId: "request_collection_scope", identity: { namespace: "tenant_a", userId: "owner_a" } }
 

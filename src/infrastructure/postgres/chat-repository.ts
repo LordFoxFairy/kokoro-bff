@@ -1,17 +1,17 @@
 import { readChatComposerSelection } from "./chat-composer-selection.js"
 import { readRunFinalAnswer } from "./run-final-answer-read.js"
-import type { RunFinalAnswerQuery, RunFinalAnswer } from "../../application/ports/chat-repository.js"
+import type { RunFinalAnswerQuery, RunFinalAnswer } from "../../application/chat/chat-repository.js"
 import { readMessageFeedback, setMessageFeedback } from "./message-feedback.js"
 import type { MessageFeedbackQuery, SetMessageFeedback } from "../../application/chat/message-feedback-input.js"
-import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "../../application/ports/chat-repository.js"
+import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "../../application/chat/chat-repository.js"
 import { listOwnedArchivedTasks, readArchiveState, changeArchiveState } from "./archived-tasks.js"
 import { listOwnedSharedTasks } from "./shared-tasks.js"
-import type { SharedTasksPosition, SharedTasksRead } from "../../application/ports/chat-repository.js"
+import type { SharedTasksPosition, SharedTasksRead } from "../../application/chat/chat-repository.js"
 import { readRunInteraction } from "./agui-interaction-projection.js"
 import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
 import type { MessagePartsPage } from "../../contracts/chat.js"
-import type { MessagePartsQuery, PrivateMessageReadContext, PrivateMessagePage, MessageReadLifetime } from "../../application/ports/chat-repository.js"
+import type { MessagePartsQuery, PrivateMessageReadContext, PrivateMessagePage, MessageReadLifetime } from "../../application/chat/chat-repository.js"
 import { withMessageReadClient, messageReadLifetime, privateMessagesFromRows, readMessageParts, type PrivateMessageRow } from "./message-parts-read.js"
 
 import type {
@@ -24,7 +24,7 @@ import type {
   MoveConversationCommand,
   MoveConversationResult,
   RunProcessPage,
-} from "../../application/ports/chat-repository.js"
+} from "../../application/chat/chat-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Share } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
@@ -239,7 +239,7 @@ export class PostgresChatRepository implements ChatRepository {
     subjectId: string,
     conversationId: string,
     projectRef: string | undefined,
-  ): Promise<import("../../application/ports/chat-repository.js").ChatRunControlState | null> {
+  ): Promise<import("../../application/chat/chat-repository.js").ChatRunControlState | null> {
     const state = await this.readSnapshotState(tenantId, subjectId, conversationId, projectRef, false)
     return state === null ? null : state.executionHead === undefined ? {} : { executionHead: state.executionHead }
   }

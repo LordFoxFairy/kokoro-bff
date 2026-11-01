@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg"
 import { createHash } from "node:crypto"
 
-import type { RunProcessPage } from "../../application/ports/chat-repository.js"
+import type { RunProcessPage } from "../../application/chat/chat-repository.js"
 
 const CURSOR = /^agui_[0-9a-f]{32}$/u
 const MAX_PAGE_BYTES = 1024 * 1024

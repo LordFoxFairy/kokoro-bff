@@ -1,5 +1,5 @@
 import type { Pool } from "pg"
-import type { RunFinalAnswerQuery, RunFinalAnswer } from "../../application/ports/chat-repository.js"
+import type { RunFinalAnswerQuery, RunFinalAnswer } from "../../application/chat/chat-repository.js"
 import { withMessageReadClient } from "./message-parts-read.js"
 import { parseMessageParts } from "./message-parts.js"
 

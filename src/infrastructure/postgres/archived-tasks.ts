@@ -6,7 +6,7 @@ import type {
   ArchiveStateQuery,
   ArchiveStateCommand,
   ArchiveStateResult,
-} from "../../application/ports/chat-repository.js"
+} from "../../application/chat/chat-repository.js"
 import { ArchiveSqlLease } from "./archive-sql-lease.js"
 
 const validParent = `(c.project_ref IS NULL OR EXISTS (SELECT 1 FROM bff_project p WHERE p.tenant_id=c.tenant_id AND p.owner_id=c.owner_id AND p.deleted_at IS NULL AND (p.project_id=c.project_ref OR p.slug=c.project_ref)))`
