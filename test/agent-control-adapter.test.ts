@@ -7,6 +7,7 @@ import { DEFAULT_AGUI_CONFIG, type BffConfig } from "../dist/config/runtime.js"
 import { parseAgentControlReceipt } from "../dist/infrastructure/clients/agent/control-receipt.js"
 import { liveAgentSession } from "../dist/http/routes/agent.js"
 import { createLiveTestBffServer } from "./doubles/server.ts"
+import { createBffServer } from "../dist/bootstrap/server.js"
 
 const servers: Server[] = []
 const canonicalDigest = "sha256:25f421bfa958a4ed2ee20e9f23f67881d6ebd0be17df1581c729b2527c50409c"
@@ -99,6 +100,73 @@ function bffServer(configValue: BffConfig, authorized = true, chat: Parameters<t
     ),
   })
 }
+
+test("routes Agent control through the raw compatibility chain", async () => {
+  const observed: string[] = []
+  const agent = createServer((request, response) => {
+    observed.push(request.url ?? "")
+    response.writeHead(202, { "content-type": "application/json" })
+    response.end(JSON.stringify({
+      data: {
+        command_id: "command_raw",
+        request_digest: canonicalDigest,
+        status: "pending",
+        replayed: false,
+      },
+      meta: { request_id: "agent_request" },
+    }))
+  })
+  const agentBase = await listen(agent)
+  const receipts = new Map<string, { fingerprint: string; status: number; body: unknown }>()
+  const businessStore = {
+    ready: async (): Promise<void> => undefined,
+    close: async (): Promise<void> => undefined,
+    async claimReceipt(scope: string, fingerprint: string) {
+      const prior = receipts.get(scope)
+      if (prior !== undefined) return { claimed: false, receipt: prior }
+      const pending = { fingerprint, status: 102, body: {} }
+      receipts.set(scope, pending)
+      return { claimed: true, receipt: null }
+    },
+    async getReceipt(scope: string) { return receipts.get(scope) ?? null },
+    async putReceipt(scope: string, receipt: { fingerprint: string; status: number; body: unknown }) { receipts.set(scope, receipt) },
+    async compareAndSetReceipt() { return { updated: false, receipt: null } },
+    async releaseReceipt(scope: string) { receipts.delete(scope) },
+  }
+  const chat = {
+    async findConversation() {
+      return { session_id: "session_control", title: "Raw", owner_id: "user_control", created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z" }
+    },
+  }
+  const projects = { async find() { return null } }
+  const raw = createBffServer(config(agentBase), {
+    businessStore,
+    chatService: chat as never,
+    projectService: projects as never,
+    readiness: async (): Promise<void> => undefined,
+    sessionAdmission: new (class {
+      async verify(input: { token: string; requestId: string; signal: AbortSignal }) {
+        if (input.token !== "control-session") return { ok: false as const, status: 401 as const, code: "session_invalid" }
+        return { ok: true as const, identity: { namespace: "tenant_control", userId: "user_control" }, platformAdmin: false }
+      }
+    })(),
+  })
+  const base = await listen(raw)
+  const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
+    method: "POST",
+    headers: authHeaders("command_raw"),
+    body: JSON.stringify({ kind: "run.cancel" }),
+  })
+  assert.equal(response.status, 202)
+  assert.deepEqual((await response.json()).data, {
+    run_id: "run_control",
+    command_id: "command_raw",
+    request_digest: canonicalDigest,
+    status: "pending",
+    replayed: false,
+  })
+  assert.deepEqual(observed, ["/v1/runs/run_control/control"])
+})
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))

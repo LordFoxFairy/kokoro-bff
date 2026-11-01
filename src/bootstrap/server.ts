@@ -104,6 +104,7 @@ import { type ProjectSkillContentAccess } from "../http/routes/skill-package-ins
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 import { handleIamRelayRequest } from "../modules/iam-relay/iam-relay.middleware.js"
 import { handleAgentConnectionSetupRequest } from "../http/routes/agent-connection-setup-native.js"
+import { handleAgentControlRequest } from "../http/routes/agent-control-native.js"
 
 function projectContentAccessForRequest(
   request: IncomingMessage,
@@ -1050,6 +1051,26 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           : composition.routeHandler !== undefined
             ? false
             : handleAgentConnectionSetupRequest(request, response, config, composition.sessionAdmission),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined ||
+              composition.businessStore === null ||
+              composition.chatService === null ||
+              composition.projectService === null
+            ? false
+            : handleAgentControlRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.chatService,
+                composition.projectService,
+                composition.agUiRuntime,
+                composition.idempotency,
+                composition.businessStore,
+              ),
       )
       .then((handled) => {
         if (handled) return
