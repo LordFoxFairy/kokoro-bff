@@ -280,6 +280,25 @@ test("AgentRunsModule owns the run-display adapter and provider seam", async () 
   assert.doesNotMatch(server, /await runDisplayRoute\(/u)
 })
 
+test("AgentDispatchModule owns Agent outbox worker lifecycle", async () => {
+  const [dispatchModule, legacyRuntime, runtime] = await Promise.all([
+    readFile(path.join(root, "src/modules/agent-dispatch/agent-dispatch.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+  ])
+  assert.match(dispatchModule, /provide: AGENT_DISPATCH_DISPATCHER/u)
+  assert.match(dispatchModule, /provide: AGENT_CANCELLATION_DISPATCHER/u)
+  assert.match(dispatchModule, /AgentDispatchWorkerLifecycle/u)
+  assert.match(dispatchModule, /onModuleInit/u)
+  assert.match(dispatchModule, /onApplicationShutdown/u)
+  assert.match(legacyRuntime, /AGENT_DISPATCH_DISPATCHER/u)
+  assert.match(legacyRuntime, /AGENT_CANCELLATION_DISPATCHER/u)
+  assert.doesNotMatch(legacyRuntime, /this\.composition\.agentDispatchDispatcher\?\.start\(\)/u)
+  assert.doesNotMatch(legacyRuntime, /this\.composition\.agentCancellationDispatcher\?\.start\(\)/u)
+  assert.match(runtime, /explicitlySuppliedAgentDispatchDispatcher/u)
+  assert.match(runtime, /explicitlySuppliedAgentCancellationDispatcher/u)
+})
+
 test("McpModule owns MCP route admission and candidate clients", async () => {
   const [mcpModule, middleware, route, connectorRoute, adminMiddleware, adminRoute, publicationMiddleware, publicationRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/mcp/mcp.module.ts"), "utf8"),

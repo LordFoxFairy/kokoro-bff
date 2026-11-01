@@ -192,8 +192,8 @@ export type BffCompositionOptions = {
   agUiRuntime?: AgUiSessionRuntime
   agUiProjector?: AgUiProjectorRunner
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
-  agentDispatchDispatcher?: AgentDispatchOutboxDispatcher
-  agentCancellationDispatcher?: AgentCancellationOutboxDispatcher
+  agentDispatchDispatcher?: AgentDispatchOutboxDispatcher | null
+  agentCancellationDispatcher?: AgentCancellationOutboxDispatcher | null
   scheduledAgentDispatcher?: ScheduledAgentDispatcher
   scheduledAgentTerminalConsumer?: ScheduledAgentTerminalConsumer
   projectScopeReleaseDispatcher?: ProjectScopeReleaseOutboxDispatcher
@@ -378,20 +378,22 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : new ScheduledTaskOutboxDispatcher(businessStore.scheduledTaskOutbox, new SchedulerOutboxDelivery(config), {
           workerId: `bff-scheduled-outbox-${process.pid}-${randomUUID()}`,
         }))
-  const agentDispatchDispatcher =
-    options.agentDispatchDispatcher ??
-    (!config.agentEnabled || config.upstreams.agents === null || businessStore?.agentDispatchOutbox === undefined
+  const explicitlySuppliedAgentDispatchDispatcher = Object.prototype.hasOwnProperty.call(options, "agentDispatchDispatcher")
+  const agentDispatchDispatcher = explicitlySuppliedAgentDispatchDispatcher
+    ? (options.agentDispatchDispatcher ?? undefined)
+    : !config.agentEnabled || config.upstreams.agents === null || businessStore?.agentDispatchOutbox === undefined
       ? undefined
       : new AgentDispatchOutboxDispatcher(businessStore.agentDispatchOutbox, new AgentOutboxDelivery(config), {
           workerId: `bff-agent-outbox-${process.pid}-${randomUUID()}`,
-        }))
-  const agentCancellationDispatcher =
-    options.agentCancellationDispatcher ??
-    (!config.agentEnabled || config.upstreams.agents === null || businessStore?.agentCancellationOutbox === undefined
+        })
+  const explicitlySuppliedAgentCancellationDispatcher = Object.prototype.hasOwnProperty.call(options, "agentCancellationDispatcher")
+  const agentCancellationDispatcher = explicitlySuppliedAgentCancellationDispatcher
+    ? (options.agentCancellationDispatcher ?? undefined)
+    : !config.agentEnabled || config.upstreams.agents === null || businessStore?.agentCancellationOutbox === undefined
       ? undefined
       : new AgentCancellationOutboxDispatcher(businessStore.agentCancellationOutbox, new AgentCancellationDelivery(config), {
           workerId: `bff-agent-cancellation-${process.pid}-${randomUUID()}`,
-        }))
+        })
   const scheduledAgentDispatcher =
     options.scheduledAgentDispatcher ??
     (!config.agentEnabled || config.upstreams.agents === null || businessStore?.scheduledAgentDispatch === undefined
