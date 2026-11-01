@@ -139,6 +139,23 @@ function dispatchBody(extra = ""): string {
 }
 
 describe("Scheduler receiver admission", () => {
+  it("handles the raw callback before generic routing and preserves provider-null semantics", async () => {
+    const bff = createBffServer(config(null), { businessStore: null, readiness: async () => undefined })
+    const base = await listen(bff)
+    try {
+      const result = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
+        method: "POST",
+        headers: dispatchHeaders("raw-provider-null", "raw-provider-null-request"),
+        body: dispatchBody(),
+      })
+      assert.equal(result.status, 503)
+      assert.equal(result.headers.get("x-request-id"), "raw-provider-null-request")
+      assert.equal(((await result.json()) as { error: { code: string } }).error.code, "business_store_not_configured")
+    } finally {
+      await close(bff)
+    }
+  })
+
   it("rejects missing or malformed task revisions before claiming a receipt", async () => {
     let claims = 0
     const store = {

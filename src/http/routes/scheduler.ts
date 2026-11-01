@@ -64,6 +64,7 @@ export async function schedulerDispatch(
 ): Promise<boolean> {
   if (!isSchedulerDispatchRequest(request)) return false
   const fallbackRequestId = requestId(request)
+  response.setHeader("x-request-id", fallbackRequestId)
   if (request.method !== "POST") {
     send(response, 405, failure("method_not_allowed", "Only POST is supported", fallbackRequestId))
     return true

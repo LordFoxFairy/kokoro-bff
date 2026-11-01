@@ -452,6 +452,19 @@ test("ScheduledTasksModule owns the scheduled outbox worker lifecycle", async ()
   assert.match(runtime, /explicitlySuppliedScheduledAgentTerminalConsumer/u)
 })
 
+test("Scheduler dispatch shares the feature-owned entrypoint with the raw compatibility chain", async () => {
+  const [route, middleware, server] = await Promise.all([
+    readFile(path.join(root, "src/http/routes/scheduler.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/scheduled-tasks/scheduler-dispatch.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+  ])
+  assert.match(route, /isSchedulerDispatchRequest/u)
+  assert.match(route, /response\.setHeader\("x-request-id", fallbackRequestId\)/u)
+  assert.match(middleware, /schedulerDispatch\(request, response, this\.config/u)
+  assert.match(server, /schedulerDispatch\(request, response, config, schedulerProvider, composition\.idempotency\)/u)
+  assert.doesNotMatch(server, /segments\[0\] === "internal" && segments\[1\] === "bff" && segments\[2\] === "scheduled-tasks" && segments\[3\] === "dispatch"/u)
+})
+
 test("AgentRuns execution-binding and submitted-run reader ports are feature-local", async () => {
   assert.equal(await fileExists("src/application/agent-runs/project-execution-binding-reader.ts"), true)
   assert.equal(await fileExists("src/application/agent-runs/submitted-agent-run-reader.ts"), true)

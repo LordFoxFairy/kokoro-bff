@@ -78,7 +78,7 @@ import { livePlatformProjectionRead, platformProjectionRequest } from "../http/r
 import { handleProjectMutationBusiness, projectMutation } from "../http/routes/project-mutation-native.js"
 import { handleMoriRequest } from "../http/routes/music-native.js"
 import { configuredUpstream, bffOwnedBusinessPath, upstreamKey } from "../http/routes/routing.js"
-import { schedulerDispatch } from "../http/routes/scheduler.js"
+import { schedulerDispatch, type SchedulerDispatchProvider } from "../http/routes/scheduler.js"
 import { handleSystemNativeRequest } from "../http/routes/system-native.js"
 import { handleChatNativeRequest } from "../http/routes/chat-native.js"
 import { handleChatBusinessReadRequest } from "../http/routes/chat-business-native.js"
@@ -153,6 +153,17 @@ function isRawSessionRequest(request: IncomingMessage): boolean {
   }
 }
 
+function schedulerDispatchProviderForComposition(
+  composition: ReturnType<typeof createBffComposition>,
+): SchedulerDispatchProvider | null {
+  if (composition.schedulerDispatchReceipts === null || composition.scheduledTaskService === null) return null
+  return {
+    schedulerDispatchReceipts: composition.schedulerDispatchReceipts,
+    scheduledTasks: composition.scheduledTaskService,
+    ...(composition.scheduledAgentDispatch === null ? {} : { scheduledAgentDispatch: composition.scheduledAgentDispatch }),
+  }
+}
+
 export async function handleBffRequest(
   request: IncomingMessage,
   response: ServerResponse,
@@ -177,17 +188,6 @@ export async function handleBffRequest(
         retryable: false,
       },
     })
-    return
-  }
-  if (segments[0] === "internal" && segments[1] === "bff" && segments[2] === "scheduled-tasks" && segments[3] === "dispatch" && segments.length === 4) {
-    const schedulerProvider = composition.schedulerDispatchReceipts !== null && composition.scheduledTaskService !== null
-      ? {
-          schedulerDispatchReceipts: composition.schedulerDispatchReceipts,
-          scheduledTasks: composition.scheduledTaskService,
-          ...(composition.scheduledAgentDispatch === null ? {} : { scheduledAgentDispatch: composition.scheduledAgentDispatch }),
-        }
-      : null
-    await schedulerDispatch(request, response, config, schedulerProvider, composition.idempotency)
     return
   }
   const removedSkillRead =
@@ -688,9 +688,11 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
         receipts: composition.businessStore,
         idempotency: composition.idempotency,
       }
+  const schedulerProvider = schedulerDispatchProviderForComposition(composition)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
     const handler = handleHealthRequest(request, response, config, composition.readiness)
       .then((handled) => handled ? true : handleIamRelayRequest(request, response, config))
+      .then((handled) => handled ? true : schedulerDispatch(request, response, config, schedulerProvider, composition.idempotency))
       .then((handled) => handled ? true : composition.routeHandler === undefined ? handleSharedPublicRequest(request, response, config, composition.publicShareService) : false)
       .then((handled) => handled ? true : handleSharedReaderRequest(request, response, config, composition.sharedSessionReader))
       .then((handled) => handled ? true : handleAdminIdentityRequest(request, response, config, composition.sessionAdmission))
