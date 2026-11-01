@@ -599,7 +599,7 @@ test("McpModule owns MCP projections, custom API route admission and candidate c
   assert.match(server, /handleMcpProjectPublicationRequest/u)
   assert.match(mcpModule, /CUSTOM_API_CLIENT/u)
   assert.match(mcpModule, /CustomApiMiddleware/u)
-  assert.match(customMiddleware, /customApiRoute/u)
+  assert.match(customMiddleware, /handleCustomApiRequest/u)
   assert.match(customRoute, /customApiOperation/u)
   assert.match(server, /customApiRoute\(request, response, composition\.customApiClient/u)
   assert.match(route, /handleProjectMcpRecommendationsRequest/u)

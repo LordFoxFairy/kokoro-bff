@@ -36,8 +36,10 @@ import { mcpPrepareReceiptKeySchema, mcpPrepareReceiptQuerySchema } from "../mcp
 import { parseMcpPersonalServer } from "../mcp-personal-server-input.js"
 import type { McpPersonalJsonImportInput } from "../../infrastructure/clients/platform/mcp-personal-json-import-binding.js"
 import { parseMcpPersonalJsonImport } from "../mcp-personal-json-import-input.js"
-import { mcpRequestRemaining } from "../mcp-request-budget.js"
+import { mcpRequestRemaining, startMcpRequestBudget } from "../mcp-request-budget.js"
+import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
+import { failure } from "../../contracts/index.js"
 
 export type McpPersonalClient = Pick<McpPersonalConnectClient, "read"> &
   Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon" | "prepareReceipt">>
@@ -54,6 +56,38 @@ export function isMcpPersonalRequest(request: IncomingMessage): boolean {
     return path[0] === "browser" && path[1] === "v1" && mcpPersonalOperation(path.slice(2), request.method ?? "GET") !== null
   } catch {
     return false
+  }
+}
+
+/** Raw compatibility entrypoint for the feature-owned Personal MCP adapter. */
+export async function handleMcpPersonalRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  client: McpPersonalClient | null,
+  authorization: Pick<McpAuthorizationClient, "check">,
+): Promise<boolean> {
+  if (!isMcpPersonalRequest(request)) return false
+  startMcpRequestBudget(request, 10_000)
+  response.setHeader("cache-control", "no-store")
+  const id = requestId(request)
+  response.setHeader("x-request-id", id)
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000))
+    if (!admitted.ok) {
+      send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+      return true
+    }
+    const path = pathOf(request).slice(2)
+    const operation = mcpPersonalOperation(path, request.method ?? "GET")
+    if (operation === null) return false
+    await mcpPersonalRoute(request, response, config, { mcpPersonalClient: client, mcpAuthorization: authorization, sessionAdmission: admission }, admitted, path)
+    return true
+  } catch {
+    if (!response.headersSent && !response.writableEnded && !response.destroyed)
+      send(response, 503, failure("mcp_personal_dependency_unavailable", "Personal MCP is unavailable", id))
+    return true
   }
 }
 

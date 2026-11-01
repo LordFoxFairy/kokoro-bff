@@ -2,11 +2,17 @@ import { mcpIconSelection } from "../../infrastructure/clients/platform/mcp-icon
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { IncomingMessage, ServerResponse } from "node:http"
+import type { BffConfig } from "../../config/runtime.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import { authorizeUserRequest } from "../../auth/user-admission.js"
+import { failure as admissionFailure } from "../../contracts/index.js"
 import { z } from "zod"
 import type { AdmittedUserRequestContext } from "../../domain/request-context.js"
 import type { CustomApiInput, CustomApiOperation } from "../../infrastructure/clients/platform/custom-api-binding.js"
 import type { CustomApiConnectClient } from "../../infrastructure/clients/platform/custom-api-connect.js"
 import { send } from "../response.js"
+import { pathOf, requestId } from "../request.js"
+import { startMcpRequestBudget } from "../mcp-request-budget.js"
 import { connectorCommandFault } from "../../infrastructure/clients/platform/connector-command-fault.js"
 
 const profileId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u)
@@ -74,6 +80,40 @@ export function customApiOperation(path: string[], method: string): CustomApiOpe
   if (path.length === 3 && method === "DELETE") return "remove"
   return null
 }
+
+/** Raw compatibility entrypoint for the feature-owned Custom API adapter. */
+export async function handleCustomApiRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  client: Pick<CustomApiConnectClient, "execute"> | null,
+): Promise<boolean> {
+  let path: string[]
+  try {
+    path = pathOf(request).slice(2)
+  } catch {
+    return false
+  }
+  if (pathOf(request)[0] !== "browser" || pathOf(request)[1] !== "v1" || customApiOperation(path, request.method ?? "GET") === null) return false
+  startMcpRequestBudget(request, 10_000)
+  response.setHeader("cache-control", "no-store")
+  const id = requestId(request)
+  response.setHeader("x-request-id", id)
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000))
+    if (!admitted.ok) {
+      send(response, admitted.status, admissionFailure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+      return true
+    }
+    await customApiRoute(request, response, client, admitted.context, id, path)
+  } catch {
+    if (!response.headersSent && !response.writableEnded && !response.destroyed)
+      send(response, 503, admissionFailure("custom_api_dependency_unavailable", "Custom API is unavailable", id))
+  }
+  return true
+}
+
 function failure(response: ServerResponse, status: number, code: string, retryable = false): void {
   if (!response.destroyed && !response.writableEnded)
     send(response, status, {

@@ -22,8 +22,8 @@ import { handleAgentRunsInternalRequest } from "../http/routes/agent-runs-native
 import { handleProjectSkillSelectionRequest, projectSkillSelectionProvider } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 
-import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
-import { customApiOperation, customApiRoute } from "../http/routes/custom-api.js"
+import { handleMcpPersonalRequest, mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
+import { customApiOperation, customApiRoute, handleCustomApiRequest } from "../http/routes/custom-api.js"
 import { handleMcpAdminRequest } from "../http/routes/mcp-admin-native.js"
 import { handleMcpProjectPublicationRequest } from "../http/routes/mcp-project-publication-native.js"
 import { handleConnectorListRequest } from "../http/routes/connector-list-native.js"
@@ -1071,6 +1071,27 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 composition.idempotency,
                 composition.businessStore,
               ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleMcpPersonalRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.mcpPersonalClient,
+                composition.mcpAuthorization,
+              ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleCustomApiRequest(request, response, config, composition.sessionAdmission, composition.customApiClient),
       )
       .then((handled) => {
         if (handled) return
