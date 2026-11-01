@@ -3,6 +3,8 @@ import { DatabaseModule } from "../../common/database/database.module.js"
 import {
   BFF_CONFIG,
   BFF_DATABASE,
+  BFF_POOL,
+  PROJECT_IDEMPOTENCY,
   PROJECT_EXACT_DOWNLOAD_SOURCE,
   PROJECT_SCOPE_RELEASE_DISPATCHER,
   PROJECT_SCOPE_RELEASE_OUTBOX,
@@ -18,6 +20,7 @@ import { ProjectService } from "../../application/project-service.js"
 import { AccountModule } from "../account/account.module.js"
 import { ChatModule } from "../chat/chat.module.js"
 import { ProjectPinMiddleware } from "./project-pin.middleware.js"
+import { ProjectMutationMiddleware } from "./project-mutation.middleware.js"
 import { ProjectSkillPackageInspectionMiddleware } from "./project-skill-package-inspection.middleware.js"
 import { ProjectSkillDownloadMiddleware } from "./project-skill-download.middleware.js"
 import { SkillsModule } from "../skills/skills.module.js"
@@ -33,6 +36,9 @@ import type { ProjectScopeReleaseOutboxRepository } from "../../application/port
 import { ProjectScopeReleaseOutboxDispatcher } from "../../application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../../infrastructure/clients/storage/scope-release-client.js"
 import { randomUUID } from "node:crypto"
+import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
+import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
+import type { Pool } from "pg"
 
 @Injectable()
 class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, OnApplicationShutdown {
@@ -51,6 +57,7 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, OnApplicationS
   imports: [AccountModule, ChatModule, DatabaseModule, SkillsModule, ProjectAccessModule],
   providers: [
     ProjectPinMiddleware,
+    ProjectMutationMiddleware,
     ProjectSkillPackageInspectionMiddleware,
     ProjectSkillDownloadMiddleware,
     {
@@ -119,6 +126,11 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, OnApplicationS
       useFactory: (database: PostgresBffDatabase): ProjectScopeReleaseOutboxRepository => new PostgresProjectScopeReleaseOutboxRepository(database),
     },
     {
+      provide: PROJECT_IDEMPOTENCY,
+      inject: [BFF_POOL],
+      useFactory: (pool: Pool): IdempotencyRepository => new PostgresIdempotencyRepository(pool),
+    },
+    {
       provide: PROJECT_SCOPE_RELEASE_DISPATCHER,
       inject: [PROJECT_SCOPE_RELEASE_OUTBOX, BFF_CONFIG],
       useFactory: (repository: ProjectScopeReleaseOutboxRepository, config: BffConfig): ProjectScopeReleaseOutboxDispatcher | null => {
@@ -136,6 +148,7 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, OnApplicationS
 })
 export class ProjectsModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(ProjectMutationMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(ProjectPinMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(ProjectSkillDownloadMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(ProjectSkillPackageInspectionMiddleware).forRoutes({ path: "*", method: RequestMethod.GET })

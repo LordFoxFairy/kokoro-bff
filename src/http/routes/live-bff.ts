@@ -104,16 +104,6 @@ export async function liveBffBusiness(
         await reply(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ project }, context.requestId), context, idempotency, mutation)
         return true
       }
-      if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "tasks" && method === "GET") {
-      const tasks = await store.services.projects.tasks(ownerScope, projectId)
-        if (tasks === null) {
-          await reply(response, 404, failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
-        } else {
-          await reply(response, 200, ok({ tasks }, context.requestId), context, idempotency, mutation)
-        }
-        return true
-      }
-
       if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "scheduled-tasks" && method === "POST") {
         const input = scheduledCreateInput(json, projectId)
         if (input === null) {

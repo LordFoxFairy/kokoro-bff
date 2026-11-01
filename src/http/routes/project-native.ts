@@ -25,6 +25,7 @@ export type ProjectCoreReadProvider = Readonly<{
   list(scope: Readonly<{ tenantId: string; subjectId: string }>): Promise<readonly unknown[]>
   find(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<unknown | null>
   revisions(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<readonly unknown[] | null>
+  tasks(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string): Promise<readonly unknown[] | null>
   deletion(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string, signal: AbortSignal): Promise<unknown | null>
   rename(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string, name: string, key: string, signal: AbortSignal): Promise<RenameProjectResult>
   delete(
@@ -56,7 +57,11 @@ export function isProjectPinRequest(request: IncomingMessage): boolean {
 
 export function isProjectCoreReadRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
-  return request.method === "GET" && (path === "/v1/projects" || /^\/v1\/projects\/[^/]+$/u.test(path) || /^\/v1\/projects\/[^/]+\/instruction-revisions$/u.test(path))
+  return request.method === "GET" &&
+    (path === "/v1/projects" ||
+      /^\/v1\/projects\/[^/]+$/u.test(path) ||
+      /^\/v1\/projects\/[^/]+\/instruction-revisions$/u.test(path) ||
+      /^\/v1\/projects\/[^/]+\/tasks$/u.test(path))
 }
 
 export function isProjectDeletionStatusRequest(request: IncomingMessage): boolean {
@@ -616,6 +621,12 @@ export async function handleProjectCoreReadRequest(
     const scope = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }
     const path = (request.url ?? "").split("?", 1)[0] ?? ""
     const projectId = path === "/v1/projects" ? null : path.slice("/v1/projects/".length)
+    if (projectId !== null && projectId.endsWith("/tasks")) {
+      const tasks = await projects.tasks(scope, projectId.slice(0, -"/tasks".length))
+      if (abort.signal.aborted || response.destroyed || response.writableEnded) return true
+      send(response, tasks === null ? 404 : 200, tasks === null ? failure("project_not_found", "Project was not found", id) : ok({ tasks }, id))
+      return true
+    }
     if (projectId !== null && projectId.endsWith("/instruction-revisions")) {
       const revisions = await projects.revisions(scope, projectId.slice(0, -"/instruction-revisions".length))
       if (abort.signal.aborted || response.destroyed || response.writableEnded) return true

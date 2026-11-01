@@ -163,11 +163,12 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
   assert.doesNotMatch(server, /segments\[1\] === "shared"/u)
 })
 
-test("ProjectsModule owns the project-pin adapter and provider", async () => {
-  const [projectsModule, accessModule, middleware, nativeRoute, packageMiddleware, downloadMiddleware, server, liveBff] = await Promise.all([
+test("ProjectsModule owns the project command/read adapters and provider", async () => {
+  const [projectsModule, accessModule, middleware, mutationMiddleware, nativeRoute, packageMiddleware, downloadMiddleware, server, liveBff] = await Promise.all([
     readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-access.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-pin.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/projects/project-mutation.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/project-native.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-skill-package-inspection.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-skill-download.middleware.ts"), "utf8"),
@@ -177,6 +178,8 @@ test("ProjectsModule owns the project-pin adapter and provider", async () => {
   assert.match(projectsModule, /ProjectAccessModule/u)
   assert.match(accessModule, /provide: PROJECT_SERVICE/u)
   assert.match(projectsModule, /ProjectPinMiddleware/u)
+  assert.match(projectsModule, /ProjectMutationMiddleware/u)
+  assert.match(projectsModule, /PROJECT_IDEMPOTENCY/u)
   assert.match(projectsModule, /ProjectSkillPackageInspectionMiddleware/u)
   assert.match(projectsModule, /PROJECT_EXACT_DOWNLOAD_SOURCE/u)
   assert.match(projectsModule, /ProjectSkillDownloadMiddleware/u)
@@ -193,6 +196,10 @@ test("ProjectsModule owns the project-pin adapter and provider", async () => {
   assert.match(middleware, /handleProjectResourceUploadRequest/u)
   assert.match(middleware, /handleProjectResourceReadRequest/u)
   assert.match(middleware, /handleProjectCoreReadRequest/u)
+  assert.match(mutationMiddleware, /ProjectMutationMiddleware/u)
+  assert.match(mutationMiddleware, /PROJECT_IDEMPOTENCY/u)
+  assert.match(mutationMiddleware, /projectName/u)
+  assert.match(nativeRoute, /tasks\(scope/u)
   assert.match(middleware, /handleProjectSkillSelectionRequest/u)
   assert.match(middleware, /handleProjectSkillInstallationRequest/u)
   assert.match(projectsModule, /PROJECT_SKILL_SELECTION_PROVIDER/u)
