@@ -246,6 +246,20 @@ test("ScheduledTasksModule owns the current-state read adapter and provider", as
   assert.doesNotMatch(server, /await scheduledTaskReadRoute\(/u)
 })
 
+test("ScheduledTasksModule owns the scheduled outbox worker lifecycle", async () => {
+  const [scheduledModule, legacyRuntime, runtime] = await Promise.all([
+    readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+  ])
+  assert.match(scheduledModule, /provide: SCHEDULED_TASK_OUTBOX/u)
+  assert.match(scheduledModule, /provide: SCHEDULED_TASK_DISPATCHER/u)
+  assert.match(scheduledModule, /ScheduledTaskWorkerLifecycle/u)
+  assert.match(legacyRuntime, /SCHEDULED_TASK_DISPATCHER/u)
+  assert.doesNotMatch(legacyRuntime, /this\.composition\.scheduledTaskDispatcher\?\.start\(\)/u)
+  assert.match(runtime, /explicitlySuppliedScheduledTaskDispatcher/u)
+})
+
 test("AgentRunsModule owns internal admission and execution-binding adapters", async () => {
   const [agentModule, middleware, nativeRoute, controlRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/agent-runs/agent-runs.module.ts"), "utf8"),

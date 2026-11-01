@@ -191,7 +191,7 @@ export type BffCompositionOptions = {
   idempotency?: Map<string, IdempotencyEntry>
   agUiRuntime?: AgUiSessionRuntime
   agUiProjector?: AgUiProjectorRunner | null
-  scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
+  scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher | null
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher | null
   agentCancellationDispatcher?: AgentCancellationOutboxDispatcher | null
   scheduledAgentDispatcher?: ScheduledAgentDispatcher
@@ -371,13 +371,14 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     await storeReadiness()
   }
   const ownsStore = !explicitlySuppliedStore
-  const scheduledTaskDispatcher =
-    options.scheduledTaskDispatcher ??
-    (businessStore?.scheduledTaskOutbox === undefined
+  const explicitlySuppliedScheduledTaskDispatcher = Object.prototype.hasOwnProperty.call(options, "scheduledTaskDispatcher")
+  const scheduledTaskDispatcher = explicitlySuppliedScheduledTaskDispatcher
+    ? (options.scheduledTaskDispatcher ?? undefined)
+    : businessStore?.scheduledTaskOutbox === undefined
       ? undefined
       : new ScheduledTaskOutboxDispatcher(businessStore.scheduledTaskOutbox, new SchedulerOutboxDelivery(config), {
           workerId: `bff-scheduled-outbox-${process.pid}-${randomUUID()}`,
-        }))
+        })
   const explicitlySuppliedAgentDispatchDispatcher = Object.prototype.hasOwnProperty.call(options, "agentDispatchDispatcher")
   const agentDispatchDispatcher = explicitlySuppliedAgentDispatchDispatcher
     ? (options.agentDispatchDispatcher ?? undefined)

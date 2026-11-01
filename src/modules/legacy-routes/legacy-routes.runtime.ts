@@ -13,6 +13,7 @@ import {
   PROJECT_SERVICE,
   PROJECT_SKILL_SELECTION_PROVIDER,
   PUBLIC_SHARE_SERVICE,
+  SCHEDULED_TASK_DISPATCHER,
   SCHEDULED_TASK_READ_SERVICE,
   SESSION_ADMISSION,
   SKILL_AI_ASSOCIATION,
@@ -41,6 +42,7 @@ import type { SkillSpecificationSource } from "../../application/skill-specifica
 import type { AgentDispatchOutboxDispatcher } from "../../application/agent-dispatch-outbox-dispatcher.js"
 import type { AgentCancellationOutboxDispatcher } from "../../application/agent-cancellation-outbox-dispatcher.js"
 import type { AgUiProjectorRunner } from "../../application/agui/projector.js"
+import type { ScheduledTaskOutboxDispatcher } from "../../application/scheduled-task-outbox-dispatcher.js"
 
 @Injectable()
 export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown {
@@ -83,6 +85,8 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
     agentCancellationDispatcher: AgentCancellationOutboxDispatcher | null,
     @Inject(AGUI_PROJECTOR)
     agUiProjector: AgUiProjectorRunner | null,
+    @Inject(SCHEDULED_TASK_DISPATCHER)
+    scheduledTaskDispatcher: ScheduledTaskOutboxDispatcher | null,
   ) {
     this.composition = createBffComposition(config, {
       sessionAdmission,
@@ -103,11 +107,11 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
       agentDispatchDispatcher,
       agentCancellationDispatcher,
       agUiProjector,
+      scheduledTaskDispatcher,
     })
   }
 
   public onModuleInit(): void {
-    this.composition.scheduledTaskDispatcher?.start()
     this.composition.scheduledAgentDispatcher?.start()
     this.composition.scheduledAgentTerminalConsumer?.start()
     this.composition.projectScopeReleaseDispatcher?.start()

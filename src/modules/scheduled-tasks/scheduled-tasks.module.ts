@@ -1,16 +1,33 @@
-import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common"
+import { Inject, Injectable, Module, MiddlewareConsumer, NestModule, OnApplicationShutdown, OnModuleInit, RequestMethod } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
-import { BFF_CONFIG, BFF_DATABASE, SCHEDULED_TASK_READ_SERVICE } from "../../common/tokens.js"
+import { BFF_CONFIG, BFF_DATABASE, SCHEDULED_TASK_DISPATCHER, SCHEDULED_TASK_OUTBOX, SCHEDULED_TASK_READ_SERVICE } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import { PostgresScheduledTaskRepository } from "../../infrastructure/postgres/scheduled-task-repository.js"
 import { SchedulerControlClient } from "../../infrastructure/clients/scheduler/control-client.js"
 import { SchedulerTaskStateReader } from "../../infrastructure/clients/scheduler/task-state-reader.js"
 import { ScheduledTaskReadService } from "../../application/scheduled-task-read-service.js"
+import { ScheduledTaskOutboxDispatcher } from "../../application/scheduled-task-outbox-dispatcher.js"
+import { SchedulerOutboxDelivery } from "../../infrastructure/clients/scheduler/outbox-delivery.js"
+import type { ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
 import { AgentRunsModule } from "../agent-runs/agent-runs.module.js"
 import { AccountModule } from "../account/account.module.js"
 import { ProjectsModule } from "../projects/projects.module.js"
 import { ScheduledTaskReadMiddleware } from "./scheduled-task-read.middleware.js"
+import { randomUUID } from "node:crypto"
+
+@Injectable()
+class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdown {
+  public constructor(@Inject(SCHEDULED_TASK_DISPATCHER) private readonly dispatcher: ScheduledTaskOutboxDispatcher | null) {}
+
+  public onModuleInit(): void {
+    this.dispatcher?.start()
+  }
+
+  public async onApplicationShutdown(): Promise<void> {
+    await this.dispatcher?.stop()
+  }
+}
 
 @Module({
   imports: [AccountModule, ProjectsModule, AgentRunsModule, DatabaseModule],
@@ -31,8 +48,22 @@ import { ScheduledTaskReadMiddleware } from "./scheduled-task-read.middleware.js
         )
       },
     },
+    {
+      provide: SCHEDULED_TASK_OUTBOX,
+      inject: [BFF_DATABASE],
+      useFactory: (database: PostgresBffDatabase): ScheduledTaskOutboxRepository => new PostgresScheduledTaskRepository(database),
+    },
+    {
+      provide: SCHEDULED_TASK_DISPATCHER,
+      inject: [SCHEDULED_TASK_OUTBOX, BFF_CONFIG],
+      useFactory: (repository: ScheduledTaskOutboxRepository, config: BffConfig): ScheduledTaskOutboxDispatcher =>
+        new ScheduledTaskOutboxDispatcher(repository, new SchedulerOutboxDelivery(config), {
+          workerId: `bff-scheduled-outbox-${process.pid}-${randomUUID()}`,
+        }),
+    },
+    ScheduledTaskWorkerLifecycle,
   ],
-  exports: [SCHEDULED_TASK_READ_SERVICE],
+  exports: [SCHEDULED_TASK_READ_SERVICE, SCHEDULED_TASK_OUTBOX, SCHEDULED_TASK_DISPATCHER],
 })
 export class ScheduledTasksModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
