@@ -10,6 +10,7 @@ import {
   CHAT_TURN_SERVICE,
   PERSONAL_KNOWLEDGE_REPOSITORY,
   PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
+  PROJECT_SCOPE_RELEASE_DISPATCHER,
   PROJECT_SERVICE,
   PROJECT_SKILL_SELECTION_PROVIDER,
   PUBLIC_SHARE_SERVICE,
@@ -43,6 +44,7 @@ import type { AgentDispatchOutboxDispatcher } from "../../application/agent-disp
 import type { AgentCancellationOutboxDispatcher } from "../../application/agent-cancellation-outbox-dispatcher.js"
 import type { AgUiProjectorRunner } from "../../application/agui/projector.js"
 import type { ScheduledTaskOutboxDispatcher } from "../../application/scheduled-task-outbox-dispatcher.js"
+import type { ProjectScopeReleaseOutboxDispatcher } from "../../application/project-scope-release-outbox-dispatcher.js"
 
 @Injectable()
 export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown {
@@ -87,6 +89,8 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
     agUiProjector: AgUiProjectorRunner | null,
     @Inject(SCHEDULED_TASK_DISPATCHER)
     scheduledTaskDispatcher: ScheduledTaskOutboxDispatcher | null,
+    @Inject(PROJECT_SCOPE_RELEASE_DISPATCHER)
+    projectScopeReleaseDispatcher: ProjectScopeReleaseOutboxDispatcher | null,
   ) {
     this.composition = createBffComposition(config, {
       sessionAdmission,
@@ -108,13 +112,13 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
       agentCancellationDispatcher,
       agUiProjector,
       scheduledTaskDispatcher,
+      projectScopeReleaseDispatcher,
     })
   }
 
   public onModuleInit(): void {
     this.composition.scheduledAgentDispatcher?.start()
     this.composition.scheduledAgentTerminalConsumer?.start()
-    this.composition.projectScopeReleaseDispatcher?.start()
   }
 
   public async use(request: IncomingMessage, response: ServerResponse): Promise<void> {

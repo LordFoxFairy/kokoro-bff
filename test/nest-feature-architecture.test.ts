@@ -231,6 +231,20 @@ test("ProjectsModule owns the project-pin adapter and provider", async () => {
   assert.doesNotMatch(liveBff, /projectDeletionStatus/u)
 })
 
+test("ProjectsModule owns project-scope release worker lifecycle", async () => {
+  const [projectsModule, legacyRuntime, runtime] = await Promise.all([
+    readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+  ])
+  assert.match(projectsModule, /provide: PROJECT_SCOPE_RELEASE_OUTBOX/u)
+  assert.match(projectsModule, /provide: PROJECT_SCOPE_RELEASE_DISPATCHER/u)
+  assert.match(projectsModule, /ProjectScopeReleaseWorkerLifecycle/u)
+  assert.match(legacyRuntime, /PROJECT_SCOPE_RELEASE_DISPATCHER/u)
+  assert.doesNotMatch(legacyRuntime, /this\.composition\.projectScopeReleaseDispatcher\?\.start\(\)/u)
+  assert.match(runtime, /explicitlySuppliedProjectScopeReleaseDispatcher/u)
+})
+
 test("ScheduledTasksModule owns the current-state read adapter and provider", async () => {
   const [scheduledModule, middleware, nativeRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),

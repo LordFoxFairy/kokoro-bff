@@ -1,8 +1,11 @@
-import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common"
+import { Inject, Injectable, MiddlewareConsumer, Module, NestModule, OnApplicationShutdown, OnModuleInit, RequestMethod } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
 import {
   BFF_CONFIG,
+  BFF_DATABASE,
   PROJECT_EXACT_DOWNLOAD_SOURCE,
+  PROJECT_SCOPE_RELEASE_DISPATCHER,
+  PROJECT_SCOPE_RELEASE_OUTBOX,
   PROJECT_SERVICE,
   PROJECT_SKILL_SELECTION_PROVIDER,
   SKILL_DOWNLOAD_HANDLES,
@@ -10,6 +13,7 @@ import {
   SKILL_PACKAGE_INSPECTION_CLIENT,
 } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
+import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import { ProjectService } from "../../application/project-service.js"
 import { AccountModule } from "../account/account.module.js"
 import { ChatModule } from "../chat/chat.module.js"
@@ -24,6 +28,24 @@ import type { SkillInstallationConnectClient } from "../../infrastructure/client
 import type { SkillPackageInspectionConnectClient } from "../../infrastructure/clients/platform/skill-package-inspection-connect.js"
 import { projectInstallation } from "../../infrastructure/clients/platform/skill-installation-response.js"
 import { assertSkillWireKnown, skillTimestamp } from "../../infrastructure/clients/platform/skill-product-response.js"
+import { PostgresProjectScopeReleaseOutboxRepository } from "../../infrastructure/postgres/project-scope-release-outbox-repository.js"
+import type { ProjectScopeReleaseOutboxRepository } from "../../application/ports/project-scope-release-outbox.js"
+import { ProjectScopeReleaseOutboxDispatcher } from "../../application/project-scope-release-outbox-dispatcher.js"
+import { StorageScopeReleaseClient } from "../../infrastructure/clients/storage/scope-release-client.js"
+import { randomUUID } from "node:crypto"
+
+@Injectable()
+class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, OnApplicationShutdown {
+  public constructor(@Inject(PROJECT_SCOPE_RELEASE_DISPATCHER) private readonly dispatcher: ProjectScopeReleaseOutboxDispatcher | null) {}
+
+  public onModuleInit(): void {
+    this.dispatcher?.start()
+  }
+
+  public async onApplicationShutdown(): Promise<void> {
+    await this.dispatcher?.stop()
+  }
+}
 
 @Module({
   imports: [AccountModule, ChatModule, DatabaseModule, SkillsModule, ProjectAccessModule],
@@ -91,8 +113,26 @@ import { assertSkillWireKnown, skillTimestamp } from "../../infrastructure/clien
         })
       },
     },
+    {
+      provide: PROJECT_SCOPE_RELEASE_OUTBOX,
+      inject: [BFF_DATABASE],
+      useFactory: (database: PostgresBffDatabase): ProjectScopeReleaseOutboxRepository => new PostgresProjectScopeReleaseOutboxRepository(database),
+    },
+    {
+      provide: PROJECT_SCOPE_RELEASE_DISPATCHER,
+      inject: [PROJECT_SCOPE_RELEASE_OUTBOX, BFF_CONFIG],
+      useFactory: (repository: ProjectScopeReleaseOutboxRepository, config: BffConfig): ProjectScopeReleaseOutboxDispatcher | null => {
+        if (config.storage === undefined) return null
+        return new ProjectScopeReleaseOutboxDispatcher(
+          repository,
+          new StorageScopeReleaseClient(config.storage.baseUrl, config.storage.secret),
+          { workerId: `bff-project-scope-release-${process.pid}-${randomUUID()}` },
+        )
+      },
+    },
+    ProjectScopeReleaseWorkerLifecycle,
   ],
-  exports: [PROJECT_EXACT_DOWNLOAD_SOURCE, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER],
+  exports: [PROJECT_EXACT_DOWNLOAD_SOURCE, PROJECT_SCOPE_RELEASE_OUTBOX, PROJECT_SCOPE_RELEASE_DISPATCHER, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER],
 })
 export class ProjectsModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

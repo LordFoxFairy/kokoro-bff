@@ -141,7 +141,7 @@ export type BffServerComposition = {
   agentCancellationDispatcher?: AgentCancellationOutboxDispatcher
   scheduledAgentDispatcher?: ScheduledAgentDispatcher
   scheduledAgentTerminalConsumer?: ScheduledAgentTerminalConsumer
-  projectScopeReleaseDispatcher?: ProjectScopeReleaseOutboxDispatcher
+  projectScopeReleaseDispatcher?: ProjectScopeReleaseOutboxDispatcher | null
   readiness: () => Promise<void>
   stopWorkers: () => Promise<void>
   close: () => Promise<void>
@@ -196,7 +196,7 @@ export type BffCompositionOptions = {
   agentCancellationDispatcher?: AgentCancellationOutboxDispatcher | null
   scheduledAgentDispatcher?: ScheduledAgentDispatcher
   scheduledAgentTerminalConsumer?: ScheduledAgentTerminalConsumer
-  projectScopeReleaseDispatcher?: ProjectScopeReleaseOutboxDispatcher
+  projectScopeReleaseDispatcher?: ProjectScopeReleaseOutboxDispatcher | null
   readiness?: () => Promise<void>
   close?: () => Promise<void>
   routeHandler?: BffRouteHandler
@@ -444,9 +444,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
           },
         )
       : undefined
-  const projectScopeReleaseDispatcher =
-    options.projectScopeReleaseDispatcher ??
-    (config.storage === undefined || businessStore?.projectScopeReleaseOutbox === undefined
+  const explicitlySuppliedProjectScopeReleaseDispatcher = Object.prototype.hasOwnProperty.call(options, "projectScopeReleaseDispatcher")
+  const projectScopeReleaseDispatcher = explicitlySuppliedProjectScopeReleaseDispatcher
+    ? (options.projectScopeReleaseDispatcher ?? undefined)
+    : config.storage === undefined || businessStore?.projectScopeReleaseOutbox === undefined
       ? undefined
       : new ProjectScopeReleaseOutboxDispatcher(
           businessStore.projectScopeReleaseOutbox,
@@ -454,7 +455,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
           {
             workerId: `bff-project-scope-release-${process.pid}-${randomUUID()}`,
           },
-        ))
+        )
   const closeStore = options.close ?? (ownsStore && businessStore !== null ? (): Promise<void> => businessStore.close() : async (): Promise<void> => undefined)
   let stopWorkersPromise: Promise<void> | null = null
   const stopWorkers = (): Promise<void> => {
