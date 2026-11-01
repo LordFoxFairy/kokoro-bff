@@ -11,11 +11,12 @@ import { ChatMiddleware } from "./chat.middleware.js"
 import { PostgresConversationArtifactLibrary } from "../../infrastructure/postgres/conversation-artifact-library.js"
 import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
 import { AgentDispatchModule } from "../agent-dispatch/agent-dispatch.module.js"
+import { AguiModule } from "../agui/agui.module.js"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
 import type { Pool } from "pg"
 
 @Module({
-  imports: [AccountModule, DatabaseModule, AgentDispatchModule],
+  imports: [AccountModule, DatabaseModule, AgentDispatchModule, AguiModule],
   providers: [
     ChatMiddleware,
     {

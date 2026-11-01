@@ -1,6 +1,6 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, CHAT_IDEMPOTENCY, CHAT_SERVICE, CHAT_TURN_SERVICE, PUBLIC_SHARE_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
+import { AGUI_PROJECTION, AGUI_PROJECTION_CONSUMERS, AGUI_RUNTIME, AGUI_SOURCE_PROJECTION_ACTIVE, BFF_CONFIG, CHAT_IDEMPOTENCY, CHAT_SERVICE, CHAT_TURN_SERVICE, PUBLIC_SHARE_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
@@ -15,6 +15,10 @@ import { handleMoveSessionRequest } from "../../http/routes/move-session-native.
 import { handleMessageRegenerationRequest } from "../../http/routes/message-regeneration-native.js"
 import { handleChatBusinessReadRequest } from "../../http/routes/chat-business-native.js"
 import { handleChatMutationRequest } from "../../http/routes/chat-mutation-native.js"
+import { handleChatEventsRequest } from "../../http/routes/chat-events-native.js"
+import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
+import type { AgUiProjectionConsumerRepository } from "../../application/agui/ports/agui-projection-repository.js"
+import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
 
 @Injectable()
 export class ChatMiddleware implements NestMiddleware {
@@ -27,6 +31,10 @@ export class ChatMiddleware implements NestMiddleware {
     @Inject(CHAT_TURN_SERVICE) private readonly chatTurns: ChatTurnApplicationService,
     @Inject(PUBLIC_SHARE_SERVICE) private readonly publicShare: PublicShareApplicationService,
     @Inject(CHAT_IDEMPOTENCY) private readonly chatIdempotency: IdempotencyRepository,
+    @Inject(AGUI_PROJECTION) private readonly agUiProjection: AgUiProjectionService,
+    @Inject(AGUI_PROJECTION_CONSUMERS) private readonly agUiConsumers: AgUiProjectionConsumerRepository,
+    @Inject(AGUI_RUNTIME) private readonly agUiRuntime: AgUiSessionRuntime,
+    @Inject(AGUI_SOURCE_PROJECTION_ACTIVE) private readonly sourceProjectionActive: boolean,
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
@@ -37,6 +45,7 @@ export class ChatMiddleware implements NestMiddleware {
       .then((handled) => handled || handleMessageRegenerationRequest(request, response, this.config, this.admission, this.chatTurns))
       .then((handled) => handled || handleMoveSessionRequest(request, response, this.config, this.admission, this.chat))
       .then((handled) => handled || handleChatMutationRequest(request, response, this.config, this.admission, this.chat, this.idempotency, this.chatIdempotency))
+      .then((handled) => handled || handleChatEventsRequest(request, response, this.config, this.admission, this.chat, this.agUiProjection, this.agUiConsumers, this.agUiRuntime, this.sourceProjectionActive))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })
