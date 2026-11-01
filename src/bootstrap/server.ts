@@ -37,11 +37,7 @@ import { handlePublishedSkillPackageRequest } from "../http/routes/skill-publish
 import { startSkillRequestBudget, skillRequestRemaining } from "../http/routes/skill-drafts.js"
 import { handleSkillAdminRequest } from "../http/routes/skill-admin-native.js"
 import { handleAccountNativeRequest } from "../http/routes/account-native.js"
-import { libraryFileListRoute } from "../http/routes/library-file-list.js"
-import { personalFileUploadRoute } from "../http/routes/personal-file-upload.js"
-import { personalFileDownloadRoute } from "../http/routes/personal-file-download.js"
-import { libraryArtifactRoute } from "../http/routes/library-artifact.js"
-import { libraryArtifactDownloadRoute } from "../http/routes/library-artifact-download.js"
+import { handleLibraryRequest, libraryRequest } from "../http/routes/library-native.js"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
 import { loadConfig, type BffConfig } from "../config/runtime.js"
@@ -510,58 +506,12 @@ export async function handleBffRequest(
       return
     }
   }
-  if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 1 && businessPath[0] === "library") {
-    await libraryFileListRoute(request, response, config, context, undefined, composition.businessStore?.artifactLibrary)
-    return
-  }
-  if (
-    composition.routeHandler === undefined &&
-    method === "GET" &&
-    businessPath.length === 4 &&
-    businessPath[0] === "library" &&
-    businessPath[1] === "artifacts"
-  ) {
-    await libraryArtifactRoute(request, response, config, context, composition.businessStore?.artifactLibrary, businessPath[2] ?? "", businessPath[3] ?? "")
-    return
-  }
-  if (
-    composition.routeHandler === undefined &&
-    method === "GET" &&
-    businessPath.length === 5 &&
-    businessPath[0] === "library" &&
-    businessPath[1] === "artifacts" &&
-    businessPath[4] === "content"
-  ) {
-    await libraryArtifactDownloadRoute(
-      request,
-      response,
-      config,
-      context,
-      composition.businessStore?.artifactLibrary,
-      businessPath[2] ?? "",
-      businessPath[3] ?? "",
-    )
-    return
-  }
-  if (
-    composition.routeHandler === undefined &&
-    method === "GET" &&
-    businessPath.length === 4 &&
-    businessPath[0] === "library" &&
-    businessPath[1] === "files" &&
-    businessPath[3] === "content"
-  ) {
-    await personalFileDownloadRoute(request, response, config, context, businessPath[2] ?? "")
-    return
-  }
-  if (
-    composition.routeHandler === undefined &&
-    method === "POST" &&
-    businessPath.length === 2 &&
-    businessPath[0] === "library" &&
-    businessPath[1] === "files"
-  ) {
-    await personalFileUploadRoute(request, response, config, context, body ?? Buffer.alloc(0), composition.businessStore, composition.idempotency)
+  if (composition.routeHandler === undefined && libraryRequest(request)) {
+    await handleLibraryRequest(request, response, config, context, {
+      ...(composition.businessStore?.artifactLibrary === undefined ? {} : { artifactLibrary: composition.businessStore.artifactLibrary }),
+      receipts: composition.businessStore,
+      idempotency: composition.idempotency,
+    }, body ?? Buffer.alloc(0))
     return
   }
   const durableChatAdmission =
@@ -628,7 +578,6 @@ export async function handleBffRequest(
   if (billingPersonalRequest(request) && await handleBillingPersonalBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency)) return
   if (systemModelCatalogRequest(request) && await handleSystemModelCatalogBusiness(request, response, config, context, composition.idempotency, mutation)) return
   if (platformProjectionRequest(request) && await livePlatformProjectionRead(request, response, config, context, businessPath)) return
-
   if (businessPath[0] === "sessions") {
     if (
       composition.businessStore !== null &&
@@ -718,11 +667,11 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleMcpProjectPublicationRequest(request, response, config, {
         sessionAdmission: composition.sessionAdmission,
         mcpAuthorization: composition.mcpAuthorization,
-        project: composition.projectService ?? composition.businessStore?.services.projects ?? null,
+        project: composition.projectService ?? composition.businessStore?.services?.projects ?? null,
         client: composition.mcpProjectPublicationClient,
       }))
       .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
-      .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService ?? composition.businessStore?.services.projects ?? null))
+      .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService ?? composition.businessStore?.services?.projects ?? null))
       .then((handled) => handled ? true : handleSkillDownloadRequest(
         request,
         response,
@@ -741,7 +690,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       }))
       .then((handled) => handled ? true : handleAppSkillBindingsRequest(request, response, config, composition.sessionAdmission, composition.openAppManagementAdmission, composition.appSkillBindingClient))
       .then((handled) => handled ? true : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization))
-      .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.services.chat ?? null))
+      .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService ?? composition.businessStore?.services?.chat ?? null))
       .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
       .then((handled) => handled ? true : composition.routeHandler !== undefined ? false : handleMoriRequest(request, response, config, composition.sessionAdmission, { entries: composition.idempotency, ...(composition.businessStore === null ? {} : { persistent: composition.businessStore }) }))
       .then((handled) =>
@@ -764,7 +713,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
               config,
               composition.sessionAdmission,
               composition.businessStore?.submittedAgentRuns && composition.businessStore?.services?.chat
-                ? { submittedAgentRuns: composition.businessStore.submittedAgentRuns, chat: composition.businessStore.services.chat }
+                ? { submittedAgentRuns: composition.businessStore.submittedAgentRuns, chat: composition.businessStore.services?.chat }
                 : null,
             ),
       )
