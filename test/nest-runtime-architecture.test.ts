@@ -59,3 +59,16 @@ test("transitional runtime receives Personal Knowledge from AccountModule instea
   assert.match(runtime, /businessStore\?\.personalKnowledge/u)
   assert.match(server, /composition\.personalKnowledgeRepository/u)
 })
+
+test("transitional runtime receives Skill usage from SkillsModule instead of only global store lookup", async () => {
+  const [runtime, legacyModule, legacyRuntime, server] = await Promise.all([
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+  ])
+  assert.match(legacyModule, /SkillsModule/u)
+  assert.match(legacyRuntime, /SKILL_USAGE_READER/u)
+  assert.match(runtime, /skillUsageReader/u)
+  assert.match(server, /composition\.skillUsageReader/u)
+})

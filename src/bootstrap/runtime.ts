@@ -30,6 +30,7 @@ import { AgUiProjectorRunner } from "../application/agui/projector.js"
 import type { IdempotencyEntry, MutationTicket } from "../application/idempotency.js"
 import type { BffBusinessStore } from "../application/ports/bff-business-store.js"
 import type { PersonalKnowledgeRepository } from "../application/ports/personal-knowledge-repository.js"
+import type { SkillUsageReader } from "../application/agui/skill-usage.js"
 import { ScheduledTaskOutboxDispatcher } from "../application/scheduled-task-outbox-dispatcher.js"
 import { AgentDispatchOutboxDispatcher } from "../application/agent-dispatch-outbox-dispatcher.js"
 import { AgentCancellationOutboxDispatcher } from "../application/agent-cancellation-outbox-dispatcher.js"
@@ -110,6 +111,7 @@ export type BffServerComposition = {
   /** Feature-owned account personalization provider; legacy composition is only a test/runtime fallback. */
   personalizationProvider: PersonalizationProvider | null
   personalKnowledgeRepository: PersonalKnowledgeRepository | null
+  skillUsageReader: SkillUsageReader | null
   /** Chat-owned archive/share provider; global store fallback is transitional. */
   chatService: ChatApplicationService | null
   /** Project-owned pin provider; global store fallback is transitional. */
@@ -161,6 +163,7 @@ export type BffCompositionOptions = {
   businessStore?: BffBusinessStore | null
   personalizationProvider?: PersonalizationProvider | null
   personalKnowledgeRepository?: PersonalKnowledgeRepository | null
+  skillUsageReader?: SkillUsageReader | null
   chatService?: ChatApplicationService | null
   projectService?: ProjectService | null
   sessionAdmission?: SessionAdmission
@@ -314,6 +317,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     options.personalizationProvider !== undefined ? options.personalizationProvider : null
   const personalKnowledgeRepository =
     options.personalKnowledgeRepository !== undefined ? options.personalKnowledgeRepository : (businessStore?.personalKnowledge ?? null)
+  const skillUsageReader = options.skillUsageReader !== undefined ? options.skillUsageReader : (businessStore?.skillUsage ?? null)
   const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.services?.chat ?? null)
   const projectService =
     options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
@@ -703,6 +707,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     businessStore,
     personalizationProvider,
     personalKnowledgeRepository,
+    skillUsageReader,
     chatService,
     projectService,
     publicShareService,

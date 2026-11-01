@@ -911,7 +911,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           ? true
           : composition.routeHandler !== undefined
             ? false
-            : handleSkillUsageRequest(request, response, config, composition.sessionAdmission, composition.businessStore?.skillUsage),
+            : handleSkillUsageRequest(request, response, config, composition.sessionAdmission, composition.skillUsageReader ?? undefined),
       )
       .then((handled) =>
         handled
