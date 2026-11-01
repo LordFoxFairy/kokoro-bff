@@ -2,7 +2,7 @@ import type { ChatMessage } from "../contracts/chat.js"
 import { isRecord } from "../domain/json.js"
 import { parseSkillSourceSelection } from "../domain/chat/skill-source-selection.js"
 import { chatMessage } from "./chat/mappers.js"
-import type { PublicShareRepository } from "./ports/public-share-repository.js"
+import type { PublicShareRepository } from "./chat/public-share-repository.js"
 
 export class PublicShareApplicationService {
   public constructor(private readonly repository: PublicShareRepository) {}

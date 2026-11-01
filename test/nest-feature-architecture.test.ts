@@ -175,6 +175,17 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
   assert.doesNotMatch(server, /segments\[1\] === "shared"/u)
 })
 
+test("Chat public-share capability port is feature-local", async () => {
+  assert.equal(await fileExists("src/application/chat/public-share-repository.ts"), true)
+  assert.equal(await fileExists("src/application/ports/public-share-repository.ts"), false)
+  const [service, repository] = await Promise.all([
+    readFile(path.join(root, "src/application/public-share-service.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/public-share-repository.ts"), "utf8"),
+  ])
+  assert.match(service, /chat\/public-share-repository\.js/u)
+  assert.match(repository, /application\/chat\/public-share-repository\.js/u)
+})
+
 test("ProjectsModule owns the project command/read adapters and provider", async () => {
   const [projectsModule, accessModule, middleware, mutationMiddleware, nativeRoute, packageMiddleware, downloadMiddleware, server] = await Promise.all([
     readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),

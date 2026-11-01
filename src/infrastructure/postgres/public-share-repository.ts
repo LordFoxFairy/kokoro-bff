@@ -1,5 +1,5 @@
 import type { MessagePage } from "../../application/ports/chat-repository.js"
-import type { PublicShareRepository } from "../../application/ports/public-share-repository.js"
+import type { PublicShareRepository } from "../../application/chat/public-share-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { ConversationShare } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
