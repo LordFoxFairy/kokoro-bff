@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { createClient, ConnectError, Code, type Client, type Transport } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
 import { ArtifactKind, StorageService } from "../../../generated/storage-connect/kokoro/storage/v3/storage_pb.js"
-import type { ArtifactAssociation } from "../../../application/ports/artifact-library-repository.js"
+import type { ArtifactAssociation } from "../../../application/account/artifact-library-repository.js"
 import { ProjectResourceError } from "../../../application/project-resource.error.js"
 import type { ArtifactDownloadReference } from "./artifact-download-transfer.js"
 

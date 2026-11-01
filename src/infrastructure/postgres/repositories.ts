@@ -33,7 +33,7 @@ import type { AgentCancellationOutboxRepository } from "../../application/ports/
 import { Sha256StableIdGenerator } from "../identifiers/scheduled-task-outbox-id.js"
 import { PostgresSchedulerDispatchReceiptRepository } from "./scheduler-dispatch-receipt-repository.js"
 import type { SchedulerDispatchReceiptRepository } from "../../application/ports/scheduler-dispatch-receipt-repository.js"
-import type { ArtifactLibraryRepository } from "../../application/ports/artifact-library-repository.js"
+import type { ArtifactLibraryRepository } from "../../application/account/artifact-library-repository.js"
 import { PostgresScheduledAgentDispatchRepository } from "./scheduled-agent-dispatch-repository.js"
 import type { ScheduledAgentDispatchRepository } from "../../application/ports/scheduled-agent-dispatch-repository.js"
 import { PostgresConversationArtifactLibrary } from "./conversation-artifact-library.js"

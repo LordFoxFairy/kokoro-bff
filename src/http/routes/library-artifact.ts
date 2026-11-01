@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { ArtifactLibraryRepository } from "../../application/ports/artifact-library-repository.js"
+import type { ArtifactLibraryRepository } from "../../application/account/artifact-library-repository.js"
 import { ProjectResourceError } from "../../application/project-resource.error.js"
 import { FinalArtifactClient, type FinalArtifact, type FinalArtifactContext } from "../../infrastructure/clients/storage/final-artifact.js"
 import { failure, ok } from "../../contracts/index.js"

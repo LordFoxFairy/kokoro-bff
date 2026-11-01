@@ -6,7 +6,7 @@ import { PersonalFileListClient, type PersonalFileContext } from "../../infrastr
 import { libraryFileListInput } from "../library-file-list-input.js"
 import { failure, ok } from "../../contracts/index.js"
 import { send } from "../response.js"
-import type { ArtifactLibraryRepository } from "../../application/ports/artifact-library-repository.js"
+import type { ArtifactLibraryRepository } from "../../application/account/artifact-library-repository.js"
 import { libraryArtifactListRoute } from "./library-artifact-list.js"
 
 export async function libraryFileListRoute(

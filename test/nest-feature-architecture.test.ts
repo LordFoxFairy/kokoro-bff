@@ -218,6 +218,23 @@ test("Account personal-knowledge repository port is feature-local", async () => 
   assert.match(runtime, /application\/account\/personal-knowledge-repository\.js/u)
 })
 
+test("Account library artifact repository port is feature-local", async () => {
+  assert.equal(await fileExists("src/application/account/artifact-library-repository.ts"), true)
+  assert.equal(await fileExists("src/application/ports/artifact-library-repository.ts"), false)
+  const [moduleSource, middleware, route, repository, runtime] = await Promise.all([
+    readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/account/library.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/library-native.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/conversation-artifact-library.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+  ])
+  assert.match(moduleSource, /application\/account\/artifact-library-repository\.js/u)
+  assert.match(middleware, /application\/account\/artifact-library-repository\.js/u)
+  assert.match(route, /application\/account\/artifact-library-repository\.js/u)
+  assert.match(repository, /application\/account\/artifact-library-repository\.js/u)
+  assert.match(runtime, /application\/account\/artifact-library-repository\.js/u)
+})
+
 test("ProjectsModule owns the project command/read adapters and provider", async () => {
   const [projectsModule, accessModule, middleware, mutationMiddleware, nativeRoute, packageMiddleware, downloadMiddleware, server] = await Promise.all([
     readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),

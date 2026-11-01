@@ -1,5 +1,5 @@
 import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
-import type { ArtifactAssociation, ArtifactLibraryRepository, ArtifactPosition } from "../../application/ports/artifact-library-repository.js"
+import type { ArtifactAssociation, ArtifactLibraryRepository, ArtifactPosition } from "../../application/account/artifact-library-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
 
 type AssociationRow = {

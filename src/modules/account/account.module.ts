@@ -13,7 +13,7 @@ import { PostgresPersonalKnowledgeRepository } from "../../infrastructure/postgr
 import { PostgresConversationArtifactLibrary } from "../../infrastructure/postgres/conversation-artifact-library.js"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
-import type { ArtifactLibraryRepository } from "../../application/ports/artifact-library-repository.js"
+import type { ArtifactLibraryRepository } from "../../application/account/artifact-library-repository.js"
 import { LibraryMiddleware } from "./library.middleware.js"
 import type { Pool } from "pg"
 
