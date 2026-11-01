@@ -32,75 +32,24 @@ test("BFF production entrypoint does not create a second raw HTTP listener", asy
 })
 
 test("Nest health controller owns health and readiness instead of the legacy route adapter", async () => {
-  const [healthModule, legacyModule, server] = await Promise.all([
+  const [healthModule, appModule, server] = await Promise.all([
     readFile(path.join(root, "src/modules/health/health.module.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
+    readFile(path.join(root, "src/app.module.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(healthModule, /@Get\("healthz"\)/u)
   assert.match(healthModule, /@Get\("readyz"\)/u)
-  assert.match(legacyModule, /exclude\(/u)
-  assert.match(legacyModule, /path: "healthz"/u)
-  assert.match(legacyModule, /path: "readyz"/u)
+  assert.doesNotMatch(appModule, /LegacyRoutesModule|GracefulShutdown/u)
   assert.doesNotMatch(server, /segments\.length === 1 && segments\[0\] === "healthz"/u)
   assert.doesNotMatch(server, /segments\.length === 1 && segments\[0\] === "readyz"/u)
 })
 
-test("transitional runtime receives Personal Knowledge from AccountModule instead of global store lookup", async () => {
-  const [runtime, accountModule, legacyRuntime, server] = await Promise.all([
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+test("Nest production has no legacy route composition", async () => {
+  const [appModule, main] = await Promise.all([
+    readFile(path.join(root, "src/app.module.ts"), "utf8"),
+    readFile(path.join(root, "src/main.ts"), "utf8"),
   ])
-  assert.match(accountModule, /PERSONAL_KNOWLEDGE_REPOSITORY/u)
-  assert.match(legacyRuntime, /PERSONAL_KNOWLEDGE_REPOSITORY/u)
-  assert.match(runtime, /personalKnowledgeRepository/u)
-  assert.match(runtime, /businessStore\?\.personalKnowledge/u)
-  assert.match(server, /composition\.personalKnowledgeRepository/u)
-})
-
-test("transitional runtime receives Skill usage from SkillsModule instead of only global store lookup", async () => {
-  const [runtime, legacyModule, legacyRuntime, server] = await Promise.all([
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
-  ])
-  assert.match(legacyModule, /SkillsModule/u)
-  assert.match(legacyRuntime, /SKILL_USAGE_READER/u)
-  assert.match(runtime, /skillUsageReader/u)
-  assert.match(server, /composition\.skillUsageReader/u)
-  assert.match(legacyRuntime, /SKILL_AI_ASSOCIATION/u)
-  assert.match(runtime, /skillAiAssociation/u)
-  assert.match(server, /composition\.skillAiAssociation/u)
-  assert.match(legacyRuntime, /SKILL_SHARE_REPOSITORY/u)
-  assert.match(runtime, /skillShareRepository/u)
-  assert.match(server, /composition\.skillShareRepository/u)
-  assert.match(legacyModule, /ChatModule/u)
-  assert.match(legacyRuntime, /PUBLIC_SHARE_SERVICE/u)
-  assert.match(runtime, /publicShareService/u)
-  assert.match(server, /composition\.publicShareService/u)
-  assert.match(legacyModule, /ScheduledTasksModule/u)
-  assert.match(legacyRuntime, /SCHEDULED_TASK_READ_SERVICE/u)
-  assert.match(runtime, /scheduledTaskReader/u)
-  assert.match(server, /composition\.scheduledTaskReader/u)
-  assert.match(legacyModule, /ProjectsModule/u)
-  assert.match(legacyModule, /AgentDispatchModule/u)
-  assert.match(legacyRuntime, /CHAT_SERVICE/u)
-  assert.match(legacyRuntime, /CHAT_TURN_SERVICE/u)
-  assert.match(legacyRuntime, /PROJECT_SERVICE/u)
-  assert.match(runtime, /chatTurnService/u)
-  assert.match(server, /composition\.chatTurnService/u)
-  assert.match(legacyRuntime, /PROJECT_SKILL_SELECTION_PROVIDER/u)
-  assert.match(runtime, /projectSkillSelectionProvider/u)
-  assert.match(server, /composition\.projectSkillSelectionProvider/u)
-  assert.match(legacyModule, /McpModule/u)
-  assert.match(legacyRuntime, /PROJECT_MCP_RECOMMENDATIONS_PROVIDER/u)
-  assert.match(runtime, /projectMcpRecommendationsProvider/u)
-  assert.match(server, /composition\.projectMcpRecommendationsProvider/u)
-  assert.match(legacyRuntime, /SKILL_EXACT_DOWNLOAD_SOURCE/u)
-  assert.match(legacyRuntime, /SKILL_SPECIFICATION_SOURCE/u)
-  assert.match(runtime, /exactSkillDownloadSource/u)
-  assert.match(server, /composition\.exactSkillDownloadSource/u)
+  assert.doesNotMatch(appModule, /LegacyRoutesModule|GracefulShutdown/u)
+  assert.doesNotMatch(main, /LegacyRoutesRuntime|handleBffRequest/u)
+  assert.equal(await exists("src/modules/legacy-routes/legacy-routes.runtime.ts"), false)
 })

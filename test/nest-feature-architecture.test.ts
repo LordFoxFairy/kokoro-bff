@@ -30,21 +30,18 @@ test("scheduled-task state reader port is owned by its feature module", async ()
   assert.equal(await fileExists("src/application/ports/scheduled-task-state-reader.ts"), false)
 })
 
-test("AccountModule owns the SessionAdmission provider consumed by the transitional runtime", async () => {
-  const [accountModule, middleware, nativeRoute, server, runtime, legacyModule] = await Promise.all([
+test("AccountModule owns the SessionAdmission provider", async () => {
+  const [accountModule, middleware, nativeRoute, server, runtime] = await Promise.all([
     readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/account/account.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/admin-identity-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
   assert.match(accountModule, /provide: SESSION_ADMISSION/u)
   assert.match(accountModule, /PERSONAL_KNOWLEDGE_REPOSITORY/u)
   assert.match(accountModule, /exports: \[[^\]]*SESSION_ADMISSION/u)
-  assert.match(runtime, /Inject\(SESSION_ADMISSION\)/u)
   assert.match(runtime, /sessionAdmission/u)
-  assert.match(legacyModule, /imports: \[AccountModule(?:,|\])/u)
   assert.match(middleware, /handleAdminIdentityRequest/u)
   assert.match(nativeRoute, /handleAdminIdentityRequest/u)
   assert.match(server, /handleAdminIdentityRequest/u)
@@ -125,7 +122,7 @@ test("MusicModule owns the Mori owner adapter and idempotency seam", async () =>
 })
 
 test("ChatModule owns the archive/share adapters and chat provider", async () => {
-  const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, regenerationNativeRoute, mutationRoute, eventsRoute, messageRoute, aguiModule, server, legacyModule] = await Promise.all([
+  const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, regenerationNativeRoute, mutationRoute, eventsRoute, messageRoute, aguiModule, server] = await Promise.all([
     readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/chat/chat.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-native.ts"), "utf8"),
@@ -137,7 +134,6 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
     readFile(path.join(root, "src/http/routes/chat-message-native.ts"), "utf8"),
     readFile(path.join(root, "src/modules/agui/agui.module.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
   ])
   assert.match(chatModule, /provide: CHAT_SERVICE/u)
   assert.match(chatModule, /CHAT_TURN_SERVICE/u)
@@ -172,7 +168,6 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
   assert.doesNotMatch(server, /await messageFeedbackRoute\(/u)
   assert.match(server, /handleMoveSessionRequest/u)
   assert.doesNotMatch(server, /await moveSessionRoute\(/u)
-  assert.doesNotMatch(legacyModule, /v1\/account\/(?:archived-tasks|shared-tasks)/u)
   assert.match(chatModule, /PUBLIC_SHARE_SERVICE/u)
   assert.match(chatModule, /SKILL_AI_ASSOCIATION/u)
   assert.match(middleware, /handleSharedPublicRequest/u)
@@ -251,16 +246,13 @@ test("ProjectsModule owns the project command/read adapters and provider", async
 })
 
 test("ProjectsModule owns project-scope release worker lifecycle", async () => {
-  const [projectsModule, legacyRuntime, runtime] = await Promise.all([
+  const [projectsModule, runtime] = await Promise.all([
     readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
   assert.match(projectsModule, /provide: PROJECT_SCOPE_RELEASE_OUTBOX/u)
   assert.match(projectsModule, /provide: PROJECT_SCOPE_RELEASE_DISPATCHER/u)
   assert.match(projectsModule, /ProjectScopeReleaseWorkerLifecycle/u)
-  assert.match(legacyRuntime, /PROJECT_SCOPE_RELEASE_DISPATCHER/u)
-  assert.doesNotMatch(legacyRuntime, /this\.composition\.projectScopeReleaseDispatcher\?\.start\(\)/u)
   assert.match(runtime, /explicitlySuppliedProjectScopeReleaseDispatcher/u)
 })
 
@@ -280,9 +272,8 @@ test("ScheduledTasksModule owns the current-state read adapter and provider", as
 })
 
 test("ScheduledTasksModule owns the scheduled outbox worker lifecycle", async () => {
-  const [scheduledModule, legacyRuntime, runtime] = await Promise.all([
+  const [scheduledModule, runtime] = await Promise.all([
     readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
   assert.match(scheduledModule, /provide: SCHEDULED_TASK_OUTBOX/u)
@@ -295,12 +286,6 @@ test("ScheduledTasksModule owns the scheduled outbox worker lifecycle", async ()
   assert.match(scheduledModule, /provide: SCHEDULED_AGENT_DISPATCH_REPOSITORY/u)
   assert.match(scheduledModule, /provide: SCHEDULED_AGENT_DISPATCHER/u)
   assert.match(scheduledModule, /provide: SCHEDULED_AGENT_TERMINAL_CONSUMER/u)
-  assert.match(legacyRuntime, /SCHEDULED_TASK_DISPATCHER/u)
-  assert.match(legacyRuntime, /SCHEDULED_AGENT_DISPATCHER/u)
-  assert.match(legacyRuntime, /SCHEDULED_AGENT_TERMINAL_CONSUMER/u)
-  assert.doesNotMatch(legacyRuntime, /this\.composition\.scheduledTaskDispatcher\?\.start\(\)/u)
-  assert.doesNotMatch(legacyRuntime, /this\.composition\.scheduledAgentDispatcher\?\.start\(\)/u)
-  assert.doesNotMatch(legacyRuntime, /this\.composition\.scheduledAgentTerminalConsumer\?\.start\(\)/u)
   assert.match(runtime, /explicitlySuppliedScheduledTaskDispatcher/u)
   assert.match(runtime, /explicitlySuppliedScheduledAgentDispatcher/u)
   assert.match(runtime, /explicitlySuppliedScheduledAgentTerminalConsumer/u)
@@ -341,9 +326,8 @@ test("AgentRunsModule owns the run-display adapter and provider seam", async () 
 })
 
 test("AgentDispatchModule owns Agent outbox worker lifecycle", async () => {
-  const [dispatchModule, legacyRuntime, runtime] = await Promise.all([
+  const [dispatchModule, runtime] = await Promise.all([
     readFile(path.join(root, "src/modules/agent-dispatch/agent-dispatch.module.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
   assert.match(dispatchModule, /provide: AGENT_DISPATCH_DISPATCHER/u)
@@ -351,27 +335,18 @@ test("AgentDispatchModule owns Agent outbox worker lifecycle", async () => {
   assert.match(dispatchModule, /AgentDispatchWorkerLifecycle/u)
   assert.match(dispatchModule, /onModuleInit/u)
   assert.match(dispatchModule, /onApplicationShutdown/u)
-  assert.match(legacyRuntime, /AGENT_DISPATCH_DISPATCHER/u)
-  assert.match(legacyRuntime, /AGENT_CANCELLATION_DISPATCHER/u)
-  assert.doesNotMatch(legacyRuntime, /this\.composition\.agentDispatchDispatcher\?\.start\(\)/u)
-  assert.doesNotMatch(legacyRuntime, /this\.composition\.agentCancellationDispatcher\?\.start\(\)/u)
   assert.match(runtime, /explicitlySuppliedAgentDispatchDispatcher/u)
   assert.match(runtime, /explicitlySuppliedAgentCancellationDispatcher/u)
 })
 
 test("AguiModule owns the projector lifecycle", async () => {
-  const [aguiModule, legacyModule, legacyRuntime, runtime] = await Promise.all([
+  const [aguiModule, runtime] = await Promise.all([
     readFile(path.join(root, "src/modules/agui/agui.module.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
   assert.match(aguiModule, /provide: AGUI_PROJECTOR/u)
   assert.match(aguiModule, /AguiProjectorLifecycle/u)
   assert.match(aguiModule, /AgentAgUiSourceReader/u)
-  assert.match(legacyModule, /AguiModule/u)
-  assert.match(legacyRuntime, /AGUI_PROJECTOR/u)
-  assert.doesNotMatch(legacyRuntime, /this\.composition\.agUiProjector\?\.start\(\)/u)
   assert.match(runtime, /explicitlySuppliedAgUiProjector/u)
 })
 

@@ -942,11 +942,10 @@ test("R257 personalization stays caller-owned and bypasses generic receipt dispa
   const route = await readFile(path.join(root, "src/http/routes/personalization.ts"), "utf8")
   const repository = await readFile(path.join(root, "src/infrastructure/postgres/personalization-repository.ts"), "utf8")
   const provider = await readFile(path.join(root, "src/modules/account/personalization.provider.ts"), "utf8")
-  const [server, middleware, accountModule, legacyModule] = await Promise.all([
+  const [server, middleware, accountModule] = await Promise.all([
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/modules/account/account.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
   ])
   assert.match(route, /context\.identity\.namespace/u)
   assert.match(route, /context\.identity\.userId/u)
@@ -958,7 +957,7 @@ test("R257 personalization stays caller-owned and bypasses generic receipt dispa
   assert.match(server, /composition\.personalizationProvider/u)
   assert.match(middleware, /handleAccountNativeRequest/u)
   assert.match(accountModule, /AccountMiddleware/u)
-  assert.doesNotMatch(legacyModule, /v1\/preferences\/personalization/u)
+  assert.doesNotMatch(server, /await personalizationRoute\(/u)
 })
 
 test("shared tasks stays in the existing Chat owner without a new pool or capability projection", async () => {

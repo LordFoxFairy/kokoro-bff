@@ -2,10 +2,8 @@ import { Module } from "@nestjs/common"
 import { BffConfigModule } from "./config/config.module.js"
 import { DatabaseModule } from "./common/database/database.module.js"
 import { RedisModule } from "./common/redis/redis.module.js"
-import { GracefulShutdown } from "./common/lifecycle/graceful-shutdown.js"
 import { HealthModule } from "./modules/health/health.module.js"
 import { IamRelayModule } from "./modules/iam-relay/iam-relay.module.js"
-import { LegacyRoutesModule } from "./modules/legacy-routes/legacy-routes.module.js"
 import { AccountModule } from "./modules/account/account.module.js"
 import { ChatModule } from "./modules/chat/chat.module.js"
 import { AgentRunsModule } from "./modules/agent-runs/agent-runs.module.js"
@@ -36,8 +34,8 @@ import { MusicModule } from "./modules/music/music.module.js"
     BillingModule,
     SystemModule,
     MusicModule,
-    LegacyRoutesModule,
+    // All production business routes are owned by feature modules. Raw
+    // createBffServer remains an explicit test/compatibility entrypoint.
   ],
-  providers: [GracefulShutdown],
 })
 export class AppModule {}
