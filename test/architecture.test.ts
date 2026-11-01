@@ -129,6 +129,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/chat/mappers.ts",
     "src/application/scheduled-task-service.ts",
     "src/application/ports/idempotency-repository.ts",
+    "src/application/ports/artifact-library-repository.ts",
     "src/application/ports/project-repository.ts",
     "src/application/ports/chat-repository.ts",
     "src/application/ports/agent-dispatch-outbox-repository.ts",

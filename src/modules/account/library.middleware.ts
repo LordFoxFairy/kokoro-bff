@@ -4,7 +4,7 @@ import { ACCOUNT_IDEMPOTENCY, BFF_CONFIG, LIBRARY_ARTIFACT_REPOSITORY, SESSION_A
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
-import type { ArtifactLibraryRepository } from "../../application/ports/bff-business-store.js"
+import type { ArtifactLibraryRepository } from "../../application/ports/artifact-library-repository.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { failure } from "../../contracts/index.js"

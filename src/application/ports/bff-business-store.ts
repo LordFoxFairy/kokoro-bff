@@ -12,23 +12,7 @@ import type { SkillUsageReader } from "../agui/skill-usage.js"
 import type { SkillAiAssociation } from "../skill-ai-handoff.js"
 import type { SkillShareRepository } from "./skill-share-repository.js"
 import type { PublicShareApplicationService } from "../public-share-service.js"
-
-export type ArtifactAssociation = Readonly<{
-  conversationId: string
-  artifactId: string
-  runId: string
-  sourceAssetId: string
-  sourceArtifactKind: "document" | "code" | "image" | "audio" | "video" | "data" | "archive" | "other"
-  sourceContentSha256: string
-  deliveredAt: string
-}>
-
-export type ArtifactPosition = Readonly<{ deliveredAt: string; conversationId: string; artifactId: string }>
-
-export interface ArtifactLibraryRepository {
-  listCandidates(tenantId: string, subjectId: string, position: ArtifactPosition | null, limit: number): Promise<readonly ArtifactAssociation[]>
-  findCandidate(tenantId: string, subjectId: string, conversationId: string, artifactId: string): Promise<ArtifactAssociation | null>
-}
+import type { ArtifactLibraryRepository } from "./artifact-library-repository.js"
 
 /** Runtime port consumed by BFF routes; PostgreSQL is one infrastructure implementation. */
 export interface BffBusinessStore extends IdempotencyRepository {

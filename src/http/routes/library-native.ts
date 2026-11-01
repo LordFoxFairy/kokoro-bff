@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { ArtifactLibraryRepository } from "../../application/ports/bff-business-store.js"
+import type { ArtifactLibraryRepository } from "../../application/ports/artifact-library-repository.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
 import { pathOf } from "../request.js"
