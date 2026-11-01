@@ -148,7 +148,7 @@ integration("knowledge admission rejects foreign scopes and closed-input violati
 integration("knowledge capacity serializes concurrent creates, not updates or other callers", async (t) => {
   const f = await fixture(t),
     scope = { tenantId: f.tenant, subjectId: f.actor },
-    repo = f.store.services.personalKnowledge,
+    repo = f.store.personalKnowledge,
     fields = { name: "n", when_to_use: "w", content: "c" }
   const options = () => ({ signal: new AbortController().signal, deadline: performance.now() + 5000 })
   const first = randomUUID()
@@ -199,11 +199,11 @@ integration("knowledge commit ACK loss recovers original identity and cancellati
   )
   const id = randomUUID()
   assert.equal((await repo.replace(scope, id, 0, fields, options())).kind, "unknown")
-  const confirmed = await f.store.services.personalKnowledge.get(scope, id, options())
+  const confirmed = await f.store.personalKnowledge.get(scope, id, options())
   assert.equal(confirmed.kind, "ok")
   assert.equal(confirmed.value.revision, 1)
   assert.equal(confirmed.value.content, "c")
-  assert.equal((await f.store.services.personalKnowledge.replace(scope, id, 0, fields, options())).kind, "conflict")
+  assert.equal((await f.store.personalKnowledge.replace(scope, id, 0, fields, options())).kind, "conflict")
   const abort = new AbortController(),
     cancelledId = randomUUID()
   const cancelled = new PostgresPersonalKnowledgeRepository(
@@ -212,8 +212,8 @@ integration("knowledge commit ACK loss recovers original identity and cancellati
     }),
   )
   assert.equal((await cancelled.replace(scope, cancelledId, 0, fields, options(abort.signal))).kind, "unavailable")
-  assert.equal((await f.store.services.personalKnowledge.get(scope, cancelledId, options())).kind, "not_found")
-  assert.equal((await f.store.services.personalKnowledge.replace(scope, randomUUID(), 0, { ...fields, name: "" }, options())).kind, "unavailable")
+  assert.equal((await f.store.personalKnowledge.get(scope, cancelledId, options())).kind, "not_found")
+  assert.equal((await f.store.personalKnowledge.replace(scope, randomUUID(), 0, { ...fields, name: "" }, options())).kind, "unavailable")
 })
 
 integration("bounded chunked knowledge mutations follow the same JSON and CAS contract", async (t) => {
@@ -237,7 +237,7 @@ integration("knowledge cancellation retires a real SQL lock wait without inserti
   try {
     await blocker.query("BEGIN")
     await blocker.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify(["personal-knowledge", f.tenant, f.actor])])
-    const pending = f.store.services.personalKnowledge.replace(
+    const pending = f.store.personalKnowledge.replace(
       scope,
       id,
       0,
@@ -265,7 +265,7 @@ integration("knowledge cancellation retires a real SQL lock wait without inserti
     ])
     assert.equal(result.kind, "unavailable")
     await blocker.query("ROLLBACK")
-    const read = await f.store.services.personalKnowledge.get(scope, id, { signal: new AbortController().signal, deadline: performance.now() + 5000 })
+    const read = await f.store.personalKnowledge.get(scope, id, { signal: new AbortController().signal, deadline: performance.now() + 5000 })
     assert.equal(read.kind, "not_found")
   } finally {
     abort.abort()
