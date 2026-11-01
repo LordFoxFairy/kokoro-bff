@@ -12,16 +12,13 @@ if (!ownerBase || !/^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/u.test(ownerBase))
 const webOrigin = "https://iam.example.test"
 const serviceHeaders = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret" }
 
-test("BFF preserves real IAM discovery, sign-in cookie and issuer Session over HTTP", async () => {
+test("BFF preserves native sign-in, session and sign-out over HTTP", async () => {
   const config = loadConfig({
     KOKORO_BFF_SHARED_SECRET: "test-secret",
     KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused_bff_relay_fixture?schema=kokoro_bff",
     KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
     KOKORO_IAM_BASE_URL: ownerBase,
-    KOKORO_IAM_ISSUER_URL: `${webOrigin}/iam`,
     KOKORO_IAM_WEB_ORIGIN: webOrigin,
-    KOKORO_IAM_WEB_CALLBACK_URI: `${webOrigin}/api/auth/callback/kokoro-iam`,
-    KOKORO_IAM_WEB_POST_LOGOUT_URI: `${webOrigin}/auth/sign-in`,
     NODE_ENV: "test",
   })
   const server = createLiveTestBffServer(config)
@@ -33,11 +30,6 @@ test("BFF preserves real IAM discovery, sign-in cookie and issuer Session over H
   if (address === null || typeof address === "string") throw new Error("BFF did not bind")
   const base = `http://127.0.0.1:${address.port}`
   try {
-    const discovery = await fetch(`${base}/iam/.well-known/openid-configuration`, { headers: serviceHeaders })
-    assert.equal(discovery.status, 200)
-    const metadata = await discovery.json()
-    assert.equal(metadata.issuer, `${webOrigin}/iam`)
-
     const signedIn = await fetch(`${base}/iam/sign-in/email`, {
       method: "POST",
       headers: { ...serviceHeaders, origin: webOrigin, "content-type": "application/json" },
@@ -49,24 +41,19 @@ test("BFF preserves real IAM discovery, sign-in cookie and issuer Session over H
     assert.ok(issuerCookies.some((value) => value.startsWith("kokoro-issuer.session_token=")))
     assert.ok(issuerCookies.every((value) => !value.startsWith("authjs.")))
     const cookie = issuerCookies.map((value) => value.split(";", 1)[0]).join("; ")
-    const session = await fetch(`${base}/iam/get-session`, { headers: { ...serviceHeaders, cookie: `authjs.session-token=never-forward; ${cookie}` } })
+
+    const session = await fetch(`${base}/iam/get-session`, {
+      headers: { ...serviceHeaders, cookie: `authjs.session-token=never-forward; ${cookie}` },
+    })
     assert.equal(session.status, 200)
     assert.equal((await session.json()).user.email, "owner@example.test")
 
-    const authorize = await fetch(
-      `${base}/iam/oauth2/authorize?client_id=unknown-client&response_type=code&scope=openid&redirect_uri=${encodeURIComponent(`${webOrigin}/api/auth/callback/kokoro-iam`)}&code_challenge=abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG&code_challenge_method=S256&state=state-1&resource=${encodeURIComponent("https://kokoro.dev/resources/iam-internal")}`,
-      { headers: { ...serviceHeaders, cookie }, redirect: "manual" },
-    )
-    assert.equal(authorize.status, 200)
-    assert.match(authorize.headers.get("content-type") ?? "", /application\/json/u)
-
-    const token = await fetch(`${base}/iam/oauth2/token`, {
+    const signedOut = await fetch(`${base}/iam/sign-out`, {
       method: "POST",
-      headers: { ...serviceHeaders, authorization: "Basic dW5rbm93bjpiYWQ=", "content-type": "application/x-www-form-urlencoded" },
-      body: "grant_type=refresh_token&refresh_token=invalid&resource=https%3A%2F%2Fkokoro.dev%2Fresources%2Fiam-internal",
+      headers: { ...serviceHeaders, origin: webOrigin, cookie },
+      redirect: "manual",
     })
-    assert.ok(token.status === 400 || token.status === 401)
-    assert.notEqual(token.headers.get("content-type"), null)
+    assert.ok([200, 204, 401, 303, 307].includes(signedOut.status))
   } finally {
     server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))

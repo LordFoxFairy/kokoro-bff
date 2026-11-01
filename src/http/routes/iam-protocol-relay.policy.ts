@@ -8,23 +8,12 @@ export const IAM_RELAY_POLICY = {
   iamOpenapiVersion: "0.7.0",
   iamOpenapiSha256: "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2",
   routes: {
-    "/.well-known/openid-configuration": ["GET"],
-    "/.well-known/oauth-authorization-server": ["GET"],
-    "/jwks": ["GET"],
-    "/oauth2/authorize": ["GET", "POST"],
-    "/oauth2/token": ["POST"],
-    "/oauth2/userinfo": ["GET"],
-    "/oauth2/revoke": ["POST"],
-    "/oauth2/end-session": ["GET", "POST"],
-    "/oauth2/end-session/confirm": ["POST"],
     "/sign-up/email": ["POST"],
     "/sign-in/email": ["POST"],
     "/verify-email": ["GET"],
     "/sign-out": ["POST"],
     "/get-session": ["GET"],
     "/organization/set-active": ["POST"],
-    "/oauth2/consent": ["POST"],
-    "/oauth2/continue": ["POST"],
   },
   invitationRoutes: [
     {
@@ -70,16 +59,16 @@ export const IAM_RELAY_POLICY = {
     errorQueryParameter: "error",
     allowedErrorCodes: ["TOKEN_EXPIRED", "INVALID_TOKEN", "USER_NOT_FOUND", "INVALID_USER"],
   },
-  requestHeaders: ["accept", "content-type", "origin", "cookie", "authorization", "x-request-id"],
+  requestHeaders: ["accept", "content-type", "origin", "cookie", "x-request-id"],
   responseHeaders: ["content-type", "cache-control", "location", "retry-after", "content-security-policy", "x-content-type-options", "pragma", "x-request-id"],
-  cookieNames: ["session_token", "session_data", "dont_remember", "session_token.oauth_logout_confirmation"],
+  cookieNames: ["session_token", "session_data", "dont_remember"],
   cookieNamePrefixes: ["kokoro-issuer.", "__Secure-kokoro-issuer."],
-  cookiePaths: { default: "/", logoutConfirmation: "/" },
+  cookiePaths: { default: "/" },
   // The issuer keeps interaction pages under its public `/iam` mount. These
   // are browser navigation targets, not owner API routes; admitting them
   // preserves the one outer product-login journey without turning the relay
   // into an open redirect.
-  webInteractionPaths: ["/auth/sign-in", "/auth/select-tenant", "/auth/consent", "/iam/interactions/consent"],
+  webInteractionPaths: ["/auth/sign-in", "/auth/select-tenant", "/iam/interactions/invitation"],
   maxQueryBytes: 8192,
   maxRequestBodyBytes: 65536,
   maxHeaderBytes: 16384,
@@ -161,18 +150,7 @@ export function fixedTenantSetActiveBody(body: Buffer, tenantId: string): "valid
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) return "invalid"
   const fields = value as Record<string, unknown>
-  if (Object.keys(fields).sort().join(",") !== "oauth_query,organizationId") return "invalid"
-  if (typeof fields.organizationId !== "string" || fields.organizationId.length === 0 || typeof fields.oauth_query !== "string") return "invalid"
-  const query = fields.oauth_query
-  if (
-    query.length === 0 ||
-    Buffer.byteLength(query) > IAM_RELAY_POLICY.maxQueryBytes ||
-    /[?#\\\u0000-\u001f\u007f]/u.test(query) ||
-    /%(?![0-9a-fA-F]{2})/u.test(query)
-  )
-    return "invalid"
-  for (const pair of query.split("&")) if (pair.indexOf("=") < 1) return "invalid"
-  const signatures = new URLSearchParams(query).getAll("sig")
-  if (signatures.length !== 1 || signatures[0] === "") return "invalid"
+  if (Object.keys(fields).sort().join(",") !== "organizationId") return "invalid"
+  if (typeof fields.organizationId !== "string" || fields.organizationId.length === 0) return "invalid"
   return fields.organizationId === tenantId ? "valid" : "tenant_mismatch"
 }

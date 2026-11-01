@@ -14,8 +14,8 @@ test("published browser-private policy is a deterministic read-only projection o
   const bytes = await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url))
   const published = JSON.parse(bytes.toString("utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "5267077fda99ad651cec258a44ffcb393fbdeb761783bb9646bb01856b1cb3bb")
-  assert.deepEqual(IAM_RELAY_POLICY.webInteractionPaths, ["/auth/sign-in", "/auth/select-tenant", "/auth/consent", "/iam/interactions/consent"])
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "b2adc766332c1ca87b55900f359f5cc931b7f50505a19ea21cbb0c36faf9f72f")
+  assert.deepEqual(IAM_RELAY_POLICY.webInteractionPaths, ["/auth/sign-in", "/auth/select-tenant", "/iam/interactions/invitation"])
   assert.equal(IAM_RELAY_POLICY.version, "2.1.0")
   assert.equal(IAM_RELAY_POLICY.iamOpenapiVersion, "0.7.0")
   assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "e3c035b99cf9479ac8357c7d38147f1541dcbcac")
@@ -58,7 +58,7 @@ test("published browser-private policy is a deterministic read-only projection o
       idempotency: "none",
     },
   ])
-  assert.deepEqual(IAM_RELAY_POLICY.cookiePaths, { default: "/", logoutConfirmation: "/" })
+  assert.deepEqual(IAM_RELAY_POLICY.cookiePaths, { default: "/" })
   assert.deepEqual((IAM_RELAY_POLICY as unknown as { invitationLocation?: unknown }).invitationLocation, {
     sourceRoute: "/verify-email",
     path: "/iam/interactions/invitation",
@@ -176,11 +176,8 @@ test("relay route matrix is exact and never treats aliases as owner paths", () =
   })
   assert.equal(iamRelayRoute("/iam/verify-email", "POST"), null)
   assert.equal(iamRelayRoute("/iam/%76erify-email?token=opaque", "GET"), null)
-  assert.deepEqual(iamRelayRoute("/iam/oauth2/authorize?client_id=a&ba_param=scope&ba_param=state", "GET"), {
-    path: "/oauth2/authorize",
-    query: "?client_id=a&ba_param=scope&ba_param=state",
-  })
   for (const path of [
+    "/iam/oauth2/authorize",
     "/iam/oauth2/authorize/",
     "/iam/oauth2/%61uthorize",
     "/iam//oauth2/authorize",
@@ -191,7 +188,7 @@ test("relay route matrix is exact and never treats aliases as owner paths", () =
     assert.equal(iamRelayRoute(path, "GET"), null, path)
   }
   assert.equal(iamRelayRoute("/iam/oauth2/token", "GET"), null)
-  assert.equal(iamRelayRoute("/iam/oauth2/token", "POST")?.path, "/oauth2/token")
+  assert.equal(iamRelayRoute("/iam/oauth2/token", "POST"), null)
 })
 
 test("only the locked issuer cookie names pass in their deployment mode", () => {
@@ -202,42 +199,15 @@ test("only the locked issuer cookie names pass in their deployment mode", () => 
   assert.equal(iamRelayCookieName("authjs.session-token", false), false)
 })
 
-test("relay URL configuration rejects partial settings and callback authority aliases", () => {
+test("native relay configuration requires only the canonical Web origin", () => {
   const base = {
     KOKORO_BFF_SHARED_SECRET: "test-secret",
     KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused?schema=kokoro_bff",
     KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
-    KOKORO_IAM_ISSUER_URL: "https://web.example.test/iam",
     KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
-    KOKORO_IAM_WEB_CALLBACK_URI: "https://web.example.test/api/auth/callback/kokoro-iam",
-    KOKORO_IAM_WEB_POST_LOGOUT_URI: "https://web.example.test/auth/sign-in",
   }
-  assert.equal(loadConfig(base).iamRelay?.callbackUri, base.KOKORO_IAM_WEB_CALLBACK_URI)
-  assert.throws(() => loadConfig({ ...base, KOKORO_IAM_WEB_CALLBACK_URI: undefined }), /IAM relay requires/u)
-  assert.throws(
-    () =>
-      loadConfig({
-        ...base,
-        KOKORO_IAM_WEB_CALLBACK_URI: "https://user:pass@web.example.test/api/auth/callback/kokoro-iam",
-      }),
-    /IAM relay URLs/u,
-  )
-  assert.throws(
-    () =>
-      loadConfig({
-        ...base,
-        KOKORO_IAM_WEB_CALLBACK_URI: "https://web.example.test/api/auth/callback/kokoro-iam?next=evil",
-      }),
-    /IAM relay URLs/u,
-  )
-  assert.throws(
-    () =>
-      loadConfig({
-        ...base,
-        KOKORO_IAM_ISSUER_URL: "https://other.example.test/iam",
-      }),
-    /IAM relay URLs/u,
-  )
+  assert.deepEqual(loadConfig(base).iamRelay, { webOrigin: base.KOKORO_IAM_WEB_ORIGIN, secureCookies: false })
+  assert.throws(() => loadConfig({ ...base, KOKORO_IAM_WEB_ORIGIN: "https://user:pass@web.example.test" }), /KOKORO_IAM_BASE_URL|KOKORO_IAM_WEB_ORIGIN/u)
 })
 
 test("R357 IAM 0.12 preserves all original fifteen consumer operations and their complete shared schemas", async () => {

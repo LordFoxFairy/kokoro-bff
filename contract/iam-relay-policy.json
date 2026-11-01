@@ -7,35 +7,6 @@
   "iamOpenapiVersion": "0.7.0",
   "iamOpenapiSha256": "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2",
   "routes": {
-    "/.well-known/openid-configuration": [
-      "GET"
-    ],
-    "/.well-known/oauth-authorization-server": [
-      "GET"
-    ],
-    "/jwks": [
-      "GET"
-    ],
-    "/oauth2/authorize": [
-      "GET",
-      "POST"
-    ],
-    "/oauth2/token": [
-      "POST"
-    ],
-    "/oauth2/userinfo": [
-      "GET"
-    ],
-    "/oauth2/revoke": [
-      "POST"
-    ],
-    "/oauth2/end-session": [
-      "GET",
-      "POST"
-    ],
-    "/oauth2/end-session/confirm": [
-      "POST"
-    ],
     "/sign-up/email": [
       "POST"
     ],
@@ -52,12 +23,6 @@
       "GET"
     ],
     "/organization/set-active": [
-      "POST"
-    ],
-    "/oauth2/consent": [
-      "POST"
-    ],
-    "/oauth2/continue": [
       "POST"
     ]
   },
@@ -126,7 +91,6 @@
     "content-type",
     "origin",
     "cookie",
-    "authorization",
     "x-request-id"
   ],
   "responseHeaders": [
@@ -142,22 +106,19 @@
   "cookieNames": [
     "session_token",
     "session_data",
-    "dont_remember",
-    "session_token.oauth_logout_confirmation"
+    "dont_remember"
   ],
   "cookieNamePrefixes": [
     "kokoro-issuer.",
     "__Secure-kokoro-issuer."
   ],
   "cookiePaths": {
-    "default": "/",
-    "logoutConfirmation": "/"
+    "default": "/"
   },
   "webInteractionPaths": [
     "/auth/sign-in",
     "/auth/select-tenant",
-    "/auth/consent",
-    "/iam/interactions/consent"
+    "/iam/interactions/invitation"
   ],
   "maxQueryBytes": 8192,
   "maxRequestBodyBytes": 65536,

@@ -24,8 +24,6 @@ import {
 } from "./iam-protocol-relay.policy.js"
 import { requestIamRelay, type IamRelayUpstream } from "./iam-protocol-relay.transport.js"
 
-const LOGOUT_CSP = "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
-
 type IamErrorCode = ApiErrorResponse["error"]["code"]
 
 const INVITATION_ERROR_MESSAGES: Readonly<Record<IamErrorCode, string>> = {
@@ -108,7 +106,7 @@ function replyFailure(response: ServerResponse, id: string, status: number, code
   send(response, status, failure(code, "IAM relay request was rejected", id))
 }
 
-function filteredCookie(raw: string | null, secure: boolean, route: string): string | null {
+function filteredCookie(raw: string | null, secure: boolean): string | null {
   if (raw === null || raw === "") return ""
   const names = new Set<string>()
   const kept: string[] = []
@@ -120,16 +118,9 @@ function filteredCookie(raw: string | null, secure: boolean, route: string): str
     if (!iamRelayCookieName(name, secure)) continue
     if (names.has(name)) return null
     names.add(name)
-    if (name.endsWith(".oauth_logout_confirmation") && route !== "/oauth2/end-session/confirm") continue
     kept.push(pair)
   }
   return kept.join("; ")
-}
-
-function validAuthorization(route: string, value: string | null): boolean {
-  if (route === "/oauth2/token" || route === "/oauth2/revoke") return value !== null && /^Basic [A-Za-z0-9+/]+={0,2}$/u.test(value)
-  if (route === "/oauth2/userinfo") return value !== null && /^Bearer [^\s,]+$/u.test(value)
-  return value === null
 }
 
 function safeHeaderValue(value: string, max = 4096): boolean {
@@ -149,32 +140,6 @@ function invitationInteractionLocation(value: string, webOrigin: string): boolea
   return error.startsWith(errorPrefix) && (IAM_RELAY_POLICY.invitationLocation.allowedErrorCodes as readonly string[]).includes(error.slice(errorPrefix.length))
 }
 
-function validProductCallbackLocation(url: URL, config: NonNullable<BffConfig["iamRelay"]>): boolean {
-  const callback = new URL(config.callbackUri)
-  if (url.origin !== callback.origin || url.pathname !== callback.pathname) return false
-  const query = url.searchParams
-  const values = [...query.entries()]
-  if (new Set(values.map(([name]) => name)).size !== values.length) return false
-  if (
-    query.getAll("state").length !== 1 ||
-    query.getAll("iss").length !== 1 ||
-    query.get("iss") !== config.publicIssuerUrl ||
-    !/^[A-Za-z0-9_-]{16,256}$/u.test(query.get("state") ?? "")
-  )
-    return false
-  const code = query.get("code")
-  const error = query.get("error")
-  if (code !== null && error === null) return values.length === 3 && /^[A-Za-z0-9._~-]{1,2048}$/u.test(code)
-  if (code !== null || error === null || !/^[a-z_]{1,64}$/u.test(error)) return false
-  if (values.some(([name]) => !["error", "error_description", "error_uri", "iss", "state"].includes(name))) return false
-  for (const name of ["error_description", "error_uri"] as const) {
-    const value = query.get(name)
-    if ((value !== null && query.getAll(name).length !== 1) || (value !== null && (Buffer.byteLength(value) > 1024 || /[\u0000-\u001f\u007f]/u.test(value))))
-      return false
-  }
-  return true
-}
-
 function allowedLocation(value: string, config: NonNullable<BffConfig["iamRelay"]>, sourceRoute: string): boolean {
   if (!safeHeaderValue(value, 8192) || value.startsWith("//") || value.includes("\\") || value.includes("#")) return false
   if (!value.startsWith("/") && !/^https?:\/\//u.test(value)) return false
@@ -184,10 +149,8 @@ function allowedLocation(value: string, config: NonNullable<BffConfig["iamRelay"
     const url = new URL(value, config.webOrigin)
     if (url.username !== "" || url.password !== "" || url.hash !== "" || url.pathname.includes("%")) return false
     if (url.origin !== config.webOrigin) return false
-    if (validProductCallbackLocation(url, config)) return true
     if (sourceRoute === IAM_RELAY_POLICY.invitationLocation.sourceRoute && invitationInteractionLocation(value, config.webOrigin)) return true
     if ((IAM_RELAY_POLICY.webInteractionPaths as readonly string[]).includes(url.pathname)) return true
-    if (url.href === config.postLogoutUri) return true
     if (!url.pathname.startsWith("/iam/")) return false
     return iamRelayRoute(`${url.pathname}${url.search}`, "GET") !== null
   } catch {
@@ -209,9 +172,8 @@ function validSetCookie(value: string, config: NonNullable<BffConfig["iamRelay"]
     if (attributes.has(key)) return false
     attributes.set(key, index < 0 ? "" : part.slice(index + 1))
   }
-  const expectedPath = name.endsWith(".oauth_logout_confirmation") ? IAM_RELAY_POLICY.cookiePaths.logoutConfirmation : IAM_RELAY_POLICY.cookiePaths.default
   return (
-    attributes.get("path") === expectedPath &&
+    attributes.get("path") === IAM_RELAY_POLICY.cookiePaths.default &&
     attributes.has("httponly") &&
     attributes.get("samesite")?.toLowerCase() === "lax" &&
     !attributes.has("domain") &&
@@ -232,7 +194,6 @@ function responseHeaders(
     if (!safeHeaderValue(value)) return null
     if (name === "location" && !allowedLocation(value, config, sourceRoute)) return null
     if (name === "retry-after" && (upstream.status !== 429 || !/^[1-9][0-9]{0,4}$/u.test(value) || Number(value) > 86400)) return null
-    if (name === "content-security-policy" && value !== LOGOUT_CSP) return null
     if (name === "x-content-type-options" && value.toLowerCase() !== "nosniff") return null
     if (name === "pragma" && value.toLowerCase() !== "no-cache") return null
     headers[name] = value
@@ -413,7 +374,7 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
     return
   }
   const authorization = rawHeader(request, "authorization")
-  if (!validAuthorization(routePath, authorization) || (authorization === null && hasRawHeader(request, "authorization"))) {
+  if (authorization !== null || hasRawHeader(request, "authorization")) {
     replyFailure(response, id, 403, "iam_relay_credential_rejected")
     return
   }
@@ -421,7 +382,7 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
     replyFailure(response, id, 400, "iam_relay_header_invalid")
     return
   }
-  const cookie = filteredCookie(rawHeader(request, "cookie"), config.iamRelay.secureCookies, routePath)
+  const cookie = filteredCookie(rawHeader(request, "cookie"), config.iamRelay.secureCookies)
   if (cookie === null) {
     replyFailure(response, id, 400, "iam_relay_cookie_invalid")
     return
@@ -441,12 +402,8 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
     replyFailure(response, id, 403, "iam_relay_cookie_rejected")
     return
   }
-  if ((staticRoute?.path === "/oauth2/token" || staticRoute?.path === "/oauth2/revoke" || staticRoute?.path === "/oauth2/userinfo") && cookie !== "") {
-    replyFailure(response, id, 403, "iam_relay_cookie_rejected")
-    return
-  }
   const origin = rawHeader(request, "origin")
-  const browserMutation = request.method === "POST" && staticRoute?.path !== "/oauth2/token" && staticRoute?.path !== "/oauth2/revoke"
+  const browserMutation = request.method === "POST"
   if ((browserMutation || invitationRoute !== null) && origin !== config.iamRelay.webOrigin) {
     replyFailure(response, id, 403, "iam_relay_origin_rejected")
     return
@@ -523,12 +480,6 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
     if (origin !== null) headers.set("origin", origin)
     if (cookie !== "") headers.set("cookie", cookie)
     if (authorization !== null) headers.set("authorization", authorization)
-    // Node fetch defaults to cors. The issuer intentionally returns a JSON redirect
-    // to fetch requests, while browser authorization and logout navigations require
-    // its native redirect/cookie semantics. Synthesize this only after fixed route
-    // and method admission; it never reflects a caller-provided fetch-metadata header.
-    const browserNavigation = request.method === "GET" && (staticRoute?.path === "/oauth2/authorize" || staticRoute?.path === "/oauth2/end-session")
-    if (browserNavigation) headers.set("sec-fetch-mode", "navigate")
     headers.set("x-request-id", id)
     const upstream = await requestIamRelay({
       baseUrl: config.iamBaseUrl,
@@ -539,7 +490,6 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
       timeoutMs: Math.max(1, deadline - Date.now()),
       maxResponseBytes: config.upstreamMaxResponseBytes,
       signal: abort.signal,
-      browserNavigation,
     })
     if (abort.signal.aborted) {
       if (abort.signal.reason === "deadline") {

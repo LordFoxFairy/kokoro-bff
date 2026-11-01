@@ -71,10 +71,7 @@ export type BffConfig = {
   iamWebOrigin?: string | null
   iamSessionAdmissionCredentialFile?: string | null
   iamRelay?: Readonly<{
-    publicIssuerUrl: string
     webOrigin: string
-    callbackUri: string
-    postLogoutUri: string
     secureCookies: boolean
   }>
   storage?: Readonly<{ baseUrl: string; secret: string; objectOrigin: string }>
@@ -149,37 +146,14 @@ function optionalOrigin(value: string | undefined, name = "KOKORO_IAM_BASE_URL")
 }
 
 function iamRelayConfig(env: NodeJS.ProcessEnv): BffConfig["iamRelay"] {
-  const values = [env.KOKORO_IAM_ISSUER_URL, env.KOKORO_IAM_WEB_ORIGIN, env.KOKORO_IAM_WEB_CALLBACK_URI, env.KOKORO_IAM_WEB_POST_LOGOUT_URI]
+  const values = [env.KOKORO_IAM_WEB_ORIGIN]
   if (values.every((value) => value === undefined || value.trim() === "")) return undefined
-  if (values.some((value) => value === undefined || value.trim() === ""))
-    throw new Error("IAM relay requires issuer, Web origin, callback URI and post-logout URI")
-  const [issuerRaw, originRaw, callbackRaw, logoutRaw] = values as [string, string, string, string]
+  const originRaw = values[0]
+  if (originRaw === undefined || originRaw.trim() === "") throw new Error("IAM relay requires Web origin")
   const webOrigin = optionalOrigin(originRaw)
   if (webOrigin === null) throw new Error("KOKORO_IAM_WEB_ORIGIN must be an HTTP(S) origin")
-  const issuer = new URL(issuerRaw)
-  const callback = new URL(callbackRaw)
-  const logout = new URL(logoutRaw)
-  if (
-    issuer.toString() !== `${webOrigin}/iam` ||
-    callback.origin !== webOrigin ||
-    callback.username !== "" ||
-    callback.password !== "" ||
-    !/^\/api\/auth\/callback\/[a-z0-9-]+$/u.test(callback.pathname) ||
-    callback.search !== "" ||
-    callback.hash !== "" ||
-    logout.origin !== webOrigin ||
-    logout.pathname !== "/auth/sign-in" ||
-    logout.username !== "" ||
-    logout.password !== "" ||
-    logout.search !== "" ||
-    logout.hash !== ""
-  )
-    throw new Error("IAM relay URLs must bind the exact Web issuer, callback and post-logout paths")
   return {
-    publicIssuerUrl: issuer.toString(),
     webOrigin,
-    callbackUri: callback.toString(),
-    postLogoutUri: logout.toString(),
     secureCookies: env.NODE_ENV === "production",
   }
 }
