@@ -51,6 +51,7 @@ import type { ChatApplicationService } from "../application/chat-service.js"
 import type { ChatTurnApplicationService } from "../application/chat-turn-service.js"
 import type { ProjectService } from "../application/project-service.js"
 import type { PublicShareApplicationService } from "../application/public-share-service.js"
+import type { ScheduledTaskService } from "../application/scheduled-task-service.js"
 import { SessionAdmissionClient } from "../auth/session-admission.client.js"
 import type { SessionAdmission } from "../auth/session-admission.types.js"
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
@@ -126,6 +127,8 @@ export type BffServerComposition = {
   chatTurnService: ChatTurnApplicationService | null
   /** Project-owned pin provider; global store fallback is transitional. */
   projectService: ProjectService | null
+  /** ScheduledTask-owned mutation provider; global store fallback is transitional. */
+  scheduledTaskService: ScheduledTaskService | null
   projectSkillSelectionProvider: ProjectSkillSelectionProvider | null
   projectMcpRecommendationsProvider: ProjectMcpRecommendationsProvider | null
   publicShareService: PublicShareApplicationService | null
@@ -180,6 +183,7 @@ export type BffCompositionOptions = {
   skillShareRepository?: SkillShareRepository | null
   chatService?: ChatApplicationService | null
   projectService?: ProjectService | null
+  scheduledTaskService?: ScheduledTaskService | null
   projectSkillSelectionProvider?: ProjectSkillSelectionProvider | null
   projectMcpRecommendationsProvider?: ProjectMcpRecommendationsProvider | null
   publicShareService?: PublicShareApplicationService | null
@@ -345,6 +349,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.services?.chat ?? null)
   const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (businessStore?.services?.chatTurns ?? null)
   const projectService = options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
+  const scheduledTaskService = options.scheduledTaskService !== undefined ? options.scheduledTaskService : (businessStore?.services?.scheduledTasks ?? null)
   const publicShareService =
     options.publicShareService !== undefined
       ? options.publicShareService
@@ -353,11 +358,11 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const scheduledTaskReader =
     options.scheduledTaskReader !== undefined
       ? options.scheduledTaskReader
-      : businessStore === null
+      : businessStore === null || scheduledTaskService === null
         ? null
         : new ScheduledTaskReadService(
             {
-              snapshots: (scope, signal, taskId) => businessStore.services.scheduledTasks.snapshots(scope, signal, taskId),
+              snapshots: (scope, signal, taskId) => scheduledTaskService.snapshots(scope, signal, taskId),
             },
             new SchedulerTaskStateReader(
               config.upstreams.scheduler == null || config.schedulerServiceToken === null
@@ -560,7 +565,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                 installations: installationClient,
                 projection: projectionClient!,
               }),
-              ...(businessStore?.services?.projects === undefined ? {} : { projects: businessStore.services.projects }),
+              ...(projectService === null ? {} : { projects: projectService }),
               profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
               ...(businessStore?.skillUsage === undefined ? {} : { usage: businessStore.skillUsage }),
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
@@ -584,7 +589,8 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                         signal: AbortSignal,
                       ) => {
                         signal.throwIfAborted()
-                        const project = await businessStore.services.projects.find(
+                        if (projectService === null) return null
+                        const project = await projectService.find(
                           {
                             tenantId: context.identity.namespace,
                             subjectId: context.identity.userId,
@@ -605,7 +611,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                         )
                         if (!("projectRef" in owner) || owner.projectRef !== projectId) throw new Error("skill_response_invalid")
                         const record = exactInstallationRecord(installationId, projectInstallation(owner.installation))
-                        const current = await businessStore.services.projects.find(
+                        const current = await projectService.find(
                           {
                             tenantId: context.identity.namespace,
                             subjectId: context.identity.userId,
@@ -749,6 +755,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     skillShareRepository,
     chatService,
     projectService,
+    scheduledTaskService,
     projectSkillSelectionProvider: options.projectSkillSelectionProvider ?? null,
     projectMcpRecommendationsProvider: options.projectMcpRecommendationsProvider ?? null,
     publicShareService,

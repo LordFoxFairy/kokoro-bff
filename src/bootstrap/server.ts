@@ -393,8 +393,8 @@ export async function handleBffRequest(
       if (!checked.ok) throw new ConnectError("Project Skill action denied", checked.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
     }
     signal.throwIfAborted()
-    if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
-    const project = await composition.businessStore.services.projects.find(
+    if (!composition.projectService) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+    const project = await composition.projectService.find(
       {
         tenantId: context.identity.namespace,
         subjectId: context.identity.userId,
@@ -496,7 +496,9 @@ export async function handleBffRequest(
         send(response, chatAuthorization.status, failure(chatAuthorization.code, chatAuthorization.message, id))
         return
       }
-      const resourceAuthorization = await authorizeScheduledTaskMutation(method, context, businessPath, scheduledCreate, composition.businessStore)
+      const resourceAuthorization = composition.projectService !== null && composition.scheduledTaskService !== null
+        ? await authorizeScheduledTaskMutation(method, context, businessPath, scheduledCreate, { projects: composition.projectService, scheduledTasks: composition.scheduledTaskService })
+        : null
       if (resourceAuthorization !== null && !resourceAuthorization.ok) {
         send(response, resourceAuthorization.status, failure(resourceAuthorization.code, resourceAuthorization.message, id))
         return
@@ -565,14 +567,14 @@ export async function handleBffRequest(
   }
 
   if (composition.businessStore !== null && projectMutation(request) !== null) {
-    const projectOwner = composition.projectService ?? composition.businessStore.services.projects
-    if (projectOwner !== undefined && await handleProjectMutationBusiness(request, response, context, projectOwner, json, mutation, composition.idempotency)) return
+    const projectOwner = composition.projectService
+    if (projectOwner !== null && await handleProjectMutationBusiness(request, response, context, projectOwner, json, mutation, composition.idempotency)) return
   }
 
   if (composition.businessStore !== null && scheduledTaskMutation(request) !== null) {
-    const scheduledOwner = composition.businessStore.services.scheduledTasks
-    const projectOwner = composition.projectService ?? composition.businessStore.services.projects
-    if (projectOwner !== undefined && await handleScheduledTaskMutationBusiness(request, response, context, scheduledOwner, projectOwner, json, mutation, composition.idempotency)) return
+    const scheduledOwner = composition.scheduledTaskService
+    const projectOwner = composition.projectService
+    if (scheduledOwner !== null && projectOwner !== null && await handleScheduledTaskMutationBusiness(request, response, context, scheduledOwner, projectOwner, json, mutation, composition.idempotency)) return
   }
 
   if (billingPersonalRequest(request) && await handleBillingPersonalBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency)) return

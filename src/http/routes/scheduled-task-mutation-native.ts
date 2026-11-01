@@ -3,7 +3,6 @@ import type { RequestContext } from "../../domain/request-context.js"
 import type { ScheduledTaskCreateInput, ScheduledTaskMutationLineage } from "../../application/ports/scheduled-task-repository.js"
 import type { ScheduledTaskService } from "../../application/scheduled-task-service.js"
 import type { ProjectService } from "../../application/project-service.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { failure, ok } from "../../contracts/index.js"
 import { idempotencyKey, pathOf } from "../request.js"
@@ -24,6 +23,11 @@ export type ScheduledTaskAuthorization =
   | Readonly<{ ok: true }>
   | Readonly<{ ok: false; status: 400; code: "invalid_scheduled_task"; message: string }>
   | Readonly<{ ok: false; status: 404; code: "project_not_found" | "scheduled_task_not_found"; message: string }>
+
+export type ScheduledTaskMutationOwners = Readonly<{
+  projects: Pick<ProjectService, "find">
+  scheduledTasks: Pick<ScheduledTaskService, "find">
+}>
 
 export function scheduledTaskMutation(request: IncomingMessage): ScheduledTaskMutation | null {
   let path: string[]
@@ -53,26 +57,26 @@ export async function authorizeScheduledTaskMutation(
   context: RequestContext,
   businessPath: readonly string[],
   scheduledCreate: ScheduledTaskCreateInput | null,
-  store: BffBusinessStore,
+  owners: ScheduledTaskMutationOwners,
 ): Promise<ScheduledTaskAuthorization | null> {
   if (!new Set(["POST", "PATCH", "DELETE"]).has(method)) return null
   const scope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
   if (businessPath[0] === "projects" && businessPath.length > 1) {
     const projectId = businessPath[1]
-    if (projectId !== undefined && await store.services.projects.find(scope, projectId) === null)
+    if (projectId !== undefined && await owners.projects.find(scope, projectId) === null)
       return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
     return { ok: true }
   }
   if (businessPath[0] !== "scheduled-tasks") return null
   if (businessPath.length > 1) {
     const taskId = businessPath[1]
-    if (taskId !== undefined && await store.services.scheduledTasks.find(scope, taskId) === null)
+    if (taskId !== undefined && await owners.scheduledTasks.find(scope, taskId) === null)
       return { ok: false, status: 404, code: "scheduled_task_not_found", message: "Scheduled task was not found" }
     return { ok: true }
   }
   if (method === "POST") {
     if (scheduledCreate === null) return { ok: false, status: 400, code: "invalid_scheduled_task", message: "Scheduled task fields are invalid" }
-    if (scheduledCreate.projectId !== undefined && await store.services.projects.find(scope, scheduledCreate.projectId) === null)
+    if (scheduledCreate.projectId !== undefined && await owners.projects.find(scope, scheduledCreate.projectId) === null)
       return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
   }
   return { ok: true }
