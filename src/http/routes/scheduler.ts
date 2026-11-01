@@ -60,7 +60,7 @@ export async function schedulerDispatch(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  source: BffBusinessStore | SchedulerDispatchProvider | null,
+  source: SchedulerDispatchProvider | null,
   _idempotency: Map<string, IdempotencyEntry>,
 ): Promise<boolean> {
   if (!isSchedulerDispatchRequest(request)) return false
@@ -74,17 +74,7 @@ export async function schedulerDispatch(
     send(response, 401, failure("service_auth_failed", "Scheduler dispatch authentication failed", fallbackRequestId))
     return true
   }
-  const provider: SchedulerDispatchProvider | null = source === null
-    ? null
-    : "services" in source
-      ? source.schedulerDispatchReceipts === undefined
-        ? null
-        : {
-            schedulerDispatchReceipts: source.schedulerDispatchReceipts,
-            scheduledTasks: source.services.scheduledTasks,
-            ...(source.scheduledAgentDispatch === undefined ? {} : { scheduledAgentDispatch: source.scheduledAgentDispatch }),
-          }
-      : source
+  const provider = source
   const receipts = provider?.schedulerDispatchReceipts
   if (provider === null || receipts === undefined) {
     send(response, 503, failure("business_store_not_configured", "BFF Scheduler receipt store is not configured", fallbackRequestId))

@@ -123,7 +123,7 @@ function projectContentAccessForRequest(
     }
     if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
       throw new ConnectError("Project not found", Code.NotFound)
-    const owner = composition.projectService ?? composition.businessStore?.services.projects
+    const owner = composition.projectService
     if (!owner) throw new ConnectError("Project owner unavailable", Code.Unavailable)
     const project = await owner.find(
       {
@@ -165,7 +165,14 @@ export async function handleBffRequest(
     return
   }
   if (segments[0] === "internal" && segments[1] === "bff" && segments[2] === "scheduled-tasks" && segments[3] === "dispatch" && segments.length === 4) {
-    await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency)
+    const schedulerProvider = composition.businessStore?.schedulerDispatchReceipts !== undefined && composition.scheduledTaskService !== null
+      ? {
+          schedulerDispatchReceipts: composition.businessStore.schedulerDispatchReceipts,
+          scheduledTasks: composition.scheduledTaskService,
+          ...(composition.businessStore.scheduledAgentDispatch === undefined ? {} : { scheduledAgentDispatch: composition.businessStore.scheduledAgentDispatch }),
+        }
+      : null
+    await schedulerDispatch(request, response, config, schedulerProvider, composition.idempotency)
     return
   }
   const removedSkillRead =
