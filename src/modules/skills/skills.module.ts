@@ -37,6 +37,7 @@ import { projectInstallation } from "../../infrastructure/clients/platform/skill
 import { assertSkillWireKnown, skillTimestamp } from "../../infrastructure/clients/platform/skill-product-response.js"
 import { projectSkillPackageInspectionResponse } from "../../infrastructure/clients/platform/skill-package-inspection-response.js"
 import { PlatformProjectionHttpClient } from "../../infrastructure/clients/platform/projection-http.js"
+import { SkillInstallationAccessModule } from "./skill-installation-access.module.js"
 
 @Injectable()
 class SkillsRuntime implements OnApplicationShutdown {
@@ -48,7 +49,7 @@ class SkillsRuntime implements OnApplicationShutdown {
 }
 
 @Module({
-  imports: [AccountModule, ChatModule, DatabaseModule, IamRelayModule, BffConfigModule],
+  imports: [AccountModule, ChatModule, DatabaseModule, IamRelayModule, BffConfigModule, SkillInstallationAccessModule],
   providers: [
     SkillsMiddleware,
     SkillsRuntime,
@@ -143,27 +144,6 @@ class SkillsRuntime implements OnApplicationShutdown {
       provide: SKILL_AUTHORIZATION,
       inject: [BFF_CONFIG],
       useFactory: (config: BffConfig): SkillAuthorizationClient => new SkillAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 }),
-    },
-    {
-      provide: SKILL_INSTALLATION_CLIENT,
-      inject: [BFF_CONFIG],
-      useFactory: (config: BffConfig): SkillInstallationConnectClient | null => {
-        if (
-          config.skillDraft?.platformBaseUrl === null ||
-          config.skillDraft?.platformBaseUrl === undefined ||
-          config.skillDraft.credentialFile === null ||
-          config.skillDraft.credentialFile === undefined ||
-          config.platformProjection.credentialFile === null ||
-          config.platformProjection.credentialFile === undefined
-        )
-          return null
-        return new SkillInstallationConnectClient(
-          config.skillDraft.platformBaseUrl,
-          new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
-          new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
-          config.skillDraft.timeoutMs,
-        )
-      },
     },
     {
       provide: SKILL_DRAFT_CLIENT,

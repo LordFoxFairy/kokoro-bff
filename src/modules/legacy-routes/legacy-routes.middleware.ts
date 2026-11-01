@@ -8,10 +8,11 @@ import { isMessageRegenerationNativeRequest } from "../../http/routes/message-re
 import { isSharedPublicRequest } from "../../http/routes/shared-native.js"
 import { isChatMutationRequest } from "../../http/routes/chat-mutation-native.js"
 import { isChatEventsNativeRequest } from "../../http/routes/chat-events-native.js"
+import { isChatMessageNativeRequest } from "../../http/routes/chat-message-native.js"
 
 export function isMigratedChatRoute(request: IncomingMessage): boolean {
   try {
-    if (isSharedPublicRequest(request) || isChatNativeRequest(request) || isChatBusinessReadRequest(request) || isChatMutationRequest(request) || isChatEventsNativeRequest(request)) return true
+    if (isSharedPublicRequest(request) || isChatNativeRequest(request) || isChatBusinessReadRequest(request) || isChatMutationRequest(request) || isChatEventsNativeRequest(request) || isChatMessageNativeRequest(request)) return true
     if (isMessageFeedbackRequest(request) || isMessageRegenerationNativeRequest(request)) return true
     const path = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean)
     return request.method === "POST" && path[0] === "v1" && path[1] === "sessions" && path.length === 4 && path[3] === "move"

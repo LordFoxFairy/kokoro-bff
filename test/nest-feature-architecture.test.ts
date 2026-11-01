@@ -108,7 +108,7 @@ test("MusicModule owns the Mori owner adapter and idempotency seam", async () =>
 })
 
 test("ChatModule owns the archive/share adapters and chat provider", async () => {
-  const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, regenerationNativeRoute, mutationRoute, eventsRoute, aguiModule, server, legacyModule] = await Promise.all([
+  const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, regenerationNativeRoute, mutationRoute, eventsRoute, messageRoute, aguiModule, server, legacyModule] = await Promise.all([
     readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/chat/chat.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-native.ts"), "utf8"),
@@ -117,6 +117,7 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
     readFile(path.join(root, "src/http/routes/message-regeneration-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-mutation-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-events-native.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/chat-message-native.ts"), "utf8"),
     readFile(path.join(root, "src/modules/agui/agui.module.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.module.ts"), "utf8"),
@@ -139,8 +140,12 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
   assert.match(mutationRoute, /liveChatBusiness/u)
   assert.match(mutationRoute, /mutationTicket/u)
   assert.match(chatModule, /CHAT_IDEMPOTENCY/u)
+  assert.match(chatModule, /ProjectAccessModule/u)
+  assert.match(chatModule, /SkillInstallationAccessModule/u)
   assert.match(eventsRoute, /liveAgentSession/u)
   assert.match(eventsRoute, /registerConsumer/u)
+  assert.match(messageRoute, /liveChatBusiness/u)
+  assert.match(messageRoute, /commitChatTurn|chatTurns/u)
   assert.match(aguiModule, /AGUI_PROJECTION/u)
   assert.match(aguiModule, /AGUI_RUNTIME/u)
   assert.match(server, /handleChatNativeRequest/u)
