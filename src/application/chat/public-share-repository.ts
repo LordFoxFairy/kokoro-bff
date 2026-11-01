@@ -1,6 +1,6 @@
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { ConversationShare } from "../../domain/chat/share.js"
-import type { MessagePage } from "../ports/chat-repository.js"
+import type { MessagePage } from "./chat-repository.js"
 
 /** Capability-scoped reads; deliberately separate from trusted-subject Chat APIs. */
 export interface PublicShareRepository {
