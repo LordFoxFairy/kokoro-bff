@@ -2383,7 +2383,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
         },
       ],
     )
-    const shared = await store.services.publicShares.listMessages(share.shareId, "tenant_a", "session_gc", 100)
+    const shared = await store.publicShareService.listMessages(share.shareId, "tenant_a", "session_gc", 100)
     assert.ok(shared)
     assert.deepEqual(
       shared.messages.map(({ run_id, status, failure }) => ({

@@ -280,7 +280,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       assert.deepEqual(part.activity, detail)
       assert.ok(BigInt(part.first_sequence) < BigInt(part.latest_sequence))
       const share = await freshReader.createShare(c.tenantId, c.subjectId, c.conversationId)
-      const { messages: publicMessages } = await store.services.publicShares.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
+      const { messages: publicMessages } = await store.publicShareService.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
       assert.equal(publicMessages.find((item) => item.role === "assistant").content, "AB")
       assert.equal(JSON.stringify(publicMessages).includes("public_lookup"), false)
       assert.equal(
@@ -319,7 +319,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       const listed = await reader.listMessages(c.tenantId, c.subjectId, c.conversationId, 100, null)
       assert.deepEqual(assistant(listed).rendering, selected.rendering)
       const share = await reader.createShare(c.tenantId, c.subjectId, c.conversationId)
-      const shared = await store.services.publicShares.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
+      const shared = await store.publicShareService.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
       assert.equal(shared.messages.find((message) => message.role === "assistant").content, "AB")
       assert.equal(
         Object.hasOwn(
@@ -693,7 +693,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
         aborted.abort()
         await assert.rejects(c.snapshot({ ...lifetime(), signal: aborted.signal }), /MESSAGE_PARTS_UNAVAILABLE/u)
         const share = await reader.createShare(c.tenantId, c.subjectId, c.conversationId)
-        const shared = await store.services.publicShares.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
+        const shared = await store.publicShareService.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
         assert.equal(
           shared.messages.some((message) => Object.hasOwn(message, "terminal_status")),
           false,
