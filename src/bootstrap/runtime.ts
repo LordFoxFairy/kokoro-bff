@@ -59,6 +59,7 @@ import { PlatformServiceCredentialSource } from "../infrastructure/clients/platf
 import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
 import type { LocalSkillImportClient } from "../http/routes/local-skill-import.js"
+import type { ProjectSkillSelectionProvider } from "../http/routes/project-skill-selection.js"
 import { LocalSkillImportConnectClient } from "../infrastructure/clients/platform/local-skill-import-connect.js"
 import { ExactSkillDownloadService, exactInstallationRecord, exactManagedRecord, type ExactSkillDownloadSource } from "../application/exact-skill-download.js"
 import { projectInstallation } from "../infrastructure/clients/platform/skill-installation-response.js"
@@ -123,6 +124,7 @@ export type BffServerComposition = {
   chatTurnService: ChatTurnApplicationService | null
   /** Project-owned pin provider; global store fallback is transitional. */
   projectService: ProjectService | null
+  projectSkillSelectionProvider: ProjectSkillSelectionProvider | null
   publicShareService: PublicShareApplicationService | null
   scheduledTaskReader: ScheduledTaskReadService | null
   sessionAdmission: SessionAdmission
@@ -175,6 +177,7 @@ export type BffCompositionOptions = {
   skillShareRepository?: SkillShareRepository | null
   chatService?: ChatApplicationService | null
   projectService?: ProjectService | null
+  projectSkillSelectionProvider?: ProjectSkillSelectionProvider | null
   publicShareService?: PublicShareApplicationService | null
   scheduledTaskReader?: ScheduledTaskReadService | null
   chatTurnService?: ChatTurnApplicationService | null
@@ -729,6 +732,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     skillShareRepository,
     chatService,
     projectService,
+    projectSkillSelectionProvider: options.projectSkillSelectionProvider ?? null,
     publicShareService,
     chatTurnService,
     scheduledTaskReader,

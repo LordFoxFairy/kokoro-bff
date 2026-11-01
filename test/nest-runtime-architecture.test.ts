@@ -92,4 +92,7 @@ test("transitional runtime receives Skill usage from SkillsModule instead of onl
   assert.match(legacyRuntime, /PROJECT_SERVICE/u)
   assert.match(runtime, /chatTurnService/u)
   assert.match(server, /composition\.chatTurnService/u)
+  assert.match(legacyRuntime, /PROJECT_SKILL_SELECTION_PROVIDER/u)
+  assert.match(runtime, /projectSkillSelectionProvider/u)
+  assert.match(server, /composition\.projectSkillSelectionProvider/u)
 })

@@ -1,7 +1,7 @@
 import { Inject, Injectable, OnApplicationShutdown, OnModuleInit } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
-import { BFF_CONFIG, CHAT_SERVICE, CHAT_TURN_SERVICE, PERSONAL_KNOWLEDGE_REPOSITORY, PROJECT_SERVICE, PUBLIC_SHARE_SERVICE, SCHEDULED_TASK_READ_SERVICE, SESSION_ADMISSION, SKILL_AI_ASSOCIATION, SKILL_SHARE_REPOSITORY, SKILL_USAGE_READER } from "../../common/tokens.js"
+import { BFF_CONFIG, CHAT_SERVICE, CHAT_TURN_SERVICE, PERSONAL_KNOWLEDGE_REPOSITORY, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER, PUBLIC_SHARE_SERVICE, SCHEDULED_TASK_READ_SERVICE, SESSION_ADMISSION, SKILL_AI_ASSOCIATION, SKILL_SHARE_REPOSITORY, SKILL_USAGE_READER } from "../../common/tokens.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { createBffComposition, type BffServerComposition } from "../../bootstrap/runtime.js"
 import { handleBffRequest } from "../../bootstrap/server.js"
@@ -15,6 +15,7 @@ import type { ScheduledTaskReadService } from "../../application/scheduled-task-
 import type { ChatApplicationService } from "../../application/chat-service.js"
 import type { ChatTurnApplicationService } from "../../application/chat-turn-service.js"
 import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectSkillSelectionProvider } from "../../http/routes/project-skill-selection.js"
 
 @Injectable()
 export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown {
@@ -43,6 +44,8 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
     chatTurnService: ChatTurnApplicationService,
     @Inject(PROJECT_SERVICE)
     projectService: ProjectService,
+    @Inject(PROJECT_SKILL_SELECTION_PROVIDER)
+    projectSkillSelectionProvider: ProjectSkillSelectionProvider,
   ) {
     this.composition = createBffComposition(config, {
       sessionAdmission,
@@ -56,6 +59,7 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
       chatService,
       chatTurnService,
       projectService,
+      projectSkillSelectionProvider,
     })
   }
 

@@ -775,7 +775,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 response,
                 config,
                 composition.sessionAdmission,
-                projectSkillSelectionProvider(composition.businessStore),
+                composition.projectSkillSelectionProvider ?? projectSkillSelectionProvider(composition.businessStore),
                 composition.installationClient,
               ),
       )
