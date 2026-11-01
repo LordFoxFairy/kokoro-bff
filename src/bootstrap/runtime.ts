@@ -346,7 +346,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (businessStore?.services?.chatTurns ?? null)
   const projectService = options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
   const publicShareService =
-    options.publicShareService !== undefined ? options.publicShareService : (businessStore?.publicShareService ?? null)
+    options.publicShareService !== undefined
+      ? options.publicShareService
+      : (businessStore?.publicShareService ??
+        ((businessStore?.services as unknown as { publicShares?: PublicShareApplicationService } | undefined)?.publicShares ?? null))
   const scheduledTaskReader =
     options.scheduledTaskReader !== undefined
       ? options.scheduledTaskReader

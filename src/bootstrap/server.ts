@@ -663,7 +663,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => handled ? true : handleSharedReaderRequest(request, response, config, composition.sharedSessionReader))
       .then((handled) => handled ? true : handleAdminIdentityRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleBillingAdminRequest(request, response, config, composition.sessionAdmission))
-      .then((handled) => handled ? true : handleSystemAdminRequest(request, response, config, composition.sessionAdmission))
+      .then((handled) => handled ? true : composition.routeHandler !== undefined ? false : handleSystemAdminRequest(request, response, config, composition.sessionAdmission))
       .then((handled) => handled ? true : handleMcpProjectPublicationRequest(request, response, config, {
         sessionAdmission: composition.sessionAdmission,
         mcpAuthorization: composition.mcpAuthorization,
@@ -788,9 +788,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) =>
         handled
           ? true
-          : composition.routeHandler !== undefined
-            ? false
-            : handleSkillAdminRequest(request, response, config, composition.sessionAdmission, composition.skillAuthorization, composition.skillAdminClient),
+          : handleSkillAdminRequest(request, response, config, composition.sessionAdmission, composition.skillAuthorization, composition.skillAdminClient),
       )
       .then((handled) =>
         handled
