@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
-import type { SubmittedAgentRunReader } from "../../application/ports/submitted-agent-run-reader.js"
-import type { ProjectExecutionBindingReader } from "../../application/ports/project-execution-binding-reader.js"
+import type { SubmittedAgentRunReader } from "../../application/agent-runs/submitted-agent-run-reader.js"
+import type { ProjectExecutionBindingReader } from "../../application/agent-runs/project-execution-binding-reader.js"
 import { agentModelAdmissionRoute } from "./model-admission.js"
 import { projectExecutionBindingRoute } from "./project-execution-binding.js"
 

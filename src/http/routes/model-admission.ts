@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
-import type { SubmittedAgentRunReader } from "../../application/ports/submitted-agent-run-reader.js"
+import type { SubmittedAgentRunReader } from "../../application/agent-runs/submitted-agent-run-reader.js"
 import { agentModelAdmissionCredentialTenant } from "../../auth/agent-model-admission-credential.js"
 import { requestBillingModelSettlement } from "../../infrastructure/clients/owner/billing-model-settlement.js"
 import { recoverBillingModelAdmission } from "../../infrastructure/clients/owner/billing-model-admission-recovery.js"

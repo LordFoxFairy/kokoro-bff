@@ -24,8 +24,8 @@ import type { PostgresBffDatabase } from "./client.js"
 import { commitChatTurn, prepareChatTurnSelection } from "./chat-turn-commit.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
 import { instant } from "./chat-repository-mappers.js"
-import type { ProjectExecutionBindingInput, ProjectExecutionBindingReader } from "../../application/ports/project-execution-binding-reader.js"
-import type { SubmittedAgentRunInput, SubmittedAgentRunReader } from "../../application/ports/submitted-agent-run-reader.js"
+import type { ProjectExecutionBindingInput, ProjectExecutionBindingReader } from "../../application/agent-runs/project-execution-binding-reader.js"
+import type { SubmittedAgentRunInput, SubmittedAgentRunReader } from "../../application/agent-runs/submitted-agent-run-reader.js"
 import { readSubmittedAgentRun, readProjectExecutionBinding } from "./project-execution-binding.js"
 
 type AgentDispatchRow = {

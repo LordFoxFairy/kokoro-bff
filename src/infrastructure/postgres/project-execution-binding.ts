@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import type { PoolClient, QueryConfig, QueryResult, QueryResultRow } from "pg"
 
-import type { ProjectExecutionBinding, ProjectExecutionBindingInput } from "../../application/ports/project-execution-binding-reader.js"
+import type { ProjectExecutionBinding, ProjectExecutionBindingInput } from "../../application/agent-runs/project-execution-binding-reader.js"
 import { parseAgentDispatchPayload } from "../../domain/chat/agent-dispatch.js"
 import { parseSkillSourceSelection } from "../../domain/chat/skill-source-selection.js"
 import type { PostgresBffDatabase } from "./client.js"
@@ -118,8 +118,8 @@ export async function readProjectExecutionBinding(database: PostgresBffDatabase,
 /** Durable submitter lookup also serves recovery after a soft deletion, move or terminal Run. */
 export async function readSubmittedAgentRun(
   database: PostgresBffDatabase,
-  input: import("../../application/ports/submitted-agent-run-reader.js").SubmittedAgentRunInput,
-): Promise<import("../../application/ports/submitted-agent-run-reader.js").SubmittedAgentRun | null> {
+  input: import("../../application/agent-runs/submitted-agent-run-reader.js").SubmittedAgentRunInput,
+): Promise<import("../../application/agent-runs/submitted-agent-run-reader.js").SubmittedAgentRun | null> {
   input.signal?.throwIfAborted()
   const result = await bindingQuery<{
     subject_id: string

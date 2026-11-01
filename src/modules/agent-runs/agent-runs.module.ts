@@ -2,7 +2,7 @@ import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/c
 import { AGENT_CONTROL_IDEMPOTENCY, AGENT_DISPATCH_OUTBOX, AGENT_RUNS_READER, BFF_POOL, CHAT_SERVICE, RUN_DISPLAY_PROVIDER } from "../../common/tokens.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
 import { AgentRunsMiddleware } from "./agent-runs.middleware.js"
-import type { SubmittedAgentRunReader } from "../../application/ports/submitted-agent-run-reader.js"
+import type { SubmittedAgentRunReader } from "../../application/agent-runs/submitted-agent-run-reader.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
 import { AccountModule } from "../account/account.module.js"
 import { ChatModule } from "../chat/chat.module.js"

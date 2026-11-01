@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import type { ProjectExecutionBindingReader } from "../../application/ports/project-execution-binding-reader.js"
+import type { ProjectExecutionBindingReader } from "../../application/agent-runs/project-execution-binding-reader.js"
 import { projectExecutionCredentialTenant } from "../../auth/project-execution-credential.js"
 import { projectExecutionBindingRequest, projectExecutionBindingResponse } from "../project-execution-binding.contract.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
