@@ -1,0 +1,35 @@
+import assert from "node:assert/strict"
+import { test } from "node:test"
+import type { IncomingMessage } from "node:http"
+import { isMigratedChatRoute } from "../src/modules/legacy-routes/legacy-routes.middleware.ts"
+
+function request(method: string, url: string): IncomingMessage {
+  return { method, url } as IncomingMessage
+}
+
+test("LegacyRoutes bypasses Chat-owned migrated paths", () => {
+  for (const [method, url] of [
+    ["GET", "/v1/shared/share-1"],
+    ["GET", "/v1/account/archived-tasks"],
+    ["POST", "/v1/sessions/session-1/archive"],
+    ["GET", "/v1/sessions"],
+    ["GET", "/v1/sessions/session-1/messages"],
+    ["PUT", "/v1/sessions/session-1/messages/message-1/feedback"],
+    ["POST", "/v1/sessions/session-1/messages/message-1/regenerate"],
+    ["POST", "/v1/sessions/session-1/move"],
+  ]) {
+    assert.equal(isMigratedChatRoute(request(method, url)), true, `${method} ${url}`)
+  }
+})
+
+test("LegacyRoutes retains un-migrated Chat mutations and scoped reads", () => {
+  for (const [method, url] of [
+    ["POST", "/v1/sessions/session-1/messages"],
+    ["GET", "/v1/sessions/session-1/events"],
+    ["PATCH", "/v1/sessions/session-1/title"],
+    ["DELETE", "/v1/sessions/session-1"],
+    ["GET", "/v1/sessions?project_ref=project-1"],
+  ]) {
+    assert.equal(isMigratedChatRoute(request(method, url)), false, `${method} ${url}`)
+  }
+})

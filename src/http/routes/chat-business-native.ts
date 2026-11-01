@@ -9,7 +9,7 @@ import { send } from "../response.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
 import { liveChatBusiness } from "./chat.js"
 
-function directChatReadPath(request: IncomingMessage): boolean {
+export function isChatBusinessReadRequest(request: IncomingMessage): boolean {
   if (request.method !== "GET") return false
   const path = pathOf(request)
   if (path[0] !== "v1" || path[1] !== "sessions") return false
@@ -31,7 +31,7 @@ export async function handleChatBusinessReadRequest(
   admission: SessionAdmission,
   chat: ChatApplicationService | null,
 ): Promise<boolean> {
-  if (!directChatReadPath(request)) return false
+  if (!isChatBusinessReadRequest(request)) return false
   const id = requestId(request)
   response.setHeader("x-request-id", id)
   if (chat === null) return false

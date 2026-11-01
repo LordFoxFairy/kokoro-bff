@@ -1,12 +1,28 @@
 import { Injectable } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { LegacyRoutesRuntime } from "./legacy-routes.runtime.js"
+import { isChatNativeRequest } from "../../http/routes/chat-native.js"
+import { isChatBusinessReadRequest } from "../../http/routes/chat-business-native.js"
+import { isMessageFeedbackRequest } from "../../http/routes/message-feedback-native.js"
+import { isMessageRegenerationNativeRequest } from "../../http/routes/message-regeneration-native.js"
+import { isSharedPublicRequest } from "../../http/routes/shared-native.js"
+
+export function isMigratedChatRoute(request: IncomingMessage): boolean {
+  if (isSharedPublicRequest(request) || isChatNativeRequest(request) || isChatBusinessReadRequest(request)) return true
+  if (isMessageFeedbackRequest(request) || isMessageRegenerationNativeRequest(request)) return true
+  const path = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean)
+  return request.method === "POST" && path[0] === "v1" && path[1] === "sessions" && path.length === 4 && path[3] === "move"
+}
 
 @Injectable()
 export class LegacyRoutesMiddleware {
   public constructor(private readonly runtime: LegacyRoutesRuntime) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
+    if (isMigratedChatRoute(request)) {
+      next()
+      return
+    }
     void this.runtime.use(request, response).catch(() => {
       if (!response.headersSent) {
         response.statusCode = 500
