@@ -31,6 +31,7 @@ import type { IdempotencyEntry, MutationTicket } from "../application/idempotenc
 import type { BffBusinessStore } from "../application/ports/bff-business-store.js"
 import type { PersonalKnowledgeRepository } from "../application/ports/personal-knowledge-repository.js"
 import type { SkillUsageReader } from "../application/agui/skill-usage.js"
+import type { AgUiProjectionConsumerRepository } from "../application/agui/ports/agui-projection-repository.js"
 import type { SkillAiAssociation } from "../application/skill-ai-handoff.js"
 import type { SkillShareRepository } from "../application/ports/skill-share-repository.js"
 import { ScheduledTaskOutboxDispatcher } from "../application/scheduled-task-outbox-dispatcher.js"
@@ -139,6 +140,8 @@ export type BffServerComposition = {
   appSkillBindingClient: AppSkillBindingClient | null
   idempotency: Map<string, IdempotencyEntry>
   agUiRuntime: AgUiSessionRuntime
+  /** AG-UI consumer registry owned by AguiModule; raw composition receives it explicitly. */
+  agUiConsumers: AgUiProjectionConsumerRepository | null
   agUiProjector?: AgUiProjectorRunner
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher
@@ -195,6 +198,7 @@ export type BffCompositionOptions = {
   appSkillBindingClient?: AppSkillBindingClient | null
   idempotency?: Map<string, IdempotencyEntry>
   agUiRuntime?: AgUiSessionRuntime
+  agUiConsumers?: AgUiProjectionConsumerRepository | null
   agUiProjector?: AgUiProjectorRunner | null
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher | null
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher | null
@@ -360,6 +364,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     options.skillShareRepository !== undefined
       ? options.skillShareRepository
       : (skillShareRepositoryFromStore(businessStore) ?? null)
+  const agUiConsumers = options.agUiConsumers !== undefined ? options.agUiConsumers : (businessStore?.agUiConsumers ?? null)
   const chatService = options.chatService !== undefined ? options.chatService : (ownerServiceStore?.chatService ?? null)
   const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (ownerServiceStore?.chatTurnService ?? null)
   const projectService = options.projectService !== undefined ? options.projectService : (ownerServiceStore?.projectService ?? null)
@@ -792,6 +797,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       }),
     idempotency: options.idempotency ?? new Map<string, IdempotencyEntry>(),
     agUiRuntime: options.agUiRuntime ?? createAgUiRuntime(config),
+    agUiConsumers,
     ...(agUiProjector === undefined ? {} : { agUiProjector }),
     ...(scheduledTaskDispatcher === undefined ? {} : { scheduledTaskDispatcher }),
     ...(agentDispatchDispatcher === undefined ? {} : { agentDispatchDispatcher }),

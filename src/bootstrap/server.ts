@@ -502,7 +502,7 @@ export async function handleBffRequest(
     ...(chatService === undefined || chatService === null ? {} : { chatService }),
     ...(composition.chatTurnService === null ? {} : { chatTurnService: composition.chatTurnService }),
     ...(projectService === undefined || projectService === null ? {} : { projectService }),
-    ...(composition.businessStore?.agUiConsumers === undefined ? {} : { agUiConsumers: composition.businessStore.agUiConsumers }),
+    ...(composition.agUiConsumers === null ? {} : { agUiConsumers: composition.agUiConsumers }),
   }
   if (composition.routeHandler === undefined && composition.businessStore !== null) {
     try {
