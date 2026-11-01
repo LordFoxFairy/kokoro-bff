@@ -40,6 +40,10 @@ import type { ProjectExecutionBindingReader } from "../application/ports/project
 import type { SchedulerDispatchReceiptRepository } from "../application/ports/scheduler-dispatch-receipt-repository.js"
 import type { ScheduledAgentDispatchRepository } from "../application/ports/scheduled-agent-dispatch-repository.js"
 import type { ArtifactLibraryRepository } from "../application/ports/artifact-library-repository.js"
+import type { ScheduledTaskOutboxRepository } from "../application/ports/scheduled-task-outbox-repository.js"
+import type { AgentDispatchOutboxRepository } from "../application/ports/agent-dispatch-outbox-repository.js"
+import type { AgentCancellationOutboxRepository } from "../application/ports/agent-cancellation-outbox-repository.js"
+import type { ProjectScopeReleaseOutboxRepository } from "../application/ports/project-scope-release-outbox.js"
 import { ScheduledTaskOutboxDispatcher } from "../application/scheduled-task-outbox-dispatcher.js"
 import { AgentDispatchOutboxDispatcher } from "../application/agent-dispatch-outbox-dispatcher.js"
 import { AgentCancellationOutboxDispatcher } from "../application/agent-cancellation-outbox-dispatcher.js"
@@ -236,12 +240,27 @@ export type BffCompositionOptions = {
 }
 
 /**
- * The live PostgreSQL store exposes named owner services while the legacy
- * aggregate view is retained only by integration fixtures. Keeping this
- * seam local to bootstrap prevents the aggregate from becoming a runtime
- * application port again.
+ * Infrastructure resources are resolved only at the bootstrap boundary.
+ * The application-facing BffBusinessStore stays limited to receipts and
+ * lifecycle, while feature resources cross the raw-server boundary by name.
  */
-type BffOwnerServiceStore = BffBusinessStore & {
+type BffInfrastructureStore = BffBusinessStore & {
+  readonly personalKnowledge?: PersonalKnowledgeRepository
+  readonly skillUsage?: SkillUsageReader
+  readonly skillAiAssociation?: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>
+  readonly skillShares?: SkillShareRepository
+  readonly publicShareService?: PublicShareApplicationService
+  readonly submittedAgentRuns?: SubmittedAgentRunReader
+  readonly projectExecutionBindings?: ProjectExecutionBindingReader
+  readonly artifactLibrary?: ArtifactLibraryRepository
+  readonly agUi?: AgUiProjectionService
+  readonly agUiConsumers?: AgUiProjectionConsumerRepository
+  readonly scheduledTaskOutbox?: ScheduledTaskOutboxRepository
+  readonly agentDispatchOutbox?: AgentDispatchOutboxRepository
+  readonly agentCancellationOutbox?: AgentCancellationOutboxRepository
+  readonly schedulerDispatchReceipts?: SchedulerDispatchReceiptRepository
+  readonly scheduledAgentDispatch?: ScheduledAgentDispatchRepository
+  readonly projectScopeReleaseOutbox?: ProjectScopeReleaseOutboxRepository
   readonly chatService?: ChatApplicationService
   readonly chatTurnService?: ChatTurnApplicationService
   readonly projectService?: ProjectService
@@ -373,32 +392,32 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : (() => {
           throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime")
         })()
-  const ownerServiceStore = businessStore as BffOwnerServiceStore | null
+  const infrastructureStore = businessStore as BffInfrastructureStore | null
   const personalizationProvider =
     options.personalizationProvider !== undefined ? options.personalizationProvider : null
   const personalKnowledgeRepository =
-    options.personalKnowledgeRepository !== undefined ? options.personalKnowledgeRepository : (businessStore?.personalKnowledge ?? null)
-  const skillUsageReader = options.skillUsageReader !== undefined ? options.skillUsageReader : (businessStore?.skillUsage ?? null)
-  const skillAiAssociation = options.skillAiAssociation !== undefined ? options.skillAiAssociation : (businessStore?.skillAiAssociation ?? null)
+    options.personalKnowledgeRepository !== undefined ? options.personalKnowledgeRepository : (infrastructureStore?.personalKnowledge ?? null)
+  const skillUsageReader = options.skillUsageReader !== undefined ? options.skillUsageReader : (infrastructureStore?.skillUsage ?? null)
+  const skillAiAssociation = options.skillAiAssociation !== undefined ? options.skillAiAssociation : (infrastructureStore?.skillAiAssociation ?? null)
   const skillShareRepository =
     options.skillShareRepository !== undefined
       ? options.skillShareRepository
-      : (skillShareRepositoryFromStore(businessStore) ?? null)
-  const agUiConsumers = options.agUiConsumers !== undefined ? options.agUiConsumers : (businessStore?.agUiConsumers ?? null)
-  const agUiProjection = options.agUiProjection !== undefined ? options.agUiProjection : (businessStore?.agUi ?? null)
-  const submittedAgentRuns = options.submittedAgentRuns !== undefined ? options.submittedAgentRuns : (businessStore?.submittedAgentRuns ?? null)
-  const projectExecutionBindings = options.projectExecutionBindings !== undefined ? options.projectExecutionBindings : (businessStore?.projectExecutionBindings ?? null)
-  const schedulerDispatchReceipts = options.schedulerDispatchReceipts !== undefined ? options.schedulerDispatchReceipts : (businessStore?.schedulerDispatchReceipts ?? null)
-  const scheduledAgentDispatch = options.scheduledAgentDispatch !== undefined ? options.scheduledAgentDispatch : (businessStore?.scheduledAgentDispatch ?? null)
-  const artifactLibrary = options.artifactLibrary !== undefined ? options.artifactLibrary : (businessStore?.artifactLibrary ?? null)
-  const chatService = options.chatService !== undefined ? options.chatService : (ownerServiceStore?.chatService ?? null)
-  const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (ownerServiceStore?.chatTurnService ?? null)
-  const projectService = options.projectService !== undefined ? options.projectService : (ownerServiceStore?.projectService ?? null)
-  const scheduledTaskService = options.scheduledTaskService !== undefined ? options.scheduledTaskService : (ownerServiceStore?.scheduledTaskService ?? null)
+      : (skillShareRepositoryFromStore(infrastructureStore) ?? null)
+  const agUiConsumers = options.agUiConsumers !== undefined ? options.agUiConsumers : (infrastructureStore?.agUiConsumers ?? null)
+  const agUiProjection = options.agUiProjection !== undefined ? options.agUiProjection : (infrastructureStore?.agUi ?? null)
+  const submittedAgentRuns = options.submittedAgentRuns !== undefined ? options.submittedAgentRuns : (infrastructureStore?.submittedAgentRuns ?? null)
+  const projectExecutionBindings = options.projectExecutionBindings !== undefined ? options.projectExecutionBindings : (infrastructureStore?.projectExecutionBindings ?? null)
+  const schedulerDispatchReceipts = options.schedulerDispatchReceipts !== undefined ? options.schedulerDispatchReceipts : (infrastructureStore?.schedulerDispatchReceipts ?? null)
+  const scheduledAgentDispatch = options.scheduledAgentDispatch !== undefined ? options.scheduledAgentDispatch : (infrastructureStore?.scheduledAgentDispatch ?? null)
+  const artifactLibrary = options.artifactLibrary !== undefined ? options.artifactLibrary : (infrastructureStore?.artifactLibrary ?? null)
+  const chatService = options.chatService !== undefined ? options.chatService : (infrastructureStore?.chatService ?? null)
+  const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (infrastructureStore?.chatTurnService ?? null)
+  const projectService = options.projectService !== undefined ? options.projectService : (infrastructureStore?.projectService ?? null)
+  const scheduledTaskService = options.scheduledTaskService !== undefined ? options.scheduledTaskService : (infrastructureStore?.scheduledTaskService ?? null)
   const publicShareService =
     options.publicShareService !== undefined
       ? options.publicShareService
-      : (businessStore?.publicShareService ?? null)
+      : (infrastructureStore?.publicShareService ?? null)
   const scheduledTaskReader =
     options.scheduledTaskReader !== undefined
       ? options.scheduledTaskReader
@@ -430,25 +449,25 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const explicitlySuppliedScheduledTaskDispatcher = Object.prototype.hasOwnProperty.call(options, "scheduledTaskDispatcher")
   const scheduledTaskDispatcher = explicitlySuppliedScheduledTaskDispatcher
     ? (options.scheduledTaskDispatcher ?? undefined)
-    : businessStore?.scheduledTaskOutbox === undefined
+    : infrastructureStore?.scheduledTaskOutbox === undefined
       ? undefined
-      : new ScheduledTaskOutboxDispatcher(businessStore.scheduledTaskOutbox, new SchedulerOutboxDelivery(config), {
+      : new ScheduledTaskOutboxDispatcher(infrastructureStore.scheduledTaskOutbox, new SchedulerOutboxDelivery(config), {
           workerId: `bff-scheduled-outbox-${process.pid}-${randomUUID()}`,
         })
   const explicitlySuppliedAgentDispatchDispatcher = Object.prototype.hasOwnProperty.call(options, "agentDispatchDispatcher")
   const agentDispatchDispatcher = explicitlySuppliedAgentDispatchDispatcher
     ? (options.agentDispatchDispatcher ?? undefined)
-    : !config.agentEnabled || config.upstreams.agents === null || businessStore?.agentDispatchOutbox === undefined
+    : !config.agentEnabled || config.upstreams.agents === null || infrastructureStore?.agentDispatchOutbox === undefined
       ? undefined
-      : new AgentDispatchOutboxDispatcher(businessStore.agentDispatchOutbox, new AgentOutboxDelivery(config), {
+      : new AgentDispatchOutboxDispatcher(infrastructureStore.agentDispatchOutbox, new AgentOutboxDelivery(config), {
           workerId: `bff-agent-outbox-${process.pid}-${randomUUID()}`,
         })
   const explicitlySuppliedAgentCancellationDispatcher = Object.prototype.hasOwnProperty.call(options, "agentCancellationDispatcher")
   const agentCancellationDispatcher = explicitlySuppliedAgentCancellationDispatcher
     ? (options.agentCancellationDispatcher ?? undefined)
-    : !config.agentEnabled || config.upstreams.agents === null || businessStore?.agentCancellationOutbox === undefined
+    : !config.agentEnabled || config.upstreams.agents === null || infrastructureStore?.agentCancellationOutbox === undefined
       ? undefined
-      : new AgentCancellationOutboxDispatcher(businessStore.agentCancellationOutbox, new AgentCancellationDelivery(config), {
+      : new AgentCancellationOutboxDispatcher(infrastructureStore.agentCancellationOutbox, new AgentCancellationDelivery(config), {
           workerId: `bff-agent-cancellation-${process.pid}-${randomUUID()}`,
         })
   const explicitlySuppliedScheduledAgentDispatcher = Object.prototype.hasOwnProperty.call(options, "scheduledAgentDispatcher")
@@ -505,10 +524,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const explicitlySuppliedProjectScopeReleaseDispatcher = Object.prototype.hasOwnProperty.call(options, "projectScopeReleaseDispatcher")
   const projectScopeReleaseDispatcher = explicitlySuppliedProjectScopeReleaseDispatcher
     ? (options.projectScopeReleaseDispatcher ?? undefined)
-    : config.storage === undefined || businessStore?.projectScopeReleaseOutbox === undefined
+    : config.storage === undefined || infrastructureStore?.projectScopeReleaseOutbox === undefined
       ? undefined
       : new ProjectScopeReleaseOutboxDispatcher(
-          businessStore.projectScopeReleaseOutbox,
+          infrastructureStore.projectScopeReleaseOutbox,
           new StorageScopeReleaseClient(config.storage.baseUrl, config.storage.secret),
           {
             workerId: `bff-project-scope-release-${process.pid}-${randomUUID()}`,
