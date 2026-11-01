@@ -45,3 +45,17 @@ test("Nest health controller owns health and readiness instead of the legacy rou
   assert.doesNotMatch(server, /segments\.length === 1 && segments\[0\] === "healthz"/u)
   assert.doesNotMatch(server, /segments\.length === 1 && segments\[0\] === "readyz"/u)
 })
+
+test("transitional runtime receives Personal Knowledge from AccountModule instead of global store lookup", async () => {
+  const [runtime, accountModule, legacyRuntime, server] = await Promise.all([
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/legacy-routes/legacy-routes.runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+  ])
+  assert.match(accountModule, /PERSONAL_KNOWLEDGE_REPOSITORY/u)
+  assert.match(legacyRuntime, /PERSONAL_KNOWLEDGE_REPOSITORY/u)
+  assert.match(runtime, /personalKnowledgeRepository/u)
+  assert.match(runtime, /businessStore\?\.personalKnowledge/u)
+  assert.match(server, /composition\.personalKnowledgeRepository/u)
+})

@@ -29,6 +29,7 @@ import { AgUiSessionRuntime } from "../application/agui/session-runtime.js"
 import { AgUiProjectorRunner } from "../application/agui/projector.js"
 import type { IdempotencyEntry, MutationTicket } from "../application/idempotency.js"
 import type { BffBusinessStore } from "../application/ports/bff-business-store.js"
+import type { PersonalKnowledgeRepository } from "../application/ports/personal-knowledge-repository.js"
 import { ScheduledTaskOutboxDispatcher } from "../application/scheduled-task-outbox-dispatcher.js"
 import { AgentDispatchOutboxDispatcher } from "../application/agent-dispatch-outbox-dispatcher.js"
 import { AgentCancellationOutboxDispatcher } from "../application/agent-cancellation-outbox-dispatcher.js"
@@ -108,6 +109,7 @@ export type BffServerComposition = {
   businessStore: BffBusinessStore | null
   /** Feature-owned account personalization provider; legacy composition is only a test/runtime fallback. */
   personalizationProvider: PersonalizationProvider | null
+  personalKnowledgeRepository: PersonalKnowledgeRepository | null
   /** Chat-owned archive/share provider; global store fallback is transitional. */
   chatService: ChatApplicationService | null
   /** Project-owned pin provider; global store fallback is transitional. */
@@ -158,6 +160,7 @@ export type BffCompositionOptions = {
   /** Supplying null is an explicit test composition; omitted means real persistence. */
   businessStore?: BffBusinessStore | null
   personalizationProvider?: PersonalizationProvider | null
+  personalKnowledgeRepository?: PersonalKnowledgeRepository | null
   chatService?: ChatApplicationService | null
   projectService?: ProjectService | null
   sessionAdmission?: SessionAdmission
@@ -309,6 +312,8 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         })()
   const personalizationProvider =
     options.personalizationProvider !== undefined ? options.personalizationProvider : null
+  const personalKnowledgeRepository =
+    options.personalKnowledgeRepository !== undefined ? options.personalKnowledgeRepository : (businessStore?.personalKnowledge ?? null)
   const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.services?.chat ?? null)
   const projectService =
     options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
@@ -697,6 +702,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     installationClient,
     businessStore,
     personalizationProvider,
+    personalKnowledgeRepository,
     chatService,
     projectService,
     publicShareService,

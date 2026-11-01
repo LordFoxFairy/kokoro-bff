@@ -1,11 +1,12 @@
 import { Inject, Injectable, OnApplicationShutdown, OnModuleInit } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
-import { BFF_CONFIG, SESSION_ADMISSION } from "../../common/tokens.js"
+import { BFF_CONFIG, PERSONAL_KNOWLEDGE_REPOSITORY, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { createBffComposition, type BffServerComposition } from "../../bootstrap/runtime.js"
 import { handleBffRequest } from "../../bootstrap/server.js"
 import { PERSONALIZATION_PROVIDER, type PersonalizationProvider } from "../account/personalization.provider.js"
+import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
 
 @Injectable()
 export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown {
@@ -16,10 +17,13 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
     @Inject(SESSION_ADMISSION) sessionAdmission: SessionAdmission,
     @Inject(PERSONALIZATION_PROVIDER)
     personalizationProvider: PersonalizationProvider,
+    @Inject(PERSONAL_KNOWLEDGE_REPOSITORY)
+    personalKnowledgeRepository: PersonalKnowledgeRepository,
   ) {
     this.composition = createBffComposition(config, {
       sessionAdmission,
       personalizationProvider,
+      personalKnowledgeRepository,
     })
   }
 
