@@ -99,6 +99,7 @@ import { handlePersonalSkillLifecycleRequest } from "../http/routes/personal-ski
 import { type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 import { handleIamRelayRequest } from "../modules/iam-relay/iam-relay.middleware.js"
+import { handleAgentConnectionSetupRequest } from "../http/routes/agent-connection-setup-native.js"
 
 function projectContentAccessForRequest(
   request: IncomingMessage,
@@ -980,6 +981,13 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
             : handleScheduledTaskReadRequest(request, response, config, composition.sessionAdmission, composition.scheduledTaskReader),
       )
       .then((handled) => (handled ? true : handleSystemNativeRequest(request, response, config)))
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleAgentConnectionSetupRequest(request, response, config, composition.sessionAdmission),
+      )
       .then((handled) => {
         if (handled) return
         return handleBffRequest(request, response, config, composition)

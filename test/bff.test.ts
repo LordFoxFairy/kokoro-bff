@@ -284,6 +284,49 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(invalid.status, 400)
   })
 
+  it("keeps live Agent setup explicit and fail-closed when the owner is disabled", async () => {
+    const base = await listen(liveServer(config()))
+    const invalid = await fetch(`${base}/v1/agents/connections/setup?platform=irc`, { headers: authHeaders() })
+    assert.equal(invalid.status, 400)
+    assert.equal(((await invalid.json()) as { error: { code: string } }).error.code, "invalid_agent_platform")
+
+    const disabled = await fetch(`${base}/v1/agents/connections/setup?platform=telegram`, { headers: authHeaders() })
+    assert.equal(disabled.status, 503)
+    assert.equal(((await disabled.json()) as { error: { code: string } }).error.code, "agent_not_configured")
+  })
+
+  it("projects an enabled Agent setup response through the explicit owner adapter", async () => {
+    const agent = createServer((request, response) => {
+      assert.equal(request.url, "/v1/agents/connections/setup?platform=telegram")
+      assert.equal(request.headers["x-kokoro-subject-ref"], "user_test")
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({
+        data: {
+          platform: "telegram",
+          status: "pending",
+          qr_value: "kokoro://connect/telegram/fixture",
+          continue_url: "https://dev.kokoro.localhost/app/agents?platform=telegram",
+          expires_at: "2026-11-01T00:15:00.000Z",
+        },
+        meta: { request_id: "agent-owner-request" },
+      }))
+    })
+    const agentBase = await listen(agent)
+    const base = await listen(liveServer(config({ agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } })))
+    const response = await fetch(`${base}/v1/agents/connections/setup?platform=telegram`, { headers: authHeaders() })
+    assert.equal(response.status, 200)
+    assert.deepEqual((await response.json()) as { data: { status: string } }, {
+      data: {
+        platform: "telegram",
+        status: "pending",
+        qr_value: "kokoro://connect/telegram/fixture",
+        continue_url: "https://dev.kokoro.localhost/app/agents?platform=telegram",
+        expires_at: "2026-11-01T00:15:00.000Z",
+      },
+      meta: { request_id: "agent-owner-request" },
+    })
+  })
+
   it("supports scheduled task mutations through the same business contract", async () => {
     const base = await listen(testServer(config()))
     const headers = { ...authHeaders(), "content-type": "application/json", "idempotency-key": "schedule-create-1" }
