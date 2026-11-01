@@ -82,6 +82,10 @@ import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { handleSystemNativeRequest } from "../http/routes/system-native.js"
 import { handleChatNativeRequest } from "../http/routes/chat-native.js"
 import { handleChatBusinessReadRequest } from "../http/routes/chat-business-native.js"
+import { handleChatMutationRequest } from "../http/routes/chat-mutation-native.js"
+import { handleChatEventsRequest } from "../http/routes/chat-events-native.js"
+import { handleChatMessageRequest } from "../http/routes/chat-message-native.js"
+import { handleMessageRegenerationRequest } from "../http/routes/message-regeneration-native.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 import { handleSkillDraftRequest } from "../http/routes/skill-draft-native.js"
 import { handleSkillDraftMutationRequest } from "../http/routes/skill-draft-mutations-native.js"
@@ -738,6 +742,65 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
       .then((handled) => (handled ? true : handleChatBusinessReadRequest(request, response, config, composition.sessionAdmission, composition.chatService, composition.projectService)))
       .then((handled) => (handled ? true : handleMessageFeedbackRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined || composition.chatTurnService === null
+            ? false
+            : handleMessageRegenerationRequest(request, response, config, composition.sessionAdmission, composition.chatTurnService),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined || composition.businessStore === null || composition.chatService === null || composition.projectService === null
+            ? false
+            : handleChatMutationRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.chatService,
+                composition.projectService,
+                composition.idempotency,
+                composition.businessStore,
+              ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined || composition.chatService === null || composition.projectService === null || composition.agUiProjection === null || composition.agUiConsumers === null
+            ? false
+            : handleChatEventsRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.chatService,
+                composition.projectService,
+                composition.agUiProjection,
+                composition.agUiConsumers,
+                composition.agUiRuntime,
+                composition.agUiProjector !== undefined,
+              ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined || composition.businessStore === null || composition.chatService === null || composition.chatTurnService === null || composition.projectService === null
+            ? false
+            : handleChatMessageRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.chatService,
+                composition.chatTurnService,
+                composition.projectService,
+                composition.installationClient,
+                composition.idempotency,
+                composition.businessStore,
+              ),
+      )
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectRenameRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectDeleteRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectDeletionStatusRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
