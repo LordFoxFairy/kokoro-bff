@@ -71,7 +71,7 @@ import { proxyUpstream } from "../upstream.js"
 import { liveAgentSession } from "../http/routes/agent.js"
 import { liveChatBusiness } from "../http/routes/chat.js"
 import type { ChatBusinessProvider } from "../http/routes/chat-business-provider.js"
-import { authorizeLiveBffMutation, liveBffBusiness } from "../http/routes/live-bff.js"
+import { authorizeScheduledTaskMutation, handleScheduledTaskMutationBusiness, scheduledTaskMutation } from "../http/routes/scheduled-task-mutation-native.js"
 import { scheduledCreateInput } from "../application/scheduled/input.js"
 import type { ScheduledTaskCreateInput } from "../application/ports/scheduled-task-repository.js"
 import { authorizeChatRequest, type ChatAuthorization } from "../http/routes/chat-authorization.js"
@@ -497,7 +497,7 @@ export async function handleBffRequest(
         send(response, chatAuthorization.status, failure(chatAuthorization.code, chatAuthorization.message, id))
         return
       }
-      const resourceAuthorization = await authorizeLiveBffMutation(method, context, businessPath, scheduledCreate, composition.businessStore)
+      const resourceAuthorization = await authorizeScheduledTaskMutation(method, context, businessPath, scheduledCreate, composition.businessStore)
       if (resourceAuthorization !== null && !resourceAuthorization.ok) {
         send(response, resourceAuthorization.status, failure(resourceAuthorization.code, resourceAuthorization.message, id))
         return
@@ -616,6 +616,12 @@ export async function handleBffRequest(
     if (projectOwner !== undefined && await handleProjectMutationBusiness(request, response, context, projectOwner, json, mutation, composition.idempotency)) return
   }
 
+  if (composition.businessStore !== null && scheduledTaskMutation(request) !== null) {
+    const scheduledOwner = composition.businessStore.services.scheduledTasks
+    const projectOwner = composition.projectService ?? composition.businessStore.services.projects
+    if (projectOwner !== undefined && await handleScheduledTaskMutationBusiness(request, response, context, scheduledOwner, projectOwner, json, mutation, composition.idempotency)) return
+  }
+
   if (businessPath[0] === "sessions") {
     if (
       composition.businessStore !== null &&
@@ -653,10 +659,6 @@ export async function handleBffRequest(
       composition.chatService ?? composition.businessStore?.services?.chat ?? null,
     )
     return
-  }
-  if (composition.businessStore !== null && bffOwnedBusinessPath(businessPath)) {
-    if (await liveBffBusiness(request, response, context, businessPath, json, mutation, composition.idempotency, composition.businessStore, scheduledCreate))
-      return
   }
   if (await liveOwnerBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency)) return
   if (upstreamBase === null) {

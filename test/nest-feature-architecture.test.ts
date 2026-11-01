@@ -164,7 +164,7 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
 })
 
 test("ProjectsModule owns the project command/read adapters and provider", async () => {
-  const [projectsModule, accessModule, middleware, mutationMiddleware, nativeRoute, packageMiddleware, downloadMiddleware, server, liveBff] = await Promise.all([
+  const [projectsModule, accessModule, middleware, mutationMiddleware, nativeRoute, packageMiddleware, downloadMiddleware, server] = await Promise.all([
     readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-access.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-pin.middleware.ts"), "utf8"),
@@ -173,7 +173,6 @@ test("ProjectsModule owns the project command/read adapters and provider", async
     readFile(path.join(root, "src/modules/projects/project-skill-package-inspection.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-skill-download.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/live-bff.ts"), "utf8"),
   ])
   assert.match(projectsModule, /ProjectAccessModule/u)
   assert.match(accessModule, /provide: PROJECT_SERVICE/u)
@@ -232,10 +231,6 @@ test("ProjectsModule owns the project command/read adapters and provider", async
   assert.doesNotMatch(server, /await projectResourceRoute\(/u)
   assert.doesNotMatch(server, /await projectSkillSelectionRoute\(/u)
   assert.doesNotMatch(server, /isProjectInstallationPath \? .*skillInstallationRoute/u)
-  assert.doesNotMatch(liveBff, /businessPath\[0\] === "projects"[\s\S]{0,200}method === "GET"/u)
-  assert.doesNotMatch(liveBff, /businessPath\.length === 2[\s\S]{0,120}projectId !== undefined && method === "GET"/u)
-  assert.doesNotMatch(liveBff, /instruction-revisions[\s\S]{0,120}method === "GET"/u)
-  assert.doesNotMatch(liveBff, /projectDeletionStatus/u)
 })
 
 test("ProjectsModule owns project-scope release worker lifecycle", async () => {

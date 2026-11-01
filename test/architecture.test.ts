@@ -161,7 +161,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/http/routes/agent.ts",
     "src/http/routes/chat-authorization.ts",
     "src/http/routes/chat.ts",
-    "src/http/routes/live-bff.ts",
+    "src/http/routes/scheduled-task-mutation-native.ts",
     "src/http/routes/owner.ts",
     "src/http/routes/music.ts",
     "src/http/routes/scheduler.ts",
@@ -596,7 +596,7 @@ test("private BFF resources use named owner scopes before receipts and keep serv
   assert.match(server, /ChatBusinessProvider/u)
   assert.match(server, /chatProvider/u)
   assert.ok(server.indexOf("authorizeChatRequest") < server.indexOf("mutationTicket("))
-  assert.ok(server.indexOf("authorizeLiveBffMutation") < server.indexOf("mutationTicket("))
+  assert.ok(server.indexOf("authorizeScheduledTaskMutation") < server.indexOf("mutationTicket("))
   assert.match(openapi, /DirectScopeQuery:[\s\S]*enum: \['', direct\]/u)
   assert.match(openapi, /ShareScopeQuery:[\s\S]*minLength: 1/u)
   assert.match(schema, /uq_bff_project_owner_slug/u)
@@ -667,13 +667,13 @@ test("Conversation Move keeps one PostgreSQL implementation and a bounded driver
 })
 
 test("ScheduledTask mutations use an owner-scoped transactional outbox and fenced dispatcher", async () => {
-  const [scheduledRepository, outboxRepository, dispatcher, delivery, controlClient, liveRoute, schema] = await Promise.all([
+  const [scheduledRepository, outboxRepository, dispatcher, delivery, controlClient, mutationRoute, schema] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
     readFile(path.join(root, "src/application/ports/scheduled-task-outbox-repository.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled-task-outbox-dispatcher.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/clients/scheduler/outbox-delivery.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/clients/scheduler/control-client.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/live-bff.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/scheduled-task-mutation-native.ts"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
   assert.match(scheduledRepository, /BEGIN/u)
@@ -689,8 +689,8 @@ test("ScheduledTask mutations use an owner-scoped transactional outbox and fence
   assert.match(delivery, /SchedulerControlClient/u)
   assert.match(controlClient, /generated\/scheduler\/sdk\.gen\.js/u)
   assert.match(controlClient, /Idempotency-Key/u)
-  assert.doesNotMatch(liveRoute, /reconcileSchedulerTask\(/u)
-  assert.match(liveRoute, /mutationLineage/u)
+  assert.doesNotMatch(mutationRoute, /reconcileSchedulerTask\(/u)
+  assert.match(mutationRoute, /mutationLineage/u)
   assert.match(schema, /CONSTRAINT uq_bff_scheduled_task_outbox_business UNIQUE/u)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
 })
