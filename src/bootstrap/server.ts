@@ -485,7 +485,7 @@ export async function handleBffRequest(
   const projectService = composition.projectService ?? composition.businessStore?.services?.projects
   const chatProvider: ChatBusinessProvider = {
     ...(chatService === undefined || chatService === null ? {} : { chatService }),
-    ...(composition.businessStore?.services?.chatTurns === undefined ? {} : { chatTurnService: composition.businessStore.services.chatTurns }),
+    ...(composition.chatTurnService === null ? {} : { chatTurnService: composition.chatTurnService }),
     ...(projectService === undefined || projectService === null ? {} : { projectService }),
     ...(composition.businessStore?.agUiConsumers === undefined ? {} : { agUiConsumers: composition.businessStore.agUiConsumers }),
   }

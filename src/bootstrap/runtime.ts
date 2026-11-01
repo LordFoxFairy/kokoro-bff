@@ -48,6 +48,7 @@ import { PostgresBffRepositories } from "../infrastructure/postgres/repositories
 import type { RequestContext } from "../domain/request-context.js"
 import type { PersonalizationProvider } from "../modules/account/personalization.provider.js"
 import type { ChatApplicationService } from "../application/chat-service.js"
+import type { ChatTurnApplicationService } from "../application/chat-turn-service.js"
 import type { ProjectService } from "../application/project-service.js"
 import type { PublicShareApplicationService } from "../application/public-share-service.js"
 import { SessionAdmissionClient } from "../auth/session-admission.client.js"
@@ -118,6 +119,8 @@ export type BffServerComposition = {
   skillShareRepository: SkillShareRepository | null
   /** Chat-owned archive/share provider; global store fallback is transitional. */
   chatService: ChatApplicationService | null
+  /** Chat-turn provider owned by AgentDispatchModule; global aggregate fallback is transitional. */
+  chatTurnService: ChatTurnApplicationService | null
   /** Project-owned pin provider; global store fallback is transitional. */
   projectService: ProjectService | null
   publicShareService: PublicShareApplicationService | null
@@ -174,6 +177,7 @@ export type BffCompositionOptions = {
   projectService?: ProjectService | null
   publicShareService?: PublicShareApplicationService | null
   scheduledTaskReader?: ScheduledTaskReadService | null
+  chatTurnService?: ChatTurnApplicationService | null
   sessionAdmission?: SessionAdmission
   skillListAdmission?: SkillListAdmission
   openAppManagementAdmission?: OpenAppManagementAdmission
@@ -329,8 +333,8 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const skillAiAssociation = options.skillAiAssociation !== undefined ? options.skillAiAssociation : (businessStore?.skillAiAssociation ?? null)
   const skillShareRepository = options.skillShareRepository !== undefined ? options.skillShareRepository : (businessStore?.skillShares ?? null)
   const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.services?.chat ?? null)
-  const projectService =
-    options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
+  const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (businessStore?.services?.chatTurns ?? null)
+  const projectService = options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
   const publicShareService =
     options.publicShareService !== undefined ? options.publicShareService : (businessStore?.publicShareService ?? null)
   const scheduledTaskReader =
@@ -726,6 +730,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     chatService,
     projectService,
     publicShareService,
+    chatTurnService,
     scheduledTaskReader,
     sessionAdmission,
     appSkillBindingClient,
