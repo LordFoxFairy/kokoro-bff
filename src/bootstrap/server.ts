@@ -103,7 +103,7 @@ import { handlePersonalSkillLifecycleRequest } from "../http/routes/personal-ski
 import { type ProjectSkillContentAccess } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 import { handleIamRelayRequest } from "../modules/iam-relay/iam-relay.middleware.js"
-import { handleAgentConnectionSetupRequest } from "../http/routes/agent-connection-setup-native.js"
+import { agentConnectionSetupRequest, handleAgentConnectionSetupRequest } from "../http/routes/agent-connection-setup-native.js"
 import { handleAgentControlRequest } from "../http/routes/agent-control-native.js"
 
 function projectContentAccessForRequest(
@@ -148,6 +148,18 @@ function isRawSessionRequest(request: IncomingMessage): boolean {
   try {
     const path = pathOf(request)
     return path[0] === "v1" && path[1] === "sessions"
+  } catch {
+    return false
+  }
+}
+
+function isRawUnknownConfiguredOwnerRequest(request: IncomingMessage): boolean {
+  try {
+    const path = pathOf(request)
+    if (path[0] !== "v1") return false
+    if (path[1] === "agents") return !agentConnectionSetupRequest(request)
+    if (path[1] === "billing") return !billingPersonalRequest(request)
+    return false
   } catch {
     return false
   }
@@ -1112,6 +1124,12 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       )
       .then((handled) => {
         if (handled) return
+        if (composition.routeHandler === undefined && isRawUnknownConfiguredOwnerRequest(request)) {
+          const id = requestId(request)
+          response.setHeader("x-request-id", id)
+          send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
+          return
+        }
         if (
           composition.routeHandler === undefined &&
           composition.businessStore !== null &&

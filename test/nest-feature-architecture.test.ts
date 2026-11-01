@@ -465,6 +465,13 @@ test("Scheduler dispatch shares the feature-owned entrypoint with the raw compat
   assert.doesNotMatch(server, /segments\[0\] === "internal" && segments\[1\] === "bff" && segments\[2\] === "scheduled-tasks" && segments\[3\] === "dispatch"/u)
 })
 
+test("raw compatibility terminates unknown configured owner paths after named adapters", async () => {
+  const server = await readFile(path.join(root, "src/bootstrap/server.ts"), "utf8")
+  assert.match(server, /isRawUnknownConfiguredOwnerRequest\(request\)/u)
+  assert.match(server, /send\(response, 404, failure\("bff_route_not_found"/u)
+  assert.match(server, /composition\.routeHandler === undefined && isRawUnknownConfiguredOwnerRequest/u)
+})
+
 test("AgentRuns execution-binding and submitted-run reader ports are feature-local", async () => {
   assert.equal(await fileExists("src/application/agent-runs/project-execution-binding-reader.ts"), true)
   assert.equal(await fileExists("src/application/agent-runs/submitted-agent-run-reader.ts"), true)
