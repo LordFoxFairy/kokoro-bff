@@ -842,7 +842,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
               config,
               composition.sessionAdmission,
               composition.businessStore,
-              composition.businessStore?.skillAiAssociation ?? null,
+              composition.skillAiAssociation,
               composition.skillProductClient,
             ),
       )
