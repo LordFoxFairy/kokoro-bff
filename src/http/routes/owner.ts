@@ -39,4 +39,3 @@ export async function liveOwnerRequest(
     return { status: 502, body: failure("upstream_unreachable", `The configured ${owner} upstream is unavailable`, context.requestId) }
   }
 }
-
