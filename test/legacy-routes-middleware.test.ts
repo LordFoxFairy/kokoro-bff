@@ -30,6 +30,7 @@ test("LegacyRoutes bypasses Chat-owned migrated paths", () => {
     ["POST", "/v1/sessions/session-1/runs/run-1/control"],
     ["GET", "/v1/sessions/session-1/runs/run-1/display"],
     ["POST", "/internal/v1/model-admissions"],
+    ["POST", "/internal/v1/project-execution-bindings/verify"],
   ]) {
     assert.equal(isMigratedChatRoute(request(method, url)), true, `${method} ${url}`)
   }
