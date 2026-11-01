@@ -99,4 +99,8 @@ test("transitional runtime receives Skill usage from SkillsModule instead of onl
   assert.match(legacyRuntime, /PROJECT_MCP_RECOMMENDATIONS_PROVIDER/u)
   assert.match(runtime, /projectMcpRecommendationsProvider/u)
   assert.match(server, /composition\.projectMcpRecommendationsProvider/u)
+  assert.match(legacyRuntime, /SKILL_EXACT_DOWNLOAD_SOURCE/u)
+  assert.match(legacyRuntime, /SKILL_SPECIFICATION_SOURCE/u)
+  assert.match(runtime, /exactSkillDownloadSource/u)
+  assert.match(server, /composition\.exactSkillDownloadSource/u)
 })
