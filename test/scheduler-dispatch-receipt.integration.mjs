@@ -101,9 +101,9 @@ function receiverConfig(agentBase) {
   }
 }
 
-function receiverStore(store, receipts = store.schedulerDispatchReceipts, scheduledTasks = store.services.scheduledTasks) {
+function receiverStore(store, receipts = store.schedulerDispatchReceipts, scheduledTasks = store.scheduledTaskService) {
   return {
-    services: { scheduledTasks },
+    scheduledTaskService: scheduledTasks,
     agUi: store.agUi,
     schedulerDispatchReceipts: receipts,
     scheduledAgentDispatch: store.scheduledAgentDispatch,
@@ -407,7 +407,7 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
   try {
     const agentBase = await listen(agent)
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
-    await store.services.scheduledTasks.create(
+    await store.scheduledTaskService.create(
       { tenantId: tenant, subjectId: owner },
       {
         title: "Receiver fixture",
@@ -516,7 +516,7 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
   let store
   try {
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
-    await store.services.scheduledTasks.create(
+    await store.scheduledTaskService.create(
       { tenantId: tenant, subjectId: owner },
       {
         title: "Rollback",
@@ -619,7 +619,7 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
     let deleteOperation
     try {
       store = new PostgresBffRepositories(postgresUrl, redisUrl)
-      await store.services.scheduledTasks.create(
+      await store.scheduledTaskService.create(
         { tenantId: tenant, subjectId: owner },
         {
           title: "Race",
@@ -683,7 +683,7 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
           response: { status: 202, body: { data: { accepted: true } } },
         })
       const remove = () =>
-        store.services.scheduledTasks.delete({ tenantId: tenant, subjectId: owner }, taskId, {
+        store.scheduledTaskService.delete({ tenantId: tenant, subjectId: owner }, taskId, {
           tenantId: tenant,
           actorId: owner,
           requestId: `delete-${suffix}`,
@@ -826,7 +826,7 @@ async function r66LifecycleFixture(context) {
     const requestId = `mutation-${suffix}-${++requestSequence}`
     return { tenantId: tenant, actorId: owner, requestId, idempotencyKey: requestId }
   }
-  await store.services.scheduledTasks.create(
+  await store.scheduledTaskService.create(
     { tenantId: tenant, subjectId: owner },
     {
       title: "Lifecycle",
@@ -869,7 +869,7 @@ async function r66LifecycleFixture(context) {
     return { status: response.status, body: await response.json() }
   }
   const setActive = async (active) => {
-    const task = await store.services.scheduledTasks.update(
+    const task = await store.scheduledTaskService.update(
       { tenantId: tenant, subjectId: owner },
       taskId,
       { enabled: active, status: active ? "active" : "paused" },
@@ -881,7 +881,7 @@ async function r66LifecycleFixture(context) {
     return task
   }
   const prepare = async () => {
-    const record = await store.services.scheduledTasks.findRecord(tenant, taskId)
+    const record = await store.scheduledTaskService.findRecord(tenant, taskId)
     assert.ok(record !== null)
     assert.equal(record.task.projectId, undefined)
     const requestId = `prepared-${suffix}`
@@ -944,7 +944,7 @@ function r66AssertInactive(result) {
 
 receiverIntegrationTest("cadence-only change rejects unprepared old callbacks and accepts only the new frozen revision", async (context) => {
   const fixture = await r66LifecycleFixture(context)
-  const changed = await fixture.store.services.scheduledTasks.update(
+  const changed = await fixture.store.scheduledTaskService.update(
     { tenantId: fixture.tenant, subjectId: fixture.owner },
     fixture.taskId,
     { frequency: "weekly", time: "08:00", timezone: "UTC", weekdays: [1] },
@@ -1072,7 +1072,7 @@ receiverIntegrationTest("R66 accepted admitted head survives pause and restart w
   assert.deepEqual(await fixture.callback(), accepted)
   assert.deepEqual(await fixture.receipt(), terminal)
   assert.deepEqual(await fixture.facts(), before)
-  const task = await fixture.store.services.scheduledTasks.findRecord(fixture.tenant, fixture.taskId)
+  const task = await fixture.store.scheduledTaskService.findRecord(fixture.tenant, fixture.taskId)
   assert.equal(task.task.status, "paused")
   assert.equal(task.task.enabled, false)
 })
@@ -1125,7 +1125,7 @@ for (const invalidation of ["deleted", "owner_changed", "revision_changed"]) {
     await fixture.prepare()
     if (invalidation === "deleted") {
       assert.equal(
-        await fixture.store.services.scheduledTasks.delete({ tenantId: fixture.tenant, subjectId: fixture.owner }, fixture.taskId, {
+        await fixture.store.scheduledTaskService.delete({ tenantId: fixture.tenant, subjectId: fixture.owner }, fixture.taskId, {
           tenantId: fixture.tenant,
           actorId: fixture.owner,
           requestId: `${fixture.key}-delete`,
@@ -1146,7 +1146,7 @@ for (const invalidation of ["deleted", "owner_changed", "revision_changed"]) {
         1,
       )
     } else {
-      const updated = await fixture.store.services.scheduledTasks.update(
+      const updated = await fixture.store.scheduledTaskService.update(
         { tenantId: fixture.tenant, subjectId: fixture.owner },
         fixture.taskId,
         { prompt: "revised prompt" },
