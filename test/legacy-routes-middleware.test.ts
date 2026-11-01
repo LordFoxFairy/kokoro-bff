@@ -17,6 +17,10 @@ test("LegacyRoutes bypasses Chat-owned migrated paths", () => {
     ["PUT", "/v1/sessions/session-1/messages/message-1/feedback"],
     ["POST", "/v1/sessions/session-1/messages/message-1/regenerate"],
     ["POST", "/v1/sessions/session-1/move"],
+    ["PATCH", "/v1/sessions/session-1/title"],
+    ["DELETE", "/v1/sessions/session-1"],
+    ["POST", "/v1/sessions/session-1/share"],
+    ["DELETE", "/v1/sessions/session-1/share"],
   ]) {
     assert.equal(isMigratedChatRoute(request(method, url)), true, `${method} ${url}`)
   }
@@ -26,10 +30,11 @@ test("LegacyRoutes retains un-migrated Chat mutations and scoped reads", () => {
   for (const [method, url] of [
     ["POST", "/v1/sessions/session-1/messages"],
     ["GET", "/v1/sessions/session-1/events"],
-    ["PATCH", "/v1/sessions/session-1/title"],
-    ["DELETE", "/v1/sessions/session-1"],
+    ["PATCH", "/v1/sessions/session-1/title?project_ref=project-1"],
+    ["DELETE", "/v1/sessions/session-1?project_ref=project-1"],
     ["GET", "/v1/sessions?project_ref=project-1"],
   ]) {
     assert.equal(isMigratedChatRoute(request(method, url)), false, `${method} ${url}`)
   }
+  assert.equal(isMigratedChatRoute(request("GET", "/v1/sessions/%E0%A4%A")), false)
 })

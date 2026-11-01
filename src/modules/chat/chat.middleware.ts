@@ -1,26 +1,32 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, CHAT_SERVICE, CHAT_TURN_SERVICE, PUBLIC_SHARE_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
+import { BFF_CONFIG, CHAT_IDEMPOTENCY, CHAT_SERVICE, CHAT_TURN_SERVICE, PUBLIC_SHARE_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
 import type { PublicShareApplicationService } from "../../application/public-share-service.js"
 import type { ChatTurnApplicationService } from "../../application/chat-turn-service.js"
+import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
+import type { IdempotencyEntry } from "../../application/idempotency.js"
 import { handleChatNativeRequest } from "../../http/routes/chat-native.js"
 import { handleMessageFeedbackRequest } from "../../http/routes/message-feedback-native.js"
 import { handleSharedPublicRequest } from "../../http/routes/shared-native.js"
 import { handleMoveSessionRequest } from "../../http/routes/move-session-native.js"
 import { handleMessageRegenerationRequest } from "../../http/routes/message-regeneration-native.js"
 import { handleChatBusinessReadRequest } from "../../http/routes/chat-business-native.js"
+import { handleChatMutationRequest } from "../../http/routes/chat-mutation-native.js"
 
 @Injectable()
 export class ChatMiddleware implements NestMiddleware {
+  private readonly idempotency = new Map<string, IdempotencyEntry>()
+
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(CHAT_SERVICE) private readonly chat: ChatApplicationService,
     @Inject(CHAT_TURN_SERVICE) private readonly chatTurns: ChatTurnApplicationService,
     @Inject(PUBLIC_SHARE_SERVICE) private readonly publicShare: PublicShareApplicationService,
+    @Inject(CHAT_IDEMPOTENCY) private readonly chatIdempotency: IdempotencyRepository,
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
@@ -30,6 +36,7 @@ export class ChatMiddleware implements NestMiddleware {
       .then((handled) => handled || handleMessageFeedbackRequest(request, response, this.config, this.admission, this.chat))
       .then((handled) => handled || handleMessageRegenerationRequest(request, response, this.config, this.admission, this.chatTurns))
       .then((handled) => handled || handleMoveSessionRequest(request, response, this.config, this.admission, this.chat))
+      .then((handled) => handled || handleChatMutationRequest(request, response, this.config, this.admission, this.chat, this.idempotency, this.chatIdempotency))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

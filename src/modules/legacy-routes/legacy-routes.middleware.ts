@@ -6,12 +6,17 @@ import { isChatBusinessReadRequest } from "../../http/routes/chat-business-nativ
 import { isMessageFeedbackRequest } from "../../http/routes/message-feedback-native.js"
 import { isMessageRegenerationNativeRequest } from "../../http/routes/message-regeneration-native.js"
 import { isSharedPublicRequest } from "../../http/routes/shared-native.js"
+import { isChatDirectMutationRequest } from "../../http/routes/chat-mutation-native.js"
 
 export function isMigratedChatRoute(request: IncomingMessage): boolean {
-  if (isSharedPublicRequest(request) || isChatNativeRequest(request) || isChatBusinessReadRequest(request)) return true
-  if (isMessageFeedbackRequest(request) || isMessageRegenerationNativeRequest(request)) return true
-  const path = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean)
-  return request.method === "POST" && path[0] === "v1" && path[1] === "sessions" && path.length === 4 && path[3] === "move"
+  try {
+    if (isSharedPublicRequest(request) || isChatNativeRequest(request) || isChatBusinessReadRequest(request) || isChatDirectMutationRequest(request)) return true
+    if (isMessageFeedbackRequest(request) || isMessageRegenerationNativeRequest(request)) return true
+    const path = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean)
+    return request.method === "POST" && path[0] === "v1" && path[1] === "sessions" && path.length === 4 && path[3] === "move"
+  } catch {
+    return false
+  }
 }
 
 @Injectable()
