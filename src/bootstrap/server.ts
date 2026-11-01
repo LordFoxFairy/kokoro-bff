@@ -76,6 +76,7 @@ import { scheduledCreateInput } from "../application/scheduled/input.js"
 import type { ScheduledTaskCreateInput } from "../application/ports/scheduled-task-repository.js"
 import { authorizeChatRequest, type ChatAuthorization } from "../http/routes/chat-authorization.js"
 import { liveOwnerBusiness } from "../http/routes/owner.js"
+import { billingPersonalRequest, handleBillingPersonalBusiness } from "../http/routes/billing-personal-native.js"
 import { handleProjectMutationBusiness, projectMutation } from "../http/routes/project-mutation-native.js"
 import { handleMoriRequest } from "../http/routes/music-native.js"
 import { configuredUpstream, bffOwnedBusinessPath, upstreamKey } from "../http/routes/routing.js"
@@ -622,6 +623,8 @@ export async function handleBffRequest(
     if (projectOwner !== undefined && await handleScheduledTaskMutationBusiness(request, response, context, scheduledOwner, projectOwner, json, mutation, composition.idempotency)) return
   }
 
+  if (billingPersonalRequest(request) && await handleBillingPersonalBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency)) return
+
   if (businessPath[0] === "sessions") {
     if (
       composition.businessStore !== null &&
@@ -660,7 +663,7 @@ export async function handleBffRequest(
     )
     return
   }
-  if (await liveOwnerBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency)) return
+  if (await liveOwnerBusiness(request, response, config, context, businessPath, mutation, composition.idempotency)) return
   if (upstreamBase === null) {
     await reply(
       response,

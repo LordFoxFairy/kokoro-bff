@@ -62,17 +62,26 @@ test("IamRelayModule owns the native protocol relay before the transitional disp
   assert.doesNotMatch(server, /startsWith\("\/iam"\)/u)
 })
 
-test("BillingModule owns administrator credit and metering routes", async () => {
-  const [moduleSource, middleware, nativeRoute, server] = await Promise.all([
+test("BillingModule owns personal and administrator billing routes", async () => {
+  const [moduleSource, middleware, personalMiddleware, personalRoute, nativeRoute, server, owner] = await Promise.all([
     readFile(path.join(root, "src/modules/billing/billing.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/billing/billing-admin.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/billing/billing-personal.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/billing-personal-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/billing-admin-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/owner.ts"), "utf8"),
   ])
   assert.match(moduleSource, /BillingAdminMiddleware/u)
+  assert.match(moduleSource, /BillingPersonalMiddleware/u)
+  assert.match(moduleSource, /BILLING_IDEMPOTENCY/u)
   assert.match(middleware, /handleBillingAdminRequest/u)
+  assert.match(personalMiddleware, /BillingPersonalMiddleware/u)
+  assert.match(personalRoute, /handleBillingPersonalBusiness/u)
   assert.match(nativeRoute, /handleBillingAdminRequest/u)
   assert.match(server, /handleBillingAdminRequest/u)
+  assert.match(server, /handleBillingPersonalBusiness/u)
+  assert.doesNotMatch(owner, /billingPersonalRead|readBillingCatalog|initializeBillingCreditAccount/u)
   assert.doesNotMatch(server, /await liveAdminCreditGrant\(/u)
   assert.doesNotMatch(server, /await liveAdminMetering\(/u)
 })
