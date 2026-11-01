@@ -5,12 +5,12 @@ import { describe, it } from "node:test"
 import { AgentDispatchOutboxDispatcher } from "../dist/application/agent-dispatch-outbox-dispatcher.js"
 import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
 import { classifyAgentDispatchAttempt } from "../dist/infrastructure/clients/agent/outbox-delivery.js"
-import type { AgentDispatchDeliveryPort } from "../dist/application/ports/agent-dispatch-delivery.js"
+import type { AgentDispatchDeliveryPort } from "../dist/application/agent-dispatch/agent-dispatch-delivery.js"
 import type {
   AgentDispatchOutboxClaimInput,
   AgentDispatchOutboxRepository,
   CommitChatTurn,
-} from "../dist/application/ports/agent-dispatch-outbox-repository.js"
+} from "../dist/application/agent-dispatch/agent-dispatch-outbox-repository.js"
 import type { StableIdGenerator } from "../dist/application/ports/stable-id-generator.js"
 import type { AgentDispatchCommand, AgentDispatchLease, AgentDispatchReceipt } from "../dist/domain/chat/agent-dispatch.js"
 
@@ -29,7 +29,7 @@ class RecordingRepository implements AgentDispatchOutboxRepository {
   public unknown: Array<{ lease: AgentDispatchLease; delayMs: number; errorCode: string }> = []
   public notAdmitted: Array<{ lease: AgentDispatchLease; errorCode: string }> = []
 
-  public async prepareChatTurnSelection(_input): Promise<import("../dist/application/ports/agent-dispatch-outbox-repository.js").ChatTurnSelection> {
+  public async prepareChatTurnSelection(_input): Promise<import("../dist/application/agent-dispatch/agent-dispatch-outbox-repository.js").ChatTurnSelection> {
     return { kind: "new", projectId: null, installationIds: [] }
   }
 

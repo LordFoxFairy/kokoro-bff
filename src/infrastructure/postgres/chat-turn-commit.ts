@@ -4,7 +4,7 @@ import { performance } from "node:perf_hooks"
 
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 
-import type { CommitChatTurn, ChatTurnSelectionInput, ChatTurnSelection } from "../../application/ports/agent-dispatch-outbox-repository.js"
+import type { CommitChatTurn, ChatTurnSelectionInput, ChatTurnSelection } from "../../application/agent-dispatch/agent-dispatch-outbox-repository.js"
 import { bindAgentDispatchPayloadProjectScope, parseAgentDispatchPayload, type AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
 import { firstMessageConversationTitle, isClientCreatedConversationId } from "../../domain/chat/conversation.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"

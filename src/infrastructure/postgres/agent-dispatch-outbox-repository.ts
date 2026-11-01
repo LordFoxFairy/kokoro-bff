@@ -10,7 +10,7 @@ import type {
   CommitChatTurn,
   ChatTurnSelectionInput,
   ChatTurnSelection,
-} from "../../application/ports/agent-dispatch-outbox-repository.js"
+} from "../../application/agent-dispatch/agent-dispatch-outbox-repository.js"
 import { agentDispatchFailureProjection } from "../../application/agui/agent-dispatch-failure.js"
 import {
   parseAgentDispatchPayload,

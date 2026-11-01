@@ -478,6 +478,31 @@ test("AgentRunsModule owns the run-display adapter and provider seam", async () 
   assert.doesNotMatch(server, /await runDisplayRoute\(/u)
 })
 
+test("Agent dispatch and cancellation outbox ports are feature-local", async () => {
+  for (const file of [
+    "src/application/agent-dispatch/agent-dispatch-delivery.ts",
+    "src/application/agent-dispatch/agent-dispatch-outbox-repository.ts",
+    "src/application/agent-dispatch/agent-cancellation-delivery.ts",
+    "src/application/agent-dispatch/agent-cancellation-outbox-repository.ts",
+  ]) assert.equal(await fileExists(file), true, `${file} must exist`)
+  for (const file of [
+    "src/application/ports/agent-dispatch-delivery.ts",
+    "src/application/ports/agent-dispatch-outbox-repository.ts",
+    "src/application/ports/agent-cancellation-delivery.ts",
+    "src/application/ports/agent-cancellation-outbox-repository.ts",
+  ]) assert.equal(await fileExists(file), false, `${file} must stay deleted`)
+  const [dispatch, cancellation, chatTurn, repository] = await Promise.all([
+    readFile(path.join(root, "src/application/agent-dispatch-outbox-dispatcher.ts"), "utf8"),
+    readFile(path.join(root, "src/application/agent-cancellation-outbox-dispatcher.ts"), "utf8"),
+    readFile(path.join(root, "src/application/chat-turn-service.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/agent-dispatch-outbox-repository.ts"), "utf8"),
+  ])
+  assert.match(dispatch, /agent-dispatch\/agent-dispatch-(?:delivery|outbox-repository)\.js/u)
+  assert.match(cancellation, /agent-dispatch\/agent-cancellation-(?:delivery|outbox-repository)\.js/u)
+  assert.match(chatTurn, /agent-dispatch\/agent-dispatch-outbox-repository\.js/u)
+  assert.match(repository, /application\/agent-dispatch\/agent-dispatch-outbox-repository\.js/u)
+})
+
 test("AgentDispatchModule owns Agent outbox worker lifecycle", async () => {
   const [dispatchModule, runtime] = await Promise.all([
     readFile(path.join(root, "src/modules/agent-dispatch/agent-dispatch.module.ts"), "utf8"),

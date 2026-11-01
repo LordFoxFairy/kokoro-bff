@@ -2,11 +2,11 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import { AgentCancellationOutboxDispatcher } from "../dist/application/agent-cancellation-outbox-dispatcher.js"
-import type { AgentCancellationDeliveryPort } from "../dist/application/ports/agent-cancellation-delivery.js"
+import type { AgentCancellationDeliveryPort } from "../dist/application/agent-dispatch/agent-cancellation-delivery.js"
 import type {
   AgentCancellationOutboxClaimInput,
   AgentCancellationOutboxRepository,
-} from "../dist/application/ports/agent-cancellation-outbox-repository.js"
+} from "../dist/application/agent-dispatch/agent-cancellation-outbox-repository.js"
 import type {
   AgentCancellationCommand,
   AgentCancellationLease,

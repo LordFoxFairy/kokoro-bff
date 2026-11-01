@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { test } from "node:test"
-import type { CommitChatTurn } from "../src/application/ports/agent-dispatch-outbox-repository.js"
+import type { CommitChatTurn } from "../src/application/agent-dispatch/agent-dispatch-outbox-repository.js"
 import { ChatTurnApplicationService } from "../src/application/chat-turn-service.js"
 const frozen = {
   schema_version: 3 as const,

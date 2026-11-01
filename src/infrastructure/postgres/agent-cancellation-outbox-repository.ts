@@ -3,7 +3,7 @@ import type { PoolClient } from "pg"
 import type {
   AgentCancellationOutboxClaimInput,
   AgentCancellationOutboxRepository,
-} from "../../application/ports/agent-cancellation-outbox-repository.js"
+} from "../../application/agent-dispatch/agent-cancellation-outbox-repository.js"
 import {
   parseAgentCancellationPayload,
   type AgentCancellationCommand,
