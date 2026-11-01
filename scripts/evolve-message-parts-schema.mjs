@@ -5,6 +5,7 @@ import { performance } from "node:perf_hooks"
 import { Client } from "pg"
 
 import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"
+import { messageRegenerationDefinitions } from "./message-regeneration-schema-catalog.mjs"
 
 /** One named additive operation. No runtime pool, retries, migration ledger or caller DDL. */
 export async function evolveMessagePartsSchema({ mode, databaseUrl, signal, timeoutMs = 20000 }) {
@@ -197,7 +198,15 @@ export function messagePartsSchemaDefinitions(schema) {
   if (typeof schema !== "string") throw new Error("invalid_schema")
   const tables = [...schema.matchAll(/^CREATE TABLE IF NOT EXISTS bff_message \([\s\S]*?^\);/gmu)]
   if (tables.length !== 1) throw new Error("invalid_schema")
-  const table = tables[0][0]
+  let table = tables[0][0]
+  let currentTables = []
+  if (createHash("sha256").update(table).digest("hex") !== TARGET_TABLE_SHA256) {
+    // The existing owner definitions prove the exact regeneration/final descendants.
+    // Strip those approved deltas only; never normalize an arbitrary published table.
+    const descendants = messageRegenerationDefinitions(schema)
+    table = descendants.prior
+    currentTables = [descendants.current, ...(descendants.currentWithFinal ? [descendants.currentWithFinal] : [])]
+  }
   if (createHash("sha256").update(table).digest("hex") !== TARGET_TABLE_SHA256) throw new Error("invalid_schema")
   const constraints = [...table.matchAll(/  CONSTRAINT ck_bff_message_ordered_parts CHECK \([\s\S]*?\n  \),\n/gu)]
   if (constraints.length !== 1) throw new Error("invalid_schema")
@@ -210,7 +219,7 @@ export function messagePartsSchemaDefinitions(schema) {
     return { name, declaration: lines[0].slice(2, -1) }
   })
   if (createHash("sha256").update(oldTable).digest("hex") !== BASE_TABLE_SHA256) throw new Error("invalid_schema")
-  return { table, oldTable, columns, constraint }
+  return { table, oldTable, columns, constraint, currentTables }
 }
 
 async function readCatalog(query, relation) {
@@ -243,17 +252,21 @@ async function readCatalog(query, relation) {
 }
 
 async function expectedCatalog(query, definitions) {
-  const probe = definitions.table.replace("CREATE TABLE IF NOT EXISTS bff_message", "CREATE TEMP TABLE bff_message_parts_probe")
-  await query(`${probe.slice(0, -1)} ON COMMIT DROP`)
-  const catalog = await readCatalog(query, "pg_temp.bff_message_parts_probe")
-  await query("DROP TABLE pg_temp.bff_message_parts_probe")
-  catalog.constraints = catalog.constraints
-    .map((constraint) => ({
-      ...constraint,
-      name: constraint.name.replace(/^bff_message_parts_probe_/u, "bff_message_"),
-    }))
-    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-  return catalog
+  const catalogs = []
+  for (const table of [definitions.table, ...definitions.currentTables]) {
+    const probe = table.replace("CREATE TABLE IF NOT EXISTS bff_message", "CREATE TEMP TABLE bff_message_parts_probe")
+    await query(`${probe.slice(0, -1)} ON COMMIT DROP`)
+    const catalog = await readCatalog(query, "pg_temp.bff_message_parts_probe")
+    await query("DROP TABLE pg_temp.bff_message_parts_probe")
+    catalog.constraints = catalog.constraints
+      .map((constraint) => ({
+        ...constraint,
+        name: constraint.name.replace(/^bff_message_parts_probe_/u, "bff_message_"),
+      }))
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    catalogs.push(catalog)
+  }
+  return catalogs
 }
 
 async function assertMessageRelation(query) {
@@ -277,10 +290,10 @@ async function assertMessageRelation(query) {
 async function inspectMessagePartsSchema(query, expected) {
   await assertMessageRelation(query)
   const actual = await readCatalog(query, "kokoro_bff.bff_message")
-  if (JSON.stringify(actual) === JSON.stringify(expected)) return "current"
+  if (expected.some((catalog) => JSON.stringify(actual) === JSON.stringify(catalog))) return "current"
   const old = {
-    columns: expected.columns.filter(({ name }) => !PARTS_COLUMNS.includes(name)),
-    constraints: expected.constraints.filter(({ name }) => name !== PARTS_CONSTRAINT),
+    columns: expected[0].columns.filter(({ name }) => !PARTS_COLUMNS.includes(name)),
+    constraints: expected[0].constraints.filter(({ name }) => name !== PARTS_CONSTRAINT),
   }
   if (JSON.stringify(actual) === JSON.stringify(old)) return "old"
   throw new Error("invalid_schema")

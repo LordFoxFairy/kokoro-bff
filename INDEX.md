@@ -1,3 +1,9 @@
+## 2026-11-01 具名非空库演进工具
+
+- `scripts/evolve-message-parts-schema.mjs`：沿既有 regeneration/final 精确定义识别固定parts父及完整后继，不放宽任意旧形状。
+- `scripts/evolve-dispatch-execution-schema.mjs`、`scripts/dispatch-execution-schema-catalog.mjs`：现canonical dispatch两nullable列的有限check/apply，严格旧/current catalog、原索引/行保持及unknown恢复。
+- `test/message-parts-schema-evolution.integration.mjs`、`test/dispatch-execution-schema-evolution.integration.mjs`：只用Root具名独占临时库；`test/fixtures/schema-evolution-relay.mjs`复用原真实COMMIT丢ACK relay。实际结果与正常未激活边界见CURRENT首节。
+
 ## 原 Run Skill／文件展示（2026-10-28，候选）
 
 `routes/run-display.ts` 仅为当前Session/owned Conversation的exact submitted Run按需读Agent正式8.3；前后bounded资格与caller abort，最后owned检查在immutable映射之后，不插snapshot/list N+1。新safeactivity可选事实沿原process/ordered保留；旧display为独立只读hint，不改source/event/digest、不纳Share或当前catalog。原18生成器及完整父逆证在contract入口，正常由Root后验。

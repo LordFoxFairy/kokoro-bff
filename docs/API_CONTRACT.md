@@ -1,3 +1,9 @@
+## 2026-11-01 旧库具名工具（B-15，无网络契约变化）
+
+现 Public28.17、internal、generated 与全部 HTTP 操作保持原字节。新增 `pnpm db:evolve-dispatch-execution check|apply`，与既有具名入口一样只接一个模式参数、显式 `KOKORO_BFF_POSTGRES_URL`，拒系统库、非owner schema、注入 options 和多余参数。结果闭集为 state/code/cleanup/duration_ms，CLI额外固定operation；unknown 退出4，只允许后继独立 check 核实，不自动重试 apply，不回显URL或原始数据库异常。check含事务锁与 TEMP catalog probe，不是只读SQL连接入口。
+
+parts入口不变，只修对当前 approved canonical 的精确识别；已完成regen/final返回current而不降级。两工具不提供调用者 SQL、路径、任意表/列参数或业务恢复API。
+
 ## 2026-10-29 Custom API 选择冻结与私有恢复（候选）
 
 已固定 Agent `f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87` HTTP8.10，OpenAPI SHA256 `af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e`；原生成入口派生18份client/validator/profile并验证两次字节一致，新数组按owner profile_id唯一且嵌套项strict，不手改生成物。

@@ -1,3 +1,9 @@
+## 2026-11-01 既有 canonical 的具名非空库演进（B-15，未执行正常DDL）
+
+本片 `database/schema.sql` 原字节保持。Dispatch唯一delta是原 `bff_agent_dispatch_outbox.execution_project_ref TEXT` 和 `execution_context_retired_at TIMESTAMPTZ(3)` 两个 nullable、无default列；仅旧/current完整形状可接受，部分安装和漂移拒绝。apply同事务追加后重验，保留原行、payload、receipt、xmin、索引与其他owner；不从trace/payload回填执行authority。未知历史NULL保留，不声称旧Run已经具备新执行绑定证明。
+
+Message仅修工具的canonical反投影：agent-failure→parts→regeneration→final的正式前置链不变，固定父hash不重签。完整regen/final可作current，无降级/删列；部分或不明旧形状拒绝。失败回滚，实际发送COMMIT后丢ACK为unknown；回退停止新producer并保留可读列/新事实。正常RSS历史表列不在本片清理范围。fresh installer仍只装空owner schema，不能替代非空库升级。Root负责隔离fixture、备份恢复及正常激活，当前没有执行任何正常数据库操作。
+
 ## 2026-10-29 Custom API 选择冻结与私有恢复（候选）
 
 不增表、列、DDL、缓存或第二份偏好事实。原bff_agent_dispatch_outbox.payload.launch可携带selected_custom_api_profiles，只含{profile_id,expected_state_version}，按原提交事务持久冻结；schema_version=3继续接受旧省略形式。空数组producer规范化为省略，旧JSON/digest原字节不变；既有历史行不回填。

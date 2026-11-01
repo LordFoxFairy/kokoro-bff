@@ -1,3 +1,9 @@
+## 2026-11-01 具名旧库演进工具补齐（B-15，Root 已批准，未正常激活）
+
+基线853ca9a，唯一数据事实仍是现 `database/schema.sql`。只修离线具名工具，不改 public/internal wire、runtime、canonical、依赖或正常资源。Message parts 从既有 regeneration/final 精确定义反投影到原固定 parts 父块；原 BASE/TARGET、三列和 CHECK 字节不变。可识别的完成态仅为正式 parts、regeneration、final 三个完整 catalog；旧态只允许精确 parts BASE，部分列、额外字段、未知约束及 canonical 漂移拒绝，不修补历史混合形状。
+
+新增 dispatch-execution 具名 check/apply，仅在原 outbox 精确旧/current catalog 之间追加已获准的两个 nullable 列；声明从 canonical 抽取并固定表/索引原件摘要。复用原具名工具的 owner advisory lock、有限表锁、20秒共同期限、取消、连接退休与 COMMIT-unknown 规则。无 migration runner/ledger、运行自动DDL或历史 payload 回填。先隔离测试与 Root 独审，再备份/恢复演练及正式配对；源码候选不代表正常升级完成。
+
 ## 2026-10-29 Custom API 选择冻结与私有恢复（候选）
 
 已固定 Agent `f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87` HTTP8.10，OpenAPI SHA256 `af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e`；原生成入口派生18份client/validator/profile并验证两次字节一致，新数组按owner profile_id唯一且嵌套项strict，不手改生成物。

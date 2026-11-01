@@ -1,3 +1,11 @@
+## 2026-11-01 B-15 具名旧库演进候选（未正常激活）
+
+基线853ca9a，仅离线工具/测试与必要说明。parts原工具对当前canonical在连库前invalid_schema的RED已复现；现复用正式 regeneration/final 精确定义反投影，保原BASE/TARGET摘要，只有精确旧态可加三列/CHECK，完整parts/regen/final态为current。新增 `db:evolve-dispatch-execution check|apply`，只追加现canonical的execution_project_ref与execution_context_retired_at两nullable列；表/索引精确父保护、部分安装及未知形状拒绝，不回填payload或旧执行authority。public/internal/canonical/runtime/依赖保持原字节。
+
+Node22.22.2实跑：`node --test --test-concurrency=1 test/message-parts-schema-evolution.integration.mjs` 7 PASS/0 SKIP；`node --test --test-concurrency=1 test/dispatch-execution-schema-evolution.integration.mjs` 5 PASS/0 SKIP，分别使用Root创建的独占临时PG库，未访问正常库/Redis。覆盖failure→parts→regen→final前置、fresh/旧/current、旧行/xmin/索引与其他schema、部分/漂移/default/type/RLS/rule/trigger、锁超时/在途取消、真实丢COMMIT ACK后的unknown/独立check核实及单连接退役；CLI非法参数拒绝。测试结束所有Pool/relay已关，库恢复current空业务fixture并交Root回收。首轮dispatch测试在主动加列后的JSON快照预期处失败，已修正为比较注入后的快照并保拒绝/不改行断言，后续完整通过；不隐去失败记录。
+
+受影响格式、lint、typecheck及architecture36 PASS；schema-governance13 PASS/2既有资源SKIP，不把跳过称通过。Root停写后独立重跑两个专属PG文件共12项（7项pure、5项实际PG case），零失败/跳过；完整默认2306 PASS/3原条件SKIP、contract1327 PASS/0SKIP，默认命令含正式build。非文档输入前后无漂移，13文件冻结组合经独审复算精确一致，无确定P0/P1/P2。原RED和首轮夹具预期错误保留在worker工具历史，不能冒独立文件日志；Root复验已有本机完整日志。真实非owner SQL权限矩阵、并发apply/owner advisory竞争仍未逐项验。正常备份恢复、DDL、BFF/Web配对和A的Run/display/RSS旅程仍未验，不能由此声称全产品兼容。本片未操作正常配置/服务/数据。入口与边界见INDEX及三设计首节。
+
 ## 2026-10-29 Custom API 安全选择发送/恢复（候选，正常未启用）
 
 Public28.17新增可选 safe profile_id/expected_state_version 引用，固定消费 Agent HTTP8.10 f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87。原提交 digest/outbox 深冻结、unknown重试、再生成复制与私有snapshot回读承接同一选择；省略/空数组保持旧digest/payload字节，严格拒绝重复ID、坏版本和额外字段。不新增Schema、Platform调用、权限或Share字段。

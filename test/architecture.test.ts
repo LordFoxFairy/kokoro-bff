@@ -65,6 +65,7 @@ function isNamedSchemaEvolutionReader(relativePath: string, source: string): boo
       "scripts/personalization-schema-evolution.mjs",
       "scripts/evolve-agent-failure-schema.mjs",
       "scripts/evolve-message-parts-schema.mjs",
+      "scripts/evolve-dispatch-execution-schema.mjs",
       "scripts/evolve-project-mcp-recommendations-schema.mjs",
       "scripts/evolve-project-pin-schema.mjs",
       "scripts/evolve-message-feedback-schema.mjs",
@@ -945,6 +946,7 @@ test("R257 named evolution may import exactly the two approved canonical read he
     "scripts/personalization-schema-evolution.mjs",
     "scripts/evolve-agent-failure-schema.mjs",
     "scripts/evolve-message-parts-schema.mjs",
+    "scripts/evolve-dispatch-execution-schema.mjs",
     "scripts/evolve-project-mcp-recommendations-schema.mjs",
     "scripts/evolve-message-feedback-schema.mjs",
     "scripts/message-schema-evolution.mjs",
@@ -964,6 +966,7 @@ test("R257 named evolution exception rejects installer execution exports and alt
     "scripts/personalization-schema-evolution.mjs",
     "scripts/evolve-agent-failure-schema.mjs",
     "scripts/evolve-message-parts-schema.mjs",
+    "scripts/evolve-dispatch-execution-schema.mjs",
     "scripts/evolve-project-mcp-recommendations-schema.mjs",
   ]) {
     for (const source of [
