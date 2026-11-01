@@ -40,7 +40,7 @@ import { PostgresConversationArtifactLibrary } from "./conversation-artifact-lib
 import { PostgresProjectScopeReleaseOutboxRepository } from "./project-scope-release-outbox-repository.js"
 import type { ProjectScopeReleaseOutboxRepository } from "../../application/ports/project-scope-release-outbox.js"
 import { PostgresSkillShareRepository } from "./skill-share-repository.js"
-import type { SkillShareRepository } from "../../application/ports/skill-share-repository.js"
+import type { SkillShareRepository } from "../../application/skills/skill-share-repository.js"
 import { PublicShareApplicationService } from "../../application/public-share-service.js"
 import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
 import type { SkillUsageReader } from "../../application/agui/skill-usage.js"

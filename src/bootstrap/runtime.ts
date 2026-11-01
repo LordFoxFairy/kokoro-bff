@@ -34,7 +34,7 @@ import type { PersonalKnowledgeRepository } from "../application/ports/personal-
 import type { SkillUsageReader } from "../application/agui/skill-usage.js"
 import type { AgUiProjectionConsumerRepository } from "../application/agui/ports/agui-projection-repository.js"
 import type { SkillAiAssociation } from "../application/skill-ai-handoff.js"
-import type { SkillShareRepository } from "../application/ports/skill-share-repository.js"
+import type { SkillShareRepository } from "../application/skills/skill-share-repository.js"
 import type { SubmittedAgentRunReader } from "../application/ports/submitted-agent-run-reader.js"
 import type { ProjectExecutionBindingReader } from "../application/ports/project-execution-binding-reader.js"
 import type { SchedulerDispatchReceiptRepository } from "../application/ports/scheduler-dispatch-receipt-repository.js"

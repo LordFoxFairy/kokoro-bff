@@ -186,6 +186,23 @@ test("Chat public-share capability port is feature-local", async () => {
   assert.match(repository, /application\/chat\/public-share-repository\.js/u)
 })
 
+test("Skills share capability port is feature-local", async () => {
+  assert.equal(await fileExists("src/application/skills/skill-share-repository.ts"), true)
+  assert.equal(await fileExists("src/application/ports/skill-share-repository.ts"), false)
+  const [middleware, moduleSource, route, repository, runtime] = await Promise.all([
+    readFile(path.join(root, "src/modules/skills/skills.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/skills/skills.module.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/skill-share.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/skill-share-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+  ])
+  assert.match(middleware, /application\/skills\/skill-share-repository\.js/u)
+  assert.match(moduleSource, /SKILL_SHARE_REPOSITORY/u)
+  assert.match(route, /application\/skills\/skill-share-repository\.js/u)
+  assert.match(repository, /application\/skills\/skill-share-repository\.js/u)
+  assert.match(runtime, /application\/skills\/skill-share-repository\.js/u)
+})
+
 test("ProjectsModule owns the project command/read adapters and provider", async () => {
   const [projectsModule, accessModule, middleware, mutationMiddleware, nativeRoute, packageMiddleware, downloadMiddleware, server] = await Promise.all([
     readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),

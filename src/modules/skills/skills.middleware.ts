@@ -32,7 +32,7 @@ import type { SkillAdminConnectClient } from "../../infrastructure/clients/platf
 import type { LocalSkillImportClient } from "../../http/routes/local-skill-import.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
-import type { SkillShareRepository } from "../../application/ports/skill-share-repository.js"
+import type { SkillShareRepository } from "../../application/skills/skill-share-repository.js"
 import type { SkillSpecificationSource } from "../../application/skill-specification.types.js"
 import type { OpenAppManagementAdmission } from "../../auth/open-app-management-admission.client.js"
 import type { AppSkillBindingClient } from "../../application/app-skill-bindings.types.js"
