@@ -1,8 +1,8 @@
-import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations, ProjectPinQuery, SetProjectPin } from "./ports/project-repository.js"
+import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations, ProjectPinQuery, SetProjectPin } from "./projects/project-repository.js"
 import { createHash } from "node:crypto"
 
 import type { Project, ProjectInstructionRevision, Task } from "../contracts/index.js"
-import type { DeleteProjectResult, ProjectDeletionResource, ProjectOwnerScope, ProjectRepository, RenameProjectResult } from "./ports/project-repository.js"
+import type { DeleteProjectResult, ProjectDeletionResource, ProjectOwnerScope, ProjectRepository, RenameProjectResult } from "./projects/project-repository.js"
 
 /** Project use cases. HTTP handlers depend on this service, not on SQL adapters. */
 export class ProjectService {

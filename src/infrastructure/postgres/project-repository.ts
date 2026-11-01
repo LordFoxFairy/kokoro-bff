@@ -1,7 +1,7 @@
 import { listProjectPins, setProjectPin } from "./project-pin.js"
-import type { ProjectPinQuery, SetProjectPin } from "../../application/ports/project-repository.js"
+import type { ProjectPinQuery, SetProjectPin } from "../../application/projects/project-repository.js"
 import { readProjectMcpRecommendations, replaceProjectMcpRecommendations } from "./project-mcp-recommendations.js"
-import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations } from "../../application/ports/project-repository.js"
+import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations } from "../../application/projects/project-repository.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
 import { renameProject, replaceProjectSkillSelection } from "./project-rename.js"
 import { deleteProjectAggregate, readProjectDeletion } from "./project-delete.js"
@@ -19,7 +19,7 @@ import type {
   ReplaceProjectSkillSelectionCommand,
   ReplaceProjectSkillSelectionResult,
   ProjectSkillSelection,
-} from "../../application/ports/project-repository.js"
+} from "../../application/projects/project-repository.js"
 
 type ProjectRow = {
   project_id: string

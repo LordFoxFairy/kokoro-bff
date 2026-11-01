@@ -15,7 +15,7 @@ import {
   type ReceiptCasResult,
   type ReceiptClaim,
 } from "../../application/ports/idempotency-repository.js"
-import type { ProjectRepository } from "../../application/ports/project-repository.js"
+import type { ProjectRepository } from "../../application/projects/project-repository.js"
 import type { ScheduledTaskRepository } from "../../application/ports/scheduled-task-repository.js"
 import type { ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
 import { ProjectService } from "../../application/project-service.js"

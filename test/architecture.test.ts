@@ -130,7 +130,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/scheduled-task-service.ts",
     "src/application/ports/idempotency-repository.ts",
     "src/application/account/artifact-library-repository.ts",
-    "src/application/ports/project-repository.ts",
+    "src/application/projects/project-repository.ts",
     "src/application/chat/chat-repository.ts",
     "src/application/ports/agent-dispatch-outbox-repository.ts",
     "src/application/ports/agent-dispatch-delivery.ts",
@@ -563,7 +563,7 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
 
 test("private BFF resources use named owner scopes before receipts and keep service capabilities separate", async () => {
   const [projectPort, projectRepository, scheduledPort, scheduledRepository, chatAuthorization, server, client, openapi, schema] = await Promise.all([
-    readFile(path.join(root, "src/application/ports/project-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/projects/project-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/project-repository.ts"), "utf8"),
     readFile(path.join(root, "src/application/ports/scheduled-task-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),

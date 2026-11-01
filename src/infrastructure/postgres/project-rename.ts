@@ -10,7 +10,7 @@ import type {
   ReplaceProjectSkillSelectionCommand,
   ReplaceProjectSkillSelectionResult,
   ProjectSkillSelection,
-} from "../../application/ports/project-repository.js"
+} from "../../application/projects/project-repository.js"
 import { isRecord } from "../../domain/json.js"
 import { projectName } from "../../domain/project/name.js"
 import type { PostgresBffDatabase } from "./client.js"
