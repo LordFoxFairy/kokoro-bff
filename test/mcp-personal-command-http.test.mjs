@@ -1641,3 +1641,189 @@ test("Prepare outcome extension preserves unrelated details and legacy wrong-cod
     await f.close()
   }
 })
+
+test("private new authorization crosses Native RPC, retains unknown key and historical ACK without management GET or Prepare", async () => {
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { Code, ConnectError } = await import("@connectrpc/connect")
+  const { ProductMcpPersonalService } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { McpPersonalConnectClient } = await import("../dist/infrastructure/clients/platform/mcp-personal-connect.js")
+  const { bindMcpPersonalServerCommand } = await import("../dist/infrastructure/clients/platform/mcp-personal-server-binding.js")
+  const wire = []
+  let reads = 0
+  let prepares = 0
+  let deletedAfterCommit = false
+  const peer = createServer(
+    connectNodeAdapter({
+      routes: (router) =>
+        router.service(ProductMcpPersonalService, {
+          getPersonalMcpServer: () => {
+            reads++
+            throw new ConnectError("removed", Code.NotFound)
+          },
+          preparePersonalMcpServer: () => {
+            prepares++
+            throw new ConnectError("not authorized", Code.PermissionDenied)
+          },
+          reauthorizePersonalMcpServer: (value, context) => {
+            assert.equal(context.requestHeader.get("authorization"), "Bearer native-service")
+            assert.equal(context.requestHeader.get("x-kokoro-tenant"), "tenant-server")
+            assert.equal(context.requestHeader.get("x-kokoro-subject"), "human-one")
+            context.responseHeader.set("cache-control", "no-store")
+            context.responseHeader.set("x-kokoro-request-id", "mcp-http-1")
+            wire.push(value)
+            if (wire.length === 1) {
+              deletedAfterCommit = true
+              throw new ConnectError("private material never forwarded", Code.Unavailable, { "x-kokoro-error-code": "command_receipt_outcome_unknown" })
+            }
+            assert.equal(deletedAfterCommit, true)
+            return {
+              server: {
+                transport: 2,
+                availability: 5,
+                serverId: { value: "server-one" },
+                displayName: "Private tools",
+                serverUrl: "https://tools.example/mcp",
+                status: "pending",
+                stateVersion: 5n,
+                prepareStatus: 1,
+                declarationsAvailable: false,
+              },
+              connector: {
+                availability: 5,
+                connectorId: { value: "new-one" },
+                connectorType: 3,
+                providerKey: "private-server-one",
+                serverId: { value: "server-one" },
+                status: 1,
+                enabled: false,
+                stateVersion: 1n,
+              },
+              replayed: true,
+            }
+          },
+        }),
+    }),
+  )
+  await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve))
+  const client = new McpPersonalConnectClient(`http://127.0.0.1:${peer.address().port}`, { get: async () => "native-service" })
+  let checks = 0
+  const f = await fixture(true, {
+    mcpPersonalClient: client,
+    check: async (value) => {
+      checks++
+      assert.equal(value.action, "manage")
+      return { ok: true }
+    },
+  })
+  const body = { source_connector_id: "old-one", expected_server_state_version: "4", expected_connector_state_version: "7" }
+  const commandHeaders = { ...headers, "content-type": "application/json", "idempotency-key": "original-intent" }
+  try {
+    for (const invalid of [
+      { ...body, expected_server_state_version: "2147483647" },
+      { ...body, tenant_id: "forged" },
+      { ...body, expected_connector_state_version: null },
+    ]) {
+      const response = await fetch(f.origin + "/browser/v1/mcp/servers/server-one/reauthorize", {
+        method: "POST",
+        headers: commandHeaders,
+        body: JSON.stringify(invalid),
+      })
+      assert.equal(response.status, 400)
+      await response.arrayBuffer()
+    }
+    assert.equal(wire.length, 0)
+    const request = () =>
+      fetch(f.origin + "/browser/v1/mcp/servers/server-one/reauthorize", { method: "POST", headers: commandHeaders, body: JSON.stringify(body) })
+    const unknown = await request()
+    assert.equal(unknown.status, 503)
+    assert.equal((await unknown.json()).error.code, "mcp_personal_command_outcome_unknown")
+    const replay = await request()
+    assert.equal(replay.status, 200)
+    assert.equal(replay.headers.get("cache-control"), "no-store")
+    const ack = (await replay.json()).data
+    assert.equal(ack.replayed, true)
+    assert.equal(ack.connector.connector_id, "new-one")
+    assert.equal(ack.connector.enabled, false)
+    assert.equal(ack.server.prepare_status, "pending_prepare")
+    assert.equal(ack.server.connection_id, undefined)
+    assert.equal(wire.length, 2)
+    assert.deepEqual(wire[0], wire[1])
+    assert.deepEqual(wire[0].command, {
+      $typeName: "kokoro.common.v1.CommandIdentity",
+      ...bindMcpPersonalServerCommand("reauthorizeServer", {
+        tenant: "tenant-server",
+        subject: "human-one",
+        requestId: "mcp-http-1",
+        commandId: "original-intent",
+        id: "server-one",
+        sourceConnectorId: "old-one",
+        expectedServerStateVersion: "4",
+        expectedConnectorStateVersion: "7",
+      }),
+    })
+    assert.equal(wire[0].serverId.value, "server-one")
+    assert.equal(wire[0].sourceConnectorId.value, "old-one")
+    assert.equal(wire[0].expectedServerStateVersion, 4n)
+    assert.equal(wire[0].expectedConnectorStateVersion, 7n)
+    assert.equal(reads, 0)
+    assert.equal(prepares, 0)
+    assert.ok(checks >= 3)
+  } finally {
+    client.close()
+    await f.close()
+    peer.closeAllConnections()
+    await new Promise((resolve) => peer.close(resolve))
+  }
+})
+
+test("private new authorization is fenced by final subject and the original absolute deadline", async () => {
+  for (const mode of ["changed-subject", "deadline"]) {
+    let calls = 0
+    let verify = 0
+    let ownerSignal
+    let release
+    const f = await fixture(true, {
+      ...(mode === "deadline" ? { deadlineMs: 45 } : {}),
+      check: async () => ({ ok: true }),
+      verify: async () => ({
+        ok: true,
+        identity: { namespace: "tenant-server", userId: ++verify > 1 && mode === "changed-subject" ? "other" : "human-one" },
+        platformAdmin: false,
+      }),
+      mcpPersonalClient: {
+        read: async () => {
+          throw new Error("unexpected management read")
+        },
+        server: async (operation, input, signal) => {
+          calls++
+          assert.equal(operation, "reauthorizeServer")
+          assert.equal(input.commandId, "original-intent")
+          ownerSignal = signal
+          if (mode === "deadline")
+            await new Promise((resolve) => {
+              release = resolve
+            })
+          return { server: privateServer }
+        },
+      },
+    })
+    try {
+      const response = await fetch(f.origin + "/browser/v1/mcp/servers/server-one/reauthorize", {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-intent" },
+        body: JSON.stringify({ source_connector_id: "old-one", expected_server_state_version: "4", expected_connector_state_version: "7" }),
+      })
+      assert.equal(response.status, mode === "deadline" ? 503 : 404)
+      const body = await response.json()
+      assert.equal(body.data, undefined)
+      assert.equal(calls, 1)
+      if (mode === "deadline") {
+        assert.equal(ownerSignal.aborted, true)
+        release()
+      }
+    } finally {
+      release?.()
+      await f.close()
+    }
+  }
+})

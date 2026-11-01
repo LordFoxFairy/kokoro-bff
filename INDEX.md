@@ -1,3 +1,9 @@
+## 2026-11-02 B01 私有 MCP 新授权消费者候选
+
+原mcp-personal route/server input/binding/response/Connect承接显式reauthorize；`src/http/mcp-reauthorization.contract.ts`沿原connector错误生成器发布独立browser-private机器contract。固定Platform2cf63945/v2，原双生成和历史父逆证保持；Public29/200、canonicalSQL、普通Provider行为不变。原key/双CAS直接到owner，ACK仅新pending身份，无管理GET前置/自动Prepare。验收及正常未激活边界见CURRENT与三设计首节。
+
+本片限定独审通过；相关91项、contract1560项、architecture37项及默认2762项通过（3项原条件跳过），正式静态与构建门通过；原Public warnings/整体未验末端保留，见CURRENT。
+
 ## 2026-11-02 正式双父整合入口
 
 基线 b3289f4a 与正常源 8395b44 正在正式整合。唯一 Public29.0 契约共200操作，保原199且仅新增运行记录。`scripts/task-b-bff-integration-public-contract.mjs`、`contract/tests/task-b-bff-integration.json` 和对应测试只用于有限双父完整原文、有序 inventory 与 SQL 逆证；旧 oracle 不重签，也不作为运行兼容层。

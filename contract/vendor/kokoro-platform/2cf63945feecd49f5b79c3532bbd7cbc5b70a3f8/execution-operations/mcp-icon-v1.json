@@ -1,0 +1,86 @@
+{
+  "profile": "mcp-icon-v1",
+  "version": "1.0.0",
+  "owner": "Platform/MCP",
+  "status": "prepared-consumer-pairing-required",
+  "service": "kokoro.platform.v1.ProductMcpPersonalService",
+  "methods": [
+    {
+      "name": "BeginPersonalMcpIconUpload",
+      "command": true
+    },
+    {
+      "name": "CompletePersonalMcpIconUpload",
+      "command": true
+    },
+    {
+      "name": "GetPersonalMcpIconIntent",
+      "command": false
+    },
+    {
+      "name": "CancelPersonalMcpIconIntent",
+      "command": true
+    },
+    {
+      "name": "ImportPersonalMcpIconUrl",
+      "command": true
+    }
+  ],
+  "identity": "existing Product MCP admission; tenant and subject never from body",
+  "semantics": {
+    "get": "read-only; no Complete/Cancel recovery",
+    "unknown": "original receipt/digest/key/body/CAS; no rebase",
+    "save": "same original resource transaction: claim/binding/receipt/outbox; replay completed receipt first",
+    "transfer": "fresh no-store; never persisted in receipt/outbox",
+    "url": "bounded public HTTPS, pinned DNS/TLS, no redirect/auth/cookie, fixed first bytes",
+    "normal_activation": false
+  },
+  "limits": {
+    "icon_bytes": 1048576,
+    "dimension_max": 4096,
+    "area_max": 16777216,
+    "intent_version_max": 2147483646
+  },
+  "parents": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+      "path": "contract/descriptor/platform-mcp-icon-parent.proto.snapshot",
+      "sha256": "e4c9e692284b4797fdc691e729171500730a698b5b9402502fac8c304acf135b"
+    },
+    "contract/descriptor/platform-v1.binpb": {
+      "path": "contract/descriptor/platform-mcp-icon-parent.binpb.snapshot",
+      "sha256": "54f88791f4da0f0fc48cabb83a8ff5f24ba8821a0b17454caed1387943e95001"
+    },
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+      "path": "contract/descriptor/platform-mcp-icon-parent.generated.ts.snapshot",
+      "sha256": "b29974575f844cd27c7f8a1d97f9409be380d3e5c46464d6acb119d65a0831e9"
+    }
+  },
+  "request_digest": {
+    "canonicalization": "RFC8785",
+    "encoding": "UTF-8",
+    "algorithm": "SHA-256",
+    "trusted": [
+      "tenant_id",
+      "subject_id"
+    ],
+    "excluded": [
+      "request_id",
+      "command.command_id",
+      "command.request_digest"
+    ],
+    "input": "exact original operation-specific request fields; decimal versions/bytes; URL not silently normalized"
+  },
+  "request_vectors": {
+    "path": "contract/execution-operations/mcp-icon-request-vectors-v1.json",
+    "sha256": "b906cba768889bf09a5bc9455153f6ea39c63c9396c14fa775aef09be9a28435"
+  },
+  "source_delta": {
+    "path": "contract/descriptor/platform-mcp-icon-source-delta.json",
+    "sha256": "bc55da02e5aef74f0a35cc53e99161f65835622321d28e2a0ff113ed7ac17884"
+  },
+  "source_sha256": "e406e4b0d637f2e1a6736741482c71d6a2285ff36a67db12c68284d9e49e52f6",
+  "descriptor_sha256": "81ae8a8c825b87b82b21b7892f7f9bb7a3b70bb3294e4a62d39d72dc34b428a5",
+  "generated_sha256": "e73a4ca8241ec2ee06822a7987957b3433b43ce7e3c761723a465acf9df7817b",
+  "compiled_file_sha256": "d464ff50842f704181e83f73979504cedc143df09c2c12efeb91d9c7233fac45",
+  "generated_file_known_sha256": "87f4c6765dedea65f0ee74f0750d668c849bbc4305d909b0019f0a91791ea2a2"
+}

@@ -1,0 +1,231 @@
+{
+  "profile": "mcp-icon-request-vectors-v1",
+  "vectors": [
+    {
+      "identity": {
+        "tenantId": "tenant-1",
+        "subjectId": "subject-1"
+      },
+      "method": "BeginPersonalMcpIconUpload",
+      "request": {
+        "request_id": "request-0",
+        "command": {
+          "command_id": "command-0",
+          "request_digest": "d2e07c98941122151d844b87045230ae433c63f74f71babbb5a05dcc7d25a568"
+        },
+        "filename": "图标.png",
+        "mime_type": "image/png",
+        "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size_bytes": "1048576"
+      },
+      "canonical": {
+        "operation": "kokoro.platform.v1.ProductMcpPersonalService/BeginPersonalMcpIconUpload",
+        "tenant_id": "tenant-1",
+        "subject_id": "subject-1",
+        "input": {
+          "filename": "图标.png",
+          "mime_type": "image/png",
+          "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": "1048576"
+        }
+      },
+      "sha256": "d2e07c98941122151d844b87045230ae433c63f74f71babbb5a05dcc7d25a568"
+    },
+    {
+      "identity": {
+        "tenantId": "tenant-1",
+        "subjectId": "subject-1"
+      },
+      "method": "BeginPersonalMcpIconUpload",
+      "request": {
+        "request_id": "request-1",
+        "command": {
+          "command_id": "command-1",
+          "request_digest": "a69531c773f64cd8285ddc27c9dd2375ae59fcb43cc728fa1679d4ce984b4a1a"
+        },
+        "filename": "图标.png",
+        "mime_type": "image/jpeg",
+        "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size_bytes": "1"
+      },
+      "canonical": {
+        "operation": "kokoro.platform.v1.ProductMcpPersonalService/BeginPersonalMcpIconUpload",
+        "tenant_id": "tenant-1",
+        "subject_id": "subject-1",
+        "input": {
+          "filename": "图标.png",
+          "mime_type": "image/jpeg",
+          "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": "1"
+        }
+      },
+      "sha256": "a69531c773f64cd8285ddc27c9dd2375ae59fcb43cc728fa1679d4ce984b4a1a"
+    },
+    {
+      "identity": {
+        "tenantId": "tenant-2",
+        "subjectId": "subject-1"
+      },
+      "method": "BeginPersonalMcpIconUpload",
+      "request": {
+        "request_id": "request-2",
+        "command": {
+          "command_id": "command-2",
+          "request_digest": "fdcf3d5a3591fbbc08eee66ec7d578a06c5409c7805715fcab7b8e276a1bcf28"
+        },
+        "filename": "图标.png",
+        "mime_type": "image/png",
+        "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size_bytes": "1048576"
+      },
+      "canonical": {
+        "operation": "kokoro.platform.v1.ProductMcpPersonalService/BeginPersonalMcpIconUpload",
+        "tenant_id": "tenant-2",
+        "subject_id": "subject-1",
+        "input": {
+          "filename": "图标.png",
+          "mime_type": "image/png",
+          "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": "1048576"
+        }
+      },
+      "sha256": "fdcf3d5a3591fbbc08eee66ec7d578a06c5409c7805715fcab7b8e276a1bcf28"
+    },
+    {
+      "identity": {
+        "tenantId": "tenant-1",
+        "subjectId": "subject-2"
+      },
+      "method": "BeginPersonalMcpIconUpload",
+      "request": {
+        "request_id": "request-3",
+        "command": {
+          "command_id": "command-3",
+          "request_digest": "aa54814ab9fface6df1d32fde2d2c432762487ad1d6c367be619a16dd29b6463"
+        },
+        "filename": "图标.png",
+        "mime_type": "image/png",
+        "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size_bytes": "1048576"
+      },
+      "canonical": {
+        "operation": "kokoro.platform.v1.ProductMcpPersonalService/BeginPersonalMcpIconUpload",
+        "tenant_id": "tenant-1",
+        "subject_id": "subject-2",
+        "input": {
+          "filename": "图标.png",
+          "mime_type": "image/png",
+          "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": "1048576"
+        }
+      },
+      "sha256": "aa54814ab9fface6df1d32fde2d2c432762487ad1d6c367be619a16dd29b6463"
+    },
+    {
+      "identity": {
+        "tenantId": "tenant-1",
+        "subjectId": "subject-1"
+      },
+      "method": "CompletePersonalMcpIconUpload",
+      "request": {
+        "request_id": "request-4",
+        "command": {
+          "command_id": "command-4",
+          "request_digest": "3699103074c1485cf4a7d6b93dcbe8630523a7220188012220bc987e0522dd2a"
+        },
+        "intent_id": "12345678-1234-1234-1234-123456789abc",
+        "expected_state_version": "3",
+        "source_version_id": "source-1"
+      },
+      "canonical": {
+        "operation": "kokoro.platform.v1.ProductMcpPersonalService/CompletePersonalMcpIconUpload",
+        "tenant_id": "tenant-1",
+        "subject_id": "subject-1",
+        "input": {
+          "intent_id": "12345678-1234-1234-1234-123456789abc",
+          "expected_state_version": "3",
+          "source_version_id": "source-1"
+        }
+      },
+      "sha256": "3699103074c1485cf4a7d6b93dcbe8630523a7220188012220bc987e0522dd2a"
+    },
+    {
+      "identity": {
+        "tenantId": "tenant-1",
+        "subjectId": "subject-1"
+      },
+      "method": "CompletePersonalMcpIconUpload",
+      "request": {
+        "request_id": "request-5",
+        "command": {
+          "command_id": "command-5",
+          "request_digest": "7810f856e63a3ec425a29233ee811549f3f8deda1f8a054acd9ca9bb2f6067c8"
+        },
+        "intent_id": "12345678-1234-1234-1234-123456789abc",
+        "expected_state_version": "4",
+        "source_version_id": "source-2"
+      },
+      "canonical": {
+        "operation": "kokoro.platform.v1.ProductMcpPersonalService/CompletePersonalMcpIconUpload",
+        "tenant_id": "tenant-1",
+        "subject_id": "subject-1",
+        "input": {
+          "intent_id": "12345678-1234-1234-1234-123456789abc",
+          "expected_state_version": "4",
+          "source_version_id": "source-2"
+        }
+      },
+      "sha256": "7810f856e63a3ec425a29233ee811549f3f8deda1f8a054acd9ca9bb2f6067c8"
+    },
+    {
+      "identity": {
+        "tenantId": "tenant-1",
+        "subjectId": "subject-1"
+      },
+      "method": "CancelPersonalMcpIconIntent",
+      "request": {
+        "request_id": "request-6",
+        "command": {
+          "command_id": "command-6",
+          "request_digest": "8d77ec5ece422d5ffd012e19ca3d5a208d8113a01abe22dd451b3c63365c55c2"
+        },
+        "intent_id": "12345678-1234-1234-1234-123456789abc",
+        "expected_state_version": "3"
+      },
+      "canonical": {
+        "operation": "kokoro.platform.v1.ProductMcpPersonalService/CancelPersonalMcpIconIntent",
+        "tenant_id": "tenant-1",
+        "subject_id": "subject-1",
+        "input": {
+          "intent_id": "12345678-1234-1234-1234-123456789abc",
+          "expected_state_version": "3"
+        }
+      },
+      "sha256": "8d77ec5ece422d5ffd012e19ca3d5a208d8113a01abe22dd451b3c63365c55c2"
+    },
+    {
+      "identity": {
+        "tenantId": "tenant-1",
+        "subjectId": "subject-1"
+      },
+      "method": "ImportPersonalMcpIconUrl",
+      "request": {
+        "request_id": "request-7",
+        "command": {
+          "command_id": "command-7",
+          "request_digest": "bf4d860a88ad662c6e9e6099c61ee3f9a18884f6af3192e36da46f8e385eeaa5"
+        },
+        "image_url": "https://images.example/icon.png?revision=2"
+      },
+      "canonical": {
+        "operation": "kokoro.platform.v1.ProductMcpPersonalService/ImportPersonalMcpIconUrl",
+        "tenant_id": "tenant-1",
+        "subject_id": "subject-1",
+        "input": {
+          "image_url": "https://images.example/icon.png?revision=2"
+        }
+      },
+      "sha256": "bf4d860a88ad662c6e9e6099c61ee3f9a18884f6af3192e36da46f8e385eeaa5"
+    }
+  ]
+}

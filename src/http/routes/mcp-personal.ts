@@ -74,6 +74,7 @@ export function mcpPersonalOperation(
   if (path.length === 3 && path[1] === "servers" && method === "PATCH") return "updateServer"
   if (path.length === 3 && path[1] === "servers" && method === "DELETE") return "deleteServer"
   if (path.length === 4 && path[1] === "servers" && path[3] === "prepare" && method === "POST") return "prepareServer"
+  if (path.length === 4 && path[1] === "servers" && path[3] === "reauthorize" && method === "POST") return "reauthorizeServer"
   if (method !== "GET") return null
   if (path.length === 4 && path[1] === "servers" && path[3] === "prepare-receipt") return "prepareReceipt"
   if (path.length === 4 && path[1] === "servers" && path[3] === "icon") return "serverIcon"
@@ -103,7 +104,7 @@ export async function mcpPersonalRoute(
   }
   const iconOperation = ["beginIcon", "completeIcon", "getIcon", "cancelIcon", "importIcon"].includes(operation)
   const authorization = ["begin", "reconnect", "complete", "createConnection"].includes(operation)
-  const serverOperation = ["registerServer", "server", "prepareServer", "updateServer", "deleteServer"].includes(operation)
+  const serverOperation = ["registerServer", "server", "prepareServer", "reauthorizeServer", "updateServer", "deleteServer"].includes(operation)
   const importOperation = operation === "importJson"
   const mutation =
     (iconOperation && operation !== "getIcon") ||
@@ -118,6 +119,7 @@ export async function mcpPersonalRoute(
       "createConnection",
       "registerServer",
       "prepareServer",
+      "reauthorizeServer",
       "updateServer",
       "deleteServer",
       "importJson",

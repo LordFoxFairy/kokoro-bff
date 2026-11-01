@@ -1,3 +1,13 @@
+## 2026-11-02 B01 私有 MCP 新授权候选（未发行/正常未激活）
+
+固定Platform正式2cf63945的Proto/descriptor/private-server-v2与原父原件，沿唯一generator双次生成Connect。新增私有POST `/browser/v1/mcp/servers/{server_id}/reauthorize`，保原trusted Session/mcp_personal.manage/10秒总预算/首末重验。closed source+双CAS为规范十进制1..2147483646，JSON Schema与运行解析同一闭集；原key/digest不换，无本地receipt/Schema/owner GET前置。成功仅原server version恰+1、新pending disabled connector version1；不自动Prepare或声称已连接。
+
+业务RED先确认strict请求未支持、ACK缺新身份分支；修后相关原三文件91项通过（9.025秒），含真实本机BFF HTTP→Native二进制peer的unknown后原key重试、后继Delete历史ACK不经管理GET、首末主体变化和总预算取消。peer/Session/数据替身明确，不称真实Platform持久化或浏览器E2E；首轮Native测试的CommandIdentity包名断言错误已修，原失败保留，不作产品RED。
+
+最终冻结89个非Markdown输入前后无漂移，限定独审APPROVE；Node22.22.2正式lint/typecheck/build/format通过。完整contract:check通过（1560通过/0跳过，聚合369.207秒），architecture37通过；完整默认2762通过/3原条件跳过/0失败（测试401.731秒，含build聚合420.066秒）。Public29 lint仍报告105 warnings，canonical与7e4逐字相同，未隐藏或修改警告；跳过不是通过。主控独立artifact tsc和原三文件91项复核通过。
+
+私有artifact正规生成，Public29/200、canonicalSQL与原共享错误JSON保持原字节，无BFF数据演进。正常服务/资源未动，App消费者仍须本仓正式提交后固定；实际新页面命令、远端OAuth/执行及整体TaskB仍未验收，不将本片通过冒充全产品或可合main。Platform重型校验的原超时边界保持于其owner记录，CI不冒绿。
+
 ## 2026-11-02 B-15 正式分叉整合候选（未激活）
 
 物理基线 b3289f4a 与正常源8395b44正在保双父整合。当前唯一 canonical Public29.0/200操作，原199完整保留且只新增 listScheduledTaskRuns；RSS 必填 trigger_kind 按 breaking major 表达。固定 owner pins 不变，lock 只恢复原 sax1.6.1/@types1.2.7。有限双父原文、有序 inventory 与 SQL 逆证仅用于 build/test，旧 RSS20 与 System20 不混同，旧 oracle 不重签。

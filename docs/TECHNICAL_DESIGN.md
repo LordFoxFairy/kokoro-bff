@@ -1,3 +1,13 @@
+## 2026-11-02 B01 私有 MCP 显式新授权消费者（已批准方案，候选已接线）
+
+固定 Platform 正式 `2cf63945feecd49f5b79c3532bbd7cbc5b70a3f8` 的 private-server-v2/2.0.0；沿现 mcp-personal route、server input/binding/response、Connect client 与唯一正式生成器接线。新增 browser-private POST `/browser/v1/mcp/servers/{server_id}/reauthorize`；无新 client/store/receipt/Schema/IAM scope。Public29/200 和其 canonical 原字节保持。
+
+同原trusted Session/tenant/subject、mcp_personal.manage及body前起算单一10秒绝对预算，复核身份/权限后才返回。仅转发source connector与两个原CAS，规范十进制1..2147483646；原Idempotency-Key和JCS digest保持。直接调用owner新命令，不先管理GET、不自动换key或Prepare；owner先原安全绑定再原receipt，completed跨换代/Delete仍可原ACK，未知保原body/key/CAS。
+
+ACK严格绑定原server、server version恰+1、新connector不等于source且type/provider/server一致、version1/pending/enabled=false与pending_prepare。安全descriptor只读投影，不含秘密；历史ACK不被当前GET覆盖、不授已连接/执行资格。具名私有机器contract在原HTTP责任面维护、沿现connector错误生成入口发布给App；旧错误闭集/普通Provider重连不变。先现测试业务RED，再相关行为/契约与正式门，真实资源由Root，旧整体门红不洗绿；正常未激活。
+
+本片最终89个非Markdown输入停写，限定独审APPROVE；相关91项、完整contract1560项、architecture37项和默认2762项通过，默认3项原条件跳过，lint/typecheck/build/format通过。真实Native peer证明BFF边界，不替代Platform持久化或最终App页面；正常未激活，整体Draft限制保持。
+
 ## 2026-11-01 B-15 分叉正式整合（Root 已批准，候选未激活）
 
 下载复核修正：原共享 spool 自身承接 transferSignal 与既有有限预算 race；上游 fetch 不合作时仍释放已获两名额，迟到 response.body 必须取消且取消不等待。同步取消跨 response 回传边界也退休 body；不新增路由 race、不改 wire / 数据表 / 原字节校验。

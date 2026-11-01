@@ -1,3 +1,13 @@
+## 2026-11-02 B01 browser-private 新授权（候选已接线）
+
+POST `/browser/v1/mcp/servers/{server_id}/reauthorize`，closed JSON body `{source_connector_id,expected_server_state_version,expected_connector_state_version}`，原唯一Idempotency-Key必需。source为原opaque ID闭集，两个版本仅规范十进制字符串1..2147483646；拒query/额外/重复/null/自报身份，沿现65536-byte正文/UTF-8/framing限制。原trusted Session与mcp_personal.manage首末核验，单10秒总预算覆盖正文、凭据与owner。
+
+正式RPC `kokoro.platform.v1.ProductMcpPersonalService/ReauthorizePersonalMcpServer`，digest input为path server_id+body三字段、tenant/subject可信；command/request ID不进业务input。200 `{data:{server,connector,replayed}}`只表示新pending身份：server精确原ID/version+1、connector为不同source的新ID/version1/pending/enabled=false，绑定closed。无自动Prepare/当前GET，same-key completed原安全ACK可跨后继Delete；unknown/in_progress/expired沿原typed receipt错误与原key/body恢复，无新key授权。
+
+唯一新增机器源 `src/http/mcp-reauthorization.contract.ts` 复用原输入/响应schema与connector错误源，正式生成 `contract/openapi/browser/v1/mcp-reauthorization.json`；Public29/200不变。固定Platform 2cf63945/private-server-v2/2.0.0正规生成Connect与pin；旧profile/oracle保持，消费者App待正式BFF提交。
+
+本片独立私有artifact与正式pin检查通过，完整contract1560项通过、Public29/200原字节保持；Public lint的105 warnings保留。原三文件91项及默认2762项通过/3原条件跳过，限定独审通过；未据此宣称浏览器新授权流程或全部发行门完成。
+
 ## 2026-11-01 Public29 分叉整合（Root 已批准，候选）
 
 下载复核修正：原共享 spool 自身承接 transferSignal 与既有有限预算 race；上游 fetch 不合作时仍释放已获两名额，迟到 response.body 必须取消且取消不等待。同步取消跨 response 回传边界也退休 body；不新增路由 race、不改 wire / 数据表 / 原字节校验。

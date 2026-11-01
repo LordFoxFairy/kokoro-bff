@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "94e574c68d6c972078b661fa7d917dab90c71042"
+const ownerCommit = "2cf63945feecd49f5b79c3532bbd7cbc5b70a3f8"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-connect"
@@ -15,7 +15,7 @@ const manifestPath = "contract/dependencies/platform-connect.json"
 
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "26266d24fc1fcffb581662d5a404a97c485c09e3b2e597bb88df3a9cc482ed36",
+  "kokoro/platform/v1/platform_runtime.proto": "7bc9253cd91a03f20e263a79be7183436497cc205d321e704e3c2338cdc8fe9c",
   "kokoro/storage/v3/storage.proto": "b84a2fb1fd9c6e8c16e15a29cafbc33de670f40f703f3f33ef27652a0237a629",
   "kokoro/platform/v1/mcp_package_admin.proto": "60b6778cbb3024f09184bbfc1e06e124191a6583ad892e48e0bcb3c4d0667b31",
 }
@@ -48,10 +48,10 @@ const artifactDigests = {
   "errors/command-receipt-v1.json": "d82a4b30039adc0754fe1bcc43738fc68be2cd3cbef0e710d14089f55bc0ac68",
   "auth/bff-service-auth-v1.json": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef",
   "execution-operations/skill-installation-update-v1.json": "9b75d679665f42eb48d89e9c6fe99c39f2f019894db4a54de15e9f97622dd194",
-  "descriptor/platform-v1.binpb": "6c7dadd8ccad5a5a1b56a4c9cf17acb7a1a3f41390e8e0c011fb120dd943483f",
+  "descriptor/platform-v1.binpb": "c023847f5f080311eb93273db44afc063467d9af27343c6645b7e73b3d67c731",
   "execution-operations/custom-api-v1.json": "eca45ebd0f3c31d48cc174256dc23bda22de288ded91aa12198b1a2a37516a38",
   "execution-operations/mcp-private-server-v1.json": "066505d4a13cb6fd7a5f625b07eaf5f784b215db2a8584041f14da8ffc98eda1",
-  "provenance.json": "cd5ebc24ce786b3c57bf0f42ce48abde0d7556e1fb3e44c18187589f41cc5073",
+  "provenance.json": "12790544e1159d57e337705b7382e8d0d0fd5100867175703711344db95b8bfc",
   "execution-operations/skill-acquisition-v1.json": "7c9cf9ed456199d4acd3d25f29154c8f098ed8866554476d37f058add0d78028",
   "openapi/platform-http.openapi.json": "085e1367f69c34edc6b80cbfb448596f36039f9857cee3bd5a407befbc295361",
   "mcp-package-admin/v1/profile.json": "d4b29dba0a5a6df8a0f36a654fcb81d5e95381568c0f5afd0bd104984366be75",
@@ -79,6 +79,15 @@ const artifactDigests = {
   "descriptor/platform-mcp-prepare-rejection-parent.platform_runtime.proto.snapshot": "1081183bae7a8377fb9f245fbc31612c88421a801f0c454a2d27702695e88409",
   "descriptor/platform-mcp-prepare-rejection-parent.platform-v1.binpb.snapshot": "89d0f77d7f775231ad0fcb3b0987fbe0f303982c5271fd9cd689633eaafd53d8",
   "descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot": "2814a928d324a529c3ad6d27c98be9e21d30584c6a0bc22795e40c98ab289fa0",
+  "execution-operations/mcp-private-server-v2.json": "5afb96d07c90b3895b1772cd6c1e564fcfd64f29e32361e82c5a97e28e48ebe4",
+  "execution-operations/mcp-private-server-request-vectors-v2.json": "d919e2d0ef0c21c931f9e99b2b60b947651e6e118f5046b82cbf132c2aceddc8",
+  "descriptor/platform-private-mcp-v2-parents.json": "6c5dfead3ed39ba3adf403d9608a70ccd12cb0291e85d97ef3ca1bd70b066bec",
+  "descriptor/platform-private-mcp-v2-proto.snapshot": "26266d24fc1fcffb581662d5a404a97c485c09e3b2e597bb88df3a9cc482ed36",
+  "descriptor/platform-private-mcp-v2-parent.binpb": "6c7dadd8ccad5a5a1b56a4c9cf17acb7a1a3f41390e8e0c011fb120dd943483f",
+  "descriptor/platform-private-mcp-v2-generated.ts.snapshot": "dfc1410f5cf18d18d449b35b7f92499e7b08c778d8f258b80f4abec0927c9d5d",
+  "descriptor/platform-private-mcp-v2-provenance.json.snapshot": "c0f9e23eb0e92939f8917f50722b3da759302ed22066bc0332bdd39ccf0744f8",
+  "descriptor/platform-private-mcp-v2-profile.json.snapshot": "066505d4a13cb6fd7a5f625b07eaf5f784b215db2a8584041f14da8ffc98eda1",
+  "descriptor/platform-private-mcp-v2-prisma.snapshot": "ec3e63999a77fe02019d70337b5b70916fb2ffc87ae2c0a4f52d27e6eaf7d52e",
 }
 // Independently pinned committed publication profile; the existing broad bundle remains unchanged.
 const publicationOwnerCommit = "dd8d536a28059cbdbe0674debc47bf28d039fb47"
@@ -97,10 +106,10 @@ async function verifyPublication() {
     assert.equal(sha256(await readFile(path.join(root, publicationVendor, file))), digest, `publication artifact drifted: ${file}`)
 }
 
-const provenanceCombinedSha256 = "fe6643f9785fd92754d5b044c613ed63e4a44dfed57b0afdaf17b016b1d96e0a"
+const provenanceCombinedSha256 = "f39c8f19a3b9f153ea2e68fa451d6f7a11c72488861aee0b8b33aba88661e0f3"
 const ownerGenerated = {
   path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
-  sha256: "dfc1410f5cf18d18d449b35b7f92499e7b08c778d8f258b80f4abec0927c9d5d",
+  sha256: "1f007e57ccf3a0926b1e07f533dd1d35bdedc108885e5ab34bf67cd33d93b5ae",
 }
 const generatedFiles = [
   "command-receipt-errors.ts",
@@ -417,6 +426,27 @@ async function manifestFor(directory) {
           path: "contract/descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot",
           sha256: artifactDigests["descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot"],
         },
+        { path: "contract/execution-operations/mcp-private-server-v2.json", sha256: artifactDigests["execution-operations/mcp-private-server-v2.json"] },
+        {
+          path: "contract/execution-operations/mcp-private-server-request-vectors-v2.json",
+          sha256: artifactDigests["execution-operations/mcp-private-server-request-vectors-v2.json"],
+        },
+        { path: "contract/descriptor/platform-private-mcp-v2-parents.json", sha256: artifactDigests["descriptor/platform-private-mcp-v2-parents.json"] },
+        { path: "contract/descriptor/platform-private-mcp-v2-proto.snapshot", sha256: artifactDigests["descriptor/platform-private-mcp-v2-proto.snapshot"] },
+        { path: "contract/descriptor/platform-private-mcp-v2-parent.binpb", sha256: artifactDigests["descriptor/platform-private-mcp-v2-parent.binpb"] },
+        {
+          path: "contract/descriptor/platform-private-mcp-v2-generated.ts.snapshot",
+          sha256: artifactDigests["descriptor/platform-private-mcp-v2-generated.ts.snapshot"],
+        },
+        {
+          path: "contract/descriptor/platform-private-mcp-v2-provenance.json.snapshot",
+          sha256: artifactDigests["descriptor/platform-private-mcp-v2-provenance.json.snapshot"],
+        },
+        {
+          path: "contract/descriptor/platform-private-mcp-v2-profile.json.snapshot",
+          sha256: artifactDigests["descriptor/platform-private-mcp-v2-profile.json.snapshot"],
+        },
+        { path: "contract/descriptor/platform-private-mcp-v2-prisma.snapshot", sha256: artifactDigests["descriptor/platform-private-mcp-v2-prisma.snapshot"] },
       ],
       provenance: {
         path: "contract/provenance.json",

@@ -1362,3 +1362,137 @@ test("Prepare outcome publication derives its owner pin and links only method-sp
   assert.equal(lookup.outcomes_version, source.version)
   assert.deepEqual(lookup.allowed_faults, source.operations.getMcpPrepareReceipt)
 })
+
+test("private new authorization keeps source and double CAS in a strict bounded original intent", () => {
+  const body = { source_connector_id: "old-one", expected_server_state_version: "4", expected_connector_state_version: "7" }
+  const fields = parseMcpPersonalServer("reauthorizeServer", bytes(body))
+  assert.deepEqual(fields, { sourceConnectorId: "old-one", expectedServerStateVersion: "4", expectedConnectorStateVersion: "7" })
+  const bound = { ...input, ...fields, id: "server-one" }
+  const canonical =
+    '{"input":{"expected_connector_state_version":"7","expected_server_state_version":"4","server_id":"server-one","source_connector_id":"old-one"},"method":"kokoro.platform.v1.ProductMcpPersonalService/ReauthorizePersonalMcpServer","subject_id":"subject","tenant_id":"tenant"}'
+  assert.equal(bindMcpPersonalServerCommand("reauthorizeServer", bound).requestDigest, createHash("sha256").update(canonical).digest("hex"))
+  assert.deepEqual(
+    bindMcpPersonalServerCommand("reauthorizeServer", bound),
+    bindMcpPersonalServerCommand("reauthorizeServer", { ...bound, requestId: "later" }),
+  )
+  for (const key of ["tenant", "subject", "id", "sourceConnectorId", "expectedServerStateVersion", "expectedConnectorStateVersion"] as const)
+    assert.notEqual(
+      bindMcpPersonalServerCommand("reauthorizeServer", bound).requestDigest,
+      bindMcpPersonalServerCommand("reauthorizeServer", { ...bound, [key]: key.startsWith("expected") ? "8" : "other" }).requestDigest,
+    )
+  for (const version of ["0", "-1", "01", "1.0", "2147483647", "18446744073709551615", "4\n", 4, null])
+    for (const key of ["expected_server_state_version", "expected_connector_state_version"])
+      assert.throws(() => parseMcpPersonalServer("reauthorizeServer", bytes({ ...body, [key]: version })))
+  for (const extra of [{ tenant_id: "forged" }, { server_id: "other" }, { headers: [] }, { oauth_client: {} }, { source_connector_id: "bad\n" }])
+    assert.throws(() => parseMcpPersonalServer("reauthorizeServer", bytes({ ...body, ...extra })))
+  assert.throws(() =>
+    parseMcpPersonalServer(
+      "reauthorizeServer",
+      Buffer.from('{"source_connector_id":"old-one","source_connector_id":"other","expected_server_state_version":"4","expected_connector_state_version":"7"}'),
+    ),
+  )
+  assert.equal(
+    parseMcpPersonalServer("reauthorizeServer", bytes({ ...body, expected_server_state_version: "2147483646" })).expectedServerStateVersion,
+    "2147483646",
+  )
+})
+
+test("private new authorization ACK is a new pending identity, never current connection or old-source restoration", () => {
+  const ack = create(RegisterPersonalMcpServerResponseSchema, {
+    server: {
+      transport: 2,
+      availability: 5,
+      serverId: { value: "server-one" },
+      displayName: "Private tools",
+      serverUrl: input.serverUrl,
+      status: "pending",
+      stateVersion: 5n,
+      prepareStatus: 1,
+      declarationsAvailable: false,
+    },
+    connector: {
+      availability: 5,
+      connectorId: { value: "new-one" },
+      connectorType: 3,
+      providerKey: "private-server-one",
+      serverId: { value: "server-one" },
+      status: 1,
+      enabled: false,
+      stateVersion: 1n,
+    },
+  })
+  const bound = { ...input, id: "server-one", sourceConnectorId: "old-one", expectedServerStateVersion: "4", expectedConnectorStateVersion: "7" }
+  for (const replayed of [false, true]) {
+    const result = projectMcpPersonalServer("reauthorizeServer", { ...ack, replayed }, bound) as {
+      server: { state_version: string }
+      connector: { connector_id: string }
+    }
+    assert.equal(result.server.state_version, "5")
+    assert.equal(result.connector.connector_id, "new-one")
+  }
+  for (const altered of [
+    { server: { ...ack.server!, stateVersion: 6n } },
+    { server: { ...ack.server!, status: "registered" } },
+    { server: { ...ack.server!, connectionId: { value: "old-connection" } } },
+    { server: { ...ack.server!, prepareStatus: 4, declarationsAvailable: true, declarationDigest: "a".repeat(64) } },
+    { connector: { ...ack.connector!, connectorId: { value: "old-one" } } },
+    { connector: { ...ack.connector!, stateVersion: 2n } },
+    { connector: { ...ack.connector!, providerKey: "other" } },
+    { connector: { ...ack.connector!, connectorType: 1 } },
+    { connector: { ...ack.connector!, enabled: true } },
+    { connector: { ...ack.connector!, status: 2 } },
+    { connector: { ...ack.connector!, approvedScopes: ["old:scope"] } },
+    { replayed: "yes" },
+  ])
+    assert.throws(() => projectMcpPersonalServer("reauthorizeServer", { ...ack, ...altered }, bound))
+})
+
+test("private new authorization publishes the same bounded input, pending ACK and original-key policy to App", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const { MCP_REAUTHORIZATION_POLICY, mcpReauthorizationRequestSchema } = await import("../src/http/mcp-reauthorization.contract.js")
+  const published = JSON.parse(await readFile(new URL("../contract/openapi/browser/v1/mcp-reauthorization.json", import.meta.url), "utf8"))
+  assert.deepEqual(published["x-kokoro-reauthorization-policy"], MCP_REAUTHORIZATION_POLICY)
+  const operation = published.paths[MCP_REAUTHORIZATION_POLICY.path].post
+  assert.equal(operation["x-kokoro-permission"], "mcp_personal.manage")
+  assert.equal(published["x-kokoro-owner-contract"].commit, "2cf63945feecd49f5b79c3532bbd7cbc5b70a3f8")
+  const schema = operation.requestBody.content["application/json"].schema
+  assert.equal(schema.additionalProperties, false)
+  const owner = JSON.parse(
+    await readFile(
+      new URL(
+        "../contract/vendor/kokoro-platform/2cf63945feecd49f5b79c3532bbd7cbc5b70a3f8/execution-operations/mcp-private-server-request-vectors-v2.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  )
+  const body = {
+    source_connector_id: owner.accepted.source_connector_id.value,
+    expected_server_state_version: owner.accepted.expected_server_state_version,
+    expected_connector_state_version: owner.accepted.expected_connector_state_version,
+  }
+  assert.doesNotThrow(() => mcpReauthorizationRequestSchema.parse(body))
+  for (const field of ["expected_server_state_version", "expected_connector_state_version"] as const) {
+    const pattern = new RegExp(schema.properties[field].pattern, "u")
+    for (const value of [...owner.rejected_versions, "2147483648", "2147499999", "2199999999", "2999999999", "9999999999", "4\n"]) {
+      assert.equal(pattern.test(value), false, value)
+      assert.throws(() => mcpReauthorizationRequestSchema.parse({ ...body, [field]: value }))
+    }
+    for (const value of ["1", "999999999", "1000000000", "2000000000", "2140000000", "2147000000", "2147483000", "2147483639", "2147483640", "2147483646"])
+      assert.equal(pattern.test(value), true, value)
+  }
+  assert.equal(MCP_REAUTHORIZATION_POLICY.automatic_retries, false)
+  assert.equal(MCP_REAUTHORIZATION_POLICY.prepare_authorized, false)
+  assert.equal(MCP_REAUTHORIZATION_POLICY.new_command_authorized, false)
+  assert.equal(MCP_REAUTHORIZATION_POLICY.connected, false)
+  assert.equal(operation.responses[200].content["application/json"].schema.properties.data.properties.connector.properties.enabled.const, false)
+  assert.equal(operation.responses[200].content["application/json"].schema.properties.data.properties.connector.properties.state_version.const, "1")
+  for (const fault of MCP_REAUTHORIZATION_POLICY.errors) {
+    const alternatives = operation.responses[fault.status].content["application/json"].schema.oneOf
+    assert.ok(
+      alternatives.some(
+        (value) => value.properties.error.properties.code.const === fault.code && value.properties.error.properties.retryable.const === fault.retryable,
+      ),
+    )
+  }
+})

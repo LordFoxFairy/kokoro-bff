@@ -1,3 +1,9 @@
+## 2026-11-02 B01 新授权消费者（无BFF数据演进）
+
+BFF不新增表/列/Redis状态或receipt，不读Platform数据库。currentConnectorId、新代connector、配置墓碑、永久撤权和原命令回执仅由固定Platform `2cf63945feecd49f5b79c3532bbd7cbc5b70a3f8` owner持有。BFF仅转发trusted identity、原source/双CAS/key/digest并安全投影原ACK；历史completed结果不是当前资源/执行资格，禁止管理GET作receipt前置或本地缓存恢复。canonical `database/schema.sql`及Public29数据模型保持原字节，正常资源不动。
+
+最终冻结核验canonicalSQL与7e4逐字相同，无本片BFF迁移或资源操作；限定独审及默认2762项通过，原3项资源条件跳过不计通过。Platform真实迁移/材料生命周期证据仍归其owner，前端与正常配对后继。
+
 ## 2026-11-01 两父既有数据整合（Root 已批准，未正常DDL）
 
 下载复核修正：原共享 spool 自身承接 transferSignal 与既有有限预算 race；上游 fetch 不合作时仍释放已获两名额，迟到 response.body 必须取消且取消不等待。同步取消跨 response 回传边界也退休 body；不新增路由 race、不改 wire / 数据表 / 原字节校验。

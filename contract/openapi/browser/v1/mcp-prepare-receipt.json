@@ -129,7 +129,7 @@
     ],
     "outcomes_source": {
       "path": "../../../mcp-prepare-outcomes-v1.json",
-      "sha256": "7c403d910d8659ccab0e02e4dde2c4b8bf51a98d9ec8d4f1f13b5c399e3ea54d"
+      "sha256": "190d010fb9875b759bc97548ec3e0ac0a0e1e4aaabd5e6c6c217a6122fb4ea61"
     }
   },
   "paths": {
