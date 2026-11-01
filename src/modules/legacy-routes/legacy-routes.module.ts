@@ -2,11 +2,12 @@ import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/c
 import { AccountModule } from "../account/account.module.js"
 import { SkillsModule } from "../skills/skills.module.js"
 import { ChatModule } from "../chat/chat.module.js"
+import { ScheduledTasksModule } from "../scheduled-tasks/scheduled-tasks.module.js"
 import { LegacyRoutesMiddleware } from "./legacy-routes.middleware.js"
 import { LegacyRoutesRuntime } from "./legacy-routes.runtime.js"
 
 @Module({
-  imports: [AccountModule, SkillsModule, ChatModule],
+  imports: [AccountModule, SkillsModule, ChatModule, ScheduledTasksModule],
   providers: [LegacyRoutesRuntime],
   exports: [LegacyRoutesRuntime],
 })

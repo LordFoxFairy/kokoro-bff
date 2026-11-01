@@ -81,4 +81,8 @@ test("transitional runtime receives Skill usage from SkillsModule instead of onl
   assert.match(legacyRuntime, /PUBLIC_SHARE_SERVICE/u)
   assert.match(runtime, /publicShareService/u)
   assert.match(server, /composition\.publicShareService/u)
+  assert.match(legacyModule, /ScheduledTasksModule/u)
+  assert.match(legacyRuntime, /SCHEDULED_TASK_READ_SERVICE/u)
+  assert.match(runtime, /scheduledTaskReader/u)
+  assert.match(server, /composition\.scheduledTaskReader/u)
 })

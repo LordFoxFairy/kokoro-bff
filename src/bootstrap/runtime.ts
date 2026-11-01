@@ -173,6 +173,7 @@ export type BffCompositionOptions = {
   chatService?: ChatApplicationService | null
   projectService?: ProjectService | null
   publicShareService?: PublicShareApplicationService | null
+  scheduledTaskReader?: ScheduledTaskReadService | null
   sessionAdmission?: SessionAdmission
   skillListAdmission?: SkillListAdmission
   openAppManagementAdmission?: OpenAppManagementAdmission
@@ -333,19 +334,21 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const publicShareService =
     options.publicShareService !== undefined ? options.publicShareService : (businessStore?.publicShareService ?? null)
   const scheduledTaskReader =
-    businessStore === null
-      ? null
-      : new ScheduledTaskReadService(
-          {
-            snapshots: (scope, signal, taskId) => businessStore.services.scheduledTasks.snapshots(scope, signal, taskId),
-          },
-          new SchedulerTaskStateReader(
-            config.upstreams.scheduler == null || config.schedulerServiceToken === null
-              ? null
-              : new SchedulerControlClient(config.upstreams.scheduler, config.schedulerServiceToken, config.upstreamTimeoutMs, config.upstreamMaxResponseBytes),
-            config.schedulerTargetUrl,
-          ),
-        )
+    options.scheduledTaskReader !== undefined
+      ? options.scheduledTaskReader
+      : businessStore === null
+        ? null
+        : new ScheduledTaskReadService(
+            {
+              snapshots: (scope, signal, taskId) => businessStore.services.scheduledTasks.snapshots(scope, signal, taskId),
+            },
+            new SchedulerTaskStateReader(
+              config.upstreams.scheduler == null || config.schedulerServiceToken === null
+                ? null
+                : new SchedulerControlClient(config.upstreams.scheduler, config.schedulerServiceToken, config.upstreamTimeoutMs, config.upstreamMaxResponseBytes),
+              config.schedulerTargetUrl,
+            ),
+          )
   const storeReadiness =
     options.readiness ??
     (businessStore === null
