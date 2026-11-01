@@ -4,8 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { failure, ok } from "../../contracts/index.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
-import type { SchedulerDispatchClaim, SchedulerDispatchResponse } from "../../application/ports/scheduler-dispatch-receipt-repository.js"
+import type { SchedulerDispatchClaim, SchedulerDispatchResponse, SchedulerDispatchReceiptRepository } from "../../application/ports/scheduler-dispatch-receipt-repository.js"
 import { buildScheduledAgentLaunch } from "../../infrastructure/clients/agent/index.js"
 import { schedulerDispatchDigest, schedulerDispatchScope, schedulerOccurrenceIdentity } from "../../infrastructure/clients/scheduler/dispatch-identity.js"
 import { schedulerScheduleName } from "../../infrastructure/clients/scheduler/schedule.js"
@@ -17,7 +16,7 @@ import { send } from "../response.js"
 import { headerString, readBody, requestBodyJson, requestId } from "../request.js"
 
 export type SchedulerDispatchProvider = Readonly<{
-  schedulerDispatchReceipts: NonNullable<BffBusinessStore["schedulerDispatchReceipts"]>
+  schedulerDispatchReceipts: SchedulerDispatchReceiptRepository
   scheduledTasks: Pick<ScheduledTaskService, "findRecord">
   scheduledAgentDispatch?: ScheduledAgentDispatchRepository
 }>
@@ -35,7 +34,7 @@ export function scheduledTaskId(context: RequestContext, path: string, key: stri
 
 async function settle(
   response: ServerResponse,
-  store: NonNullable<BffBusinessStore["schedulerDispatchReceipts"]>,
+  store: SchedulerDispatchReceiptRepository,
   claim: SchedulerDispatchClaim,
   result: SchedulerDispatchResponse,
   requestIdentifier: string,
@@ -46,7 +45,7 @@ async function settle(
 
 async function releaseUnknown(
   response: ServerResponse,
-  store: NonNullable<BffBusinessStore["schedulerDispatchReceipts"]>,
+  store: SchedulerDispatchReceiptRepository,
   claim: SchedulerDispatchClaim,
   requestIdentifier: string,
   code: string,

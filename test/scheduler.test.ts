@@ -142,7 +142,7 @@ describe("Scheduler receiver admission", () => {
   it("rejects missing or malformed task revisions before claiming a receipt", async () => {
     let claims = 0
     const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
+      scheduledTaskService: { findRecord: async () => null },
       schedulerDispatchReceipts: {
         claim: async () => {
           claims += 1
@@ -176,13 +176,11 @@ describe("Scheduler receiver admission", () => {
     let accepted = 0
     let recovered: ReturnType<typeof dispatchSnapshot>["snapshot"] | null = null
     const store = {
-      services: {
-        scheduledTasks: {
-          findRecord: async () => ({
-            ownerId: "owner_fixture",
-            task: { id: "scheduled_fixture", prompt: "go", autoApprove: false, timezone: "UTC", revision: 2, enabled: true, status: "active" },
-          }),
-        },
+      scheduledTaskService: {
+        findRecord: async () => ({
+          ownerId: "owner_fixture",
+          task: { id: "scheduled_fixture", prompt: "go", autoApprove: false, timezone: "UTC", revision: 2, enabled: true, status: "active" },
+        }),
       },
       schedulerDispatchReceipts: {
         claim: async () => ({ outcome: "claimed", claim: { ...dispatchSnapshot(60_000), snapshot: recovered } }),
@@ -236,7 +234,7 @@ describe("Scheduler receiver admission", () => {
     })
     const agentBase = await listen(agent)
     const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
+      scheduledTaskService: { findRecord: async () => null },
       schedulerDispatchReceipts: {
         claim: async () => {
           receiptClaims += 1
@@ -275,7 +273,7 @@ describe("Scheduler receiver admission", () => {
       },
     }
     const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
+      scheduledTaskService: { findRecord: async () => null },
       schedulerDispatchReceipts: receipts,
       ready: async () => undefined,
       close: async () => undefined,
@@ -314,7 +312,7 @@ describe("Scheduler receiver admission", () => {
       complete: async () => true,
     }
     const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
+      scheduledTaskService: { findRecord: async () => null },
       schedulerDispatchReceipts: receipts,
       ready: async () => undefined,
       close: async () => undefined,
@@ -347,7 +345,7 @@ describe("Scheduler receiver admission", () => {
       complete: async () => true,
     }
     const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
+      scheduledTaskService: { findRecord: async () => null },
       schedulerDispatchReceipts: receipts,
       scheduledAgentDispatch: { accept: async () => ({ outcome: "accepted" }) },
       ready: async () => undefined,
@@ -386,7 +384,7 @@ describe("Scheduler receiver admission", () => {
       complete: async () => true,
     }
     const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
+      scheduledTaskService: { findRecord: async () => null },
       schedulerDispatchReceipts: receipts,
       ready: async () => undefined,
       close: async () => undefined,
@@ -439,7 +437,7 @@ describe("Scheduler receiver admission", () => {
       },
     }
     const store = {
-      services: { scheduledTasks: { findRecord: async () => record } },
+      scheduledTaskService: { findRecord: async () => record },
       schedulerDispatchReceipts: receipts,
       ready: async () => undefined,
       close: async () => undefined,
