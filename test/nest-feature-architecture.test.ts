@@ -247,17 +247,20 @@ test("ScheduledTasksModule owns the current-state read adapter and provider", as
 })
 
 test("AgentRunsModule owns internal admission and execution-binding adapters", async () => {
-  const [agentModule, middleware, nativeRoute, server] = await Promise.all([
+  const [agentModule, middleware, nativeRoute, controlRoute, server] = await Promise.all([
     readFile(path.join(root, "src/modules/agent-runs/agent-runs.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/agent-runs/agent-runs.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/agent-runs-native.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/agent-control-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(agentModule, /provide: AGENT_RUNS_READER/u)
   assert.match(agentModule, /AgentRunsMiddleware/u)
   assert.match(middleware, /handleAgentRunsInternalRequest/u)
+  assert.match(middleware, /handleAgentControlRequest/u)
   assert.match(nativeRoute, /agentModelAdmissionRoute/u)
   assert.match(nativeRoute, /projectExecutionBindingRoute/u)
+  assert.match(controlRoute, /liveAgentSession/u)
   assert.match(server, /handleAgentRunsInternalRequest/u)
   assert.doesNotMatch(server, /await agentModelAdmissionRoute\(/u)
   assert.doesNotMatch(server, /await projectExecutionBindingRoute\(/u)
