@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { z } from "zod"
 import type { BffConfig } from "../../config/runtime.js"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
+import type { McpPersonalProvider } from "./mcp-personal.js"
 import { authorizeUserRequest, authorizeMcpAction, type UserAdmissionResult } from "../../auth/user-admission.js"
 import { mcpServerIconId } from "../../application/mcp-server-icon.contract.js"
 import { mcpIconBindingSchema } from "../../infrastructure/clients/platform/mcp-icon.js"
@@ -26,7 +26,7 @@ export async function mcpServerIconRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: McpPersonalProvider,
   initial: Extract<UserAdmissionResult, { ok: true }>,
   serverId: string,
 ): Promise<void> {

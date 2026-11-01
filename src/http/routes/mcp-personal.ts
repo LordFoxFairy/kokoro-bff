@@ -2,7 +2,9 @@ import { mcpServerIconRoute } from "./mcp-server-icon.js"
 import { mcpIconId, parseMcpIcon, type McpIconInput, type McpIconOperation } from "../../infrastructure/clients/platform/mcp-icon.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
+import type { McpPersonalConnectClient } from "../../infrastructure/clients/platform/mcp-personal-connect.js"
+import type { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest, authorizeMcpAction, type UserAdmissionResult } from "../../auth/user-admission.js"
 import {
   mcpPersonalFault,
@@ -36,6 +38,24 @@ import type { McpPersonalJsonImportInput } from "../../infrastructure/clients/pl
 import { parseMcpPersonalJsonImport } from "../mcp-personal-json-import-input.js"
 import { mcpRequestRemaining } from "../mcp-request-budget.js"
 import { send } from "../response.js"
+
+export type McpPersonalClient = Pick<McpPersonalConnectClient, "read"> &
+  Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon" | "prepareReceipt">>
+
+export type McpPersonalProvider = Readonly<{
+  mcpPersonalClient: McpPersonalClient | null
+  mcpAuthorization: Pick<McpAuthorizationClient, "check">
+  sessionAdmission: SessionAdmission
+}>
+
+export function isMcpPersonalRequest(request: IncomingMessage): boolean {
+  try {
+    const path = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean)
+    return path[0] === "browser" && path[1] === "v1" && mcpPersonalOperation(path.slice(2), request.method ?? "GET") !== null
+  } catch {
+    return false
+  }
+}
 
 export function mcpPersonalOperation(
   path: string[],
@@ -90,7 +110,7 @@ export async function mcpPersonalRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: McpPersonalProvider,
   initialAdmission: Extract<UserAdmissionResult, { ok: true }>,
   path: string[],
 ): Promise<void> {
