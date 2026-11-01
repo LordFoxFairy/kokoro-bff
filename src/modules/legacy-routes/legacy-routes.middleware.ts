@@ -12,10 +12,11 @@ import { isChatMessageNativeRequest } from "../../http/routes/chat-message-nativ
 import { isAgentControlNativeRequest } from "../../http/routes/agent-control-native.js"
 import { isAgentRunsInternalRequest } from "../../http/routes/agent-runs-native.js"
 import { isRunDisplayRequest } from "../../http/routes/run-display.js"
+import { isSchedulerDispatchRequest } from "../../http/routes/scheduler.js"
 
 export function isMigratedChatRoute(request: IncomingMessage): boolean {
   try {
-    if (isSharedPublicRequest(request) || isChatNativeRequest(request) || isChatBusinessReadRequest(request) || isChatMutationRequest(request) || isChatEventsNativeRequest(request) || isChatMessageNativeRequest(request) || isAgentControlNativeRequest(request) || isAgentRunsInternalRequest(request) || isRunDisplayRequest(request)) return true
+    if (isSharedPublicRequest(request) || isChatNativeRequest(request) || isChatBusinessReadRequest(request) || isChatMutationRequest(request) || isChatEventsNativeRequest(request) || isChatMessageNativeRequest(request) || isAgentControlNativeRequest(request) || isAgentRunsInternalRequest(request) || isRunDisplayRequest(request) || isSchedulerDispatchRequest(request)) return true
     if (isMessageFeedbackRequest(request) || isMessageRegenerationNativeRequest(request)) return true
     const path = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean)
     return request.method === "POST" && path[0] === "v1" && path[1] === "sessions" && path.length === 4 && path[3] === "move"

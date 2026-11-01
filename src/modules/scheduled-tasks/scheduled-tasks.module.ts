@@ -3,12 +3,16 @@ import { DatabaseModule } from "../../common/database/database.module.js"
 import {
   BFF_CONFIG,
   BFF_DATABASE,
+  BFF_POOL,
+  SCHEDULER_DISPATCH_RECEIPTS,
   SCHEDULED_AGENT_DISPATCHER,
   SCHEDULED_AGENT_DISPATCH_REPOSITORY,
   SCHEDULED_AGENT_TERMINAL_CONSUMER,
   SCHEDULED_TASK_DISPATCHER,
   SCHEDULED_TASK_OUTBOX,
+  SCHEDULED_TASK_REPOSITORY,
   SCHEDULED_TASK_READ_SERVICE,
+  SCHEDULED_TASK_SERVICE,
 } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
@@ -29,6 +33,11 @@ import { AgentRunsModule } from "../agent-runs/agent-runs.module.js"
 import { AccountModule } from "../account/account.module.js"
 import { ProjectsModule } from "../projects/projects.module.js"
 import { ScheduledTaskReadMiddleware } from "./scheduled-task-read.middleware.js"
+import { SchedulerDispatchMiddleware } from "./scheduler-dispatch.middleware.js"
+import { ScheduledTaskService } from "../../application/scheduled-task-service.js"
+import { PostgresSchedulerDispatchReceiptRepository } from "../../infrastructure/postgres/scheduler-dispatch-receipt-repository.js"
+import type { SchedulerDispatchReceiptRepository } from "../../application/ports/scheduler-dispatch-receipt-repository.js"
+import type { Pool } from "pg"
 import { randomUUID } from "node:crypto"
 
 function scheduledWorkerLog(event: { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }): void {
@@ -60,11 +69,26 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdow
   imports: [AccountModule, ProjectsModule, AgentRunsModule, DatabaseModule],
   providers: [
     ScheduledTaskReadMiddleware,
+    SchedulerDispatchMiddleware,
+    {
+      provide: SCHEDULED_TASK_REPOSITORY,
+      inject: [BFF_DATABASE],
+      useFactory: (database: PostgresBffDatabase): PostgresScheduledTaskRepository => new PostgresScheduledTaskRepository(database),
+    },
+    {
+      provide: SCHEDULED_TASK_SERVICE,
+      inject: [SCHEDULED_TASK_REPOSITORY],
+      useFactory: (repository: PostgresScheduledTaskRepository): ScheduledTaskService => new ScheduledTaskService(repository),
+    },
+    {
+      provide: SCHEDULER_DISPATCH_RECEIPTS,
+      inject: [BFF_POOL],
+      useFactory: (pool: Pool): SchedulerDispatchReceiptRepository => new PostgresSchedulerDispatchReceiptRepository(pool),
+    },
     {
       provide: SCHEDULED_TASK_READ_SERVICE,
-      inject: [BFF_CONFIG, BFF_DATABASE],
-      useFactory: (config: BffConfig, database: PostgresBffDatabase): ScheduledTaskReadService => {
-        const repository = new PostgresScheduledTaskRepository(database)
+      inject: [BFF_CONFIG, SCHEDULED_TASK_REPOSITORY],
+      useFactory: (config: BffConfig, repository: PostgresScheduledTaskRepository): ScheduledTaskReadService => {
         const scheduler =
           typeof config.upstreams.scheduler === "string" && config.schedulerServiceToken !== null
             ? new SchedulerControlClient(config.upstreams.scheduler, config.schedulerServiceToken, config.upstreamTimeoutMs, config.upstreamMaxResponseBytes)
@@ -77,8 +101,8 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdow
     },
     {
       provide: SCHEDULED_TASK_OUTBOX,
-      inject: [BFF_DATABASE],
-      useFactory: (database: PostgresBffDatabase): ScheduledTaskOutboxRepository => new PostgresScheduledTaskRepository(database),
+      inject: [SCHEDULED_TASK_REPOSITORY],
+      useFactory: (repository: PostgresScheduledTaskRepository): ScheduledTaskOutboxRepository => repository,
     },
     {
       provide: SCHEDULED_TASK_DISPATCHER,
@@ -125,6 +149,9 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdow
   ],
   exports: [
     SCHEDULED_TASK_READ_SERVICE,
+    SCHEDULED_TASK_REPOSITORY,
+    SCHEDULED_TASK_SERVICE,
+    SCHEDULER_DISPATCH_RECEIPTS,
     SCHEDULED_TASK_OUTBOX,
     SCHEDULED_TASK_DISPATCHER,
     SCHEDULED_AGENT_DISPATCH_REPOSITORY,
@@ -134,6 +161,7 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdow
 })
 export class ScheduledTasksModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(SchedulerDispatchMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(ScheduledTaskReadMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
   }
 }
