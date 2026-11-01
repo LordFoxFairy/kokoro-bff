@@ -24,6 +24,7 @@ import { handleAppSkillBindingsRequest } from "../../http/routes/app-skill-bindi
 import { handleSkillSpecificationRequest } from "../../http/routes/skill-specification-native.js"
 import { handleSkillPackageInspectionRequest } from "../../http/routes/skill-package-inspection-native.js"
 import { handleSkillDownloadRequest } from "../../http/routes/skill-download-native.js"
+import { handleRetiredOwnerRequest } from "../../http/routes/retired-owner-native.js"
 import type { SkillUsageResult } from "../../application/agui/skill-usage.js"
 import type { CatalogConnectClient } from "../../infrastructure/clients/platform/catalog-connect.js"
 import type { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
@@ -94,6 +95,7 @@ export class SkillsMiddleware implements NestMiddleware {
       .then((handled) => handled || handleSkillLocalImportRequest(request, response, this.config, this.admission, this.skillAuthorization, this.localImportClient))
       .then((handled) => handled || handlePersonalSkillLifecycleRequest(request, response, this.config, this.admission, this.skillAuthorization, this.draftClient))
       .then((handled) => handled || handleSkillUsageRequest(request, response, this.config, this.admission, this.usageReader))
+      .then((handled) => handled || handleRetiredOwnerRequest(request, response, this.config, this.admission))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

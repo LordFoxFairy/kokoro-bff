@@ -5,6 +5,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import { handleSystemNativeRequest } from "../../http/routes/system-native.js"
 import { handleSystemAdminRequest } from "../../http/routes/system-admin-native.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import { handleRetiredOwnerRequest } from "../../http/routes/retired-owner-native.js"
 
 @Injectable()
 export class SystemMiddleware implements NestMiddleware {
@@ -13,6 +14,7 @@ export class SystemMiddleware implements NestMiddleware {
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleSystemAdminRequest(request, response, this.config, this.admission)
       .then((handled) => handled || handleSystemNativeRequest(request, response, this.config))
+      .then((handled) => handled || handleRetiredOwnerRequest(request, response, this.config, this.admission))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

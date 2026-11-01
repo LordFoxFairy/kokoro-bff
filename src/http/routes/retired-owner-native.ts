@@ -1,9 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { RequestContext } from "../../domain/request-context.js"
+import type { BffConfig } from "../../config/runtime.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { failure } from "../../contracts/index.js"
-import { pathOf } from "../request.js"
-import { reply } from "../response.js"
+import { pathOf, requestId } from "../request.js"
+import { reply, send } from "../response.js"
+import { authorizeUserRequest } from "../../auth/user-admission.js"
 
 export async function handleRetiredOwnerBusiness(
   request: IncomingMessage,
@@ -31,4 +34,26 @@ export async function handleRetiredOwnerBusiness(
     mutation,
   )
   return true
+}
+
+export async function handleRetiredOwnerRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+): Promise<boolean> {
+  let path: string[]
+  try {
+    path = pathOf(request)
+  } catch {
+    return false
+  }
+  if (path[1] !== "system" && path[1] !== "skills") return false
+  const id = requestId(request)
+  const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000))
+  if (!admitted.ok) {
+    send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+    return true
+  }
+  return handleRetiredOwnerBusiness(request, response, admitted.context, new Map(), null)
 }
