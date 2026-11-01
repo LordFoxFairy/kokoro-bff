@@ -144,6 +144,15 @@ function projectContentAccessForRequest(
   }
 }
 
+function isRawSessionRequest(request: IncomingMessage): boolean {
+  try {
+    const path = pathOf(request)
+    return path[0] === "v1" && path[1] === "sessions"
+  } catch {
+    return false
+  }
+}
+
 export async function handleBffRequest(
   request: IncomingMessage,
   response: ServerResponse,
@@ -1095,6 +1104,18 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       )
       .then((handled) => {
         if (handled) return
+        if (
+          composition.routeHandler === undefined &&
+          composition.businessStore !== null &&
+          composition.chatService !== null &&
+          composition.projectService !== null &&
+          isRawSessionRequest(request)
+        ) {
+          const id = requestId(request)
+          response.setHeader("x-request-id", id)
+          send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
+          return
+        }
         return handleBffRequest(request, response, config, composition)
       })
     void handler.catch(() => {

@@ -168,6 +168,26 @@ test("routes Agent control through the raw compatibility chain", async () => {
   assert.deepEqual(observed, ["/v1/runs/run_control/control"])
 })
 
+test("terminates unknown live session paths before the raw session fallback", async () => {
+  const raw = createBffServer(config("http://127.0.0.1:9"), {
+    businessStore: { ready: async (): Promise<void> => undefined, close: async (): Promise<void> => undefined } as never,
+    chatService: { async findConversation() { return null } } as never,
+    projectService: { async find() { return null } } as never,
+    readiness: async (): Promise<void> => undefined,
+    sessionAdmission: new (class {
+      async verify() {
+        return { ok: true as const, identity: { namespace: "tenant_control", userId: "user_control" }, platformAdmin: false }
+      }
+    })(),
+  })
+  const base = await listen(raw)
+  const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/unknown`, {
+    headers: authHeaders("command_unknown"),
+  })
+  assert.equal(response.status, 404)
+  assert.equal((await response.json()).error.code, "bff_route_not_found")
+})
+
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
 })
