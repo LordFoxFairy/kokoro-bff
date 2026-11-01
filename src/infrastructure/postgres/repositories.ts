@@ -59,11 +59,6 @@ export class PostgresBffRepositories {
   public readonly scheduledTaskService: ScheduledTaskService
   public readonly chatService: ChatApplicationService
   public readonly chatTurnService: ChatTurnApplicationService
-  /** Compatibility view for legacy integration fixtures; production code never reads it. */
-  public readonly services: Readonly<{
-    chat: ChatApplicationService
-    chatTurns: ChatTurnApplicationService
-  }>
   public readonly agUi: AgUiProjectionService
   public readonly agUiConsumers: AgUiProjectionConsumerRepository
   public readonly scheduledTaskOutbox: ScheduledTaskOutboxRepository
@@ -117,10 +112,6 @@ export class PostgresBffRepositories {
     this.scheduledTaskService = new ScheduledTaskService(this.scheduled)
     this.chatService = new ChatApplicationService(chat)
     this.chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
-    this.services = {
-      chat: this.chatService,
-      chatTurns: this.chatTurnService,
-    }
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)
   }

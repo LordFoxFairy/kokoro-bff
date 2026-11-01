@@ -338,7 +338,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
       originalFrames.map((frame) => frame.id),
     )
 
-    const secondTurn = await admissionStore.services.chatTurns.submit({
+    const secondTurn = await admissionStore.chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_live",
       subjectId: "user_integration",
@@ -506,7 +506,7 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await insertConversation(pool, "session_boundary", "Boundary Chat")
     admissionStore = new PostgresBffRepositories(postgresUrl, redisUrl)
-    const turn = await admissionStore.services.chatTurns.submit({
+    const turn = await admissionStore.chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_boundary",
       subjectId: "user_integration",
@@ -700,7 +700,7 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await insertConversation(pool, "session_budget", "Budget Chat")
     admissionStore = new PostgresBffRepositories(postgresUrl, redisUrl)
-    const currentTurn = await admissionStore.services.chatTurns.submit({
+    const currentTurn = await admissionStore.chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_budget",
       subjectId: "user_integration",
@@ -1058,7 +1058,7 @@ integrationTest(
       store = new PostgresBffRepositories(postgresUrl, redisUrl)
       await store.ready()
       const submit = (name) =>
-        store.services.chatTurns.submit({
+        store.chatTurnService.submit({
           tenantId,
           conversationId: sessionId,
           subjectId: ownerId,
@@ -1277,7 +1277,7 @@ integrationTest(
       for (const { event } of frames) assert.doesNotThrow(() => EventSchemas.parse(event))
       assert.equal(launchRequests.length, 1)
       assert.ok(eventRequests.some(({ publishB: released, launchCount }) => released && launchCount === 1))
-      const finalSnapshot = await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined)
+      const finalSnapshot = await store.chatService.snapshot(tenantId, ownerId, sessionId, undefined)
       assert.equal(finalSnapshot.execution_head, undefined)
       assert.equal(finalSnapshot.event_watermark, frames.at(-1).id)
       const replay = await store.agUi.replay(tenantId, sessionId, originalSnapshot.event_watermark, 100)
@@ -1568,7 +1568,7 @@ async function r57HttpContext(context) {
   store = new PostgresBffRepositories(postgresUrl, redisUrl)
   await store.ready()
   await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,title) VALUES ($1,$2,$3,'R57 control')", [sessionId, tenantId, ownerId])
-  const turn = await store.services.chatTurns.submit({
+  const turn = await store.chatTurnService.submit({
     tenantId,
     conversationId: sessionId,
     subjectId: ownerId,
@@ -1745,7 +1745,7 @@ async function r57HttpContext(context) {
     facts,
     ingest: (sequence, payload, kind, sourceRunId) => store.agUi.ingest(tenantId, sessionId, [source(sequence, payload, kind, sourceRunId)]),
     submitAndStartSuccessor: async (sequence) => {
-      const next = await store.services.chatTurns.submit({
+      const next = await store.chatTurnService.submit({
         tenantId,
         conversationId: sessionId,
         subjectId: ownerId,

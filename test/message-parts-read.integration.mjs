@@ -57,7 +57,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
         tenantId,
         subjectId,
       ])
-      const receipt = await store.services.chatTurns.submit({
+      const receipt = await store.chatTurnService.submit({
         tenantId,
         conversationId,
         subjectId,
@@ -591,7 +591,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
         const c = await create({ terminalStatus: "cancelled", noText: content === "", long: content })
         const before = await raw(c)
         assert.equal((await c.snapshot()).messages.find((message) => message.messageId === c.messageId).terminal_status, "cancelled")
-        const next = await store.services.chatTurns.submit({
+        const next = await store.chatTurnService.submit({
           tenantId: c.tenantId,
           conversationId: c.conversationId,
           subjectId: c.subjectId,

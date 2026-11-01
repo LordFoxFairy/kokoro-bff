@@ -3368,7 +3368,7 @@ async function r279DeleteProject(f, projectId, key) {
 
 async function r279CreateConversation(f, repositories, projectId, label) {
   const conversationId = `conv_${randomUUID()}`
-  const receipt = await repositories.services.chatTurns.submit({
+  const receipt = await repositories.chatTurnService.submit({
     tenantId: f.tenant,
     conversationId,
     projectRef: projectId,
@@ -3443,7 +3443,7 @@ integrationTest("R279 aggregate deletion freezes active and deleted members and 
     activeConversation = await r279CreateConversation(f, repositories, project.id, "active-conversation")
     deletedConversation = await r279CreateConversation(f, repositories, project.id, "deleted-conversation")
     assert.equal(
-      await repositories.services.chat.deleteConversation(f.tenant, f.owner, deletedConversation, `r279-delete-member-${randomUUID()}`, project.id),
+      await repositories.chatService.deleteConversation(f.tenant, f.owner, deletedConversation, `r279-delete-member-${randomUUID()}`, project.id),
       true,
     )
   } finally {
@@ -4284,7 +4284,7 @@ integrationTest(
       activeConversation = await r279CreateConversation(f, repositories, project.id, "release-active")
       deletedConversation = await r279CreateConversation(f, repositories, project.id, "release-deleted")
       assert.equal(
-        await repositories.services.chat.deleteConversation(f.tenant, f.owner, deletedConversation, `r285-single-delete-${randomUUID()}`, project.id),
+        await repositories.chatService.deleteConversation(f.tenant, f.owner, deletedConversation, `r285-single-delete-${randomUUID()}`, project.id),
         true,
       )
     } finally {

@@ -2556,7 +2556,7 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
     )
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
-    const receipt = await store.services.chatTurns.submit({
+    const receipt = await store.chatTurnService.submit({
       tenantId: tenant,
       conversationId,
       subjectId: "chat_user",
@@ -2653,7 +2653,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
     await store.ready()
     for (const suffix of ["first", "second", "third"]) {
       assert.ok(
-        await store.services.chatTurns.submit({
+        await store.chatTurnService.submit({
           tenantId: tenant,
           conversationId,
           subjectId: "chat_user",
@@ -2665,7 +2665,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
       )
     }
 
-    const queuedSnapshot = await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)
+    const queuedSnapshot = await store.chatService.snapshot(tenant, "chat_user", conversationId, undefined)
     const queuedRows = await pool.query(
       `SELECT run_id, conversation_dispatch_seq
          FROM bff_agent_dispatch_outbox
@@ -2691,7 +2691,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
     )
     const queuedWatermark = queuedSnapshot.event_watermark
 
-    const replayedFirst = await store.services.chatTurns.submit({
+    const replayedFirst = await store.chatTurnService.submit({
       tenantId: tenant,
       conversationId,
       subjectId: "chat_user",
@@ -2701,7 +2701,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
       content: "Dispatch first",
     })
     assert.equal(replayedFirst.run_id, queuedRows.rows[0].run_id)
-    assert.equal((await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)).event_watermark, queuedWatermark)
+    assert.equal((await store.chatService.snapshot(tenant, "chat_user", conversationId, undefined)).event_watermark, queuedWatermark)
 
     const beforeClaim = await pool.query("SELECT expected_run_id FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2", [tenant, conversationId])
     assert.equal(beforeClaim.rows[0].expected_run_id, null)
@@ -2720,7 +2720,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
       first[0].runId,
     )
     assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(first[0]), true)
-    assert.deepEqual((await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)).execution_head, {
+    assert.deepEqual((await store.chatService.snapshot(tenant, "chat_user", conversationId, undefined)).execution_head, {
       run_id: first[0].runId,
       state: "queued",
       pending_pauses: [],
@@ -2788,7 +2788,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
         },
       },
     ])
-    const handedOff = await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)
+    const handedOff = await store.chatService.snapshot(tenant, "chat_user", conversationId, undefined)
     assert.deepEqual(handedOff.execution_head, {
       run_id: queuedRows.rows[1].run_id,
       state: "queued",
@@ -2849,7 +2849,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
     )
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
-    const firstReceipt = await store.services.chatTurns.submit({
+    const firstReceipt = await store.chatTurnService.submit({
       tenantId: tenant,
       conversationId,
       subjectId: "chat_user",
@@ -2866,7 +2866,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
       maxAttempts: 8,
     })
     assert.ok(first)
-    const secondReceipt = await store.services.chatTurns.submit({
+    const secondReceipt = await store.chatTurnService.submit({
       tenantId: tenant,
       conversationId,
       subjectId: "chat_user",
@@ -2948,7 +2948,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
       { run_id: firstReceipt.run_id, status: "failed", agent_failure_code: null, agent_failure_retryable: null },
       { run_id: secondReceipt.run_id, status: "failed", agent_failure_code: null, agent_failure_retryable: null },
     ])
-    assert.equal((await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)).active_run, undefined)
+    assert.equal((await store.chatService.snapshot(tenant, "chat_user", conversationId, undefined)).active_run, undefined)
 
     await store.close()
     store = undefined
@@ -3003,7 +3003,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     await store.ready()
     for (const suffix of ["admitted", "inflight", "local_only"]) {
       assert.ok(
-        await store.services.chatTurns.submit({
+        await store.chatTurnService.submit({
           tenantId: tenant,
           conversationId,
           subjectId: "chat_user",
@@ -3022,7 +3022,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     })
     assert.ok(admitted)
     assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(admitted), true)
-    assert.equal(await store.services.chat.deleteConversation(tenant, "chat_user", conversationId, "request_delete_conversation"), true)
+    assert.equal(await store.chatService.deleteConversation(tenant, "chat_user", conversationId, "request_delete_conversation"), true)
     assert.deepEqual(
       await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_after_delete", limit: 10, leaseDurationMs: 5000, maxAttempts: 8 }),
       [],
@@ -3125,7 +3125,7 @@ integrationTest(
         owner,
         suffix,
       ])
-      return store.services.chatTurns.submit({
+      return store.chatTurnService.submit({
         tenantId: tenant,
         conversationId,
         subjectId: owner,
@@ -3239,7 +3239,7 @@ integrationTest(
         store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_delete_claim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
       )
       await waitForBlockedStream(deleteLock)
-      const deletePromise = track(store.services.chat.deleteConversation(tenant, owner, deleteConversation, "barrier_delete"))
+      const deletePromise = track(store.chatService.deleteConversation(tenant, owner, deleteConversation, "barrier_delete"))
       await releaseLocker(deleteLock)
       await Promise.all([deleteClaimPromise, deletePromise])
       assert.deepEqual(
@@ -3436,7 +3436,7 @@ integrationTest(
         ).rows,
         [],
       )
-      const exhaustedSnapshot = await store.services.chat.snapshot(tenant, owner, exhaustedX, undefined)
+      const exhaustedSnapshot = await store.chatService.snapshot(tenant, owner, exhaustedX, undefined)
       assert.equal(exhaustedSnapshot.execution_head, undefined)
     } finally {
       for (const locker of lockers) {
@@ -3506,7 +3506,7 @@ integrationTest("does not return dispatch or consumer leases exhausted by the re
     const owner = "commit_budget_user"
     const createTurn = async (conversationId, suffix) => {
       await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,title) VALUES ($1,$2,$3,$4)", [conversationId, tenant, owner, suffix])
-      return store.services.chatTurns.submit({
+      return store.chatTurnService.submit({
         tenantId: tenant,
         conversationId,
         subjectId: owner,
@@ -3683,7 +3683,7 @@ integrationTest(
       triggerInstalled = true
       let failure
       try {
-        await store.services.chatTurns.submit(input)
+        await store.chatTurnService.submit(input)
       } catch (error) {
         failure = error
       }
@@ -3693,7 +3693,7 @@ integrationTest(
       assert.deepEqual(afterFailure, before, "Conversation/Message/outbox/stream/source/public ledger and cursor must all roll back")
 
       await removeFault()
-      const accepted = await store.services.chatTurns.submit(input)
+      const accepted = await store.chatTurnService.submit(input)
       assert.ok(accepted)
       const committed = await fingerprint()
       assert.equal(committed.facts.bff_conversation.length, 1)
@@ -3713,14 +3713,14 @@ integrationTest(
         dispatch_sequence: String(outbox.conversation_dispatch_seq),
       })
       assert.match(committed.cursor, /^agui_[0-9a-f]{32}$/u)
-      const snapshot = await store.services.chat.snapshot(tenantId, subjectId, conversationId, undefined)
+      const snapshot = await store.chatService.snapshot(tenantId, subjectId, conversationId, undefined)
       assert.deepEqual(snapshot.execution_head, { run_id: accepted.run_id, state: "queued", pending_pauses: [] })
       assert.equal(snapshot.event_watermark, committed.cursor)
       await store.close()
       store = new PostgresBffRepositories(postgresUrl, redisUrl)
       await store.ready()
-      assert.deepEqual(await store.services.chatTurns.submit(input), accepted)
-      assert.deepEqual(await store.services.chatTurns.submit(input), accepted)
+      assert.deepEqual(await store.chatTurnService.submit(input), accepted)
+      assert.deepEqual(await store.chatTurnService.submit(input), accepted)
       assert.deepEqual(await fingerprint(), committed, "same key after reconnect must not add facts, alter markers or advance cursor")
     } finally {
       await removeFault()
@@ -3784,7 +3784,7 @@ integrationTest("R124 Conversation deletion removes owned compact process rows w
         "agui_" + "d".repeat(32),
       ],
     )
-    assert.equal(await store.services.chat.deleteConversation(tenantId, ownerId, conversationId, "r124_delete_request_" + suffix), true)
+    assert.equal(await store.chatService.deleteConversation(tenantId, ownerId, conversationId, "r124_delete_request_" + suffix), true)
     assert.equal(
       (await pool.query("SELECT count(*)::int AS count FROM bff_agui_run_process WHERE tenant_id=$1 AND session_id=$2", [tenantId, conversationId])).rows[0]
         .count,
@@ -3840,7 +3840,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     )
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
-    const admittedRun = await store.services.chatTurns.submit({
+    const admittedRun = await store.chatTurnService.submit({
       tenantId: tenant,
       conversationId,
       projectRef: projectA,
@@ -4042,7 +4042,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     assert.deepEqual(noOp.body, movedInto.body)
     assert.equal((await pool.query("SELECT updated_at::text AS value FROM bff_conversation WHERE conversation_id=$1", [directId])).rows[0].value, timestamp)
 
-    const slugRun = await store.services.chatTurns.submit({
+    const slugRun = await store.chatTurnService.submit({
       tenantId: tenant,
       conversationId: slugId,
       projectRef: projectA,
@@ -4097,7 +4097,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     assert.equal(await projectRef(raceDifferentId), winner.body.data.project_ref)
     assert.deepEqual(await preservedRows(), beforeMoveFacts, "concurrent Move must leave historical facts unchanged")
     assert.deepEqual(await bindingRow(), retired, "Move replay and later unrelated Moves do not rewrite the original retirement")
-    const directRun = await store.services.chatTurns.submit({
+    const directRun = await store.chatTurnService.submit({
       tenantId: tenant,
       conversationId,
       subjectId: subject,
@@ -4130,7 +4130,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     assert.deepEqual(await bindingRow(), retired, "P→direct→P never revives the old execution binding")
     assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), null, "ABA does not revive the old authorization")
     assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(directBinding), null, "moving into Project retires the preceding direct Run")
-    const freshProjectRun = await store.services.chatTurns.submit({
+    const freshProjectRun = await store.chatTurnService.submit({
       tenantId: tenant,
       conversationId,
       projectRef: projectA,
@@ -4808,7 +4808,7 @@ integrationTest(
       )
       store = new PostgresBffRepositories(postgresUrl, redisUrl)
       await store.ready()
-      const originalRun = await store.services.chatTurns.submit({
+      const originalRun = await store.chatTurnService.submit({
         tenantId: tenant,
         conversationId,
         subjectId: subject,
@@ -5179,7 +5179,7 @@ integrationTest("R149 identical concurrent Move keys read one real PostgreSQL wi
     ])
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
-    const existingRun = await store.services.chatTurns.submit({
+    const existingRun = await store.chatTurnService.submit({
       tenantId: tenant,
       conversationId,
       subjectId: subject,
@@ -5729,7 +5729,7 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
       assert.deepEqual(ids, ["installation_b"])
       return ["skill:version_b"]
     }
-    const receipt = await store.services.chatTurns.submit(input, resolver)
+    const receipt = await store.chatTurnService.submit(input, resolver)
     assert.ok(receipt)
     const frozen = await pool.query("SELECT selected_skill_source_refs FROM bff_message WHERE message_id=$1", [receipt.user_message_id])
     assert.deepEqual(frozen.rows[0].selected_skill_source_refs, ["skill:version_b"])
@@ -5740,14 +5740,14 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
     assert.deepEqual(dispatched.rows[0].payload.launch.selected_skill_source_refs, ["skill:version_b"])
     await save(["installation_c"], "changed-default")
     assert.deepEqual(
-      await store.services.chatTurns.submit(input, async () => {
+      await store.chatTurnService.submit(input, async () => {
         throw Error("replay must not resolve current defaults")
       }),
       receipt,
     )
     assert.equal(resolutions, 1)
-    await assert.rejects(store.services.chatTurns.submit({ ...input, selectedSkillSourceRefs: [] }), /CHAT_TURN_IDEMPOTENCY_CONFLICT/)
-    const empty = await store.services.chatTurns.submit({ ...input, idempotencyKey: "explicit-empty", selectedSkillSourceRefs: [] }, async () => {
+    await assert.rejects(store.chatTurnService.submit({ ...input, selectedSkillSourceRefs: [] }), /CHAT_TURN_IDEMPOTENCY_CONFLICT/)
+    const empty = await store.chatTurnService.submit({ ...input, idempotencyKey: "explicit-empty", selectedSkillSourceRefs: [] }, async () => {
       throw Error("explicit empty must not inherit")
     })
     assert.deepEqual(
@@ -5756,7 +5756,7 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
     )
     const raced = { ...input, conversationId: `conv_${randomUUID()}`, idempotencyKey: "defaults-race" }
     await assert.rejects(
-      store.services.chatTurns.submit(raced, async () => {
+      store.chatTurnService.submit(raced, async () => {
         await save([], "clear-during-resolve")
         return ["skill:version_c"]
       }),
@@ -5772,8 +5772,8 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
       project.id,
     ])
     await assert.rejects(
-      store.services.chatTurns.submit({ ...input, conversationId: movedId, idempotencyKey: "move-race" }, async () => {
-        const moved = await store.services.chat.moveConversation(
+      store.chatTurnService.submit({ ...input, conversationId: movedId, idempotencyKey: "move-race" }, async () => {
+        const moved = await store.chatService.moveConversation(
           { requestId: "selection-move", identity: { namespace: tenant, userId: subject } },
           movedId,
           other.id,
@@ -5786,10 +5786,10 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
       /CHAT_SKILL_SELECTION_CHANGED/,
     )
     assert.equal((await pool.query("SELECT 1 FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2", [tenant, movedId])).rowCount, 0)
-    assert.equal(await store.services.chat.deleteConversation(tenant, subject, input.conversationId, "delete-selection", project.id), true)
+    assert.equal(await store.chatService.deleteConversation(tenant, subject, input.conversationId, "delete-selection", project.id), true)
     const before = (await pool.query("SELECT count(*)::int AS n FROM bff_message WHERE tenant_id=$1", [tenant])).rows[0].n
     assert.equal(
-      await store.services.chatTurns.submit(input, async () => {
+      await store.chatTurnService.submit(input, async () => {
         throw Error("deleted conversation must not resolve")
       }),
       null,
