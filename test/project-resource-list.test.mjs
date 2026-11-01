@@ -320,13 +320,10 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
     const bff = await listen(
       createBffServer(config, {
         readiness: async () => {},
-        businessStore: {
-          services: {
-            projects: {
-              async find(scope, ref) {
-                return scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
-              },
-            },
+        businessStore: { ready: async () => {}, close: async () => {} },
+        projectService: {
+          async find(scope, ref) {
+            return scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
           },
         },
         sessionAdmission: {

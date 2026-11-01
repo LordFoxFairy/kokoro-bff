@@ -18,7 +18,6 @@ import {
 import type { ProjectRepository } from "../../application/ports/project-repository.js"
 import type { ScheduledTaskRepository } from "../../application/ports/scheduled-task-repository.js"
 import type { ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
-import { BffApplicationServices } from "../../application/services.js"
 import { ProjectService } from "../../application/project-service.js"
 import { ScheduledTaskService } from "../../application/scheduled-task-service.js"
 import { ChatApplicationService } from "../../application/chat-service.js"
@@ -55,16 +54,18 @@ export class PostgresBffRepositories {
   private readonly idempotency: IdempotencyRepository
   private readonly projects: ProjectRepository
   private readonly scheduled: ScheduledTaskRepository
-  /**
-   * Feature-owned application services exposed as named seams for the live
-   * composition root. `services` remains only as a compatibility view for
-   * integration fixtures while callers migrate to these explicit owners.
-   */
+  /** Feature-owned application services exposed as named seams for bootstrap. */
   public readonly projectService: ProjectService
   public readonly scheduledTaskService: ScheduledTaskService
   public readonly chatService: ChatApplicationService
   public readonly chatTurnService: ChatTurnApplicationService
-  public readonly services: BffApplicationServices
+  /** Compatibility view for legacy integration fixtures; production code never reads it. */
+  public readonly services: Readonly<{
+    projects: ProjectService
+    scheduledTasks: ScheduledTaskService
+    chat: ChatApplicationService
+    chatTurns: ChatTurnApplicationService
+  }>
   public readonly agUi: AgUiProjectionService
   public readonly agUiConsumers: AgUiProjectionConsumerRepository
   public readonly scheduledTaskOutbox: ScheduledTaskOutboxRepository
@@ -114,17 +115,16 @@ export class PostgresBffRepositories {
       }
     }
     this.skillAiAssociation = (tenant, subject, conversation, artifact) => artifactLibrary.findSkillHandoff(tenant, subject, conversation, artifact)
-    this.services = new BffApplicationServices(
-      this.projects,
-      this.scheduled,
-      chat,
-      agentDispatchOutbox,
-      new Sha256StableIdGenerator(),
-    )
-    this.projectService = this.services.projects
-    this.scheduledTaskService = this.services.scheduledTasks
-    this.chatService = this.services.chat
-    this.chatTurnService = this.services.chatTurns
+    this.projectService = new ProjectService(this.projects)
+    this.scheduledTaskService = new ScheduledTaskService(this.scheduled)
+    this.chatService = new ChatApplicationService(chat)
+    this.chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    this.services = {
+      projects: this.projectService,
+      scheduledTasks: this.scheduledTaskService,
+      chat: this.chatService,
+      chatTurns: this.chatTurnService,
+    }
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)
   }

@@ -73,16 +73,14 @@ async function fixture({ execute = async () => publication(), find, verify, chec
       businessStore: {
         ready: async () => {},
         close: async () => {},
-        services: {
-          projects: {
-            find: async (scope, id) => {
-              assert.deepEqual(scope, { tenantId: "tenant", subjectId: "reader" })
-              events.push(`project:${id}`)
-              return find ? find(id) : { id }
-            },
-          },
-        },
         getReceipt: async () => null,
+      },
+      projectService: {
+        find: async (scope, id) => {
+          assert.deepEqual(scope, { tenantId: "tenant", subjectId: "reader" })
+          events.push(`project:${id}`)
+          return find ? find(id) : { id }
+          },
       },
       mcpProjectPublicationClient: {
         execute: async (identity, input, signal, deadline) => {

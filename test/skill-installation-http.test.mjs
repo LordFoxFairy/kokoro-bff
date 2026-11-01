@@ -833,16 +833,16 @@ test("Project installation six routes use the current owned project, distinct co
       businessStore: {
         ready: async () => {},
         getReceipt: async () => null,
-        services: {
-          chat: {},
-          chatTurns: {
-            submit: async (_input, resolve) => {
-              await resolve(project.id, ["i"])
-              commits++
-              throw Error("unexpected commit")
-            },
-          },
-          projects: {
+      },
+      chatTurnService: {
+        submit: async (_input, resolve) => {
+          await resolve(project.id, ["i"])
+          commits++
+          throw Error("unexpected commit")
+        },
+      },
+      chatService: {},
+      projectService: {
             skillSelection: async () => ({ project_id: project.id, installation_ids: [...selection] }),
             replaceSkillSelection: async (_scope, id, ids) => {
               assert.equal(id, project.id)
@@ -854,9 +854,7 @@ test("Project installation six routes use the current owned project, distinct co
               assert.deepEqual(scope, { tenantId: "tenant", subjectId: "user-session" })
               return visible && ["project-alias", project.id].includes(ref) ? project : null
             },
-          },
         },
-      },
       readiness: async () => {},
     },
   )

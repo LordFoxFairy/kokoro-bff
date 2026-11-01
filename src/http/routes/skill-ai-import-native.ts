@@ -10,18 +10,6 @@ import { send } from "../response.js"
 import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
 
 type SkillAiAssociationReader = (tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>
-type SkillAiReceiptComposition = SkillImportReceipts & {
-  skillAiAssociation?: SkillAiAssociationReader
-  services?: object
-}
-
-function legacyAssociationReader(receipts: SkillAiReceiptComposition | null): SkillAiAssociationReader | null {
-  if (receipts?.skillAiAssociation !== undefined) return receipts.skillAiAssociation
-  const services = receipts?.services
-  if (services === undefined || services === null || !("skillAiAssociation" in services)) return null
-  const reader = (services as { skillAiAssociation?: unknown }).skillAiAssociation
-  return typeof reader === "function" ? (reader as SkillAiAssociationReader) : null
-}
 
 /** AI Skill import is owned by SkillsModule; artifact association remains a narrow Chat-owned provider. */
 export async function handleSkillAiImportRequest(
@@ -29,7 +17,7 @@ export async function handleSkillAiImportRequest(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
-  receipts: SkillAiReceiptComposition | null,
+  receipts: SkillImportReceipts | null,
   associationReader: SkillAiAssociationReader | null,
   client: SkillProductConnectClient | null,
 ): Promise<boolean> {
@@ -49,8 +37,7 @@ export async function handleSkillAiImportRequest(
         throw new Error("skill_not_found")
       currentSignal.throwIfAborted()
     }
-    const effectiveAssociationReader = associationReader ?? legacyAssociationReader(receipts)
-    const store: SkillAiImportStore | null = receipts !== null && effectiveAssociationReader !== null ? composeSkillAiImportStore(receipts, effectiveAssociationReader) : null
+    const store: SkillAiImportStore | null = receipts !== null && associationReader !== null ? composeSkillAiImportStore(receipts, associationReader) : null
     await skillAiImportRoute(request, response, admitted.context, config, store, client, readmit)
   } catch {
     if (!response.headersSent && !response.destroyed && !response.writableEnded)

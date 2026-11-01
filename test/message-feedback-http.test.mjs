@@ -40,7 +40,7 @@ async function fixture(t) {
       return { session_id: q.conversationId, message_id: q.messageId, feedback }
     },
   }
-  const server = createBffServer(config, { businessStore: { services: { chat } }, readiness: async () => undefined, sessionAdmission: admission })
+  const server = createBffServer(config, { businessStore: null, chatService: chat, readiness: async () => undefined, sessionAdmission: admission })
   await new Promise((r) => server.listen(0, "127.0.0.1", r))
   t.after(async () => {
     server.closeAllConnections()

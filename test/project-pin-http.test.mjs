@@ -54,7 +54,7 @@ async function fixture(t) {
     upstreams: {},
   }
   const admission = new SessionAdmissionDouble({ "pin-session": { namespace: "tenant", userId: "subject" } })
-  const server = createBffServer(config, { businessStore: { services: { projects } }, readiness: async () => undefined, sessionAdmission: admission })
+  const server = createBffServer(config, { businessStore: null, projectService: projects, readiness: async () => undefined, sessionAdmission: admission })
   await new Promise((r) => server.listen(0, "127.0.0.1", r))
   t.after(async () => {
     server.closeAllConnections()

@@ -128,7 +128,6 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/agent-dispatch-outbox-dispatcher.ts",
     "src/application/chat/mappers.ts",
     "src/application/scheduled-task-service.ts",
-    "src/application/services.ts",
     "src/application/ports/idempotency-repository.ts",
     "src/application/ports/project-repository.ts",
     "src/application/ports/chat-repository.ts",
@@ -248,6 +247,7 @@ test("global business store does not duplicate feature service providers", async
     readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
   assert.doesNotMatch(store, /BffApplicationServices|services\s*:/u)
+  assert.equal(await exists("src/application/services.ts"), false)
   assert.doesNotMatch(store, /personalizationProvider\?/u)
   assert.doesNotMatch(repositories, /public readonly personalizationProvider/u)
   assert.doesNotMatch(repositories, /this\.personalizationProvider\s*=/u)

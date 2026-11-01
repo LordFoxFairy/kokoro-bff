@@ -58,14 +58,12 @@ async function fixture(t) {
                 : { tenantId: q.tenantId, userId: "subject", runId: q.runId, conversationId: "session" }
               : null,
       },
-      services: {
-        chat: {
-          findConversation: async () => (visible ? { session_id: "session" } : null),
-          readRunFinalAnswer: async (q) => {
-            finalReads.push(q)
-            return typeof finalProof === "function" ? finalProof(q) : finalProof
-          },
-        },
+    },
+    chatService: {
+      findConversation: async () => (visible ? { session_id: "session" } : null),
+      readRunFinalAnswer: async (q) => {
+        finalReads.push(q)
+        return typeof finalProof === "function" ? finalProof(q) : finalProof
       },
     },
     readiness: async () => undefined,

@@ -18,7 +18,6 @@ export class MessageRegenerationAdmissionError extends Error {
 }
 export type MessageRegenerationStore = Readonly<{
   chatTurnService?: Pick<ChatTurnApplicationService, "regenerate">
-  services?: Readonly<{ chatTurns: Pick<ChatTurnApplicationService, "regenerate"> }>
 }>
 export async function messageRegenerationRoute(
   request: IncomingMessage,
@@ -105,7 +104,7 @@ export async function messageRegenerationRoute(
     if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 0) invalid()
     await within(() => currentAdmission(controller.signal))
     if (!store) throw Error("message_regeneration_unavailable")
-    const chatTurns = store.chatTurnService ?? store.services?.chatTurns
+    const chatTurns = store.chatTurnService
     if (!chatTurns) throw Error("message_regeneration_unavailable")
     const data = await within(() =>
       chatTurns.regenerate({

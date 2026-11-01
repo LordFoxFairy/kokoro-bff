@@ -3,19 +3,11 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { PersonalKnowledgeRepository } from "../../application/ports/personal-knowledge-repository.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import { personalKnowledgeRoute } from "./personal-knowledge.js"
 import { requestId } from "../request.js"
 import { send } from "../response.js"
 
-type KnowledgeRepository = PersonalKnowledgeRepository | BffBusinessStore | null
-
-function repositoryOf(value: KnowledgeRepository): PersonalKnowledgeRepository | null {
-  if (value === null) return null
-  if ("personalKnowledge" in value) return value.personalKnowledge ?? null
-  const legacy = value as BffBusinessStore & { services?: { personalKnowledge?: PersonalKnowledgeRepository } }
-  return legacy.services?.personalKnowledge ?? (value as PersonalKnowledgeRepository)
-}
+type KnowledgeRepository = PersonalKnowledgeRepository | null
 
 /** Account-owned Knowledge routes use one admitted user context and a feature-local repository. */
 export async function handlePersonalKnowledgeRequest(
@@ -35,7 +27,7 @@ export async function handlePersonalKnowledgeRequest(
       send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
       return true
     }
-    await personalKnowledgeRoute(request, response, admitted.context, repositoryOf(repository))
+    await personalKnowledgeRoute(request, response, admitted.context, repository)
   } catch {
     if (!response.headersSent && !response.destroyed && !response.writableEnded)
       send(response, 503, { error: { code: "knowledge_unavailable", message: "Knowledge store is unavailable", retryable: request.method === "GET" } })

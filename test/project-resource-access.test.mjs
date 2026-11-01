@@ -147,6 +147,10 @@ function request(method, url, key) {
 }
 const context = { requestId: "request-1", identity: { namespace: "tenant-1", userId: "subject-1" } }
 const store = {
+  projectService: {
+    find: async (scope, ref) =>
+      scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ["slug", "project-1"].includes(ref) ? { id: "project-1" } : null,
+  },
   services: {
     projects: {
       find: async (scope, ref) =>

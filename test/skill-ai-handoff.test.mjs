@@ -287,11 +287,9 @@ test("AI real HTTP final artifact body block rechecks session before receipt or 
           },
           skillAuthorization: { check: async () => ({ ok: true }) },
           businessStore: {
-            services: {
-              skillAiAssociation: async () => {
-                associations++
-                return association
-              },
+            skillAiAssociation: async () => {
+              associations++
+              return association
             },
             getReceipt: async () => {
               effects.push("receipt")

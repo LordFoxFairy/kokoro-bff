@@ -31,7 +31,8 @@ async function fixture(t) {
     upstreams: {},
   }
   const server = createBffServer(config, {
-    businessStore: { services: { chatTurns, chat: { findConversation: async () => ({ conversationId: "session" }) } } },
+    businessStore: null,
+    chatTurnService: chatTurns,
     readiness: async () => undefined,
     sessionAdmission: new SessionAdmissionDouble({ qa: { namespace: "tenant", userId: "owner" } }),
   })
