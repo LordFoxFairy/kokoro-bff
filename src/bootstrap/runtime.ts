@@ -172,6 +172,7 @@ export type BffCompositionOptions = {
   skillShareRepository?: SkillShareRepository | null
   chatService?: ChatApplicationService | null
   projectService?: ProjectService | null
+  publicShareService?: PublicShareApplicationService | null
   sessionAdmission?: SessionAdmission
   skillListAdmission?: SkillListAdmission
   openAppManagementAdmission?: OpenAppManagementAdmission
@@ -329,7 +330,8 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const chatService = options.chatService !== undefined ? options.chatService : (businessStore?.services?.chat ?? null)
   const projectService =
     options.projectService !== undefined ? options.projectService : (businessStore?.services?.projects ?? null)
-  const publicShareService = businessStore?.publicShareService ?? null
+  const publicShareService =
+    options.publicShareService !== undefined ? options.publicShareService : (businessStore?.publicShareService ?? null)
   const scheduledTaskReader =
     businessStore === null
       ? null

@@ -77,4 +77,8 @@ test("transitional runtime receives Skill usage from SkillsModule instead of onl
   assert.match(legacyRuntime, /SKILL_SHARE_REPOSITORY/u)
   assert.match(runtime, /skillShareRepository/u)
   assert.match(server, /composition\.skillShareRepository/u)
+  assert.match(legacyModule, /ChatModule/u)
+  assert.match(legacyRuntime, /PUBLIC_SHARE_SERVICE/u)
+  assert.match(runtime, /publicShareService/u)
+  assert.match(server, /composition\.publicShareService/u)
 })

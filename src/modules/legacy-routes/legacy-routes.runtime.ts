@@ -1,7 +1,7 @@
 import { Inject, Injectable, OnApplicationShutdown, OnModuleInit } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
-import { BFF_CONFIG, PERSONAL_KNOWLEDGE_REPOSITORY, SESSION_ADMISSION, SKILL_AI_ASSOCIATION, SKILL_SHARE_REPOSITORY, SKILL_USAGE_READER } from "../../common/tokens.js"
+import { BFF_CONFIG, PERSONAL_KNOWLEDGE_REPOSITORY, PUBLIC_SHARE_SERVICE, SESSION_ADMISSION, SKILL_AI_ASSOCIATION, SKILL_SHARE_REPOSITORY, SKILL_USAGE_READER } from "../../common/tokens.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { createBffComposition, type BffServerComposition } from "../../bootstrap/runtime.js"
 import { handleBffRequest } from "../../bootstrap/server.js"
@@ -10,6 +10,7 @@ import type { PersonalKnowledgeRepository } from "../../application/ports/person
 import type { SkillUsageReader } from "../../application/agui/skill-usage.js"
 import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
 import type { SkillShareRepository } from "../../application/ports/skill-share-repository.js"
+import type { PublicShareApplicationService } from "../../application/public-share-service.js"
 
 @Injectable()
 export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown {
@@ -28,6 +29,8 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
     skillAiAssociation: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>,
     @Inject(SKILL_SHARE_REPOSITORY)
     skillShareRepository: SkillShareRepository,
+    @Inject(PUBLIC_SHARE_SERVICE)
+    publicShareService: PublicShareApplicationService,
   ) {
     this.composition = createBffComposition(config, {
       sessionAdmission,
@@ -36,6 +39,7 @@ export class LegacyRoutesRuntime implements OnModuleInit, OnApplicationShutdown 
       skillUsageReader,
       skillAiAssociation,
       skillShareRepository,
+      publicShareService,
     })
   }
 

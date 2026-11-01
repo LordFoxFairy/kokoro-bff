@@ -1,11 +1,12 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common"
 import { AccountModule } from "../account/account.module.js"
 import { SkillsModule } from "../skills/skills.module.js"
+import { ChatModule } from "../chat/chat.module.js"
 import { LegacyRoutesMiddleware } from "./legacy-routes.middleware.js"
 import { LegacyRoutesRuntime } from "./legacy-routes.runtime.js"
 
 @Module({
-  imports: [AccountModule, SkillsModule],
+  imports: [AccountModule, SkillsModule, ChatModule],
   providers: [LegacyRoutesRuntime],
   exports: [LegacyRoutesRuntime],
 })
