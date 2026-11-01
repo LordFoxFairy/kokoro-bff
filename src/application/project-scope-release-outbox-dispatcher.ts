@@ -3,7 +3,7 @@ import type {
   ProjectScopeReleaseCommand,
   ProjectScopeReleaseLease,
   ProjectScopeReleaseOutboxRepository,
-} from "./ports/project-scope-release-outbox.js"
+} from "./projects/project-scope-release-outbox.js"
 
 export type ProjectScopeReleaseDispatcherOptions = Readonly<{
   workerId: string

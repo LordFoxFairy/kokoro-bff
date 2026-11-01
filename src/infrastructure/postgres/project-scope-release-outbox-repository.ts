@@ -4,7 +4,7 @@ import type {
   ProjectScopeReleaseCommand,
   ProjectScopeReleaseLease,
   ProjectScopeReleaseOutboxRepository,
-} from "../../application/ports/project-scope-release-outbox.js"
+} from "../../application/projects/project-scope-release-outbox.js"
 import type { PostgresBffDatabase } from "./client.js"
 
 type BoundedTransaction = Readonly<{

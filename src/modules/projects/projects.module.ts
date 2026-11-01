@@ -32,7 +32,7 @@ import type { SkillPackageInspectionConnectClient } from "../../infrastructure/c
 import { projectInstallation } from "../../infrastructure/clients/platform/skill-installation-response.js"
 import { assertSkillWireKnown, skillTimestamp } from "../../infrastructure/clients/platform/skill-product-response.js"
 import { PostgresProjectScopeReleaseOutboxRepository } from "../../infrastructure/postgres/project-scope-release-outbox-repository.js"
-import type { ProjectScopeReleaseOutboxRepository } from "../../application/ports/project-scope-release-outbox.js"
+import type { ProjectScopeReleaseOutboxRepository } from "../../application/projects/project-scope-release-outbox.js"
 import { ProjectScopeReleaseOutboxDispatcher } from "../../application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../../infrastructure/clients/storage/scope-release-client.js"
 import { randomUUID } from "node:crypto"

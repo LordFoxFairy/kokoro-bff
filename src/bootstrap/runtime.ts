@@ -43,7 +43,7 @@ import type { ArtifactLibraryRepository } from "../application/account/artifact-
 import type { ScheduledTaskOutboxRepository } from "../application/ports/scheduled-task-outbox-repository.js"
 import type { AgentDispatchOutboxRepository } from "../application/ports/agent-dispatch-outbox-repository.js"
 import type { AgentCancellationOutboxRepository } from "../application/ports/agent-cancellation-outbox-repository.js"
-import type { ProjectScopeReleaseOutboxRepository } from "../application/ports/project-scope-release-outbox.js"
+import type { ProjectScopeReleaseOutboxRepository } from "../application/projects/project-scope-release-outbox.js"
 import { ScheduledTaskOutboxDispatcher } from "../application/scheduled-task-outbox-dispatcher.js"
 import { AgentDispatchOutboxDispatcher } from "../application/agent-dispatch-outbox-dispatcher.js"
 import { AgentCancellationOutboxDispatcher } from "../application/agent-cancellation-outbox-dispatcher.js"

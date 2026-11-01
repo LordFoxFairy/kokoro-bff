@@ -38,7 +38,7 @@ import { PostgresScheduledAgentDispatchRepository } from "./scheduled-agent-disp
 import type { ScheduledAgentDispatchRepository } from "../../application/ports/scheduled-agent-dispatch-repository.js"
 import { PostgresConversationArtifactLibrary } from "./conversation-artifact-library.js"
 import { PostgresProjectScopeReleaseOutboxRepository } from "./project-scope-release-outbox-repository.js"
-import type { ProjectScopeReleaseOutboxRepository } from "../../application/ports/project-scope-release-outbox.js"
+import type { ProjectScopeReleaseOutboxRepository } from "../../application/projects/project-scope-release-outbox.js"
 import { PostgresSkillShareRepository } from "./skill-share-repository.js"
 import type { SkillShareRepository } from "../../application/skills/skill-share-repository.js"
 import { PublicShareApplicationService } from "../../application/public-share-service.js"

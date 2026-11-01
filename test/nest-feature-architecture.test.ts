@@ -267,6 +267,21 @@ test("Projects repository port is feature-local", async () => {
   assert.match(runtime, /application\/projects\/project-repository\.js/u)
 })
 
+test("Projects scope-release outbox port is feature-local", async () => {
+  assert.equal(await fileExists("src/application/projects/project-scope-release-outbox.ts"), true)
+  assert.equal(await fileExists("src/application/ports/project-scope-release-outbox.ts"), false)
+  const [moduleSource, runtime, client, repository] = await Promise.all([
+    readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/clients/storage/scope-release-client.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/project-scope-release-outbox-repository.ts"), "utf8"),
+  ])
+  assert.match(moduleSource, /application\/projects\/project-scope-release-outbox\.js/u)
+  assert.match(runtime, /application\/projects\/project-scope-release-outbox\.js/u)
+  assert.match(client, /application\/projects\/project-scope-release-outbox\.js/u)
+  assert.match(repository, /application\/projects\/project-scope-release-outbox\.js/u)
+})
+
 test("ProjectsModule owns the project command/read adapters and provider", async () => {
   const [projectsModule, accessModule, middleware, mutationMiddleware, nativeRoute, packageMiddleware, downloadMiddleware, server] = await Promise.all([
     readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),
