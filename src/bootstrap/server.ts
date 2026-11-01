@@ -717,8 +717,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
               request,
               response,
               config,
-              composition.businessStore?.submittedAgentRuns ?? null,
-              composition.businessStore?.projectExecutionBindings ?? null,
+              composition.submittedAgentRuns,
+              composition.projectExecutionBindings,
             ),
       )
       .then((handled) =>
@@ -729,8 +729,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
               response,
               config,
               composition.sessionAdmission,
-              composition.businessStore?.submittedAgentRuns && composition.chatService
-                ? { submittedAgentRuns: composition.businessStore.submittedAgentRuns, chat: composition.chatService }
+              composition.submittedAgentRuns && composition.chatService
+                ? { submittedAgentRuns: composition.submittedAgentRuns, chat: composition.chatService }
                 : null,
             ),
       )

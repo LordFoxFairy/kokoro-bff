@@ -35,6 +35,8 @@ import type { SkillUsageReader } from "../application/agui/skill-usage.js"
 import type { AgUiProjectionConsumerRepository } from "../application/agui/ports/agui-projection-repository.js"
 import type { SkillAiAssociation } from "../application/skill-ai-handoff.js"
 import type { SkillShareRepository } from "../application/ports/skill-share-repository.js"
+import type { SubmittedAgentRunReader } from "../application/ports/submitted-agent-run-reader.js"
+import type { ProjectExecutionBindingReader } from "../application/ports/project-execution-binding-reader.js"
 import { ScheduledTaskOutboxDispatcher } from "../application/scheduled-task-outbox-dispatcher.js"
 import { AgentDispatchOutboxDispatcher } from "../application/agent-dispatch-outbox-dispatcher.js"
 import { AgentCancellationOutboxDispatcher } from "../application/agent-cancellation-outbox-dispatcher.js"
@@ -145,6 +147,9 @@ export type BffServerComposition = {
   agUiProjection: AgUiProjectionService | null
   /** AG-UI consumer registry owned by AguiModule; raw composition receives it explicitly. */
   agUiConsumers: AgUiProjectionConsumerRepository | null
+  /** AgentRuns-owned readers supplied explicitly to raw internal/display routes. */
+  submittedAgentRuns: SubmittedAgentRunReader | null
+  projectExecutionBindings: ProjectExecutionBindingReader | null
   agUiProjector?: AgUiProjectorRunner
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher
@@ -203,6 +208,8 @@ export type BffCompositionOptions = {
   agUiRuntime?: AgUiSessionRuntime
   agUiProjection?: AgUiProjectionService | null
   agUiConsumers?: AgUiProjectionConsumerRepository | null
+  submittedAgentRuns?: SubmittedAgentRunReader | null
+  projectExecutionBindings?: ProjectExecutionBindingReader | null
   agUiProjector?: AgUiProjectorRunner | null
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher | null
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher | null
@@ -370,6 +377,8 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : (skillShareRepositoryFromStore(businessStore) ?? null)
   const agUiConsumers = options.agUiConsumers !== undefined ? options.agUiConsumers : (businessStore?.agUiConsumers ?? null)
   const agUiProjection = options.agUiProjection !== undefined ? options.agUiProjection : (businessStore?.agUi ?? null)
+  const submittedAgentRuns = options.submittedAgentRuns !== undefined ? options.submittedAgentRuns : (businessStore?.submittedAgentRuns ?? null)
+  const projectExecutionBindings = options.projectExecutionBindings !== undefined ? options.projectExecutionBindings : (businessStore?.projectExecutionBindings ?? null)
   const chatService = options.chatService !== undefined ? options.chatService : (ownerServiceStore?.chatService ?? null)
   const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (ownerServiceStore?.chatTurnService ?? null)
   const projectService = options.projectService !== undefined ? options.projectService : (ownerServiceStore?.projectService ?? null)
@@ -804,6 +813,8 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     agUiRuntime: options.agUiRuntime ?? createAgUiRuntime(config),
     agUiProjection,
     agUiConsumers,
+    submittedAgentRuns,
+    projectExecutionBindings,
     ...(agUiProjector === undefined ? {} : { agUiProjector }),
     ...(scheduledTaskDispatcher === undefined ? {} : { scheduledTaskDispatcher }),
     ...(agentDispatchDispatcher === undefined ? {} : { agentDispatchDispatcher }),
