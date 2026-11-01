@@ -10,7 +10,7 @@ import type { RequestContext } from "../../domain/request-context.js"
 import { reply } from "../response.js"
 import { normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
-import { liveOwnerRequest } from "./owner.js"
+import { liveOwnerRequest } from "./owner-request.js"
 
 export async function liveMoriBusiness(
   request: IncomingMessage,

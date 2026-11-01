@@ -6,7 +6,7 @@ import { failure, ok } from "../../contracts/index.js"
 import { modelCatalogData } from "../../infrastructure/clients/owner/system-model-catalog.js"
 import { queryOf, pathOf } from "../request.js"
 import { reply } from "../response.js"
-import { liveOwnerRequest } from "./owner.js"
+import { liveOwnerRequest } from "./owner-request.js"
 
 export function systemModelCatalogRequest(request: IncomingMessage): boolean {
   try {

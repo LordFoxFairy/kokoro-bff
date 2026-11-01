@@ -8,6 +8,7 @@ import { normalizeSystemUpstreamResponse, normalizeUpstreamResponse } from "../.
 import { incomingHeaders } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { LiveOwnerResult } from "./types.js"
+
 export async function liveOwnerRequest(
   request: IncomingMessage,
   config: BffConfig,

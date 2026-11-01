@@ -162,7 +162,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/http/routes/chat-authorization.ts",
     "src/http/routes/chat.ts",
     "src/http/routes/scheduled-task-mutation-native.ts",
-    "src/http/routes/owner.ts",
+    "src/http/routes/owner-request.ts",
     "src/http/routes/music.ts",
     "src/http/routes/scheduler.ts",
     "src/http/routes/routing.ts",
@@ -889,7 +889,7 @@ test("BFF user identity crosses one pinned IAM admission boundary and service-on
 
 test("Library file handling has no retired Storage HTTP or BFF shadow Asset table", async () => {
   const [owner, projections, runtime, localEnv, prodEnv, account, mockRoute, mockStore, schema] = await Promise.all([
-    readFile(path.join(root, "src/http/routes/owner.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/owner-request.ts"), "utf8"),
     readFile(path.join(root, "src/application/projections.ts"), "utf8"),
     readFile(path.join(root, "src/config/runtime.ts"), "utf8"),
     readFile(path.join(root, ".env.local.example"), "utf8"),

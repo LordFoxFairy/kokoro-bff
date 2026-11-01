@@ -70,7 +70,7 @@ test("BillingModule owns personal and administrator billing routes", async () =>
     readFile(path.join(root, "src/http/routes/billing-personal-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/billing-admin-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/owner.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/owner-request.ts"), "utf8"),
   ])
   assert.match(moduleSource, /BillingAdminMiddleware/u)
   assert.match(moduleSource, /BillingPersonalMiddleware/u)
@@ -94,7 +94,7 @@ test("SystemModule owns model catalog and administrator configuration/routing ro
     readFile(path.join(root, "src/http/routes/system-model-catalog-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/system-admin-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/owner.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/owner-request.ts"), "utf8"),
   ])
   assert.match(moduleSource, /AccountModule/u)
   assert.match(moduleSource, /SystemModelCatalogMiddleware/u)
@@ -388,7 +388,7 @@ test("McpModule owns MCP projections, route admission and candidate clients", as
     readFile(path.join(root, "src/modules/mcp/mcp-project-publication.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/mcp-project-publication-native.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/owner.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/owner-request.ts"), "utf8"),
   ])
   assert.match(mcpModule, /PROJECT_MCP_RECOMMENDATIONS_PROVIDER/u)
   assert.match(mcpModule, /MCP_AUTHORIZATION/u)
