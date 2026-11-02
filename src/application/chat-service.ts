@@ -1,3 +1,4 @@
+import type { ShareMetadataQuery } from "./ports/chat-repository.js"
 import type { MessageFeedbackQuery, SetMessageFeedback } from "./chat/message-feedback-input.js"
 import type { RunFinalAnswerQuery, ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "./ports/chat-repository.js"
 import type { ChatMessageRead, ChatSessionDetail, PrivateChatSessionDetail, ChatSessionSummary } from "../contracts/index.js"
@@ -195,6 +196,10 @@ export class ChatApplicationService {
     projectRef?: string,
   ): ReturnType<ChatRepository["deleteConversation"]> {
     return this.repository.deleteConversation(tenantId, subjectId, conversationId, requestId, projectRef)
+  }
+
+  public readShareMetadata(query: ShareMetadataQuery) {
+    return this.repository.readShareMetadata(query)
   }
 
   public createShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): ReturnType<ChatRepository["createShare"]> {

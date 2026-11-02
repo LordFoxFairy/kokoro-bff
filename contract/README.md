@@ -1,3 +1,9 @@
+## 2026-11-02 Session share metadata 消费投影
+
+唯一 wire 仍是 Public29.1 `/v1/sessions/{id}/share` GET。`pnpm contract:generate:session-share-metadata` 机械提取该操作、path 级参数、根 security/servers 与递归 component 引用闭包，生成 `openapi/browser/v1/session-share-metadata.json`。明确 profile 为 session-share-metadata-browser/1.0.0，来源记录 canonical path/version/全文 SHA；实际路由、permission 和 visibility 保原件，不另建 browser endpoint 或可编辑 DTO。
+
+`pnpm contract:check:session-share-metadata` 逐字检查确定性产物，build 与 contract:check 自动前置执行。任何 canonical byte、projection、未知缺失引用漂移都拒绝；消费者固定正式提交及产物 SHA 后沿既有客户端接线。定向9项/正式build已通过，真实 owner 与页面验收由原链继续，不把消费制品当新权限事实。
+
 ## 当前最终答复引用（Public28.14，reader-first）
 
 固定 Agent b802f9b／HTTP8.8，在成功 RUN_FINISHED.result 和私有 OrderedMessageRendering／MessagePartsPage 增 optional final_segment_id。同 Run 原公开正文身份、与 parts revision 原子持久化，历史缺失保持缺失；无新operation、无Share或命令扩展。完整28.14→28.13、Agent8.8→8.7逆证保留。候选不是正常页面完成，配对见 docs/CURRENT.md。

@@ -5502,3 +5502,71 @@ test("I3 R285 checkout failure with the cancellation code is outside the private
   assert.deepEqual(f.releases, [])
   assert.equal(f.client.listenerCount("error"), 0)
 })
+
+integrationTest("B10 real PG share metadata is owner-authoritative and GET leaves all facts unchanged", async (t) => {
+  const f = await r237Fixture(t)
+  const unsharedConversation = async (projectRef = null, tenant = f.tenant) => {
+    const id = `conv_${randomUUID()}`
+    await f.pool.query(
+      "INSERT INTO bff_conversation(conversation_id,tenant_id,owner_id,project_ref,title,status) VALUES($1,$2,$3,$4,'B10 owned read','active')",
+      [id, tenant, f.owner, projectRef],
+    )
+    return id
+  }
+  const id = await unsharedConversation()
+  const metadata = (session = id, query = "", options = {}) => f.request(`sessions/${session}/share${query}`, "GET", undefined, options)
+  const unchanged = async (operation, status, share) => {
+    const before = await f.facts()
+    const revisions = await f.pool.query("SELECT share_id,xmin::text AS revision FROM bff_share WHERE tenant_id=$1 ORDER BY share_id", [f.tenant])
+    const result = await operation()
+    assert.equal(result.status, status, JSON.stringify(result.body))
+    if (status === 200) assert.deepEqual(result.body.data, { share })
+    else assert.equal(result.body.error.code, "session_not_found")
+    assert.deepEqual(await f.facts(), before, "metadata GET must not write facts, receipts or outboxes")
+    assert.deepEqual(
+      (await f.pool.query("SELECT share_id,xmin::text AS revision FROM bff_share WHERE tenant_id=$1 ORDER BY share_id", [f.tenant])).rows,
+      revisions.rows,
+      "metadata GET must not rewrite expired rows",
+    )
+    return result
+  }
+  await unchanged(() => metadata(), 200, null)
+  const created = await f.request(`sessions/${id}/share`, "POST", {})
+  assert.equal(created.status, 200)
+  const shareId = created.body.data.share_id
+  const authoritative = (await f.pool.query("SELECT share_id,created_at,expires_at FROM bff_share WHERE tenant_id=$1 AND share_id=$2", [f.tenant, shareId]))
+    .rows[0]
+  const expected = {
+    share_id: shareId,
+    created_at: authoritative.created_at.toISOString(),
+    expires_at: authoritative.expires_at?.toISOString() ?? null,
+  }
+  await unchanged(() => metadata(), 200, expected)
+  await unchanged(() => metadata(), 200, expected)
+  await unchanged(() => metadata(id, "", { owner: "other_owner" }), 404)
+  const otherTenantSession = await unsharedConversation(null, `${f.tenant}_other`)
+  await unchanged(() => metadata(otherTenantSession), 404)
+  const beforeAdmission = await f.facts()
+  const wrongProductTenant = await metadata(id, "", { tenant: `${f.tenant}_other` })
+  assert.equal(wrongProductTenant.status, 403)
+  assert.equal(wrongProductTenant.body.error.code, "product_tenant_forbidden")
+  assert.deepEqual(await f.facts(), beforeAdmission)
+  await unchanged(() => metadata(`missing_${randomUUID()}`), 404)
+  await f.pool.query("UPDATE bff_share SET created_at=statement_timestamp()-interval '2 days',expires_at=statement_timestamp()-interval '1 day' WHERE tenant_id=$1 AND share_id=$2", [f.tenant, shareId])
+  await unchanged(() => metadata(), 200, null)
+  assert.equal((await f.pool.query("SELECT revoked_at FROM bff_share WHERE share_id=$1", [shareId])).rows[0].revoked_at, null)
+  const replacement = await f.request(`sessions/${id}/share`, "POST", {})
+  assert.equal(replacement.status, 200)
+  assert.notEqual(replacement.body.data.share_id, shareId)
+  assert.equal((await f.request(`sessions/${id}/share`, "DELETE")).status, 200)
+  await unchanged(() => metadata(), 200, null)
+  const project = await f.project()
+  const projectSession = await unsharedConversation(project.id)
+  await unchanged(() => metadata(projectSession, `?project_ref=${project.id}`), 200, null)
+  await unchanged(() => metadata(projectSession, "?scope=direct"), 404)
+  await f.pool.query("UPDATE bff_project SET deleted_at=statement_timestamp() WHERE tenant_id=$1 AND project_id=$2", [f.tenant, project.id])
+  await unchanged(() => metadata(projectSession), 404)
+  await unchanged(() => metadata(projectSession, `?project_ref=${project.id}`), 404)
+  await f.pool.query("UPDATE bff_conversation SET status='deleted',deleted_at=statement_timestamp() WHERE tenant_id=$1 AND conversation_id=$2", [f.tenant, id])
+  await unchanged(() => metadata(), 404)
+})

@@ -1,3 +1,4 @@
+import type { ShareMetadataQuery, ShareMetadataRead } from "../../application/ports/chat-repository.js"
 import { readChatComposerSelection } from "./chat-composer-selection.js"
 import { readRunFinalAnswer } from "./run-final-answer-read.js"
 import type { RunFinalAnswerQuery, RunFinalAnswer } from "../../application/ports/chat-repository.js"
@@ -590,6 +591,44 @@ export class PostgresChatRepository implements ChatRepository {
     } finally {
       client.release()
     }
+  }
+
+  public async readShareMetadata(query: ShareMetadataQuery): Promise<ShareMetadataRead | null> {
+    return withMessageReadClient(this.database.pool, query, async (client) => {
+      const result = await client.query<{
+        share_id: string | null
+        created_at: Date | string | null
+        expires_at: Date | string | null
+      }>(
+        `SELECT s.share_id,s.created_at,s.expires_at
+         FROM bff_conversation c
+         LEFT JOIN bff_share s ON s.tenant_id=c.tenant_id AND s.conversation_id=c.conversation_id
+           AND s.resource_kind='conversation' AND s.revoked_at IS NULL
+           AND (s.expires_at IS NULL OR s.expires_at > statement_timestamp())
+         WHERE c.tenant_id=$1 AND c.owner_id=$2 AND c.conversation_id=$3 AND c.status='active'
+           AND ($4::text IS NULL OR c.project_ref=$4)
+           AND ($5::text='all' OR c.project_ref IS NULL)
+           AND (c.project_ref IS NULL OR EXISTS (
+             SELECT 1 FROM bff_project p WHERE p.tenant_id=c.tenant_id AND p.owner_id=c.owner_id
+               AND (p.project_id=c.project_ref OR p.slug=c.project_ref) AND p.deleted_at IS NULL))`,
+        [query.tenantId, query.subjectId, query.conversationId, query.projectRef ?? null, query.scope],
+      )
+      if (result.rows.length === 0) return null
+      if (result.rows.length !== 1) throw new Error("SHARE_METADATA_INVALID")
+      const row = result.rows[0]!
+      if (row.share_id === null) {
+        if (row.created_at !== null || row.expires_at !== null) throw new Error("SHARE_METADATA_INVALID")
+        return { share: null }
+      }
+      if (typeof row.share_id !== "string" || row.share_id.trim() === "" || row.created_at === null) throw new Error("SHARE_METADATA_INVALID")
+      return {
+        share: {
+          share_id: row.share_id,
+          created_at: instant(row.created_at).toISOString(),
+          expires_at: row.expires_at === null ? null : instant(row.expires_at).toISOString(),
+        },
+      }
+    })
   }
 
   public async createShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<Share | null> {

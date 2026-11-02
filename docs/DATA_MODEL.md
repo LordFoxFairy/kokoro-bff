@@ -1,3 +1,7 @@
+## 2026-11-02 B10 分享 metadata 只读投影
+
+不变更 canonical Schema。读取以本人 active bff_conversation 为根，复核同 tenant/owner 的未删除 bff_project，再 LEFT JOIN 当前未撤销、未过期的 conversation bff_share；合法无 share 保留根行。share_id/created_at/expires_at 来自原 owner 行。过期记录仍保持原字节，GET 不清理、不写 receipt/outbox，不引入共享副本或权限字段。
+
 ## 2026-11-02 B01 新授权消费者（无BFF数据演进）
 
 BFF不新增表/列/Redis状态或receipt，不读Platform数据库。currentConnectorId、新代connector、配置墓碑、永久撤权和原命令回执仅由固定Platform `2cf63945feecd49f5b79c3532bbd7cbc5b70a3f8` owner持有。BFF仅转发trusted identity、原source/双CAS/key/digest并安全投影原ACK；历史completed结果不是当前资源/执行资格，禁止管理GET作receipt前置或本地缓存恢复。canonical `database/schema.sql`及Public29数据模型保持原字节，正常资源不动。

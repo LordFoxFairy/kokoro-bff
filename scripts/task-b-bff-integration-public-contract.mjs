@@ -1,3 +1,4 @@
+import { restoreSessionShareMetadataContract, sessionShareMetadataParentBaseline } from "./session-share-metadata-public-contract.mjs"
 // Exact build/test-only proof for the two distinct historical parents.
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
@@ -5,6 +6,7 @@ import { readFileSync } from "node:fs"
 const proof = JSON.parse(readFileSync(new URL("../contract/tests/task-b-bff-integration.json", import.meta.url), "utf8"))
 const hash = (value) => createHash("sha256").update(value).digest("hex")
 export function restoreIntegrationParent(source, parent) {
+  source = restoreSessionShareMetadataContract(source)
   const target = proof.parents[parent]
   assert.ok(target, "known integration parent")
   if (hash(source) === target.source_sha256) return source
@@ -19,6 +21,7 @@ export function restoreIntegrationParent(source, parent) {
   return restored
 }
 export function restoreIntegrationBaseline(baseline, parent) {
+  baseline = sessionShareMetadataParentBaseline(baseline)
   const target = proof.parents[parent]
   assert.ok(target, "known integration parent")
   if (hash(JSON.stringify(baseline)) === target.inventory_sha256) return baseline

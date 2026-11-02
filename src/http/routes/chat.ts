@@ -387,6 +387,27 @@ export async function liveChatBusiness(
       return true
     }
 
+    if (businessPath.length === 3 && businessPath[2] === "share" && method === "GET") {
+      const metadata = await privateMessageRead(request, response, projectRef, (lifetime) =>
+        chat.readShareMetadata({
+          ...lifetime,
+          tenantId,
+          subjectId,
+          conversationId,
+          projectRef,
+        }),
+      )
+      await reply(
+        response,
+        metadata === null ? 404 : 200,
+        metadata === null ? failure("session_not_found", "Session was not found", context.requestId) : ok(metadata, context.requestId),
+        context,
+        idempotency,
+        null,
+      )
+      return true
+    }
+
     if (businessPath.length === 3 && businessPath[2] === "share" && method === "POST") {
       const share = await chat.createShare(tenantId, subjectId, conversationId, projectRef)
       await reply(
@@ -413,6 +434,9 @@ export async function liveChatBusiness(
       return true
     }
   } catch (error) {
+    if (businessPath.length === 3 && businessPath[2] === "share" && method === "GET" && error instanceof Error && error.message === "MESSAGE_PARTS_UNAVAILABLE") {
+      error = new Error("SHARE_METADATA_UNAVAILABLE")
+    }
     await sendChatError(response, error, context, idempotency, mutation)
     return true
   }

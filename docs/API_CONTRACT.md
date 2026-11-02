@@ -1,3 +1,9 @@
+## 2026-11-02 B10 本人会话分享 metadata（实施设计）
+
+GET `/v1/sessions/{id}/share`，沿原 trusted Session、owner/tenant/project 资格和 private scope/project_ref。无 Idempotency-Key 要求，也不创建幂等回执。200 为原 data/meta envelope，data 严格 `{share:null|{share_id,created_at,expires_at}}`，expires_at 可 null；只返回当前 active/nonexpired 分享，不派生 URL。
+
+外层不存在、跨 tenant/subject、会话删除或项目不可用统一原 session_not_found/404；合法无分享、已撤销或已过期为 200/share:null。SQL/连接/取消/预算失败为既有受控 503，不能转 null。原创建和撤销 wire/receipt 语义不变。Public29.1 仅新增此 GET 与其闭集响应，保全部 200 个父操作与原字节证明。
+
 ## 2026-11-02 B01 browser-private 新授权（候选已接线）
 
 POST `/browser/v1/mcp/servers/{server_id}/reauthorize`，closed JSON body `{source_connector_id,expected_server_state_version,expected_connector_state_version}`，原唯一Idempotency-Key必需。source为原opaque ID闭集，两个版本仅规范十进制字符串1..2147483646；拒query/额外/重复/null/自报身份，沿现65536-byte正文/UTF-8/framing限制。原trusted Session与mcp_personal.manage首末核验，单10秒总预算覆盖正文、凭据与owner。

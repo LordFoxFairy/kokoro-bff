@@ -1,3 +1,17 @@
+## 2026-11-02 B10 owner 定向真实验证
+
+主方在现有自有 PG/Redis 单选真实分享 metadata 旅程通过（Node22.22.2，4.11秒）；使用原 SessionAdmissionDouble，不冒真实 OIDC/浏览器验收。覆盖创建后原ID回读、重复读取、主体/租户与已删项目隔离、过期/撤销及 GET 全事实/xmin 零写。首轮自有过期造数违反正式时间约束已保留，修正造数后复验，不改 Schema。冻结生产/契约20文件独立审查有限批准；追加机械投影由主方只读审查，9项定向与正式构建检查通过。App 接线与真实登录完整旅程仍待交付，正常3314未切换、Task B不关单。
+
+## 2026-11-02 B10 正式消费投影候选
+
+原冻结生产与 Schema 未变；新增唯一机械投影生成器和正式 `contract/openapi/browser/v1/session-share-metadata.json`，profile=session-share-metadata-browser/1.0.0，绑定唯一 Public29.1 全文SHA与原GET引用闭包。原三入口有限逆证及父 oracle 不变；build/contract:check 前置校验，不新增 browser 路由或共享事实。原同组9项与带正式投影check的build通过；App待正式owner提交消费，真实PG由主会话运行。
+
+## 2026-11-02 B10 会话分享 metadata 候选
+
+沿原 BFF owner 新增纯 GET `/v1/sessions/{id}/share`，合法无分享与不可访问严格区分；请求取消/10秒 read lifetime 内一条资格与 LEFT JOIN 查询，不清过期行、不写 receipt/outbox。Public29.1/201 正式登记，有限逆证逐字恢复固定 e3/Public29 与原 ordered200，不变更 canonical SQL、创建或撤销行为。App 消费及真实页面旅程待正式 owner 固定。
+
+定向行为/相关契约188项、architecture37项通过；build/typecheck/lint 与公开语义201通过，OpenAPI lint0错误/原105 warnings。原 RED 与中途两个不存在 response ref 的校验失败保留，已修原正式 response 定义后通过。真实 PG 新旅程已写但未由本 worker 执行，交主会话在自有资源单选；未跑全仓历史门，整体 Draft 边界不变。
+
 ## 2026-11-02 B01 私有 MCP 新授权候选（未发行/正常未激活）
 
 固定Platform正式2cf63945的Proto/descriptor/private-server-v2与原父原件，沿唯一generator双次生成Connect。新增私有POST `/browser/v1/mcp/servers/{server_id}/reauthorize`，保原trusted Session/mcp_personal.manage/10秒总预算/首末重验。closed source+双CAS为规范十进制1..2147483646，JSON Schema与运行解析同一闭集；原key/digest不换，无本地receipt/Schema/owner GET前置。成功仅原server version恰+1、新pending disabled connector version1；不自动Prepare或声称已连接。

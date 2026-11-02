@@ -287,6 +287,11 @@
       "operation_id": "renameSession"
     },
     {
+      "method": "GET",
+      "path": "/v1/sessions/{id}/share",
+      "operation_id": "getSessionShareMetadata"
+    },
+    {
       "method": "POST",
       "path": "/v1/sessions/{id}/share",
       "operation_id": "createShare"

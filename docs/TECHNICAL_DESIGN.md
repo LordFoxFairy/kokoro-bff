@@ -1,3 +1,11 @@
+## 2026-11-02 B10 会话分享状态读取（实施设计）
+
+沿现本人会话分享 aggregate 增加 GET `/v1/sessions/{id}/share`，Public29.1 additive；事实仍由 BFF 的 conversation/project/share 行持有。POST/DELETE、匿名分享页与 IAM 权限不变，不用创建命令探测分享状态。
+
+复用原 private read 请求取消、10 秒绝对期限及只读事务；一个参数化 owner SQL 在 active conversation、本人/tenant 和当前未删除项目资格内 LEFT JOIN 未撤销且未过期的 conversation share。端口外层 null 表示无权或不存在，内层 `{share:null}` 表示合法无分享；依赖失败透出错误，不能当作无分享。读取不更新过期行、不写 receipt/outbox。返回仅 share_id/created_at/expires_at，无 URL、授权布尔或副本。
+
+新原件沿正式公开契约登记与生成流程发布，完整恢复固定 Public29/200 父原件后继续既有历史证明；旧 oracle 不重签。相关行为测试先 RED，真实 PG 由主会话在自有 fixture 执行，源码候选不代替页面验收。
+
 ## 2026-11-02 B01 私有 MCP 显式新授权消费者（已批准方案，候选已接线）
 
 固定 Platform 正式 `2cf63945feecd49f5b79c3532bbd7cbc5b70a3f8` 的 private-server-v2/2.0.0；沿现 mcp-personal route、server input/binding/response、Connect client 与唯一正式生成器接线。新增 browser-private POST `/browser/v1/mcp/servers/{server_id}/reauthorize`；无新 client/store/receipt/Schema/IAM scope。Public29/200 和其 canonical 原字节保持。

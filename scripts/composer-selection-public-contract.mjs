@@ -1,3 +1,4 @@
+import { restoreSessionShareMetadataContract } from "./session-share-metadata-public-contract.mjs"
 import { restoreIntegrationParent } from "./task-b-bff-integration-public-contract.mjs"
 // Build/test-only exact additive private snapshot change; no runtime downgrade.
 import { createHash } from "node:crypto"
@@ -16,6 +17,7 @@ export function restorePublic2815ComposerSelectionContract(source) {
 
 // The API selection adds only two optional safe-ref fields; all parent bytes remain fixed.
 export function restorePublic2816CustomApiSelectionContract(source) {
+  source = restoreSessionShareMetadataContract(source)
   if (/^  version: 29\.0\.0$/mu.test(source)) source = restoreIntegrationParent(source, "approved")
   if (!/^  version: 28\.17\.0$/mu.test(source)) return source
   if (hash(source) !== "ea0031103488daa1fcc0cca45fdd13f4d4061546ac4525c745ec47105649f7e7") throw Error("Custom API selection Public28.17 child drift")

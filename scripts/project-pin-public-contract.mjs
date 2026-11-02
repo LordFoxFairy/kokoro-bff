@@ -1,3 +1,4 @@
+import { sessionShareMetadataParentBaseline } from "./session-share-metadata-public-contract.mjs"
 import { restoreIntegrationBaseline } from "./task-b-bff-integration-public-contract.mjs"
 import { restoreFinalAnswerSchema } from "./message-final-answer-schema.mjs"
 import { restorePublic2813FinalAnswerContract } from "./final-answer-public-contract.mjs"
@@ -239,6 +240,7 @@ export function projectContentParentInventory(inventory) {
 }
 
 export function messageActionsParentInventory(inventory) {
+  inventory = sessionShareMetadataParentBaseline(inventory)
   if (inventory.length === 200) inventory = restoreIntegrationBaseline(inventory, "approved")
   const ids = new Set(["getMessageFeedback", "setMessageFeedback", "regenerateLatestAssistantMessage", "getSessionRunDisplay"])
   if (!inventory.some((item) => ids.has(item.operation_id))) return inventory

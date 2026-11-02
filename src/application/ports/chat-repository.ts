@@ -27,6 +27,20 @@ export type PrivateMessageRead = (
 ) & { terminal_status?: "cancelled"; regeneratedFromMessageId?: string }
 export type PrivateMessagePage = { messages: PrivateMessageRead[]; next_cursor: string | null }
 export type MessageReadLifetime = Readonly<{ signal: AbortSignal; deadlineAt: number }>
+export type ShareMetadata = Readonly<{
+  share_id: string
+  created_at: string
+  expires_at: string | null
+}>
+export type ShareMetadataRead = Readonly<{ share: ShareMetadata | null }>
+export type ShareMetadataQuery = MessageReadLifetime &
+  Readonly<{
+    tenantId: string
+    subjectId: string
+    conversationId: string
+    projectRef: string | undefined
+    scope: "all" | "direct"
+  }>
 export type PrivateMessageReadContext = MessageReadLifetime & Readonly<{ scope: "all" | "direct" }>
 export type MessagePartsQuery = MessageReadLifetime &
   Readonly<{
@@ -166,6 +180,7 @@ export type ChatRepository = {
   renameConversation(tenantId: string, subjectId: string, conversationId: string, title: string, projectRef?: string): Promise<Conversation | null>
   moveConversation(command: MoveConversationCommand): Promise<MoveConversationResult>
   deleteConversation(tenantId: string, subjectId: string, conversationId: string, requestId: string, projectRef?: string): Promise<boolean>
+  readShareMetadata(query: ShareMetadataQuery): Promise<ShareMetadataRead | null>
   createShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<Share | null>
   revokeShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<Share | null>
 }

@@ -611,3 +611,225 @@ test("shared tasks service forwards trusted owner, anchor and the original absol
   assert.equal(await service.listOwnedSharedTasks("tenant", "owner", 20, null, signal, 12345), result)
   assert.deepEqual(calls, [["tenant", "owner", 20, null, signal, 12345]])
 })
+
+// The exact owner read distinguishes an inaccessible conversation from an unshared one.
+function shareReadFixture(rows: unknown[], pending = false) {
+  const calls: Array<{ sql: string; values?: unknown[] }> = []
+  const releases: unknown[] = []
+  const client = {
+    on() {},
+    removeListener() {},
+    async query(sql: string, values?: unknown[]) {
+      calls.push({ sql, values })
+      if (sql.includes("LEFT JOIN bff_share")) {
+        if (pending) return new Promise(() => {})
+        return { rows }
+      }
+      return { rows: [] }
+    },
+    release(value?: unknown) {
+      releases.push(value)
+    },
+  }
+  return {
+    calls,
+    releases,
+    repository: new PostgresChatRepository({
+      pool: { connect: async () => client },
+    } as never),
+  }
+}
+const shareQuery = () => ({
+  tenantId: "tenant_a",
+  subjectId: "owner_a",
+  conversationId: "session_a",
+  projectRef: undefined,
+  scope: "all" as const,
+  signal: new AbortController().signal,
+  deadlineAt: performance.now() + 1000,
+})
+test("share metadata reads exact active owner state and never executes mutation SQL", async () => {
+  const f = shareReadFixture([
+    {
+      share_id: "shr_exact",
+      created_at: new Date("2026-11-01T01:02:03.000Z"),
+      expires_at: null,
+    },
+  ])
+  const query = shareQuery()
+  assert.deepEqual(await f.repository.readShareMetadata(query), {
+    share: {
+      share_id: "shr_exact",
+      created_at: "2026-11-01T01:02:03.000Z",
+      expires_at: null,
+    },
+  })
+  const read = f.calls.find(({ sql }) => sql.includes("LEFT JOIN bff_share"))!
+  assert.deepEqual(read.values, ["tenant_a", "owner_a", "session_a", null, "all"])
+  for (const guard of [
+    "c.owner_id=$2",
+    "c.tenant_id=$1",
+    "c.status='active'",
+    "s.revoked_at IS NULL",
+    "s.expires_at > statement_timestamp()",
+    "p.deleted_at IS NULL",
+    "p.owner_id=c.owner_id",
+    "s.resource_kind='conversation'",
+    "c.project_ref IS NULL",
+  ])
+    assert.ok(read.sql.includes(guard), guard)
+  assert.equal(f.calls.filter(({ sql }) => sql.includes("LEFT JOIN bff_share")).length, 1)
+  assert.ok(f.calls.every(({ sql }) => !/\b(INSERT|UPDATE|DELETE)\b/u.test(sql)))
+  assert.equal(f.calls[0]!.sql, "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+  assert.equal(f.calls.at(-1)!.sql, "COMMIT")
+  assert.deepEqual(f.releases, [false])
+})
+test("share metadata preserves accessible unshared versus inaccessible conversation distinction", async () => {
+  assert.deepEqual(await shareReadFixture([{ share_id: null, created_at: null, expires_at: null }]).repository.readShareMetadata(shareQuery()), { share: null })
+  assert.equal(await shareReadFixture([]).repository.readShareMetadata(shareQuery()), null)
+})
+test("share metadata rejects contaminated rows rather than reporting unshared", async () => {
+  const f = shareReadFixture([{ share_id: "shr_bad", created_at: new Date(NaN), expires_at: null }])
+  await assert.rejects(f.repository.readShareMetadata(shareQuery()))
+  assert.deepEqual(f.releases, [true])
+})
+test("share metadata pending SQL obeys abort and destroys only its lease", async () => {
+  const controller = new AbortController()
+  const f = shareReadFixture([], true)
+  const result = f.repository.readShareMetadata({
+    ...shareQuery(),
+    signal: controller.signal,
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  controller.abort()
+  await assert.rejects(result)
+  assert.deepEqual(f.releases, [true])
+  assert.ok(!f.calls.some(({ sql }) => sql === "COMMIT"))
+})
+test("share metadata deadline expires while waiting without manufacturing null", async () => {
+  const f = shareReadFixture([], true)
+  await assert.rejects(
+    f.repository.readShareMetadata({
+      ...shareQuery(),
+      deadlineAt: performance.now() + 20,
+    }),
+  )
+  assert.deepEqual(f.releases, [true])
+})
+
+async function shareMetadataRoute(read: (query: unknown) => Promise<unknown>) {
+  let status = 0,
+    body: unknown
+  const headers = new Map<string, unknown>()
+  const request = Object.assign(new EventEmitter(), {
+    method: "GET",
+    url: "/v1/sessions/session_a/share",
+  })
+  const response = Object.assign(new EventEmitter(), {
+    setHeader(name: string, value: unknown) {
+      headers.set(name.toLowerCase(), value)
+    },
+    writeHead(code: number, values: Record<string, unknown>) {
+      status = code
+      for (const [key, value] of Object.entries(values)) headers.set(key, value)
+    },
+    end(value: Buffer) {
+      body = JSON.parse(value.toString())
+    },
+  })
+  const receipts = new Map()
+  const store = { services: { chat: { readShareMetadata: read } } }
+  const handled = await liveChatBusiness(
+    request as never,
+    response as never,
+    {} as never,
+    collectionContext,
+    ["sessions", "session_a", "share"],
+    {},
+    null,
+    receipts,
+    store as never,
+    { ok: true, projectRef: undefined },
+  )
+  return { status, body, headers, handled, receipts }
+}
+test("share metadata GET returns authoritative safe state and does not create a receipt", async () => {
+  let received: unknown
+  const metadata = {
+    share: {
+      share_id: "shr_live",
+      created_at: "2026-11-01T00:00:00.000Z",
+      expires_at: null,
+    },
+  }
+  const result = await shareMetadataRoute(async (query) => {
+    received = query
+    return metadata
+  })
+  assert.equal(result.handled, true)
+  assert.equal(result.status, 200)
+  assert.deepEqual((result.body as { data: unknown }).data, metadata)
+  assert.equal(result.receipts.size, 0)
+  assert.equal(result.headers.get("cache-control"), "no-store")
+  assert.deepEqual(Object.fromEntries(Object.entries(received as object).filter(([key]) => !["signal", "deadlineAt"].includes(key))), {
+    tenantId: "tenant_a",
+    subjectId: "owner_a",
+    conversationId: "session_a",
+    projectRef: undefined,
+    scope: "all",
+  })
+  assert.ok((received as { signal: AbortSignal }).signal instanceof AbortSignal)
+})
+test("share metadata GET keeps unshared, inaccessible and dependency failures distinct", async () => {
+  const unshared = await shareMetadataRoute(async () => ({ share: null }))
+  assert.equal(unshared.status, 200)
+  assert.deepEqual((unshared.body as { data: unknown }).data, { share: null })
+  const hidden = await shareMetadataRoute(async () => null)
+  assert.equal(hidden.status, 404)
+  assert.equal((hidden.body as { error: { code: string } }).error.code, "session_not_found")
+  const unavailable = await shareMetadataRoute(async () => {
+    throw new Error("private SQL connection secret")
+  })
+  assert.equal(unavailable.status, 503)
+  assert.ok(!JSON.stringify(unavailable.body).includes("private SQL"))
+  assert.equal(unavailable.receipts.size, 0)
+})
+
+test("share metadata authorizes in its single bounded owner query without preliminary reads", async () => {
+  let reads = 0
+  const store = {
+    services: {
+      projects: {
+        find: async () => {
+          reads += 1
+          return {}
+        },
+      },
+      chat: {
+        findConversation: async () => {
+          reads += 1
+          return {}
+        },
+      },
+    },
+  }
+  const request = { method: "GET", url: "/v1/sessions/session_a/share?project_ref=project_a" }
+  assert.deepEqual(await authorizeChatRequest(request as never, collectionContext, ["sessions", "session_a", "share"], {}, store as never), {
+    ok: true,
+    projectRef: "project_a",
+  })
+  assert.equal(reads, 0)
+  const invalid = { method: "GET", url: "/v1/sessions/session_a/share?scope=direct&project_ref=project_a" }
+  const denied = await authorizeChatRequest(invalid as never, collectionContext, ["sessions", "session_a", "share"], {}, store as never)
+  assert.equal(denied?.ok, false)
+  if (denied && !denied.ok) assert.equal(denied.code, "invalid_scope")
+  assert.equal(reads, 0)
+  await authorizeChatRequest(
+    { method: "POST", url: "/v1/sessions/session_a/share?project_ref=project_a" } as never,
+    collectionContext,
+    ["sessions", "session_a", "share"],
+    {},
+    store as never,
+  )
+  assert.equal(reads, 2, "existing mutation authorization keeps its original owner/project reads")
+})

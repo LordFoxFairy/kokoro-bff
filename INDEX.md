@@ -1,3 +1,11 @@
+## 2026-11-02 分享 metadata 正式消费投影
+
+`generate-session-share-metadata-browser-contract.mjs` 从唯一 Public29.1 GET 及完整引用闭包机械发布 `contract/openapi/browser/v1/session-share-metadata.json`，路径/权限/安全定义原样，无新 browser 路由。package 的 generate/check 入口及 build/contract:check 前置检查绑定 canonical 全文 SHA；定向9项和正式build通过。App 可固定正式提交的该制品，无需牵动旧完整 Public29 消费基线。
+
+## 2026-11-02 B10 分享 metadata 读取候选
+
+现 chat port/service/Postgres repository/route 及精确 GET authorization 分支提供本人分享状态；正式 Public29.1 及201 inventory 经原 canonical 生成入口发布。`scripts/session-share-metadata-public-contract.mjs` / `contract/tests/session-share-metadata.json` 仅为有限 build/test 父逆证，原 integration/composer/project-pin 三入口复用同一逆证；Schema与历史 oracle 原样。原 `test/chat-service.test.ts`、`test/contract/task-b-bff-integration.test.mjs` 与 `test/business-store.integration.mjs` 的 B10 单选旅程承接验证。当前证据/未验页面边界见 CURRENT。
+
 ## 2026-11-02 B01 私有 MCP 新授权消费者候选
 
 原mcp-personal route/server input/binding/response/Connect承接显式reauthorize；`src/http/mcp-reauthorization.contract.ts`沿原connector错误生成器发布独立browser-private机器contract。固定Platform2cf63945/v2，原双生成和历史父逆证保持；Public29/200、canonicalSQL、普通Provider行为不变。原key/双CAS直接到owner，ACK仅新pending身份，无管理GET前置/自动Prepare。验收及正常未激活边界见CURRENT与三设计首节。
