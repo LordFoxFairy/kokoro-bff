@@ -6,6 +6,11 @@ import { afterEach, test } from "node:test"
 import assert from "node:assert/strict"
 import { SessionAdmissionClient } from "../dist/auth/session-admission.client.js"
 import { nativeSessionCookie } from "../dist/auth/user-admission.js"
+import { loadConfig } from "../dist/config/runtime.js"
+import { ProjectService } from "../dist/application/project-service.js"
+import { ProjectMutationMiddleware } from "../dist/modules/projects/project-mutation.middleware.js"
+import type { ProjectRepository } from "../src/application/projects/project-repository.js"
+import type { IdempotencyRepository } from "../src/application/ports/idempotency-repository.js"
 
 const servers: Server[] = []
 const directories: string[] = []
@@ -38,7 +43,15 @@ async function credentialFile(): Promise<string> {
 }
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
+  await Promise.all(
+    servers.splice(0).map(
+      (server) =>
+        new Promise<void>((resolve) => {
+          server.closeAllConnections()
+          server.close(() => resolve())
+        }),
+    ),
+  )
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })))
 })
 
@@ -135,6 +148,132 @@ test("native session admission rejects an origin mismatch before IAM I/O", async
     { ok: false, status: 403, code: "session_forbidden" },
   )
   assert.equal(calls, 0)
+})
+
+test("production project middleware rejects native transport failures before project creation or receipt claim", { timeout: 10_000 }, async (t) => {
+  let mode: "disconnect" | "timeout" | "success" = "disconnect"
+  const iamRequests: string[] = []
+  const baseUrl = await listen(
+    createServer((request, response) => {
+      iamRequests.push(request.url ?? "")
+      if (mode === "disconnect") {
+        request.socket.destroy()
+        return
+      }
+      if (mode === "timeout") return
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "iam-native-1" })
+      response.end(
+        JSON.stringify({
+          data: {
+            subject_id: "user-1",
+            tenant_id: "tenant-1",
+            session_id: "session-1",
+            permissions: ["tenant.read"],
+            session_expires_at: "2030-01-01T00:00:00.000Z",
+          },
+          meta: { request_id: "iam-native-1", contract_version: "1.0.0" },
+        }),
+      )
+    }),
+  )
+  const config = loadConfig({
+    KOKORO_BFF_SHARED_SECRET: "native-middleware-test-only",
+    KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused_native_fixture?schema=kokoro_bff",
+    KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
+    KOKORO_IAM_BASE_URL: baseUrl,
+    KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
+    KOKORO_BFF_IAM_SESSION_ADMISSION_CREDENTIAL_FILE: await credentialFile(),
+    KOKORO_TENANT_ID: "tenant-1",
+    KOKORO_UPSTREAM_TIMEOUT_MS: "200",
+  })
+  const client = new SessionAdmissionClient({
+    baseUrl: config.iamBaseUrl,
+    credentialFile: config.iamSessionAdmissionCredentialFile,
+    webOrigin: config.iamWebOrigin,
+    tenantId: config.tenantId,
+    timeoutMs: config.upstreamTimeoutMs,
+    maxResponseBytes: config.upstreamMaxResponseBytes,
+  })
+  const legacyVerify = t.mock.method(client, "verify")
+  const project = {
+    id: "project-native",
+    name: "Native admission control",
+    slug: "native-admission-control",
+    description: "",
+    created_at: "2026-11-01T00:00:00.000Z",
+    updated_at: "2026-11-01T00:00:00.000Z",
+  }
+  const createProject = t.mock.fn<ProjectRepository["createProject"]>(async () => project)
+  const repository: Pick<ProjectRepository, "createProject"> = { createProject }
+  // This HTTP test reaches only create; the real service still invokes its repository.
+  const projects = new ProjectService(repository as ProjectRepository)
+  const create = t.mock.method(projects, "create")
+  const receipts = {
+    getReceipt: async () => assert.fail("Project creation must claim, not read, a receipt"),
+    claimReceipt: t.mock.fn<IdempotencyRepository["claimReceipt"]>(async () => ({ claimed: true, receipt: null })),
+    putReceipt: t.mock.fn<IdempotencyRepository["putReceipt"]>(async () => undefined),
+    compareAndSetReceipt: async () => assert.fail("Project creation does not replace a receipt"),
+    releaseReceipt: async () => assert.fail("Rejected admission must not acquire a receipt to release"),
+  } satisfies IdempotencyRepository
+  const middleware = new ProjectMutationMiddleware(config, client, projects, receipts)
+  const next = t.mock.fn()
+  const bffUrl = await listen(
+    createServer((request, response) => {
+      middleware.use(request, response, () => {
+        next()
+        response.writeHead(404).end()
+      })
+    }),
+  )
+  const sendMutation = () =>
+    fetch(`${bffUrl}/v1/projects`, {
+      method: "POST",
+      headers: {
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "native-middleware-test-only",
+        cookie: "kokoro-issuer.session_token=session",
+        origin: "https://web.example.test",
+        authorization: "Bearer must-not-fallback",
+        "content-type": "application/json",
+        "idempotency-key": `native-${mode}`,
+      },
+      body: JSON.stringify({ name: project.name }),
+      signal: AbortSignal.timeout(3000),
+    })
+  for (const failureMode of ["disconnect", "timeout"] as const) {
+    mode = failureMode
+    const attemptsBefore = iamRequests.length
+    const started = performance.now()
+    const response = await sendMutation()
+    assert.equal(response.status, 503, failureMode)
+    const body = (await response.json()) as { error: { code: string } }
+    assert.equal(body.error.code, "iam_admission_unavailable", failureMode)
+    // The 200 ms transport budget has scheduling room, but not the outer 3 s watchdog.
+    assert.ok(performance.now() - started < 2000, failureMode)
+    assert.equal(iamRequests.length, attemptsBefore + 1, failureMode)
+    assert.equal(iamRequests.at(-1), "/internal/v1/native-session-admission/verify")
+    assert.equal(legacyVerify.mock.callCount(), 0)
+    assert.equal(create.mock.callCount(), 0)
+    assert.equal(createProject.mock.callCount(), 0)
+    assert.equal(receipts.claimReceipt.mock.callCount(), 0)
+    assert.equal(receipts.putReceipt.mock.callCount(), 0)
+    assert.equal(next.mock.callCount(), 0)
+  }
+  // A successful request through the same middleware proves the side-effect observers are live.
+  mode = "success"
+  const response = await sendMutation()
+  assert.equal(response.status, 200)
+  assert.deepEqual(((await response.json()) as { data: { project: typeof project } }).data.project, project)
+  assert.deepEqual(iamRequests, Array(3).fill("/internal/v1/native-session-admission/verify"))
+  assert.equal(legacyVerify.mock.callCount(), 0)
+  assert.equal(create.mock.callCount(), 1)
+  assert.equal(createProject.mock.callCount(), 1)
+  const createArguments = [{ tenantId: "tenant-1", subjectId: "user-1" }, project.name, ""]
+  assert.deepEqual(create.mock.calls[0]!.arguments, createArguments)
+  assert.deepEqual(createProject.mock.calls[0]!.arguments, createArguments)
+  assert.equal(receipts.claimReceipt.mock.callCount(), 1)
+  assert.equal(receipts.putReceipt.mock.callCount(), 1)
+  assert.equal(next.mock.callCount(), 0)
 })
 
 test("native session admission preserves the owner's required, closed and versioned success fields", async () => {
