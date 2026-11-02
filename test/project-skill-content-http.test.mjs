@@ -154,16 +154,39 @@ async function withProjectContent(run) {
       }
     },
   }
+  const receipts = new Map()
   const store = {
-    services: {
-      skillShares: {},
-      projects: {
-        find: async (identity, ref) => {
-          state.projectReads.push({ identity, ref })
-          assert.deepEqual(identity, { tenantId: "tenant", subjectId: "user" })
-          return state.visible && [canonicalProject, "project-alias"].includes(ref) ? { id: canonicalProject } : null
-        },
-      },
+    async ready() {},
+    async close() {},
+    async getReceipt(scope) {
+      return receipts.get(scope) ?? null
+    },
+    async claimReceipt(scope, fingerprint) {
+      const prior = receipts.get(scope)
+      if (prior) return { claimed: false, receipt: prior }
+      const receipt = { fingerprint, status: 102, body: {} }
+      receipts.set(scope, receipt)
+      return { claimed: true, receipt }
+    },
+    async putReceipt(scope, receipt) {
+      receipts.set(scope, receipt)
+    },
+    async compareAndSetReceipt(scope, fingerprint, expected, replacement) {
+      const current = receipts.get(scope)
+      if (!current || current.fingerprint !== fingerprint || JSON.stringify(current) !== JSON.stringify(expected)) return { updated: false, receipt: current ?? null }
+      receipts.set(scope, replacement)
+      return { updated: true, receipt: replacement }
+    },
+    async releaseReceipt(scope, fingerprint) {
+      const current = receipts.get(scope)
+      if (current?.fingerprint === fingerprint) receipts.delete(scope)
+    },
+  }
+  const projectService = {
+    find: async (identity, ref) => {
+      state.projectReads.push({ identity, ref })
+      assert.deepEqual(identity, { tenantId: "tenant", subjectId: "user" })
+      return state.visible && [canonicalProject, "project-alias"].includes(ref) ? { id: canonicalProject } : null
     },
   }
   const config = {
@@ -191,6 +214,8 @@ async function withProjectContent(run) {
   }
   const server = createBffServer(config, {
     businessStore: store,
+    projectService,
+    skillShareRepository: { findActive: async () => null },
     installationClient,
     skillProductClient: {
       download: async () => {
