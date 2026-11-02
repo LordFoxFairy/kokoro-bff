@@ -86,16 +86,14 @@ async function setup(options = {}) {
   }
   const base = await listen(
     createBffServer(config, {
-      businessStore: {
-        submittedAgentRuns: {
-          readSubmittedAgentRun: async (input) => {
-            sources.push(input)
-            return options.source
-              ? options.source(input)
-              : { tenantId: "verified-tenant", userId: "original-user", runId: wire.run_id, conversationId: "original-conversation" }
-          },
+      businessStore: null,
+      submittedAgentRuns: {
+        readSubmittedAgentRun: async (input) => {
+          sources.push(input)
+          return options.source
+            ? options.source(input)
+            : { tenantId: "verified-tenant", userId: "original-user", runId: wire.run_id, conversationId: "original-conversation" }
         },
-        services: {},
       },
       sessionAdmission: {
         verify: async () => {
