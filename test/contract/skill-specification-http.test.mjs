@@ -2040,16 +2040,12 @@ test("shared revision summary serves exact old revision through the admitted pub
     undefined,
     {},
     {
-      businessStore: {
-        services: {
-          skillShares: {
-            findActive: async () => {
-              reads++
-              return share
-            },
-          },
+      businessStore: null,
+      skillShareRepository: {
+        findActive: async () => {
+          reads++
+          return share
         },
-        close: async () => {},
       },
     },
   )
@@ -2149,22 +2145,18 @@ for (const scenario of ["revoked", "expired", "changed-source", "other-tenant", 
       undefined,
       {},
       {
-        businessStore: {
-          services: {
-            skillShares: {
-              findActive: async () => {
-                reads++
-                return {
-                  ...share,
-                  ...(scenario === "other-tenant" ? { tenantId: "other" } : {}),
-                  ...(reads === 2 && scenario === "revoked" ? { revokedAt: new Date() } : {}),
-                  ...(reads === 2 && scenario === "expired" ? { expiresAt: new Date(0) } : {}),
-                  ...(reads === 2 && scenario === "changed-source" ? { sourceRef: "skill:new-version" } : {}),
-                }
-              },
-            },
+        businessStore: null,
+        skillShareRepository: {
+          findActive: async () => {
+            reads++
+            return {
+              ...share,
+              ...(scenario === "other-tenant" ? { tenantId: "other" } : {}),
+              ...(reads === 2 && scenario === "revoked" ? { revokedAt: new Date() } : {}),
+              ...(reads === 2 && scenario === "expired" ? { expiresAt: new Date(0) } : {}),
+              ...(reads === 2 && scenario === "changed-source" ? { sourceRef: "skill:new-version" } : {}),
+            }
           },
-          close: async () => {},
         },
       },
     )
@@ -2287,16 +2279,12 @@ test("shared summary disconnect cancels exact metadata and prevents a late secon
     undefined,
     {},
     {
-      businessStore: {
-        services: {
-          skillShares: {
-            findActive: async () => {
-              reads++
-              return share
-            },
-          },
+      businessStore: null,
+      skillShareRepository: {
+        findActive: async () => {
+          reads++
+          return share
         },
-        close: async () => {},
       },
     },
   )
