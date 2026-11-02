@@ -783,6 +783,7 @@ test("Project installation six routes use the current owned project, distinct co
     commits = 0,
     admitted = true
   const calls = []
+  const receipts = new Map()
   let visible = true
   let wrongResponse = null
   const project = { id: "project-canonical" }
@@ -832,7 +833,28 @@ test("Project installation six routes use the current owned project, distinct co
       installationClient: client,
       businessStore: {
         ready: async () => {},
-        getReceipt: async () => null,
+        close: async () => {},
+        getReceipt: async (scope) => receipts.get(scope) ?? null,
+        claimReceipt: async (scope, fingerprint) => {
+          const prior = receipts.get(scope)
+          if (prior) return { claimed: false, receipt: prior }
+          const receipt = { fingerprint, status: 102, body: {} }
+          receipts.set(scope, receipt)
+          return { claimed: true, receipt }
+        },
+        putReceipt: async (scope, receipt) => {
+          receipts.set(scope, receipt)
+        },
+        compareAndSetReceipt: async (scope, fingerprint, expected, replacement) => {
+          const current = receipts.get(scope)
+          if (!current || current.fingerprint !== fingerprint || JSON.stringify(current) !== JSON.stringify(expected)) return { updated: false, receipt: current ?? null }
+          receipts.set(scope, replacement)
+          return { updated: true, receipt: replacement }
+        },
+        releaseReceipt: async (scope, fingerprint) => {
+          const current = receipts.get(scope)
+          if (current?.fingerprint === fingerprint) receipts.delete(scope)
+        },
       },
       chatTurnService: {
         submit: async (_input, resolve) => {

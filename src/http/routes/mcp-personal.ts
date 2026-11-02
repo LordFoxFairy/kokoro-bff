@@ -323,6 +323,15 @@ export async function mcpPersonalRoute(
     })
   try {
     controller.signal.throwIfAborted()
+    if (mutation) {
+      const action = await within(authorizeMcpAction(composition.mcpAuthorization, initialAdmission, "manage", controller.signal))
+      if (!action.ok) {
+        fail(action.status, action.code, action.status === 429 || action.status === 503, action.status === 429 ? action.retryAfter : undefined)
+        return
+      }
+      controller.signal.throwIfAborted()
+      if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_personal_deadline")
+    }
     if (receiptLookup) {
       const action = await within(authorizeMcpAction(composition.mcpAuthorization, initialAdmission, "read", controller.signal))
       if (!action.ok) {
