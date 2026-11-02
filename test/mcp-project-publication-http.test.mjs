@@ -80,7 +80,7 @@ async function fixture({ execute = async () => publication(), find, verify, chec
           assert.deepEqual(scope, { tenantId: "tenant", subjectId: "reader" })
           events.push(`project:${id}`)
           return find ? find(id) : { id }
-          },
+        },
       },
       mcpProjectPublicationClient: {
         execute: async (identity, input, signal, deadline) => {

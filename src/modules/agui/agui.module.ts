@@ -1,5 +1,13 @@
 import { Inject, Injectable, Module, OnApplicationShutdown, OnModuleInit } from "@nestjs/common"
-import { AGUI_PROJECTION, AGUI_PROJECTION_CONSUMERS, AGUI_PROJECTOR, AGUI_RUNTIME, AGUI_SOURCE_PROJECTION_ACTIVE, BFF_CONFIG, BFF_DATABASE } from "../../common/tokens.js"
+import {
+  AGUI_PROJECTION,
+  AGUI_PROJECTION_CONSUMERS,
+  AGUI_PROJECTOR,
+  AGUI_RUNTIME,
+  AGUI_SOURCE_PROJECTION_ACTIVE,
+  BFF_CONFIG,
+  BFF_DATABASE,
+} from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { DatabaseModule } from "../../common/database/database.module.js"
 import { RedisModule } from "../../common/redis/redis.module.js"
@@ -64,11 +72,7 @@ class AguiProjectorLifecycle implements OnModuleInit, OnApplicationShutdown {
     {
       provide: AGUI_PROJECTOR,
       inject: [BFF_CONFIG, AGUI_PROJECTION, AGUI_PROJECTION_CONSUMERS],
-      useFactory: (
-        config: BffConfig,
-        projection: AgUiProjectionService,
-        consumers: PostgresAgUiConsumerRepository,
-      ): AgUiProjectorRunner | null => {
+      useFactory: (config: BffConfig, projection: AgUiProjectionService, consumers: PostgresAgUiConsumerRepository): AgUiProjectorRunner | null => {
         const baseUrl = config.upstreams.agents ?? null
         if (!config.agentEnabled || baseUrl === null) return null
         return new AgUiProjectorRunner(

@@ -104,7 +104,7 @@ ScheduledTask 的 HTTP/JSON 时间字段在边界使用 RFC 3339 UTC；applicati
 
 ## 五分钟启动
 
-要求：Node.js 22、pnpm 11.25.0。
+要求：Node.js 24.20.0（见 `.node-version`）、pnpm 11.25.0。
 
 ```bash
 cp .env.local.example .env.local

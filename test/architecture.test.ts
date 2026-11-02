@@ -50,6 +50,14 @@ function staticLiteralModuleSpecifiers(source: string): string[] {
   return specifiers
 }
 
+function importsRawBootstrap(relativePath: string, source: string): boolean {
+  return staticLiteralModuleSpecifiers(source).some((specifier) => {
+    const literalPath = specifier.split(/[?#]/u, 1)[0] ?? specifier
+    const resolvedPath = literalPath.startsWith(".") ? path.posix.normalize(path.posix.join(path.posix.dirname(relativePath), literalPath)) : literalPath
+    return /(?:^|\/)src\/bootstrap\/(?:server|runtime)\.[cm]?[jt]s$/u.test(resolvedPath)
+  })
+}
+
 function importsCanonicalSchemaInstaller(relativePath: string, source: string): boolean {
   return staticLiteralModuleSpecifiers(source).some((specifier) => {
     const literalPath = specifier.split(/[?#]/u, 1)[0] ?? specifier
@@ -230,15 +238,60 @@ test("Platform projection generated types stay behind one facade and old Capabil
   }
 })
 
-test("BFF composition root stays small and delegates resource routes", async () => {
+test("BFF production entrypoint stays small and excludes the temporary raw server", async () => {
   const main = await readFile(path.join(root, "src/main.ts"), "utf8")
   const server = await readFile(path.join(root, "src/bootstrap/server.ts"), "utf8")
   assert.ok(main.split("\n").length < 80, "src/main.ts must remain a thin entry point")
-  assert.match(main, /bootstrap\/server\.js/)
+  assert.equal(importsRawBootstrap("src/main.ts", main), false)
   assert.match(server, /routes\/agent\.js/)
   assert.match(server, /routes\/system-model-catalog-native\.js/)
   assert.match(server, /routes\/scheduler\.js/)
   assert.doesNotMatch(server, /routes\/mock\.js|MockBffStore|MoriMockBffStore/)
+})
+
+test("BFF feature HTTP adapters do not depend on the temporary raw composition", async () => {
+  for (const directory of ["src/http", "src/modules"]) {
+    const files = await readdir(path.join(root, directory), { recursive: true })
+    for (const file of files) {
+      if (!file.endsWith(".ts")) continue
+      const relativePath = `${directory}/${file}`
+      const source = await readFile(path.join(root, relativePath), "utf8")
+      assert.equal(importsRawBootstrap(relativePath, source), false, relativePath)
+    }
+  }
+})
+
+test("BFF raw composition boundary recognizes literal dependency forms and permits feature providers", () => {
+  const relativePath = "src/http/routes/example.ts"
+  for (const source of [
+    'import type { SessionAdmission } from "../../auth/session-admission.types.js"',
+    'import { Client } from "../../infrastructure/clients/owner.js"',
+    'const config = await import("../../config/runtime.js")',
+  ]) {
+    assert.equal(importsRawBootstrap(relativePath, source), false, source)
+  }
+  for (const source of [
+    'import type { BffServerComposition } from "../../bootstrap/runtime.js"',
+    'export { createBffServer } from "../../bootstrap/server.js"',
+    'import "../../bootstrap/server.js"',
+    'const runtime = await import("../../bootstrap/runtime.js")',
+    'const runtime = require("../../bootstrap/runtime.js")',
+    'import type { BffServerComposition } from /* boundary */ "../../bootstrap/runtime.js"',
+    'const runtime = import /* boundary */ ( /* literal */ "../../bootstrap/runtime.js")',
+    'import { createBffServer } from "../../bootstrap/../bootstrap/server.ts?test=1"',
+  ]) {
+    assert.equal(importsRawBootstrap(relativePath, source), true, source)
+  }
+})
+
+test("BFF standard test gates include each Nest architecture suite exactly once", async () => {
+  const { scripts } = JSON.parse(await readFile(path.join(root, "package.json"), "utf8")) as { scripts: Record<string, string> }
+  for (const gate of ["test", "test:architecture"]) {
+    const entries = (scripts[gate] ?? "").split(/\s+/u)
+    for (const suite of ["test/architecture.test.ts", "test/nest-runtime-architecture.test.ts", "test/nest-feature-architecture.test.ts"]) {
+      assert.equal(entries.filter((entry) => entry === suite).length, 1, `${gate} must run ${suite} once`)
+    }
+  }
 })
 
 test("global business store does not duplicate feature service providers", async () => {

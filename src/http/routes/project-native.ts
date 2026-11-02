@@ -27,7 +27,13 @@ export type ProjectCoreReadProvider = Readonly<{
   revisions(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<readonly unknown[] | null>
   tasks(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string): Promise<readonly unknown[] | null>
   deletion(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string, signal: AbortSignal): Promise<unknown | null>
-  rename(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string, name: string, key: string, signal: AbortSignal): Promise<RenameProjectResult>
+  rename(
+    scope: Readonly<{ tenantId: string; subjectId: string }>,
+    projectId: string,
+    name: string,
+    key: string,
+    signal: AbortSignal,
+  ): Promise<RenameProjectResult>
   delete(
     scope: Readonly<{ tenantId: string; subjectId: string }>,
     projectId: string,
@@ -41,10 +47,11 @@ export type ProjectResourceReadProvider = Readonly<{
   find(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<unknown | null>
 }>
 
-export type ProjectResourceUploadProvider = ProjectResourceReadProvider & Readonly<{
-  receipts: IdempotencyRepository
-  idempotency: Map<string, IdempotencyEntry>
-}>
+export type ProjectResourceUploadProvider = ProjectResourceReadProvider &
+  Readonly<{
+    receipts: IdempotencyRepository
+    idempotency: Map<string, IdempotencyEntry>
+  }>
 
 function projectPinPath(request: IncomingMessage): string {
   return (request.url ?? "").split("?", 1)[0] ?? ""
@@ -57,11 +64,13 @@ export function isProjectPinRequest(request: IncomingMessage): boolean {
 
 export function isProjectCoreReadRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
-  return request.method === "GET" &&
+  return (
+    request.method === "GET" &&
     (path === "/v1/projects" ||
       /^\/v1\/projects\/[^/]+$/u.test(path) ||
       /^\/v1\/projects\/[^/]+\/instruction-revisions$/u.test(path) ||
       /^\/v1\/projects\/[^/]+\/tasks$/u.test(path))
+  )
 }
 
 export function isProjectDeletionStatusRequest(request: IncomingMessage): boolean {
@@ -101,8 +110,10 @@ export async function handleProjectResourceUploadRequest(
   config: BffConfig,
   admission: SessionAdmission,
   projects: ProjectResourceUploadProvider | null,
-  clientFactory: (storage: NonNullable<BffConfig["storage"]>, context: { tenantId: string; subjectId: string; projectId: string; key: string; requestId: string }) => ProjectResourceStorage = (storage, context) =>
-    new StorageUploadClient(storage, context),
+  clientFactory: (
+    storage: NonNullable<BffConfig["storage"]>,
+    context: { tenantId: string; subjectId: string; projectId: string; key: string; requestId: string },
+  ) => ProjectResourceStorage = (storage, context) => new StorageUploadClient(storage, context),
 ): Promise<boolean> {
   if (!isProjectResourceUploadRequest(request)) return false
   const id = requestId(request)
@@ -128,8 +139,11 @@ export async function handleProjectResourceUploadRequest(
     const match = /^\/v1\/projects\/([^/]+)\/resources$/u.exec(path)
     if (match?.[1] === undefined || request.url !== path) throw new ProjectResourceError("invalid_project_resource", 400)
     let projectRef: string
-    try { projectRef = decodeURIComponent(match[1]) }
-    catch { throw new ProjectResourceError("invalid_project_resource", 400) }
+    try {
+      projectRef = decodeURIComponent(match[1])
+    } catch {
+      throw new ProjectResourceError("invalid_project_resource", 400)
+    }
     const project = await projects.find({ tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }, projectRef)
     if (project === null) throw new ProjectResourceError("project_not_found", 404)
     if (typeof project !== "object" || project === null || !("id" in project) || typeof project.id !== "string")
@@ -141,7 +155,15 @@ export async function handleProjectResourceUploadRequest(
     const body = await readBody(request)
     const input = await parseProjectResource(request.headers["content-type"] ?? "", body)
     const context = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId, projectId: project.id, key, requestId: id }
-    const ticket = await mutationTicket(key, "POST", `/projects/${project.id}/resources`, admitted.context, projectResourceFingerprint(input), projects.idempotency, projects.receipts)
+    const ticket = await mutationTicket(
+      key,
+      "POST",
+      `/projects/${project.id}/resources`,
+      admitted.context,
+      projectResourceFingerprint(input),
+      projects.idempotency,
+      projects.receipts,
+    )
     if (ticket.replay !== null) {
       send(response, ticket.replay.status, ticket.replay.body)
       return true
@@ -154,7 +176,8 @@ export async function handleProjectResourceUploadRequest(
   } catch (error) {
     const known = error instanceof ProjectResourceError ? error : new ProjectResourceError("resource_upload_unavailable", 503, true)
     if (admittedContext === null || projects === null) send(response, known.status, failure(known.code, "Project resource upload did not complete", id))
-    else await reply(response, known.status, failure(known.code, "Project resource upload did not complete", id), admittedContext, projects.idempotency, mutation)
+    else
+      await reply(response, known.status, failure(known.code, "Project resource upload did not complete", id), admittedContext, projects.idempotency, mutation)
   } finally {
     request.off("aborted", cancel)
     response.off("close", cancel)
@@ -224,8 +247,10 @@ export async function handleProjectResourceDeleteRequest(
   config: BffConfig,
   admission: SessionAdmission,
   projects: ProjectCoreReadProvider | null,
-  clientFactory: (storage: NonNullable<BffConfig["storage"]>, context: { tenantId: string; subjectId: string; projectId: string; requestId: string }) => Pick<ProjectResourceAccessClient, "delete"> = (storage, context) =>
-    new ProjectResourceAccessClient(storage, context),
+  clientFactory: (
+    storage: NonNullable<BffConfig["storage"]>,
+    context: { tenantId: string; subjectId: string; projectId: string; requestId: string },
+  ) => Pick<ProjectResourceAccessClient, "delete"> = (storage, context) => new ProjectResourceAccessClient(storage, context),
 ): Promise<boolean> {
   if (!isProjectResourceDeleteRequest(request)) return false
   const id = requestId(request)
@@ -265,8 +290,7 @@ export async function handleProjectResourceDeleteRequest(
       throw new ProjectResourceError("invalid_project_resource", 400)
     const keys = projectDeletionHeaderValues(request.rawHeaders, "idempotency-key")
     const key = keys[0]
-    if (keys.length !== 1 || key === undefined || !/^[\x21-\x7e]{1,191}$/u.test(key))
-      throw new ProjectResourceError("invalid_project_resource", 400)
+    if (keys.length !== 1 || key === undefined || !/^[\x21-\x7e]{1,191}$/u.test(key)) throw new ProjectResourceError("invalid_project_resource", 400)
     if (projects === null) throw new ProjectResourceError("business_store_unavailable", 503, true)
     const scope = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }
     const project = await projects.find(scope, projectRef)
@@ -295,8 +319,10 @@ export async function handleProjectResourceListRequest(
   config: BffConfig,
   admission: SessionAdmission,
   projects: ProjectCoreReadProvider | null,
-  clientFactory: (storage: NonNullable<BffConfig["storage"]>, context: { tenantId: string; subjectId: string; projectId: string; requestId: string }) => Pick<StorageUploadClient, "listAssets"> = (storage, context) =>
-    new StorageUploadClient(storage, context),
+  clientFactory: (
+    storage: NonNullable<BffConfig["storage"]>,
+    context: { tenantId: string; subjectId: string; projectId: string; requestId: string },
+  ) => Pick<StorageUploadClient, "listAssets"> = (storage, context) => new StorageUploadClient(storage, context),
 ): Promise<boolean> {
   if (!isProjectResourceListRequest(request)) return false
   const id = requestId(request)
@@ -327,10 +353,7 @@ export async function handleProjectResourceListRequest(
     }
     if (request.headers["transfer-encoding"] !== undefined || (request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0"))
       throw new ProjectResourceError("invalid_project_resource_page", 400)
-    const project = await projects.find(
-      { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId },
-      projectRef,
-    )
+    const project = await projects.find({ tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }, projectRef)
     if (project === null) throw new ProjectResourceError("project_not_found", 404)
     if (typeof project !== "object" || project === null || !("id" in project) || typeof project.id !== "string")
       throw new ProjectResourceError("project_resources_unavailable", 503, true)
@@ -581,8 +604,7 @@ export async function handleProjectDeletionStatusRequest(
     if (resource === null) fail(404, "project_not_found", "Project was not found")
     else send(response, 200, { data: resource })
   } catch {
-    if (!response.destroyed && !response.writableEnded)
-      fail(503, "business_store_unavailable", "Project deletion status is unavailable", true)
+    if (!response.destroyed && !response.writableEnded) fail(503, "business_store_unavailable", "Project deletion status is unavailable", true)
   } finally {
     clearTimeout(timer)
     request.removeListener("aborted", onAborted)
@@ -605,7 +627,9 @@ export async function handleProjectCoreReadRequest(
   const abort = new AbortController()
   const timer = setTimeout(() => abort.abort(), Math.min(config.upstreamTimeoutMs, 10_000))
   const onAborted = (): void => abort.abort()
-  const onClosed = (): void => { if (!response.writableEnded) abort.abort() }
+  const onClosed = (): void => {
+    if (!response.writableEnded) abort.abort()
+  }
   request.once("aborted", onAborted)
   response.once("close", onClosed)
   try {
@@ -630,7 +654,11 @@ export async function handleProjectCoreReadRequest(
     if (projectId !== null && projectId.endsWith("/instruction-revisions")) {
       const revisions = await projects.revisions(scope, projectId.slice(0, -"/instruction-revisions".length))
       if (abort.signal.aborted || response.destroyed || response.writableEnded) return true
-      send(response, revisions === null ? 404 : 200, revisions === null ? failure("project_not_found", "Project was not found", id) : ok({ items: revisions }, id))
+      send(
+        response,
+        revisions === null ? 404 : 200,
+        revisions === null ? failure("project_not_found", "Project was not found", id) : ok({ items: revisions }, id),
+      )
       return true
     }
     if (projectId !== null) {

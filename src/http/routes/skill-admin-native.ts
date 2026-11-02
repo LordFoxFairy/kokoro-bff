@@ -16,7 +16,20 @@ function decode(value: string): string {
   }
 }
 
-function actionFor(method: string, path: string[]): "admin_read" | "admin_create_draft" | "admin_create_version" | "official_publish" | "admin_withdraw" | "quarantine" | "restore" | "admin_set_publication_audience" | "admin_discard_draft" | null {
+function actionFor(
+  method: string,
+  path: string[],
+):
+  | "admin_read"
+  | "admin_create_draft"
+  | "admin_create_version"
+  | "official_publish"
+  | "admin_withdraw"
+  | "quarantine"
+  | "restore"
+  | "admin_set_publication_audience"
+  | "admin_discard_draft"
+  | null {
   if (method === "GET" && path.length >= 2 && path[0] === "admin" && path[1] === "skills") return "admin_read"
   if (method === "POST" && path.length === 2) return "admin_create_draft"
   if (method !== "POST" || path.length !== 4) return null
@@ -44,7 +57,8 @@ export async function handleSkillAdminRequest(
   const parts = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean).map(decode)
   if (parts[0] !== "v1" || parts[1] !== "admin" || parts[2] !== "skills") return false
   const path = parts.slice(1)
-  if (!((request.method === "GET" && (path.length === 2 || path.length === 3)) || (request.method === "POST" && (path.length === 2 || path.length === 4)))) return false
+  if (!((request.method === "GET" && (path.length === 2 || path.length === 3)) || (request.method === "POST" && (path.length === 2 || path.length === 4))))
+    return false
   const action = actionFor(request.method ?? "GET", path)
   if (action === null) return false
   const id = requestId(request)
@@ -52,12 +66,19 @@ export async function handleSkillAdminRequest(
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, signal)
     if (!admitted.ok) {
-      send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+      send(
+        response,
+        admitted.status,
+        { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } },
+        admitted.retryAfter,
+      )
       return true
     }
     const checked = await authorizeSkillAction(skillAuthorization, admitted, action, signal)
     if (!checked.ok) {
-      send(response, checked.status, { error: { code: checked.code, message: "Skill action admission failed", retryable: checked.status === 429 || checked.status === 503 } })
+      send(response, checked.status, {
+        error: { code: checked.code, message: "Skill action admission failed", retryable: checked.status === 429 || checked.status === 503 },
+      })
       return true
     }
     await skillAdminRoute(request, response, admitted.context, path, client, config.iamBaseUrl)

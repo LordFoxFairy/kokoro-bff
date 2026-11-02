@@ -58,8 +58,8 @@ async function tree(directory, prefix = "") {
 }
 
 async function verifyInputs() {
-  assert.equal(process.versions.node, "22.22.2", "Storage consumer generation requires pinned Node 22.22.2")
-  assert.equal(await readFile(path.join(root, ".node-version"), "utf8"), "22.22.2\n")
+  assert.equal(process.versions.node, "24.20.0", "Storage consumer generation requires pinned Node 24.20.0")
+  assert.equal(await readFile(path.join(root, ".node-version"), "utf8"), "24.20.0\n", ".node-version must pin Node 24.20.0")
   const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"))
   assert.equal(packageJson.packageManager, "pnpm@11.25.0")
   for (const [name, version] of Object.entries({ ...versions, prettier: "3.9.6", typescript: "5.9.3" })) {
@@ -135,7 +135,7 @@ async function manifestFor(directory) {
       exit_path: "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
       sources: ["https://connectrpc.com/docs/node/using-clients/", "https://github.com/bufbuild/protobuf-es/releases/tag/v2.14.0"],
     },
-    runtime: { node: "22.22.2", pnpm: "11.25.0", typescript: "5.9.3" },
+    runtime: { node: process.versions.node, pnpm: "11.25.0", typescript: "5.9.3" },
     lockfile_sha256: sha256(await readFile(path.join(root, "pnpm-lock.yaml"))),
     build_policy_sha256: sha256(await readFile(path.join(root, "pnpm-workspace.yaml"))),
     generated: await Promise.all(generatedFiles.map(async (file) => ({ path: file, sha256: sha256(await readFile(path.join(directory, file))) }))),

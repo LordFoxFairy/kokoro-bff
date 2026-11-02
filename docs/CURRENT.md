@@ -1,3 +1,13 @@
+## 2026-11-01 Task A 当前候选：入口隔离与 Node 24 门禁
+
+本段覆盖下方 Task A 旧基线描述。Nest 生产入口已移除 raw server re-export，两处 HTTP adapter 改用窄依赖类型；默认 `test` / `test:architecture` 已各接入两套现有 Nest 架构测试。raw server/runtime、测试消费者与聚合资源工厂仍待后续迁移删除，Nest 关闭/worker drain/池释放尚待真实运行验证；本候选不代表 C-2/C-3 完成。
+
+当前运行与七条消费者生成链统一固定 Node 24.20.0，CI 使用 `.node-version`，Docker 基镜像固定版本与 digest；生成入口在任何写入前核实际 runtime/pin。正规再生成后 106 个生成文件与原基线字节一致，owner/vendor/wire/历史摘要及 lockfile 未变。32 个本任务文件的格式修复经 AST/注释等价复核，无行为改动。
+
+Root 在 `228e3d6` 加 64 路径停写候选上完成 `pnpm format:check && pnpm check`：format/lint/typecheck/contract/build 通过；contract 1344 pass，默认测试 2343 pass / 0 fail / 2 skip。两项 skip 为未注入数据库配置的现有 schema 测试；随后单独注入受管 PostgreSQL 的隔离 fixture，`node --import tsx --test --test-concurrency=1 test/schema-governance.test.mjs` 为 15 pass / 0 fail / 0 skip，包含共存/失败回滚与 R237 catalog。临时库由各测试 finally 回收；这不替代完整业务 integration 或当前 App/BFF/IAM 浏览器旅程。
+
+候选按本仓独立 draft PR 交付，不合并 main、不部署；Root 精确 gitlink 与真实 native smoke、完整四旅程仍待配对。此前两轮全门失败分别为 Storage Node 22 固定断言、旧摘要负控 fixture 漏带当前 Node pin，均保留证据后定向修复，未删除旧摘要拒绝断言。
+
 ## 2026-10-31 C-1 clean-slate cleanup（已实施，BFF NestJS 收敛未开始）
 
 BFF 仅保留空 `kokoro_bff` owner schema 的 `db:apply-schema` fresh-only 安装入口；全部 schema-evolution CLI、事务 runner 与对应演进 integration tests 已删除，package、architecture oracle 与当前反馈／Project Pin 测试不再引用。非空旧 owner 不由 BFF 兼容承接，必须先完成 clean-slate 数据重建。App 已删除 `cancelledRuns` HMR 迁移、Conversation hash URL、无序 snapshot activity fallback 与 legacy final proof folding；Agent 已删除按旧 `mcp/tools.py` digest 推断 `legacy_failed` 的展示分支，保留当前 frozen recipe authority。

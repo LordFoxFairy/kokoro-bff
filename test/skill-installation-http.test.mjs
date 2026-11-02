@@ -847,7 +847,8 @@ test("Project installation six routes use the current owned project, distinct co
         },
         compareAndSetReceipt: async (scope, fingerprint, expected, replacement) => {
           const current = receipts.get(scope)
-          if (!current || current.fingerprint !== fingerprint || JSON.stringify(current) !== JSON.stringify(expected)) return { updated: false, receipt: current ?? null }
+          if (!current || current.fingerprint !== fingerprint || JSON.stringify(current) !== JSON.stringify(expected))
+            return { updated: false, receipt: current ?? null }
           receipts.set(scope, replacement)
           return { updated: true, receipt: replacement }
         },
@@ -865,18 +866,18 @@ test("Project installation six routes use the current owned project, distinct co
       },
       chatService: {},
       projectService: {
-            skillSelection: async () => ({ project_id: project.id, installation_ids: [...selection] }),
-            replaceSkillSelection: async (_scope, id, ids) => {
-              assert.equal(id, project.id)
-              writes++
-              selection = [...ids]
-              return { kind: "replaced", receipt: { data: { project_id: id, installation_ids: [...ids] } } }
-            },
-            find: async (scope, ref) => {
-              assert.deepEqual(scope, { tenantId: "tenant", subjectId: "user-session" })
-              return visible && ["project-alias", project.id].includes(ref) ? project : null
-            },
+        skillSelection: async () => ({ project_id: project.id, installation_ids: [...selection] }),
+        replaceSkillSelection: async (_scope, id, ids) => {
+          assert.equal(id, project.id)
+          writes++
+          selection = [...ids]
+          return { kind: "replaced", receipt: { data: { project_id: id, installation_ids: [...ids] } } }
         },
+        find: async (scope, ref) => {
+          assert.deepEqual(scope, { tenantId: "tenant", subjectId: "user-session" })
+          return visible && ["project-alias", project.id].includes(ref) ? project : null
+        },
+      },
       readiness: async () => {},
     },
   )

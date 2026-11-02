@@ -45,10 +45,7 @@ test("Nest health controller owns health and readiness instead of the legacy rou
 })
 
 test("Nest production has no legacy route composition", async () => {
-  const [appModule, main] = await Promise.all([
-    readFile(path.join(root, "src/app.module.ts"), "utf8"),
-    readFile(path.join(root, "src/main.ts"), "utf8"),
-  ])
+  const [appModule, main] = await Promise.all([readFile(path.join(root, "src/app.module.ts"), "utf8"), readFile(path.join(root, "src/main.ts"), "utf8")])
   assert.doesNotMatch(appModule, /LegacyRoutesModule|GracefulShutdown/u)
   assert.doesNotMatch(main, /LegacyRoutesRuntime|handleBffRequest/u)
   assert.equal(await exists("src/modules/legacy-routes/legacy-routes.runtime.ts"), false)

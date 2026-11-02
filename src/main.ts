@@ -2,14 +2,11 @@ import "reflect-metadata"
 import { NestFactory } from "@nestjs/core"
 import { AppModule } from "./app.module.js"
 import { loadConfig } from "./config/runtime.js"
-import type { BffServer } from "./bootstrap/server.js"
-
-export { createBffServer } from "./bootstrap/server.js"
 
 const SHUTDOWN_GRACE_PERIOD_MS = 30_000
 const SHUTDOWN_HARD_DEADLINE_MS = 31_000
 
-type ShutdownServer = Pick<BffServer, "shutdown">
+type ShutdownServer = { shutdown(gracePeriodMs?: number): Promise<void> }
 
 /** Bind process termination to the server's existing ordered drain exactly once. */
 export function installBffSignalHandlers(server: ShutdownServer, options: Readonly<{ hardDeadlineMs?: number }> = {}): void {

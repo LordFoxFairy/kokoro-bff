@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import { Pool } from "pg"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
-import { createBffServer } from "../dist/main.js"
+import { createBffServer } from "../dist/bootstrap/server.js"
 import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 const pg = process.env.KOKORO_TEST_POSTGRES_URL,

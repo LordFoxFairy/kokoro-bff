@@ -18,13 +18,19 @@ export async function handlePersonalKnowledgeRequest(
   repository: KnowledgeRepository,
 ): Promise<boolean> {
   const pathname = new URL(request.url ?? "/", "http://bff.local").pathname
-  if (!(pathname === "/v1/preferences/knowledge" || pathname === "/v1/preferences/knowledge-usage" || pathname.startsWith("/v1/preferences/knowledge/"))) return false
+  if (!(pathname === "/v1/preferences/knowledge" || pathname === "/v1/preferences/knowledge-usage" || pathname.startsWith("/v1/preferences/knowledge/")))
+    return false
   const id = requestId(request)
   const signal = AbortSignal.timeout(5_000)
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, signal)
     if (!admitted.ok) {
-      send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+      send(
+        response,
+        admitted.status,
+        { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } },
+        admitted.retryAfter,
+      )
       return true
     }
     await personalKnowledgeRoute(request, response, admitted.context, repository)

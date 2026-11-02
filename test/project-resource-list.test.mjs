@@ -165,15 +165,25 @@ test("GET route checks current owner before Storage and binds every page to cano
   let calls = 0
   const scopes = []
   const projects = {
-    async list() { return [] },
+    async list() {
+      return []
+    },
     async find(scope, ref) {
       scopes.push(scope)
       return scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
     },
-    async revisions() { return [] },
-    async deletion() { return null },
-    async rename() { return { kind: "conflict" } },
-    async delete() { return { kind: "not_found" } },
+    async revisions() {
+      return []
+    },
+    async deletion() {
+      return null
+    },
+    async rename() {
+      return { kind: "conflict" }
+    },
+    async delete() {
+      return { kind: "not_found" }
+    },
   }
   const config = { storage: storageConfig, tenantId: "tenant-1", sharedSecret: "web-secret", upstreamTimeoutMs: 5000, iamBaseUrl: null }
   const admission = {
@@ -193,15 +203,22 @@ test("GET route checks current owner before Storage and binds every page to cano
       "x-request-id": "req-list",
     }
     req.rawHeaders = [
-      "authorization", req.headers.authorization,
-      "x-kokoro-service", "web-bff",
-      "x-kokoro-internal-secret", "web-secret",
-      "x-request-id", "req-list",
+      "authorization",
+      req.headers.authorization,
+      "x-kokoro-service",
+      "web-bff",
+      "x-kokoro-internal-secret",
+      "web-secret",
+      "x-request-id",
+      "req-list",
     ]
     const res = new EventEmitter()
     res.destroyed = false
     res.writableEnded = false
-    res.setHeader = (name, value) => { res.headers ??= {}; res.headers[name.toLowerCase()] = value }
+    res.setHeader = (name, value) => {
+      res.headers ??= {}
+      res.headers[name.toLowerCase()] = value
+    }
     res.writeHead = (status, headers) => {
       res.status = status
       res.headers = headers

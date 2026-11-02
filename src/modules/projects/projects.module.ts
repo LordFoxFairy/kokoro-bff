@@ -80,13 +80,16 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, OnApplicationS
               const project = await projectService.find({ tenantId: context.identity.namespace, subjectId: context.identity.userId }, projectId)
               signal.throwIfAborted()
               if (!project || project.id !== projectId) return null
-              const owner = await installations.get({
-                requestId: context.requestId,
-                tenant: context.identity.namespace,
-                subject: context.identity.userId,
-                projectRef: projectId,
-                installationId,
-              }, signal)
+              const owner = await installations.get(
+                {
+                  requestId: context.requestId,
+                  tenant: context.identity.namespace,
+                  subject: context.identity.userId,
+                  projectRef: projectId,
+                  installationId,
+                },
+                signal,
+              )
               if (!("projectRef" in owner) || owner.projectRef !== projectId) throw new Error("skill_response_invalid")
               const record = exactInstallationRecord(installationId, projectInstallation(owner.installation))
               const current = await projectService.find({ tenantId: context.identity.namespace, subjectId: context.identity.userId }, projectId)
@@ -94,13 +97,17 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, OnApplicationS
               return current?.id === projectId ? record : null
             },
             download: async (projectId, installationId, context, signal, deadlineAt) => {
-              const value = await packageInspection.downloadProject({
-                projectId,
-                installationId,
-                requestId: context.requestId,
-                tenant: context.identity.namespace,
-                subject: context.identity.userId,
-              }, signal, deadlineAt)
+              const value = await packageInspection.downloadProject(
+                {
+                  projectId,
+                  installationId,
+                  requestId: context.requestId,
+                  tenant: context.identity.namespace,
+                  subject: context.identity.userId,
+                },
+                signal,
+                deadlineAt,
+              )
               assertSkillWireKnown(value)
               return {
                 sourceRef: value.sourceRef?.value ?? "",
@@ -135,11 +142,9 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, OnApplicationS
       inject: [PROJECT_SCOPE_RELEASE_OUTBOX, BFF_CONFIG],
       useFactory: (repository: ProjectScopeReleaseOutboxRepository, config: BffConfig): ProjectScopeReleaseOutboxDispatcher | null => {
         if (config.storage === undefined) return null
-        return new ProjectScopeReleaseOutboxDispatcher(
-          repository,
-          new StorageScopeReleaseClient(config.storage.baseUrl, config.storage.secret),
-          { workerId: `bff-project-scope-release-${process.pid}-${randomUUID()}` },
-        )
+        return new ProjectScopeReleaseOutboxDispatcher(repository, new StorageScopeReleaseClient(config.storage.baseUrl, config.storage.secret), {
+          workerId: `bff-project-scope-release-${process.pid}-${randomUUID()}`,
+        })
       },
     },
     ProjectScopeReleaseWorkerLifecycle,

@@ -90,12 +90,7 @@ export type PostgresBffOwnerResources = {
   getReceipt(scope: string): Promise<PersistentReceipt | null>
   claimReceipt(scope: string, fingerprint: string): Promise<ReceiptClaim>
   putReceipt(scope: string, receipt: PersistentReceipt): Promise<void>
-  compareAndSetReceipt(
-    scope: string,
-    fingerprint: string,
-    expected: PersistentReceipt,
-    replacement: PersistentReceipt,
-  ): Promise<ReceiptCasResult>
+  compareAndSetReceipt(scope: string, fingerprint: string, expected: PersistentReceipt, replacement: PersistentReceipt): Promise<ReceiptCasResult>
   releaseReceipt(scope: string, fingerprint: string): Promise<void>
 }
 

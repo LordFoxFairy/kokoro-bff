@@ -6,7 +6,7 @@ import { test } from "node:test"
 import { Pool } from "pg"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
-import { createBffServer } from "../dist/main.js"
+import { createBffServer } from "../dist/bootstrap/server.js"
 import { schedulerDispatchDigest, schedulerDispatchScope } from "../dist/infrastructure/clients/scheduler/dispatch-identity.js"
 import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { PostgresSchedulerDispatchReceiptRepository } from "../dist/infrastructure/postgres/scheduler-dispatch-receipt-repository.js"

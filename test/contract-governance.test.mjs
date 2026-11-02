@@ -6,12 +6,74 @@ import { restorePublic15AccountSessionContract } from "../scripts/account-sessio
 import { inspectSkillProductContract, stripSkillProductSource } from "../scripts/verify-skill-product-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
+import { spawnSync } from "node:child_process"
 import { readFile, readdir, stat } from "node:fs/promises"
 import { test } from "node:test"
 
 import { compareOperationBaseline, inspectOpenApiGovernance } from "../scripts/check-contract.mjs"
 import * as iamGenerator from "../scripts/generate-iam-http-client.mjs"
 import * as schedulerGenerator from "../scripts/generate-scheduler-contracts.mjs"
+
+const pinnedConsumerGenerators = [
+  ["agent-http", "generate-agent-http-client.mjs"],
+  ["billing-http", "generate-billing-http-client.mjs"],
+  ["iam-http", "generate-iam-http-client.mjs"],
+  ["platform-http", "generate-platform-http-client.mjs"],
+  ["system-http", "generate-system-http-client.mjs"],
+  ["scheduler", "generate-scheduler-contracts.mjs"],
+  ["storage-connect", "generate-storage-connect-client.mjs"],
+]
+
+test("consumer generation records the pinned Node 24 runtime required by the Nest owner", async () => {
+  const pin = await readFile(new URL("../.node-version", import.meta.url), "utf8")
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"))
+  assert.equal(pin, "24.20.0\n")
+  assert.equal(packageJson.engines.node, ">=24 <25")
+  assert.equal(process.versions.node, pin.trim())
+  for (const [name] of pinnedConsumerGenerators) {
+    const manifest = JSON.parse(await readFile(new URL(`../contract/dependencies/${name}.json`, import.meta.url), "utf8"))
+    assert.equal(manifest.runtime.node, pin.trim(), `${name} generation runtime provenance`)
+  }
+})
+
+for (const [name, script] of pinnedConsumerGenerators) {
+  test(`${name} generator CLI rejects runtime and pin drift before generation or writes`, () => {
+    for (const [runtime, pin, message] of [
+      ["22.22.2", "24.20.0\n", /requires pinned Node 24\.20\.0/u],
+      ["24.13.0", "24.20.0\n", /requires pinned Node 24\.20\.0/u],
+      ["24.20.0", "22.22.2\n", /\.node-version must pin Node 24\.20\.0/u],
+      ["24.20.0", "24.13.0\n", /\.node-version must pin Node 24\.20\.0/u],
+    ]) {
+      // The preload changes only this test child. Stop at the first generation
+      // side effect so a missing preflight neither rewrites artifacts nor runs a compiler.
+      const preload = `
+        import fs from "node:fs/promises";
+        import childProcess from "node:child_process";
+        import { syncBuiltinESMExports } from "node:module";
+        Object.defineProperty(process.versions, "node", { value: ${JSON.stringify(runtime)} });
+        const readFile = fs.readFile;
+        fs.readFile = (file, ...args) => String(file).endsWith("/.node-version")
+          ? Promise.resolve(${JSON.stringify(pin)}) : readFile(file, ...args);
+        const stop = () => { throw new Error("GENERATION_STARTED_BEFORE_RUNTIME_REJECTION"); };
+        childProcess.spawn = stop;
+        for (const operation of ["mkdtemp", "mkdir", "cp", "rm", "writeFile"]) fs[operation] = stop;
+        syncBuiltinESMExports();
+      `
+      const result = spawnSync(
+        process.execPath,
+        ["--import", `data:text/javascript,${encodeURIComponent(preload)}`, new URL(`../scripts/${script}`, import.meta.url).pathname, "--write"],
+        {
+          encoding: "utf8",
+          timeout: 10000,
+        },
+      )
+      assert.equal(result.error, undefined, `${name}: ${runtime}/${pin.trim()} child completed`)
+      assert.equal(result.status, 1, `${name}: ${runtime}/${pin.trim()} must fail closed`)
+      assert.match(result.stderr, message)
+      assert.doesNotMatch(result.stderr, /GENERATION_STARTED_BEFORE_RUNTIME_REJECTION/u)
+    }
+  })
+}
 
 const governedOperation = `openapi: 3.1.0
 paths:
@@ -194,7 +256,7 @@ test("the IAM consumer pins the complete 0.18.0 owner artifact and generates onl
     config_sha256: sha256(config),
   })
   assert.deepEqual(manifest.runtime, {
-    node: "22.22.2",
+    node: "24.20.0",
     pnpm: "11.25.0",
     zod: "4.5.4",
   })
@@ -430,7 +492,7 @@ test("the Scheduler consumer pins immutable producer-owned control and webhook c
       config_path: "openapi-ts.scheduler.config.ts",
       config_sha256: sha256(config),
     },
-    runtime: { node: "22.22.2", pnpm: "11.25.0", zod: "4.5.4" },
+    runtime: { node: "24.20.0", pnpm: "11.25.0", zod: "4.5.4" },
     lockfile_sha256: sha256(lockfile),
     generated,
   })

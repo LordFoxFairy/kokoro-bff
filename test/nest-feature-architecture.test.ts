@@ -122,7 +122,19 @@ test("MusicModule owns the Mori owner adapter and idempotency seam", async () =>
 })
 
 test("ChatModule owns the archive/share adapters and chat provider", async () => {
-  const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, regenerationNativeRoute, mutationRoute, eventsRoute, messageRoute, aguiModule, server] = await Promise.all([
+  const [
+    chatModule,
+    middleware,
+    nativeRoute,
+    sharedNativeRoute,
+    feedbackRoute,
+    regenerationNativeRoute,
+    mutationRoute,
+    eventsRoute,
+    messageRoute,
+    aguiModule,
+    server,
+  ] = await Promise.all([
     readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/chat/chat.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-native.ts"), "utf8"),
@@ -368,12 +380,14 @@ test("ScheduledTask repository and outbox ports are feature-local", async () => 
     "src/application/scheduled/scheduled-task-repository.ts",
     "src/application/scheduled/scheduled-task-outbox-repository.ts",
     "src/application/scheduled/scheduled-task-outbox-delivery.ts",
-  ]) assert.equal(await fileExists(file), true, `${file} must exist`)
+  ])
+    assert.equal(await fileExists(file), true, `${file} must exist`)
   for (const file of [
     "src/application/ports/scheduled-task-repository.ts",
     "src/application/ports/scheduled-task-outbox-repository.ts",
     "src/application/ports/scheduled-task-outbox-delivery.ts",
-  ]) assert.equal(await fileExists(file), false, `${file} must stay deleted`)
+  ])
+    assert.equal(await fileExists(file), false, `${file} must stay deleted`)
   const [moduleSource, service, dispatcher, repository, delivery] = await Promise.all([
     readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled-task-service.ts"), "utf8"),
@@ -394,13 +408,15 @@ test("Scheduled Agent and Scheduler receipt ports are feature-local", async () =
     "src/application/scheduled/scheduled-agent-dispatch-repository.ts",
     "src/application/scheduled/scheduler-dispatch-receipt-repository.ts",
     "src/application/scheduled/stable-id-generator.ts",
-  ]) assert.equal(await fileExists(file), true, `${file} must exist`)
+  ])
+    assert.equal(await fileExists(file), true, `${file} must exist`)
   for (const file of [
     "src/application/ports/scheduled-agent-dispatch-delivery.ts",
     "src/application/ports/scheduled-agent-dispatch-repository.ts",
     "src/application/ports/scheduler-dispatch-receipt-repository.ts",
     "src/application/ports/stable-id-generator.ts",
-  ]) assert.equal(await fileExists(file), false, `${file} must stay deleted`)
+  ])
+    assert.equal(await fileExists(file), false, `${file} must stay deleted`)
   const [moduleSource, dispatcher, terminal, schedulerRoute, delivery, id] = await Promise.all([
     readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled-agent-dispatcher.ts"), "utf8"),
@@ -533,13 +549,15 @@ test("Agent dispatch and cancellation outbox ports are feature-local", async () 
     "src/application/agent-dispatch/agent-dispatch-outbox-repository.ts",
     "src/application/agent-dispatch/agent-cancellation-delivery.ts",
     "src/application/agent-dispatch/agent-cancellation-outbox-repository.ts",
-  ]) assert.equal(await fileExists(file), true, `${file} must exist`)
+  ])
+    assert.equal(await fileExists(file), true, `${file} must exist`)
   for (const file of [
     "src/application/ports/agent-dispatch-delivery.ts",
     "src/application/ports/agent-dispatch-outbox-repository.ts",
     "src/application/ports/agent-cancellation-delivery.ts",
     "src/application/ports/agent-cancellation-outbox-repository.ts",
-  ]) assert.equal(await fileExists(file), false, `${file} must stay deleted`)
+  ])
+    assert.equal(await fileExists(file), false, `${file} must stay deleted`)
   const [dispatch, cancellation, chatTurn, repository] = await Promise.all([
     readFile(path.join(root, "src/application/agent-dispatch-outbox-dispatcher.ts"), "utf8"),
     readFile(path.join(root, "src/application/agent-cancellation-outbox-dispatcher.ts"), "utf8"),
@@ -578,7 +596,22 @@ test("AguiModule owns the projector lifecycle", async () => {
 })
 
 test("McpModule owns MCP projections, custom API route admission and candidate clients", async () => {
-  const [mcpModule, middleware, route, connectorRoute, projectionMiddleware, projectionRoute, adminMiddleware, adminRoute, publicationMiddleware, publicationRoute, customMiddleware, customRoute, server, owner] = await Promise.all([
+  const [
+    mcpModule,
+    middleware,
+    route,
+    connectorRoute,
+    projectionMiddleware,
+    projectionRoute,
+    adminMiddleware,
+    adminRoute,
+    publicationMiddleware,
+    publicationRoute,
+    customMiddleware,
+    customRoute,
+    server,
+    owner,
+  ] = await Promise.all([
     readFile(path.join(root, "src/modules/mcp/mcp.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/mcp/project-mcp-recommendations.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/project-mcp-recommendations.ts"), "utf8"),
@@ -631,7 +664,26 @@ test("McpModule owns MCP projections, custom API route admission and candidate c
 })
 
 test("SkillsModule owns personal skill-installation admission and client", async () => {
-  const [skillsModule, middleware, route, managedRoute, enabledRoute, usageRoute, lifecycleRoute, draftRoute, draftMutationsRoute, catalogCommandRoute, importRoute, aiImportRoute, shareRoute, appBindingsRoute, appBindingsNativeRoute, specificationNativeRoute, packageInspectionNativeRoute, server] = await Promise.all([
+  const [
+    skillsModule,
+    middleware,
+    route,
+    managedRoute,
+    enabledRoute,
+    usageRoute,
+    lifecycleRoute,
+    draftRoute,
+    draftMutationsRoute,
+    catalogCommandRoute,
+    importRoute,
+    aiImportRoute,
+    shareRoute,
+    appBindingsRoute,
+    appBindingsNativeRoute,
+    specificationNativeRoute,
+    packageInspectionNativeRoute,
+    server,
+  ] = await Promise.all([
     readFile(path.join(root, "src/modules/skills/skills.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/skills/skills.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/skill-installations.ts"), "utf8"),

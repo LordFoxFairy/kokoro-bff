@@ -3,7 +3,7 @@ import { createServer } from "node:http"
 import { describe, it } from "node:test"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
-import { createBffServer } from "../dist/main.js"
+import { createBffServer } from "../dist/bootstrap/server.js"
 import { schedulerDispatchDigest } from "../dist/infrastructure/clients/scheduler/dispatch-identity.js"
 import { parseSchedulerDispatchWebhook } from "../dist/infrastructure/clients/scheduler/webhook-contract.js"
 import { buildScheduledAgentLaunch } from "../dist/infrastructure/clients/agent/index.js"

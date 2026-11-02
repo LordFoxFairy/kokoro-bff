@@ -6,7 +6,7 @@ import { test } from "node:test"
 import { EventSchemas } from "@ag-ui/core"
 import { Pool } from "pg"
 
-import { createBffServer } from "../dist/main.js"
+import { createBffServer } from "../dist/bootstrap/server.js"
 import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { AgUiSessionRuntime } from "../dist/application/agui/session-runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"

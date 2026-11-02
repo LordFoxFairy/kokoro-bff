@@ -9,7 +9,10 @@ import { handleRetiredOwnerRequest } from "../../http/routes/retired-owner-nativ
 
 @Injectable()
 export class SystemMiddleware implements NestMiddleware {
-  public constructor(@Inject(BFF_CONFIG) private readonly config: BffConfig, @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission) {}
+  public constructor(
+    @Inject(BFF_CONFIG) private readonly config: BffConfig,
+    @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
+  ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleSystemAdminRequest(request, response, this.config, this.admission)

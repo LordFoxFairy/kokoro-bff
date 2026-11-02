@@ -173,7 +173,8 @@ async function withProjectContent(run) {
     },
     async compareAndSetReceipt(scope, fingerprint, expected, replacement) {
       const current = receipts.get(scope)
-      if (!current || current.fingerprint !== fingerprint || JSON.stringify(current) !== JSON.stringify(expected)) return { updated: false, receipt: current ?? null }
+      if (!current || current.fingerprint !== fingerprint || JSON.stringify(current) !== JSON.stringify(expected))
+        return { updated: false, receipt: current ?? null }
       receipts.set(scope, replacement)
       return { updated: true, receipt: replacement }
     },

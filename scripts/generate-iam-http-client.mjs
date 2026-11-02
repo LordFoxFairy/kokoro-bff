@@ -213,7 +213,7 @@ async function manifestFor(directory) {
   ])
   const packageJson = JSON.parse(packageDocument)
   assert.equal(sha256(vendor), ownerDigest, "vendored IAM contract digest drifted")
-  assert.equal(nodeVersion, "22.22.2\n", ".node-version must pin Node 22.22.2")
+  assert.equal(nodeVersion, "24.20.0\n", ".node-version must pin Node 24.20.0")
   assert.equal(packageJson.packageManager, "pnpm@11.25.0")
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
   assert.equal(packageJson.devDependencies.prettier, "3.9.6")
@@ -235,7 +235,7 @@ async function manifestFor(directory) {
       config_path: "openapi-ts.iam.config.ts",
       config_sha256: sha256(config),
     },
-    runtime: { node: "22.22.2", pnpm: "11.25.0", zod: "4.5.4" },
+    runtime: { node: process.versions.node, pnpm: "11.25.0", zod: "4.5.4" },
     lockfile_sha256: sha256(lockfile),
     generated: await Promise.all(
       generatedFiles.map(async (file) => ({
@@ -249,6 +249,8 @@ async function manifestFor(directory) {
 async function main() {
   const mode = process.argv[2]
   assert.ok(mode === "--write" || mode === "--check", "expected --write or --check")
+  assert.equal(process.versions.node, "24.20.0", "Consumer generation requires pinned Node 24.20.0")
+  assert.equal(await readFile(path.join(root, ".node-version"), "utf8"), "24.20.0\n", ".node-version must pin Node 24.20.0")
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "kokoro-iam-http-"))
   const temporaryOutput = path.join(temporaryRoot, "generated")
   const repeatedOutput = path.join(temporaryRoot, "generated-again")

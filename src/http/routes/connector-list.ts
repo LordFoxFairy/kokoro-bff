@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { authorizeMcpAction, authorizeUserRequest } from "../../auth/user-admission.js"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
+import type { McpPersonalConnectClient } from "../../infrastructure/clients/platform/mcp-personal-connect.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { AdmittedUserRequestContext } from "../../domain/request-context.js"
 import { mcpRequestRemaining } from "../mcp-request-budget.js"
@@ -14,9 +16,9 @@ export function isConnectorListRequest(path: readonly string[], method: string):
 }
 
 export type ConnectorListProvider = Readonly<{
-  mcpPersonalClient: NonNullable<BffServerComposition["mcpPersonalClient"]> | null
-  sessionAdmission: BffServerComposition["sessionAdmission"]
-  mcpAuthorization: BffServerComposition["mcpAuthorization"]
+  mcpPersonalClient: Pick<McpPersonalConnectClient, "read"> | null
+  sessionAdmission: SessionAdmission
+  mcpAuthorization: Pick<McpAuthorizationClient, "check">
 }>
 
 export function connectorListFailure(response: ServerResponse, status: number, requestId: string, code: string, message: string): void {
@@ -30,7 +32,7 @@ export function connectorListFailure(response: ServerResponse, status: number, r
 type Page = Readonly<{ items: readonly unknown[]; next_cursor: string | null }>
 
 async function readAll(
-  read: NonNullable<BffServerComposition["mcpPersonalClient"]>["read"],
+  read: McpPersonalConnectClient["read"],
   operation: "connectors" | "providers",
   input: Readonly<{ requestId: string; tenant: string; subject: string }>,
   signal: AbortSignal,

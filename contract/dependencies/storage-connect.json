@@ -36,7 +36,7 @@
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "1b3fbf7e60eb53443b66d8edbf8134c00841cebeced9bc51af0ad67d93ff55b0",
+    "script_sha256": "ef19d620b48dc39aaaa42225abf78e4af509136f0e93f36007d5e958dfcb2da8",
     "formatting": {
       "package": "prettier",
       "version": "3.9.6",
@@ -59,7 +59,7 @@
     ]
   },
   "runtime": {
-    "node": "22.22.2",
+    "node": "24.20.0",
     "pnpm": "11.25.0",
     "typescript": "5.9.3"
   },

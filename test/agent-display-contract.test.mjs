@@ -17,6 +17,7 @@ test("formal Agent8.5 details,8.4 raw tool facts and8.3 display deltas restores 
 test("both current generator modes reject a full legacy owner blob rather than publishing a ghost display client", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "kokoro-agent83-ghost-")))
   try {
+    await writeFile(join(dir, ".node-version"), await readFile(new URL("../.node-version", import.meta.url)))
     await mkdir(join(dir, "scripts"), { recursive: true })
     await writeFile(
       join(dir, "scripts/agent-final-answer-contract.mjs"),

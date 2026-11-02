@@ -17,7 +17,7 @@
     "config_sha256": "6741c28ea63e833e84271cc3cb1cdebf3b7c788d7149501f9f5a4fb1eef1b3f1"
   },
   "runtime": {
-    "node": "22.22.2",
+    "node": "24.20.0",
     "pnpm": "11.25.0",
     "zod": "4.5.4"
   },

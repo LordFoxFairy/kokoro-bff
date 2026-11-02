@@ -82,7 +82,14 @@ export async function handleMcpPersonalRequest(
     const path = pathOf(request).slice(2)
     const operation = mcpPersonalOperation(path, request.method ?? "GET")
     if (operation === null) return false
-    await mcpPersonalRoute(request, response, config, { mcpPersonalClient: client, mcpAuthorization: authorization, sessionAdmission: admission }, admitted, path)
+    await mcpPersonalRoute(
+      request,
+      response,
+      config,
+      { mcpPersonalClient: client, mcpAuthorization: authorization, sessionAdmission: admission },
+      admitted,
+      path,
+    )
     return true
   } catch {
     if (!response.headersSent && !response.writableEnded && !response.destroyed)

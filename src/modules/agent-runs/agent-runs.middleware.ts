@@ -1,6 +1,15 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { AGENT_CONTROL_IDEMPOTENCY, AGENT_RUNS_READER, AGUI_RUNTIME, BFF_CONFIG, CHAT_SERVICE, PROJECT_SERVICE, RUN_DISPLAY_PROVIDER, SESSION_ADMISSION } from "../../common/tokens.js"
+import {
+  AGENT_CONTROL_IDEMPOTENCY,
+  AGENT_RUNS_READER,
+  AGUI_RUNTIME,
+  BFF_CONFIG,
+  CHAT_SERVICE,
+  PROJECT_SERVICE,
+  RUN_DISPLAY_PROVIDER,
+  SESSION_ADMISSION,
+} from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { SubmittedAgentRunReader } from "../../application/agent-runs/submitted-agent-run-reader.js"
@@ -34,7 +43,21 @@ export class AgentRunsMiddleware implements NestMiddleware {
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleAgentRunsInternalRequest(request, response, this.config, this.reader, this.reader)
       .then((handled) => handled || handleRunDisplayRequest(request, response, this.config, this.admission, this.runDisplay))
-      .then((handled) => handled || handleAgentControlRequest(request, response, this.config, this.admission, this.chat, this.projects, this.agUiRuntime, this.idempotency, this.controlIdempotency))
+      .then(
+        (handled) =>
+          handled ||
+          handleAgentControlRequest(
+            request,
+            response,
+            this.config,
+            this.admission,
+            this.chat,
+            this.projects,
+            this.agUiRuntime,
+            this.idempotency,
+            this.controlIdempotency,
+          ),
+      )
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

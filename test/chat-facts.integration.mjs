@@ -8,7 +8,7 @@ import { test } from "node:test"
 import { Pool } from "pg"
 import { createClient } from "redis"
 
-import { createBffServer } from "../dist/main.js"
+import { createBffServer } from "../dist/bootstrap/server.js"
 import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 

@@ -1,6 +1,14 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
-import { ACCOUNT_IDEMPOTENCY, BFF_CONFIG, BFF_DATABASE, BFF_POOL, LIBRARY_ARTIFACT_REPOSITORY, PERSONAL_KNOWLEDGE_REPOSITORY, SESSION_ADMISSION } from "../../common/tokens.js"
+import {
+  ACCOUNT_IDEMPOTENCY,
+  BFF_CONFIG,
+  BFF_DATABASE,
+  BFF_POOL,
+  LIBRARY_ARTIFACT_REPOSITORY,
+  PERSONAL_KNOWLEDGE_REPOSITORY,
+  SESSION_ADMISSION,
+} from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
 import { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"

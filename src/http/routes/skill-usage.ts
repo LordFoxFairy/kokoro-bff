@@ -61,7 +61,12 @@ export async function handleSkillUsageRequest(
   const signal = AbortSignal.timeout(10_000)
   const admitted = await authorizeUserRequest(request, config, admission, id, signal)
   if (!admitted.ok) {
-    send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+    send(
+      response,
+      admitted.status,
+      { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } },
+      admitted.retryAfter,
+    )
     return true
   }
   await skillUsageRoute(request, response, admitted.context, reader)

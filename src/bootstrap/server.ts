@@ -41,26 +41,11 @@ import { handleLibraryRequest, libraryRequest } from "../http/routes/library-nat
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
 import { loadConfig, type BffConfig } from "../config/runtime.js"
-import {
-  authorizeUserRequest,
-  authorizeMcpAction,
-  mcpActionForRequest,
-  authorizeSkillAction,
-  skillActionForRequest,
-} from "../auth/user-admission.js"
+import { authorizeUserRequest, authorizeMcpAction, mcpActionForRequest, authorizeSkillAction, skillActionForRequest } from "../auth/user-admission.js"
 import { handleSkillLocalImportRequest } from "../http/routes/skill-local-import-native.js"
 import { failure } from "../contracts/index.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
-import {
-  mutationFingerprint,
-  idempotencyKey,
-  isMutation,
-  pathOf,
-  readBody,
-  requestBodyJson,
-  requestId,
-  requiresIdempotency,
-} from "../http/request.js"
+import { mutationFingerprint, idempotencyKey, isMutation, pathOf, readBody, requestBodyJson, requestId, requiresIdempotency } from "../http/request.js"
 import { reply, send } from "../http/response.js"
 import { liveAgentSession } from "../http/routes/agent.js"
 import { liveChatBusiness } from "../http/routes/chat.js"
@@ -87,7 +72,12 @@ import { handleMessageRegenerationRequest } from "../http/routes/message-regener
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 import { handleSkillDraftRequest } from "../http/routes/skill-draft-native.js"
 import { handleSkillDraftMutationRequest } from "../http/routes/skill-draft-mutations-native.js"
-import { handleSkillCatalogCommandRequest, handleSkillCoverRequest, handleSkillGithubPreviewRequest, handleSkillPackageUploadReadRequest } from "../http/routes/skill-catalog-command-native.js"
+import {
+  handleSkillCatalogCommandRequest,
+  handleSkillCoverRequest,
+  handleSkillGithubPreviewRequest,
+  handleSkillPackageUploadReadRequest,
+} from "../http/routes/skill-catalog-command-native.js"
 import { handleSkillGithubImportRequest } from "../http/routes/skill-import-native.js"
 import { handleSkillAiImportRequest } from "../http/routes/skill-ai-import-native.js"
 import { handleSkillShareRequest } from "../http/routes/skill-share-native.js"
@@ -165,9 +155,7 @@ function isRawUnknownConfiguredOwnerRequest(request: IncomingMessage): boolean {
   }
 }
 
-function schedulerDispatchProviderForComposition(
-  composition: ReturnType<typeof createBffComposition>,
-): SchedulerDispatchProvider | null {
+function schedulerDispatchProviderForComposition(composition: ReturnType<typeof createBffComposition>): SchedulerDispatchProvider | null {
   if (composition.schedulerDispatchReceipts === null || composition.scheduledTaskService === null) return null
   return {
     schedulerDispatchReceipts: composition.schedulerDispatchReceipts,
@@ -185,9 +173,7 @@ export async function handleBffRequest(
   const id = requestId(request)
   response.setHeader("x-request-id", id)
   const rawPathname = new URL(request.url || "/", "http://bff.local").pathname
-  const isRawSkillPackageInspection =
-    request.method === "GET" &&
-    /^\/v1\/projects\/[^/]+\/skill-installations\/[^/]+\/package$/u.test(rawPathname)
+  const isRawSkillPackageInspection = request.method === "GET" && /^\/v1\/projects\/[^/]+\/skill-installations\/[^/]+\/package$/u.test(rawPathname)
   let segments: string[]
   try {
     segments = pathOf(request)
@@ -257,11 +243,7 @@ export async function handleBffRequest(
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
   }
-  const hasMcpBudget =
-    isProjectMcpRecommendationsPath ||
-    mcpAction !== null ||
-    isMcpPersonalOperation ||
-    isCustomApiOperation
+  const hasMcpBudget = isProjectMcpRecommendationsPath || mcpAction !== null || isMcpPersonalOperation || isCustomApiOperation
   if (hasMcpBudget) {
     startMcpRequestBudget(request, 10_000)
     response.setHeader("cache-control", "no-store")
@@ -396,12 +378,7 @@ export async function handleBffRequest(
     await customApiRoute(request, response, composition.customApiClient, admission.context, id, businessPath)
     return
   }
-  if (
-    hasMcpBudget &&
-    !isMcpPersonalOperation &&
-    !isProjectMcpRecommendationsPath &&
-    (request.method !== "GET" || businessPath[0] === "self")
-  ) {
+  if (hasMcpBudget && !isMcpPersonalOperation && !isProjectMcpRecommendationsPath && (request.method !== "GET" || businessPath[0] === "self")) {
     if (!response.destroyed && !response.writableEnded)
       send(response, 503, failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", id))
     return
@@ -416,10 +393,10 @@ export async function handleBffRequest(
       composition.chatTurnService === null ? null : { chatTurnService: composition.chatTurnService },
       messageRegenerationDeadline,
       async (signal) => {
-      const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
-      if (!fresh.ok) throw new MessageRegenerationAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
-      if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
-        throw new MessageRegenerationAdmissionError(404, "message_not_found")
+        const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+        if (!fresh.ok) throw new MessageRegenerationAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
+        if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+          throw new MessageRegenerationAdmissionError(404, "message_not_found")
       },
     )
     return
@@ -474,12 +451,7 @@ export async function handleBffRequest(
   }
 
   const key = upstreamKey(businessPath)
-  if (
-    composition.routeHandler === undefined &&
-    key === null &&
-    !isPlatformProjectionRead &&
-    !bffOwnedBusinessPath(businessPath)
-  ) {
+  if (composition.routeHandler === undefined && key === null && !isPlatformProjectionRead && !bffOwnedBusinessPath(businessPath)) {
     send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
     return
   }
@@ -537,9 +509,13 @@ export async function handleBffRequest(
         send(response, chatAuthorization.status, failure(chatAuthorization.code, chatAuthorization.message, id))
         return
       }
-      const resourceAuthorization = composition.projectService !== null && composition.scheduledTaskService !== null
-        ? await authorizeScheduledTaskMutation(method, context, businessPath, scheduledCreate, { projects: composition.projectService, scheduledTasks: composition.scheduledTaskService })
-        : null
+      const resourceAuthorization =
+        composition.projectService !== null && composition.scheduledTaskService !== null
+          ? await authorizeScheduledTaskMutation(method, context, businessPath, scheduledCreate, {
+              projects: composition.projectService,
+              scheduledTasks: composition.scheduledTaskService,
+            })
+          : null
       if (resourceAuthorization !== null && !resourceAuthorization.ok) {
         send(response, resourceAuthorization.status, failure(resourceAuthorization.code, resourceAuthorization.message, id))
         return
@@ -550,11 +526,18 @@ export async function handleBffRequest(
     }
   }
   if (composition.routeHandler === undefined && libraryRequest(request)) {
-    await handleLibraryRequest(request, response, config, context, {
-      ...(composition.artifactLibrary === null ? {} : { artifactLibrary: composition.artifactLibrary }),
-      receipts: composition.businessStore,
-      idempotency: composition.idempotency,
-    }, body ?? Buffer.alloc(0))
+    await handleLibraryRequest(
+      request,
+      response,
+      config,
+      context,
+      {
+        ...(composition.artifactLibrary === null ? {} : { artifactLibrary: composition.artifactLibrary }),
+        receipts: composition.businessStore,
+        idempotency: composition.idempotency,
+      },
+      body ?? Buffer.alloc(0),
+    )
     return
   }
   const durableChatAdmission =
@@ -609,18 +592,29 @@ export async function handleBffRequest(
 
   if (composition.businessStore !== null && projectMutation(request) !== null) {
     const projectOwner = composition.projectService
-    if (projectOwner !== null && await handleProjectMutationBusiness(request, response, context, projectOwner, json, mutation, composition.idempotency)) return
+    if (projectOwner !== null && (await handleProjectMutationBusiness(request, response, context, projectOwner, json, mutation, composition.idempotency)))
+      return
   }
 
   if (composition.businessStore !== null && scheduledTaskMutation(request) !== null) {
     const scheduledOwner = composition.scheduledTaskService
     const projectOwner = composition.projectService
-    if (scheduledOwner !== null && projectOwner !== null && await handleScheduledTaskMutationBusiness(request, response, context, scheduledOwner, projectOwner, json, mutation, composition.idempotency)) return
+    if (
+      scheduledOwner !== null &&
+      projectOwner !== null &&
+      (await handleScheduledTaskMutationBusiness(request, response, context, scheduledOwner, projectOwner, json, mutation, composition.idempotency))
+    )
+      return
   }
 
-  if (billingPersonalRequest(request) && await handleBillingPersonalBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency)) return
-  if (systemModelCatalogRequest(request) && await handleSystemModelCatalogBusiness(request, response, config, context, composition.idempotency, mutation)) return
-  if (platformProjectionRequest(request) && await livePlatformProjectionRead(request, response, config, context, businessPath)) return
+  if (
+    billingPersonalRequest(request) &&
+    (await handleBillingPersonalBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency))
+  )
+    return
+  if (systemModelCatalogRequest(request) && (await handleSystemModelCatalogBusiness(request, response, config, context, composition.idempotency, mutation)))
+    return
+  if (platformProjectionRequest(request) && (await livePlatformProjectionRead(request, response, config, context, businessPath))) return
   if (businessPath[0] === "sessions") {
     if (
       composition.businessStore !== null &&
@@ -673,62 +667,120 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
   const projectResourceProjectReader = composition.projectService
-  const projectResourceUpload = composition.businessStore === null || typeof projectResourceProjectReader?.find !== "function"
-    ? null
-    : {
-        find: projectResourceProjectReader.find.bind(projectResourceProjectReader),
-        receipts: composition.businessStore,
-        idempotency: composition.idempotency,
-      }
+  const projectResourceUpload =
+    composition.businessStore === null || typeof projectResourceProjectReader?.find !== "function"
+      ? null
+      : {
+          find: projectResourceProjectReader.find.bind(projectResourceProjectReader),
+          receipts: composition.businessStore,
+          idempotency: composition.idempotency,
+        }
   const schedulerProvider = schedulerDispatchProviderForComposition(composition)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
     const handler = handleHealthRequest(request, response, config, composition.readiness)
-      .then((handled) => handled ? true : handleIamRelayRequest(request, response, config))
-      .then((handled) => handled ? true : schedulerDispatch(request, response, config, schedulerProvider, composition.idempotency))
-      .then((handled) => handled ? true : composition.routeHandler === undefined ? handleSharedPublicRequest(request, response, config, composition.publicShareService) : false)
-      .then((handled) => handled ? true : handleSharedReaderRequest(request, response, config, composition.sharedSessionReader))
-      .then((handled) => handled ? true : handleAdminIdentityRequest(request, response, config, composition.sessionAdmission))
-      .then((handled) => handled ? true : handleBillingAdminRequest(request, response, config, composition.sessionAdmission))
-      .then((handled) => handled ? true : composition.routeHandler !== undefined ? false : handleSystemAdminRequest(request, response, config, composition.sessionAdmission))
-      .then((handled) => handled ? true : handleMcpProjectPublicationRequest(request, response, config, {
-        sessionAdmission: composition.sessionAdmission,
-        mcpAuthorization: composition.mcpAuthorization,
-        project: composition.projectService,
-        client: composition.mcpProjectPublicationClient,
-      }))
-      .then((handled) => handled ? true : handleMcpAdminRequest(request, response, config, composition.sessionAdmission, composition.mcpAuthorization, composition.mcpProviderAdminClient, composition.mcpPackageAdminClient))
-      .then((handled) => handled ? true : handleSkillPackageInspectionRequest(request, response, config, composition.sessionAdmission, { client: null, installations: composition.installationClient }, composition.projectService))
-      .then((handled) => handled ? true : handleSkillDownloadRequest(
-        request,
-        response,
-        config,
-        composition.sessionAdmission,
-        composition.skillDownloadHandles,
-        composition.skillSpecificationSource,
-        composition.exactSkillDownloadSource,
-        projectContentAccessForRequest(request, response, config, composition, requestId(request)),
-      ))
-      .then((handled) => handled ? true : handleSkillSpecificationRequest(request, response, config, {
-        skillListAdmission: composition.skillListAdmission,
-        skillSpecificationSource: composition.skillSpecificationSource,
-        sessionAdmission: composition.sessionAdmission,
-        skillDownloadHandles: composition.skillDownloadHandles,
-      }))
-      .then((handled) => handled ? true : handleAppSkillBindingsRequest(request, response, config, composition.sessionAdmission, composition.openAppManagementAdmission, composition.appSkillBindingClient))
-      .then((handled) => handled ? true : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization))
-      .then((handled) => handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService))
-      .then((handled) => handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider))
-      .then((handled) => handled ? true : composition.routeHandler !== undefined ? false : handleMoriRequest(request, response, config, composition.sessionAdmission, { entries: composition.idempotency, ...(composition.businessStore === null ? {} : { persistent: composition.businessStore }) }))
+      .then((handled) => (handled ? true : handleIamRelayRequest(request, response, config)))
+      .then((handled) => (handled ? true : schedulerDispatch(request, response, config, schedulerProvider, composition.idempotency)))
+      .then((handled) =>
+        handled ? true : composition.routeHandler === undefined ? handleSharedPublicRequest(request, response, config, composition.publicShareService) : false,
+      )
+      .then((handled) => (handled ? true : handleSharedReaderRequest(request, response, config, composition.sharedSessionReader)))
+      .then((handled) => (handled ? true : handleAdminIdentityRequest(request, response, config, composition.sessionAdmission)))
+      .then((handled) => (handled ? true : handleBillingAdminRequest(request, response, config, composition.sessionAdmission)))
+      .then((handled) =>
+        handled ? true : composition.routeHandler !== undefined ? false : handleSystemAdminRequest(request, response, config, composition.sessionAdmission),
+      )
       .then((handled) =>
         handled
           ? true
-          : handleAgentRunsInternalRequest(
+          : handleMcpProjectPublicationRequest(request, response, config, {
+              sessionAdmission: composition.sessionAdmission,
+              mcpAuthorization: composition.mcpAuthorization,
+              project: composition.projectService,
+              client: composition.mcpProjectPublicationClient,
+            }),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : handleMcpAdminRequest(
               request,
               response,
               config,
-              composition.submittedAgentRuns,
-              composition.projectExecutionBindings,
+              composition.sessionAdmission,
+              composition.mcpAuthorization,
+              composition.mcpProviderAdminClient,
+              composition.mcpPackageAdminClient,
             ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : handleSkillPackageInspectionRequest(
+              request,
+              response,
+              config,
+              composition.sessionAdmission,
+              { client: null, installations: composition.installationClient },
+              composition.projectService,
+            ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : handleSkillDownloadRequest(
+              request,
+              response,
+              config,
+              composition.sessionAdmission,
+              composition.skillDownloadHandles,
+              composition.skillSpecificationSource,
+              composition.exactSkillDownloadSource,
+              projectContentAccessForRequest(request, response, config, composition, requestId(request)),
+            ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : handleSkillSpecificationRequest(request, response, config, {
+              skillListAdmission: composition.skillListAdmission,
+              skillSpecificationSource: composition.skillSpecificationSource,
+              sessionAdmission: composition.sessionAdmission,
+              skillDownloadHandles: composition.skillDownloadHandles,
+            }),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : handleAppSkillBindingsRequest(
+              request,
+              response,
+              config,
+              composition.sessionAdmission,
+              composition.openAppManagementAdmission,
+              composition.appSkillBindingClient,
+            ),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : handleConnectorListRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization),
+      )
+      .then((handled) => (handled ? true : handleMoveSessionRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
+      .then((handled) =>
+        handled ? true : handleAccountNativeRequest(request, response, config, composition.sessionAdmission, composition.personalizationProvider),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleMoriRequest(request, response, config, composition.sessionAdmission, {
+                entries: composition.idempotency,
+                ...(composition.businessStore === null ? {} : { persistent: composition.businessStore }),
+              }),
+      )
+      .then((handled) =>
+        handled ? true : handleAgentRunsInternalRequest(request, response, config, composition.submittedAgentRuns, composition.projectExecutionBindings),
       )
       .then((handled) =>
         handled
@@ -744,7 +796,11 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
             ),
       )
       .then((handled) => (handled ? true : handleChatNativeRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
-      .then((handled) => (handled ? true : handleChatBusinessReadRequest(request, response, config, composition.sessionAdmission, composition.chatService, composition.projectService)))
+      .then((handled) =>
+        handled
+          ? true
+          : handleChatBusinessReadRequest(request, response, config, composition.sessionAdmission, composition.chatService, composition.projectService),
+      )
       .then((handled) => (handled ? true : handleMessageFeedbackRequest(request, response, config, composition.sessionAdmission, composition.chatService)))
       .then((handled) =>
         handled
@@ -756,7 +812,10 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) =>
         handled
           ? true
-          : composition.routeHandler !== undefined || composition.businessStore === null || composition.chatService === null || composition.projectService === null
+          : composition.routeHandler !== undefined ||
+              composition.businessStore === null ||
+              composition.chatService === null ||
+              composition.projectService === null
             ? false
             : handleChatMutationRequest(
                 request,
@@ -772,7 +831,11 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) =>
         handled
           ? true
-          : composition.routeHandler !== undefined || composition.chatService === null || composition.projectService === null || composition.agUiProjection === null || composition.agUiConsumers === null
+          : composition.routeHandler !== undefined ||
+              composition.chatService === null ||
+              composition.projectService === null ||
+              composition.agUiProjection === null ||
+              composition.agUiConsumers === null
             ? false
             : handleChatEventsRequest(
                 request,
@@ -790,7 +853,11 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       .then((handled) =>
         handled
           ? true
-          : composition.routeHandler !== undefined || composition.businessStore === null || composition.chatService === null || composition.chatTurnService === null || composition.projectService === null
+          : composition.routeHandler !== undefined ||
+              composition.businessStore === null ||
+              composition.chatService === null ||
+              composition.chatTurnService === null ||
+              composition.projectService === null
             ? false
             : handleChatMessageRequest(
                 request,
@@ -805,14 +872,62 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 composition.businessStore,
               ),
       )
-      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectRenameRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
-      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectDeleteRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
-      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectDeletionStatusRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
-      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceDeleteRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
-      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceUploadRequest(request, response, config, composition.sessionAdmission, projectResourceUpload)))
-      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceReadRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
-      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectResourceListRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
-      .then((handled) => (handled ? true : composition.routeHandler !== undefined ? false : handleProjectCoreReadRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleProjectRenameRequest(request, response, config, composition.sessionAdmission, composition.projectService),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleProjectDeleteRequest(request, response, config, composition.sessionAdmission, composition.projectService),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleProjectDeletionStatusRequest(request, response, config, composition.sessionAdmission, composition.projectService),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleProjectResourceDeleteRequest(request, response, config, composition.sessionAdmission, composition.projectService),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleProjectResourceUploadRequest(request, response, config, composition.sessionAdmission, projectResourceUpload),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleProjectResourceReadRequest(request, response, config, composition.sessionAdmission, composition.projectService),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleProjectResourceListRequest(request, response, config, composition.sessionAdmission, composition.projectService),
+      )
+      .then((handled) =>
+        handled
+          ? true
+          : composition.routeHandler !== undefined
+            ? false
+            : handleProjectCoreReadRequest(request, response, config, composition.sessionAdmission, composition.projectService),
+      )
       .then((handled) => (handled ? true : handleProjectPinRequest(request, response, config, composition.sessionAdmission, composition.projectService)))
       .then((handled) =>
         handled
@@ -833,14 +948,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           ? true
           : composition.routeHandler !== undefined
             ? false
-            : handleSkillDraftRequest(
-                request,
-                response,
-                config,
-                composition.sessionAdmission,
-                composition.skillAuthorization,
-                composition.skillDraftClient,
-              ),
+            : handleSkillDraftRequest(request, response, config, composition.sessionAdmission, composition.skillAuthorization, composition.skillDraftClient),
       )
       .then((handled) =>
         handled
@@ -854,14 +962,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           ? true
           : composition.routeHandler !== undefined
             ? false
-            : handleSkillCoverRequest(
-                request,
-                response,
-                config,
-                composition.sessionAdmission,
-                composition.skillAuthorization,
-                composition.skillProductClient,
-              ),
+            : handleSkillCoverRequest(request, response, config, composition.sessionAdmission, composition.skillAuthorization, composition.skillProductClient),
       )
       .then((handled) =>
         handled
@@ -906,17 +1007,20 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
               composition.skillSpecificationSource,
             ),
       )
-      .then((handled) =>
-        handled
-          ? true
-          : handleSkillGithubPreviewRequest(request, response, config, composition.sessionAdmission),
-      )
+      .then((handled) => (handled ? true : handleSkillGithubPreviewRequest(request, response, config, composition.sessionAdmission)))
       .then((handled) =>
         handled
           ? true
           : composition.routeHandler !== undefined
             ? false
-            : handleSkillLocalImportRequest(request, response, config, composition.sessionAdmission, composition.skillAuthorization, composition.localSkillImportClient),
+            : handleSkillLocalImportRequest(
+                request,
+                response,
+                config,
+                composition.sessionAdmission,
+                composition.skillAuthorization,
+                composition.localSkillImportClient,
+              ),
       )
       .then((handled) =>
         handled
@@ -986,13 +1090,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           ? true
           : composition.routeHandler !== undefined
             ? false
-            : handleSkillSpecificationEnabledRequest(
-                request,
-                response,
-                config,
-                composition.sessionAdmission,
-                composition.installationClient,
-              ),
+            : handleSkillSpecificationEnabledRequest(request, response, config, composition.sessionAdmission, composition.installationClient),
       )
       .then((handled) =>
         handled
@@ -1034,10 +1132,11 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 config,
                 composition.sessionAdmission,
                 composition.mcpAuthorization,
-                composition.projectMcpRecommendationsProvider ?? projectMcpRecommendationsProvider(composition.projectService, {
-                  mcpPersonalClient: composition.mcpPersonalClient,
-                  customApiClient: composition.customApiClient,
-                }),
+                composition.projectMcpRecommendationsProvider ??
+                  projectMcpRecommendationsProvider(composition.projectService, {
+                    mcpPersonalClient: composition.mcpPersonalClient,
+                    customApiClient: composition.customApiClient,
+                  }),
               ),
       )
       .then((handled) =>
@@ -1049,11 +1148,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       )
       .then((handled) => (handled ? true : handleSystemNativeRequest(request, response, config)))
       .then((handled) =>
-        handled
-          ? true
-          : composition.routeHandler !== undefined
-            ? false
-            : handleRetiredOwnerRawRequest(request, response, config, composition.sessionAdmission),
+        handled ? true : composition.routeHandler !== undefined ? false : handleRetiredOwnerRawRequest(request, response, config, composition.sessionAdmission),
       )
       .then((handled) =>
         handled
@@ -1087,14 +1182,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           ? true
           : composition.routeHandler !== undefined
             ? false
-            : handleMcpPersonalRequest(
-                request,
-                response,
-                config,
-                composition.sessionAdmission,
-                composition.mcpPersonalClient,
-                composition.mcpAuthorization,
-              ),
+            : handleMcpPersonalRequest(request, response, config, composition.sessionAdmission, composition.mcpPersonalClient, composition.mcpAuthorization),
       )
       .then((handled) =>
         handled

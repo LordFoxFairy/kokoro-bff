@@ -31,7 +31,9 @@ import { readSkillBody as readBody } from "./skill-drafts.js"
 import { send } from "../response.js"
 
 export type SkillImportReceipts = Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt">
-export type SkillAiImportStore = SkillImportReceipts & { skillAiAssociation: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null> }
+export type SkillAiImportStore = SkillImportReceipts & {
+  skillAiAssociation: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>
+}
 
 export function composeSkillAiImportStore(receipts: SkillImportReceipts, associationReader: SkillAiImportStore["skillAiAssociation"]): SkillAiImportStore {
   return {

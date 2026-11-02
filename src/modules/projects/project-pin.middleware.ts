@@ -38,10 +38,7 @@ import {
 @Injectable()
 export class ProjectPinMiddleware implements NestMiddleware {
   private readonly projectResourceReceipts: PostgresIdempotencyRepository
-  private readonly projectResourceIdempotency = new Map<
-    string,
-    import("../../application/idempotency.js").IdempotencyEntry
-  >()
+  private readonly projectResourceIdempotency = new Map<string, import("../../application/idempotency.js").IdempotencyEntry>()
 
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
@@ -56,28 +53,34 @@ export class ProjectPinMiddleware implements NestMiddleware {
   }
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
-    void (isProjectSkillInstallationRequest(request)
-      ? handleProjectSkillInstallationRequest(
-          request,
-          response,
-          this.config,
-          this.admission,
-          this.skillAuthorization,
-          this.projectService,
-          this.installationClient,
-        )
-      : isProjectSkillSelectionRequest(request)
-        ? handleProjectSkillSelectionRequest(request, response, this.config, this.admission, this.projectSkillSelection, this.installationClient)
-        : Promise.resolve(false))
+    void (
+      isProjectSkillInstallationRequest(request)
+        ? handleProjectSkillInstallationRequest(
+            request,
+            response,
+            this.config,
+            this.admission,
+            this.skillAuthorization,
+            this.projectService,
+            this.installationClient,
+          )
+        : isProjectSkillSelectionRequest(request)
+          ? handleProjectSkillSelectionRequest(request, response, this.config, this.admission, this.projectSkillSelection, this.installationClient)
+          : Promise.resolve(false)
+    )
       .then((handled) => handled || handleProjectRenameRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectDeleteRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectDeletionStatusRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectResourceDeleteRequest(request, response, this.config, this.admission, this.projectService))
-      .then((handled) => handled || handleProjectResourceUploadRequest(request, response, this.config, this.admission, {
-        find: this.projectService.find.bind(this.projectService),
-        receipts: this.projectResourceReceipts,
-        idempotency: this.projectResourceIdempotency,
-      }))
+      .then(
+        (handled) =>
+          handled ||
+          handleProjectResourceUploadRequest(request, response, this.config, this.admission, {
+            find: this.projectService.find.bind(this.projectService),
+            receipts: this.projectResourceReceipts,
+            idempotency: this.projectResourceIdempotency,
+          }),
+      )
       .then((handled) => handled || handleProjectResourceReadRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectResourceListRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.projectService))

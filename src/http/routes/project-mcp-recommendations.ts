@@ -64,13 +64,18 @@ export async function handleProjectMcpRecommendationsRequest(
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, signal)
     if (!admitted.ok) {
-      send(response, admitted.status, {
-        error: {
-          code: admitted.code,
-          message: "BFF user admission failed",
-          retryable: admitted.status === 429 || admitted.status === 503,
+      send(
+        response,
+        admitted.status,
+        {
+          error: {
+            code: admitted.code,
+            message: "BFF user admission failed",
+            retryable: admitted.status === 429 || admitted.status === 503,
+          },
         },
-      }, admitted.retryAfter)
+        admitted.retryAfter,
+      )
       return true
     }
     const match = /^\/v1\/projects\/([^/]+)\/mcp-recommendations(?:\?|$)/u.exec(request.url ?? "")
@@ -82,20 +87,28 @@ export async function handleProjectMcpRecommendationsRequest(
       throw new ConnectError("Project not found", Code.NotFound)
     }
     const context = admitted.context
-    await projectMcpRecommendationsRoute(request, response, context, ["projects", projectRef, "mcp-recommendations"], provider?.project ?? null, provider?.clients ?? { mcpPersonalClient: null, customApiClient: null }, async (mcpRead, currentSignal, deadlineAt) => {
-      void deadlineAt
-      const fresh = await authorizeUserRequest(request, config, admission, id, currentSignal)
-      if (!fresh.ok) throw new ProjectMcpRecommendationsAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
-      if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
-        throw new ConnectError("Project not found", Code.NotFound)
-      if (mcpRead) {
-        const read = await authorizeMcpAction(mcpAuthorization, fresh, "read", currentSignal)
-        if (!read.ok) throw new ProjectMcpRecommendationsAdmissionError(read.status, read.code, read.retryAfter)
-      }
-      if (!provider) throw new ConnectError("Project owner unavailable", Code.Unavailable)
-      currentSignal.throwIfAborted()
-      return projectRef
-    })
+    await projectMcpRecommendationsRoute(
+      request,
+      response,
+      context,
+      ["projects", projectRef, "mcp-recommendations"],
+      provider?.project ?? null,
+      provider?.clients ?? { mcpPersonalClient: null, customApiClient: null },
+      async (mcpRead, currentSignal, deadlineAt) => {
+        void deadlineAt
+        const fresh = await authorizeUserRequest(request, config, admission, id, currentSignal)
+        if (!fresh.ok) throw new ProjectMcpRecommendationsAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
+        if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+          throw new ConnectError("Project not found", Code.NotFound)
+        if (mcpRead) {
+          const read = await authorizeMcpAction(mcpAuthorization, fresh, "read", currentSignal)
+          if (!read.ok) throw new ProjectMcpRecommendationsAdmissionError(read.status, read.code, read.retryAfter)
+        }
+        if (!provider) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+        currentSignal.throwIfAborted()
+        return projectRef
+      },
+    )
   } catch (error) {
     if (response.writableEnded || response.destroyed) return true
     const status = error instanceof ConnectError && error.code === Code.NotFound ? 404 : 503

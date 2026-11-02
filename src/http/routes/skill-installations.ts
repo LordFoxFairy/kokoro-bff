@@ -101,7 +101,10 @@ function mapped(error: unknown) {
 
 export function isProjectSkillInstallationRequest(request: IncomingMessage): boolean {
   const url = request.url ?? ""
-  return /^\/v1\/projects\/[^/]+\/skill-installations(?:\/[^?]*)?(?:\?|$)/u.test(url) && !/^\/v1\/projects\/[^/]+\/skill-installations\/[^/]+\/package(?:\?|$)/u.test(url)
+  return (
+    /^\/v1\/projects\/[^/]+\/skill-installations(?:\/[^?]*)?(?:\?|$)/u.test(url) &&
+    !/^\/v1\/projects\/[^/]+\/skill-installations\/[^/]+\/package(?:\?|$)/u.test(url)
+  )
 }
 
 export function isPersonalSkillInstallationRequest(request: IncomingMessage): boolean {
@@ -125,13 +128,18 @@ export async function handlePersonalSkillInstallationRequest(
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, signal)
     if (!admitted.ok) {
-      send(response, admitted.status, {
-        error: {
-          code: admitted.code,
-          message: "BFF user admission failed",
-          retryable: admitted.status === 429 || admitted.status === 503,
+      send(
+        response,
+        admitted.status,
+        {
+          error: {
+            code: admitted.code,
+            message: "BFF user admission failed",
+            retryable: admitted.status === 429 || admitted.status === 503,
+          },
         },
-      }, admitted.retryAfter)
+        admitted.retryAfter,
+      )
       return true
     }
     const parts = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean)
@@ -157,7 +165,11 @@ export async function handlePersonalSkillInstallationRequest(
     send(
       response,
       status,
-      failure(status === 400 ? "invalid_skill_installation_request" : status === 403 ? "permission_denied" : "skill_installation_dependency_unavailable", "Skill installation request failed", status === 503),
+      failure(
+        status === 400 ? "invalid_skill_installation_request" : status === 403 ? "permission_denied" : "skill_installation_dependency_unavailable",
+        "Skill installation request failed",
+        status === 503,
+      ),
     )
   }
   return true
@@ -182,17 +194,23 @@ export async function handleProjectSkillInstallationRequest(
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, signal)
     if (!admitted.ok) {
-      send(response, admitted.status, {
-        error: {
-          code: admitted.code,
-          message: "BFF user admission failed",
-          retryable: admitted.status === 429 || admitted.status === 503,
+      send(
+        response,
+        admitted.status,
+        {
+          error: {
+            code: admitted.code,
+            message: "BFF user admission failed",
+            retryable: admitted.status === 429 || admitted.status === 503,
+          },
         },
-      }, admitted.retryAfter)
+        admitted.retryAfter,
+      )
       return true
     }
     const parts = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean)
-    if (parts.length < 4 || parts[0] !== "v1" || parts[1] !== "projects" || parts[3] !== "skill-installations") throw new ConnectError("Project not found", Code.NotFound)
+    if (parts.length < 4 || parts[0] !== "v1" || parts[1] !== "projects" || parts[3] !== "skill-installations")
+      throw new ConnectError("Project not found", Code.NotFound)
     let projectRef: string
     try {
       projectRef = decodeURIComponent(parts[2] ?? "")
@@ -212,10 +230,7 @@ export async function handleProjectSkillInstallationRequest(
         if (!checked.ok) throw new ConnectError("Skill action denied", checked.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
       }
       if (!projects) throw new ConnectError("Project owner unavailable", Code.Unavailable)
-      const project = await projects.find(
-        { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId },
-        projectRef,
-      )
+      const project = await projects.find({ tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }, projectRef)
       currentSignal.throwIfAborted()
       if (!project || typeof project !== "object" || !("id" in project) || typeof project.id !== "string")
         throw new ConnectError("Project not found", Code.NotFound)

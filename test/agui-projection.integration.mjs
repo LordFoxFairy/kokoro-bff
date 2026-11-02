@@ -4995,10 +4995,7 @@ integrationTest(
       )
       assert.deepEqual(oldAssistant.rendering, beforeAssistant.rendering)
       assertOrderedReadReference(oldAssistant, "5", before.event_watermark)
-      await assert.rejects(
-        c.store.chatService.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, oldAssistant)),
-        /MESSAGE_PARTS_CHANGED/u,
-      )
+      await assert.rejects(c.store.chatService.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, oldAssistant)), /MESSAGE_PARTS_CHANGED/u)
       await assertOrderedReadBody(
         c.store.chatService,
         c.tenantId,

@@ -82,19 +82,25 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
     {
       provide: CUSTOM_API_CLIENT,
       inject: [BFF_CONFIG],
-      useFactory: (config: BffConfig): CustomApiClient | null => config.customApi
-        ? new CustomApiConnectClient(config.customApi.baseUrl, new PlatformServiceCredentialSource(config.customApi.credentialFile, "custom_api_personal"))
-        : null,
+      useFactory: (config: BffConfig): CustomApiClient | null =>
+        config.customApi
+          ? new CustomApiConnectClient(config.customApi.baseUrl, new PlatformServiceCredentialSource(config.customApi.credentialFile, "custom_api_personal"))
+          : null,
     },
     {
       provide: MCP_AUTHORIZATION,
       inject: [BFF_CONFIG],
-      useFactory: (config: BffConfig): McpAuthorizationClient => new McpAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 }),
+      useFactory: (config: BffConfig): McpAuthorizationClient =>
+        new McpAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 }),
     },
     {
       provide: PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
       inject: [PROJECT_SERVICE, MCP_PERSONAL_CLIENT, CUSTOM_API_CLIENT],
-      useFactory: (project: ProjectService, mcpPersonalClient: McpPersonalConnectClient | null, customApiClient: CustomApiClient | null): ProjectMcpRecommendationsProvider => {
+      useFactory: (
+        project: ProjectService,
+        mcpPersonalClient: McpPersonalConnectClient | null,
+        customApiClient: CustomApiClient | null,
+      ): ProjectMcpRecommendationsProvider => {
         return {
           project,
           clients: { mcpPersonalClient, customApiClient },
@@ -104,33 +110,54 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
     {
       provide: MCP_PERSONAL_CLIENT,
       inject: [BFF_CONFIG],
-      useFactory: (config: BffConfig): McpPersonalConnectClient | null => config.mcpPersonal
-        ? new McpPersonalConnectClient(config.mcpPersonal.baseUrl, new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"))
-        : null,
+      useFactory: (config: BffConfig): McpPersonalConnectClient | null =>
+        config.mcpPersonal
+          ? new McpPersonalConnectClient(config.mcpPersonal.baseUrl, new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"))
+          : null,
     },
     {
       provide: MCP_PROVIDER_ADMIN_CLIENT,
       inject: [BFF_CONFIG],
-      useFactory: (config: BffConfig): McpProviderAdminConnectClient | null => config.mcpProviderAdmin
-        ? new McpProviderAdminConnectClient(config.mcpProviderAdmin.baseUrl, new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"))
-        : null,
+      useFactory: (config: BffConfig): McpProviderAdminConnectClient | null =>
+        config.mcpProviderAdmin
+          ? new McpProviderAdminConnectClient(
+              config.mcpProviderAdmin.baseUrl,
+              new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"),
+            )
+          : null,
     },
     {
       provide: MCP_PACKAGE_ADMIN_CLIENT,
       inject: [BFF_CONFIG],
-      useFactory: (config: BffConfig): McpPackageAdminConnectClient | null => config.mcpProviderAdmin
-        ? new McpPackageAdminConnectClient(config.mcpProviderAdmin.baseUrl, new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"))
-        : null,
+      useFactory: (config: BffConfig): McpPackageAdminConnectClient | null =>
+        config.mcpProviderAdmin
+          ? new McpPackageAdminConnectClient(
+              config.mcpProviderAdmin.baseUrl,
+              new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"),
+            )
+          : null,
     },
     {
       provide: MCP_PROJECT_PUBLICATION_CLIENT,
       inject: [BFF_CONFIG],
-      useFactory: (config: BffConfig): McpProjectPublicationConnectClient | null => config.mcpPersonal
-        ? new McpProjectPublicationConnectClient(config.mcpPersonal.baseUrl, new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"))
-        : null,
+      useFactory: (config: BffConfig): McpProjectPublicationConnectClient | null =>
+        config.mcpPersonal
+          ? new McpProjectPublicationConnectClient(
+              config.mcpPersonal.baseUrl,
+              new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"),
+            )
+          : null,
     },
   ],
-  exports: [MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, MCP_PROVIDER_ADMIN_CLIENT, MCP_PACKAGE_ADMIN_CLIENT, MCP_PROJECT_PUBLICATION_CLIENT, CUSTOM_API_CLIENT, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
+  exports: [
+    MCP_AUTHORIZATION,
+    MCP_PERSONAL_CLIENT,
+    MCP_PROVIDER_ADMIN_CLIENT,
+    MCP_PACKAGE_ADMIN_CLIENT,
+    MCP_PROJECT_PUBLICATION_CLIENT,
+    CUSTOM_API_CLIENT,
+    PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
+  ],
 })
 export class McpModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

@@ -34,12 +34,15 @@ import type { Pool } from "pg"
     {
       provide: PUBLIC_SHARE_SERVICE,
       inject: [BFF_DATABASE],
-      useFactory: (database: PostgresBffDatabase): PublicShareApplicationService => new PublicShareApplicationService(new PostgresPublicShareRepository(database)),
+      useFactory: (database: PostgresBffDatabase): PublicShareApplicationService =>
+        new PublicShareApplicationService(new PostgresPublicShareRepository(database)),
     },
     {
       provide: SKILL_AI_ASSOCIATION,
       inject: [BFF_DATABASE],
-      useFactory: (database: PostgresBffDatabase): ((tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>) => {
+      useFactory: (
+        database: PostgresBffDatabase,
+      ): ((tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>) => {
         const library = new PostgresConversationArtifactLibrary(database)
         return library.findSkillHandoff.bind(library)
       },

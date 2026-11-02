@@ -73,7 +73,8 @@ export class ExactSkillDownloadService implements ExactSkillDownloadSource {
   ) {}
 
   private resolver(qualifier: Exclude<ExactSkillDownloadQualifier, { kind: "project_installation" }>): readonly [Resolver, string] {
-    const resolve = qualifier.kind === "installation" ? this.dependencies.installation : qualifier.kind === "managed" ? this.dependencies.managed : this.dependencies.share
+    const resolve =
+      qualifier.kind === "installation" ? this.dependencies.installation : qualifier.kind === "managed" ? this.dependencies.managed : this.dependencies.share
     if (!resolve) throw new ConnectError("Skill download dependency missing", Code.Unavailable)
     if (qualifier.kind === "installation") return [resolve, qualifier.installationId]
     if (qualifier.kind === "managed") return [resolve, qualifier.versionId]
@@ -108,7 +109,9 @@ export class ExactSkillDownloadService implements ExactSkillDownloadSource {
         ? await this.dependencies.projectInstallation!.download(qualifier.projectId, qualifier.installationId, context, signal, deadlineAt)
         : this.dependencies.download
           ? await this.dependencies.download(record.sourceRef, context, signal, deadlineAt)
-          : (() => { throw new ConnectError("Skill download dependency missing", Code.Unavailable) })()
+          : (() => {
+              throw new ConnectError("Skill download dependency missing", Code.Unavailable)
+            })()
     active(signal, deadlineAt)
     const packageFact = verifiedSkillDownloadPackage(owner, record, this.dependencies.objectOrigin)
     if (qualifier.kind === "project_installation") {

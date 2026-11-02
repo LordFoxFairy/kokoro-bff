@@ -2,7 +2,27 @@ import { Inject, Injectable, MiddlewareConsumer, Module, NestModule, OnApplicati
 import { BffConfigModule } from "../../config/config.module.js"
 import { AccountModule } from "../account/account.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
-import { APP_SKILL_BINDING_CLIENT, BFF_CONFIG, BFF_DATABASE, BFF_POOL, OPEN_APP_MANAGEMENT_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_EXACT_DOWNLOAD_SOURCE, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER } from "../../common/tokens.js"
+import {
+  APP_SKILL_BINDING_CLIENT,
+  BFF_CONFIG,
+  BFF_DATABASE,
+  BFF_POOL,
+  OPEN_APP_MANAGEMENT_ADMISSION,
+  SKILL_ADMIN_CLIENT,
+  SKILL_AUTHORIZATION,
+  SKILL_DOWNLOAD_HANDLES,
+  SKILL_DRAFT_CLIENT,
+  SKILL_EXACT_DOWNLOAD_SOURCE,
+  SKILL_IMPORT_RECEIPTS,
+  SKILL_INSTALLATION_CLIENT,
+  SKILL_LIST_ADMISSION,
+  SKILL_LOCAL_IMPORT_CLIENT,
+  SKILL_PACKAGE_INSPECTION_CLIENT,
+  SKILL_PRODUCT_CLIENT,
+  SKILL_SHARE_REPOSITORY,
+  SKILL_SPECIFICATION_SOURCE,
+  SKILL_USAGE_READER,
+} from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
 import { PlatformServiceCredentialSource } from "../../infrastructure/clients/platform/platform-service-credential.js"
@@ -56,19 +76,25 @@ class SkillsRuntime implements OnApplicationShutdown {
     {
       provide: SKILL_LIST_ADMISSION,
       inject: [BFF_CONFIG],
-      useFactory: (config: BffConfig): SkillListAdmissionClient => new SkillListAdmissionClient({
-        baseUrl: config.iamBaseUrl,
-        timeoutMs: config.upstreamTimeoutMs,
-        maxResponseBytes: config.upstreamMaxResponseBytes,
-      }),
+      useFactory: (config: BffConfig): SkillListAdmissionClient =>
+        new SkillListAdmissionClient({
+          baseUrl: config.iamBaseUrl,
+          timeoutMs: config.upstreamTimeoutMs,
+          maxResponseBytes: config.upstreamMaxResponseBytes,
+        }),
     },
     { provide: SKILL_DOWNLOAD_HANDLES, useFactory: (): SkillDownloadHandles => new SkillDownloadHandles() },
     {
       provide: SKILL_PACKAGE_INSPECTION_CLIENT,
       inject: [BFF_CONFIG],
-      useFactory: (config: BffConfig): SkillPackageInspectionConnectClient | null => config.platformProjection?.baseUrl && config.platformProjection.credentialFile
-        ? new SkillPackageInspectionConnectClient(config.platformProjection.baseUrl, config.platformProjection.credentialFile, config.platformProjection.timeoutMs)
-        : null,
+      useFactory: (config: BffConfig): SkillPackageInspectionConnectClient | null =>
+        config.platformProjection?.baseUrl && config.platformProjection.credentialFile
+          ? new SkillPackageInspectionConnectClient(
+              config.platformProjection.baseUrl,
+              config.platformProjection.credentialFile,
+              config.platformProjection.timeoutMs,
+            )
+          : null,
     },
     {
       provide: SKILL_EXACT_DOWNLOAD_SOURCE,
@@ -80,14 +106,38 @@ class SkillsRuntime implements OnApplicationShutdown {
         shares: PostgresSkillShareRepository,
         handles: SkillDownloadHandles,
       ): ExactSkillDownloadSource | null => {
-        if (!product || !installations || !shares || !config.platformProjection?.baseUrl || !config.platformProjection.credentialFile || !config.iamBaseUrl) return null
-        const projection = new PlatformProjectionHttpClient(config.platformProjection.baseUrl, config.platformProjection.credentialFile, config.platformProjection.timeoutMs)
+        if (!product || !installations || !shares || !config.platformProjection?.baseUrl || !config.platformProjection.credentialFile || !config.iamBaseUrl)
+          return null
+        const projection = new PlatformProjectionHttpClient(
+          config.platformProjection.baseUrl,
+          config.platformProjection.credentialFile,
+          config.platformProjection.timeoutMs,
+        )
         return new ExactSkillDownloadService({
           handles,
           objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
-          installation: async (id, context, signal) => exactInstallationRecord(id, projectInstallation((await installations.get({ requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, installationId: id }, signal)).installation)),
+          installation: async (id, context, signal) =>
+            exactInstallationRecord(
+              id,
+              projectInstallation(
+                (
+                  await installations.get(
+                    { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, installationId: id },
+                    signal,
+                  )
+                ).installation,
+              ),
+            ),
           managed: async (id, context, signal, deadlineAt) => {
-            const result = await projection.readManagedPersonalSkill("managedSkill", context.identity.namespace, context.identity.userId, context.requestId, { skillId: id }, signal, deadlineAt)
+            const result = await projection.readManagedPersonalSkill(
+              "managedSkill",
+              context.identity.namespace,
+              context.identity.userId,
+              context.requestId,
+              { skillId: id },
+              signal,
+              deadlineAt,
+            )
             if (!result.ok) {
               if (result.status === 404) return null
               if (result.status === 502) throw new Error("skill_response_invalid")
@@ -98,13 +148,21 @@ class SkillsRuntime implements OnApplicationShutdown {
           share: async (id, context, signal, deadlineAt) => {
             const share = await shares.findActive(context.identity.namespace, id)
             if (!share) return null
-            const raw = await product.inspect({ requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef: share.sourceRef }, signal, deadlineAt)
+            const raw = await product.inspect(
+              { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef: share.sourceRef },
+              signal,
+              deadlineAt,
+            )
             assertSkillWireKnown(raw)
             const value = projectSkillPackageInspectionResponse(raw, { sourceRef: share.sourceRef })
             return { sourceRef: value.source_ref, revision: value.revision }
           },
           download: async (sourceRef, context, signal, deadlineAt) => {
-            const value = await product.download({ requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef }, signal, deadlineAt)
+            const value = await product.download(
+              { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef },
+              signal,
+              deadlineAt,
+            )
             assertSkillWireKnown(value)
             return {
               sourceRef: value.sourceRef?.value ?? "",
@@ -112,7 +170,12 @@ class SkillsRuntime implements OnApplicationShutdown {
               filename: value.filename,
               sizeBytes: value.sizeBytes,
               contentSha256: value.contentSha256,
-              transfer: { url: value.transferReference?.url ?? "", method: value.transferReference?.method ?? "", requiredHeaders: value.transferReference?.requiredHeaders ?? {}, expiresAt: skillTimestamp(value.transferReference?.expiresAt) },
+              transfer: {
+                url: value.transferReference?.url ?? "",
+                method: value.transferReference?.method ?? "",
+                requiredHeaders: value.transferReference?.requiredHeaders ?? {},
+                expiresAt: skillTimestamp(value.transferReference?.expiresAt),
+              },
             }
           },
         })
@@ -121,11 +184,12 @@ class SkillsRuntime implements OnApplicationShutdown {
     {
       provide: OPEN_APP_MANAGEMENT_ADMISSION,
       inject: [BFF_CONFIG],
-      useFactory: (config: BffConfig): OpenAppManagementAdmissionClient => new OpenAppManagementAdmissionClient({
-        baseUrl: config.iamBaseUrl,
-        timeoutMs: config.upstreamTimeoutMs,
-        maxResponseBytes: config.upstreamMaxResponseBytes,
-      }),
+      useFactory: (config: BffConfig): OpenAppManagementAdmissionClient =>
+        new OpenAppManagementAdmissionClient({
+          baseUrl: config.iamBaseUrl,
+          timeoutMs: config.upstreamTimeoutMs,
+          maxResponseBytes: config.upstreamMaxResponseBytes,
+        }),
     },
     {
       provide: APP_SKILL_BINDING_CLIENT,
@@ -143,13 +207,19 @@ class SkillsRuntime implements OnApplicationShutdown {
     {
       provide: SKILL_AUTHORIZATION,
       inject: [BFF_CONFIG],
-      useFactory: (config: BffConfig): SkillAuthorizationClient => new SkillAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 }),
+      useFactory: (config: BffConfig): SkillAuthorizationClient =>
+        new SkillAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 }),
     },
     {
       provide: SKILL_DRAFT_CLIENT,
       inject: [BFF_CONFIG],
       useFactory: (config: BffConfig): CatalogConnectClient | null => {
-        if (config.skillDraft?.platformBaseUrl === null || config.skillDraft?.platformBaseUrl === undefined || config.skillDraft.credentialFile === null || config.skillDraft.credentialFile === undefined)
+        if (
+          config.skillDraft?.platformBaseUrl === null ||
+          config.skillDraft?.platformBaseUrl === undefined ||
+          config.skillDraft.credentialFile === null ||
+          config.skillDraft.credentialFile === undefined
+        )
           return null
         return new CatalogConnectClient(
           config.skillDraft.platformBaseUrl,
@@ -183,7 +253,12 @@ class SkillsRuntime implements OnApplicationShutdown {
       provide: SKILL_ADMIN_CLIENT,
       inject: [BFF_CONFIG],
       useFactory: (config: BffConfig): SkillAdminConnectClient | null => {
-        if (config.skillDraft?.platformBaseUrl === null || config.skillDraft?.platformBaseUrl === undefined || config.skillAdminCredentialFile === null || config.skillAdminCredentialFile === undefined)
+        if (
+          config.skillDraft?.platformBaseUrl === null ||
+          config.skillDraft?.platformBaseUrl === undefined ||
+          config.skillAdminCredentialFile === null ||
+          config.skillAdminCredentialFile === undefined
+        )
           return null
         return new SkillAdminConnectClient(
           config.skillDraft.platformBaseUrl,
@@ -196,7 +271,14 @@ class SkillsRuntime implements OnApplicationShutdown {
       provide: SKILL_LOCAL_IMPORT_CLIENT,
       inject: [BFF_CONFIG],
       useFactory: (config: BffConfig): LocalSkillImportClient | undefined => {
-        if (config.skillDraft?.platformBaseUrl === null || config.skillDraft?.platformBaseUrl === undefined || config.skillDraft.credentialFile === null || config.skillDraft.credentialFile === undefined || config.platformProjection?.credentialFile === null || config.platformProjection?.credentialFile === undefined)
+        if (
+          config.skillDraft?.platformBaseUrl === null ||
+          config.skillDraft?.platformBaseUrl === undefined ||
+          config.skillDraft.credentialFile === null ||
+          config.skillDraft.credentialFile === undefined ||
+          config.platformProjection?.credentialFile === null ||
+          config.platformProjection?.credentialFile === undefined
+        )
           return undefined
         return new LocalSkillImportConnectClient(
           config.skillDraft.platformBaseUrl,
@@ -208,14 +290,16 @@ class SkillsRuntime implements OnApplicationShutdown {
     {
       provide: SKILL_USAGE_READER,
       inject: [BFF_POOL],
-      useFactory: (pool: Pool): ((tenant: string, refs: readonly string[]) => Promise<Map<string, SkillUsageResult>>) => async (tenant, refs) => {
-        const client = await pool.connect()
-        try {
-          return await readSkillUsage(client, tenant, refs)
-        } finally {
-          client.release()
-        }
-      },
+      useFactory:
+        (pool: Pool): ((tenant: string, refs: readonly string[]) => Promise<Map<string, SkillUsageResult>>) =>
+        async (tenant, refs) => {
+          const client = await pool.connect()
+          try {
+            return await readSkillUsage(client, tenant, refs)
+          } finally {
+            client.release()
+          }
+        },
     },
     {
       provide: SKILL_IMPORT_RECEIPTS,
@@ -237,7 +321,11 @@ class SkillsRuntime implements OnApplicationShutdown {
         usage: (tenant: string, refs: readonly string[]) => Promise<Map<string, SkillUsageResult>>,
       ): SkillSpecificationSource | null => {
         if (!product || !installations || !config.platformProjection?.baseUrl || !config.platformProjection.credentialFile || !config.iamBaseUrl) return null
-        const projection = new PlatformProjectionHttpClient(config.platformProjection.baseUrl, config.platformProjection.credentialFile, config.platformProjection.timeoutMs)
+        const projection = new PlatformProjectionHttpClient(
+          config.platformProjection.baseUrl,
+          config.platformProjection.credentialFile,
+          config.platformProjection.timeoutMs,
+        )
         return new SkillSpecificationService({
           owner: new PlatformSkillSpecificationFacade({ product, installations, projection }),
           profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
@@ -247,7 +335,24 @@ class SkillsRuntime implements OnApplicationShutdown {
       },
     },
   ],
-  exports: [APP_SKILL_BINDING_CLIENT, OPEN_APP_MANAGEMENT_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION, SKILL_DOWNLOAD_HANDLES, SKILL_DRAFT_CLIENT, SKILL_EXACT_DOWNLOAD_SOURCE, SKILL_IMPORT_RECEIPTS, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_LOCAL_IMPORT_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE, SKILL_USAGE_READER],
+  exports: [
+    APP_SKILL_BINDING_CLIENT,
+    OPEN_APP_MANAGEMENT_ADMISSION,
+    SKILL_ADMIN_CLIENT,
+    SKILL_AUTHORIZATION,
+    SKILL_DOWNLOAD_HANDLES,
+    SKILL_DRAFT_CLIENT,
+    SKILL_EXACT_DOWNLOAD_SOURCE,
+    SKILL_IMPORT_RECEIPTS,
+    SKILL_INSTALLATION_CLIENT,
+    SKILL_LIST_ADMISSION,
+    SKILL_LOCAL_IMPORT_CLIENT,
+    SKILL_PACKAGE_INSPECTION_CLIENT,
+    SKILL_PRODUCT_CLIENT,
+    SKILL_SHARE_REPOSITORY,
+    SKILL_SPECIFICATION_SOURCE,
+    SKILL_USAGE_READER,
+  ],
 })
 export class SkillsModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

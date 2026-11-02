@@ -399,31 +399,28 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
           throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime")
         })()
   const infrastructureStore = businessStore as BffInfrastructureStore | null
-  const personalizationProvider =
-    options.personalizationProvider !== undefined ? options.personalizationProvider : null
+  const personalizationProvider = options.personalizationProvider !== undefined ? options.personalizationProvider : null
   const personalKnowledgeRepository =
     options.personalKnowledgeRepository !== undefined ? options.personalKnowledgeRepository : (infrastructureStore?.personalKnowledge ?? null)
   const skillUsageReader = options.skillUsageReader !== undefined ? options.skillUsageReader : (infrastructureStore?.skillUsage ?? null)
   const skillAiAssociation = options.skillAiAssociation !== undefined ? options.skillAiAssociation : (infrastructureStore?.skillAiAssociation ?? null)
   const skillShareRepository =
-    options.skillShareRepository !== undefined
-      ? options.skillShareRepository
-      : (skillShareRepositoryFromStore(infrastructureStore) ?? null)
+    options.skillShareRepository !== undefined ? options.skillShareRepository : (skillShareRepositoryFromStore(infrastructureStore) ?? null)
   const agUiConsumers = options.agUiConsumers !== undefined ? options.agUiConsumers : (infrastructureStore?.agUiConsumers ?? null)
   const agUiProjection = options.agUiProjection !== undefined ? options.agUiProjection : (infrastructureStore?.agUi ?? null)
   const submittedAgentRuns = options.submittedAgentRuns !== undefined ? options.submittedAgentRuns : (infrastructureStore?.submittedAgentRuns ?? null)
-  const projectExecutionBindings = options.projectExecutionBindings !== undefined ? options.projectExecutionBindings : (infrastructureStore?.projectExecutionBindings ?? null)
-  const schedulerDispatchReceipts = options.schedulerDispatchReceipts !== undefined ? options.schedulerDispatchReceipts : (infrastructureStore?.schedulerDispatchReceipts ?? null)
-  const scheduledAgentDispatch = options.scheduledAgentDispatch !== undefined ? options.scheduledAgentDispatch : (infrastructureStore?.scheduledAgentDispatch ?? null)
+  const projectExecutionBindings =
+    options.projectExecutionBindings !== undefined ? options.projectExecutionBindings : (infrastructureStore?.projectExecutionBindings ?? null)
+  const schedulerDispatchReceipts =
+    options.schedulerDispatchReceipts !== undefined ? options.schedulerDispatchReceipts : (infrastructureStore?.schedulerDispatchReceipts ?? null)
+  const scheduledAgentDispatch =
+    options.scheduledAgentDispatch !== undefined ? options.scheduledAgentDispatch : (infrastructureStore?.scheduledAgentDispatch ?? null)
   const artifactLibrary = options.artifactLibrary !== undefined ? options.artifactLibrary : (infrastructureStore?.artifactLibrary ?? null)
   const chatService = options.chatService !== undefined ? options.chatService : (infrastructureStore?.chatService ?? null)
   const chatTurnService = options.chatTurnService !== undefined ? options.chatTurnService : (infrastructureStore?.chatTurnService ?? null)
   const projectService = options.projectService !== undefined ? options.projectService : (infrastructureStore?.projectService ?? null)
   const scheduledTaskService = options.scheduledTaskService !== undefined ? options.scheduledTaskService : (infrastructureStore?.scheduledTaskService ?? null)
-  const publicShareService =
-    options.publicShareService !== undefined
-      ? options.publicShareService
-      : (infrastructureStore?.publicShareService ?? null)
+  const publicShareService = options.publicShareService !== undefined ? options.publicShareService : (infrastructureStore?.publicShareService ?? null)
   const scheduledTaskReader =
     options.scheduledTaskReader !== undefined
       ? options.scheduledTaskReader
@@ -436,7 +433,12 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
             new SchedulerTaskStateReader(
               config.upstreams.scheduler == null || config.schedulerServiceToken === null
                 ? null
-                : new SchedulerControlClient(config.upstreams.scheduler, config.schedulerServiceToken, config.upstreamTimeoutMs, config.upstreamMaxResponseBytes),
+                : new SchedulerControlClient(
+                    config.upstreams.scheduler,
+                    config.schedulerServiceToken,
+                    config.upstreamTimeoutMs,
+                    config.upstreamMaxResponseBytes,
+                  ),
               config.schedulerTargetUrl,
             ),
           )

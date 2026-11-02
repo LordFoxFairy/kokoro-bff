@@ -33,7 +33,8 @@ function match(request: IncomingMessage): CatalogCommand | null {
   const parts = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean).map(decode)
   if (parts[0] !== "v1" || parts[1] !== "skills") return null
   if (parts.length === 4 && parts[3] === "package-upload") return { skillId: parts[2] ?? "", operation: "begin", action: "begin_upload" }
-  if (parts.length === 5 && parts[3] === "package-upload" && parts[4] === "complete") return { skillId: parts[2] ?? "", operation: "complete", action: "complete_upload" }
+  if (parts.length === 5 && parts[3] === "package-upload" && parts[4] === "complete")
+    return { skillId: parts[2] ?? "", operation: "complete", action: "complete_upload" }
   if (parts.length === 4 && parts[3] === "validate") return { skillId: parts[2] ?? "", operation: "validate", action: "validate_draft" }
   if (parts.length === 4 && parts[3] === "publish") return { skillId: parts[2] ?? "", operation: "publish", action: "publish" }
   return null
@@ -57,16 +58,31 @@ export async function handleSkillCatalogCommandRequest(
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, signal)
     if (!admitted.ok) {
-      send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+      send(
+        response,
+        admitted.status,
+        { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } },
+        admitted.retryAfter,
+      )
       return true
     }
     const checked = await authorizeSkillAction(skillAuthorization, admitted, operation.action, signal)
     if (!checked.ok) {
-      send(response, checked.status, { error: { code: checked.code, message: "Skill action admission failed", retryable: checked.status === 429 || checked.status === 503 } })
+      send(response, checked.status, {
+        error: { code: checked.code, message: "Skill action admission failed", retryable: checked.status === 429 || checked.status === 503 },
+      })
       return true
     }
     if (operation.operation === "begin") {
-      await beginSkillPackageUploadRoute(request, response, admitted.context, operation.skillId, client, config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null, signal)
+      await beginSkillPackageUploadRoute(
+        request,
+        response,
+        admitted.context,
+        operation.skillId,
+        client,
+        config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
+        signal,
+      )
     } else if (operation.operation === "complete") {
       await completeSkillPackageUploadRoute(request, response, admitted.context, operation.skillId, client, signal)
     } else if (operation.operation === "validate") {
@@ -98,7 +114,12 @@ export async function handleSkillPackageUploadReadRequest(
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, signal)
     if (!admitted.ok) {
-      send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+      send(
+        response,
+        admitted.status,
+        { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } },
+        admitted.retryAfter,
+      )
       return true
     }
     await getSkillPackageUploadRoute(request, response, admitted.context, parts[2] ?? "", client, signal)
@@ -137,23 +158,43 @@ export async function handleSkillCoverRequest(
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, signal)
     if (!admitted.ok) {
-      send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+      send(
+        response,
+        admitted.status,
+        { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } },
+        admitted.retryAfter,
+      )
       return true
     }
     if (action !== null) {
       const checked = await authorizeSkillAction(skillAuthorization, admitted, action, signal)
       if (!checked.ok) {
-        send(response, checked.status, { error: { code: checked.code, message: "Skill action admission failed", retryable: checked.status === 429 || checked.status === 503 } })
+        send(response, checked.status, {
+          error: { code: checked.code, message: "Skill action admission failed", retryable: checked.status === 429 || checked.status === 503 },
+        })
         return true
       }
     }
     const readmit = async (currentSignal: AbortSignal): Promise<void> => {
       const current = await authorizeUserRequest(request, config, admission, id, currentSignal)
       if (!current.ok && current.status >= 500) throw new Error("skill_dependency_unavailable")
-      if (!current.ok || current.context.identity.namespace !== admitted.context.identity.namespace || current.context.identity.userId !== admitted.context.identity.userId)
+      if (
+        !current.ok ||
+        current.context.identity.namespace !== admitted.context.identity.namespace ||
+        current.context.identity.userId !== admitted.context.identity.userId
+      )
         throw new Error("skill_not_found")
     }
-    await skillCoverRoute(request, response, admitted.context, parts[2] ?? "", operation, client, config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null, readmit)
+    await skillCoverRoute(
+      request,
+      response,
+      admitted.context,
+      parts[2] ?? "",
+      operation,
+      client,
+      config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
+      readmit,
+    )
   } catch {
     if (!response.headersSent && !response.destroyed && !response.writableEnded)
       send(response, 503, { error: { code: "skill_dependency_unavailable", message: "Skill cover dependency is unavailable", retryable: true } })
@@ -175,13 +216,22 @@ export async function handleSkillGithubPreviewRequest(
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, signal)
     if (!admitted.ok) {
-      send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+      send(
+        response,
+        admitted.status,
+        { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } },
+        admitted.retryAfter,
+      )
       return true
     }
     const readmit = async (currentSignal: AbortSignal): Promise<void> => {
       const current = await authorizeUserRequest(request, config, admission, id, currentSignal)
       if (!current.ok && current.status >= 500) throw new Error("skill_dependency_unavailable")
-      if (!current.ok || current.context.identity.namespace !== admitted.context.identity.namespace || current.context.identity.userId !== admitted.context.identity.userId)
+      if (
+        !current.ok ||
+        current.context.identity.namespace !== admitted.context.identity.namespace ||
+        current.context.identity.userId !== admitted.context.identity.userId
+      )
         throw new Error("skill_not_found")
     }
     await skillGithubPreviewRoute(request, response, admitted.context, readmit)
