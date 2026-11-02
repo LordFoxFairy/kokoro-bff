@@ -389,7 +389,6 @@ test("GitHub real HTTP final source block fences import and preview with current
             },
             skillAuthorization: { check: async () => ({ ok: true }) },
             businessStore: {
-              services: {},
               getReceipt: async () => {
                 receiptReads++
                 if (receiptReads === 1) return null // Initial read-only preflight; original postfetch effect oracle remains below.
@@ -765,7 +764,6 @@ async function githubPersistedResumeFixture(t, stage = "selected") {
     puts = 0,
     readmits = 0
   const store = {
-    services: {},
     getReceipt: async (scope) => {
       scopes.push(scope)
       return structuredClone(row)
