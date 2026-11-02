@@ -1,3 +1,7 @@
+## 2026-11-02 B09 Team 角色权限契约纠偏候选
+
+唯一 Public29.2 在原 TeamRole.skill 精确补入固定 IAM 已发布的 delete_series；原 Team 读 fixture 同步 owner/admin 事实，运行时及 Schema 不变。`scripts/team-role-permissions-public-contract.mjs` 在现 share 父入口有限逆回完整 Public29.1，原201 inventory/历史 oracle/SQL 不改。原 share browser generator 仅级联当前 source 版本与 SHA；定向测试证明 GET/ref 闭包语义原样。App 后继消费正式提交的完整 canonical，不新建 Team projection。实际检查与未验边界见 CURRENT。
+
 ## 2026-11-02 分享 metadata 正式消费投影
 
 `generate-session-share-metadata-browser-contract.mjs` 从唯一 Public29.1 GET 及完整引用闭包机械发布 `contract/openapi/browser/v1/session-share-metadata.json`，路径/权限/安全定义原样，无新 browser 路由。package 的 generate/check 入口及 build/contract:check 前置检查绑定 canonical 全文 SHA；定向9项和正式build通过。App 可固定正式提交的该制品，无需牵动旧完整 Public29 消费基线。

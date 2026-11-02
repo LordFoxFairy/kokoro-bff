@@ -1,10 +1,12 @@
 // Build/test-only finite additive proof; never used by runtime readers.
+import { restoreTeamRolePermissionsContract } from "./team-role-permissions-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 const proof = JSON.parse(readFileSync(new URL("../contract/tests/session-share-metadata.json", import.meta.url), "utf8"))
 const hash = (value) => createHash("sha256").update(value).digest("hex")
 export function restoreSessionShareMetadataContract(source) {
+  source = restoreTeamRolePermissionsContract(source)
   if (!/^  version: 29\.1\.0$/mu.test(source)) {
     assert.ok(!source.includes("operationId: getSessionShareMetadata"), "unknown share metadata release")
     return source

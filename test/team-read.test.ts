@@ -191,6 +191,7 @@ test("invitations and roles use their distinct generated owner schemas", async (
             skill: [
               "create_draft",
               "create_version",
+              "delete_series",
               "begin_upload",
               "complete_upload",
               "abort_upload",
@@ -222,6 +223,7 @@ test("invitations and roles use their distinct generated owner schemas", async (
             skill: [
               "create_draft",
               "create_version",
+              "delete_series",
               "begin_upload",
               "complete_upload",
               "abort_upload",

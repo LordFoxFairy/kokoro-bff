@@ -1,3 +1,9 @@
+## 2026-11-02 B09 Team 角色权限声明纠偏
+
+Public29.2 仅在既有 TeamRole.permissions.skill 闭集补入固定 IAM 0.15/4db7012 已发布的 delete_series；沿原角色 GET 与严格 owner parser，不新增权限、路由或运行逻辑。当前 IAM owner/admin 正式回包已含该动作，旧 Public 声明与 App 校验遗漏导致页面读取失败。
+
+只增加版本与单枚举的完整字节有限逆证，在原分享 metadata 父逆证入口先恢复完整 Public29.1，保原29/双父/inventory/SQL oracle。原分享 browser 投影仅正规再生来源版本/摘要；App 后继从正式提交的完整 canonical 正规更新已有 Team 生成链，不新建 Team projection 或并行客户端。
+
 ## 2026-11-02 B10 会话分享状态读取（实施设计）
 
 沿现本人会话分享 aggregate 增加 GET `/v1/sessions/{id}/share`，Public29.1 additive；事实仍由 BFF 的 conversation/project/share 行持有。POST/DELETE、匿名分享页与 IAM 权限不变，不用创建命令探测分享状态。

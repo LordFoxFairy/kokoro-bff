@@ -1,3 +1,11 @@
+## 2026-11-02 B09 角色权限声明纠偏候选（未提交/未激活）
+
+Public29.2 仅追加固定 IAM 已发布的 `TeamRole.permissions.skill.delete_series` 及版本号，BFF 正式生成 IAM reader 本已接受该动作，运行时源码、身份/权限、Schema 与201操作清单不变。真实普通页面 `/api/team/roles` 的 `bff_bad_response` 由主方保留；App 当前严格声明缺项，待本 owner 正式固定后通过原完整 Public/Team 生成链消费，尚不声称页面已恢复。
+
+新增有限逆证在原 share 父入口精确恢复完整 Public29.1，旧29/双父/inventory/SQL oracle 字节不改；原 share browser 投影仅正规级联 source version/SHA，测试逐结构证明其余闭包相同。正式固定 IAM 枚举对照先1项 RED、后 GREEN；本片11契约、原Team读取11项通过，覆盖 owner/admin 全动作、未知 domain/action、取消与错误边界。Node22 正式 pnpm build、非增量 typecheck、lint、scope格式与公开 semantic201 通过，未跑无关全默认/PG。
+
+额外 composer/project-pin 检查16通过/1失败，唯一原负控仅错误文案 `/drift/` 与 `unknown share metadata inventory` 不匹配；同Node22在精确2e737cad归档单选重现该失败，原测试/门禁未改。以上是 owner 契约候选证据，App 消费与真实页面恢复由主方后继验收，正常3314未切换。
+
 ## 2026-11-02 B10 owner 定向真实验证
 
 主方在现有自有 PG/Redis 单选真实分享 metadata 旅程通过（Node22.22.2，4.11秒）；使用原 SessionAdmissionDouble，不冒真实 OIDC/浏览器验收。覆盖创建后原ID回读、重复读取、主体/租户与已删项目隔离、过期/撤销及 GET 全事实/xmin 零写。首轮自有过期造数违反正式时间约束已保留，修正造数后复验，不改 Schema。冻结生产/契约20文件独立审查有限批准；追加机械投影由主方只读审查，9项定向与正式构建检查通过。App 接线与真实登录完整旅程仍待交付，正常3314未切换、Task B不关单。

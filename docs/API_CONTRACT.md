@@ -1,3 +1,7 @@
+## 2026-11-02 B09 TeamRole 权限闭集（Public29.2）
+
+既有 GET /v1/team/roles 的 TeamRole.permissions.skill 精确补入 delete_series，与固定 IAM 0.15/4db7012 的正式枚举一致；未知 domain/action 仍拒绝，不以任意 string、过滤未知权限或空成功适配。无新 operation、身份、权限或业务写；原201操作有序 inventory 与 canonical SQL 不变。完整 Public29.1 父字节通过独立有限逆证保留，原分享投影由唯一 canonical 正规再生成。
+
 ## 2026-11-02 B10 本人会话分享 metadata（实施设计）
 
 GET `/v1/sessions/{id}/share`，沿原 trusted Session、owner/tenant/project 资格和 private scope/project_ref。无 Idempotency-Key 要求，也不创建幂等回执。200 为原 data/meta envelope，data 严格 `{share:null|{share_id,created_at,expires_at}}`，expires_at 可 null；只返回当前 active/nonexpired 分享，不派生 URL。

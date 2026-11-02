@@ -7,6 +7,30 @@ import { parseOpenApiOperations } from "../../scripts/check-contract.mjs"
 const source = readFileSync(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
 const baseline = JSON.parse(readFileSync(new URL("../../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
 const hash = (value) => createHash("sha256").update(value).digest("hex")
+test("Team role permissions publish the complete fixed IAM skill action catalog", async () => {
+  const { load } = await import("js-yaml")
+  const canonical = load(source)
+  const iam = JSON.parse(
+    readFileSync(new URL("../../contract/vendor/kokoro-iam/4db7012a85752071f5fd30b9a5a3b4977e9dd4f3/iam.internal.v1.json", import.meta.url), "utf8"),
+  )
+  const expected =
+    iam.paths["/internal/v1/tenants/{tenant_id}/roles"].get.responses["200"].content["application/json"].schema.properties.data.items.properties.permissions
+      .properties.skill.items.enum
+  const actual = canonical.components.schemas.TeamRole.properties.permissions.properties.skill.items.enum
+  assert.ok(expected.includes("delete_series"), "fixed IAM owner catalog includes series deletion")
+  assert.deepEqual(actual, expected)
+  assert.equal(actual.includes("unknown_action"), false)
+  const { zListTenantRolesResponse } = await import("../../src/generated/iam-http/zod.gen.ts")
+  const permissionSchemas =
+    iam.paths["/internal/v1/tenants/{tenant_id}/roles"].get.responses["200"].content["application/json"].schema.properties.data.items.properties.permissions
+      .properties
+  const permissions = Object.fromEntries(Object.entries(permissionSchemas).map(([domain, schema]) => [domain, schema.items.enum]))
+  const page = { data: ["owner", "admin"].map((name) => ({ role_id: null, name, kind: "builtin", permissions })), meta: { next_cursor: null } }
+  assert.deepEqual(zListTenantRolesResponse.parse(page), page)
+  const unknown = structuredClone(page)
+  unknown.data[0].permissions.skill.push("unknown_action")
+  assert.equal(zListTenantRolesResponse.safeParse(unknown).success, false)
+})
 for (const [parent, digest, count] of [
   ["approved", "ea0031103488daa1fcc0cca45fdd13f4d4061546ac4525c745ec47105649f7e7", 199],
   ["rss", "6574930b3a893a208596e6f27c2f9e09122e759d111a7fdbf2d54c294efc0e8f", 168],
@@ -19,12 +43,12 @@ for (const [parent, digest, count] of [
   })
   test(`Public29 ${parent} projection rejects unrelated drift and ordered inventory drift`, () => {
     assert.throws(() => restoreIntegrationParent(source.replace("title:", "title: changed"), parent))
-    assert.throws(() => restoreIntegrationParent(source.replace("version: 29.1.0", "version: 29.1.1"), parent))
+    assert.throws(() => restoreIntegrationParent(source.replace("version: 29.2.0", "version: 29.2.1"), parent))
     assert.throws(() => restoreIntegrationBaseline([...baseline].reverse(), parent))
   })
 }
-test("current canonical is Public29.1 and 201 unique operations", () => {
-  assert.match(source, /^  version: 29\.1\.0$/mu)
+test("current canonical is Public29.2 and 201 unique operations", () => {
+  assert.match(source, /^  version: 29\.2\.0$/mu)
   const operations = parseOpenApiOperations(source)
   assert.equal(operations.length, 201)
   assert.equal(new Set(operations.map((x) => `${x.method} ${x.path}`)).size, 201)
@@ -48,7 +72,7 @@ test("integrated SQL restores both complete exact canonical parents and refuses 
 test("Public29.1 share metadata publishes a closed read-only owner contract", async () => {
   const { load } = await import("js-yaml")
   const spec = load(source)
-  assert.equal(spec.info.version, "29.1.0")
+  assert.equal(spec.info.version, "29.2.0")
   const operation = spec.paths["/v1/sessions/{id}/share"].get
   assert.equal(operation.operationId, "getSessionShareMetadata")
   assert.equal(operation["x-kokoro-idempotency"], "none")
@@ -74,7 +98,7 @@ test("share metadata finite inverse preserves exact committed parent and rejects
   for (const mutated of [
     source + "\n",
     source.replace("permission: chat.read", "permission: chat.write"),
-    source.replace("version: 29.1.0", "version: 29.2.0"),
+    source.replace("version: 29.2.0", "version: 29.3.0"),
     source.replace("required: [share]", "required: []"),
   ]) {
     assert.notEqual(mutated, source)
@@ -117,7 +141,31 @@ test("share metadata browser artifact is a deterministic canonical reference clo
     for (const nested of Object.values(value)) walk(nested)
   }
   walk(artifact)
-  for (const mutated of [source + "\n", source.replace("version: 29.1.0", "version: 29.1.1"), source.replace("required: [share]", "required: []")])
+  for (const mutated of [source + "\n", source.replace("version: 29.2.0", "version: 29.2.1"), source.replace("required: [share]", "required: []")])
     assert.throws(() => checkSessionShareMetadataBrowserContract(mutated, published))
   assert.throws(() => checkSessionShareMetadataBrowserContract(source, published + "\n"))
+})
+
+test("Team role permissions finite inverse preserves the complete Public29.1 and unchanged ordered inventory", async () => {
+  const { restoreTeamRolePermissionsContract } = await import("../../scripts/team-role-permissions-public-contract.mjs")
+  const proof = JSON.parse(readFileSync(new URL("../../contract/tests/session-share-metadata.json", import.meta.url), "utf8"))
+  const parent = restoreTeamRolePermissionsContract(source)
+  assert.equal(hash(parent), proof.current_source_sha256)
+  assert.deepEqual(parseOpenApiOperations(source), parseOpenApiOperations(parent))
+  assert.equal(hash(JSON.stringify(baseline)), proof.current_inventory_sha256)
+  assert.equal(restoreTeamRolePermissionsContract(parent), parent)
+  const { projectSessionShareMetadataBrowserContract } = await import("../../scripts/generate-session-share-metadata-browser-contract.mjs")
+  const previousProjection = projectSessionShareMetadataBrowserContract(parent)
+  const currentProjection = projectSessionShareMetadataBrowserContract(source)
+  currentProjection.info.version = previousProjection.info.version
+  currentProjection["x-kokoro-projection"].source = previousProjection["x-kokoro-projection"].source
+  assert.deepEqual(currentProjection, previousProjection, "share projection only changes canonical source version and digest")
+  for (const mutated of [
+    source + "\n",
+    source.replace("delete_series, begin_upload", "delete_series, unknown_action, begin_upload"),
+    source.replace("delete_series, begin_upload", "begin_upload"),
+    source.replace("permission: chat.read", "permission: chat.write"),
+    source.replace("version: 29.2.0", "version: 29.3.0"),
+  ])
+    assert.throws(() => restoreTeamRolePermissionsContract(mutated))
 })
