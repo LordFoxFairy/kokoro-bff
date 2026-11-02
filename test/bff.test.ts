@@ -1573,12 +1573,12 @@ describe("kokoro-bff v1 mock contract", () => {
           agentEnabled: true,
           billingServiceToken: "billing-service-token",
           upstreamSecret: "billing-upstream-secret",
-          upstreams: { ...config().upstreams, agents: ownerBase, billing: ownerBase },
+          upstreams: { ...config().upstreams, agents: ownerBase, billing: ownerBase, model: ownerBase },
         }),
       ),
     )
 
-    for (const path of ["/v1/agents/unknown", "/v1/billing/unknown"]) {
+    for (const path of ["/v1/agents/unknown", "/v1/billing/unknown", "/v1/models/unknown"]) {
       const response = await fetch(`${base}${path}`, { headers: authHeaders() })
       assert.equal(response.status, 404, path)
       assert.equal(((await response.json()) as { error: { code: string } }).error.code, "bff_route_not_found", path)
