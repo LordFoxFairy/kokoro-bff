@@ -160,6 +160,7 @@ function isRawUnknownConfiguredOwnerRequest(request: IncomingMessage): boolean {
     if (path[1] === "agents") return !agentConnectionSetupRequest(request)
     if (path[1] === "billing") return !billingPersonalRequest(request)
     if (path[1] === "models") return !systemModelCatalogRequest(request)
+    if (path[1] === "library") return !libraryRequest(request)
     return false
   } catch {
     return false

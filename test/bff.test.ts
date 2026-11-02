@@ -1558,7 +1558,7 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(((await fixture.json()) as { error: { code: string } }).error.code, "bff_route_not_found")
   })
 
-  it("does not proxy unknown Agent or Billing paths after named adapters", async () => {
+  it("does not proxy unknown configured-owner paths after named adapters", async () => {
     let ownerCalls = 0
     const owner = createServer((_request, response) => {
       ownerCalls += 1
@@ -1573,12 +1573,12 @@ describe("kokoro-bff v1 mock contract", () => {
           agentEnabled: true,
           billingServiceToken: "billing-service-token",
           upstreamSecret: "billing-upstream-secret",
-          upstreams: { ...config().upstreams, agents: ownerBase, billing: ownerBase, model: ownerBase },
+          upstreams: { ...config().upstreams, agents: ownerBase, billing: ownerBase, model: ownerBase, storage: ownerBase },
         }),
       ),
     )
 
-    for (const path of ["/v1/agents/unknown", "/v1/billing/unknown", "/v1/models/unknown"]) {
+    for (const path of ["/v1/agents/unknown", "/v1/billing/unknown", "/v1/models/unknown", "/v1/library/unknown"]) {
       const response = await fetch(`${base}${path}`, { headers: authHeaders() })
       assert.equal(response.status, 404, path)
       assert.equal(((await response.json()) as { error: { code: string } }).error.code, "bff_route_not_found", path)
