@@ -1,6 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
-import { BFF_DATABASE, BFF_POOL, CHAT_IDEMPOTENCY, CHAT_SERVICE, CHAT_TURN_SERVICE, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION } from "../../common/tokens.js"
+import { BFF_DATABASE, BFF_POOL, CHAT_IDEMPOTENCY, CHAT_SERVICE, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION } from "../../common/tokens.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import { PostgresChatRepository } from "../../infrastructure/postgres/chat-repository.js"
 import { PostgresPublicShareRepository } from "../../infrastructure/postgres/public-share-repository.js"
@@ -48,7 +48,7 @@ import type { Pool } from "pg"
       },
     },
   ],
-  exports: [CHAT_SERVICE, CHAT_TURN_SERVICE, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION],
+  exports: [CHAT_SERVICE, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION],
 })
 export class ChatModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

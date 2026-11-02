@@ -148,7 +148,8 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(chatModule, /provide: CHAT_SERVICE/u)
-  assert.match(chatModule, /CHAT_TURN_SERVICE/u)
+  assert.match(chatModule, /imports: \[[^\]]*AgentDispatchModule/u)
+  assert.match(await readFile(path.join(root, "src/modules/agent-dispatch/agent-dispatch.module.ts"), "utf8"), /provide: CHAT_TURN_SERVICE/u)
   assert.match(chatModule, /ChatMiddleware/u)
   assert.match(chatModule, /forRoutes\(\{ path: "\*", method: RequestMethod\.ALL \}\)/u)
   assert.match(middleware, /handleChatNativeRequest/u)
@@ -332,7 +333,7 @@ test("ProjectsModule owns the project command/read adapters and provider", async
   assert.match(nativeRoute, /tasks\(scope/u)
   assert.match(middleware, /handleProjectSkillSelectionRequest/u)
   assert.match(middleware, /handleProjectSkillInstallationRequest/u)
-  assert.match(projectsModule, /PROJECT_SKILL_SELECTION_PROVIDER/u)
+  assert.match(accessModule, /provide: PROJECT_SKILL_SELECTION_PROVIDER/u)
   assert.match(middleware, /SKILL_AUTHORIZATION/u)
   assert.match(nativeRoute, /projectPinRoute/u)
   assert.match(nativeRoute, /handleProjectDeletionStatusRequest/u)

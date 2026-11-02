@@ -1,3 +1,9 @@
+## 2026-11-01 T-17 前置：真实 Nest DI 装配修复（候选）
+
+真实当前native启动曾失败于ChatModule非法导出。新增生产AppModule容器compile回归（只替换测试配置与外部数据库边界），依次复现Chat/Projects/Skills非法导出及ProjectAccess/Billing数据库依赖不可见五个RED；只修正五个module的imports/exports，不重复注册provider、不Global化。四个共享token保持单注册及严格owner同实例。两条旧非法re-export源码断言转查真实owner，业务路由断言保持。
+
+停写7路径经独审/Root复核，Root Node24.20.0完整`pnpm format:check && pnpm check` exit0：contract1344pass，默认2346total/2344pass/0fail/2原资源skip，lint/types/build通过；worker实际架构74pass、默认loader runtime5pass。当前仅证明真实DI compile及静态完整门；生产HTTP启动/成功退出、native与完整生命周期矩阵仍待Root精确pin后实测，不称整个T-17或C-1.3完成。同一BFF PR18保持draft，未merge/deploy。
+
 ## 2026-11-01 Task A 当前候选：入口隔离与 Node 24 门禁
 
 本段覆盖下方 Task A 旧基线描述。Nest 生产入口已移除 raw server re-export，两处 HTTP adapter 改用窄依赖类型；默认 `test` / `test:architecture` 已各接入两套现有 Nest 架构测试。raw server/runtime、测试消费者与聚合资源工厂仍待后续迁移删除，Nest 关闭/worker drain/池释放尚待真实运行验证；本候选不代表 C-2/C-3 完成。

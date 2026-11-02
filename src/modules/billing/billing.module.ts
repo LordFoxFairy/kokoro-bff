@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common"
 import { BffConfigModule } from "../../config/config.module.js"
+import { DatabaseModule } from "../../common/database/database.module.js"
 import { AccountModule } from "../account/account.module.js"
 import { BillingAdminMiddleware } from "./billing-admin.middleware.js"
 import { BillingPersonalMiddleware } from "./billing-personal.middleware.js"
@@ -9,7 +10,7 @@ import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/ide
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 
 @Module({
-  imports: [AccountModule, BffConfigModule],
+  imports: [AccountModule, BffConfigModule, DatabaseModule],
   providers: [
     BillingAdminMiddleware,
     BillingPersonalMiddleware,

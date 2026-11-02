@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common"
+import { DatabaseModule } from "../../common/database/database.module.js"
 import { BFF_DATABASE, BFF_POOL, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER } from "../../common/tokens.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import type { Pool } from "pg"
@@ -9,6 +10,7 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
 
 /** Shared Project owner provider used by Project and Chat feature adapters. */
 @Module({
+  imports: [DatabaseModule],
   providers: [
     {
       provide: PROJECT_SERVICE,
