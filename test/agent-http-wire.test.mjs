@@ -31,19 +31,19 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87",
-        contract_version: "8.10.0",
+        repository_commit: "30ce29a605878caa0a50fd7cd627f70c1aa0e5c0",
+        contract_version: "8.11.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
+        contract_sha256: "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "a829f5a89e038b851b26f12bcd3af89f955efa603effac911317172011934089",
+        provenance_sha256: "d3525ac95b4c6e0bfeea8bfaa2a935a03e4597dfac92340bb5a34d073cafb0ed",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
+        source_sha256: "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
@@ -53,18 +53,18 @@ describe("Agent event-protocol provenance", () => {
   it("uses one HTTP8 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87")
+    assert.equal(manifest.owner.repository_commit, "30ce29a605878caa0a50fd7cd627f70c1aa0e5c0")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
+      "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/30ce29a605878caa0a50fd7cd627f70c1aa0e5c0/openapi.json", import.meta.url), "utf8"),
     )
     assert.deepEqual(owner.components.schemas.ChatActivity.oneOf[0].properties.display_code, {
       type: "string",
@@ -691,4 +691,42 @@ it("Agent Custom API launch validators preserve exact optional refs and reject d
   ])
     assert.equal(zLaunchRequest.strict().safeParse({ ...base, selected_custom_api_profiles: value }).success, false, JSON.stringify(value))
   assert.deepEqual(zLaunchRequest.strict().parse(base), base)
+})
+
+describe("B08 official owner contract extension", () => {
+  it("keeps complete 8.10 bytes and rejects drift outside the three exact additions", async () => {
+    const { restoreAgent810PersonalContextRaw } = await import("../scripts/agent-final-answer-contract.mjs")
+    const { createHash } = await import("node:crypto")
+    const raw = await readFile(new URL("../contract/vendor/kokoro-agent/30ce29a605878caa0a50fd7cd627f70c1aa0e5c0/openapi.json", import.meta.url), "utf8")
+    assert.equal(
+      createHash("sha256").update(restoreAgent810PersonalContextRaw(raw)).digest("hex"),
+      "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e",
+    )
+    for (const mutated of [
+      raw + "\n",
+      raw.replace('"version": "8.11.0"', '"version": "8.12.0"'),
+      raw.replace('"maxItems": 100', '"maxItems": 99'),
+      raw.replace('"x-kokoro-max-body-bytes": 1048576', '"x-kokoro-max-body-bytes": 1048577'),
+    ]) {
+      assert.notEqual(mutated, raw)
+      assert.throws(() => restoreAgent810PersonalContextRaw(mutated), /drift|unknown/)
+    }
+  })
+  it("retains both CustomAPI and closed personal schemas in the officially generated launch", async () => {
+    const { zLaunchRequest } = await import("../dist/generated/agent-http/zod.gen.js")
+    assert.ok(zLaunchRequest.shape.selected_custom_api_profiles)
+    const personal = zLaunchRequest.shape.personal_context
+    const value = { schema_version: 1, owner: { tenant_ref: "t", user_ref: "u" }, profile: null, knowledge: { usage_revision: 0, enabled: false, items: [] } }
+    assert.equal(personal.safeParse(value).success, true)
+    assert.equal(personal.safeParse({ ...value, knowledge: { ...value.knowledge, enabled: true } }).success, false)
+    assert.equal(
+      personal.safeParse({ ...value, profile: { revision: 1, nickname: "🧠".repeat(128), occupation: "", about: "", instructions: "" } }).success,
+      true,
+    )
+    assert.equal(
+      personal.safeParse({ ...value, profile: { revision: 1, nickname: "🧠".repeat(129), occupation: "", about: "", instructions: "" } }).success,
+      false,
+    )
+    assert.equal(personal.safeParse({ ...value, owner: { ...value.owner, subject: "foreign" } }).success, false)
+  })
 })

@@ -105,9 +105,9 @@ export async function evolveAgentFailureSchema({ mode, databaseUrl, signal, time
     if (mode === "check") {
       await raw("ROLLBACK")
       transaction = false
-      outcome = result(state === "old" ? "update_required" : "current", "ok")
+      outcome = result(state !== "current" ? "update_required" : "current", "ok")
     } else {
-      if (state === "old") {
+      if (state !== "current") {
         await query(`ALTER TABLE kokoro_bff.bff_message DROP CONSTRAINT ck_bff_message_agent_failure, ADD ${constraints.current}`)
       }
       if ((await inspectFailureConstraint(query, constraints)) !== "current") throw new Error("invalid_schema")
@@ -118,7 +118,7 @@ export async function evolveAgentFailureSchema({ mode, databaseUrl, signal, time
         return client.query("COMMIT")
       })
       transaction = false
-      outcome = result(state === "old" ? "updated" : "current", "ok")
+      outcome = result(state !== "current" ? "updated" : "current", "ok")
     }
   } catch (error) {
     outcome = result(
@@ -181,14 +181,18 @@ export async function evolveAgentFailureSchema({ mode, databaseUrl, signal, time
 
 // The prior CHECK is proved byte-for-byte; PostgreSQL itself normalizes both
 // approved forms for exact native comparison. No runtime fallback or row rewrite.
-function failureConstraints(schema) {
+export function failureConstraints(schema) {
   const matches = [...schema.matchAll(/CONSTRAINT ck_bff_message_agent_failure CHECK \([\s\S]*?\n  \)/gu)]
   if (matches.length !== 1) throw new Error("invalid_schema")
   const current = matches[0][0]
-  if (current.split(", 'model_settlement_pending'").length !== 2) throw new Error("invalid_schema")
-  const old = current.replace(", 'model_settlement_pending'", "")
+  if (createHash("sha256").update(current).digest("hex") !== "be883f1665ebc7fbaae475157bc16d04bb7409d7de7d74f5a8f8a25cb490a5a8")
+    throw new Error("invalid_schema")
+  const settlement = current.replace(", 'context_window_exceeded'", "")
+  if (createHash("sha256").update(settlement).digest("hex") !== "24319051574b8e74555b6e8f49e26441e36cb0c6ccd70cba4717d51b64a4d57b")
+    throw new Error("invalid_schema")
+  const old = settlement.replace(", 'model_settlement_pending'", "")
   if (createHash("sha256").update(old).digest("hex") !== "244f58497a12e6d6cfc1e9890b09c6d14563039c3c8eae545ea091c5d05cd4e2") throw new Error("invalid_schema")
-  return { old, current }
+  return { old, settlement, current }
 }
 
 async function inspectFailureConstraint(query, constraints) {
@@ -224,7 +228,7 @@ async function inspectFailureConstraint(query, constraints) {
     constraint.connoinherit
   )
     throw new Error("invalid_schema")
-  for (const state of ["old", "current"]) {
+  for (const state of ["old", "settlement", "current"]) {
     await query(
       `CREATE TEMP TABLE bff_failure_probe_${state} (agent_failure_code TEXT,agent_failure_retryable BOOLEAN,role TEXT,status TEXT,run_id TEXT, ${constraints[state]}) ON COMMIT DROP`,
     )

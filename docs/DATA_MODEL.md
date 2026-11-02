@@ -1,3 +1,10 @@
+## 2026-11-03 B08 私有执行快照候选（原材料存储复用，失败CHECK精确新增）
+
+材料仍复用既有bff_personalization、bff_personal_knowledge、bff_personal_knowledge_usage和bff_agent_dispatch_outbox.payload JSONB；无新表/列/receipt或新owner。payload.launch.personal_context承载个人owner、profile revision/四字段、usage_revision/enabled及完整active item ID/revision/三字段。快照由原事务一次SQL读取，并随原Run immutable保存；停用/编辑/删除当前资料只影响后继new-key Run，不重写旧outbox。旧Run私有执行材料按原保留策略存在，当前知识行删除擦除不等于抹除旧Run；不将该快照投影到AGUI、Share、Message正文或浏览器dispatch。
+
+
+B08 独审P2：原 Message CHECK 漏 context_window_exceeded 会令合法失败投影回滚。canonical 仅新增该不可重试枚举；原 db:evolve-agent-failure 的 check/apply 接受精确 pre-settlement 与 settlement 两个已批准旧约束，未知 CHECK、未验证约束或放宽 retry/role 均拒绝，不更新历史行。已有 parts/regeneration/final 定义保留新 CHECK，并由同一完整 SHA 有限逆证核对旧字节；旧 oracle 不改。切换前使用 KOKORO_BFF_POSTGRES_URL（schema=kokoro_bff）运行 pnpm db:evolve-agent-failure check → apply → check，禁止在非空库执行 fresh installer。
+
 ## 2026-11-02 B10 分享 metadata 只读投影
 
 不变更 canonical Schema。读取以本人 active bff_conversation 为根，复核同 tenant/owner 的未删除 bff_project，再 LEFT JOIN 当前未撤销、未过期的 conversation bff_share；合法无 share 保留根行。share_id/created_at/expires_at 来自原 owner 行。过期记录仍保持原字节，GET 不清理、不写 receipt/outbox，不引入共享副本或权限字段。

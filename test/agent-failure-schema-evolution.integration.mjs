@@ -2,14 +2,15 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Pool } from "pg"
 import { loadCanonicalSchema } from "../scripts/apply-schema.mjs"
-import { evolveAgentFailureSchema } from "../scripts/evolve-agent-failure-schema.mjs"
+import { evolveAgentFailureSchema, failureConstraints } from "../scripts/evolve-agent-failure-schema.mjs"
 
 const databaseUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const integration = databaseUrl ? test : test.skip
 integration("expands only the approved failure CHECK without rewriting retained messages and rejects drift", async () => {
   const pool = new Pool({ connectionString: databaseUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const target = (await loadCanonicalSchema()).match(/CONSTRAINT ck_bff_message_agent_failure CHECK \([\s\S]*?\n  \)/u)[0]
-  const old = target.replace(", 'model_settlement_pending'", "")
+  const settlement = target.replace(", 'context_window_exceeded'", "")
+  const old = settlement.replace(", 'model_settlement_pending'", "")
   const replace = (definition, suffix = "") =>
     pool.query(`ALTER TABLE kokoro_bff.bff_message DROP CONSTRAINT ck_bff_message_agent_failure; ALTER TABLE kokoro_bff.bff_message ADD ${definition}${suffix}`)
   const evolve = (mode = "apply", signal) => evolveAgentFailureSchema({ databaseUrl, mode, signal })
@@ -27,6 +28,19 @@ integration("expands only the approved failure CHECK without rewriting retained 
     assert.equal((await evolve()).state, "current")
     assert.equal((await evolve("check")).state, "current")
     assert.deepEqual(await row(), before)
+    // The currently deployed settlement-era CHECK is a distinct exact parent.
+    await replace(settlement)
+    const settlementBefore = await row()
+    assert.equal((await evolve("check")).state, "update_required")
+    await assert.rejects(pool.query("UPDATE kokoro_bff.bff_message SET agent_failure_code='context_window_exceeded' WHERE message_id='settlement_evolution'"), {
+      code: "23514",
+    })
+    assert.equal((await evolve()).state, "updated")
+    assert.deepEqual(await row(), settlementBefore, "DDL must preserve retained row bytes and xmin")
+    await pool.query("UPDATE kokoro_bff.bff_message SET agent_failure_code='context_window_exceeded' WHERE message_id='settlement_evolution'")
+    await assert.rejects(pool.query("UPDATE kokoro_bff.bff_message SET agent_failure_retryable=true WHERE message_id='settlement_evolution'"), {
+      code: "23514",
+    })
     await pool.query("UPDATE kokoro_bff.bff_message SET agent_failure_code='model_settlement_pending' WHERE message_id='settlement_evolution'")
     await assert.rejects(pool.query("UPDATE kokoro_bff.bff_message SET agent_failure_retryable=true WHERE message_id='settlement_evolution'"), {
       code: "23514",
@@ -37,6 +51,8 @@ integration("expands only the approved failure CHECK without rewriting retained 
     for (const definition of [
       target.replace("AND role = 'assistant'", "AND role <> ''"),
       target.replace("'model_unavailable', 'dependency_unavailable'", "'model_unavailable', 'dependency_unavailable', 'model_settlement_pending'"),
+      target.replace("'context_window_exceeded'", "'context_window_exceeded', 'invented_failure'"),
+      target.replace("'model_unavailable', 'dependency_unavailable'", "'model_unavailable', 'dependency_unavailable', 'context_window_exceeded'"),
     ]) {
       await replace(definition)
       const prior = (
@@ -95,6 +111,22 @@ integration("expands only the approved failure CHECK without rewriting retained 
       }
     }
   }
+})
+
+test("B08 failure evolution accepts only the complete approved CHECK and retains both exact parents", async () => {
+  const schema = await loadCanonicalSchema()
+  const definitions = failureConstraints(schema)
+  assert.deepEqual(Object.keys(definitions), ["old", "settlement", "current"])
+  assert.equal(definitions.settlement, definitions.current.replace(", 'context_window_exceeded'", ""))
+  assert.equal(definitions.old, definitions.settlement.replace(", 'model_settlement_pending'", ""))
+  for (const mutated of [
+    schema.replace("'context_window_exceeded'", "'unknown_failure'"),
+    schema.replace("'context_window_exceeded'", "'context_window_exceeded', 'internal_error'"),
+    schema.replace("AND role = 'assistant'", "AND role <> ''"),
+    schema.replace("'model_unavailable', 'dependency_unavailable'", "'model_unavailable', 'dependency_unavailable', 'context_window_exceeded'"),
+    schema.replace("'model_settlement_pending', 'context_window_exceeded'", "'context_window_exceeded'"),
+  ])
+    assert.throws(() => failureConstraints(mutated), /invalid_schema/)
 })
 
 test("rejects invalid owner scope and modes before connecting", async () => {

@@ -12,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87"
+const ownerCommit = "30ce29a605878caa0a50fd7cd627f70c1aa0e5c0"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e"
-const provenanceDigest = "a829f5a89e038b851b26f12bcd3af89f955efa603effac911317172011934089"
-const ownerContractVersion = "8.10.0"
+const ownerDigest = "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b"
+const provenanceDigest = "d3525ac95b4c6e0bfeea8bfaa2a935a03e4597dfac92340bb5a34d073cafb0ed"
+const ownerContractVersion = "8.11.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -30,6 +30,7 @@ const failureCodes = [
   "dependency_unavailable",
   "model_access_denied",
   "model_settlement_pending",
+  "context_window_exceeded",
 ]
 const retryableFailureCodes = ["model_unavailable", "dependency_unavailable"]
 const generatedFiles = [
@@ -848,10 +849,55 @@ async function generateCustomApiSelectionValidator(directory, document) {
   const { profile_id: id, expected_state_version: version } = schema.items.properties
   const file = path.join(directory, "zod.gen.ts")
   let source = await readFile(file, "utf8")
-  const property = /^[ \t]*selected_custom_api_profiles:[\s\S]*?(?=\n\}\);)/gmu
+  const property = /^[ \t]*selected_custom_api_profiles:[\s\S]*?(?=\n[ \t]*personal_context:)/gmu
   assert.equal([...source.matchAll(property)].length, 1, "generated exact Custom API selection property drifted")
   const expression = `selected_custom_api_profiles: z.array(z.object({profile_id: z.string().min(${id.minLength}).max(${id.maxLength}).regex(new RegExp(${JSON.stringify(id.pattern)}, "u")), expected_state_version: z.number().int().min(${version.minimum}).max(${version.maximum})}).strict()).max(${schema.maxItems}).refine(values => new Set(values.map(value => value.profile_id)).size === values.length).optional(),`
   source = source.replace(property, () => expression)
+  await writeFile(file, source)
+}
+
+// Compile only the published personal-context inline graph, including its conditional rules.
+function personalContextZod(schema) {
+  if (schema.oneOf) return "z.union([" + schema.oneOf.map(personalContextZod).join(",") + "])"
+  if (schema.type === "string")
+    return (
+      "z.string()" +
+      (schema.minLength === undefined ? "" : `.refine(v => [...v].length >= ${schema.minLength})`) +
+      (schema.maxLength === undefined ? "" : `.refine(v => [...v].length <= ${schema.maxLength})`) +
+      (schema.pattern === undefined ? "" : `.regex(new RegExp(${JSON.stringify(schema.pattern)}, "u"))`)
+    )
+  if (schema.const !== undefined) return `z.literal(${JSON.stringify(schema.const)})`
+  if (schema.type === "integer") return `z.number().int().min(${schema.minimum}).max(${schema.maximum})`
+  if (schema.type === "null") return "z.null()"
+  if (schema.type === "boolean") return "z.boolean()"
+  if (schema.type === "array") return `z.array(${personalContextZod(schema.items)}).max(${schema.maxItems})`
+  assert.equal(schema.type, "object")
+  assert.equal(schema.additionalProperties, false)
+  const fields = Object.entries(schema.properties).map(([key, value]) => {
+    assert.ok(schema.required.includes(key))
+    return JSON.stringify(key) + ":" + personalContextZod(value)
+  })
+  let result = `z.object({${fields.join(",")}}).strict()`
+  if (schema.properties.usage_revision) {
+    assert.deepEqual(schema.allOf, [
+      { if: { properties: { enabled: { const: false } } }, then: { properties: { items: { maxItems: 0 } } } },
+      { if: { properties: { enabled: { const: true } } }, then: { properties: { usage_revision: { minimum: 1 } } } },
+    ])
+    result +=
+      ".refine(v => v.enabled ? v.usage_revision >= 1 : v.items.length === 0).refine(v => new Set(v.items.map(i => i.knowledge_id)).size === v.items.length)"
+  } else assert.equal(schema.allOf, undefined)
+  return result
+}
+async function generatePersonalContextValidator(directory, document) {
+  const max = document.paths["/v1/runs"].post["x-kokoro-max-body-bytes"]
+  assert.ok(Number.isSafeInteger(max) && max > 0)
+  const file = path.join(directory, "zod.gen.ts")
+  let source = await readFile(file, "utf8")
+  const property = /^[ \t]*personal_context:[\s\S]*?(?=\n\}\);)/gmu
+  assert.equal([...source.matchAll(property)].length, 1, "generated personal context property retained")
+  const expression = `personal_context: ${personalContextZod(document.components.schemas.LaunchRequest.properties.personal_context)}.optional(),`
+  source = source.replace(property, () => expression)
+  source += `\n// Published complete POST /v1/runs body byte limit; not a token budget.\nexport const AGENT_LAUNCH_MAX_BODY_BYTES = ${max} as const\n`
   await writeFile(file, source)
 }
 
@@ -869,6 +915,7 @@ async function generate(directory) {
   await generateDecodedValidators(directory, ownerDocument)
   await generateMcpSelectionValidator(directory, ownerDocument)
   await generateCustomApiSelectionValidator(directory, ownerDocument)
+  await generatePersonalContextValidator(directory, ownerDocument)
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),

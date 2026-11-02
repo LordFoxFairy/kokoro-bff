@@ -59,6 +59,74 @@ export const zLaunchRequest = z.object({
     .max(32)
     .refine((values) => new Set(values.map((value) => value.profile_id)).size === values.length)
     .optional(),
+  personal_context: z
+    .union([
+      z.null(),
+      z
+        .object({
+          schema_version: z.literal(1),
+          owner: z.object({ tenant_ref: z.string().refine((v) => [...v].length >= 1), user_ref: z.string().refine((v) => [...v].length >= 1) }).strict(),
+          profile: z.union([
+            z.null(),
+            z
+              .object({
+                revision: z.number().int().min(1).max(9007199254740991),
+                nickname: z
+                  .string()
+                  .refine((v) => [...v].length <= 128)
+                  .regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                occupation: z
+                  .string()
+                  .refine((v) => [...v].length <= 256)
+                  .regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                about: z
+                  .string()
+                  .refine((v) => [...v].length <= 2000)
+                  .regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                instructions: z
+                  .string()
+                  .refine((v) => [...v].length <= 8000)
+                  .regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+              })
+              .strict(),
+          ]),
+          knowledge: z
+            .object({
+              usage_revision: z.number().int().min(0).max(9007199254740991),
+              enabled: z.boolean(),
+              items: z
+                .array(
+                  z
+                    .object({
+                      knowledge_id: z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])", "u")),
+                      revision: z.number().int().min(1).max(9007199254740991),
+                      name: z
+                        .string()
+                        .refine((v) => [...v].length >= 1)
+                        .refine((v) => [...v].length <= 500)
+                        .regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                      when_to_use: z
+                        .string()
+                        .refine((v) => [...v].length >= 1)
+                        .refine((v) => [...v].length <= 500)
+                        .regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                      content: z
+                        .string()
+                        .refine((v) => [...v].length >= 1)
+                        .refine((v) => [...v].length <= 2000)
+                        .regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                    })
+                    .strict(),
+                )
+                .max(100),
+            })
+            .strict()
+            .refine((v) => (v.enabled ? v.usage_revision >= 1 : v.items.length === 0))
+            .refine((v) => new Set(v.items.map((i) => i.knowledge_id)).size === v.items.length),
+        })
+        .strict(),
+    ])
+    .optional(),
 })
 
 export const zLaunchReceipt = z
@@ -417,3 +485,6 @@ export const zChatRunCompleted = z
   })
   .strict()
   .refine((value) => value.final_message_id === undefined || value.status === "completed", "Final answer requires completed run")
+
+// Published complete POST /v1/runs body byte limit; not a token budget.
+export const AGENT_LAUNCH_MAX_BODY_BYTES = 1048576 as const

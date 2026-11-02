@@ -6,6 +6,7 @@ import { Client } from "pg"
 
 import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"
 import { messageRegenerationDefinitions } from "./message-regeneration-schema-catalog.mjs"
+import { restoreContextWindowFailureSchema } from "./task-b-bff-integration-public-contract.mjs"
 
 /** One named additive operation. No runtime pool, retries, migration ledger or caller DDL. */
 export async function evolveMessagePartsSchema({ mode, databaseUrl, signal, timeoutMs = 20000 }) {
@@ -200,14 +201,14 @@ export function messagePartsSchemaDefinitions(schema) {
   if (tables.length !== 1) throw new Error("invalid_schema")
   let table = tables[0][0]
   let currentTables = []
-  if (createHash("sha256").update(table).digest("hex") !== TARGET_TABLE_SHA256) {
+  if (createHash("sha256").update(restoreContextWindowFailureSchema(table)).digest("hex") !== TARGET_TABLE_SHA256) {
     // The existing owner definitions prove the exact regeneration/final descendants.
     // Strip those approved deltas only; never normalize an arbitrary published table.
     const descendants = messageRegenerationDefinitions(schema)
     table = descendants.prior
     currentTables = [descendants.current, ...(descendants.currentWithFinal ? [descendants.currentWithFinal] : [])]
   }
-  if (createHash("sha256").update(table).digest("hex") !== TARGET_TABLE_SHA256) throw new Error("invalid_schema")
+  if (createHash("sha256").update(restoreContextWindowFailureSchema(table)).digest("hex") !== TARGET_TABLE_SHA256) throw new Error("invalid_schema")
   const constraints = [...table.matchAll(/  CONSTRAINT ck_bff_message_ordered_parts CHECK \([\s\S]*?\n  \),\n/gu)]
   if (constraints.length !== 1) throw new Error("invalid_schema")
   const constraint = constraints[0][0].slice(2, -2)
@@ -218,7 +219,7 @@ export function messagePartsSchemaDefinitions(schema) {
     oldTable = oldTable.replace(`${lines[0]}\n`, "")
     return { name, declaration: lines[0].slice(2, -1) }
   })
-  if (createHash("sha256").update(oldTable).digest("hex") !== BASE_TABLE_SHA256) throw new Error("invalid_schema")
+  if (createHash("sha256").update(restoreContextWindowFailureSchema(oldTable)).digest("hex") !== BASE_TABLE_SHA256) throw new Error("invalid_schema")
   return { table, oldTable, columns, constraint, currentTables }
 }
 

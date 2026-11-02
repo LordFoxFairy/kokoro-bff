@@ -1,3 +1,10 @@
+## 2026-11-03 B08 个人材料消费候选
+
+`postgres/chat-personal-context.ts` 在原 Chat 事务内一次读取本人完整 profile/usage/active knowledge；`chat-turn-commit.ts` 原幂等回执优先，绑定 scope 后、任何 queued/messages/outbox 写入前固定材料并按正式 Agent HTTP 上限核完整序列化 body。`agent-dispatch.ts`/原 delivery/原 saved-launch 投影承接 optional typed 材料，历史 omission 保持。固定 Agent30ce29a6/8.11、原18输出及同一生成入口；Public29.3仅补两处 context_window_exceeded，29.2有限完整逆证保原201操作/旧oracle。原相关单元/HTTP/合同与单选 B08 real PG 旅程见 CURRENT，模型、正常激活及scheduler首片均未冒完成。
+
+
+B08 独审P2：原 Message CHECK 漏 context_window_exceeded 会令合法失败投影回滚。canonical 仅新增该不可重试枚举；原 db:evolve-agent-failure 的 check/apply 接受精确 pre-settlement 与 settlement 两个已批准旧约束，未知 CHECK、未验证约束或放宽 retry/role 均拒绝，不更新历史行。已有 parts/regeneration/final 定义保留新 CHECK，并由同一完整 SHA 有限逆证核对旧字节；旧 oracle 不改。切换前使用 KOKORO_BFF_POSTGRES_URL（schema=kokoro_bff）运行 pnpm db:evolve-agent-failure check → apply → check，禁止在非空库执行 fresh installer。
+
 ## 2026-11-02 B09 Team 角色权限契约纠偏候选
 
 唯一 Public29.2 在原 TeamRole.skill 精确补入固定 IAM 已发布的 delete_series；原 Team 读 fixture 同步 owner/admin 事实，运行时及 Schema 不变。`scripts/team-role-permissions-public-contract.mjs` 在现 share 父入口有限逆回完整 Public29.1，原201 inventory/历史 oracle/SQL 不改。原 share browser generator 仅级联当前 source 版本与 SHA；定向测试证明 GET/ref 闭包语义原样。App 后继消费正式提交的完整 canonical，不新建 Team projection。实际检查与未验边界见 CURRENT。

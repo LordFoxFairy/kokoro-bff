@@ -129,6 +129,7 @@ export async function messageRegenerationRoute(
     if (!response.destroyed && !response.writableEnded) send(response, 202, { data })
   } catch (error) {
     if (error instanceof MessageRegenerationAdmissionError) fail(error.status, error.code, error.retryAfter)
+    else if (error instanceof Error && error.message === "PERSONAL_CONTEXT_TOO_LARGE") fail(413, "personal_context_too_large")
     else if (error instanceof Error && error.message === "message_regeneration_request_invalid") fail(400, error.message)
     else if (
       error instanceof Error &&

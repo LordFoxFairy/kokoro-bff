@@ -565,3 +565,100 @@ it("snapshots Custom API objects before awaited defaults so mutation cannot spli
   await submitting
   assert.deepEqual(repository.commits[0].payload.launch.selected_custom_api_profiles, [{ profile_id: "profile-a", expected_state_version: 3 }])
 })
+
+it("B08 retains the complete private personal snapshot and rejects invalid owner material without changing historic omission", async () => {
+  const { parseAgentDispatchPayload } = await import("../dist/domain/chat/agent-dispatch.js")
+  const old = command().payload
+  const personal = {
+    schema_version: 1,
+    owner: { tenant_ref: "tenant_fixture", user_ref: "actor_fixture" },
+    profile: { revision: 2, nickname: "妮", occupation: "研究员", about: "only private", instructions: "Use complete sources" },
+    knowledge: {
+      usage_revision: 3,
+      enabled: true,
+      items: [
+        {
+          knowledge_id: "12345678-1234-4123-8123-123456789abc",
+          revision: 4,
+          name: "Private name",
+          when_to_use: "On research",
+          content: "private full material",
+        },
+      ],
+    },
+  }
+  const payload = { ...old, launch: { ...old.launch, personal_context: personal } }
+  assert.deepEqual(parseAgentDispatchPayload(payload), payload)
+  assert.deepEqual(parseAgentDispatchPayload(old), old)
+  for (const invalid of [
+    { ...personal, other: true },
+    { ...personal, profile: { ...personal.profile, revision: 0 } },
+    { ...personal, knowledge: { ...personal.knowledge, enabled: false } },
+    { ...personal, knowledge: { ...personal.knowledge, usage_revision: 0 } },
+    { ...personal, knowledge: { ...personal.knowledge, items: [...personal.knowledge.items, ...personal.knowledge.items] } },
+  ])
+    assert.throws(() => parseAgentDispatchPayload({ ...payload, launch: { ...payload.launch, personal_context: invalid } }), /PAYLOAD_INVALID/)
+})
+
+it("B08 snapshots one statement with trusted personal owner and fails closed on invalid or unavailable owner rows", async () => {
+  const { readChatPersonalContext } = await import("../dist/infrastructure/postgres/chat-personal-context.js")
+  const calls = []
+  const owner = { tenantId: "tenant_private", actorId: "human_private" }
+  const query = async (sql, values) => {
+    calls.push({ sql, values })
+    return { rows: [{ profile: null, knowledge: { usage_revision: 0, enabled: false, items: [] } }] }
+  }
+  assert.deepEqual(await readChatPersonalContext(query, owner), {
+    schema_version: 1,
+    owner: { tenant_ref: owner.tenantId, user_ref: owner.actorId },
+    profile: null,
+    knowledge: { usage_revision: 0, enabled: false, items: [] },
+  })
+  assert.equal(calls.length, 1)
+  assert.deepEqual(calls[0].values, [owner.tenantId, owner.actorId])
+  const failure = new Error("owned database unavailable")
+  await assert.rejects(
+    readChatPersonalContext(async () => {
+      throw failure
+    }, owner),
+    (error) => error === failure,
+  )
+  for (const rows of [[], [{ profile: null, knowledge: { usage_revision: 0, enabled: true, items: [] } }]])
+    await assert.rejects(
+      readChatPersonalContext(async () => ({ rows }), owner),
+      /CHAT_PERSONAL_CONTEXT_INVALID/,
+    )
+})
+
+it("B08 bounds the exact complete UTF8 launch without truncation and keeps personal text out of client intent", async () => {
+  const { serializeAgentLaunch } = await import("../dist/infrastructure/clients/agent/outbox-delivery.js")
+  const { AGENT_LAUNCH_MAX_BODY_BYTES } = await import("../dist/generated/agent-http/zod.gen.js")
+  const base = command().payload.launch
+  const item = { knowledge_id: "12345678-1234-4123-8123-123456789abc", revision: 1, name: "Private", when_to_use: "On demand", content: "完整秘密资料" }
+  const context = {
+    schema_version: 1,
+    owner: { tenant_ref: "tenant_fixture", user_ref: "actor_fixture" },
+    profile: null,
+    knowledge: { usage_revision: 1, enabled: true, items: [item] },
+  }
+  const launch = { ...base, personal_context: context }
+  const bytes = serializeAgentLaunch(launch)
+  assert.deepEqual(JSON.parse(bytes.toString()), launch)
+  assert.equal(base.content, "hello")
+  assert.equal(Object.hasOwn(base.trace, "personal_context"), false)
+  assert.equal(AGENT_LAUNCH_MAX_BODY_BYTES, 1048576)
+  // Each field is legal; JSON escaping of complete knowledge exceeds the real body cap.
+  const items = Array.from({ length: 100 }, (_, index) => ({
+    ...item,
+    knowledge_id: `${index.toString(16).padStart(8, "0")}-1234-4123-8123-123456789abc`,
+    content: "\u0001".repeat(2000),
+  }))
+  assert.throws(
+    () => serializeAgentLaunch({ ...launch, personal_context: { ...context, knowledge: { ...context.knowledge, items } } }),
+    /PERSONAL_CONTEXT_TOO_LARGE/,
+  )
+  const emptyBytes = serializeAgentLaunch({ ...base, content: "" + "x" })
+  const atCap = { ...base, content: "x".repeat(AGENT_LAUNCH_MAX_BODY_BYTES - emptyBytes.byteLength + 1) }
+  assert.equal(serializeAgentLaunch(atCap).byteLength, AGENT_LAUNCH_MAX_BODY_BYTES)
+  assert.throws(() => serializeAgentLaunch({ ...atCap, content: atCap.content + "字" }), /PERSONAL_CONTEXT_TOO_LARGE/)
+})

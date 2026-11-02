@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kokoro Business API",
-    "version": "29.2.0",
+    "version": "29.3.0",
     "description": "Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。",
     "license": {
       "name": "Proprietary Kokoro contract",
@@ -14,8 +14,8 @@
     "version": "1.0.0",
     "source": {
       "path": "contract/openapi/v1/openapi.yaml",
-      "version": "29.2.0",
-      "sha256": "df5a33d4fa33662e4f70967bf5db60033f71f29511bf5975aa2395d61abb3e9c"
+      "version": "29.3.0",
+      "sha256": "4f27adbea9a63c36d8b11e95c9dde342a6e8d662cab77cb42091384f3b17e333"
     },
     "operation_id": "getSessionShareMetadata"
   },

@@ -1,3 +1,5 @@
+import { zLaunchRequest } from "../../generated/agent-http/zod.gen.js"
+import type { LaunchRequest } from "../../generated/agent-http/types.gen.js"
 import { parseCustomApiProfileSelection, type SelectedCustomApiProfile } from "./custom-api-profile-selection.js"
 import { parseMcpConnectionSelection } from "./mcp-connection-selection.js"
 import { isRecord } from "../json.js"
@@ -17,6 +19,7 @@ export type AgentLaunchBody = {
   selected_mcp_connection_ids?: string[]
   selected_custom_api_profiles?: SelectedCustomApiProfile[]
   requested_model_label?: string
+  personal_context?: NonNullable<LaunchRequest["personal_context"]>
   trace: {
     source: "kokoro-bff"
     project_ref?: string
@@ -214,6 +217,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
           "selected_mcp_connection_ids",
           "selected_custom_api_profiles",
           "requested_model_label",
+          "personal_context",
           "trace",
         ].includes(key),
     )
@@ -242,6 +246,8 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
   const thinking = traceValue.thinking
   if (thinking !== undefined && typeof thinking !== "boolean") throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const requestedModel = optionalString(launchValue, "requested_model_label")
+  const personal = zLaunchRequest.shape.personal_context.safeParse(launchValue.personal_context)
+  if (!personal.success) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   return {
     schema_version: AGENT_DISPATCH_SCHEMA_VERSION,
     launch: {
@@ -256,6 +262,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
       ...(selectedMcpConnectionIds === undefined ? {} : { selected_mcp_connection_ids: selectedMcpConnectionIds }),
       ...(selectedCustomApiProfiles === undefined ? {} : { selected_custom_api_profiles: selectedCustomApiProfiles }),
       ...(requestedModel === undefined ? {} : { requested_model_label: requestedModel }),
+      ...(personal.data == null ? {} : { personal_context: personal.data }),
       trace: {
         source: "kokoro-bff",
         ...(projectRef === undefined ? {} : { project_ref: projectRef }),

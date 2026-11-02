@@ -10,6 +10,7 @@ const parent =
 const current = parent.replace("create_version, begin_upload", "create_version, delete_series, begin_upload")
 
 export function restoreTeamRolePermissionsContract(source) {
+  source = restorePersonalContextFailureContract(source)
   if (/^  version: 29\.1\.0$/mu.test(source)) {
     assert.equal(hash(source), parentDigest, "complete committed Public29.1 parent bytes")
     return source
@@ -23,4 +24,15 @@ export function restoreTeamRolePermissionsContract(source) {
   source = source.replace(current, parent).replace(/^  version: 29\.2\.0$/mu, "  version: 29.1.0")
   assert.equal(hash(source), parentDigest, "complete committed Public29.1 parent bytes")
   return source
+}
+
+// Build/test-only finite 29.3 addition: both existing public Agent failure sites.
+export function restorePersonalContextFailureContract(source) {
+  if (!/^  version: 29\.3\.0$/mu.test(source)) return source
+  assert.equal(hash(source), "4f27adbea9a63c36d8b11e95c9dde342a6e8d662cab77cb42091384f3b17e333", "complete Public29.3 personal context failure artifact drift")
+  const addition = "                - context_window_exceeded\n"
+  assert.equal(source.split(addition).length, 3, "exact two public context failure sites")
+  const parent = source.replaceAll(addition, "").replace(/^  version: 29\.3\.0$/mu, "  version: 29.2.0")
+  assert.equal(hash(parent), currentDigest, "complete committed Public29.2 parent bytes")
+  return parent
 }

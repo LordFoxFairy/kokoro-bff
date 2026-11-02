@@ -5570,3 +5570,150 @@ integrationTest("B10 real PG share metadata is owner-authoritative and GET leave
   await f.pool.query("UPDATE bff_conversation SET status='deleted',deleted_at=statement_timestamp() WHERE tenant_id=$1 AND conversation_id=$2", [f.tenant, id])
   await unchanged(() => metadata(), 404)
 })
+
+integrationTest(
+  "B08 real PG freezes personal owner material per new Run, replays unchanged and rejects complete oversized context before queued writes",
+  async (t) => {
+    const f = await r237Fixture(t)
+    const options = () => ({ signal: new AbortController().signal, deadline: performance.now() + 10000 })
+    const scope = { tenantId: f.tenant, subjectId: f.owner }
+    const profile = { nickname: "Owned user", occupation: "Research", about: "private profile v1", instructions: "Preserve full private material" }
+    assert.equal((await f.store.services.personalization.replace(scope, { expectedRevision: 0, fields: profile }, options())).kind, "saved")
+    const knowledgeId = randomUUID()
+    const fields = { name: "Owned knowledge", when_to_use: "Research", content: "private knowledge v1" }
+    const knowledge = f.store.services.personalKnowledge
+    assert.equal((await knowledge.replace(scope, knowledgeId, 0, fields, options())).kind, "ok")
+    assert.equal((await knowledge.replaceUsage(scope, 0, true, options())).kind, "ok")
+    assert.equal(
+      (
+        await f.store.services.personalization.replace(
+          { ...scope, tenantId: `${f.tenant}_other` },
+          { expectedRevision: 0, fields: { ...profile, about: "OTHER TENANT PRIVATE" } },
+          options(),
+        )
+      ).kind,
+      "saved",
+    )
+    assert.equal(
+      (
+        await f.store.services.personalization.replace(
+          { ...scope, subjectId: "other_owner" },
+          { expectedRevision: 0, fields: { ...profile, about: "OTHER OWNER PRIVATE" } },
+          options(),
+        )
+      ).kind,
+      "saved",
+    )
+    const conversation = await f.conversation()
+    const body = { content: "Ordinary public input", selected_skill_source_refs: [] }
+    const submit = (key, id = conversation) => f.request(`sessions/${id}/messages`, "POST", body, { key })
+    const payload = async (key) =>
+      (await f.pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND idempotency_key=$2", [f.tenant, key])).rows[0]?.payload
+    const first = await submit("b08-first")
+    assert.equal(first.status, 202, JSON.stringify(first.body))
+    const frozen = await payload("b08-first")
+    assert.deepEqual(frozen.launch.personal_context, {
+      schema_version: 1,
+      owner: { tenant_ref: f.tenant, user_ref: f.owner },
+      profile: { revision: 1, ...profile },
+      knowledge: { usage_revision: 1, enabled: true, items: [{ knowledge_id: knowledgeId, revision: 1, ...fields }] },
+    })
+    assert.equal(frozen.launch.content, body.content)
+    assert.equal(Object.hasOwn(frozen.launch.trace, "personal_context"), false)
+    const publicRead = await f.request(`sessions/${conversation}`)
+    assert.equal(publicRead.status, 200)
+    assert.equal(JSON.stringify(publicRead.body).includes(fields.content), false)
+    assert.equal(JSON.stringify(publicRead.body).includes(profile.about), false)
+    assert.equal(
+      (await f.store.services.personalization.replace(scope, { expectedRevision: 1, fields: { ...profile, about: "private profile v2" } }, options())).kind,
+      "saved",
+    )
+    assert.equal((await knowledge.replace(scope, knowledgeId, 1, { ...fields, content: "private knowledge v2" }, options())).kind, "ok")
+    assert.equal((await knowledge.replaceUsage(scope, 1, false, options())).kind, "ok")
+    assert.equal((await knowledge.remove(scope, knowledgeId, 2, options())).kind, "ok")
+    const beforeReplay = await f.facts()
+    const replay = await submit("b08-first")
+    assert.equal(replay.status, 202)
+    assert.deepEqual(replay.body.data, first.body.data)
+    assert.deepEqual(await payload("b08-first"), frozen)
+    assert.deepEqual(await f.facts(), beforeReplay, "same-key replay must not update owner facts or replace the frozen material")
+    const next = await submit("b08-next")
+    assert.equal(next.status, 202, JSON.stringify(next.body))
+    const current = (await payload("b08-next")).launch.personal_context
+    assert.equal(current.profile.about, "private profile v2")
+    assert.equal(current.profile.revision, 2)
+    assert.deepEqual(current.knowledge, { usage_revision: 2, enabled: false, items: [] })
+    assert.equal(JSON.stringify(current).includes("OTHER"), false)
+    const conflict = await f.request(`sessions/${conversation}/messages`, "POST", { ...body, content: "Changed input" }, { key: "b08-first" })
+    assert.equal(conflict.status, 409)
+    // Exercise the complete legal owner capacity through the existing management repository.
+    assert.equal((await knowledge.replaceUsage(scope, 2, true, options())).kind, "ok")
+    for (let index = 0; index < 100; index++)
+      assert.equal((await knowledge.replace(scope, randomUUID(), 0, { ...fields, content: "\u0001".repeat(2000) }, options())).kind, "ok")
+    const freshConversation = `conv_${randomUUID()}`
+    const beforeOversize = await f.facts()
+    const oversized = await submit("b08-oversized", freshConversation)
+    assert.equal(oversized.status, 413, JSON.stringify(oversized.body))
+    assert.equal(oversized.body.error.code, "personal_context_too_large")
+    assert.deepEqual(await f.facts(), beforeOversize, "oversize must roll back first Conversation, queued events, messages, receipt and outbox")
+    assert.equal(await payload("b08-oversized"), undefined)
+    // Original committed identity remains recoverable even when current settings cannot fit.
+    assert.equal((await submit("b08-first")).status, 202)
+    assert.deepEqual(await payload("b08-first"), frozen)
+  },
+)
+
+integrationTest("B08 real PG persists context_window_exceeded through the Agent ledger and owner Message projection", async (t) => {
+  const f = await r237Fixture(t)
+  const sessionId = await f.conversation()
+  const submitted = await f.request(
+    `sessions/${sessionId}/messages`,
+    "POST",
+    { content: "Owned context rejection", selected_skill_source_refs: [] },
+    { key: "b08-failure-projection" },
+  )
+  assert.equal(submitted.status, 202, JSON.stringify(submitted.body))
+  const turn = submitted.body.data
+  const [claim] = await f.store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: `b08_${f.tenant}`, limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+  assert.equal(claim.runId, turn.run_id)
+  assert.equal(await f.store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+  const failure = { source: "agent", code: "context_window_exceeded", retryable: false }
+  const source = (sequence, kind, payload) => {
+    const occurredAt = new Date(sequence * 1000).toISOString()
+    const id = `b08_context_failure_${sequence}`
+    return {
+      sourceRunId: turn.run_id,
+      sourceEventId: id,
+      sourceSequence: sequence,
+      sourceOccurredAt: occurredAt,
+      sourcePayload: { chat_event_id: id, session_id: sessionId, run_id: turn.run_id, seq: sequence, created_at: sequence * 1000, payload },
+      event: { event_id: id, seq: sequence, session_id: sessionId, run_id: turn.run_id, kind, timestamp: occurredAt, payload },
+    }
+  }
+  const failed = source(3, "run.failed", { failure, message: "Context window exceeded" })
+  await f.store.agUi.ingest(f.tenant, sessionId, [
+    source(1, "run.created", { run_id: turn.run_id }),
+    source(2, "message.delta", { segment_id: "b08_retained", delta: "Retained text" }),
+    failed,
+  ])
+  const persisted = (
+    await f.pool.query("SELECT content,status,agent_failure_code,agent_failure_retryable FROM bff_message WHERE tenant_id=$1 AND message_id=$2", [
+      f.tenant,
+      turn.assistant_message_id,
+    ])
+  ).rows[0]
+  assert.deepEqual(persisted, { content: "Retained text", status: "failed", agent_failure_code: failure.code, agent_failure_retryable: false })
+  const snapshot = await f.request(`sessions/${sessionId}`)
+  assert.equal(snapshot.status, 200)
+  assert.deepEqual(snapshot.body.data.messages.find((message) => message.message_id === turn.assistant_message_id).failure, failure)
+  const replay = await f.store.agUi.replay(f.tenant, sessionId, null, 100)
+  assert.equal(replay.kind, "page")
+  const error = replay.frames.find(({ payload }) => payload.type === "RUN_ERROR" && payload.runId === turn.run_id)
+  assert.deepEqual(error.payload.metadata.kokoro.failure, failure)
+  assert.equal(error.payload.code, failure.code)
+  const beforeDuplicate = await f.facts()
+  const duplicate = await f.store.agUi.ingest(f.tenant, sessionId, [failed])
+  assert.equal(duplicate.insertedSources, 0)
+  assert.equal(duplicate.insertedFrames, 0)
+  assert.deepEqual(await f.facts(), beforeDuplicate)
+})

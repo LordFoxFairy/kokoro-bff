@@ -1,3 +1,12 @@
+## 2026-11-03 B08 本人材料冻结与投递候选
+
+沿 Root B08 D0 裁定：profile/knowledge/usage 的 owner 仍为本 BFF。首次 Chat/new-key Run（含显式再生）在 `commitChatTurn` 原有界事务、原幂等早退与 scope/选择校验之后，以一个 statement snapshot 查询 trusted tenant+human actor；不在应用层借另一连接先读，也不把 project subject 当个人 owner。profile 缺行与 usage 缺行沿权威 null/false默认；disabled 不提取正文、active知识最多100条完整保留，无检索/截断。原 outbox JSONB 保存版本和完整材料，与 messages/queued 同提交。相同 key/body 及 transport/COMMIT未知恢复继续原冻结内容，原客户端 digest不混入后来设置。
+
+Agent固定正式30ce29a605878caa0a50fd7cd627f70c1aa0e5c0/OpenAPI8.11，personal_context仅可信内部launch；原 user content/trace/公共AGUI/Share/浏览器输入均不追加材料。首次冻结后使用原delivery同一strict SDK规范序列化，并机械消费正式POST max-body metadata 1048576，在任何queued写入前超界抛出personal_context_too_large/413并回滚；不加身份margin/预算新数字，不把失败降级成无材料Run。delivery保原sticky admission unknown安全边界；scheduler独立面暂OPEN。Agent负责真实context_window估算与trace内容禁采，本BFF不复制模型/窗口规则，真实模型生效另由Root配对验收。
+
+
+B08 独审P2：原 Message CHECK 漏 context_window_exceeded 会令合法失败投影回滚。canonical 仅新增该不可重试枚举；原 db:evolve-agent-failure 的 check/apply 接受精确 pre-settlement 与 settlement 两个已批准旧约束，未知 CHECK、未验证约束或放宽 retry/role 均拒绝，不更新历史行。已有 parts/regeneration/final 定义保留新 CHECK，并由同一完整 SHA 有限逆证核对旧字节；旧 oracle 不改。切换前使用 KOKORO_BFF_POSTGRES_URL（schema=kokoro_bff）运行 pnpm db:evolve-agent-failure check → apply → check，禁止在非空库执行 fresh installer。
+
 ## 2026-11-02 B09 Team 角色权限声明纠偏
 
 Public29.2 仅在既有 TeamRole.permissions.skill 闭集补入固定 IAM 0.15/4db7012 已发布的 delete_series；沿原角色 GET 与严格 owner parser，不新增权限、路由或运行逻辑。当前 IAM owner/admin 正式回包已含该动作，旧 Public 声明与 App 校验遗漏导致页面读取失败。

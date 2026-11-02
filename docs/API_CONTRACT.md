@@ -1,3 +1,12 @@
+## 2026-11-03 B08 正式消费与公开失败枚举候选
+
+唯一public机器源现Public29.3.0/201操作：仅两处既有Agent failure enum增加不可重试context_window_exceeded。`team-role-permissions-public-contract.mjs`先严格完整29.3逆回固定29.2，再沿原29.1/29双父证明；原operation inventory/旧oracle不改。两既有Chat create/regenerate操作本已声明413与一般ErrorEnvelope.code，本片正规提供personal_context_too_large：完整个人材料冻结后，规范launch bytes超过正式1MiB上限时，首次事务无队列/消息/首次Conversation写入。该确定错误可先修改设置再显式重试原body/key；不承诺当前App自动恢复为可编辑composer，unknown仍保原恢复协议。
+
+Agent唯一vendor改固定30ce29a605878caa0a50fd7cd627f70c1aa0e5c0，8.11原件SHAad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b、provenance SHAd3525ac95b4c6e0bfeea8bfaa2a935a03e4597dfac92340bb5a34d073cafb0ed。`contract:generate:agent`/`contract:check:agent`维持18原输出；生成器从固定inline图派生严格个人字段/Unicode scalar/条件与唯一ID校验，原CustomAPI边界收紧以保后继字段。完整8.11→8.10逆证保int64原始lexeme及旧hash，非运行兼容层。App后继固定本次canonical full Public29.3并沿原生成入口承接enum与错误提示；share browser原件仅机械级联source版本/SHA，GET及ref闭包无变化。
+
+
+B08 独审P2：原 Message CHECK 漏 context_window_exceeded 会令合法失败投影回滚。canonical 仅新增该不可重试枚举；原 db:evolve-agent-failure 的 check/apply 接受精确 pre-settlement 与 settlement 两个已批准旧约束，未知 CHECK、未验证约束或放宽 retry/role 均拒绝，不更新历史行。已有 parts/regeneration/final 定义保留新 CHECK，并由同一完整 SHA 有限逆证核对旧字节；旧 oracle 不改。切换前使用 KOKORO_BFF_POSTGRES_URL（schema=kokoro_bff）运行 pnpm db:evolve-agent-failure check → apply → check，禁止在非空库执行 fresh installer。
+
 ## 2026-11-02 B09 TeamRole 权限闭集（Public29.2）
 
 既有 GET /v1/team/roles 的 TeamRole.permissions.skill 精确补入 delete_series，与固定 IAM 0.15/4db7012 的正式枚举一致；未知 domain/action 仍拒绝，不以任意 string、过滤未知权限或空成功适配。无新 operation、身份、权限或业务写；原201操作有序 inventory 与 canonical SQL 不变。完整 Public29.1 父字节通过独立有限逆证保留，原分享投影由唯一 canonical 正规再生成。

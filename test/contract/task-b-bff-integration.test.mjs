@@ -43,12 +43,12 @@ for (const [parent, digest, count] of [
   })
   test(`Public29 ${parent} projection rejects unrelated drift and ordered inventory drift`, () => {
     assert.throws(() => restoreIntegrationParent(source.replace("title:", "title: changed"), parent))
-    assert.throws(() => restoreIntegrationParent(source.replace("version: 29.2.0", "version: 29.2.1"), parent))
+    assert.throws(() => restoreIntegrationParent(source.replace("version: 29.3.0", "version: 29.3.1"), parent))
     assert.throws(() => restoreIntegrationBaseline([...baseline].reverse(), parent))
   })
 }
-test("current canonical is Public29.2 and 201 unique operations", () => {
-  assert.match(source, /^  version: 29\.2\.0$/mu)
+test("current canonical is Public29.3 and 201 unique operations", () => {
+  assert.match(source, /^  version: 29\.3\.0$/mu)
   const operations = parseOpenApiOperations(source)
   assert.equal(operations.length, 201)
   assert.equal(new Set(operations.map((x) => `${x.method} ${x.path}`)).size, 201)
@@ -72,7 +72,7 @@ test("integrated SQL restores both complete exact canonical parents and refuses 
 test("Public29.1 share metadata publishes a closed read-only owner contract", async () => {
   const { load } = await import("js-yaml")
   const spec = load(source)
-  assert.equal(spec.info.version, "29.2.0")
+  assert.equal(spec.info.version, "29.3.0")
   const operation = spec.paths["/v1/sessions/{id}/share"].get
   assert.equal(operation.operationId, "getSessionShareMetadata")
   assert.equal(operation["x-kokoro-idempotency"], "none")
@@ -98,7 +98,7 @@ test("share metadata finite inverse preserves exact committed parent and rejects
   for (const mutated of [
     source + "\n",
     source.replace("permission: chat.read", "permission: chat.write"),
-    source.replace("version: 29.2.0", "version: 29.3.0"),
+    source.replace("version: 29.3.0", "version: 29.4.0"),
     source.replace("required: [share]", "required: []"),
   ]) {
     assert.notEqual(mutated, source)
@@ -141,7 +141,7 @@ test("share metadata browser artifact is a deterministic canonical reference clo
     for (const nested of Object.values(value)) walk(nested)
   }
   walk(artifact)
-  for (const mutated of [source + "\n", source.replace("version: 29.2.0", "version: 29.2.1"), source.replace("required: [share]", "required: []")])
+  for (const mutated of [source + "\n", source.replace("version: 29.3.0", "version: 29.3.1"), source.replace("required: [share]", "required: []")])
     assert.throws(() => checkSessionShareMetadataBrowserContract(mutated, published))
   assert.throws(() => checkSessionShareMetadataBrowserContract(source, published + "\n"))
 })
@@ -165,7 +165,15 @@ test("Team role permissions finite inverse preserves the complete Public29.1 and
     source.replace("delete_series, begin_upload", "delete_series, unknown_action, begin_upload"),
     source.replace("delete_series, begin_upload", "begin_upload"),
     source.replace("permission: chat.read", "permission: chat.write"),
-    source.replace("version: 29.2.0", "version: 29.3.0"),
+    source.replace("version: 29.3.0", "version: 29.4.0"),
   ])
     assert.throws(() => restoreTeamRolePermissionsContract(mutated))
+})
+
+test("B08 public context failure is exactly additive and cannot hide unknown contract drift", async () => {
+  const { restorePersonalContextFailureContract, restoreTeamRolePermissionsContract } = await import("../../scripts/team-role-permissions-public-contract.mjs")
+  const parent = restorePersonalContextFailureContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "df5a33d4fa33662e4f70967bf5db60033f71f29511bf5975aa2395d61abb3e9c")
+  for (const mutated of [source + "\n", source.replace("context_window_exceeded", "unknown_capacity"), source.replace("version: 29.3.0", "version: 29.3.1")])
+    assert.throws(() => restoreTeamRolePermissionsContract(mutated), /drift|unknown/)
 })

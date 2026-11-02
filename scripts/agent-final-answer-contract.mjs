@@ -70,6 +70,7 @@ export function restoreAgent88FinalDisplayContract(document) {
 }
 
 export function restoreAgent89CustomApiSelectionRaw(source) {
+  source = restoreAgent810PersonalContextRaw(source)
   if (!source.includes('"version": "8.10.0"')) return source
   assert.equal(hash(source), "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e", "Agent8.10 Custom API child drift")
   const field =
@@ -80,6 +81,7 @@ export function restoreAgent89CustomApiSelectionRaw(source) {
   return source
 }
 export function restoreAgent89CustomApiSelectionContract(document) {
+  document = restoreAgent810PersonalContextContract(document)
   if (document.info?.version !== "8.10.0") return document
   const parent = structuredClone(document)
   assert.deepEqual(
@@ -106,5 +108,67 @@ export function restoreAgent89CustomApiSelectionContract(document) {
   delete parent.components.schemas.LaunchRequest.properties.selected_custom_api_profiles
   parent.info.version = "8.9.0"
   assert.equal(hash(JSON.stringify(parent)), "390e799d6534f7eda94bf4fe8b1318640e944a4da06326a33ed7e303cc618278", "Agent8.9 Custom API complete parent drift")
+  return parent
+}
+
+// Exact build/test-only 8.11 inverse. Neither runtime nor legacy oracle is rewritten.
+export function restoreAgent810PersonalContextRaw(source) {
+  if (!source.includes('"version": "8.11.0"')) {
+    assert.ok(!source.includes('"personal_context"'), "unknown personal context release")
+    return source
+  }
+  assert.equal(hash(source), "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b", "Agent8.11 complete personal context child drift")
+  const marker = ',\n          "personal_context": '
+  assert.equal(source.split(marker).length, 2, "exact personal context field")
+  const start = source.indexOf(marker),
+    valueStart = start + marker.length
+  let depth = 0,
+    quoted = false,
+    escaped = false,
+    end = valueStart
+  for (; end < source.length; end++) {
+    const character = source[end]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (character === "\\") escaped = true
+      else if (character === '"') quoted = false
+    } else if (character === '"') quoted = true
+    else if (character === "{" || character === "[") depth++
+    else if ((character === "}" || character === "]") && --depth === 0) {
+      end++
+      break
+    }
+  }
+  assert.ok(depth === 0 && !quoted, "closed personal context value")
+  let restored = source.slice(0, start) + source.slice(end)
+  const metadata = ',\n        "x-kokoro-max-body-bytes": 1048576'
+  assert.equal(restored.split(metadata).length, 2, "exact launch body budget")
+  restored = restored.replace(metadata, "")
+  const failure = ',\n              "context_window_exceeded"'
+  assert.equal(restored.split(failure).length, 2, "exact context failure addition")
+  restored = restored.replace(failure, "").replace('"version": "8.11.0"', '"version": "8.10.0"')
+  assert.equal(hash(restored), "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e", "Agent8.10 complete personal context parent drift")
+  return restored
+}
+export function restoreAgent810PersonalContextContract(document) {
+  if (document.info?.version !== "8.11.0") {
+    assert.ok(!Object.hasOwn(document.components?.schemas?.LaunchRequest?.properties ?? {}, "personal_context"), "unknown personal context release")
+    return document
+  }
+  const parent = structuredClone(document)
+  delete parent.components.schemas.LaunchRequest.properties.personal_context
+  delete parent.paths["/v1/runs"].post["x-kokoro-max-body-bytes"]
+  assert.equal(parent.components.schemas.Failure.properties.code.enum.pop(), "context_window_exceeded")
+  parent.info.version = "8.10.0"
+  assert.equal(
+    hash(JSON.stringify(document)),
+    "bd241f7412be7bd194a6d06ac1c73559f01d6729980ed41350ee2fe9c4b78b11",
+    "Agent8.11 complete parsed personal context drift",
+  )
+  assert.equal(
+    hash(JSON.stringify(parent)),
+    "91a79c67ad6adc0f2ba727a8cb870e4505ed2ad95f50fb1792af8c395f09d793",
+    "Agent8.10 complete parsed personal context drift",
+  )
   return parent
 }

@@ -356,7 +356,7 @@ integration("PG: the approved parts to regeneration to final chain is current wi
     await f.dropParts()
     const failure = f.definitions.oldTable.match(/CONSTRAINT ck_bff_message_agent_failure CHECK \([\s\S]*?\n  \)/u)[0]
     await f.pool.query(`ALTER TABLE kokoro_bff.bff_message DROP CONSTRAINT ck_bff_message_agent_failure,
-      ADD ${failure.replace(", 'model_settlement_pending'", "")}`)
+      ADD ${failure.replace(", 'context_window_exceeded'", "").replace(", 'model_settlement_pending'", "")}`)
     assert.equal((await f.evolve("check")).state, "invalid_schema", "agent-failure is an exact prerequisite, not a compatible arbitrary old CHECK")
     assert.equal((await evolveAgentFailureSchema({ databaseUrl, mode: "apply" })).state, "updated")
     await f.pool.query(`INSERT INTO kokoro_bff.bff_message(message_id,tenant_id,conversation_id,run_id,role,content,status,message_seq)

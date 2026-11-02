@@ -3,11 +3,12 @@ import { test } from "node:test"
 import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
-async function fixture(t) {
+async function fixture(t, failure) {
   const calls = []
   const chatTurns = {
     regenerate: async (input) => {
       calls.push(input)
+      if (failure) throw failure
       return { run_id: "new-run", assistant_message_id: "new-answer", user_message_id: "original-question", regenerated_from_message_id: input.sourceMessageId }
     },
   }
@@ -75,4 +76,13 @@ test("regeneration cannot accept copied prompt, execution choices or actor from 
   for (const body of ['{"content":"copy"}', '{"model":"old"}', '{"subject_id":"other"}', "[]", '{"x":1,"x":2}'])
     assert.equal((await f.request(body)).status, 400)
   assert.equal(f.calls.length, 0)
+})
+
+test("B08 regeneration capacity rejection is a definite 413 with no fabricated Run receipt", async (t) => {
+  const f = await fixture(t, new Error("PERSONAL_CONTEXT_TOO_LARGE"))
+  const result = await f.request()
+  assert.equal(result.status, 413)
+  assert.equal(result.body.error.code, "personal_context_too_large")
+  assert.equal(Object.hasOwn(result.body, "data"), false)
+  assert.equal(f.calls.length, 1)
 })

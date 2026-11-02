@@ -47,6 +47,12 @@ function chatError(error: unknown): { status: number; code: string; message: str
   if (error instanceof ConnectError && error.code === Code.NotFound) return { status: 404, code: "project_not_found", message: "Project was not found" }
   if (error.message === "CHAT_SKILL_SELECTION_INVALID")
     return { status: 400, code: "invalid_skill_selection", message: "Project Skill selection is no longer usable; update the selection" }
+  if (error.message === "PERSONAL_CONTEXT_TOO_LARGE")
+    return {
+      status: 413,
+      code: "personal_context_too_large",
+      message: "Complete personal context exceeds the Agent request limit; update your settings and retry",
+    }
   if (error.message === "CHAT_TURN_IDEMPOTENCY_CONFLICT") {
     return { status: 409, code: "idempotency_conflict", message: "Idempotency key was already used with different Chat input" }
   }

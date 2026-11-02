@@ -1,15 +1,17 @@
 import { withoutFinalAnswerColumn } from "./message-final-answer-schema.mjs"
+import { restoreContextWindowFailureSchema } from "./task-b-bff-integration-public-contract.mjs"
 import { createHash } from "node:crypto"
 const hash = (value) => createHash("sha256").update(value).digest("hex")
 export function messageRegenerationDefinitions(schema) {
   const published = schema.match(/^CREATE TABLE IF NOT EXISTS bff_message \([\s\S]*?^\);/mu)?.[0]
   const table = published && withoutFinalAnswerColumn(published)
-  if (!table || hash(table) !== "b798b18ac37cbafdfb18538927c51073ac8c7d4ec338e0a752c19be6c1c437ad") throw Error("invalid_schema")
+  if (!table || hash(restoreContextWindowFailureSchema(table)) !== "b798b18ac37cbafdfb18538927c51073ac8c7d4ec338e0a752c19be6c1c437ad")
+    throw Error("invalid_schema")
   const columns = table.match(/^  -- MESSAGE-REGENERATION-COLUMNS-BEGIN\n([\s\S]*?)^  -- MESSAGE-REGENERATION-COLUMNS-END\n/mu)
   const constraint = table.match(/^  -- MESSAGE-REGENERATION-CONSTRAINT-BEGIN\n([\s\S]*?)^  -- MESSAGE-REGENERATION-CONSTRAINT-END\n/mu)
   if (!columns || !constraint) throw Error("invalid_schema")
   const prior = table.replace(columns[0], "").replace(constraint[0], "")
-  if (hash(prior) !== "4649e21e9e9b3007eefe3c092fa965ebb8f60db7d17ef9d669167c59d816f2df") throw Error("invalid_schema")
+  if (hash(restoreContextWindowFailureSchema(prior)) !== "4649e21e9e9b3007eefe3c092fa965ebb8f60db7d17ef9d669167c59d816f2df") throw Error("invalid_schema")
   const additions = columns[1]
     .trim()
     .split("\n")

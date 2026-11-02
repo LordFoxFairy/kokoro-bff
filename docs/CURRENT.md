@@ -1,3 +1,14 @@
+## 2026-11-03 B08 个人材料进入新 Run：BFF候选，尚未真实模型验收
+
+已固定Agent30ce29a6/OpenAPI8.11：原18生成输出正规再生与双次byte-identical检查通过。原消息有界事务新增单SQL本人profile/knowledge/usage快照，先原key/digest早退，再scope绑定/容量核验，最后原消息与outbox提交；新key/显式再生取当前设置，同key恢复旧快照。正式Public29.3只补context_window_exceeded两处enum，原201 inventory、29.2及历史oracle保持；general413码personal_context_too_large沿原操作公开。未改App/其它owner、Git、正常服务/DB或模型。
+
+实际RED：新增合法完整personal_context被原parser拒绝（1FAIL），已修并保原日志。当前相关六文件focused63PASS、架构37PASS、OpenAPI201 semantic PASS、lint/typecheck/build均exit0，实际执行Node22.23.2；dependency manifest的22.22.2是原声明，不冒本轮执行版本。正式生成过程首次暴露本片inverse对int64再序列化和遗漏generator config pin，失败日志保留并修为保原字节/固定正规源，不称产品缺陷。第二轮focused唯一fail为新版本断言仍写29.2，已精确更新后63PASS，旧断言风险不移除。
+
+新增单选 `B08 real PG freezes personal owner material per new Run, replays unchanged and rejects complete oversized context before queued writes`，沿r237随机tenant/真实管理repo/HTTP及原schema验证，Root已在既有受管PG的自有临时库正规fresh安装后实跑通过（1PASS，测试3.50秒/整体5.10秒），临时库已删除；首轮共享候选库被其它tenant后台AGUI租约更新影响全表事实比较，原失败日志与断言保留；不得全跑含DROP的原business-store文件。完整默认/全历史门未为本片重跑，既有Draft边界不洗绿；真实模型材料采用/停用、窗口超限零调用、正常启动、App提示与scheduler仍按Root后继精确配对。当前源码/测试冻结清单与日志在原TaskB证据目录，本段不是实际模型生效声明。
+
+
+B08 独审P2：原 Message CHECK 漏 context_window_exceeded 会令合法失败投影回滚。canonical 仅新增该不可重试枚举；原 db:evolve-agent-failure 的 check/apply 接受精确 pre-settlement 与 settlement 两个已批准旧约束，未知 CHECK、未验证约束或放宽 retry/role 均拒绝，不更新历史行。已有 parts/regeneration/final 定义保留新 CHECK，并由同一完整 SHA 有限逆证核对旧字节；旧 oracle 不改。切换前使用 KOKORO_BFF_POSTGRES_URL（schema=kokoro_bff）运行 pnpm db:evolve-agent-failure check → apply → check，禁止在非空库执行 fresh installer。 新增CHECK闭集测试真实RED1FAIL→定向pure10PASS；正式build（含tsc）exit0。新单选 B08 real PG persists context_window_exceeded 由真实submit/admit→Agent ledger→Message/HTTP/RUN_ERROR回读及重复零写验证，当前由Root隔离资源执行；不能用此前容量旅程代替新failure落库。尝试未安装的eslint入口失败日志保留，本仓正式 pnpm lint 已 exit0，不冒ESLint通过。
+
 ## 2026-11-02 B09 角色权限声明纠偏候选（未提交/未激活）
 
 Public29.2 仅追加固定 IAM 已发布的 `TeamRole.permissions.skill.delete_series` 及版本号，BFF 正式生成 IAM reader 本已接受该动作，运行时源码、身份/权限、Schema 与201操作清单不变。真实普通页面 `/api/team/roles` 的 `bff_bad_response` 由主方保留；App 当前严格声明缺项，待本 owner 正式固定后通过原完整 Public/Team 生成链消费，尚不声称页面已恢复。

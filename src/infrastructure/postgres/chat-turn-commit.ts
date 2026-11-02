@@ -1,3 +1,5 @@
+import { readChatPersonalContext } from "./chat-personal-context.js"
+import { serializeAgentLaunch } from "../clients/agent/outbox-delivery.js"
 import { regenerationSourceInTransaction } from "./message-regeneration.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
 import { performance } from "node:perf_hooks"
@@ -430,7 +432,10 @@ export async function commitChatTurn(
         await rollback()
         return null
       }
-      const payload = bindAgentDispatchPayloadProjectScope(callerPayload, scope.canonicalProjectId)
+      const boundPayload = bindAgentDispatchPayloadProjectScope(callerPayload, scope.canonicalProjectId)
+      const personalContext = await readChatPersonalContext(query, { tenantId: command.tenantId, actorId: command.actorId })
+      const payload = { ...boundPayload, launch: { ...boundPayload.launch, personal_context: personalContext } }
+      serializeAgentLaunch(payload.launch)
       const registration = agUiConsumerRegistration(command.tenantId, command.conversationId, command.subjectId, undefined)
       const registered = await query(registration.text, registration.values)
       if (registered.rowCount !== 1) throw new Error("AGENT_DISPATCH_CONSUMER_REGISTRATION_FAILED")
