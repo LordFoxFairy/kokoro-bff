@@ -303,6 +303,7 @@ test("the IAM consumer pins the complete 0.18.0 owner artifact and generates onl
     "resolveTenantPublisherProfiles",
     "revokeAccountSession",
     "updateAccountProfile",
+    "verifyNativeSession",
     "verifyOpenAppManagementAuthorization",
     "verifySessionAuthorization",
     "verifySkillListIdentity",
@@ -315,6 +316,11 @@ test("the IAM consumer pins the complete 0.18.0 owner artifact and generates onl
   for (const resource of ["members", "invitations", "roles"]) {
     assert.match(config, new RegExp(`GET /internal/v1/tenants/\\{tenant_id\\}/${resource}`, "u"))
   }
+})
+
+test("the default test entry includes native session admission regressions", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"))
+  assert.ok(packageJson.scripts.test.split(/\s+/u).includes("test/native-session-admission.test.ts"))
 })
 
 test("the IAM generator normalizer and generated-tree allowlist fail closed on drift", async () => {

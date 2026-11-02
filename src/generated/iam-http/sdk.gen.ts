@@ -63,6 +63,9 @@ import type {
   UpdateAccountProfileData,
   UpdateAccountProfileErrors,
   UpdateAccountProfileResponses,
+  VerifyNativeSessionData,
+  VerifyNativeSessionErrors,
+  VerifyNativeSessionResponses,
   VerifyOpenAppManagementAuthorizationData,
   VerifyOpenAppManagementAuthorizationErrors,
   VerifyOpenAppManagementAuthorizationResponses,
@@ -94,6 +97,7 @@ import {
   zResolveTenantPublisherProfilesResponse,
   zRevokeAccountSessionResponse,
   zUpdateAccountProfileResponse,
+  zVerifyNativeSessionResponse,
   zVerifyOpenAppManagementAuthorizationResponse,
   zVerifySessionAuthorizationResponse,
   zVerifySkillListIdentityResponse,
@@ -261,6 +265,22 @@ export const rejectTenantInvitation = <ThrowOnError extends boolean = false>(
   (options.client ?? client).post<RejectTenantInvitationResponses, RejectTenantInvitationErrors, ThrowOnError>({
     responseValidator: async (data) => await zRejectTenantInvitationResponse.parseAsync(data),
     url: "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/reject",
+    ...options,
+  })
+
+export const verifyNativeSession = <ThrowOnError extends boolean = false>(
+  options?: Options<VerifyNativeSessionData, ThrowOnError>,
+): RequestResult<VerifyNativeSessionResponses, VerifyNativeSessionErrors, ThrowOnError> =>
+  (options?.client ?? client).post<VerifyNativeSessionResponses, VerifyNativeSessionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zVerifyNativeSessionResponse.parseAsync(data),
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/internal/v1/native-session-admission/verify",
     ...options,
   })
 

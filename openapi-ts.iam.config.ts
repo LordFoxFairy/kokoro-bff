@@ -24,6 +24,7 @@ export default defineConfig({
           "GET /internal/v1/account/sessions",
           "DELETE /internal/v1/account/sessions/{session_id}",
           "POST /internal/v1/session-authorizations/verify",
+          "POST /internal/v1/native-session-admission/verify",
           "POST /internal/v1/authorization/check",
           "POST /internal/v1/tenants/{tenant_id}/skill-authorizations/check",
           "POST /internal/v1/tenants/{tenant_id}/publisher-profiles/resolve",

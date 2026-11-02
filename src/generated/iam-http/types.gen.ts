@@ -1619,6 +1619,66 @@ export type RejectTenantInvitationResponses = {
 
 export type RejectTenantInvitationResponse = RejectTenantInvitationResponses[keyof RejectTenantInvitationResponses]
 
+export type VerifyNativeSessionData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path?: never
+  query?: never
+  url: "/internal/v1/native-session-admission/verify"
+}
+
+export type VerifyNativeSessionErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  504: ApiErrorResponse
+}
+
+export type VerifyNativeSessionError = VerifyNativeSessionErrors[keyof VerifyNativeSessionErrors]
+
+export type VerifyNativeSessionResponses = {
+  200: {
+    data: {
+      subject_id: string
+      tenant_id: string
+      session_id: string
+      permissions: Array<string>
+      session_expires_at: string
+    }
+    meta: {
+      request_id: string
+      contract_version: "1.0.0"
+    }
+  }
+}
+
+export type VerifyNativeSessionResponse = VerifyNativeSessionResponses[keyof VerifyNativeSessionResponses]
+
 export type ListTenantMembersData = {
   body?: never
   headers?: {

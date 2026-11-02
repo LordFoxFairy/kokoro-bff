@@ -12,7 +12,7 @@
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.iam.config.ts",
-    "config_sha256": "5da244461eff64f3d549b966c67f578d0e83db043c038d5f123b2cdae23d5e2b"
+    "config_sha256": "86a2f3adf6200fa8b116e1f3d72af5afdbb97e05726728b15d51d38ad2bd1d30"
   },
   "runtime": {
     "node": "24.20.0",
@@ -75,15 +75,15 @@
     },
     {
       "path": "sdk.gen.ts",
-      "sha256": "1c1b4bbb3c31c26f55ea026430a48e41113c39566172339acb776d1eea9d7e05"
+      "sha256": "143d3546654bf16285018a95f2c41b0560b58a44916f49fd1d34c80436b89d73"
     },
     {
       "path": "types.gen.ts",
-      "sha256": "bb4198398c93c677d44f466138d19f34619db52b89da0a837994ba6839c99416"
+      "sha256": "bc0377f6c3cb5da1564959927ed6cfd11ed2b0f587377ac9c211655cf5f265ca"
     },
     {
       "path": "zod.gen.ts",
-      "sha256": "ac491eb8a4704a9ed63b256dab9432927add53669f97a5d64d2459075e76afec"
+      "sha256": "1b05a381d9bbd2c2265418627f4ce7db3244fa7f6931b7c22615c4747b4845c7"
     }
   ]
 }

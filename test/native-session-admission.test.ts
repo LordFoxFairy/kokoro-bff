@@ -136,3 +136,119 @@ test("native session admission rejects an origin mismatch before IAM I/O", async
   )
   assert.equal(calls, 0)
 })
+
+test("native session admission preserves the owner's required, closed and versioned success fields", async () => {
+  const success = {
+    data: {
+      subject_id: "user-1",
+      tenant_id: "tenant-1",
+      session_id: "session-1",
+      permissions: ["platform.admin"],
+      session_expires_at: "2030-01-01T05:30:00+05:30",
+    },
+    meta: { request_id: "iam-native-1", contract_version: "1.0.0" },
+  }
+  let body: unknown = success
+  const baseUrl = await listen(
+    createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "iam-native-1" })
+      response.end(JSON.stringify(body))
+    }),
+  )
+  const client = new SessionAdmissionClient({
+    baseUrl,
+    credentialFile: await credentialFile(),
+    webOrigin: "https://web.example.test",
+    tenantId: "tenant-1",
+    timeoutMs: 1000,
+    maxResponseBytes: 65_536,
+  })
+  const verify = () =>
+    client.verifyNative({
+      cookie: "kokoro-issuer.session_token=session",
+      origin: "https://web.example.test",
+      requestId: "request-1",
+      signal: new AbortController().signal,
+    })
+  assert.deepEqual(await verify(), { ok: true, identity: { namespace: "tenant-1", userId: "user-1" }, platformAdmin: true })
+
+  const invalid: Array<[string, unknown]> = [
+    ["missing data", { meta: success.meta }],
+    ["missing meta", { data: success.data }],
+    ["extra envelope field", { ...success, extra: true }],
+    ["extra data field", { ...success, data: { ...success.data, extra: true } }],
+    ["extra meta field", { ...success, meta: { ...success.meta, extra: true } }],
+    ["unknown contract version", { ...success, meta: { ...success.meta, contract_version: "2.0.0" } }],
+    ["empty permission", { ...success, data: { ...success.data, permissions: [""] } }],
+    ["invalid calendar date", { ...success, data: { ...success.data, session_expires_at: "2030-02-29T00:00:00Z" } }],
+    ["missing timezone", { ...success, data: { ...success.data, session_expires_at: "2030-01-01T00:00:00" } }],
+  ]
+  for (const section of ["data", "meta"] as const) {
+    for (const field of Object.keys(success[section])) {
+      const incomplete: Record<string, unknown> = { ...success[section] }
+      delete incomplete[field]
+      invalid.push([`missing ${section}.${field}`, { ...success, [section]: incomplete }])
+    }
+  }
+  for (const [label, payload] of invalid) {
+    body = payload
+    assert.deepEqual(await verify(), { ok: false, status: 503, code: "iam_admission_unavailable" }, label)
+  }
+})
+
+test("native session admission accepts owner error codes but fails closed on malformed envelopes", async () => {
+  const error = { code: "native_session_invalid", message: "owner-only diagnostic", retryable: false, details: [] }
+  let status = 401
+  let body: unknown = { error }
+  const baseUrl = await listen(
+    createServer((_request, response) => {
+      response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "iam-native-1", "retry-after": "60" })
+      response.end(JSON.stringify(body))
+    }),
+  )
+  const client = new SessionAdmissionClient({
+    baseUrl,
+    credentialFile: await credentialFile(),
+    webOrigin: "https://web.example.test",
+    tenantId: "tenant-1",
+    timeoutMs: 1000,
+    maxResponseBytes: 65_536,
+  })
+  const verify = () =>
+    client.verifyNative({
+      cookie: "kokoro-issuer.session_token=session",
+      origin: "https://web.example.test",
+      requestId: "request-1",
+      signal: new AbortController().signal,
+    })
+  for (const [ownerStatus, ownerCode, expectedStatus, expectedCode] of [
+    [401, "native_session_invalid", 401, "session_invalid"],
+    [401, "UNAUTHENTICATED", 401, "session_invalid"],
+    [403, "native_session_origin_forbidden", 403, "session_forbidden"],
+    [429, "native_session_rate_limited", 429, "session_rate_limited"],
+    [503, "native_session_service_unavailable", 503, "iam_admission_unavailable"],
+    [504, "native_session_deadline_exceeded", 503, "iam_admission_unavailable"],
+  ] as const) {
+    status = ownerStatus
+    body = { error: { ...error, code: ownerCode } }
+    assert.deepEqual(await verify(), { ok: false, status: expectedStatus, code: expectedCode, ...(ownerStatus === 429 ? { retryAfter: "60" } : {}) })
+  }
+  status = 401
+  const invalid: Array<[string, unknown]> = [
+    ["unknown error code", { error: { ...error, code: "future_native_session_error" } }],
+    ["extra envelope field", { error, extra: true }],
+    ["extra error field", { error: { ...error, extra: true } }],
+    ["empty message", { error: { ...error, message: "" } }],
+    ["wrong retryable type", { error: { ...error, retryable: "false" } }],
+    ["wrong details type", { error: { ...error, details: {} } }],
+  ]
+  for (const field of Object.keys(error)) {
+    const incomplete: Record<string, unknown> = { ...error }
+    delete incomplete[field]
+    invalid.push([`missing error.${field}`, { error: incomplete }])
+  }
+  for (const [label, payload] of invalid) {
+    body = payload
+    assert.deepEqual(await verify(), { ok: false, status: 503, code: "iam_admission_unavailable" }, label)
+  }
+})

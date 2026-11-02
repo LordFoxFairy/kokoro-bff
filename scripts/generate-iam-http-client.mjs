@@ -160,6 +160,16 @@ async function normalizeGeneratorCompatibility(directory) {
       "strict IAM admission response",
     ],
   ])
+  // The pinned owner closes all three native response objects and permits RFC
+  // 3339 offsets. openapi-ts otherwise strips extra keys and forces UTC here.
+  const zodPath = path.join(directory, "zod.gen.ts")
+  const zodSource = await readFile(zodPath, "utf8")
+  const nativeResponses = [...zodSource.matchAll(/export const zVerifyNativeSessionResponse = z\.object\(\{[\s\S]*?\n\}\);/gu)]
+  assert.equal(nativeResponses.length, 1, "expected one generated native session response")
+  const nativeResponse = nativeResponses[0][0]
+  let normalized = replaceExactInSource(nativeResponse, "z.object({", "z.strictObject({", 3, "closed native session response objects")
+  normalized = replaceExactInSource(normalized, "z.iso.datetime()", "z.iso.datetime({ offset: true })", 1, "native session RFC 3339 offsets")
+  await writeFile(zodPath, replaceExactInSource(zodSource, nativeResponse, normalized, 1, "native session response"))
 }
 
 async function run(command, args, options = {}) {

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto"
-import { z } from "zod"
 
-import { zApiErrorResponse, zVerifySessionAuthorizationResponse } from "../generated/iam-http/zod.gen.js"
+import { zApiErrorResponse, zVerifyNativeSessionResponse, zVerifySessionAuthorizationResponse } from "../generated/iam-http/zod.gen.js"
 import type { NativeSessionAdmissionInput, SessionAdmission, SessionAdmissionInput, SessionAdmissionResult } from "./session-admission.types.js"
 import { SessionAdmissionTransport } from "./session-admission.transport.js"
 import { readIamSessionAdmissionCredential } from "./iam-session-admission-credential.js"
@@ -17,25 +16,6 @@ export type SessionAdmissionClientOptions = Readonly<{
   timeoutMs: number
   maxResponseBytes: number
 }>
-
-const nativeSuccess = z.strictObject({
-  data: z.strictObject({
-    subject_id: z.string().min(1),
-    tenant_id: z.string().min(1),
-    session_id: z.string().min(1),
-    permissions: z.array(z.string().min(1)),
-    session_expires_at: z.iso.datetime({ offset: true }),
-  }),
-  meta: z.strictObject({ request_id: z.string().min(1), contract_version: z.literal("1.0.0") }),
-})
-const nativeError = z.strictObject({
-  error: z.strictObject({
-    code: z.string().min(1),
-    message: z.string().min(1),
-    retryable: z.boolean(),
-    details: z.array(z.unknown()),
-  }),
-})
 
 function unavailable(): SessionAdmissionResult {
   return { ok: false, status: 503, code: "iam_admission_unavailable" }
@@ -133,7 +113,7 @@ export class SessionAdmissionClient implements SessionAdmission {
       const body = parseJson(response.body)
       if (body === null) return unavailable()
       if (response.status === 200) {
-        const parsed = nativeSuccess.safeParse(body)
+        const parsed = zVerifyNativeSessionResponse.safeParse(body)
         if (!parsed.success) return unavailable()
         return {
           ok: true,
@@ -141,7 +121,7 @@ export class SessionAdmissionClient implements SessionAdmission {
           platformAdmin: parsed.data.data.permissions.includes("platform.admin"),
         }
       }
-      if (!zApiErrorResponse.safeParse(body).success && !nativeError.safeParse(body).success) return unavailable()
+      if (!zApiErrorResponse.safeParse(body).success) return unavailable()
       if (response.status === 401) return { ok: false, status: 401, code: "session_invalid" }
       if (response.status === 403) return { ok: false, status: 403, code: "session_forbidden" }
       if (response.status === 429) {

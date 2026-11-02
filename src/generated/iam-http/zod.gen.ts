@@ -310,6 +310,31 @@ export const zRejectTenantInvitationResponse = z.object({
   }),
 })
 
+export const zVerifyNativeSessionHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zVerifyNativeSessionResponse = z.strictObject({
+  data: z.strictObject({
+    subject_id: z.string().min(1),
+    tenant_id: z.string().min(1),
+    session_id: z.string().min(1),
+    permissions: z.array(z.string().min(1)),
+    session_expires_at: z.iso
+      .datetime({ offset: true })
+      .regex(
+        /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$/,
+      ),
+  }),
+  meta: z.strictObject({
+    request_id: z.string().min(1),
+    contract_version: z.enum(["1.0.0"]),
+  }),
+})
+
 export const zListTenantMembersHeaders = z.object({
   "x-request-id": z
     .string()
