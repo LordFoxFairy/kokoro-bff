@@ -22,7 +22,7 @@ export function restoreSessionShareMetadataContract(source) {
 }
 export function sessionShareMetadataParentBaseline(inventory) {
   if (inventory.length !== 201) {
-    assert.ok(!inventory.some((operation) => operation.operation_id === "getSessionShareMetadata"), "unknown share metadata inventory")
+    assert.ok(!inventory.some((operation) => operation.operation_id === "getSessionShareMetadata"), "share metadata inventory drift")
     return inventory
   }
   assert.equal(hash(JSON.stringify(inventory)), proof.current_inventory_sha256, "complete ordered201 inventory drift")

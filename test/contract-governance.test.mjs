@@ -359,6 +359,7 @@ test("the repository exposes executable contract, schema, and strictness gates",
       "pnpm contract:check:iam-relay",
       "pnpm contract:check:skill-download",
       "pnpm contract:check:scheduler",
+      "pnpm contract:check:session-share-metadata",
       "pnpm contract:check:platform",
       "pnpm contract:check:storage",
       "pnpm contract:lint",
@@ -771,7 +772,7 @@ test("SET13 actual builtin permission fields are declared by the public contract
   const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
   const permissions = load(source).components.schemas.TeamRole.properties.permissions
   assert.deepEqual(permissions.properties.platform.items.enum, ["execute"])
-  assert.equal(permissions.properties.skill.items.enum.length, 15)
+  assert.equal(permissions.properties.skill.items.enum.length, 16)
   assert.equal(permissions.additionalProperties, false)
 })
 

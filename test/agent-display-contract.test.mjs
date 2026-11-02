@@ -23,7 +23,10 @@ test("both current generator modes reject a full legacy owner blob rather than p
       join(dir, "scripts/agent-final-answer-contract.mjs"),
       await readFile(new URL("../scripts/agent-final-answer-contract.mjs", import.meta.url)),
     )
-    const dest = join(dir, "contract/vendor/kokoro-agent/f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87")
+    // The generator verifies the currently pinned owner commit. Keep the
+    // legacy bytes under that path so the test reaches the intended digest
+    // mismatch instead of failing on a missing vendor directory.
+    const dest = join(dir, "contract/vendor/kokoro-agent/30ce29a605878caa0a50fd7cd627f70c1aa0e5c0")
     await mkdir(dest, { recursive: true })
     await writeFile(join(dir, "scripts/generate-agent-http-client.mjs"), await readFile(new URL("../scripts/generate-agent-http-client.mjs", import.meta.url)))
     await writeFile(
