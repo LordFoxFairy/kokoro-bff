@@ -250,6 +250,7 @@ test("global business store does not duplicate feature service providers", async
   assert.equal(await exists("src/application/services.ts"), false)
   assert.doesNotMatch(repositories, /public readonly personalizationProvider/u)
   assert.doesNotMatch(repositories, /this\.personalizationProvider\s*=/u)
+  assert.doesNotMatch(repositories, /class\s+PostgresBffRepositories/u)
   assert.match(runtime, /type BffRuntimeStore = IdempotencyRepository/u)
   assert.doesNotMatch(runtime, /businessStore\?\.services/u)
   assert.match(runtime, /infrastructureStore\?\.chatService/u)
