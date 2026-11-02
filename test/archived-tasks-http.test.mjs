@@ -14,29 +14,23 @@ const headers = {
 }
 async function fixture(t, options = {}) {
   const reads = []
-  const businessStore = {
-    services: {
-      chat: {
-        async listOwnedArchivedTasks(query) {
-          reads.push(query)
-          return options.read ? options.read(query) : { items: [item], nextPosition: null }
-        },
-        async readArchiveState(query) {
-          reads.push(query)
-          return options.state ? options.state(query) : { session_id: query.conversationId, archived_at: null }
-        },
-        async changeArchiveState(command) {
-          reads.push(command)
-          if (options.change) return options.change(command)
-          return {
-            kind: "changed",
-            receipt: { data: { session_id: command.conversationId, archived_at: command.action === "archive" ? item.archived_at : null } },
-          }
-        },
-      },
+  const chatService = {
+    async listOwnedArchivedTasks(query) {
+      reads.push(query)
+      return options.read ? options.read(query) : { items: [item], nextPosition: null }
     },
-    async ready() {},
-    async close() {},
+    async readArchiveState(query) {
+      reads.push(query)
+      return options.state ? options.state(query) : { session_id: query.conversationId, archived_at: null }
+    },
+    async changeArchiveState(command) {
+      reads.push(command)
+      if (options.change) return options.change(command)
+      return {
+        kind: "changed",
+        receipt: { data: { session_id: command.conversationId, archived_at: command.action === "archive" ? item.archived_at : null } },
+      }
+    },
   }
   const config = {
     host: "127.0.0.1",
@@ -58,7 +52,7 @@ async function fixture(t, options = {}) {
     upstreams: {},
   }
   const admission = options.admission ?? new SessionAdmissionDouble({ "shared-token": { namespace: "tenant-verified", userId: "user-one" } })
-  const server = createBffServer(config, { businessStore, readiness: async () => undefined, sessionAdmission: admission })
+  const server = createBffServer(config, { businessStore: null, chatService, readiness: async () => undefined, sessionAdmission: admission })
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
   t.after(async () => {
     server.closeAllConnections()

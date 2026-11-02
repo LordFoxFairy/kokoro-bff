@@ -62,8 +62,6 @@ import {
   requiresIdempotency,
 } from "../http/request.js"
 import { reply, send } from "../http/response.js"
-import { normalizeUpstreamResponse } from "../infrastructure/clients/upstream-response.js"
-import { proxyUpstream } from "../upstream.js"
 import { liveAgentSession } from "../http/routes/agent.js"
 import { liveChatBusiness } from "../http/routes/chat.js"
 import type { ChatBusinessProvider } from "../http/routes/chat-business-provider.js"
@@ -77,7 +75,7 @@ import { handleSystemModelCatalogBusiness, systemModelCatalogRequest } from "../
 import { livePlatformProjectionRead, platformProjectionRequest } from "../http/routes/platform-projection.js"
 import { handleProjectMutationBusiness, projectMutation } from "../http/routes/project-mutation-native.js"
 import { handleMoriRequest } from "../http/routes/music-native.js"
-import { configuredUpstream, bffOwnedBusinessPath, upstreamKey } from "../http/routes/routing.js"
+import { bffOwnedBusinessPath, upstreamKey } from "../http/routes/routing.js"
 import { schedulerDispatch, type SchedulerDispatchProvider } from "../http/routes/scheduler.js"
 import { handleSystemNativeRequest } from "../http/routes/system-native.js"
 import { handleChatNativeRequest } from "../http/routes/chat-native.js"
@@ -476,7 +474,6 @@ export async function handleBffRequest(
   }
 
   const key = upstreamKey(businessPath)
-  const upstreamBase = key === null ? null : configuredUpstream(config, key)
   if (
     composition.routeHandler === undefined &&
     key === null &&
@@ -662,25 +659,7 @@ export async function handleBffRequest(
     )
     return
   }
-  if (upstreamBase === null) {
-    await reply(
-      response,
-      503,
-      failure("upstream_not_configured", `No upstream is configured for ${key || "this route"}`, id),
-      context,
-      composition.idempotency,
-      mutation,
-    )
-    return
-  }
-  try {
-    const upstreamPath = `/${businessPath.map((segment) => encodeURIComponent(segment)).join("/")}${new URL(request.url || "/", "http://bff.local").search}`
-    const upstream = await proxyUpstream(config, upstreamBase, upstreamPath, method, id, new Headers(request.headers as Record<string, string>), body)
-    const normalized = normalizeUpstreamResponse(upstream, id)
-    await reply(response, normalized.status, normalized.body, context, composition.idempotency, mutation)
-  } catch {
-    await reply(response, 502, failure("upstream_unreachable", "The configured upstream is unavailable", id), context, composition.idempotency, mutation)
-  }
+  await reply(response, 404, failure("bff_route_not_found", "Business route was not found", id), context, composition.idempotency, mutation)
 }
 
 export type BffServerOptions = BffCompositionOptions

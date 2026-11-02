@@ -14,17 +14,11 @@ const headers = {
 }
 async function fixture(t, options = {}) {
   const reads = []
-  const businessStore = {
-    services: {
-      chat: {
-        async listOwnedSharedTasks(...args) {
-          reads.push(args)
-          return options.read ? options.read(...args) : { items: [item], nextPosition: null }
-        },
-      },
+  const chatService = {
+    async listOwnedSharedTasks(...args) {
+      reads.push(args)
+      return options.read ? options.read(...args) : { items: [item], nextPosition: null }
     },
-    async ready() {},
-    async close() {},
   }
   const config = {
     host: "127.0.0.1",
@@ -46,7 +40,7 @@ async function fixture(t, options = {}) {
     upstreams: {},
   }
   const admission = options.admission ?? new SessionAdmissionDouble({ "shared-token": { namespace: "tenant-verified", userId: "user-one" } })
-  const server = createBffServer(config, { businessStore, readiness: async () => undefined, sessionAdmission: admission })
+  const server = createBffServer(config, { businessStore: null, chatService, readiness: async () => undefined, sessionAdmission: admission })
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
   t.after(async () => {
     server.closeAllConnections()
