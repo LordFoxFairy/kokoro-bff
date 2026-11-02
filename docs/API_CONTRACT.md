@@ -1,3 +1,44 @@
+## I29-D0：native2 固定消费与第一方业务认证（目标，未发行／未切换）
+
+当前固定 IAM internal **0.18.0**／native **1.0.0**；以下目标依 IAM 正式发布后实施，不将文档当机器契约。BFF public endpoint、operationId、业务 DTO、权限及错误 profile 不因本片新增版本或接口；不在本仓或 Root 维护第二份 IAM 可编辑 contract。字段唯一来源为 IAM 下一正式发布物，BFF 只经现生成链固定 version／commit／digest。
+
+### 目标 native admission 消费
+
+IAM 原 `POST /internal/v1/native-session-admission/verify`／`verifyNativeSession` 不改路径，新 profile2.0.0 的 required `platform_admin:boolean` 替换 `permissions`；subject_id／tenant_id／session_id／session_expires_at 与 request_id 保留，meta.contract_version 严格为2.0.0。BFF 严格拒绝旧成功 shape、缺值／null／字符串布尔、未知字段／版本，不从 permission 字符串补值或默认 false。既有 User.platformAdminVersion 仅由 IAM 校验，不产生 BFF wire version／权限副本。
+
+请求仍无 body／tenant selector，使用 BFF 专用服务 Bearer、allowlisted issuer Cookie、精确 Origin、Accept 与 request-id。服务凭据不等于用户 Bearer；原 Web→BFF 服务认证、Cookie/CSRF、deadline／取消、no-store 和响应关联验证保持。合法 active tenant 与 BFF 固定 tenant 不符仍为 `403 product_tenant_forbidden`，不改 I28 的非失效语义。
+
+### Owner 调用范围
+
+| 第一方消费者 | 固定 IAM contract 与保留条件 |
+| --- | --- |
+| Skills action／local import／个人生命周期与管理 | `skill.authorization.check` 显式 native proof；每个原 action／subject／tenant 绑定和当前 roles／管理员判断保持 |
+| MCP 个人／管理／目录 | `authorization.check` 只走原 MCP resource/action 闭集，不开放 tenant／audit native 授权 |
+| 私有 Skills publisher enrichment | `publisher.profile.resolve` native proof；原 refs 数量／去重／exact 回包与可见性保留，所有页面与嵌套 helper 同步迁移 |
+| App Skill bindings | `open.app.management.verify` native proof；operator 名单、exact app／tenant／目标 client 注册资格保持，不接受 platformAdmin 替代 |
+| Account／Team／AdminTeam、Billing 成员列表 | 原 Account／Team operations 接显式 native proof；每页及原最终复核保当次 Session／User／active tenant／member 校验，原 cursor、CAS／审计／last-owner 不变 |
+
+native proof 是请求内传输上下文，不添加 body tenant／actor／subject／permission 字段，不伪造 OAuth grant/scope。它从 `user-admission` 贯穿 `withSkillActionAdmission`、action helpers、publisher、`humanBearer` 的原消费者与末次复核；全部承接后删 optional verifyNative、Bearer fallback、空 token 哨兵及 private 正则 token 抽取。不存在“先 native 失败再尝试 Bearer”模式。
+
+保留公共 `GET /v1/skill.list` User API Key／OpenApp 身份、`publicBearer`／`resolvePublic`、公开分享、第三方 OAuth、service-only 及执行／资金授权；这些独立协议不作为 native fallback，也不因清理 user Bearer 被整面删除。普通 Account／publisher 不因共用 native proof 新增全局 roles gate。
+
+### 失败、发布及验证
+
+IAM native2 的唯一错误分类增量为 closed `native_session_service_unauthenticated`（owner401），用于服务凭据缺失／错误、错 caller／用途等确定服务身份拒绝；随 owner code-first／OpenAPI／SDK／error enum 正规生成，历史 native1 不改。先确定服务身份，再以 `native_session_invalid`／401 断言 Cookie／Session 无效；原坏输入仍按400规则，协议／服务错误不混为 human invalid。BFF 和同一 native proof 的各 owner 客户端依 typed code 区分下表，不凭 HTTP status 猜测。无新增 public 错误／endpoint／credential 用途；业务原401／403／404／409政策保持，含 IAM allowed:false 的 BFF 业务映射及期限规则。
+
+| 事实 | owner HTTP／typed code | BFF 既有结果 |
+| --- | --- | --- |
+| bad service（含错 caller／用途） | 401／`native_session_service_unauthenticated` | 503／`iam_admission_unavailable`，不注销用户 |
+| 服务通过后的 bad Cookie／Session | 401／`native_session_invalid` | 401／`session_invalid` |
+| 必要文件／依赖不确定 | 503／`native_session_service_unavailable` | 503／`iam_admission_unavailable` |
+| 归属不明或缺合法 typed code 的401 | 不构成 human invalid 证明 | 503／`iam_admission_unavailable` |
+
+各项拒绝均零业务写入；损坏回包／不确定性同样503，不因服务故障抹除会话。429 与原 Retry-After 保留，零自动 retry、不扩额；现 IAM native `100/60s` 聚合容量未验，不由本 D0 宣称满足页面扇出。
+
+新 IAM profile2 和 next internal／SDK 正规发行后 BFF 固定单一来源生成；native1 原件／历史 hash 只读保留，新的 2.0 artifact 单独发布，不把旧 baseline 改成绿。全部 route/helper/client 与真实 owner 配对验收后才退出旧第一方身份链，无混读／兼容 union。原命令已发送后取消／未知按原 key／receipt 语义恢复，当前认证不证明旧命令未提交。
+
+必要证据：严格新 shape／旧 shape 负控、来源/hash/生成 drift，具名四 op 与 Account／Team 的真实 HTTP，Skills/publisher/下载/分享/规格、AdminTeam／Billing 分页及最终撤权负控；公共 API Key／OpenApp／第三方／service-only 无回归，第一方零 OAuth mint/introspection。详细删除边界见 [技术设计](TECHNICAL_DESIGN.md)，本片无持久模型变更见 [数据模型](DATA_MODEL.md)。
+
 ## 2026-10-29 Custom API 选择冻结与私有恢复（候选）
 
 已固定 Agent `f8eeba1df09bf1118aaf4d40fc7d481ec16f5c87` HTTP8.10，OpenAPI SHA256 `af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e`；原生成入口派生18份client/validator/profile并验证两次字节一致，新数组按owner profile_id唯一且嵌套项strict，不手改生成物。

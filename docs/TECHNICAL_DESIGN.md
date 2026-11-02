@@ -1,3 +1,44 @@
+## I29-D0：第一方 native 消费者闭环（目标设计，未实现）
+
+承接 Root ADR-035／ADR-036 的既定 cutover，沿现 Nest feature modules／显式 providers 完成认证消费者，不重开 runtime 架构或新增 owner。当前 BFF 基线 `f81f2715c4a3e5dd79b9cb0c7e6e7c5d28847351` 固定消费 IAM internal0.18.0／native1.0.0；源码仍有 optional `verifyNative`、Bearer fallback、空 token 哨兵和后续业务 Bearer 读取。下述为 D0 目标，不表示当前实现、正常装配或四个用户旅程已验收；历史设计段保持原文，不能当作新切换状态。
+
+### 单一请求身份与 owner 依赖
+
+IAM 先发行 native profile2.0.0 与 next internal／SDK，BFF 通过现 `contract/dependencies/iam-http.json`／native profile pin 和原生成入口固定同一正式 commit／version／digest。消费 required `platform_admin`，不再从 `permissions.includes("platform.admin")` 猜测；IAM 用户／Session／roles／operator 是唯一事实，BFF 无 SQL／权限副本或第二校验协议。
+
+第一方请求只走 Web same-origin adapter→BFF 受信服务 envelope→IAM 专用 `session_admission` 服务凭据＋allowlisted issuer Cookie＋精确 Origin。业务上下文含已验证 subject／tenant／平台管理员投影；用于 owner 调用的 native transport proof 显式区分于该上下文，仅请求内存持有，不把服务 secret 当人类 token。每个原 fresh／final recheck 仍调用 owner，不以一次 admission 或平台管理员布尔值代替 Skills／MCP／OpenApp 当前授权。
+
+### 必须同片承接的消费者
+
+| 现位置／能力 | 目标与删除条件 |
+| --- | --- |
+| `src/auth/session-admission.{types,client,transport}.ts`、`user-admission.ts` | native 校验是必需接口；新 shape 严格解析与固定 tenant 403 保持。全部业务消费者迁完后删除 optional 检测、`verify` 用户 Bearer fallback、`bearerToken:""` 哨兵及 native owner auth 的 token 模式探测 |
+| `src/auth/user-admission.ts::withSkillActionAdmission`、`authorizeSkillAction`／local import／MCP helpers 与对应 clients | decorator 不再只实现旧 `verify` 丢失 native 能力；沿同一 signal／总期限进行 native admission＋具名 action check。local import 的 create_draft＋install 两项当前授权保持 |
+| `src/http/routes/app-skill-bindings.ts` | 删除准入后第二次 `bearerToken(request)`；显式 native 调 IAM `open.app.management.verify`，保 operator／exact app／tenant／client 资格，不用 platformAdmin 替代 |
+| `src/http/routes/skill-admin.ts`、`skill-installations.ts` 与 `infrastructure/clients/iam-publisher-profile.ts` | 删除 publisher enrichment 的正则 Bearer 抽取／空串；私有 resolve 接 native auth，保每页批量 refs／身份／返回严格校验；公共 resolvePublic 独立保留 |
+| `src/http/routes/managed-personal-skills.ts`、`skill-specification-*`、`skill-download.ts`、`skill-share-native.ts`、`platform-projection.ts` 及其调用的 Skills helper | 迁全部 `humanBearer`／后续 publisher/action/final-recheck 参数链，不只首个 route；下载／规格／分享生成中的原权限和最终检查不得因 native 改动静默消失 |
+| Account／Team providers、`infrastructure/clients/iam-team.ts`、AdminTeam 与 Billing admin 成员选择／分页 | 同一显式 native transport 传递至每页 IAM 列表、业务动作和原 final admission；不保分页或最终复核的 token-only 分支。普通 Account／Team 及管理员消费者均在本片，不只新增四 op |
+| 现 `src/modules/{account,skills,mcp,billing}/` 等 DI 接线 | 仅复用 feature imports/exports 和原 clients；无 auth broker、global locator、共享业务 DTO 或第二 HTTP listener |
+
+上表是完整调用链切换条件，不是以文件重命名替代迁移。对于仍共享的 client/helper，按第一方 native 与独立公共身份的实际职责拆窄参数，不把所有 Bearer 删除或把 native 加成运行时 fallback。新 native 认证需要的四 op 由 IAM 拥有：Skills check、仅 MCP 闭集 authorization.check、私有 publisher resolve、OpenApp management verify；Account／Team 原动作保 owner 事务内 Session／User／active tenant／member 复核。
+
+### 保留范围、失败与状态
+
+- 公共 `GET /v1/skill.list` 的 User API Key／OpenApp、`publicBearer` 与 `resolvePublic` 保持原独立身份面；它不是第一方 Session 的后备入口。公开分享读取、service-only、第三方 OAuth／PKCE／Connection、内部服务直接认证均按其原合同保留。
+- Skills／MCP 完整 roles／action policy、OpenApp operator 名单／exact registration，以及 Account／普通 publisher 原非全局角色门保持。BFF 不通过角色名猜权限、补 client scope 或把 service identity 当人类／资金许可。
+- IAM admission 仍可返回合法但非本 Product 的 active tenant；BFF 保 `403 product_tenant_forbidden`。不将这个结果翻译成 401、强制注销或 redirect；业务 owner guard 后切租户也必须在原事务拒绝旧 tenant 请求。
+- IAM native2 唯一新增闭集错误 `native_session_service_unauthenticated`（owner401）表示服务凭据缺失／错误、错 caller／用途等确定服务拒绝；BFF 按该 typed code 映射现有 `iam_admission_unavailable`／503。只有服务身份通过后的明确 human invalid 才将 `native_session_invalid`／401 映射 `session_invalid`／401；归属不明的401 fail-closed为503，不凭status猜，不把原400坏输入／协议拒绝归为用户注销。同一 native proof 的全部 owner 客户端、分页／最终复核都保此区分。必要文件／依赖不确定 `native_session_service_unavailable`／503 仍映射503；403保权限域，坏回包／不确定性保503且不清Session。业务原401／403／404／409政策、deadline映射与脱敏保持；无新增 public 错误／endpoint／credential 用途。429 零自动 retry，不扩大 IAM `100/60s` service credential／operation 聚合额度；该容量尚无实测证明。
+- 原 business CAS／idempotency／receipt／审计／last-owner／取消及 unknown 恢复不改。认证失败不证明先前 owner 写未提交，不换 key 自动重发；现最终复核只证明当前读取资格，不承诺跨 owner 在途副作用与撤权全局原子排序。Billing／Run／lease／执行与资金门始终独立。
+
+### 顺序、验证与退出
+
+1. IAM 新 contract／SDK 与四 op、Account／Team 原事务保障先交付；BFF 正规生成并严格绑定，不手改 generated／历史 native1 pin 原件。
+2. 一次完成上述 private 消费链、嵌套 helper、所有分页和最终复核，再删除 optional verifyNative／用户 Bearer fallback／空 token／humanBearer 旧第一方路径；无双读或旧 wire 默认值。
+3. 现测试补真实 native authorizer→IAM HTTP 的 success／denial／dependency 矩阵：bad service→owner401/BFF503、bad Cookie→owner401/BFF401、dependency503→BFF503、未归属401→BFF503，拒绝均零业务写入；同时验 wrapper 接线、各表列隐蔽消费者、分页中撤销／切 tenant 和派发／响应前复核。通过 public API Key／OpenApp 与第三方／service-only 负控证明未误删。
+4. 既有 owner fixture 下核首次 admission／后续 action／publisher／OpenApp／AdminTeam／Billing member 页均无 OAuth mint/introspection；原工程门、contract／生成漂移、必要 PG／HTTP 与 App 四旅程分别验收，不能用 mock／grep 代真实链。
+
+本 D0 只改文档，无 Schema／生成物／部署／服务或资金动作。验收未闭合时保持未激活，不以放宽角色、自动重试429、扩大限额或旧 Bearer 回退解阻。IAM 发布配对仍待验证；聚合容量暂无证据不阻止按现配额进行隔离功能验证／本地源码测试，仅不宣称生产容量或发布就绪，不新增无既定 SLO 的前置门或生产压测任务。发布／部署仍未授权，不新增 owner 政策；传输细节见 [API 设计](API_CONTRACT.md)，持久边界见 [数据模型](DATA_MODEL.md)。
+
 ## 2026-10-31 C-2 BFF NestJS 收敛设计门（已批准，源码迁移未完成）
 
 ### 当前基线

@@ -1,3 +1,18 @@
+## I29-D0：native 请求内 proof，无新增持久模型（目标）
+
+当前 IAM native1.0／internal、SDK0.18 消费者未完成本片切换；目标 native2 只是第一方请求身份／授权调用链收敛。BFF 唯一 `database/schema.sql` 原字节保持：无 DDL、表／列／索引、数据回填、持久权限副本、admission cache、Redis key、Session 镜像或新 receipt/outbox。IAM 独占 User／Session／active tenant／Member／Role／operator／OpenApp 注册事实，BFF 不跨 owner SQL。
+
+- 新 native transport proof 只在当前请求内存保存 issuer Cookie／固定 Origin／受限服务凭据与原 signal／deadline；服务端身份上下文与秘密传输材料分开，不存入 Conversation、Message、Run、dispatch、日志或审计 payload。
+- `platform_admin` 是 IAM 同一当前事务的 User 投影，既有 platformAdminVersion 仅在 IAM 校验；BFF 不复制 version／permission 数组、不造管理员状态或从角色名推导权限。每个原 action／final recheck 仍访问 IAM 当前事实。
+- Account／Team／AdminTeam／Billing 成员分页每页与最终复核走 native；cursor、展示列表和一次 admission 都不是持久授权证明。IAM 在原 Account／Team mutation／list 事务复核 Session／User／active tenant／member；BFF 不为这些事实增本地事务或缓存。
+- 现 Skills／MCP／OpenApp 与 publisher 业务事实继续归各自 owner；公共 skill.list API Key／OpenApp 及第三方 OAuth／service-only 数据／生命周期不变，不把其凭据或权限迁入 BFF。
+
+native2 新增 typed `native_session_service_unauthenticated`／owner401 只作错误分类，无新状态或存储；BFF 映射既有 `iam_admission_unavailable`／503。服务认证通过后的明确 `native_session_invalid`／401 才映射 `session_invalid`／401；未归属401及服务依赖503均为BFF503，不把服务故障记成人类注销。该矩阵所有拒绝零业务写入，不清Session／业务事实；原坏输入400和业务权限／状态错误政策不变。
+
+原 BFF 业务状态机、CAS、幂等身份／digest、receipt、outbox／ledger、取消与 unknown 均保持；不因后续 401／403／503 将已发命令判为未提交或自动换 key／重试。资金 reserve／settlement 和 Run／lease／execution proof 是独立许可，不被 native proof 替代。owner 各自当前复核不构成跨 owner 全局撤权原子事务，已在途副作用仍按原取消／unknown 收敛。
+
+数据验证为 canonical 零 diff、proof／凭据未进入持久化和日志、原业务 ACK／CAS／审计／取消／unknown 回归；真实 native HTTP 与分页／最终重验由同片集成门证明。无本片 schema 安装或迁移测试需要，正常资源不操作；API／发布规则见 [API 设计](API_CONTRACT.md)，完整消费者与删除条件见 [技术设计](TECHNICAL_DESIGN.md)。
+
 ## 2026-10-29 Custom API 选择冻结与私有恢复（候选）
 
 不增表、列、DDL、缓存或第二份偏好事实。原bff_agent_dispatch_outbox.payload.launch可携带selected_custom_api_profiles，只含{profile_id,expected_state_version}，按原提交事务持久冻结；schema_version=3继续接受旧省略形式。空数组producer规范化为省略，旧JSON/digest原字节不变；既有历史行不回填。
