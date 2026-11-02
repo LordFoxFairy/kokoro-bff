@@ -1036,16 +1036,8 @@ for (const source of ["business-store", "fallback"] as const) {
     const options =
       source === "business-store"
         ? {
-            businessStore: {
-              services: {
-                publicShares,
-                chat: {
-                  snapshot: () => {
-                    throw Error("private snapshot must not be read")
-                  },
-                },
-              },
-            } as never,
+            businessStore: null,
+            publicShareService: publicShares,
           }
         : { businessStore: null, sharedSessionReader: { findSharedSession: () => ({ session_id: session.session_id }), readSession: () => detail } }
     const server = createSourceBffServer(config(), { ...options, sessionAdmission: admission, readiness: async () => undefined })
@@ -1082,28 +1074,25 @@ test("anonymous Share refuses a private ordered message instead of emitting a nu
   const { createBffServer: createSourceBffServer } = await import("../src/bootstrap/server.ts")
   const at = new Date("2026-10-27T00:00:00.000Z")
   const server = createSourceBffServer(config(), {
-    businessStore: {
-      services: {
-        publicShares: {
-          findActiveShare: async () => ({
-            share: { shareId: "share-public" },
-            conversation: { tenantId: "tenant", conversationId: "conversation", title: "title", ownerId: "owner", createdAt: at, updatedAt: at },
-          }),
-          listMessages: async () => ({
-            messages: [
-              {
-                message_id: "message",
-                role: "assistant",
-                content: null,
-                status: "completed",
-                created_at: at.toISOString(),
-                rendering: { parts_cursor: "PRIVATE_CURSOR_CANARY" },
-              },
-            ],
-          }),
-        },
-      },
-    } as never,
+    businessStore: null,
+    publicShareService: {
+      findActiveShare: async () => ({
+        share: { shareId: "share-public" },
+        conversation: { tenantId: "tenant", conversationId: "conversation", title: "title", ownerId: "owner", createdAt: at, updatedAt: at },
+      }),
+      listMessages: async () => ({
+        messages: [
+          {
+            message_id: "message",
+            role: "assistant",
+            content: null,
+            status: "completed",
+            created_at: at.toISOString(),
+            rendering: { parts_cursor: "PRIVATE_CURSOR_CANARY" },
+          },
+        ],
+      }),
+    },
     readiness: async () => undefined,
   })
   const base = await listen(server)
