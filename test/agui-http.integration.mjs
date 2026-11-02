@@ -7,7 +7,7 @@ import { EventSchemas } from "@ag-ui/core"
 import { Pool } from "pg"
 
 import { createBffServer } from "../dist/main.js"
-import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { AgUiSessionRuntime } from "../dist/application/agui/session-runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
@@ -212,7 +212,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
                'assertion_run_1', '{}'::jsonb, 'admitted', CURRENT_TIMESTAMP(3))`,
       ["a".repeat(64)],
     )
-    admissionStore = new PostgresBffRepositories(postgresUrl, redisUrl)
+    admissionStore = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await admissionStore.ready()
     await admissionStore.agUiConsumers.registerConsumer("tenant_a", "session_live", "user_integration", "run_1")
     const eventRequests = []
@@ -505,7 +505,7 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await insertConversation(pool, "session_boundary", "Boundary Chat")
-    admissionStore = new PostgresBffRepositories(postgresUrl, redisUrl)
+    admissionStore = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const turn = await admissionStore.chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_boundary",
@@ -699,7 +699,7 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await insertConversation(pool, "session_budget", "Budget Chat")
-    admissionStore = new PostgresBffRepositories(postgresUrl, redisUrl)
+    admissionStore = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const currentTurn = await admissionStore.chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_budget",
@@ -1055,7 +1055,7 @@ integrationTest(
     try {
       await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
       await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
       const submit = (name) =>
         store.chatTurnService.submit({
@@ -1112,7 +1112,7 @@ integrationTest(
       await bff.shutdown(1000)
       bff = null
       await store.close()
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
 
       const launchRequests = []
@@ -1565,7 +1565,7 @@ async function r57HttpContext(context) {
   })
   await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
   await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-  store = new PostgresBffRepositories(postgresUrl, redisUrl)
+  store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
   await store.ready()
   await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,title) VALUES ($1,$2,$3,'R57 control')", [sessionId, tenantId, ownerId])
   const turn = await store.chatTurnService.submit({
@@ -1782,7 +1782,7 @@ async function r57HttpContext(context) {
     restart: async () => {
       await bff.shutdown(1000)
       await store.close()
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
       base = await start()
     },

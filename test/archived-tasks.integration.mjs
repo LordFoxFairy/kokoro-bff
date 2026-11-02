@@ -3,7 +3,7 @@ import { randomUUID, createHash } from "node:crypto"
 import { test } from "node:test"
 import { Pool } from "pg"
 import { createBffServer } from "../dist/bootstrap/server.js"
-import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL,
   redisUrl = process.env.KOKORO_TEST_REDIS_URL
@@ -69,7 +69,7 @@ async function fixture(t, timeout = 5000) {
     admission.allow(token, { namespace: tenant, userId: user })
     return { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret", authorization: `Bearer ${token}` }
   }
-  const store = new PostgresBffRepositories(postgresUrl, redisUrl)
+  const store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
   await store.ready()
   const cfg = config(tenant)
   cfg.agentEnabled = true

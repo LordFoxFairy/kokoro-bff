@@ -5,7 +5,7 @@ import { test } from "node:test"
 import { Pool } from "pg"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { createBffServer } from "../dist/main.js"
-import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 const pg = process.env.KOKORO_TEST_POSTGRES_URL,
   redis = process.env.KOKORO_TEST_REDIS_URL
@@ -13,7 +13,7 @@ const integration = pg && redis ? test : test.skip
 async function fixture(t) {
   const tenant = `knowledge-${randomUUID()}`,
     actor = `owner-${randomUUID()}`
-  const store = new PostgresBffRepositories(pg, redis)
+  const store = createPostgresBffOwnerResources(pg, redis)
   await store.ready()
   const admission = new SessionAdmissionDouble()
   admission.allow("owner", { namespace: tenant, userId: actor })

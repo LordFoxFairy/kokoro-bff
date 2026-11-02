@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 import { Pool } from "pg"
-import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
 import { decodeMessagePartsCursor } from "../dist/infrastructure/postgres/message-parts-read.js"
 import { agentEventPage, mapAgentEvent } from "../dist/infrastructure/clients/agent/projection.js"
@@ -30,7 +30,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
     assert.equal((await pool.query("SELECT to_regclass('kokoro_bff.bff_message') AS installed")).rows[0].installed, null, "requires a fresh owned database")
     await pool.query("CREATE SCHEMA kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const reader = new PostgresChatRepository({ pool })
     async function create({

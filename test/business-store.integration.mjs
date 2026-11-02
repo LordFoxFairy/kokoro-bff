@@ -1019,7 +1019,7 @@ async function r74CreateWithRawQuery(fixture, key, payload, query) {
 // R237 stage 2. Root installs the stage-1 schema first; missing columns are not HTTP RED.
 // These are BFF HTTP / real PostgreSQL tests. IAM admission is the existing boundary double.
 import { randomUUID } from "node:crypto"
-import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { PostgresProjectRepository } from "../dist/infrastructure/postgres/project-repository.js"
 import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
 import { PostgresScheduledTaskRepository } from "../dist/infrastructure/postgres/scheduled-task-repository.js"
@@ -1069,7 +1069,7 @@ async function r237Fixture(t) {
   )
   tables.push(...catalog.rows.map((row) => row.table_name))
   assert.ok(tables.every((name) => /^bff_[a-z_]+$/u.test(name)))
-  store = new PostgresBffRepositories(postgresUrl, redisUrl)
+  store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
   await store.ready()
   bff = createBffServer(
     {
@@ -1627,7 +1627,7 @@ async function r241Fixture(t, observeDeletionSignal) {
   assert.ok(tables.includes("bff_project") && tables.includes("bff_idempotency_receipt"), "Root must install the existing canonical schema")
   assert.ok(tables.every((name) => /^bff_[a-z_]+$/u.test(name)))
   const start = async (configTenant = tenant) => {
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     if (observeDeletionSignal !== undefined) {
       const readDeletion = store.projectService.deletion.bind(store.projectService)
@@ -3435,7 +3435,7 @@ integrationTest("R279 DELETE and status expose pending logical release for an em
 integrationTest("R279 aggregate deletion freezes active and deleted members and pauses associated ScheduledTasks", async (t) => {
   const f = await r241Fixture(t)
   const project = await f.project("R279 aggregate Project")
-  const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+  const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
   await repositories.ready()
   let activeConversation
   let deletedConversation
@@ -3615,7 +3615,7 @@ for (const fault of ["second-conversation", "last-scope", "receipt"]) {
   integrationTest(`R279 ${fault} failure rolls back every tenant fact and same-key retry commits once`, async (t) => {
     const f = await r241Fixture(t)
     const project = await f.project(`R279 rollback ${fault}`)
-    const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+    const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await repositories.ready()
     let secondConversationId
     try {
@@ -3733,7 +3733,7 @@ integrationTest("R279 raw DELETE and status ingress is closed without inventing 
 integrationTest("R279 Project deletion preserves admitted-unknown recovery and fails only never-attempted dispatch", async (t) => {
   const f = await r241Fixture(t)
   const project = await f.project("R279 dispatch recovery")
-  const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+  const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
   await repositories.ready()
   let unknownConversation
   let pendingConversation
@@ -3804,7 +3804,7 @@ for (const corruption of ["missing-member", "zero-scope", "wrong-project-scope"]
   integrationTest(`R279 status fails closed for ${corruption} release-set corruption`, async (t) => {
     const f = await r241Fixture(t)
     const project = await f.project(`R279 integrity ${corruption}`)
-    const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+    const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await repositories.ready()
     let conversationId
     try {
@@ -3896,7 +3896,7 @@ integrationTest("R280 equal-count substituted Conversation scope fails closed", 
   const f = await r241Fixture(t)
   const project = await f.project("R280 substituted scope")
   const otherProject = await f.project("R280 other owned scope")
-  const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+  const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
   await repositories.ready()
   let conversationId
   let otherConversationId
@@ -4168,7 +4168,7 @@ async function r285ReleaseFixture(t, release) {
     if (errors.length > 0) throw errors[0]
   }
   const start = async () => {
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const config = {
       ...bffConfig({ tenantId: tenant }),
@@ -4276,7 +4276,7 @@ integrationTest(
   async (t) => {
     const f = await r285ReleaseFixture(t, async () => ({ replayed: false }))
     const project = await f.project("R285 release all frozen scopes")
-    const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+    const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await repositories.ready()
     let activeConversation
     let deletedConversation

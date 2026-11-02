@@ -6,7 +6,7 @@ import { test } from "node:test"
 import { Pool } from "pg"
 import { createClient } from "redis"
 
-import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
 import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgres/agui-projection-repository.js"
 import { PostgresAgUiConsumerRepository } from "../dist/infrastructure/postgres/agui-consumer-repository.js"
@@ -162,7 +162,7 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const tenantId = "tenant_artifact_projection"
     const sessionId = "session_artifact_projection"
@@ -383,7 +383,7 @@ integrationTest("bounds Chat deliveries independently of Messages and reapplies 
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const tenantId = "tenant_snapshot_limit"
     const sessionId = "session_snapshot_limit"
@@ -719,7 +719,7 @@ for (const failure of [
       await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
       await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
       await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
       const sessionId = "session_assistant_reconcile"
       await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)", [
@@ -1041,7 +1041,7 @@ for (const failure of [
       assert.equal(duplicateFailure.insertedFrames, 0)
       assert.deepEqual(await store.agUi.status("tenant_reconcile", sessionId), beforeReplay)
       await store.close()
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
       assert.deepEqual(await store.agUi.replay("tenant_reconcile", sessionId, null, 100), failedReplay)
       assert.deepEqual(await store.chatService.snapshot("tenant_reconcile", "owner_reconcile", sessionId, undefined), failedSnapshot)
@@ -1212,7 +1212,7 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const tenantId = "tenant_empty_final"
     const subjectId = "owner_empty_final"
@@ -1346,7 +1346,7 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
 
     await store.close()
     store = null
-    reopened = new PostgresBffRepositories(postgresUrl, redisUrl)
+    reopened = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await reopened.ready()
     const replay = await reopened.agUi.replay(tenantId, sessionId, null, 100)
     assert.equal(replay.kind, "page")
@@ -1424,7 +1424,7 @@ integrationTest("rejects a current-run source when its active Conversation lacks
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     for (const damage of ["missing_message", "missing_outbox", "wrong_subject", "wrong_message_run"]) {
       const sessionId = `session_binding_${damage}`
@@ -1498,7 +1498,7 @@ integrationTest("loads the latest 100 Message facts in stable chronological orde
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const sessionId = "session_latest_messages"
     await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, 'Long chat')", [
@@ -1581,7 +1581,7 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
 
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
 
     const first = await store.agUi.ingest("tenant_a", "session_shared", [
@@ -1754,7 +1754,7 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
     assert.deepEqual(redisKeys, [])
 
     await store.close()
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const afterRestart = await store.agUi.replay("tenant_a", "session_shared", initial.frames[0].cursor, 100)
     assert.equal(afterRestart.kind, "page")
     assert.deepEqual(
@@ -1805,7 +1805,7 @@ integrationTest("keeps replay page boundaries and terminal state tied to the lat
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const firstRun = await submitAndAdmit(store, pool, {
       tenantId: "tenant_a",
       sessionId: "session_runs",
@@ -1918,7 +1918,7 @@ integrationTest("returns a self-consistent replay snapshot while a new run is ap
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const oldRun = await submitAndAdmit(store, pool, {
       tenantId: "tenant_a",
       sessionId: "session_append",
@@ -2075,7 +2075,7 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
        VALUES ($1, $2, $3, $4)`,
       ["session_fenced", "tenant_a", "user_a", "Fenced projection"],
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const turn = await store.chatTurnService.submit({
       tenantId: "tenant_a",
@@ -2233,7 +2233,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ('session_gc', 'tenant_a', 'owner_gc', 'GC snapshot')")
     const latestRun = await submitAndAdmit(store, pool, {
       tenantId: "tenant_a",
@@ -2452,7 +2452,7 @@ integrationTest("skips GC when interleaved runs would leave an event without its
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const runB = await submitAndAdmit(store, pool, {
       tenantId: "tenant_a",
       sessionId: "session_interleaved_gc",
@@ -2542,7 +2542,7 @@ integrationTest("garbage collection skips ineligible streams instead of starving
     await pool.query(
       "INSERT INTO bff_conversation (tenant_id,conversation_id,owner_id,title) VALUES ('tenant_a','session_gc_later','user_gc_later','GC eligible parent')",
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.agUiConsumers.registerConsumer("tenant_a", "session_gc_later", "user_gc_later")
     await store.agUi.ingest("tenant_a", "session_gc_later", [
       agentSource({
@@ -2605,7 +2605,7 @@ integrationTest("consumer claims stop when the owning BFF conversation is delete
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_deleted', 'tenant_a', 'user_a', 'Deleted conversation')`,
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.agUiConsumers.registerConsumer("tenant_a", "session_deleted", "user_a")
     const now = new Date()
     const activeClaims = await store.agUiConsumers.claimConsumers({
@@ -2661,7 +2661,7 @@ integrationTest("registering a newer run clears the prior terminal before source
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_next_run', 'tenant_a', 'user_a', 'Next run')`,
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const oldTurn = await store.chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_next_run",
@@ -2850,7 +2850,7 @@ integrationTest("rejects blank markers and a foreign terminal without rejecting 
     await pool.query(
       `INSERT INTO bff_agui_stream (tenant_id, session_id, consumer_subject_id, expected_run_id, latest_run_id, terminal_run_id) VALUES ('tenant_a', 'session_invalid_markers', 'user_a', 'run_expected', '', NULL)`,
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await assert.rejects(store.chatService.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
     await pool.query(
       `UPDATE bff_agui_stream SET latest_run_id = 'run_expected', terminal_run_id = ' ' WHERE tenant_id = 'tenant_a' AND session_id = 'session_invalid_markers'`,
@@ -2884,7 +2884,7 @@ integrationTest("registering a newer run fences a stale projector commit", async
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_run_fence', 'tenant_a', 'user_a', 'Run fence')`,
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     database = new PostgresBffDatabase(postgresUrl, redisUrl)
     const projection = new PostgresAgUiProjectionRepository(database)
     const oldRun = await submitAndAdmit(store, pool, {
@@ -3004,7 +3004,7 @@ integrationTest("consumer claims use the PostgreSQL clock instead of a skewed wo
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_clock_fence', 'tenant_a', 'user_a', 'Clock fence')`,
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.agUiConsumers.registerConsumer("tenant_a", "session_clock_fence", "user_a")
     const now = new Date()
     const first = await store.agUiConsumers.claimConsumers({
@@ -3042,7 +3042,7 @@ integrationTest("a new lease cannot publish an old run terminal over the expecte
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_expected_run', 'tenant_a', 'user_a', 'Expected run')`,
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const turn = await store.chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_expected_run",
@@ -3142,7 +3142,7 @@ integrationTest("the expected run can finish while source runs are interleaved",
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_expected_interleaved', 'tenant_a', 'user_a', 'Expected interleaved run')`,
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const turn = await store.chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_expected_interleaved",
@@ -3352,7 +3352,7 @@ integrationTest("a skewed worker can read and settle a database-clock lease", as
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_clock_completion', 'tenant_a', 'user_a', 'Clock completion')`,
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.agUiConsumers.registerConsumer("tenant_a", "session_clock_completion", "user_a")
     let sourceReads = 0
     const skewedNow = new Date(Date.now() + 24 * 60 * 60 * 1000)
@@ -3401,7 +3401,7 @@ integrationTest("a skewed worker releases a lease back to the PostgreSQL clock",
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_clock_release', 'tenant_a', 'user_a', 'Clock release')`,
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.agUiConsumers.registerConsumer("tenant_a", "session_clock_release", "user_a")
     const now = new Date()
     const [lease] = await store.agUiConsumers.claimConsumers({
@@ -3471,7 +3471,7 @@ integrationTest(
     try {
       await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
       await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
       const submit = (name) =>
         store.chatTurnService.submit({
@@ -3724,7 +3724,7 @@ for (const parentCase of ["missing", "wrong tenant", "wrong subject"]) {
         [tenantId, foreignTenantId],
       ])
     assert.deepEqual((await streams()).rows, [])
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     assert.equal(typeof store.agUiConsumers.registerConsumer, "function", "production direct-register method must exist")
     let failure
@@ -3862,7 +3862,7 @@ integrationTest(
     )
     assert.equal(before.bff_agui_source_event.length, 3)
     assert.deepEqual(before.bff_agui_cursor_tombstone, [])
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     assert.equal(typeof store.agUiConsumers.collectGarbage, "function", "production GC method must exist")
     const collected = await store.agUiConsumers.collectGarbage({
@@ -3966,7 +3966,7 @@ integrationTest(
         status: "active",
       })),
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const submitAndClaim = async (sessionId, name) => {
       const turn = await store.chatTurnService.submit({
@@ -4369,7 +4369,7 @@ async function r57ProjectionContext(context, { started = true, dispatchState = "
   })
   await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
   await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-  store = new PostgresBffRepositories(postgresUrl, redisUrl)
+  store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
   await store.ready()
   const runId = await submitAndAdmit(store, pool, {
     tenantId,
@@ -5508,7 +5508,7 @@ integrationTest("R353 terminal-first late Skill ready is bookkeeping-only across
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const runId = await submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix })
     const terminal = agentSource({ id: `r353_terminal_${suffix}`, sequence: 1, kind: "run.completed", payload: { status: "completed" }, sessionId, runId })
@@ -5640,7 +5640,7 @@ integrationTest("R353 same-batch terminal fences late Skill bookkeeping and reje
     const tenantId = `tenant_${suffix}`,
       sessionId = `session_${suffix}`,
       ownerId = `owner_${suffix}`
-    const store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    const store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     stores.push(store)
     await store.ready()
     const runId = await submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix })
@@ -5876,7 +5876,7 @@ integrationTest("preflight-first initial terminal survives a page and restart wi
     before.bff_agui_event.some((row) => row.event_type === "RUN_STARTED"),
     false,
   )
-  const restarted = new PostgresBffRepositories(postgresUrl, redisUrl)
+  const restarted = createPostgresBffOwnerResources(postgresUrl, redisUrl)
   try {
     await restarted.ready()
     const snapshot = await restarted.chatService.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
@@ -6037,7 +6037,7 @@ integrationTest(
     })
     await c.ingest([c.source(4, initialTerminal(), "interaction.state", nextRun)])
     const before = await c.fingerprint()
-    const restarted = new PostgresBffRepositories(postgresUrl, redisUrl)
+    const restarted = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     try {
       await restarted.ready()
       const stream = await new PostgresAgUiProjectionRepository({ pool: c.pool }).readStream(c.tenantId, c.sessionId)
@@ -6078,7 +6078,7 @@ integrationTest("CHAT-ORDER leaves unproven legacy Message parts NULL and does n
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const tenantId = "tenant_ordered_legacy",
       sessionId = "session_ordered_legacy",
@@ -6302,7 +6302,7 @@ integrationTest("exhausted terminal consumers idle without losing late facts or 
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const runId = await submitAndAdmit(store, pool, {
       tenantId,

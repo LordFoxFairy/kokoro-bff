@@ -8,7 +8,7 @@ import { Pool } from "pg"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { createBffServer } from "../dist/main.js"
 import { schedulerDispatchDigest, schedulerDispatchScope } from "../dist/infrastructure/clients/scheduler/dispatch-identity.js"
-import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { PostgresSchedulerDispatchReceiptRepository } from "../dist/infrastructure/postgres/scheduler-dispatch-receipt-repository.js"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
@@ -406,7 +406,7 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
   let store = null
   try {
     const agentBase = await listen(agent)
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.scheduledTaskService.create(
       { tenantId: tenant, subjectId: owner },
       {
@@ -462,7 +462,7 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
     await bff.shutdown()
     bff = null
     await store.close()
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     bff = createBffServer(receiverConfig(agentBase), {
       businessStore: receiverStore(store),
       readiness: async () => undefined,
@@ -515,7 +515,7 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
   })
   let store
   try {
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.scheduledTaskService.create(
       { tenantId: tenant, subjectId: owner },
       {
@@ -618,7 +618,7 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
     let acceptOperation
     let deleteOperation
     try {
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.scheduledTaskService.create(
         { tenantId: tenant, subjectId: owner },
         {
@@ -812,7 +812,7 @@ async function r66LifecycleFixture(context) {
       await store.close()
       store = null
     }
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     bff = createBffServer(receiverConfig(null), {
       businessStore: receiverStore(store),

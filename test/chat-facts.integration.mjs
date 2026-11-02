@@ -9,7 +9,7 @@ import { Pool } from "pg"
 import { createClient } from "redis"
 
 import { createBffServer } from "../dist/main.js"
-import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
@@ -407,7 +407,7 @@ integrationTest("R207 Message admission bounds a Project lock wait and leaves ze
       [blockedConversation, healthyConversation, tenant, subject, projectId],
     )
 
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const runtimeConfig = config(tenant)
     runtimeConfig.agentEnabled = true
@@ -607,7 +607,7 @@ integrationTest("R209 Message cumulative SQL shares one absolute admission deadl
        FOR EACH ROW EXECUTE FUNCTION ${messageFunction}()`,
     )
 
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const runtimeConfig = config(tenant)
     runtimeConfig.agentEnabled = true
@@ -816,7 +816,7 @@ integrationTest("R211 Message HTTP pool saturation keeps one absolute deadline a
       projectId,
     ])
 
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const runtimeConfig = config(tenant)
     runtimeConfig.agentEnabled = true
@@ -1030,7 +1030,7 @@ integrationTest("R215 Message rolls back real mid-transaction SQL faults and a t
     )
     await pool.query(`CREATE TRIGGER ${sqlTrigger} BEFORE INSERT ON bff_message FOR EACH ROW EXECUTE FUNCTION ${sqlFunction}()`)
 
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const runtimeConfig = config(tenant)
     runtimeConfig.agentEnabled = true
@@ -1242,7 +1242,7 @@ integrationTest("R215 Message destroys the exact client after a real COMMIT ACK 
       subject,
       projectId,
     ])
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const ownerPool = store.database.pool
     const originalConnect = ownerPool.connect
@@ -1443,7 +1443,7 @@ integrationTest("R215 Message scope churn shares one deadline across four real a
       projectP,
     ])
     coordinator = await pool.connect()
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const ownerPool = store.database.pool
     const originalConnect = ownerPool.connect
@@ -1636,7 +1636,7 @@ integrationTest("R215 Message notification faults never reverse a committed cano
       "INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title) VALUES ($1,$3,$4,$5,'R215 throw'),($2,$3,$4,$5,'R215 late')",
       [throwConversation, lateConversation, tenant, subject, projectId],
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const originalNotify = store.database.notifyAgUiProjection.bind(store.database)
     let mode = "throw"
@@ -1775,7 +1775,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const runtimeConfig = {
       ...config(tenant),
@@ -2554,7 +2554,7 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
        VALUES ($1, $2, $3, $4)`,
       [conversationId, tenant, "chat_user", "Lease fencing"],
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const receipt = await store.chatTurnService.submit({
       tenantId: tenant,
@@ -2649,7 +2649,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
        VALUES ($1, $2, $3, $4)`,
       [conversationId, tenant, "chat_user", "Strict dispatch FIFO"],
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     for (const suffix of ["first", "second", "third"]) {
       assert.ok(
@@ -2847,7 +2847,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
        VALUES ($1, $2, $3, $4)`,
       [conversationId, tenant, "chat_user", "Dispatch failure ledger"],
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const firstReceipt = await store.chatTurnService.submit({
       tenantId: tenant,
@@ -2999,7 +2999,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
        VALUES ($1, $2, $3, $4)`,
       [conversationId, tenant, "chat_user", "Delete compensation"],
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     for (const suffix of ["admitted", "inflight", "local_only"]) {
       assert.ok(
@@ -3194,7 +3194,7 @@ integrationTest(
         "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
       )
       await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
 
       const terminalConversation = `${tenant}_terminal`
@@ -3500,7 +3500,7 @@ integrationTest("does not return dispatch or consumer leases exhausted by the re
       "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const tenant = `commit_budget_${Date.now()}`
     const owner = "commit_budget_user"
@@ -3654,7 +3654,7 @@ integrationTest(
     try {
       await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
       await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
       const before = await fingerprint()
       assert.ok(Object.values(before.facts).every((rows) => rows.length === 0))
@@ -3717,7 +3717,7 @@ integrationTest(
       assert.deepEqual(snapshot.execution_head, { run_id: accepted.run_id, state: "queued", pending_pauses: [] })
       assert.equal(snapshot.event_watermark, committed.cursor)
       await store.close()
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
       assert.deepEqual(await store.chatTurnService.submit(input), accepted)
       assert.deepEqual(await store.chatTurnService.submit(input), accepted)
@@ -3744,7 +3744,7 @@ integrationTest("R124 Conversation deletion removes owned compact process rows w
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     assert.equal(
       (await pool.query("SELECT to_regclass('kokoro_bff.bff_agui_run_process') AS process, to_regclass('kokoro_bff.bff_agui_run_activity') AS activity"))
@@ -3838,7 +3838,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
               ($3,$6,$7,$8,'Legacy slug source'),($4,$6,$5,NULL,'Foreign owner')`,
       [raceSameId, raceDifferentId, slugId, foreignId, `foreign_${suffix}`, tenant, subject, `source-${suffix}`],
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const admittedRun = await store.chatTurnService.submit({
       tenantId: tenant,
@@ -4233,7 +4233,7 @@ integrationTest("R146 Move target Project lock wait has a bounded typed HTTP fai
       tenant,
       subject,
     ])
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     bff = createBffServer(config(tenant), {
       businessStore: store,
@@ -4322,7 +4322,7 @@ integrationTest("R146 Move pool acquire timeout discards the late real Client an
       tenant,
       subject,
     ])
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const ownerPool = store.database.pool
     assert.equal(ownerPool.options.max, 10, "this case saturates the real BFF owner Pool rather than a fake repository")
@@ -4400,7 +4400,7 @@ integrationTest("R146 Move client abort destroys the exact blocked backend and p
       tenant,
       subject,
     ])
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     bff = createBffServer(config(tenant), {
       businessStore: store,
@@ -4493,7 +4493,7 @@ integrationTest(
         tenant,
         subject,
       ])
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
 
       // This fixture forwards every SQL query to the real PostgreSQL client. Only after the
@@ -4618,7 +4618,7 @@ integrationTest("R150 Move discards a broken client after an unknown real COMMIT
       tenant,
       subject,
     ])
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
 
     // All SQL, including the final COMMIT, executes against real PostgreSQL. The
@@ -4806,7 +4806,7 @@ integrationTest(
       await pool.query(
         `CREATE TRIGGER ${fixtureName} BEFORE INSERT ON bff_idempotency_receipt FOR EACH ROW WHEN (NEW.scope = '${quotedScope}') EXECUTE FUNCTION ${fixtureName}()`,
       )
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
       const originalRun = await store.chatTurnService.submit({
         tenantId: tenant,
@@ -4974,7 +4974,7 @@ integrationTest(
         messageFirstId,
         `https://share.kokoro.invalid/${suffix}`,
       ])
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
       await store.ready()
       const runtimeConfig = config(tenant)
       runtimeConfig.agentEnabled = true
@@ -5177,7 +5177,7 @@ integrationTest("R149 identical concurrent Move keys read one real PostgreSQL wi
       tenant,
       subject,
     ])
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const existingRun = await store.chatTurnService.submit({
       tenantId: tenant,
@@ -5320,7 +5320,7 @@ integrationTest("R189 Message freezes the locked canonical Project while caller 
       [projectConversation, directConversation, replayConversation, tenant, subject, projectP],
     )
 
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const runtimeConfig = config(tenant)
     runtimeConfig.agentEnabled = true
@@ -5495,7 +5495,7 @@ integrationTest("R190 omitted Message scope serializes with Move and client-crea
        VALUES ($1,$3,$4,$5,'Move first'),($2,$3,$4,$5,'Message first')`,
       [moveFirstConversation, messageFirstConversation, tenant, subject, projectP],
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const runtimeConfig = config(tenant)
     runtimeConfig.agentEnabled = true
@@ -5681,7 +5681,7 @@ integrationTest("R190 omitted Message scope serializes with Move and client-crea
 
 integrationTest("project Skill defaults freeze exact message refs, reject concurrent changes and do not replay tombstones", { timeout: 20000 }, async () => {
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  const store = new PostgresBffRepositories(postgresUrl, redisUrl)
+  const store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
   const tenant = `selection_${randomUUID()}`,
     subject = "selection-owner",
     scope = { tenantId: tenant, subjectId: subject },
@@ -5809,7 +5809,7 @@ integrationTest("SET21 real HTTP creates own turns and shares, pages safe facts 
   let store = null
   let server = null
   try {
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await store.ready()
     const cfg = config(tenant)
     cfg.agentEnabled = true

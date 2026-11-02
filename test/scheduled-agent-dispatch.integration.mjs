@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 import { Pool } from "pg"
-import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { scheduledSourceEventDigest } from "../dist/application/scheduled-source-event-digest.js"
 import { buildScheduledAgentLaunch } from "../dist/infrastructure/clients/agent/launch.js"
 import { schedulerDispatchDigest, schedulerDispatchScope, schedulerOccurrenceIdentity } from "../dist/infrastructure/clients/scheduler/dispatch-identity.js"
@@ -44,7 +44,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
       "DROP TABLE IF EXISTS bff_scheduled_agent_source_event,bff_scheduled_agent_dispatch,bff_scheduled_agent_scope,bff_agui_cursor_tombstone,bff_agui_event,bff_agui_source_event,bff_conversation_artifact,bff_agui_stream,bff_agent_cancellation_outbox,bff_agent_dispatch_outbox,bff_share,bff_message,bff_conversation,bff_idempotency_receipt,bff_scheduled_task_outbox,bff_scheduled_task,bff_project_instruction_revision,bff_project CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const task = "task",
       session = "scheduled:task",
       subject = "owner"
@@ -438,7 +438,7 @@ integrationTest("expired dispatch lease fences the stale winner while never-sent
       `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES($1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','request','key',$4,$5,'bff:x','{}')`,
       [dispatch, tenant, task, "5".repeat(64), run],
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const stale = await store.scheduledAgentDispatch.claim({
       workerId: "stale",
       leaseDurationMs: 100,
@@ -493,7 +493,7 @@ integrationTest("consumer claim locks scope then active dispatch and starts its 
   let locker
   let pendingClaim
   try {
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     await pool.query(
       "INSERT INTO bff_scheduled_agent_scope(tenant_id,task_id,session_id,subject_id,active_dispatch_id,active_run_id,consumer_next_poll_at) VALUES($1,$2,$3,$4,'barrier_dispatch','run_barrier','2000-01-01')",
       [tenant, task, `scheduled:${task}`, "owner"],
@@ -586,7 +586,7 @@ integrationTest("source resumes from non-zero N plus one across a real repositor
          SELECT $1,$2,n,'history_'||n,$3,'kokoro-agent',repeat('a',64),clock_timestamp(),'activity','{}'::jsonb FROM generate_series(1,7) n`,
       [tenant, task, run],
     )
-    firstStore = new PostgresBffRepositories(postgresUrl, redisUrl)
+    firstStore = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const firstLease = await firstStore.scheduledAgentDispatch.claimConsumer({
       workerId: "before_restart",
       leaseDurationMs: 5000,
@@ -622,7 +622,7 @@ integrationTest("source resumes from non-zero N plus one across a real repositor
     )
     await firstStore.close()
     firstStore = undefined
-    restartedStore = new PostgresBffRepositories(postgresUrl, redisUrl)
+    restartedStore = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const restartedLease = await restartedStore.scheduledAgentDispatch.claimConsumer({
       workerId: "after_restart",
       leaseDurationMs: 5000,
@@ -701,7 +701,7 @@ integrationTest("source gap and run or event identity conflicts roll back cursor
       `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at) VALUES($1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','request','key',$4,$5,'bff:x','{}','admitted',clock_timestamp())`,
       [dispatch, tenant, task, "2".repeat(64), run],
     )
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const lease = await store.scheduledAgentDispatch.claimConsumer({
       workerId: "conflict",
       leaseDurationMs: 5000,
@@ -864,7 +864,7 @@ integrationTest("a locked slow scope does not block another scope and one scope 
         [`${name}_dispatch_${suffix}`, tenant, task, `${name}_request`, `${name}_key`, (name === "slow" ? "3" : "4").repeat(64), `${name}_run_${suffix}`],
       )
     }
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     locker = await pool.connect()
     await locker.query("BEGIN")
     await locker.query("SELECT 1 FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE", [tenant, `slow_${suffix}`])
@@ -951,7 +951,7 @@ integrationTest("active terminal and next claim serialize behind the exact scope
         [dispatch, tenant, task, order, `request_${dispatch}`, `key_${dispatch}`, (status === "admitted" ? "6" : "7").repeat(64), run, status],
       )
     }
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
     const consumer = await store.scheduledAgentDispatch.claimConsumer({
       workerId: "terminal",
       leaseDurationMs: 5000,
@@ -1116,7 +1116,7 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
               owner,
             ])
           }
-          store = new PostgresBffRepositories(postgresUrl, redisUrl)
+          store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
           const schedule = schedulerScheduleName(task)
           const occurrence = "2026-09-01T12:00:00.123456789Z"
           const digest = schedulerDispatchDigest({
@@ -1212,7 +1212,7 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
             assert.equal(after.receipt[0].response_body.state, "terminal")
             assert.deepEqual(after.receipt[0].response_body.response, input.response)
             await store.close()
-            store = new PostgresBffRepositories(postgresUrl, redisUrl)
+            store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
             // This is the same terminal claim branch that returns the original callback ACK.
             assert.deepEqual(await store.schedulerDispatchReceipts.claim(receiptScope, digest), { outcome: "terminal", response: input.response })
             assert.deepEqual(await store.scheduledAgentDispatch.accept(input), { outcome: "claim_lost" })
@@ -1268,7 +1268,7 @@ function r67AcceptanceRejections(requestId) {
              VALUES($1,$2,$3,'Rejection lease','go','daily','08:00','UTC','paused',false)`,
             [task, tenant, owner],
           )
-          store = new PostgresBffRepositories(postgresUrl, redisUrl)
+          store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
           const schedule = schedulerScheduleName(task)
           const occurrence = "2026-09-01T12:00:00.123456789Z"
           const digest = schedulerDispatchDigest({
@@ -1359,7 +1359,7 @@ function r67AcceptanceRejections(requestId) {
             assert.equal(after.receipt[0].response_body.state, "terminal")
             assert.deepEqual(after.receipt[0].response_body.response, input.rejections.task_not_active)
             await store.close()
-            store = new PostgresBffRepositories(postgresUrl, redisUrl)
+            store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
             // Reopening must return the same durable rejection, not attempt to enqueue again.
             assert.deepEqual(await store.schedulerDispatchReceipts.claim(receiptScope, digest), {
               outcome: "terminal",
