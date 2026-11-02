@@ -62,7 +62,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
       })
     const insert = async (id, order, run) =>
       pool.query(
-        `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)`,
+        `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES('calendar',1,1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)`,
         [
           id,
           tenant,
@@ -119,11 +119,11 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
       subject,
     ])
     await pool.query(
-      `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,available_at) VALUES('future',$1,'task_future','2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z',$2,'qf','kf',$3,'run_future','bff:x',$4::jsonb,'retryable',clock_timestamp()+interval '1 hour')`,
+      `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,available_at) VALUES('calendar',1,1,'future',$1,'task_future','2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z',$2,'qf','kf',$3,'run_future','bff:x',$4::jsonb,'retryable',clock_timestamp()+interval '1 hour')`,
       [tenant, subject, "c".repeat(64), launchPayload("task_future", "run_future", "qf")],
     )
     await pool.query(
-      `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES('ready',$1,$2,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z',$3,'qr','kr',$4,'run_ready','bff:x',$5::jsonb)`,
+      `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES('calendar',1,1,'ready',$1,$2,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z',$3,'qr','kr',$4,'run_ready','bff:x',$5::jsonb)`,
       [tenant, otherTask, subject, "d".repeat(64), launchPayload(otherTask, "run_ready", "qr")],
     )
     const ready = await store.scheduledAgentDispatch.claim({
@@ -144,7 +144,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
     ])
     const orderedInsert = async (dispatchId, occurrence, order, runId) =>
       pool.query(
-        `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'bff:x',$11::jsonb)`,
+        `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES('calendar',1,1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'bff:x',$11::jsonb)`,
         [
           dispatchId,
           tenant,
@@ -435,7 +435,7 @@ integrationTest("expired dispatch lease fences the stale winner while never-sent
       `scheduled:${task}`,
     ])
     await pool.query(
-      `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES($1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','request','key',$4,$5,'bff:x','{}')`,
+      `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES('calendar',1,1,$1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','request','key',$4,$5,'bff:x','{}')`,
       [dispatch, tenant, task, "5".repeat(64), run],
     )
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
@@ -509,7 +509,7 @@ integrationTest("consumer claim locks scope then active dispatch and starts its 
       trace: { source: "kokoro-bff-scheduler" },
     }
     await pool.query(
-      `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at) VALUES('barrier_dispatch',$1,$2,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','qb','kb',$3,'run_barrier','bff:x',$4::jsonb,'admitted',clock_timestamp())`,
+      `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at) VALUES('calendar',1,1,'barrier_dispatch',$1,$2,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','qb','kb',$3,'run_barrier','bff:x',$4::jsonb,'admitted',clock_timestamp())`,
       [tenant, task, "e".repeat(64), JSON.stringify(payload)],
     )
     locker = await pool.connect()
@@ -578,7 +578,7 @@ integrationTest("source resumes from non-zero N plus one across a real repositor
       [tenant, task, `scheduled:${task}`, dispatch, run],
     )
     await pool.query(
-      `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at) VALUES($1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','request','key',$4,$5,'bff:x','{}','admitted',clock_timestamp())`,
+      `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at) VALUES('calendar',1,1,$1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','request','key',$4,$5,'bff:x','{}','admitted',clock_timestamp())`,
       [dispatch, tenant, task, "1".repeat(64), run],
     )
     await pool.query(
@@ -698,7 +698,7 @@ integrationTest("source gap and run or event identity conflicts roll back cursor
       [tenant, task, `scheduled:${task}`, dispatch, run],
     )
     await pool.query(
-      `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at) VALUES($1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','request','key',$4,$5,'bff:x','{}','admitted',clock_timestamp())`,
+      `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at) VALUES('calendar',1,1,$1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','request','key',$4,$5,'bff:x','{}','admitted',clock_timestamp())`,
       [dispatch, tenant, task, "2".repeat(64), run],
     )
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
@@ -860,7 +860,7 @@ integrationTest("a locked slow scope does not block another scope and one scope 
         `scheduled:${task}`,
       ])
       await pool.query(
-        `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES($1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner',$4,$5,$6,$7,'bff:x','{}')`,
+        `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES('calendar',1,1,$1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner',$4,$5,$6,$7,'bff:x','{}')`,
         [`${name}_dispatch_${suffix}`, tenant, task, `${name}_request`, `${name}_key`, (name === "slow" ? "3" : "4").repeat(64), `${name}_run_${suffix}`],
       )
     }
@@ -947,7 +947,7 @@ integrationTest("active terminal and next claim serialize behind the exact scope
       [bDispatch, bRun, "2026-09-01T12:00:00.000000002Z", "pending"],
     ]) {
       await pool.query(
-        `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at) VALUES($1,$2,$3,$4,$4,'owner',$5,$6,$7,$8,'bff:x','{}',$9,CASE WHEN $9='admitted' THEN clock_timestamp() ELSE NULL END)`,
+        `INSERT INTO bff_scheduled_agent_dispatch(source_kind,source_revision,source_epoch,dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at) VALUES('calendar',1,1,$1,$2,$3,$4,$4,'owner',$5,$6,$7,$8,'bff:x','{}',$9,CASE WHEN $9='admitted' THEN clock_timestamp() ELSE NULL END)`,
         [dispatch, tenant, task, order, `request_${dispatch}`, `key_${dispatch}`, (status === "admitted" ? "6" : "7").repeat(64), run, status],
       )
     }
@@ -1104,8 +1104,8 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
         let acceptOperation
         try {
           await pool.query(
-            `INSERT INTO bff_scheduled_task(task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,status)
-             VALUES($1,$2,$3,'Accept lease','go','daily','08:00','UTC','active')`,
+            `INSERT INTO bff_scheduled_task(trigger_kind,trigger_epoch,task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,status)
+             VALUES('calendar',1,$1,$2,$3,'Accept lease','go','daily','08:00','UTC','active')`,
             [task, tenant, owner],
           )
           if (resource === "bff_scheduled_agent_scope") {
@@ -1264,8 +1264,8 @@ function r67AcceptanceRejections(requestId) {
         let acceptOperation
         try {
           await pool.query(
-            `INSERT INTO bff_scheduled_task(task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,status,enabled)
-             VALUES($1,$2,$3,'Rejection lease','go','daily','08:00','UTC','paused',false)`,
+            `INSERT INTO bff_scheduled_task(trigger_kind,trigger_epoch,task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,status,enabled)
+             VALUES('calendar',1,$1,$2,$3,'Rejection lease','go','daily','08:00','UTC','paused',false)`,
             [task, tenant, owner],
           )
           store = new PostgresBffRepositories(postgresUrl, redisUrl)

@@ -1,4 +1,4 @@
-import { zChatEvent } from "../../../generated/agent-http/zod.gen.js"
+import { zChatEvent, zChatRunCompleted } from "../../../generated/agent-http/zod.gen.js"
 import { parseAgentInteractionState } from "./interaction-state.js"
 import type { ChatEvent, ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../../../contracts/index.js"
 import { parseAgentFailure } from "../../../generated/agent-http/failure-profile.gen.js"
@@ -95,11 +95,14 @@ export function mapAgentEvent(event: AgentChatEvent): ChatEvent {
         content_hash: contentHash(payload.content_hash),
         ...(typeof payload.note === "string" ? { note: payload.note } : {}),
       })
-    case "run.completed":
+    case "run.completed": {
+      const terminal = zChatRunCompleted.parse(payload)
       return baseEvent(event, "run.completed", {
-        status: payload.status === "cancelled" ? "cancelled" : "completed",
-        token_usage: payload.token_usage ?? null,
+        status: terminal.status,
+        token_usage: terminal.token_usage ?? null,
+        ...(terminal.final_message_id === undefined ? {} : { final_segment_id: terminal.final_message_id }),
       })
+    }
     case "run.failed": {
       const failure = parseAgentFailure(payload)
       if (failure === null) throw new Error("Agent run failure payload is invalid")

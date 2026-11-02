@@ -178,6 +178,7 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
       project_id: projectId,
       title: "Private schedule",
       prompt: "Review privately.",
+      trigger_kind: "calendar",
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
@@ -366,6 +367,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     const createPayload = {
       title: "Daily review",
       prompt: "Review the project.",
+      trigger_kind: "calendar",
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
@@ -559,6 +561,7 @@ function r73CreatePayload(extra = {}) {
   return {
     title: "R73 independent review",
     prompt: "Review the next steps.",
+    trigger_kind: "calendar",
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
@@ -716,7 +719,7 @@ integrationTest("explicit calendar HTTP persists selections, rejects retired inp
       })
       return { status: response.status, body: await response.json() }
     }
-    const sameRule = { frequency: body.frequency, time: body.time, timezone: body.timezone, local_date: body.local_date }
+    const sameRule = { trigger_kind: "calendar", frequency: body.frequency, time: body.time, timezone: body.timezone, local_date: body.local_date }
     const firstEdit = { title: "Edited after due" }
     const firstAck = await patch(`${key}-edit`, firstEdit)
     assert.equal(firstAck.status, 200)
@@ -1152,6 +1155,7 @@ function r237Schedule(projectId) {
     project_id: projectId,
     title: "R237 task",
     prompt: "Review",
+    trigger_kind: "calendar",
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
@@ -1385,6 +1389,7 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
             projectId: ref,
             title: "Denied",
             prompt: "Denied",
+            triggerKind: "calendar",
             frequency: "daily",
             time: "08:00",
             timezone: "UTC",
@@ -1512,6 +1517,7 @@ integrationTest("R237 real Project row-lock races revalidate active before Messa
               projectId: project.id,
               title: "Denied",
               prompt: "Denied",
+              triggerKind: "calendar",
               frequency: "daily",
               time: "08:00",
               timezone: "UTC",
@@ -2940,6 +2946,7 @@ integrationTest("R257 terminal Scheduler rejection is projected by authoritative
       body: JSON.stringify({
         title: "Terminal failure projection",
         prompt: "Do not execute this integration fixture.",
+        trigger_kind: "calendar",
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",
@@ -5149,7 +5156,15 @@ integrationTest("current scheduled HTTP reads authoritative next, rechecks admis
       { sessionAdmission, scheduledTaskDispatcher: { start() {}, async stop() {} } },
     )
     const base = await listen(bff)
-    const createBody = { title: "Current", prompt: "No execution", frequency: "daily", time: "08:15", timezone: "UTC", auto_approve: false }
+    const createBody = {
+      trigger_kind: "calendar",
+      title: "Current",
+      prompt: "No execution",
+      frequency: "daily",
+      time: "08:15",
+      timezone: "UTC",
+      auto_approve: false,
+    }
     const mutationHeaders = { ...headers, "content-type": "application/json", "idempotency-key": "current-create" }
     const created = await fetch(`${base}/v1/scheduled-tasks`, { method: "POST", headers: mutationHeaders, body: JSON.stringify(createBody) })
     assert.equal(created.status, 200)
@@ -5254,7 +5269,7 @@ integrationTest("current scheduled HTTP reads authoritative next, rechecks admis
     await repository.updateScheduledTask(
       { tenantId: suffix, subjectId: subject },
       original.id,
-      { frequency: "once", localDate: "2030-01-01", time: "08:15", timezone: "UTC", enabled: false, status: "paused" },
+      { triggerKind: "calendar", frequency: "once", localDate: "2030-01-01", time: "08:15", timezone: "UTC", enabled: false, status: "paused" },
       { tenantId: suffix, actorId: subject, requestId: "req-consumed", idempotencyKey: "paused-once-current" },
     )
     // One aggregate is delivered serially: settle the earlier race edit before the once replacement.
@@ -5303,4 +5318,402 @@ integrationTest("current scheduled HTTP reads authoritative next, rechecks admis
       }
     }
   }
+})
+
+async function i3R285SqlCancellationFixture({
+  failAt = "project",
+  code = "57014",
+  message = "canceling statement due to statement timeout",
+  kind = "database",
+  rollbackFailure = false,
+} = {}) {
+  const [{ EventEmitter }, { DatabaseError }, { tsImport }] = await Promise.all([import("node:events"), import("pg"), import("tsx/esm/api")])
+  const { PostgresProjectScopeReleaseOutboxRepository } = await tsImport(
+    "../src/infrastructure/postgres/project-scope-release-outbox-repository.ts",
+    import.meta.url,
+  )
+  const original = kind === "database" ? new DatabaseError(message, 0, "error") : kind === "object" ? { message } : new Error(message)
+  original.code = code
+  const rollbackError = new Error("independent rollback failure")
+  const controller = new AbortController()
+  const calls = [],
+    releases = [],
+    failures = []
+  const startedAt = performance.now()
+  const client = Object.assign(new EventEmitter(), {
+    async query(text, values) {
+      const stage =
+        text === "BEGIN"
+          ? "begin"
+          : text === "COMMIT"
+            ? "commit"
+            : text === "ROLLBACK"
+              ? "rollback"
+              : text.includes("set_config('lock_timeout'")
+                ? "settings"
+                : text.startsWith("WITH credential_recovery")
+                  ? "claim"
+                  : text.startsWith("SELECT release_command_count")
+                    ? "project"
+                    : text.trimStart().startsWith("SELECT count(o.command_id)")
+                      ? "aggregate"
+                      : text.trimStart().startsWith("UPDATE bff_project_scope_release_outbox")
+                        ? "command"
+                        : "projection"
+      calls.push({ stage, text, values })
+      if (stage === failAt) {
+        failures.push({ stage, elapsedMs: performance.now() - startedAt, aborted: controller.signal.aborted })
+        throw original
+      }
+      if (stage === "rollback" && rollbackFailure) throw rollbackError
+      if (stage === "project") return { rows: [{ release_command_count: 1 }], rowCount: 1 }
+      if (stage === "aggregate")
+        return {
+          rows: [{ total: 1, released: 1, blocked: 0, conversations: 0, matched_conversations: 0, expected_conversations: 0, projects: 1, trusted: true }],
+          rowCount: 1,
+        }
+      return { rows: [], rowCount: 1 }
+    },
+    release(destroy) {
+      releases.push({ client, destroy: destroy === true })
+    },
+  })
+  const database = { pool: { connect: async () => client } }
+  const repository = new PostgresProjectScopeReleaseOutboxRepository(database)
+  const lease = { commandId: "release_i3_r285", tenantId: "tenant_i3_r285", projectId: "project_i3_r285", leaseOwner: "worker_i3_r285", fence: 1 }
+  const invoke = {
+    claim: () =>
+      repository.claimProjectScopeReleases(
+        { workerId: lease.leaseOwner, limit: 1, leaseDurationMs: 1000, includeOneCredentialRecovery: false },
+        controller.signal,
+        10000,
+      ),
+    released: () => repository.markProjectScopeReleased(lease, controller.signal, 10000),
+    retryable: () => repository.markProjectScopeRetryable(lease, 1000, "storage_release_unknown", controller.signal, 10000),
+    blocked: () => repository.markProjectScopeBlocked(lease, "storage_terminal", controller.signal, 10000),
+  }
+  return { client, calls, releases, failures, original, rollbackError, controller, database, invoke }
+}
+
+function i3R285AssertRetired(f, stage) {
+  assert.deepEqual(
+    f.failures.map((failure) => failure.stage),
+    [stage],
+  )
+  assert.equal(f.failures[0].aborted, false, "the server cancellation must arrive before caller abort")
+  assert.ok(f.failures[0].elapsedMs < 5000, "the server cancellation must arrive while the ten-second JS budget remains")
+  assert.equal(f.calls.at(-1).stage, stage, "cancellation must start no rollback, commit or later SQL")
+  assert.equal(f.releases.length, 1)
+  assert.equal(f.releases[0].client, f.client)
+  assert.equal(f.releases[0].destroy, true)
+  assert.equal(f.client.listenerCount("error"), 0)
+  assert.equal(f.controller.signal.aborted, false)
+}
+
+for (const method of ["claim", "released", "retryable", "blocked"])
+  test(`I3 R285 SQL cancellation before the JS timer retires the exact ${method} checkout`, async () => {
+    const stage = method === "claim" ? "claim" : "project"
+    const f = await i3R285SqlCancellationFixture({ failAt: stage })
+    assert.deepEqual(await f.invoke[method](), method === "claim" ? [] : false)
+    const settings = f.calls.find((call) => call.stage === "settings")
+    assert.ok(Number.parseInt(settings.values[1]) > 0)
+    assert.ok(Number.parseInt(settings.values[1]) <= 10000)
+    i3R285AssertRetired(f, stage)
+  })
+
+test("I3 R285 genuine query cancellation is independent of English text and SQL stage", async (t) => {
+  for (const stage of ["begin", "settings", "command", "aggregate", "projection"])
+    await t.test(stage, async () => {
+      const f = await i3R285SqlCancellationFixture({ failAt: stage, message: "取消来源未由 SQLSTATE 区分" })
+      assert.equal(await f.invoke.released(), false)
+      i3R285AssertRetired(f, stage)
+    })
+})
+
+test("I3 R285 other SQL errors and same-code impostors preserve their original failure", async (t) => {
+  for (const descriptor of [{ code: "42601" }, { code: "42501" }, { code: "08006" }, { kind: "error" }, { kind: "object" }])
+    await t.test(`${descriptor.kind ?? "database"}:${descriptor.code ?? "57014"}`, async () => {
+      const f = await i3R285SqlCancellationFixture(descriptor)
+      await assert.rejects(f.invoke.released(), (error) => error === f.original)
+      assert.deepEqual(
+        f.calls.slice(-2).map((call) => call.stage),
+        ["project", "rollback"],
+      )
+      assert.equal(f.releases.length, 1)
+      assert.equal(f.releases[0].client, f.client)
+      assert.equal(f.releases[0].destroy, false)
+      assert.equal(f.client.listenerCount("error"), 0)
+    })
+})
+
+test("I3 R285 a query error remains primary if its rollback also fails", async () => {
+  const f = await i3R285SqlCancellationFixture({ code: "42601", rollbackFailure: true })
+  await assert.rejects(f.invoke.released(), (error) => error === f.original && error !== f.rollbackError)
+  assert.deepEqual(
+    f.calls.slice(-2).map((call) => call.stage),
+    ["project", "rollback"],
+  )
+  assert.equal(f.releases.length, 1)
+  assert.equal(f.releases[0].client, f.client)
+  assert.equal(f.releases[0].destroy, true)
+  assert.equal(f.client.listenerCount("error"), 0)
+})
+
+test("I3 R285 lock timeout retains its known rollback and normal release semantics", async () => {
+  const f = await i3R285SqlCancellationFixture({ code: "55P03" })
+  assert.equal(await f.invoke.released(), false)
+  assert.deepEqual(
+    f.calls.slice(-2).map((call) => call.stage),
+    ["project", "rollback"],
+  )
+  assert.equal(f.releases.length, 1)
+  assert.equal(f.releases[0].client, f.client)
+  assert.equal(f.releases[0].destroy, false)
+  assert.equal(f.client.listenerCount("error"), 0)
+})
+
+test("I3 R285 COMMIT cancellation remains unknown with the original cause and no guessed rollback", async (t) => {
+  for (const method of ["claim", "released"])
+    for (const code of ["57014", "42601"])
+      await t.test(`${method}:${code}`, async () => {
+        const f = await i3R285SqlCancellationFixture({ failAt: "commit", code })
+        await assert.rejects(f.invoke[method](), (error) => {
+          assert.equal(error.message, "PROJECT_SCOPE_RELEASE_COMMIT_UNKNOWN")
+          if (code === "57014") {
+            assert.equal(error.cause.message, "PROJECT_SCOPE_RELEASE_CANCELLED")
+            assert.equal(error.cause.cause, f.original)
+          } else assert.equal(error.cause, f.original)
+          return true
+        })
+        i3R285AssertRetired(f, "commit")
+      })
+})
+
+test("I3 R285 checkout failure with the cancellation code is outside the private SQL classifier", async () => {
+  const f = await i3R285SqlCancellationFixture()
+  let connects = 0
+  f.database.pool.connect = async () => {
+    connects++
+    throw f.original
+  }
+  await assert.rejects(f.invoke.released(), (error) => error === f.original)
+  assert.equal(connects, 1)
+  assert.deepEqual(f.calls, [])
+  assert.deepEqual(f.releases, [])
+  assert.equal(f.client.listenerCount("error"), 0)
+})
+
+integrationTest("B10 real PG share metadata is owner-authoritative and GET leaves all facts unchanged", async (t) => {
+  const f = await r237Fixture(t)
+  const unsharedConversation = async (projectRef = null, tenant = f.tenant) => {
+    const id = `conv_${randomUUID()}`
+    await f.pool.query(
+      "INSERT INTO bff_conversation(conversation_id,tenant_id,owner_id,project_ref,title,status) VALUES($1,$2,$3,$4,'B10 owned read','active')",
+      [id, tenant, f.owner, projectRef],
+    )
+    return id
+  }
+  const id = await unsharedConversation()
+  const metadata = (session = id, query = "", options = {}) => f.request(`sessions/${session}/share${query}`, "GET", undefined, options)
+  const unchanged = async (operation, status, share) => {
+    const before = await f.facts()
+    const revisions = await f.pool.query("SELECT share_id,xmin::text AS revision FROM bff_share WHERE tenant_id=$1 ORDER BY share_id", [f.tenant])
+    const result = await operation()
+    assert.equal(result.status, status, JSON.stringify(result.body))
+    if (status === 200) assert.deepEqual(result.body.data, { share })
+    else assert.equal(result.body.error.code, "session_not_found")
+    assert.deepEqual(await f.facts(), before, "metadata GET must not write facts, receipts or outboxes")
+    assert.deepEqual(
+      (await f.pool.query("SELECT share_id,xmin::text AS revision FROM bff_share WHERE tenant_id=$1 ORDER BY share_id", [f.tenant])).rows,
+      revisions.rows,
+      "metadata GET must not rewrite expired rows",
+    )
+    return result
+  }
+  await unchanged(() => metadata(), 200, null)
+  const created = await f.request(`sessions/${id}/share`, "POST", {})
+  assert.equal(created.status, 200)
+  const shareId = created.body.data.share_id
+  const authoritative = (await f.pool.query("SELECT share_id,created_at,expires_at FROM bff_share WHERE tenant_id=$1 AND share_id=$2", [f.tenant, shareId]))
+    .rows[0]
+  const expected = {
+    share_id: shareId,
+    created_at: authoritative.created_at.toISOString(),
+    expires_at: authoritative.expires_at?.toISOString() ?? null,
+  }
+  await unchanged(() => metadata(), 200, expected)
+  await unchanged(() => metadata(), 200, expected)
+  await unchanged(() => metadata(id, "", { owner: "other_owner" }), 404)
+  const otherTenantSession = await unsharedConversation(null, `${f.tenant}_other`)
+  await unchanged(() => metadata(otherTenantSession), 404)
+  const beforeAdmission = await f.facts()
+  const wrongProductTenant = await metadata(id, "", { tenant: `${f.tenant}_other` })
+  assert.equal(wrongProductTenant.status, 403)
+  assert.equal(wrongProductTenant.body.error.code, "product_tenant_forbidden")
+  assert.deepEqual(await f.facts(), beforeAdmission)
+  await unchanged(() => metadata(`missing_${randomUUID()}`), 404)
+  await f.pool.query("UPDATE bff_share SET created_at=statement_timestamp()-interval '2 days',expires_at=statement_timestamp()-interval '1 day' WHERE tenant_id=$1 AND share_id=$2", [f.tenant, shareId])
+  await unchanged(() => metadata(), 200, null)
+  assert.equal((await f.pool.query("SELECT revoked_at FROM bff_share WHERE share_id=$1", [shareId])).rows[0].revoked_at, null)
+  const replacement = await f.request(`sessions/${id}/share`, "POST", {})
+  assert.equal(replacement.status, 200)
+  assert.notEqual(replacement.body.data.share_id, shareId)
+  assert.equal((await f.request(`sessions/${id}/share`, "DELETE")).status, 200)
+  await unchanged(() => metadata(), 200, null)
+  const project = await f.project()
+  const projectSession = await unsharedConversation(project.id)
+  await unchanged(() => metadata(projectSession, `?project_ref=${project.id}`), 200, null)
+  await unchanged(() => metadata(projectSession, "?scope=direct"), 404)
+  await f.pool.query("UPDATE bff_project SET deleted_at=statement_timestamp() WHERE tenant_id=$1 AND project_id=$2", [f.tenant, project.id])
+  await unchanged(() => metadata(projectSession), 404)
+  await unchanged(() => metadata(projectSession, `?project_ref=${project.id}`), 404)
+  await f.pool.query("UPDATE bff_conversation SET status='deleted',deleted_at=statement_timestamp() WHERE tenant_id=$1 AND conversation_id=$2", [f.tenant, id])
+  await unchanged(() => metadata(), 404)
+})
+
+integrationTest(
+  "B08 real PG freezes personal owner material per new Run, replays unchanged and rejects complete oversized context before queued writes",
+  async (t) => {
+    const f = await r237Fixture(t)
+    const options = () => ({ signal: new AbortController().signal, deadline: performance.now() + 10000 })
+    const scope = { tenantId: f.tenant, subjectId: f.owner }
+    const profile = { nickname: "Owned user", occupation: "Research", about: "private profile v1", instructions: "Preserve full private material" }
+    assert.equal((await f.store.services.personalization.replace(scope, { expectedRevision: 0, fields: profile }, options())).kind, "saved")
+    const knowledgeId = randomUUID()
+    const fields = { name: "Owned knowledge", when_to_use: "Research", content: "private knowledge v1" }
+    const knowledge = f.store.services.personalKnowledge
+    assert.equal((await knowledge.replace(scope, knowledgeId, 0, fields, options())).kind, "ok")
+    assert.equal((await knowledge.replaceUsage(scope, 0, true, options())).kind, "ok")
+    assert.equal(
+      (
+        await f.store.services.personalization.replace(
+          { ...scope, tenantId: `${f.tenant}_other` },
+          { expectedRevision: 0, fields: { ...profile, about: "OTHER TENANT PRIVATE" } },
+          options(),
+        )
+      ).kind,
+      "saved",
+    )
+    assert.equal(
+      (
+        await f.store.services.personalization.replace(
+          { ...scope, subjectId: "other_owner" },
+          { expectedRevision: 0, fields: { ...profile, about: "OTHER OWNER PRIVATE" } },
+          options(),
+        )
+      ).kind,
+      "saved",
+    )
+    const conversation = await f.conversation()
+    const body = { content: "Ordinary public input", selected_skill_source_refs: [] }
+    const submit = (key, id = conversation) => f.request(`sessions/${id}/messages`, "POST", body, { key })
+    const payload = async (key) =>
+      (await f.pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND idempotency_key=$2", [f.tenant, key])).rows[0]?.payload
+    const first = await submit("b08-first")
+    assert.equal(first.status, 202, JSON.stringify(first.body))
+    const frozen = await payload("b08-first")
+    assert.deepEqual(frozen.launch.personal_context, {
+      schema_version: 1,
+      owner: { tenant_ref: f.tenant, user_ref: f.owner },
+      profile: { revision: 1, ...profile },
+      knowledge: { usage_revision: 1, enabled: true, items: [{ knowledge_id: knowledgeId, revision: 1, ...fields }] },
+    })
+    assert.equal(frozen.launch.content, body.content)
+    assert.equal(Object.hasOwn(frozen.launch.trace, "personal_context"), false)
+    const publicRead = await f.request(`sessions/${conversation}`)
+    assert.equal(publicRead.status, 200)
+    assert.equal(JSON.stringify(publicRead.body).includes(fields.content), false)
+    assert.equal(JSON.stringify(publicRead.body).includes(profile.about), false)
+    assert.equal(
+      (await f.store.services.personalization.replace(scope, { expectedRevision: 1, fields: { ...profile, about: "private profile v2" } }, options())).kind,
+      "saved",
+    )
+    assert.equal((await knowledge.replace(scope, knowledgeId, 1, { ...fields, content: "private knowledge v2" }, options())).kind, "ok")
+    assert.equal((await knowledge.replaceUsage(scope, 1, false, options())).kind, "ok")
+    assert.equal((await knowledge.remove(scope, knowledgeId, 2, options())).kind, "ok")
+    const beforeReplay = await f.facts()
+    const replay = await submit("b08-first")
+    assert.equal(replay.status, 202)
+    assert.deepEqual(replay.body.data, first.body.data)
+    assert.deepEqual(await payload("b08-first"), frozen)
+    assert.deepEqual(await f.facts(), beforeReplay, "same-key replay must not update owner facts or replace the frozen material")
+    const next = await submit("b08-next")
+    assert.equal(next.status, 202, JSON.stringify(next.body))
+    const current = (await payload("b08-next")).launch.personal_context
+    assert.equal(current.profile.about, "private profile v2")
+    assert.equal(current.profile.revision, 2)
+    assert.deepEqual(current.knowledge, { usage_revision: 2, enabled: false, items: [] })
+    assert.equal(JSON.stringify(current).includes("OTHER"), false)
+    const conflict = await f.request(`sessions/${conversation}/messages`, "POST", { ...body, content: "Changed input" }, { key: "b08-first" })
+    assert.equal(conflict.status, 409)
+    // Exercise the complete legal owner capacity through the existing management repository.
+    assert.equal((await knowledge.replaceUsage(scope, 2, true, options())).kind, "ok")
+    for (let index = 0; index < 100; index++)
+      assert.equal((await knowledge.replace(scope, randomUUID(), 0, { ...fields, content: "\u0001".repeat(2000) }, options())).kind, "ok")
+    const freshConversation = `conv_${randomUUID()}`
+    const beforeOversize = await f.facts()
+    const oversized = await submit("b08-oversized", freshConversation)
+    assert.equal(oversized.status, 413, JSON.stringify(oversized.body))
+    assert.equal(oversized.body.error.code, "personal_context_too_large")
+    assert.deepEqual(await f.facts(), beforeOversize, "oversize must roll back first Conversation, queued events, messages, receipt and outbox")
+    assert.equal(await payload("b08-oversized"), undefined)
+    // Original committed identity remains recoverable even when current settings cannot fit.
+    assert.equal((await submit("b08-first")).status, 202)
+    assert.deepEqual(await payload("b08-first"), frozen)
+  },
+)
+
+integrationTest("B08 real PG persists context_window_exceeded through the Agent ledger and owner Message projection", async (t) => {
+  const f = await r237Fixture(t)
+  const sessionId = await f.conversation()
+  const submitted = await f.request(
+    `sessions/${sessionId}/messages`,
+    "POST",
+    { content: "Owned context rejection", selected_skill_source_refs: [] },
+    { key: "b08-failure-projection" },
+  )
+  assert.equal(submitted.status, 202, JSON.stringify(submitted.body))
+  const turn = submitted.body.data
+  const [claim] = await f.store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: `b08_${f.tenant}`, limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+  assert.equal(claim.runId, turn.run_id)
+  assert.equal(await f.store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+  const failure = { source: "agent", code: "context_window_exceeded", retryable: false }
+  const source = (sequence, kind, payload) => {
+    const occurredAt = new Date(sequence * 1000).toISOString()
+    const id = `b08_context_failure_${sequence}`
+    return {
+      sourceRunId: turn.run_id,
+      sourceEventId: id,
+      sourceSequence: sequence,
+      sourceOccurredAt: occurredAt,
+      sourcePayload: { chat_event_id: id, session_id: sessionId, run_id: turn.run_id, seq: sequence, created_at: sequence * 1000, payload },
+      event: { event_id: id, seq: sequence, session_id: sessionId, run_id: turn.run_id, kind, timestamp: occurredAt, payload },
+    }
+  }
+  const failed = source(3, "run.failed", { failure, message: "Context window exceeded" })
+  await f.store.agUi.ingest(f.tenant, sessionId, [
+    source(1, "run.created", { run_id: turn.run_id }),
+    source(2, "message.delta", { segment_id: "b08_retained", delta: "Retained text" }),
+    failed,
+  ])
+  const persisted = (
+    await f.pool.query("SELECT content,status,agent_failure_code,agent_failure_retryable FROM bff_message WHERE tenant_id=$1 AND message_id=$2", [
+      f.tenant,
+      turn.assistant_message_id,
+    ])
+  ).rows[0]
+  assert.deepEqual(persisted, { content: "Retained text", status: "failed", agent_failure_code: failure.code, agent_failure_retryable: false })
+  const snapshot = await f.request(`sessions/${sessionId}`)
+  assert.equal(snapshot.status, 200)
+  assert.deepEqual(snapshot.body.data.messages.find((message) => message.message_id === turn.assistant_message_id).failure, failure)
+  const replay = await f.store.agUi.replay(f.tenant, sessionId, null, 100)
+  assert.equal(replay.kind, "page")
+  const error = replay.frames.find(({ payload }) => payload.type === "RUN_ERROR" && payload.runId === turn.run_id)
+  assert.deepEqual(error.payload.metadata.kokoro.failure, failure)
+  assert.equal(error.payload.code, failure.code)
+  const beforeDuplicate = await f.facts()
+  const duplicate = await f.store.agUi.ingest(f.tenant, sessionId, [failed])
+  assert.equal(duplicate.insertedSources, 0)
+  assert.equal(duplicate.insertedFrames, 0)
+  assert.deepEqual(await f.facts(), beforeDuplicate)
 })

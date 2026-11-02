@@ -1,3 +1,5 @@
+import { PostgresRssPollRepository } from "./rss-poll-repository.js"
+import { PostgresScheduledTaskRunsReader } from "./scheduled-task-runs.js"
 import { PostgresPersonalKnowledgeRepository } from "./personal-knowledge-repository.js"
 import { readSkillUsage } from "./skill-usage-projection.js"
 import { PostgresPersonalizationRepository } from "./personalization-repository.js"
@@ -25,6 +27,7 @@ import { PostgresAgUiProjectionRepository } from "./agui-projection-repository.j
 import { PostgresAgUiConsumerRepository } from "./agui-consumer-repository.js"
 import type { AgUiProjectionConsumerRepository } from "../../application/agui/ports/agui-projection-repository.js"
 import type { AgentDispatchOutboxRepository } from "../../application/ports/agent-dispatch-outbox-repository.js"
+import type { SubmittedAgentRunReader } from "../../application/ports/submitted-agent-run-reader.js"
 import type { ProjectExecutionBindingReader } from "../../application/ports/project-execution-binding-reader.js"
 import type { AgentCancellationOutboxRepository } from "../../application/ports/agent-cancellation-outbox-repository.js"
 import { Sha256StableIdGenerator } from "../identifiers/scheduled-task-outbox-id.js"
@@ -44,6 +47,8 @@ export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/id
 export type { ScheduledTaskRecord } from "../../application/ports/scheduled-task-repository.js"
 
 export class PostgresBffRepositories {
+  public readonly rssPoll: PostgresRssPollRepository
+  public readonly scheduledTaskRuns: PostgresScheduledTaskRunsReader
   private readonly database: PostgresBffDatabase
   private readonly idempotency: IdempotencyRepository
   private readonly projects: ProjectRepository
@@ -53,6 +58,7 @@ export class PostgresBffRepositories {
   public readonly agUiConsumers: AgUiProjectionConsumerRepository
   public readonly scheduledTaskOutbox: ScheduledTaskOutboxRepository
   public readonly agentDispatchOutbox: AgentDispatchOutboxRepository
+  public readonly submittedAgentRuns: SubmittedAgentRunReader
   public readonly projectExecutionBindings: ProjectExecutionBindingReader
   public readonly agentCancellationOutbox: AgentCancellationOutboxRepository
   public readonly schedulerDispatchReceipts: SchedulerDispatchReceiptRepository
@@ -63,6 +69,8 @@ export class PostgresBffRepositories {
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
+    this.rssPoll = new PostgresRssPollRepository(this.database.pool)
+    this.scheduledTaskRuns = new PostgresScheduledTaskRunsReader(this.database.pool)
     this.idempotency = new PostgresIdempotencyRepository(this.database.pool)
     this.projects = new PostgresProjectRepository(this.database)
     const scheduled = new PostgresScheduledTaskRepository(this.database)
@@ -73,6 +81,7 @@ export class PostgresBffRepositories {
     this.scheduled = scheduled
     this.scheduledTaskOutbox = scheduled
     this.agentDispatchOutbox = agentDispatchOutbox
+    this.submittedAgentRuns = agentDispatchOutbox
     this.projectExecutionBindings = agentDispatchOutbox
     this.agentCancellationOutbox = agentCancellationOutbox
     this.schedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(this.database.pool)

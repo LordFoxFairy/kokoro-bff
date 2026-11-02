@@ -4,6 +4,7 @@ import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
+import { load } from "js-yaml"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -11,9 +12,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "158579f8fdeb62ba5064365260942b62a195a4bb"
+const ownerCommit = "23ff71993f7772219cab8d3a3a4c7fbb4d66f735"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe"
+const ownerDigest = "f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -169,6 +170,13 @@ async function closeOwnerResponseSchemas(directory) {
     "CreditAccountResponse",
     "LedgerEntry",
     "CreditLedgerResponse",
+    "AdminCreditGrantRequest",
+    "AdminCreditGrantResponse",
+    "AdmissionCreateRequest",
+    "Admission",
+    "AdmissionResponse",
+    "AdmissionSettlementRequest",
+    "AdmissionSettlementResponse",
   ]) {
     source = closeGeneratedObject(source, schemaName)
   }
@@ -178,12 +186,104 @@ async function closeOwnerResponseSchemas(directory) {
   source = closeObjectExpression(source, "  data: z.object(", "CatalogResponse.data", catalogResponseStart)
   const ledgerResponseStart = source.indexOf("export const zCreditLedgerResponse =")
   source = closeObjectExpression(source, "  data: z.object(", "CreditLedgerResponse.data", ledgerResponseStart)
+  source = closeObjectExpression(source, "  data: z.object(", "AdminCreditGrantResponse.data", source.indexOf("export const zAdminCreditGrantResponse ="))
+  const fundingStart = source.indexOf("export const zAdminCreditGrantRequest =")
+  const fundingEnd = source.indexOf("export const ", fundingStart + 1)
+  let funding = source.slice(fundingStart, fundingEnd)
+  funding = replaceExactInSource(funding, ".max(255)", ".refine((value) => [...value].length <= 255)", 1, "subject Unicode code-point bound")
+  funding = replaceExactInSource(funding, ".max(500)", ".refine((value) => [...value].length <= 500)", 1, "reason Unicode code-point bound")
+  source = source.slice(0, fundingStart) + funding + source.slice(fundingEnd)
+  for (const name of ["AdmissionCreateRequest", "Admission"]) {
+    const start = source.indexOf(`export const z${name} =`)
+    assert.ok(start >= 0, `Admission validator ${name} missing`)
+    const end = source.indexOf("export const ", start + 1)
+    const block = source.slice(start, end)
+    const normalized = replaceExactInSource(
+      block,
+      ".max(512)",
+      ".refine((value) => [...value].length <= 512).meta({ maxLength: 512 })",
+      2,
+      `${name} identity code-point bounds`,
+    )
+    source = source.slice(0, start) + normalized + source.slice(end)
+  }
+  // The generator omits JSON Schema `not` and uses UTF-16 maxLength. Preserve the fixed owner's exact rules, not a second editable wire schema.
+  const ownerSchemas = load(await readFile(vendorPath, "utf8")).components.schemas
+  for (const name of ["AdmissionSettlementRequest", "AdmissionSettlement"]) {
+    const start = source.indexOf(`export const z${name} =`)
+    assert.ok(start >= 0, `Settlement validator ${name} missing`)
+    const next = source.indexOf("export const ", start + 1)
+    const end = next < 0 ? source.length : next
+    let block = source.slice(start, end)
+    block = replaceExactInSource(block, ".max(512)", ".refine((value) => [...value].length <= 512).meta({ maxLength: 512 })", 1, `${name} Run code-point bound`)
+    const not = ownerSchemas[name].properties.evidence_revision.not
+    assert.equal(typeof not.pattern, "string")
+    block = replaceExactInSource(
+      block,
+      ".max(19)",
+      `.max(19).refine((value) => !new RegExp(${JSON.stringify(not.pattern)}).test(value)).meta(${JSON.stringify({ not })})`,
+      1,
+      `${name} revision upper bound`,
+    )
+    if (name === "AdmissionSettlement") {
+      const creditNot = ownerSchemas[name].properties.captured_credits.not
+      assert.deepEqual(creditNot, ownerSchemas[name].properties.released_credits.not)
+      block = replaceExactInSource(
+        block,
+        ".max(13)",
+        `.max(13).refine((value) => !new RegExp(${JSON.stringify(creditNot.pattern)}).test(value)).meta(${JSON.stringify({ not: creditNot })})`,
+        2,
+        "whole Credit upper bounds",
+      )
+      const positions = [...block.matchAll(/z\.object\(/gu)].map((x) => x.index)
+      assert.equal(positions.length, 4, "Settlement three partial branches plus one closed base")
+      block = closeObjectExpression(block, "z.object(", "Settlement closed base", positions[3])
+      // Zod intersection accepts keys stripped by a permissive partial branch. Validate the complete strict base *before* intersection; both expressions are generated from the same owner schema.
+      const baseEnd = block.lastIndexOf(".strict()") + ".strict()".length
+      const base = block.slice(positions[3], baseEnd)
+      assert.ok(base.startsWith("z.object("))
+      block = replaceExactInSource(block, "= z.intersection(", `= ${base}.pipe(z.intersection(`, 1, "strict input before partial intersection")
+      assert.ok(block.trimEnd().endsWith(");"), "Settlement generated expression end drift")
+      block = block.trimEnd().slice(0, -2) + "));\n\n"
+    }
+    source = source.slice(0, start) + block + source.slice(end)
+  }
+  const meteringObjects = {
+    MeteringRational: 1,
+    MeteringRate: 4,
+    MeteringRateConfiguration: 1,
+    MeteringPolicyConfiguration: 1,
+    AdminMeteringRatePublishRequest: 1,
+    AdminMeteringPolicyPublishRequest: 1,
+    MeteringPublication: 1,
+    MeteringPublicationResponse: 1,
+    MeteringRateRevision: 1,
+    MeteringPolicyRevision: 1,
+    AdminMeteringPricingResponse: 2,
+  }
+  for (const [name, expected] of Object.entries(meteringObjects)) {
+    const start = source.indexOf(`export const z${name} =`)
+    assert.ok(start >= 0, `Metering validator ${name} missing`)
+    const next = source.indexOf("export const ", start + 1)
+    const end = next < 0 ? source.length : next
+    let block = source.slice(start, end)
+    const positions = [...block.matchAll(/z\.object\(/gu)].map((match) => match.index)
+    assert.equal(positions.length, expected, `Metering ${name} closed object count drift`)
+    for (const offset of positions.reverse()) block = closeObjectExpression(block, "z.object(", `${name} nested`, offset)
+    // JSON Schema maxLength counts Unicode code points, not JS UTF-16 units.
+    block = block.replace(/\.max\((128|255|500)\)/gu, (_match, bound) => `.refine((value) => [...value].length <= ${bound})`)
+    source = source.slice(0, start) + block + source.slice(end)
+  }
   await writeFile(file, source)
 }
 
 async function run(command, args, options = {}) {
   await new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: root, stdio: "inherit", ...options })
+    const child = spawn(command, args, {
+      cwd: root,
+      stdio: "inherit",
+      ...options,
+    })
     child.once("error", reject)
     child.once("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${path.basename(command)} exited ${code}`))))
   })
@@ -214,7 +314,9 @@ export function assertGeneratedAllowlist(files, directories, label) {
 
 async function generate(directory) {
   const cli = path.join(root, "node_modules/@hey-api/openapi-ts/bin/run.js")
-  await run(process.execPath, [cli, "--silent", "-f", configPath], { env: { ...process.env, BILLING_HTTP_CLIENT_OUTPUT: directory } })
+  await run(process.execPath, [cli, "--silent", "-f", configPath], {
+    env: { ...process.env, BILLING_HTTP_CLIENT_OUTPUT: directory },
+  })
   const tree = await generatedTree(directory)
   assertGeneratedAllowlist(tree.files, tree.directories, "generated")
   await normalizeGeneratorCompatibility(directory)
@@ -222,7 +324,19 @@ async function generate(directory) {
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
-    ["getCatalog", "getMyCreditAccount", "getMyCreditLedger", "openMyCreditAccount"],
+    [
+      "createAdminCreditGrant",
+      "createAdmission",
+      "getAdminMeteringPricing",
+      "getCatalog",
+      "getMyCreditAccount",
+      "getMyCreditLedger",
+      "openMyCreditAccount",
+      "publishAdminMeteringPolicy",
+      "publishAdminMeteringRate",
+      "recoverModelAdmission",
+      "settleModelAdmission",
+    ],
     "Billing HTTP generated operation surface drifted",
   )
   const prettier = path.join(root, "node_modules/prettier/bin/prettier.cjs")
@@ -251,7 +365,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "4.0.0-experimental.3",
+      contract_version: "4.0.0-experimental.10",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },

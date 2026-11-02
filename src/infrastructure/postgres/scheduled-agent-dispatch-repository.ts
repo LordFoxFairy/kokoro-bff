@@ -27,6 +27,7 @@ type TaskRow = {
   enabled: boolean
   status: string
   revision: string | number
+  trigger_epoch: string
 }
 type ScopeIdentityRow = { subject_id: string; session_id: string }
 type ScopeHeadRow = {
@@ -160,10 +161,10 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
         await client.query("ROLLBACK")
         return { outcome: "claim_lost" }
       }
-      const task = await client.query<TaskRow>("SELECT owner_id,enabled,status,revision FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE", [
-        input.snapshot.tenantId,
-        input.snapshot.taskId,
-      ])
+      const task = await client.query<TaskRow>(
+        "SELECT owner_id,enabled,status,revision,trigger_epoch::text FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE",
+        [input.snapshot.tenantId, input.snapshot.taskId],
+      )
       const taskRow = task.rows[0]
       // Classify while holding both locks; never re-read task state after this transaction.
       let rejection: ScheduledAgentRejectionReason | null = null
@@ -189,8 +190,8 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
         const dispatchId = id(input.snapshot.tenantId, input.snapshot.taskId, input.snapshot.occurrence)
         const inserted = await client.query(
           `INSERT INTO bff_scheduled_agent_dispatch(
-          dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb) ON CONFLICT(tenant_id,task_id,occurrence) DO NOTHING`,
+          dispatch_id,tenant_id,task_id,source_kind,source_revision,source_epoch,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload)
+          VALUES($1,$2,$3,'calendar',$13,$14,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb) ON CONFLICT(tenant_id,task_id,occurrence) DO NOTHING`,
           [
             dispatchId,
             input.snapshot.tenantId,
@@ -204,6 +205,8 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
             runId,
             input.snapshot.launch.identityAssertionRef,
             JSON.stringify(input.snapshot.launch.body),
+            input.snapshot.taskRevision,
+            taskRow!.trigger_epoch,
           ],
         )
         if (inserted.rowCount !== 1) {
@@ -261,9 +264,95 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
         await client.query<ScopeHeadRow>(`SELECT scope.tenant_id,scope.task_id,scope.active_dispatch_id FROM bff_scheduled_agent_scope scope WHERE
         (scope.active_dispatch_id IS NULL AND EXISTS(SELECT 1 FROM bff_scheduled_agent_dispatch d WHERE d.tenant_id=scope.tenant_id AND d.task_id=scope.task_id AND ((d.status IN('pending','retryable') AND d.available_at<=clock_timestamp()) OR (d.status='leased' AND d.lease_until<=clock_timestamp()))))
         OR EXISTS(SELECT 1 FROM bff_scheduled_agent_dispatch d WHERE d.dispatch_id=scope.active_dispatch_id AND (((d.status IN('pending','retryable') AND d.available_at<=clock_timestamp()) OR (d.status='leased' AND d.lease_until<=clock_timestamp()))))
-        ORDER BY scope.tenant_id,scope.task_id LIMIT 1 FOR UPDATE SKIP LOCKED`)
+        ORDER BY scope.tenant_id,scope.task_id LIMIT 1`)
       const scope = scopeResult.rows[0]
       if (!scope) {
+        await client.query("COMMIT")
+        return null
+      }
+      const candidate = (
+        await client.query<{
+          dispatch_id: string
+          run_id: string
+          source_kind: string
+          source_revision: string
+          source_epoch: string
+          subject_id: string
+          admission_unknown_seen: boolean
+          status: string
+        }>(
+          `SELECT dispatch_id,run_id,source_kind,source_revision::text,source_epoch::text,subject_id,admission_unknown_seen,status FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1 AND task_id=$2 AND ($3::text IS NULL OR dispatch_id=$3) AND status IN('pending','retryable','leased','admitted') ORDER BY occurrence_order_key,dispatch_id LIMIT 1`,
+          [scope.tenant_id, scope.task_id, scope.active_dispatch_id],
+        )
+      ).rows[0]
+      if (!candidate) {
+        await client.query("COMMIT")
+        return null
+      }
+      let eligible = true
+      if (candidate.source_kind === "rss" && !candidate.admission_unknown_seen && candidate.status !== "leased" && candidate.status !== "admitted") {
+        const binding = (
+          await client.query<{ project_id: string | null; owner_id: string }>(
+            `SELECT project_id,owner_id FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2`,
+            [scope.tenant_id, scope.task_id],
+          )
+        ).rows[0]
+        if (binding?.project_id !== null && binding?.project_id !== undefined) {
+          const parent = await client.query(
+            `SELECT project_id FROM bff_project WHERE tenant_id=$1 AND project_id=$2 AND owner_id=$3 AND deleted_at IS NULL FOR SHARE`,
+            [scope.tenant_id, binding.project_id, binding.owner_id],
+          )
+          eligible = parent.rowCount === 1
+        }
+        const task = (
+          await client.query<{
+            project_id: string | null
+            owner_id: string
+            revision: string
+            trigger_epoch: string
+            trigger_kind: string
+            enabled: boolean
+            status: string
+            current: boolean
+          }>(
+            `SELECT project_id,owner_id,revision::text,trigger_epoch::text,trigger_kind,enabled,status,(expires_at IS NULL OR expires_at>clock_timestamp()) AS current FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE`,
+            [scope.tenant_id, scope.task_id],
+          )
+        ).rows[0]
+        eligible =
+          eligible &&
+          binding?.owner_id === candidate.subject_id &&
+          !!task &&
+          task.project_id === binding?.project_id &&
+          task.owner_id === candidate.subject_id &&
+          task.trigger_kind === "rss" &&
+          task.trigger_epoch === candidate.source_epoch &&
+          task.revision === candidate.source_revision &&
+          task.enabled &&
+          task.status === "active" &&
+          task.current
+      }
+      const lockedScope = (
+        await client.query<ScopeHeadRow>(
+          `SELECT tenant_id,task_id,active_dispatch_id FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE SKIP LOCKED`,
+          [scope.tenant_id, scope.task_id],
+        )
+      ).rows[0]
+      if (!lockedScope || lockedScope.active_dispatch_id !== scope.active_dispatch_id) {
+        await client.query("COMMIT")
+        return null
+      }
+      if (!eligible) {
+        await client.query(`SELECT dispatch_id FROM bff_scheduled_agent_dispatch WHERE dispatch_id=$1 FOR UPDATE`, [candidate.dispatch_id])
+        const stopped = await client.query(
+          `UPDATE bff_scheduled_agent_dispatch SET status='failed',completed_at=CURRENT_TIMESTAMP(3),last_error_code='scheduled_task_changed',updated_at=CURRENT_TIMESTAMP(3) WHERE dispatch_id=$1 AND status IN('pending','retryable') AND admission_unknown_seen=false`,
+          [candidate.dispatch_id],
+        )
+        if (stopped.rowCount === 1)
+          await client.query(
+            `UPDATE bff_scheduled_agent_scope SET active_dispatch_id=NULL,active_run_id=NULL WHERE tenant_id=$1 AND task_id=$2 AND active_dispatch_id=$3 AND active_run_id=$4`,
+            [scope.tenant_id, scope.task_id, candidate.dispatch_id, candidate.run_id],
+          )
         await client.query("COMMIT")
         return null
       }
@@ -274,6 +363,10 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
           [scope.tenant_id, scope.task_id],
         )
         dispatchId = head.rows[0]?.dispatch_id ?? null
+        if (dispatchId !== candidate.dispatch_id) {
+          await client.query("COMMIT")
+          return null
+        }
         if (!dispatchId) {
           await client.query("COMMIT")
           return null

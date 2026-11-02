@@ -372,7 +372,15 @@ test("missing fixed Product tenant fails before IAM and business work without ch
       },
       sharedSessionReader: {
         findSharedSession: () => ({ session_id: "session-share" }),
-        readSession: () => ({ session_id: "session-share" }),
+        readSession: () => ({
+          session: {
+            session_id: "session-share",
+            title: "Shared",
+            owner_id: "owner",
+            created_at: "2026-10-27T00:00:00.000Z",
+            updated_at: "2026-10-27T00:00:00.000Z",
+          },
+        }),
       },
     },
   )
@@ -635,7 +643,15 @@ test("Share, runtime manifest, and Scheduler callback remain separate service bo
     sessionAdmission: admission,
     sharedSessionReader: {
       findSharedSession: () => ({ session_id: "session-share" }),
-      readSession: () => ({ session_id: "session-share" }),
+      readSession: () => ({
+        session: {
+          session_id: "session-share",
+          title: "Shared",
+          owner_id: "owner",
+          created_at: "2026-10-27T00:00:00.000Z",
+          updated_at: "2026-10-27T00:00:00.000Z",
+        },
+      }),
     },
   })
   const base = await listen(server)
@@ -953,4 +969,145 @@ test("Admin package HTTP admission preserves fresh human identity, tenant and or
   }
   assert.equal(admission.calls.length, 9)
   assert.equal(checks.length, 6)
+})
+
+for (const source of ["business-store", "fallback"] as const) {
+  test(`anonymous Share ${source} exposes only the original public message projection with a null process`, async () => {
+    const { createBffServer: createSourceBffServer } = await import("../src/bootstrap/server.ts")
+    const admission = new SessionAdmissionDouble()
+    const canary = "PRIVATE_TOOL_DETAIL_CANARY"
+    const createdAt = "2026-10-27T00:00:00.000Z"
+    const messages = [
+      {
+        message_id: "user-public",
+        role: "user",
+        content: "question",
+        status: "completed",
+        created_at: createdAt,
+        selected_skill_source_refs: ["skill:one"],
+        private_value: canary,
+      },
+      {
+        message_id: "answer-public",
+        role: "assistant",
+        content: "original answer",
+        status: "failed",
+        created_at: createdAt,
+        run_id: "run-public",
+        failure: { source: "agent", code: "model_unavailable", retryable: true, private_value: canary },
+        rendering: { parts_cursor: canary },
+        ordered_parts: [{ display_detail: { kind: "file", name: canary } }],
+        private_value: canary,
+      },
+    ]
+    const session = {
+      session_id: "session-public",
+      title: "Public title",
+      owner_id: "owner-public",
+      created_at: createdAt,
+      updated_at: createdAt,
+      private_value: canary,
+    }
+    const detail = {
+      session,
+      messages,
+      execution_process: { activities: [{ display_detail: { kind: "file", name: canary } }] },
+      execution_head: { pending_pauses: [{ input_schema: canary }] },
+      files: [{ path: canary }],
+      deliveries: [{ title: canary }],
+      deliveries_has_more: true,
+      event_watermark: canary,
+      private_value: canary,
+    }
+    const publicShares = {
+      findActiveShare: async () => ({
+        share: { shareId: "share-public" },
+        conversation: {
+          tenantId: "tenant-public",
+          conversationId: session.session_id,
+          title: session.title,
+          ownerId: session.owner_id,
+          createdAt: new Date(createdAt),
+          updatedAt: new Date(createdAt),
+        },
+      }),
+      listMessages: async () => ({ messages }),
+    }
+    const options =
+      source === "business-store"
+        ? {
+            businessStore: {
+              services: {
+                publicShares,
+                chat: {
+                  snapshot: () => {
+                    throw Error("private snapshot must not be read")
+                  },
+                },
+              },
+            } as never,
+          }
+        : { businessStore: null, sharedSessionReader: { findSharedSession: () => ({ session_id: session.session_id }), readSession: () => detail } }
+    const server = createSourceBffServer(config(), { ...options, sessionAdmission: admission, readiness: async () => undefined })
+    const base = await listen(server)
+    const response = await fetch(`${base}/v1/shared/share-public`, { headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret" } })
+    assert.equal(response.status, 200)
+    const body = (await response.json()) as { data: unknown }
+    assert.deepEqual(body.data, {
+      session: { session_id: session.session_id, title: session.title, owner_id: session.owner_id, created_at: createdAt, updated_at: createdAt },
+      messages: [
+        { message_id: "user-public", role: "user", content: "question", status: "completed", created_at: createdAt, selected_skill_source_refs: ["skill:one"] },
+        {
+          message_id: "answer-public",
+          role: "assistant",
+          content: "original answer",
+          status: "failed",
+          created_at: createdAt,
+          run_id: "run-public",
+          failure: { source: "agent", code: "model_unavailable", retryable: true },
+        },
+      ],
+      files: [],
+      deliveries: [],
+      deliveries_has_more: false,
+      event_watermark: null,
+      execution_process: null,
+    })
+    assert.equal(JSON.stringify(body).includes(canary), false)
+    assert.equal(admission.calls.length, 0)
+  })
+}
+
+test("anonymous Share refuses a private ordered message instead of emitting a null success body", async () => {
+  const { createBffServer: createSourceBffServer } = await import("../src/bootstrap/server.ts")
+  const at = new Date("2026-10-27T00:00:00.000Z")
+  const server = createSourceBffServer(config(), {
+    businessStore: {
+      services: {
+        publicShares: {
+          findActiveShare: async () => ({
+            share: { shareId: "share-public" },
+            conversation: { tenantId: "tenant", conversationId: "conversation", title: "title", ownerId: "owner", createdAt: at, updatedAt: at },
+          }),
+          listMessages: async () => ({
+            messages: [
+              {
+                message_id: "message",
+                role: "assistant",
+                content: null,
+                status: "completed",
+                created_at: at.toISOString(),
+                rendering: { parts_cursor: "PRIVATE_CURSOR_CANARY" },
+              },
+            ],
+          }),
+        },
+      },
+    } as never,
+    readiness: async () => undefined,
+  })
+  const base = await listen(server)
+  const response = await fetch(`${base}/v1/shared/share-public`, { headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret" } })
+  assert.equal(response.status, 503)
+  assert.equal((await response.text()).includes("PRIVATE_CURSOR_CANARY"), false)
 })

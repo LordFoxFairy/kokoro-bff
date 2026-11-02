@@ -1,3 +1,4 @@
+import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations, ProjectPinQuery, SetProjectPin } from "./ports/project-repository.js"
 import { createHash } from "node:crypto"
 
 import type { Project, ProjectInstructionRevision, Task } from "../contracts/index.js"
@@ -6,6 +7,20 @@ import type { DeleteProjectResult, ProjectDeletionResource, ProjectOwnerScope, P
 /** Project use cases. HTTP handlers depend on this service, not on SQL adapters. */
 export class ProjectService {
   public constructor(private readonly repository: ProjectRepository) {}
+
+  public listPins(input: ProjectPinQuery) {
+    return this.repository.listProjectPins(input)
+  }
+  public setPin(input: SetProjectPin) {
+    return this.repository.setProjectPin(input)
+  }
+
+  public mcpRecommendations(input: ProjectMcpRecommendationQuery) {
+    return this.repository.projectMcpRecommendations(input)
+  }
+  public replaceMcpRecommendations(input: ReplaceProjectMcpRecommendations) {
+    return this.repository.replaceProjectMcpRecommendations(input)
+  }
 
   public rename(scope: ProjectOwnerScope, projectId: string, name: string, key: string, signal: AbortSignal): Promise<RenameProjectResult> {
     return this.repository.renameProject({
@@ -25,6 +40,9 @@ export class ProjectService {
   }
   public find(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null> {
     return this.repository.findProject(scope, idOrSlug)
+  }
+  public findActiveResourceProjectId(scope: ProjectOwnerScope, idOrSlug: string, signal: AbortSignal, deadlineAt: number): Promise<string | null> {
+    return this.repository.findActiveResourceProjectId(scope, idOrSlug, signal, deadlineAt)
   }
   public create(scope: ProjectOwnerScope, name: string, description: string): Promise<Project> {
     return this.repository.createProject(scope, name, description)

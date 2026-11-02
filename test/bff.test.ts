@@ -252,6 +252,7 @@ describe("kokoro-bff v1 mock contract", () => {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "project-scheduled-flow" },
       body: JSON.stringify({
+        trigger_kind: "calendar",
         title: "Daily briefing",
         prompt: "Summarize the project updates.",
         frequency: "daily",
@@ -290,7 +291,15 @@ describe("kokoro-bff v1 mock contract", () => {
     const created = await fetch(`${base}/v1/scheduled-tasks`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ title: "Daily review", prompt: "Review", frequency: "daily", time: "10:00", timezone: "UTC", auto_approve: false }),
+      body: JSON.stringify({
+        trigger_kind: "calendar",
+        title: "Daily review",
+        prompt: "Review",
+        frequency: "daily",
+        time: "10:00",
+        timezone: "UTC",
+        auto_approve: false,
+      }),
     })
     assert.equal(created.status, 200)
     const createdBody = (await created.json()) as { data: { task: { id: string } } }
@@ -1325,11 +1334,12 @@ describe("kokoro-bff v1 mock contract", () => {
     const publicShareBody = (await publicShare.json()) as {
       data: {
         session: { session_id: string; title: string; owner_id: string }
-        pending_pauses: unknown[]
+        messages?: Array<{ message_id: string; role: string; content: string; status: string; created_at: string; run_id?: string }>
         files: unknown[]
         deliveries: unknown[]
         deliveries_has_more: boolean
-        event_watermark: string | null
+        event_watermark: null
+        execution_process: null
       }
       meta: { request_id: string }
     }
@@ -1337,7 +1347,14 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(publicShareBody.data.session.owner_id, "ns_test")
     assert.deepEqual(publicShareBody.data.deliveries, [])
     assert.equal(publicShareBody.data.deliveries_has_more, false)
-    assert.match(publicShareBody.data.event_watermark ?? "", /^agui_[0-9a-f]{32}$/u)
+    assert.equal(publicShareBody.data.event_watermark, null)
+    assert.equal(publicShareBody.data.execution_process, null)
+    assert.equal(Object.hasOwn(publicShareBody.data, "execution_head"), false)
+    assert.equal(Object.hasOwn(publicShareBody.data, "pending_pauses"), false)
+    assert.ok(publicShareBody.data.messages?.length)
+    for (const message of publicShareBody.data.messages) {
+      for (const field of ["rendering", "ordered_parts", "parts_cursor"]) assert.equal(Object.hasOwn(message, field), false)
+    }
 
     const revoked = await fetch(`${base}/v1/sessions/${sessionId}/share`, {
       method: "DELETE",

@@ -1,3 +1,4 @@
+import type { ScheduledTaskRunsReader } from "../scheduled-task-runs.types.js"
 import type { AgUiProjectionService } from "../agui/project-session-events.js"
 import type { AgUiProjectionConsumerRepository } from "../agui/ports/agui-projection-repository.js"
 import type { IdempotencyRepository } from "./idempotency-repository.js"
@@ -28,7 +29,10 @@ export interface ArtifactLibraryRepository {
 
 /** Runtime port consumed by BFF routes; PostgreSQL is one infrastructure implementation. */
 export interface BffBusinessStore extends IdempotencyRepository {
+  readonly submittedAgentRuns?: import("./submitted-agent-run-reader.js").SubmittedAgentRunReader
   readonly projectExecutionBindings?: import("./project-execution-binding-reader.js").ProjectExecutionBindingReader
+  readonly rssPoll?: import("./rss-poll-repository.js").RssPollRepository
+  readonly scheduledTaskRuns?: ScheduledTaskRunsReader
   readonly artifactLibrary?: ArtifactLibraryRepository
   readonly services: BffApplicationServices
   readonly agUi: AgUiProjectionService

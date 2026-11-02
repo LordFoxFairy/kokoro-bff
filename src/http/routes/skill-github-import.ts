@@ -4,7 +4,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
 import { skillHandoffResultSchema } from "../../infrastructure/clients/platform/skill-product-schema.js"
-import { importSkillBytes } from "./skill-ai-import.js"
+import { importSkillBytes, resumeGithubSkillImport } from "./skill-ai-import.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { GithubSkillImportClient } from "../../infrastructure/clients/github-skill-import.js"
 import { parseSkillProductInput } from "../skill-product-input.js"
@@ -61,28 +61,31 @@ export async function skillGithubImportRoute(
     const commandId = skillCommandId(request, context, "github-import"),
       input = parseSkillProductInput("githubImport", await readBody(request, 65_536))
     if (!store || !client || !config.storage?.objectOrigin) throw new ConnectError("GitHub import dependency missing", Code.Unavailable)
-    const source = await new GithubSkillImportClient().fetch(input, signal)
-    await readmit(signal)
-    signal.throwIfAborted()
-    const result = await importSkillBytes(
-      context,
-      commandId,
-      source.bytes,
-      source.metadata,
-      {
-        github: {
-          ...source.repository,
-          content_sha256: source.contentSha256,
-          size_bytes: String(source.bytes.length),
-          mime_type: "application/zip",
+    let result = await resumeGithubSkillImport(context, commandId, input, client, store, config.storage.objectOrigin, signal, deadlineAt, readmit)
+    if (result === undefined) {
+      const source = await new GithubSkillImportClient().fetch(input, signal)
+      await readmit(signal)
+      signal.throwIfAborted()
+      result = await importSkillBytes(
+        context,
+        commandId,
+        source.bytes,
+        source.metadata,
+        {
+          github: {
+            ...source.repository,
+            content_sha256: source.contentSha256,
+            size_bytes: String(source.bytes.length),
+            mime_type: "application/zip",
+          },
         },
-      },
-      client,
-      store,
-      config.storage.objectOrigin,
-      signal,
-      deadlineAt,
-    )
+        client,
+        store,
+        config.storage.objectOrigin,
+        signal,
+        deadlineAt,
+      )
+    }
     signal.throwIfAborted()
     const parsed = skillHandoffResultSchema.safeParse(result)
     if (!parsed.success) throw new Error("skill_response_invalid")

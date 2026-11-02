@@ -67,7 +67,7 @@ function authHeaders(commandId: string): Record<string, string> {
   }
 }
 
-function bffServer(configValue: BffConfig, authorized = true): Server {
+function bffServer(configValue: BffConfig, authorized = true, chat: Parameters<typeof liveAgentSession>[12] = null): Server {
   const runtime = new AgUiSessionRuntime({
     connections: {
       global: configValue.agUi.maxConnectionsGlobal,
@@ -95,6 +95,7 @@ function bffServer(configValue: BffConfig, authorized = true): Server {
       runtime,
       false,
       authorized ? { ok: true } : null,
+      chat,
     ),
   })
 }
@@ -389,4 +390,145 @@ test("R57 business dictionary nulls and decision order remain distinct owner dig
   const approveNull = { ...body, decisions: [{ type: "approve", item_id: "item_approve", args: { note: null } }] }
   const approveEmpty = { ...body, decisions: [{ type: "approve", item_id: "item_approve", args: {} }] }
   assert.notEqual(agentControlRequestDigest("run_hitl_1", approveNull), agentControlRequestDigest("run_hitl_1", approveEmpty))
+})
+
+test("immediate stop reaches the real Agent cancel path after its exact durable queued Run becomes visible", async () => {
+  const { agentControlRequestDigest } = await import("../dist/infrastructure/clients/agent/control-receipt.js")
+  const observed: { body: unknown; key: string | undefined }[] = []
+  let cancelled = false,
+    modelDispatches = 0
+  const agent = createServer((request, response) => {
+    const chunks: Buffer[] = []
+    request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+    request.on("end", () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString())
+      observed.push({ body, key: request.headers["idempotency-key"] as string | undefined })
+      if (observed.length === 1) {
+        response.writeHead(404, { "content-type": "application/json" })
+        response.end(JSON.stringify({ error: { code: "run_not_found", message: "Run was not found" } }))
+      } else {
+        cancelled = true
+        response.writeHead(202, { "content-type": "application/json" })
+        response.end(
+          JSON.stringify({
+            data: { command_id: "startup-stop", request_digest: agentControlRequestDigest("run_startup", body), status: "pending", replayed: false },
+          }),
+        )
+      }
+    })
+  })
+  const base = await listen(agent)
+  let reads = 0
+  const chat = {
+    readRunControlState: async (tenant: string, subject: string, session: string) => {
+      assert.equal(tenant, "tenant_control")
+      assert.equal(subject, "user_control")
+      assert.equal(session, "session_1")
+      reads++
+      return { executionHead: { runId: "run_startup", state: reads === 1 ? "queued" : "active", pendingPauses: [] } }
+    },
+  } as unknown as NonNullable<Parameters<typeof liveAgentSession>[12]>
+  const bff = await listen(bffServer(config(base), true, chat))
+  const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
+    method: "POST",
+    headers: authHeaders("startup-stop"),
+    body: JSON.stringify({ kind: "run.cancel" }),
+  })
+  assert.equal(response.status, 202)
+  const result = (await response.json()) as { data: { run_id: string; status: string } }
+  assert.equal(result.data.run_id, "run_startup")
+  assert.equal(result.data.status, "pending", "actual Agent receipt is not a cancelled terminal")
+  if (!cancelled) modelDispatches++
+  assert.equal(cancelled, true, "controlled Agent applies the actual cancel command")
+  assert.equal(modelDispatches, 0, "cancelled controlled Run never enters its model branch")
+  assert.ok(reads >= 1)
+  assert.equal(observed.length, 2)
+  assert.deepEqual(observed[0], observed[1], "same key and body, not a new control intent")
+})
+
+for (const [name, firstHead, nextHead, ownerCode] of [
+  ["missing head", undefined, undefined, "run_not_found"],
+  ["different Run", { runId: "other", state: "queued", pendingPauses: [] }, undefined, "run_not_found"],
+  ["already active first observation", { runId: "run_startup", state: "active", pendingPauses: [] }, undefined, "run_not_found"],
+  [
+    "head retires while waiting",
+    { runId: "run_startup", state: "queued", pendingPauses: [] },
+    { runId: "other", state: "queued", pendingPauses: [] },
+    "run_not_found",
+  ],
+  ["owner becomes unreadable", { runId: "run_startup", state: "queued", pendingPauses: [] }, "unreadable", "run_not_found"],
+  ["terminal while waiting", { runId: "run_startup", state: "queued", pendingPauses: [] }, undefined, "run_not_found"],
+  ["different owner 404", { runId: "run_startup", state: "queued", pendingPauses: [] }, undefined, "session_not_found"],
+] as const)
+  test(`startup cancel preserves original one-call rejection for ${name}`, async () => {
+    let calls = 0,
+      reads = 0
+    const agent = createServer((_request, response) => {
+      calls++
+      response.writeHead(404, { "content-type": "application/json" })
+      response.end(JSON.stringify({ error: { code: ownerCode, message: "Not found" } }))
+    })
+    const base = await listen(agent)
+    const chat = { readRunControlState: async () => { const head = reads++ === 0 ? firstHead : nextHead; return head === "unreadable" ? null : { executionHead: head } } } as unknown as NonNullable<
+      Parameters<typeof liveAgentSession>[12]
+    >
+    const bff = await listen(bffServer(config(base), true, chat))
+    const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
+      method: "POST",
+      headers: authHeaders(`reject-${name}`),
+      body: JSON.stringify({ kind: "run.cancel" }),
+    })
+    assert.equal(response.status, 404)
+    await response.arrayBuffer()
+    assert.equal(calls, 1)
+  })
+
+test("startup cancel stops waiting on caller abort without delivering a second control", async () => {
+  let calls = 0
+  const controller = new AbortController()
+  const agent = createServer((_request, response) => {
+    calls++
+    response.writeHead(404, { "content-type": "application/json" })
+    response.end(JSON.stringify({ error: { code: "run_not_found", message: "Run was not found" } }))
+  })
+  const base = await listen(agent)
+  const chat = {
+    readRunControlState: async () => {
+      setTimeout(() => controller.abort(), 5)
+      return { executionHead: { runId: "run_startup", state: "queued", pendingPauses: [] } }
+    },
+  } as unknown as NonNullable<Parameters<typeof liveAgentSession>[12]>
+  const bff = await listen(bffServer(config(base), true, chat))
+  await assert.rejects(
+    fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
+      method: "POST",
+      headers: authHeaders("abort-startup"),
+      body: JSON.stringify({ kind: "run.cancel" }),
+      signal: controller.signal,
+    }),
+  )
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  assert.equal(calls, 1)
+})
+
+test("startup cancel never renews its absolute request budget or invents a receipt", async () => {
+  let calls = 0
+  const agent = createServer((_request, response) => {
+    calls++
+    response.writeHead(404, { "content-type": "application/json" })
+    response.end(JSON.stringify({ error: { code: "run_not_found", message: "Run was not found" } }))
+  })
+  const base = await listen(agent)
+  const chat = { readRunControlState: async () => ({ executionHead: { runId: "run_startup", state: "queued", pendingPauses: [] } }) } as unknown as NonNullable<
+    Parameters<typeof liveAgentSession>[12]
+  >
+  const bff = await listen(bffServer({ ...config(base), upstreamTimeoutMs: 25 }, true, chat))
+  const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
+    method: "POST",
+    headers: authHeaders("deadline-startup"),
+    body: JSON.stringify({ kind: "run.cancel" }),
+  })
+  assert.ok([404, 502].includes(response.status), "budget expiry never fabricates an accepted command")
+  await response.arrayBuffer()
+  assert.ok(calls >= 1 && calls <= 2, "the absolute budget is not renewed for each owner delivery")
 })

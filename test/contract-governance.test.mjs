@@ -809,3 +809,19 @@ test("only the exact personal account initialization operation allows inherent i
   ])
     assert.ok(inspectOpenApiGovernance(altered).some((error) => error.includes("idempotency=required")))
 })
+
+// A resource preference is naturally idempotent only at its exact approved tuple.
+test("only the exact Message feedback PUT may use natural idempotency", () => {
+  const valid = governedOperation
+    .replace("/v1/projects", "/v1/sessions/{id}/messages/{messageId}/feedback")
+    .replace("    post:", "    put:")
+    .replace("createProject", "setMessageFeedback")
+    .replace("x-kokoro-idempotency: required", "x-kokoro-idempotency: natural")
+  assert.deepEqual(inspectOpenApiGovernance(valid), [])
+  for (const invalid of [
+    valid.replace("    put:", "    post:"),
+    valid.replace("/feedback", "/preference"),
+    valid.replace("setMessageFeedback", "otherMutation"),
+  ])
+    assert.match(inspectOpenApiGovernance(invalid).join(" "), /idempotency=required/u)
+})

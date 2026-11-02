@@ -70,7 +70,7 @@ export class PostgresPublicShareRepository implements PublicShareRepository {
               message.role, message.selected_skill_source_refs, message.content, message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
               message.created_at, message.updated_at
          FROM bff_message AS message
-        WHERE message.tenant_id = $1
+        WHERE message.tenant_id = $1 AND message.origin <> 'regeneration_input'
           AND message.conversation_id = $2
           AND EXISTS (
             SELECT 1

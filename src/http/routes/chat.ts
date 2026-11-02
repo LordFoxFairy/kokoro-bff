@@ -13,6 +13,8 @@ import { reply } from "../response.js"
 import { parseMessageCreateRequest } from "../../application/chat/message-create-input.js"
 import type { AuthorizedChatRequest } from "./chat-authorization.js"
 import { parseChatProcessPageInput } from "../chat-process-page-input.js"
+import { parseChatMessagePartsInput } from "../chat-message-parts-input.js"
+import type { PrivateMessageReadContext } from "../../application/ports/chat-repository.js"
 
 function pageInput(request: IncomingMessage, defaultLimit: number): { limit: number; cursor: string | null } | null {
   const query = queryOf(request)
@@ -29,6 +31,15 @@ function isInvalidCursor(error: unknown): boolean {
 
 function chatError(error: unknown): { status: number; code: string; message: string } | null {
   if (!(error instanceof Error)) return null
+  const parts: Record<string, { status: number; code: string; message: string }> = {
+    MESSAGE_PARTS_CURSOR_INVALID: { status: 400, code: "invalid_cursor", message: "Message parts cursor is invalid" },
+    MESSAGE_PARTS_SCOPE_INVALID: { status: 400, code: "invalid_scope", message: "Direct scope cannot be combined with a Project" },
+    MESSAGE_PARTS_CHANGED: { status: 409, code: "message_parts_changed", message: "Message parts changed; explicitly reread the current version" },
+    MESSAGE_PARTS_GONE: { status: 410, code: "message_parts_gone", message: "Retained Message ordering evidence has expired" },
+    MESSAGE_PARTS_UNAVAILABLE: { status: 503, code: "message_parts_unavailable", message: "Message parts are temporarily unavailable" },
+    MESSAGE_PARTS_BUDGET_EXCEEDED: { status: 503, code: "message_parts_budget_exceeded", message: "Message parts exceed the bounded response budget" },
+  }
+  if (parts[error.message]) return parts[error.message] ?? null
   if (error.message === "skill_installation_response_invalid")
     return { status: 502, code: "skill_installation_response_invalid", message: "Installation owner returned an invalid response" }
   if (error instanceof ConnectError && error.code === Code.PermissionDenied)
@@ -36,6 +47,12 @@ function chatError(error: unknown): { status: number; code: string; message: str
   if (error instanceof ConnectError && error.code === Code.NotFound) return { status: 404, code: "project_not_found", message: "Project was not found" }
   if (error.message === "CHAT_SKILL_SELECTION_INVALID")
     return { status: 400, code: "invalid_skill_selection", message: "Project Skill selection is no longer usable; update the selection" }
+  if (error.message === "PERSONAL_CONTEXT_TOO_LARGE")
+    return {
+      status: 413,
+      code: "personal_context_too_large",
+      message: "Complete personal context exceeds the Agent request limit; update your settings and retry",
+    }
   if (error.message === "CHAT_TURN_IDEMPOTENCY_CONFLICT") {
     return { status: 409, code: "idempotency_conflict", message: "Idempotency key was already used with different Chat input" }
   }
@@ -52,6 +69,29 @@ function chatError(error: unknown): { status: number; code: string; message: str
     return { status: 400, code: "invalid_message", message: "Chat message input is invalid" }
   }
   return null
+}
+
+async function privateMessageRead<T>(
+  request: IncomingMessage,
+  response: ServerResponse,
+  projectRef: string | undefined,
+  read: (context: PrivateMessageReadContext) => Promise<T>,
+): Promise<T> {
+  const scope = queryOf(request).get("scope")?.trim() === "direct" ? "direct" : "all"
+  if (scope === "direct" && projectRef !== undefined) throw new Error("MESSAGE_PARTS_SCOPE_INVALID")
+  const controller = new AbortController()
+  const stop = () => {
+    if (!response.writableEnded) controller.abort()
+  }
+  request.once?.("aborted", stop)
+  response.once?.("close", stop)
+  if (request.aborted || response.destroyed) controller.abort()
+  try {
+    return await read({ signal: controller.signal, deadlineAt: performance.now() + 10000, scope })
+  } finally {
+    request.removeListener?.("aborted", stop)
+    response.removeListener?.("close", stop)
+  }
 }
 
 async function sendChatError(
@@ -119,6 +159,34 @@ export async function liveChatBusiness(
   const chat = store.services.chat
 
   try {
+    if (businessPath.length === 5 && businessPath[2] === "messages" && businessPath[4] === "parts" && method === "GET") {
+      const input = parseChatMessagePartsInput(request)
+      if (!input.ok) {
+        await reply(response, 400, failure(input.code, "Message parts query is invalid", context.requestId), context, idempotency, mutation)
+        return true
+      }
+      const page = await privateMessageRead(request, response, projectRef, (lifetime) =>
+        chat.readMessageParts({
+          ...lifetime,
+          tenantId,
+          subjectId,
+          conversationId,
+          messageId: businessPath[3] ?? "",
+          projectRef,
+          scope: input.scope,
+          cursor: input.cursor,
+          limit: input.limit,
+        }),
+      )
+      if (page === null)
+        await reply(response, 404, failure("message_not_found", "Owned Message was not found", context.requestId), context, idempotency, mutation)
+      else {
+        const body = ok(page, context.requestId)
+        if (Buffer.byteLength(JSON.stringify(body)) > 1048576) throw new Error("MESSAGE_PARTS_BUDGET_EXCEEDED")
+        await reply(response, 200, body, context, idempotency, mutation)
+      }
+      return true
+    }
     if (businessPath.length === 5 && businessPath[2] === "runs" && businessPath[4] === "process" && method === "GET") {
       const input = parseChatProcessPageInput(request)
       if (input === null) {
@@ -182,7 +250,9 @@ export async function liveChatBusiness(
     }
 
     if (businessPath.length === 2 && method === "GET") {
-      const snapshot = await chat.snapshot(tenantId, subjectId, conversationId, projectRef)
+      const snapshot = await privateMessageRead(request, response, projectRef, (lifetime) =>
+        chat.snapshot(tenantId, subjectId, conversationId, projectRef, lifetime),
+      )
       if (snapshot === null) {
         await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
         return true
@@ -197,7 +267,9 @@ export async function liveChatBusiness(
         await reply(response, 400, failure("invalid_pagination", "limit must be between 1 and 100", context.requestId), context, idempotency, mutation)
         return true
       }
-      const result = await chat.listMessages(tenantId, subjectId, conversationId, page.limit, page.cursor, projectRef)
+      const result = await privateMessageRead(request, response, projectRef, (lifetime) =>
+        chat.listMessages(tenantId, subjectId, conversationId, page.limit, page.cursor, projectRef, lifetime),
+      )
       if (result === null) {
         await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
       } else {
@@ -321,6 +393,27 @@ export async function liveChatBusiness(
       return true
     }
 
+    if (businessPath.length === 3 && businessPath[2] === "share" && method === "GET") {
+      const metadata = await privateMessageRead(request, response, projectRef, (lifetime) =>
+        chat.readShareMetadata({
+          ...lifetime,
+          tenantId,
+          subjectId,
+          conversationId,
+          projectRef,
+        }),
+      )
+      await reply(
+        response,
+        metadata === null ? 404 : 200,
+        metadata === null ? failure("session_not_found", "Session was not found", context.requestId) : ok(metadata, context.requestId),
+        context,
+        idempotency,
+        null,
+      )
+      return true
+    }
+
     if (businessPath.length === 3 && businessPath[2] === "share" && method === "POST") {
       const share = await chat.createShare(tenantId, subjectId, conversationId, projectRef)
       await reply(
@@ -347,6 +440,9 @@ export async function liveChatBusiness(
       return true
     }
   } catch (error) {
+    if (businessPath.length === 3 && businessPath[2] === "share" && method === "GET" && error instanceof Error && error.message === "MESSAGE_PARTS_UNAVAILABLE") {
+      error = new Error("SHARE_METADATA_UNAVAILABLE")
+    }
     await sendChatError(response, error, context, idempotency, mutation)
     return true
   }

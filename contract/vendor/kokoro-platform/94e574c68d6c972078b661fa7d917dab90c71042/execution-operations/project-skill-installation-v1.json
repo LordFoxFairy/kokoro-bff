@@ -1,0 +1,39 @@
+{
+  "profile": "project-skill-installation-v1",
+  "version": "1.0.0",
+  "owner": "Platform/Skills",
+  "visibility": "internal-owner",
+  "runtime_verified": false,
+  "service": "kokoro.platform.v1.ProductProjectSkillInstallationService",
+  "methods": [
+    "InstallProjectSkill",
+    "UpdateProjectSkillInstallation",
+    "SetProjectSkillInstallationEnabled",
+    "RemoveProjectSkillInstallation",
+    "GetProjectSkillInstallation",
+    "ListProjectSkillInstallations"
+  ],
+  "command_digest_version": "product-project-installation/1.0.0",
+  "identity": "current BFF catalog/projection credential; trusted tenant, subject and mandatory project metadata; BFF checks current project eligibility",
+  "project_response_tags": {
+    "mutation": 5,
+    "get": 2,
+    "list": 3
+  },
+  "semantics": {
+    "install": "exact version; no implicit update",
+    "update": "same-series increasing pin CAS; preserve enabled and acquisition",
+    "receipt": "tenant/subject/method/project-bound command; reauthorize and verify current exact target",
+    "transaction": "reuse installation, completed receipt and outbox Serializable transaction"
+  },
+  "parent": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "5e7ec8cc568367eb79b75bacac4468c9a0433562d0a1dc2991547a437d850501",
+    "contract/descriptor/platform-v1.binpb": "07f69877db9b6e9c7e4f8d4deb9c756cbde5e926b4ad608cd7c33d23591e7eb0",
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "6a1687b484389324fc3aacffaeb8e13ed86d5d471057b01b65b7b48b8e5fd3d8"
+  },
+  "current": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "e6ae73055a6e03a6a3c188fbede2e35480977f9cd50eae994e7bdb8ace982503",
+    "contract/descriptor/platform-v1.binpb": "7c0d0873a82ad55637cd7a6faca1b0e55db2ac6c5536900581ba0fd3972ee637",
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "df9db350b03627fb9e0195c3277b368eda72155f1a4eaa781346333486e58884"
+  }
+}

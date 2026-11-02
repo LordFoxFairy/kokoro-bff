@@ -5,7 +5,13 @@ import type { PublicSkillListContext } from "./skill-specification.types.js"
 import type { ProjectOwnerScope } from "./ports/project-repository.js"
 import type { BffApplicationServices } from "./services.js"
 import type { SkillDownloadBinding } from "./skill-download-handles.js"
-import type { SkillDownloadFact, SkillSpecificationContext, SkillSpecificationOwner, SkillSpecificationSource } from "./skill-specification.types.js"
+import type {
+  SkillDownloadFact,
+  SkillSpecificationContext,
+  SkillSpecificationOwner,
+  SkillSpecificationSource,
+  SkillPublisherProfileFact,
+} from "./skill-specification.types.js"
 
 function identity<T>(value: T): T {
   return value
@@ -62,16 +68,16 @@ export class SkillSpecificationService implements SkillSpecificationSource {
           tenant: string,
           bearer: string,
           requestId: string,
-          refs: ReadonlyArray<Readonly<{ kind: "user"; id: string }>>,
+          refs: ReadonlyArray<Readonly<{ kind: "user" | "organization"; id: string }>>,
           signal: AbortSignal,
-        ) => Promise<Map<string, Readonly<{ status: string; display_name?: string }>>>
+        ) => Promise<Map<string, SkillPublisherProfileFact>>
         resolve(
           tenant: string,
           bearer: string,
           requestId: string,
-          refs: ReadonlyArray<Readonly<{ kind: "user"; id: string }>>,
+          refs: ReadonlyArray<Readonly<{ kind: "user" | "organization"; id: string }>>,
           signal: AbortSignal,
-        ): Promise<Map<string, Readonly<{ status: string; display_name?: string }>>>
+        ): Promise<Map<string, SkillPublisherProfileFact>>
       }>
       usage?: BffApplicationServices["skillUsage"]
       projects?: Pick<BffApplicationServices["projects"], "find">
@@ -198,7 +204,8 @@ export class SkillSpecificationService implements SkillSpecificationSource {
         exampleQuestions: skill.example_prompts,
         tags: { values: skill.category_keys.map((key) => this.tag(key)) },
         ...(ownerType === undefined ? {} : { ownerType }),
-        ...(skill.product.cover === undefined ? {} : { coverImage: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover` }),
+        // A locator is not media proof; the independent GET checks this exact revision.
+        coverImage: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover`,
       }),
     }
   }
@@ -431,13 +438,54 @@ export class SkillSpecificationService implements SkillSpecificationSource {
             page.skills.map((item) => item.source_ref),
           )
     this.active(signal, deadlineAt)
-    const skills = []
+    const current = []
     for (const item of page.skills) {
       const value = await this.current(item.series_id, context, signal, deadlineAt)
+      if (value.skill.source_ref !== item.source_ref || value.skill.revision !== item.revision)
+        throw new ConnectError("Skill publication changed", Code.Unavailable)
+      current.push({ item, value })
+    }
+    const refs = [
+      ...new Map(
+        current.flatMap(({ value }) => {
+          const publisher = value.skill.product.publisher
+          if (publisher?.kind !== "iam") return []
+          const ref = publisher.iam
+          if (!ref || !["user", "organization"].includes(ref.kind) || !ref.id) throw new Error("skill_response_invalid")
+          return [[JSON.stringify([ref.kind, ref.id]), ref] as const]
+        }),
+      ).values(),
+    ]
+    const publisherProfiles = new Map<string, SkillPublisherProfileFact>()
+    for (let offset = 0; offset < refs.length; offset += 100) {
+      this.active(signal, deadlineAt)
+      const batch = refs.slice(offset, offset + 100)
+      const profiles = await this.dependencies.profiles.resolve(context.identity.namespace, context.humanBearer, context.requestId, batch, signal)
+      this.active(signal, deadlineAt)
+      if (profiles.size !== batch.length) throw new Error("skill_response_invalid")
+      for (const ref of batch) {
+        const key = JSON.stringify([ref.kind, ref.id]),
+          profile = profiles.get(key)
+        if (
+          !profile ||
+          profile.kind !== ref.kind ||
+          profile.id !== ref.id ||
+          !["found", "missing"].includes(profile.status) ||
+          (profile.kind === "organization" && profile.status !== "found")
+        )
+          throw new Error("skill_response_invalid")
+        publisherProfiles.set(key, profile)
+      }
+    }
+    const skills = []
+    for (const { item, value } of current) {
       const { skill, record } = value
-      if (skill.source_ref !== item.source_ref || skill.revision !== item.revision) throw new ConnectError("Skill publication changed", Code.Unavailable)
+      const publisher = skill.product.publisher
+      const profile = publisher?.kind === "iam" ? publisherProfiles.get(JSON.stringify([publisher.iam!.kind, publisher.iam!.id])) : undefined
       const count = usage?.get(item.source_ref)
       skills.push({
+        product: skill.product,
+        ...(profile === undefined ? {} : { publisher_profile: profile }),
         skillId: item.series_id,
         ...(record.originalName === undefined ? {} : { originalName: record.originalName }),
         displayName: skill.name,
@@ -461,7 +509,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
             : {}),
         exampleQuestions: skill.example_prompts,
         tags: { values: skill.category_keys.map((key) => this.tag(key)) },
-        ...(skill.product.cover === undefined ? {} : { coverImage: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover` }),
+        coverImage: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover`,
       })
     }
     this.active(signal, deadlineAt)
@@ -509,16 +557,16 @@ export class SkillSpecificationService implements SkillSpecificationSource {
       source_kind: skill.product.source_kind,
       ...(record.originalName === undefined ? {} : { original_name: record.originalName }),
       ...(creator?.kind === "user" && profile?.status === "found" ? { author: { user_id: creator.id, display_name: profile.display_name } } : {}),
-      ...(skill.product.cover === undefined ? {} : { cover_image: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover` }),
+      cover_image: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover`,
     }
   }
-  public async prepareDownload(
-    _operation: "GetSkill" | "DownloadSkill",
-    skillId: string,
-    context: SkillSpecificationContext,
-    signal: AbortSignal,
-    deadlineAt: number,
-  ) {
+  public async readDetail(skillId: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number) {
+    this.active(signal, deadlineAt)
+    const value = await this.detail(skillId, context, signal, deadlineAt)
+    this.active(signal, deadlineAt)
+    return { skill: value.representation }
+  }
+  public async prepareDownload(_operation: "DownloadSkill", skillId: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number) {
     const value = await this.detail(skillId, context, signal, deadlineAt)
     const owner = await this.dependencies.owner.download(value.skill.source_ref, context, signal, deadlineAt)
     const packageFact = verifiedSkillDownloadPackage(

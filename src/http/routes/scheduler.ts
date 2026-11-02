@@ -1,3 +1,6 @@
+import { strictParseRawJson } from "../../infrastructure/raw-json.js"
+import type { RssPollService } from "../../application/rss-poll-service.js"
+import { canonicalEpoch } from "../../domain/scheduled-task/trigger.js"
 import { createHash } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
@@ -49,7 +52,20 @@ export async function schedulerDispatch(
   config: BffConfig,
   businessStore: BffBusinessStore | null,
   _idempotency: Map<string, IdempotencyEntry>,
+  rssPollService: RssPollService | null = null,
 ): Promise<boolean> {
+  const deadlineAt = performance.now() + 20000
+  const controller = new AbortController()
+  const timer = setTimeout(() => {
+    controller.abort()
+    if (!request.complete) request.destroy()
+  }, 20000)
+  timer.unref()
+  request.once("aborted", () => controller.abort())
+  response.once("close", () => {
+    clearTimeout(timer)
+    if (!response.writableFinished) controller.abort()
+  })
   const fallbackRequestId = requestId(request)
   if (request.method !== "POST") {
     send(response, 405, failure("method_not_allowed", "Only POST is supported", fallbackRequestId))
@@ -67,8 +83,24 @@ export async function schedulerDispatch(
   }
   let body: Buffer
   try {
-    body = await readBody(request)
+    let stop: (() => void) | undefined
+    try {
+      controller.signal.throwIfAborted()
+      body = await Promise.race([
+        readBody(request),
+        new Promise<never>((_, reject) => {
+          stop = () => reject(Error("rss_poll_deadline"))
+          controller.signal.addEventListener("abort", stop, { once: true })
+        }),
+      ])
+    } finally {
+      if (stop) controller.signal.removeEventListener("abort", stop)
+    }
   } catch {
+    if (controller.signal.aborted) {
+      if (!response.destroyed) send(response, 503, failure("rss_poll_deadline", "Scheduler request deadline exceeded", fallbackRequestId))
+      return true
+    }
     send(response, 413, failure("request_body_too_large", "Request body is too large", fallbackRequestId))
     return true
   }
@@ -96,6 +128,62 @@ export async function schedulerDispatch(
 
   const scope = schedulerDispatchScope(wire.tenantId, wire.idempotencyKey)
   const digest = schedulerDispatchDigest({ tenantId: wire.tenantId, schedule: wire.schedule, occurrence: wire.occurrence, body: wire.body })
+  if (wire.body.trigger_kind === "rss") {
+    try {
+      strictParseRawJson(body)
+    } catch {
+      send(response, 400, failure("invalid_scheduler_dispatch", "Invalid RSS callback JSON", responseRequestId))
+      return true
+    }
+    const keys = ["tenant_id", "task_id", "task_revision", "owner_id", "project_id", "trigger_kind", "trigger_epoch"]
+    let epoch: string
+    try {
+      epoch = canonicalEpoch(wire.body.trigger_epoch)
+    } catch {
+      send(response, 400, failure("invalid_scheduler_dispatch", "Invalid trigger epoch", responseRequestId))
+      return true
+    }
+    if (
+      Object.keys(wire.body).some((key) => !keys.includes(key)) ||
+      (Object.hasOwn(wire.body, "project_id") &&
+        (typeof wire.body.project_id !== "string" || wire.body.project_id.length === 0 || wire.body.project_id.trim() !== wire.body.project_id))
+    ) {
+      send(response, 400, failure("invalid_scheduler_dispatch", "Invalid RSS callback", responseRequestId))
+      return true
+    }
+    if (!rssPollService) {
+      send(response, 503, failure("business_store_unavailable", "RSS poll unavailable", responseRequestId))
+      return true
+    }
+    try {
+      const result = await rssPollService.poll({
+        tenantId: wire.tenantId,
+        subjectId: ownerId,
+        taskId,
+        revision: taskRevision,
+        epoch,
+        scope,
+        digest,
+        requestId: responseRequestId,
+        signal: controller.signal,
+        deadlineAt,
+        ...(typeof wire.body.project_id === "string" ? { projectId: wire.body.project_id } : {}),
+      })
+      if (!controller.signal.aborted && !response.destroyed) {
+        if (result.outcome === "terminal") send(response, 202, ok(result.summary, responseRequestId))
+        else
+          send(
+            response,
+            result.outcome === "conflict" ? 409 : 425,
+            failure(result.outcome === "conflict" ? "idempotency_conflict" : "idempotency_in_progress", "RSS poll claim unavailable", responseRequestId),
+          )
+      }
+    } catch {
+      if (!response.destroyed && !response.writableEnded)
+        send(response, 503, failure(controller.signal.aborted ? "rss_poll_deadline" : "rss_poll_unavailable", "RSS poll unavailable", responseRequestId))
+    }
+    return true
+  }
   let claimResult
   try {
     claimResult = await receipts.claim(scope, digest)
@@ -137,6 +225,9 @@ export async function schedulerDispatch(
       return true
     }
     if (
+      record.task.triggerKind !== "calendar" ||
+      wire.body.trigger_kind !== "calendar" ||
+      wire.body.trigger_epoch !== record.task.triggerEpoch ||
       taskRevision !== record.task.revision ||
       wire.body.prompt !== record.task.prompt ||
       wire.body.auto_approve !== record.task.autoApprove ||

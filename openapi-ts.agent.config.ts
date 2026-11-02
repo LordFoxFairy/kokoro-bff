@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 import { defineConfig } from "@hey-api/openapi-ts"
 
 const repositoryRoot = dirname(fileURLToPath(import.meta.url))
-const ownerCommit = "7104f3da6e812e1092866cf4e60e32826a8992c1"
+const ownerCommit = "30ce29a605878caa0a50fd7cd627f70c1aa0e5c0"
 
 export default defineConfig({
   input: resolve(repositoryRoot, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`),
@@ -17,7 +17,7 @@ export default defineConfig({
   parser: {
     filters: {
       operations: {
-        include: ["POST /v1/runs", "GET /v1/sessions/{session_id}/events", "POST /v1/runs/{run_id}/control"],
+        include: ["POST /v1/runs", "GET /v1/sessions/{session_id}/events", "POST /v1/runs/{run_id}/control", "GET /v1/runs/{run_id}/display"],
       },
       orphans: false,
     },

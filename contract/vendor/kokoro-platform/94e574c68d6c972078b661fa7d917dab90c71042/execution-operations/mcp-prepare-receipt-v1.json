@@ -1,0 +1,98 @@
+{
+  "profile": "mcp-prepare-receipt-v1",
+  "version": "1.0.0",
+  "owner": "Platform/MCP",
+  "status": "prepared-consumer-pairing-required",
+  "normal_activation": false,
+  "method": "GetPersonalMcpPrepareReceipt",
+  "command": false,
+  "original_operation": "kokoro.platform.v1.ProductMcpPersonalService/PreparePersonalMcpServer",
+  "completed_only": true,
+  "negative_ack": false,
+  "runtime_compatibility": {
+    "runtime_wire_changed": false,
+    "runtime_profile_version": "1.5.0",
+    "published_runtime_descriptor_and_profile_unchanged": true,
+    "published_personal_sse_profile_unchanged": true,
+    "agent_repin_required": false,
+    "proof": "Compile current runtime imports; remove only exact personal receipt method/wrappers; require original complete runtime FDS. Regenerate exact current and parent Platform TS before historical inputs."
+  },
+  "automatic_retries": false,
+  "new_command_authorized": false,
+  "parents": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+      "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.platform_runtime.proto.snapshot",
+      "sha256": "fc454844d272afba4815d2cab471518049ee9edaec514b59bb9d3e3b54e93835"
+    },
+    "contract/descriptor/platform-v1.binpb": {
+      "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.platform-v1.binpb.snapshot",
+      "sha256": "a7c8a73925d004b0b18aef0e1a79813ceb589f7d702e6c6e695394f36bca3db3"
+    },
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+      "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.platform_runtime_pb.ts.snapshot",
+      "sha256": "08f97b7762285c7d2234bcc707f275cf46eff7c0be3fd588aead4d91ccf89d05"
+    },
+    "contract/execution-operations/mcp-private-server-v1.json": {
+      "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.mcp-private-server-v1.json.snapshot",
+      "sha256": "c3246a5d88b79f1358205e67658570bf6ced4b805fb414b3016f816e88dbc92a"
+    },
+    "contract/provenance.json": {
+      "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.provenance.json.snapshot",
+      "sha256": "32988e4ea40eff84dbf2f341a78803f20c6cebbca76192e05588c749420b29aa"
+    },
+    "contract/descriptor/mcp-runtime-v1.binpb": {
+      "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.mcp-runtime-v1.binpb.snapshot",
+      "sha256": "56388f48b7d2f563a7aa9f56e0b9d15e73b2a453d640b3c8297502354fee6dc2"
+    },
+    "contract/execution-operations/mcp-runtime-v1.json": {
+      "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.mcp-runtime-v1.json.snapshot",
+      "sha256": "c35cc7adaeeca98f88449a3d51b08db73071cde6007bbe021030ec5328442b90"
+    },
+    "contract/execution-operations/mcp-personal-sse-v1.json": {
+      "path": "contract/descriptor/platform-mcp-prepare-receipt-parent.mcp-personal-sse-v1.json.snapshot",
+      "sha256": "29ea698428bc7be7469d6582746015e9e18ccb8887f035e89626e1791dcef647"
+    }
+  },
+  "inputs": [
+    {
+      "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
+      "sha256": "1081183bae7a8377fb9f245fbc31612c88421a801f0c454a2d27702695e88409"
+    },
+    {
+      "path": "contract/descriptor/platform-v1.binpb",
+      "sha256": "89d0f77d7f775231ad0fcb3b0987fbe0f303982c5271fd9cd689633eaafd53d8"
+    },
+    {
+      "path": "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
+      "sha256": "2814a928d324a529c3ad6d27c98be9e21d30584c6a0bc22795e40c98ab289fa0"
+    },
+    {
+      "path": "contract/execution-operations/mcp-private-server-v1.json",
+      "sha256": "066505d4a13cb6fd7a5f625b07eaf5f784b215db2a8584041f14da8ffc98eda1"
+    },
+    {
+      "path": "contract/descriptor/mcp-runtime-v1.binpb",
+      "sha256": "56388f48b7d2f563a7aa9f56e0b9d15e73b2a453d640b3c8297502354fee6dc2"
+    },
+    {
+      "path": "contract/execution-operations/mcp-runtime-v1.json",
+      "sha256": "c35cc7adaeeca98f88449a3d51b08db73071cde6007bbe021030ec5328442b90"
+    },
+    {
+      "path": "contract/execution-operations/mcp-personal-sse-v1.json",
+      "sha256": "29ea698428bc7be7469d6582746015e9e18ccb8887f035e89626e1791dcef647"
+    },
+    {
+      "path": "contract/execution-operations/mcp-prepare-receipt-v1.vectors.json",
+      "sha256": "68edb0714fecea2bc6657c976cdec4e4a62153e83e2460c640bc9da4a97de3b1"
+    },
+    {
+      "path": "contract/descriptor/platform-mcp-prepare-receipt-parents.json",
+      "sha256": "77b59d34550b69703bcbf2c02afdf88ba9d86afd0938524a5ca722e9ed586406"
+    },
+    {
+      "path": "contract/descriptor/platform-mcp-prepare-receipt-delta.json",
+      "sha256": "2edf9b9273e4d05a1aa9a69f0335e13e33b7a8abf24ec2f184892244436c6b4a"
+    }
+  ]
+}

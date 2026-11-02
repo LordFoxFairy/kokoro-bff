@@ -17,4 +17,11 @@ export type McpAuthorizationInput = SessionAdmissionInput &
     subjectId: string
   }> &
   McpAuthorizationSubject
-export type McpAuthorizationResult = Readonly<{ ok: true }> | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string }>
+export type McpAuthorizationResult =
+  | Readonly<{ ok: true }>
+  | Readonly<{
+      ok: false
+      status: 401 | 403 | 429 | 503
+      code: string
+      retryAfter?: string
+    }>

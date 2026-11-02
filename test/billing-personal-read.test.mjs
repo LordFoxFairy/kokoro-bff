@@ -89,7 +89,10 @@ async function within(promise, milliseconds, message) {
 }
 
 async function withOwner(handler, run, overrides = {}, serverOptions = {}) {
-  const owner = createServer(handler)
+  const owner = createServer((request, response) => {
+    response.setHeader("x-request-id", request.headers["x-request-id"] ?? "billing-owner-request")
+    handler(request, response)
+  })
   let bff
   try {
     const ownerBase = await listen(owner)
@@ -103,7 +106,11 @@ async function withOwner(handler, run, overrides = {}, serverOptions = {}) {
 }
 
 function json(response, status, body) {
-  response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "billing-owner-request" })
+  response.writeHead(status, {
+    "content-type": "application/json",
+    "cache-control": "no-store",
+    "x-request-id": response.getHeader("x-request-id") ?? "billing-owner-request",
+  })
   response.end(JSON.stringify(body))
 }
 
@@ -499,6 +506,7 @@ test("personal Credit initialization uses the official inherent PUT without a re
       assert.equal(response.status, 200)
       assert.deepEqual((await response.json()).data, account)
     },
+    { upstreamTimeoutMs: 2500 },
   )
   assert.equal(received.length, 1)
   assert.equal(received[0].method, "PUT")
@@ -528,6 +536,7 @@ for (const [suffix, body, mime] of [
         })
         assert.equal(response.status, 400)
       },
+      { upstreamTimeoutMs: 2500 },
     )
     assert.equal(calls, 0)
   })
@@ -538,14 +547,16 @@ for (const [ownerStatus, code, expectedStatus, expectedCode] of [
   [403, "billing.forbidden", 503, "billing_unavailable"],
   [404, "billing.not_found", 502, "upstream_response_invalid"],
   [404, "billing.credit_account_not_found", 502, "upstream_response_invalid"],
-  [503, "billing.unavailable", 503, "billing_unavailable"],
+  [503, "billing.dependency_unavailable", 503, "billing_unavailable"],
 ]) {
-  test(`initialization preserves explicit failure ${code} without retries`, async () => {
+  test(`initialization preserves explicit failure ${code} without write retries`, async () => {
     let calls = 0
+    const methods = []
     await withOwner(
       (_request, response) => {
         calls++
-        json(response, ownerStatus, { error: { code, message: "Owner failure", retryable: false } })
+        methods.push(_request.method)
+        json(response, ownerStatus, { error: { code, message: "Owner failure", retryable: ownerStatus === 503 } })
       },
       async (base) => {
         const response = await fetch(`${base}/v1/billing/credit-account`, {
@@ -556,8 +567,10 @@ for (const [ownerStatus, code, expectedStatus, expectedCode] of [
         assert.equal(response.status, expectedStatus)
         assert.equal((await response.json()).error.code, expectedCode)
       },
+      { upstreamTimeoutMs: 2500 },
     )
-    assert.equal(calls, 1)
+    assert.equal(calls, ownerStatus === 503 ? 2 : 1)
+    assert.deepEqual(methods, ownerStatus === 503 ? ["PUT", "GET"] : ["PUT"])
   })
 }
 
@@ -573,6 +586,7 @@ test("initialization does not call the owner for an unauthenticated principal", 
       const response = await fetch(`${base}/v1/billing/credit-account`, { method: "PUT", headers, body: "{}" })
       assert.equal(response.status, 401)
     },
+    { upstreamTimeoutMs: 2500 },
   )
   assert.equal(calls, 0)
 })
@@ -593,6 +607,7 @@ for (const path of ["/v1/billing/credit-account/", "/v1/billing/%63redit-account
         })
         assert.equal(response.status, 400)
       },
+      { upstreamTimeoutMs: 2500 },
     )
     assert.equal(calls, 0)
   })

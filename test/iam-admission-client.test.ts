@@ -581,3 +581,100 @@ test("IAM admission rejects missing, null, non-boolean and extra-field administr
   }
   assert.equal(calls, payloads.length)
 })
+
+for (const retryAfter of ["1", "86400", undefined, "0", "1.5", "86401", "tomorrow"] as const) {
+  test(`MCP429 action admission preserves only the bounded delay: ${retryAfter ?? "absent"}`, async () => {
+    const { McpAuthorizationClient } = await import("../dist/auth/mcp-authorization.client.js")
+    let calls = 0
+    const baseUrl = await listen((request, response) => {
+      calls++
+      assert.equal(request.url, "/internal/v1/authorization/check")
+      assert.equal(request.method, "POST")
+      const chunks: Buffer[] = []
+      request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+      request.on("end", () => {
+        assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString("utf8")), {
+          resource: "mcp_personal",
+          action: "read",
+        })
+        response.writeHead(429, responseHeaders(retryAfter === undefined ? {} : { "retry-after": retryAfter }))
+        response.end(
+          JSON.stringify({
+            error: {
+              code: "RATE_LIMITED",
+              message: "limited",
+              retryable: true,
+              details: [],
+            },
+          }),
+        )
+      })
+    })
+    const check = new McpAuthorizationClient({
+      baseUrl,
+      timeoutMs: 1000,
+      maxResponseBytes: 4096,
+    })
+    const result = await check.check({
+      token: "fixture-human",
+      requestId: "iam-request-1",
+      tenantId: "tenant-a",
+      subjectId: "person-a",
+      resource: "mcp_personal",
+      action: "read",
+      signal: new AbortController().signal,
+    })
+    const valid = retryAfter === "1" || retryAfter === "86400"
+    assert.deepEqual(result, {
+      ok: false,
+      status: 429,
+      code: "session_rate_limited",
+      ...(valid ? { retryAfter } : {}),
+    })
+    assert.equal(calls, 1)
+  })
+}
+
+for (const [status, code, expected] of [
+  [401, "UNAUTHENTICATED", "session_invalid"],
+  [403, "PERMISSION_DENIED", "session_forbidden"],
+  [503, "DEPENDENCY_UNAVAILABLE", "iam_admission_unavailable"],
+  [429, "PERMISSION_DENIED", "iam_admission_unavailable"],
+] as const) {
+  test(`MCP429 never forwards delay from another error tuple: ${status}/${code}`, async () => {
+    const { McpAuthorizationClient } = await import("../dist/auth/mcp-authorization.client.js")
+    let calls = 0
+    const baseUrl = await listen((_request, response) => {
+      calls++
+      response.writeHead(status, responseHeaders({ "retry-after": "60" }))
+      response.end(
+        JSON.stringify({
+          error: {
+            code,
+            message: "denied",
+            retryable: status === 429,
+            details: [],
+          },
+        }),
+      )
+    })
+    const check = new McpAuthorizationClient({
+      baseUrl,
+      timeoutMs: 1000,
+      maxResponseBytes: 4096,
+    })
+    assert.deepEqual(
+      await check.check({
+        token: "fixture-human",
+        requestId: "iam-request-1",
+        tenantId: "tenant-a",
+        subjectId: "person-a",
+        resource: "mcp_personal",
+        action: "read",
+        signal: new AbortController().signal,
+      }),
+      { ok: false, status: status === 429 ? 503 : status, code: expected },
+    )
+    assert.equal(calls, 1)
+  })
+}

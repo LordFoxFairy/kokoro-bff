@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS bff_project (
   slug TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   instruction TEXT,
+  recommended_mcp_refs JSONB NOT NULL DEFAULT '[]'::jsonb CONSTRAINT ck_bff_project_mcp_refs CHECK (jsonb_typeof(recommended_mcp_refs) = 'array' AND jsonb_array_length(recommended_mcp_refs) <= 16),
+  mcp_recommendations_state_version INTEGER NOT NULL DEFAULT 1 CONSTRAINT ck_bff_project_mcp_version CHECK (mcp_recommendations_state_version >= 1),
   selected_skill_installation_ids TEXT[] NOT NULL DEFAULT '{}' CONSTRAINT ck_bff_project_skill_selection CHECK (cardinality(selected_skill_installation_ids) <= 16 AND array_position(selected_skill_installation_ids, NULL) IS NULL),
   deleted_at TIMESTAMPTZ(3),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -19,6 +21,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_project_owner_slug
 CREATE INDEX IF NOT EXISTS ix_bff_project_owner_list
   ON bff_project (tenant_id, owner_id, created_at ASC, project_id ASC)
   WHERE deleted_at IS NULL;
+
+-- PROJECT-PIN-SQL-BEGIN
+CREATE TABLE IF NOT EXISTS bff_project_pin (
+  tenant_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  pinned_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, subject_id, project_id)
+);
+CREATE INDEX IF NOT EXISTS ix_bff_project_pin_subject_list
+  ON bff_project_pin (tenant_id, subject_id, pinned_at DESC, project_id COLLATE "C" ASC);
+CREATE INDEX IF NOT EXISTS ix_bff_project_pin_parent_cleanup
+  ON bff_project_pin (tenant_id, project_id);
+-- PROJECT-PIN-SQL-END
 
 CREATE TABLE IF NOT EXISTS bff_project_deletion (
   tenant_id TEXT NOT NULL,
@@ -104,9 +120,13 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_task (
   owner_id TEXT NOT NULL,
   title TEXT NOT NULL,
   prompt TEXT NOT NULL,
-  frequency TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_frequency CHECK (frequency IN ('daily', 'weekly', 'monthly', 'once')),
-  task_time TEXT NOT NULL,
-  timezone TEXT NOT NULL,
+  trigger_kind TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_trigger_kind CHECK (trigger_kind IN ('calendar', 'rss')),
+  trigger_epoch BIGINT NOT NULL CONSTRAINT ck_bff_scheduled_task_trigger_epoch CHECK (trigger_epoch >= 1),
+  rss_url TEXT,
+  rss_conditions JSONB,
+  frequency TEXT CONSTRAINT ck_bff_scheduled_task_frequency CHECK (frequency IN ('daily', 'weekly', 'monthly', 'once')),
+  task_time TEXT,
+  timezone TEXT,
   weekdays SMALLINT[],
   month_days SMALLINT[],
   local_date DATE,
@@ -116,6 +136,8 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_task (
   enabled BOOLEAN NOT NULL DEFAULT true,
   status TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_status CHECK (status IN ('active', 'paused', 'failed')),
   CONSTRAINT ck_bff_scheduled_task_calendar CHECK (
+    ((trigger_kind='calendar' AND rss_url IS NULL AND rss_conditions IS NULL
+      AND frequency IS NOT NULL AND task_time IS NOT NULL AND timezone IS NOT NULL AND (
     (frequency='daily' AND weekdays IS NULL AND month_days IS NULL AND local_date IS NULL AND run_at IS NULL)
     OR (frequency='weekly' AND weekdays IS NOT NULL AND month_days IS NULL AND local_date IS NULL AND run_at IS NULL
       AND array_ndims(weekdays)=1 AND array_lower(weekdays,1)=1 AND cardinality(weekdays) BETWEEN 1 AND 7
@@ -124,6 +146,10 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_task (
       AND array_ndims(month_days)=1 AND array_lower(month_days,1)=1 AND cardinality(month_days) BETWEEN 1 AND 31
       AND month_days <@ ARRAY[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31]::smallint[] AND array_position(month_days,NULL) IS NULL)
     OR (frequency='once' AND weekdays IS NULL AND month_days IS NULL AND local_date IS NOT NULL AND run_at IS NOT NULL)
+    )) OR (trigger_kind='rss' AND rss_url IS NOT NULL AND octet_length(rss_url) BETWEEN 1 AND 2048
+      AND rss_conditions IS NOT NULL AND jsonb_typeof(rss_conditions)='array' AND jsonb_array_length(rss_conditions)<=8
+      AND frequency IS NULL AND task_time IS NULL AND timezone IS NULL
+      AND weekdays IS NULL AND month_days IS NULL AND local_date IS NULL AND run_at IS NULL)) IS TRUE
   ),
   revision BIGINT NOT NULL DEFAULT 1 CONSTRAINT ck_bff_scheduled_task_revision CHECK (revision >= 1),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -131,6 +157,75 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_task (
 );
 CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_owner
   ON bff_scheduled_task (tenant_id, owner_id, created_at ASC, task_id ASC);
+
+-- RSS network reads never hold these rows. A fenced short transaction owns
+-- each current poll and atomically commits its seen items, dispatches and receipt.
+CREATE TABLE IF NOT EXISTS bff_scheduled_rss_poll (
+  tenant_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  source_epoch BIGINT NOT NULL,
+  task_revision BIGINT NOT NULL,
+  subject_id TEXT NOT NULL,
+  initialized BOOLEAN NOT NULL DEFAULT false,
+  poll_sequence BIGINT NOT NULL DEFAULT 0,
+  seen_count INTEGER NOT NULL DEFAULT 0,
+  next_poll_at TIMESTAMPTZ(3) NOT NULL,
+  last_checked_at TIMESTAMPTZ(3),
+  failure_count INTEGER NOT NULL DEFAULT 0,
+  last_error_code TEXT,
+  lease_owner TEXT,
+  lease_token TEXT,
+  lease_until TIMESTAMPTZ(3),
+  fence BIGINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, task_id),
+  CONSTRAINT ck_bff_scheduled_rss_poll_identity CHECK (
+    length(btrim(tenant_id))>0 AND length(btrim(task_id))>0 AND length(btrim(subject_id))>0
+  ),
+  CONSTRAINT ck_bff_scheduled_rss_poll_version CHECK (source_epoch>=1 AND task_revision>=1 AND fence>=0),
+  CONSTRAINT ck_bff_scheduled_rss_poll_counts CHECK (poll_sequence>=0 AND seen_count BETWEEN 0 AND 100000 AND failure_count>=0),
+  CONSTRAINT ck_bff_scheduled_rss_poll_initialized CHECK (
+    (initialized=false AND poll_sequence=0 AND seen_count=0)
+    OR (initialized=true AND poll_sequence>0 AND last_checked_at IS NOT NULL)
+  ),
+  CONSTRAINT ck_bff_scheduled_rss_poll_lease CHECK (
+    (lease_owner IS NULL AND lease_token IS NULL AND lease_until IS NULL)
+    OR (lease_owner IS NOT NULL AND length(btrim(lease_owner))>0
+      AND lease_token IS NOT NULL AND length(btrim(lease_token))>0 AND lease_until IS NOT NULL)
+  ),
+  CONSTRAINT ck_bff_scheduled_rss_poll_error CHECK (last_error_code IS NULL OR last_error_code IN (
+    'rss_feed_url_invalid','rss_feed_address_forbidden','rss_feed_dns_unavailable','rss_feed_dns_busy',
+    'rss_feed_unavailable','rss_feed_timeout','rss_feed_cancelled','rss_feed_response_invalid','rss_feed_too_large',
+    'feed_invalid','queue_full','launch_too_large','limit_reached'
+  ))
+);
+-- Scheduler callbacks address an exact tenant/task. Its PK serves due/lease
+-- rechecks; there is no global poll scanner requiring another index.
+
+CREATE TABLE IF NOT EXISTS bff_scheduled_rss_seen (
+  tenant_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  source_epoch BIGINT NOT NULL,
+  item_identity TEXT NOT NULL,
+  content_digest TEXT NOT NULL,
+  first_poll_sequence BIGINT NOT NULL,
+  first_seen_at TIMESTAMPTZ(3) NOT NULL,
+  matched BOOLEAN NOT NULL,
+  dispatch_id TEXT,
+  PRIMARY KEY (tenant_id, task_id, source_epoch, item_identity),
+  CONSTRAINT ck_bff_scheduled_rss_seen_identity CHECK (
+    length(btrim(tenant_id))>0 AND length(btrim(task_id))>0 AND source_epoch>=1
+    AND item_identity ~ '^[0-9a-f]{64}$' AND content_digest ~ '^[0-9a-f]{64}$'
+  ),
+  CONSTRAINT ck_bff_scheduled_rss_seen_sequence CHECK (first_poll_sequence>0),
+  CONSTRAINT ck_bff_scheduled_rss_seen_dispatch CHECK (
+    (matched=false AND dispatch_id IS NULL)
+    OR (matched=true AND dispatch_id IS NOT NULL AND length(btrim(dispatch_id))>0)
+  )
+);
+-- The PK supports exact current-epoch dedup and bounded retirement by its
+-- tenant/task/epoch prefix. No TTL, extra queue or redundant global index.
 
 -- ScheduledTask owns this bounded outbox. It is intentionally not a generic
 -- cross-domain queue: every row is one versioned Scheduler command for one
@@ -232,8 +327,26 @@ CREATE TABLE IF NOT EXISTS bff_message (
   tenant_id TEXT NOT NULL,
   conversation_id TEXT NOT NULL,
   run_id TEXT,
+  -- MESSAGE-REGENERATION-COLUMNS-BEGIN
+  origin TEXT NOT NULL DEFAULT 'normal',
+  regenerated_from_message_id TEXT,
+  regeneration_user_message_id TEXT,
+  -- MESSAGE-REGENERATION-COLUMNS-END
   role TEXT NOT NULL CONSTRAINT ck_bff_message_role CHECK (role IN ('user', 'assistant')),
   content TEXT NOT NULL,
+  ordered_parts JSONB,
+  parts_format_version SMALLINT,
+  parts_public_sequence BIGINT,
+  -- MESSAGE-FINAL-ANSWER-COLUMN-BEGIN
+  final_segment_id TEXT CONSTRAINT ck_bff_message_final_answer CHECK (
+    final_segment_id IS NULL OR (
+      length(btrim(final_segment_id)) > 0 AND role='assistant' AND status='completed'
+      AND run_id IS NOT NULL AND ordered_parts IS NOT NULL
+      AND parts_format_version IS NOT NULL AND parts_format_version=1
+      AND parts_public_sequence IS NOT NULL AND parts_public_sequence>0
+    )
+  ),
+  -- MESSAGE-FINAL-ANSWER-COLUMN-END
   selected_skill_source_refs JSONB NOT NULL DEFAULT '[]'::jsonb CONSTRAINT ck_bff_message_skill_selection CHECK (jsonb_typeof(selected_skill_source_refs) = 'array' AND jsonb_array_length(selected_skill_source_refs) <= 16),
   status TEXT NOT NULL CONSTRAINT ck_bff_message_status CHECK (status IN ('pending', 'streaming', 'completed', 'failed')),
   agent_failure_code TEXT,
@@ -241,9 +354,29 @@ CREATE TABLE IF NOT EXISTS bff_message (
   message_seq BIGINT NOT NULL,
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  -- MESSAGE-REGENERATION-CONSTRAINT-BEGIN
+  CONSTRAINT ck_bff_message_regeneration CHECK (
+    (origin='normal' AND regenerated_from_message_id IS NULL AND regeneration_user_message_id IS NULL)
+    OR (origin='regeneration_input' AND role='user' AND run_id IS NOT NULL
+      AND regenerated_from_message_id IS NOT NULL AND length(btrim(regenerated_from_message_id))>0
+      AND regeneration_user_message_id IS NOT NULL AND length(btrim(regeneration_user_message_id))>0)
+    OR (origin='regeneration_answer' AND role='assistant' AND run_id IS NOT NULL
+      AND regenerated_from_message_id IS NOT NULL AND length(btrim(regenerated_from_message_id))>0
+      AND regeneration_user_message_id IS NOT NULL AND length(btrim(regeneration_user_message_id))>0)
+  ),
+  -- MESSAGE-REGENERATION-CONSTRAINT-END
   CONSTRAINT uq_bff_message_conversation_sequence UNIQUE (tenant_id, conversation_id, message_seq),
   CONSTRAINT ck_bff_message_identity CHECK (length(btrim(tenant_id)) > 0 AND length(btrim(conversation_id)) > 0),
   CONSTRAINT ck_bff_message_sequence CHECK (message_seq >= 1),
+  CONSTRAINT ck_bff_message_ordered_parts CHECK (
+    (ordered_parts IS NULL AND parts_format_version IS NULL AND parts_public_sequence IS NULL)
+    OR (
+      role = 'assistant' AND ordered_parts IS NOT NULL
+      AND jsonb_typeof(ordered_parts) = 'array'
+      AND parts_format_version IS NOT NULL AND parts_public_sequence IS NOT NULL
+      AND parts_format_version = 1 AND parts_public_sequence >= 0
+    )
+  ),
   CONSTRAINT ck_bff_message_agent_failure CHECK (
     (agent_failure_code IS NULL AND agent_failure_retryable IS NULL)
     OR (
@@ -259,7 +392,7 @@ CREATE TABLE IF NOT EXISTS bff_message (
         'internal_error',
         'model_unavailable',
         'dependency_unavailable',
-        'model_access_denied'
+        'model_access_denied', 'model_settlement_pending', 'context_window_exceeded'
       )
       AND (agent_failure_retryable = FALSE OR agent_failure_code IN ('model_unavailable', 'dependency_unavailable'))
       AND role = 'assistant'
@@ -274,6 +407,25 @@ CREATE INDEX IF NOT EXISTS ix_bff_message_tenant_conversation_sequence
 
 -- Transactional Chat -> Agent command queue. A user message, its provisional
 -- assistant message, expected AG-UI run fence, and this row commit together.
+-- MESSAGE-FEEDBACK-SQL-BEGIN
+CREATE TABLE IF NOT EXISTS bff_message_feedback (
+  tenant_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  feedback TEXT NOT NULL CONSTRAINT ck_bff_message_feedback_value CHECK (feedback IN ('up', 'down')),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, subject_id, message_id),
+  CONSTRAINT ck_bff_message_feedback_identity CHECK (
+    length(btrim(tenant_id)) > 0 AND length(btrim(subject_id)) > 0
+    AND length(btrim(conversation_id)) > 0 AND length(btrim(message_id)) > 0
+  )
+);
+CREATE INDEX IF NOT EXISTS ix_bff_message_feedback_parent_cleanup
+  ON bff_message_feedback (tenant_id, conversation_id);
+-- MESSAGE-FEEDBACK-SQL-END
+
 CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
   outbox_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
@@ -361,6 +513,7 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_scope (
   subject_id TEXT NOT NULL,
   active_dispatch_id TEXT,
   active_run_id TEXT,
+  rss_order_high_watermark TEXT,
   source_high_watermark BIGINT NOT NULL DEFAULT 0,
   consumer_next_poll_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   consumer_lease_owner TEXT,
@@ -380,6 +533,7 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_scope (
     (active_dispatch_id IS NULL AND active_run_id IS NULL)
     OR (active_dispatch_id IS NOT NULL AND active_run_id IS NOT NULL)
   ),
+  CONSTRAINT ck_bff_scheduled_agent_scope_rss_order CHECK (rss_order_high_watermark IS NULL OR rss_order_high_watermark ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{9}Z$'),
   CONSTRAINT ck_bff_scheduled_agent_scope_source CHECK (source_high_watermark >= 0),
   CONSTRAINT ck_bff_scheduled_agent_scope_consumer CHECK (
     (consumer_lease_owner IS NULL AND consumer_lease_token IS NULL AND consumer_lease_until IS NULL)
@@ -391,6 +545,11 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_dispatch (
   dispatch_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
   task_id TEXT NOT NULL,
+  source_kind TEXT NOT NULL,
+  source_revision BIGINT NOT NULL,
+  source_epoch BIGINT NOT NULL,
+  source_item_identity TEXT,
+  source_observed_at TIMESTAMPTZ(3),
   occurrence TEXT NOT NULL,
   occurrence_order_key TEXT NOT NULL,
   subject_id TEXT NOT NULL,
@@ -417,6 +576,14 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_dispatch (
   UNIQUE (tenant_id, task_id, occurrence),
   UNIQUE (tenant_id, task_id, idempotency_key),
   UNIQUE (tenant_id, run_id),
+  CONSTRAINT ck_bff_scheduled_agent_dispatch_source CHECK (
+    source_revision>=1 AND source_epoch>=1 AND (
+      (source_kind='calendar' AND source_item_identity IS NULL AND source_observed_at IS NULL)
+      OR (source_kind='rss' AND source_item_identity IS NOT NULL AND source_item_identity ~ '^[0-9a-f]{64}$'
+        AND source_observed_at IS NOT NULL
+        AND occurrence='rss:' || source_epoch::text || ':' || source_item_identity)
+    ) IS TRUE
+  ),
   CONSTRAINT ck_bff_scheduled_agent_dispatch_order CHECK (occurrence_order_key ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{9}Z$'),
   CONSTRAINT ck_bff_scheduled_agent_dispatch_digest CHECK (request_digest ~ '^[0-9a-f]{64}$'),
   CONSTRAINT ck_bff_scheduled_agent_dispatch_payload CHECK (jsonb_typeof(payload) = 'object'),
@@ -441,6 +608,17 @@ CREATE INDEX IF NOT EXISTS ix_bff_scheduled_agent_dispatch_lease
 CREATE INDEX IF NOT EXISTS ix_bff_scheduled_agent_dispatch_head
   ON bff_scheduled_agent_dispatch (tenant_id,task_id,occurrence_order_key,dispatch_id);
 
+-- Natural RSS item identity survives retries, receipt replay and process restart.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_scheduled_agent_dispatch_rss_item
+  ON bff_scheduled_agent_dispatch (tenant_id,task_id,source_epoch,source_item_identity)
+  WHERE source_kind='rss';
+-- Runtime counts this indexed set under the task lock across ALL epochs before
+-- enqueuing the whole batch; the 1000-row cap is a cross-row transaction invariant,
+-- not a CHECK that could falsely claim to count other rows.
+CREATE INDEX IF NOT EXISTS ix_bff_scheduled_agent_dispatch_rss_unfinished
+  ON bff_scheduled_agent_dispatch (tenant_id,task_id,source_revision,dispatch_id)
+  WHERE source_kind='rss' AND status IN ('pending','leased','retryable','admitted');
+
 CREATE TABLE IF NOT EXISTS bff_scheduled_agent_source_event (
   tenant_id TEXT NOT NULL,
   task_id TEXT NOT NULL,
@@ -461,6 +639,11 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_source_event (
     AND source_digest ~ '^[0-9a-f]{64}$' AND jsonb_typeof(source_payload)='object'
   )
 );
+
+-- Bounded exact-run terminal metadata reads.
+CREATE INDEX IF NOT EXISTS ix_bff_scheduled_source_terminal_run
+  ON bff_scheduled_agent_source_event (tenant_id,task_id,source_run_id,source_sequence)
+  WHERE event_type IN ('run.completed','run.failed');
 
 -- A deleted conversation must compensate every launch that may already have
 -- crossed the Agent boundary. These run.cancel commands are committed in the

@@ -15,6 +15,10 @@ import {
   SkillPackageInspectionResponseError,
   validSkillPackagePath,
 } from "../../infrastructure/clients/platform/skill-package-inspection-response.js"
+import type { RequestContext } from "../../domain/request-context.js"
+import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
+import { projectInstallation } from "../../infrastructure/clients/platform/skill-installation-response.js"
+import { assertSkillWireKnown } from "../../infrastructure/clients/platform/skill-product-response.js"
 import { queryOf } from "../request.js"
 import { send } from "../response.js"
 
@@ -22,11 +26,14 @@ const clients = new WeakMap<BffConfig, SkillPackageInspectionConnectClient>()
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
 const RESPONSE_LIMIT = 1024 * 1024
 
-type Operation = Readonly<{ kind: "managed" | "installation"; targetId: string }>
+export type ProjectSkillContentAccess = (projectId: string, context: RequestContext, signal: AbortSignal) => Promise<string | null>
+type Operation = Readonly<{ kind: "managed" | "installation" | "project"; targetId: string; projectId?: string }>
 
 function operationFor(path: string[]): Operation | null {
   if (path.length === 4 && path[0] === "self" && path[1] === "skills" && path[3] === "package") return { kind: "managed", targetId: path[2] ?? "" }
   if (path.length === 3 && path[0] === "skill-installations" && path[2] === "package") return { kind: "installation", targetId: path[1] ?? "" }
+  if (path.length === 5 && path[0] === "projects" && path[2] === "skill-installations" && path[4] === "package")
+    return { kind: "project", projectId: path[1] ?? "", targetId: path[3] ?? "" }
   return null
 }
 
@@ -109,6 +116,7 @@ export async function skillPackageInspectionRoute(
   admissionSource: SessionAdmission,
   requestId: string,
   path: string[],
+  project?: Readonly<{ access: ProjectSkillContentAccess; installations: SkillInstallationConnectClient | null }>,
 ): Promise<void> {
   const operation = operationFor(path)
   if (operation === null || !active(request, response)) return
@@ -149,6 +157,7 @@ export async function skillPackageInspectionRoute(
     const filePath = filePathOf(request)
     if (
       !IDENTIFIER.test(operation.targetId) ||
+      (operation.kind === "project" && !IDENTIFIER.test(operation.projectId ?? "")) ||
       filePath === null ||
       request.headers["content-length"] !== undefined ||
       request.headers["transfer-encoding"] !== undefined ||
@@ -189,19 +198,48 @@ export async function skillPackageInspectionRoute(
       subject: admission.context.identity.userId,
       ...(filePath === undefined ? {} : { filePath }),
     }
-    const input: SkillPackageInspectionInput =
-      operation.kind === "managed"
-        ? { ...common, operation: "managed", skillId: operation.targetId }
-        : { ...common, operation: "installation", installationId: operation.targetId }
-
+    const readProject = async () => {
+      if (!project?.installations) throw new ConnectError("Project dependency missing", Code.Unavailable)
+      const projectId = await project.access(operation.projectId!, admission.context, controller.signal)
+      if (projectId === null) return null
+      const owner = await project.installations.get(
+        { requestId, tenant: common.tenant, subject: common.subject, projectRef: projectId, installationId: operation.targetId },
+        controller.signal,
+      )
+      if (!("projectRef" in owner) || owner.projectRef !== projectId) throw new SkillPackageInspectionResponseError()
+      const installation = projectInstallation(owner.installation)
+      const currentProjectId = await project.access(projectId, admission.context, controller.signal)
+      if (currentProjectId === null) return null
+      if (currentProjectId !== projectId) throw new ConnectError("Project not found", Code.NotFound)
+      if (installation.installation_id !== operation.targetId || !installation.installed)
+        throw new ConnectError("Project installation not found", Code.NotFound)
+      return { projectId, sourceRef: installation.source_ref, revision: installation.revision }
+    }
     try {
+      const pin = operation.kind === "project" ? await whileActive(readProject(), controller.signal) : undefined
+      if (pin === null) return
+      const input: SkillPackageInspectionInput =
+        operation.kind === "managed"
+          ? { ...common, operation: "managed", skillId: operation.targetId }
+          : operation.kind === "project"
+            ? { ...common, operation: "project", projectId: pin!.projectId, installationId: operation.targetId }
+            : { ...common, operation: "installation", installationId: operation.targetId }
+
       if (expired()) throw controller.signal.reason
       const owner = await whileActive(client.inspect(input, controller.signal, deadlineAt), controller.signal)
       if (expired()) throw controller.signal.reason
+      if (pin !== undefined) assertSkillWireKnown(owner)
       const data = projectSkillPackageInspectionResponse(owner, {
+        ...(pin === undefined ? {} : { sourceRef: pin.sourceRef, revision: pin.revision }),
         ...(operation.kind === "managed" ? { sourceRef: `skill:${operation.targetId}` } : {}),
         ...(filePath === undefined ? {} : { selectedFilePath: filePath }),
       })
+      if (pin !== undefined) {
+        const current = await whileActive(readProject(), controller.signal)
+        if (current === null) return
+        if (current.projectId !== pin.projectId || current.sourceRef !== pin.sourceRef || current.revision !== pin.revision)
+          throw new ConnectError("Project installation changed", Code.NotFound)
+      }
       const payload = Buffer.from(JSON.stringify({ data }))
       if (payload.byteLength > RESPONSE_LIMIT) {
         failIfActive(429, "skill_package_limit_exceeded", "Skill package limit was exceeded", false)

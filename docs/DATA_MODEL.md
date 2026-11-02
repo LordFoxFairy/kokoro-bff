@@ -1,3 +1,230 @@
+## 2026-11-03 B08 私有执行快照候选（原材料存储复用，失败CHECK精确新增）
+
+材料仍复用既有bff_personalization、bff_personal_knowledge、bff_personal_knowledge_usage和bff_agent_dispatch_outbox.payload JSONB；无新表/列/receipt或新owner。payload.launch.personal_context承载个人owner、profile revision/四字段、usage_revision/enabled及完整active item ID/revision/三字段。快照由原事务一次SQL读取，并随原Run immutable保存；停用/编辑/删除当前资料只影响后继new-key Run，不重写旧outbox。旧Run私有执行材料按原保留策略存在，当前知识行删除擦除不等于抹除旧Run；不将该快照投影到AGUI、Share、Message正文或浏览器dispatch。
+
+
+B08 独审P2：原 Message CHECK 漏 context_window_exceeded 会令合法失败投影回滚。canonical 仅新增该不可重试枚举；原 db:evolve-agent-failure 的 check/apply 接受精确 pre-settlement 与 settlement 两个已批准旧约束，未知 CHECK、未验证约束或放宽 retry/role 均拒绝，不更新历史行。已有 parts/regeneration/final 定义保留新 CHECK，并由同一完整 SHA 有限逆证核对旧字节；旧 oracle 不改。切换前使用 KOKORO_BFF_POSTGRES_URL（schema=kokoro_bff）运行 pnpm db:evolve-agent-failure check → apply → check，禁止在非空库执行 fresh installer。
+
+## 2026-11-02 B10 分享 metadata 只读投影
+
+不变更 canonical Schema。读取以本人 active bff_conversation 为根，复核同 tenant/owner 的未删除 bff_project，再 LEFT JOIN 当前未撤销、未过期的 conversation bff_share；合法无 share 保留根行。share_id/created_at/expires_at 来自原 owner 行。过期记录仍保持原字节，GET 不清理、不写 receipt/outbox，不引入共享副本或权限字段。
+
+## 2026-11-02 B01 新授权消费者（无BFF数据演进）
+
+BFF不新增表/列/Redis状态或receipt，不读Platform数据库。currentConnectorId、新代connector、配置墓碑、永久撤权和原命令回执仅由固定Platform `2cf63945feecd49f5b79c3532bbd7cbc5b70a3f8` owner持有。BFF仅转发trusted identity、原source/双CAS/key/digest并安全投影原ACK；历史completed结果不是当前资源/执行资格，禁止管理GET作receipt前置或本地缓存恢复。canonical `database/schema.sql`及Public29数据模型保持原字节，正常资源不动。
+
+最终冻结核验canonicalSQL与7e4逐字相同，无本片BFF迁移或资源操作；限定独审及默认2762项通过，原3项资源条件跳过不计通过。Platform真实迁移/材料生命周期证据仍归其owner，前端与正常配对后继。
+
+## 2026-11-01 两父既有数据整合（Root 已批准，未正常DDL）
+
+下载复核修正：原共享 spool 自身承接 transferSignal 与既有有限预算 race；上游 fetch 不合作时仍释放已获两名额，迟到 response.body 必须取消且取消不等待。同步取消跨 response 回传边界也退休 body；不新增路由 race、不改 wire / 数据表 / 原字节校验。
+
+
+唯一canonical以批准853的Message parts/regen/final、项目pins/MCP及execution binding为主体，保旧8395的RSS两表及三张既有表的trigger/epoch/source列、互斥CHECK、partial索引和source terminal索引。只并两父已拥有事实，不新增第三套表/owner/receipt。calendar旧身份及非重放、RSS seen/自然identity/epoch/claim fence、receipt schema_version3及其payload原值保留；不迁写或重派unknown旧事实。
+
+b328具名升级工具原保障保留；不直接把无RSS的853 installer套正常非空库，不删RSS列达到目标。正式旧RSS完整父→最终canonical演进须以精确catalog/隔离数据保持及恢复演练证明；本阶段无正常资源操作，Root另控DDL/备份恢复。Billing/下载安全移植不产生新SQL事实或跨owner读取，owner pins/权限边界不变。下列旧分支报告为历史证据，不代表本组合已升级。
+
+## 2026-11-01 既有 canonical 的具名非空库演进（B-15，未执行正常DDL）
+
+本片 `database/schema.sql` 原字节保持。Dispatch唯一delta是原 `bff_agent_dispatch_outbox.execution_project_ref TEXT` 和 `execution_context_retired_at TIMESTAMPTZ(3)` 两个 nullable、无default列；仅旧/current完整形状可接受，部分安装和漂移拒绝。apply同事务追加后重验，保留原行、payload、receipt、xmin、索引与其他owner；不从trace/payload回填执行authority。未知历史NULL保留，不声称旧Run已经具备新执行绑定证明。
+
+Message仅修工具的canonical反投影：agent-failure→parts→regeneration→final的正式前置链不变，固定父hash不重签。完整regen/final可作current，无降级/删列；部分或不明旧形状拒绝。失败回滚，实际发送COMMIT后丢ACK为unknown；回退停止新producer并保留可读列/新事实。正常RSS历史表列不在本片清理范围。fresh installer仍只装空owner schema，不能替代非空库升级。Root负责隔离fixture、备份恢复及正常激活，当前没有执行任何正常数据库操作。
+
+## 2026-10-29 Custom API 选择冻结与私有恢复（候选）
+
+不增表、列、DDL、缓存或第二份偏好事实。原bff_agent_dispatch_outbox.payload.launch可携带selected_custom_api_profiles，只含{profile_id,expected_state_version}，按原提交事务持久冻结；schema_version=3继续接受旧省略形式。空数组producer规范化为省略，旧JSON/digest原字节不变；既有历史行不回填。
+
+私有读取仍在同一ACL/read事务选择最新normal/user Message，并按tenant/subject/actor/Conversation/Run/Message精确关联dispatch。SQL只多投影有界API数组：32项各含最大191 ASCII ID及int32版本，16384字节上限覆盖合法JSONB文本；解析再核完整闭集。不存在来源或任一选择损坏不返回伪空，不跳过最新消息寻找旧配置；regeneration_input不替换normal来源。原删除/保留/事务及canonical schema保持。
+
+## 会话 MCP 选择读取（2026-10-28，未激活）
+
+无新增表或列。唯一事实仍是消息创建事务冻结的 bff_agent_dispatch_outbox.payload.launch.selected_mcp_connection_ids，与 bff_message normal/user 的 Run/Message/Conversation 和当前 subject 精确匹配。最新普通消息按既有 message_seq/message_id 排序，只取一条；镜像再生成不改变草稿基线。原 schema_version=3 launch 缺省与空数组等价为该次无额外 MCP；旧 trace 不升级为执行选择。缺失/损坏来源不落库修补，也不回退旧非空项。读取使用既有同库本 owner 事务，禁止关联 Platform 数据库；删除与保留策略不变。
+
+## 最终答复身份（2026-10-28，设计已定，正常环境未激活）
+
+沿 BFF 自有 bff_message 增加 nullable `final_segment_id`，只用于 assistant 成功终态且已有 ordered parts 的同 Run 已完成正文引用。历史 NULL 表示无证明，不批量回填。该字段与 status／ordered_parts／parts_public_sequence／AG-UI terminal 在原事务中提交；exact tenant、subject、Conversation、Run、Message 绑定不变。私有读表示输出 optional，分享模型不扩展。不增 Run 表或 metadata endpoint。canonical schema 与具名加列演进需隔离验证，正常环境激活单独记录。
+
+## tool_facts 只读展示后继（Root 已核准）
+
+仅原exact Run display临时表示加已证MCP名称／单工具failed提示；不改Agent源event/id/digest、BFF存储图、Message／Run／账本／feedback／regen行，不建立新表或状态中心。未知仍缺省事实，不借提示修改历史终态。
+
+## 原 Run 展示只读 adjunct（2026-10-28，Root 已核准）
+
+无新增数据表／Schema／缓存实体。新 safe activity 可选展示字段作为原 owner 当时发布的事实沿现AG-UI/ordered parts保存；历史只读 display 是按需 exact Run projection，不改旧 source event payload/id/digest，不写当前目录title或虚构revision。原Message再生成关联／反馈模型见下；读权限不从展示字段取得。
+
+## 再生成输入镜像与回答关联（2026-10-28，Root 已核准 A，候选未发行）
+
+沿本 owner Message 增加 origin（normal／regeneration_input／regeneration_answer）、regenerated_from_message_id 与 regeneration_user_message_id；旧行为 normal／空关联。内部 input 镜像为新 Run 的真实 user，assistant 为新回答；两者 exact 关联 source assistant 与最初可信 user，持久身份不复用旧 Agent Chat PK，不修改旧 user／回答。role 与 origin／关联闭集由 canonical CHECK 固定；同事务提交新两行与原 outbox／receipt，不新增 branch owner／表或执行状态。
+
+产品消息读取在 SQL 分页之前排除 regeneration_input；内部 execution／审计仍保真实两行。Message.assistant 私有 read 可显式返回 source 关联，普通 public Message／share 保旧 wire。具名 additive Message regeneration 演进仅加这三列／CHECK，严格旧／当前 catalog，无业务旧行回填；旧 normal 默认列用数据库元数据增加，旧消息内容／run／序列／xmin应不变。回退保新列／表与事实，不自动 drop；已有镜像写入时须保SQL过滤reader并停新producer，不可直接恢复不识别origin的旧reader。生产仅 Root 授权后安装。
+
+## Message 本人反馈（2026-10-28，Root 已核准，候选未发行）
+
+唯一 canonical `database/schema.sql` 新增 `bff_message_feedback`，列 tenant_id／subject_id／conversation_id／message_id／feedback(up|down)／created_at／updated_at；主键(tenant_id,subject_id,message_id)，本 owner tenant／conversation 清理索引。它是偏好资源，不是 Message status／评分统计／审计或执行事实；null PUT 精确 DELETE 本人行，不建 clear 墓碑／版本／receipt，无 FK 沿原 owner 策略。同值 UPSERT 不更新 timestamp，改变值才更新；父 Conversation 删除同事务清子项，不改旧 Message／Run／ledger 行。
+
+fresh installer 从 canonical 安装；具名 message-feedback schema evolution 仅精确新增本表／索引，check 对 catalog 漂移失败关闭，不 ALTER／重建旧表或复制第二 SQL 源。ready 显式核新对象。只在 Root 授权隔离或正常资源执行，旧 binary 回退保留本表与记录，不自动 drop；无旧事实回填。
+
+## 私有取消终态 read projection（2026-10-28，Root 已核准，候选未发行）
+
+无数据库 Schema／enum／索引／表／数据回填变化，持久 Message.status 继续 pending／streaming／completed／failed。`terminal_status: cancelled` 仅从既有同 owner `bff_skill_usage_run_terminal` 与其保留的 source 身份及 exact dispatch/Message 绑定派生，在原授权 snapshot／分页的 READ ONLY RR 事务中一次有界批量读取；不写旧 Message，不覆盖 failure、不补造 ledger 或完整空正文。ordered_parts 当前只含 text/activity 与 publicSequence，不当终态事实。AG-UI frame/source GC 不影响该持久终态；原 RR 事务保障同一可见提交，不要求 frame 仍存活。durable terminal 缺失不发标志，不具可信绑定不投影；破损或冲突按既有依赖错误边界失败，不能伪造取消。契约见 [API首节](API_CONTRACT.md)。
+
+## S10 GitHub 目录发现（2026-10-27，Root D0 已批准）
+
+无 Schema、数据库 enum／表／role、receipt 或存储写入变化。preview 仍只读固定 GitHub provider，内存扫描最多512个 SKILL.md 后最终重验当前 Session；实际导入依旧既有 owner 路径，单精选包128文件原限保持。只扩大目录响应候选容量，不创建持久缓存或新 owner；[API边界](API_CONTRACT.md)与[实现边界](TECHNICAL_DESIGN.md)首节为准。
+
+## MCP-PREPARE-OUTCOME：只消费 owner 事实，无新增 BFF 数据（2026-10-27，正式原件候选消费）
+
+本片不改BFF Schema／SQL／缓存／receipt／outbox，不访问Platform数据库。正式owner f294输出4确定拒绝与5旧本地执行fenced；5历史效果仍unknown，不回写为失败或成功，不改原K/CAS或独立OAuth refresh marker。原ACK仍历史ACK，仅availability沿owner本人同RR安全投影；下一写独立fresh/manage准入。机器tuple／方法范围与停止线见[API设计](API_CONTRACT.md)及[技术设计](TECHNICAL_DESIGN.md)首节。
+
+App同feature journal v2的active保留、retired_intents精确双store归档／删除、旧client版本fence及不可变历史由App唯一实现，不在BFF镜像。reason4可exact_failed退休但不归成功；reason5仅用户显式停止等待后归档unknown_fenced，保原key/CAS查询定位。K2须另一次新点击、fresh Current／manage及不同crypto key；不得借旧complete missing或晚ACK复活历史／删除K2。未决refresh marker仅原正式重新授权，不复用cipher。本BFF候选不代表App完整UI/wire已接或正常激活。
+
+## MCP-PREPARE-RECEIPT-D0：历史 completed 查询无新增 BFF 事实（2026-10-27，Root 已批准；候选实施）
+
+BFF基线`a819855a45e9ddda3eb7318b9bed99c399374254`；Root已批准消费者候选；Platform正式query已固定688bc1e3并正规重出owner generated；Schema/SQL与正常资源不改。Prepare receipt、CommandIdentity/digest、fingerprint key version、结果/保留期限和当前本人Server/关联Connector可见性仍由Platform唯一拥有；BFF不直读/修写owner表、不保存回执副本/current镜像/授权快照或执行许可。
+
+GET的server、原expected_state_version、原Idempotency-Key仅在请求内定位原Prepare；身份来自当次可信tenant/subject，digest仍绑定Prepare而非query方法。completed是已持久化原ACK的安全投影，replayed=true、原expected+1和精确关联有效即可读取，不要求等于current CAS，仅availability由owner在同一RR按当前本人安全投影到返回副本，其余原ACK不改；不灌回current cache；下一写的CAS/授权仍独立fresh核验。
+
+无BFF业务表、receipt/journal/outbox、Redis key、恢复队列/定时器、通用receipt中心或跨owner事务；不创建/claim/续期receipt、不推进Server/Connector/CAS、不刷新discovery。missing、foreign、expired、processing和旧失败未知都不是negative ACK，不授权清unknown/新key/重建；取消及late completed不改变owner命令状态。保留期限到期也不复活旧key写许可。
+
+表示只在原有界请求内存在；key/digest/秘密/owner内部错误不新增日志或持久telemetry内容。Root后继实证原completed/current CAS前进、跨主体拒绝、取消/期限与unknown时，应核原receipt/Server/Connector行及原key状态不变，Prepare/claim/refresh调用为0；protocol peer不冒真实owner SQL证据。canonical `database/schema.sql`原字节保持，不因D0新增清理器或恢复事实。
+
+## PROJECT-PIN-D0：BFF Project 内的个人固定关联（2026-10-27，Root 已核 D0，Public28.5 本地候选）
+
+当前基线 `020b4016afbb4b3f5f2b43355a987bfbbf6300a6` 的 canonical schema 无 Project pin。本片选择独立 `bff_project_pin`，不是 `bff_project.pinned_at`、Personalization JSON 或 localStorage；唯一 owner／writer 为现 BFF Project，用同一个应用数据库的 kokoro_bff owner schema，不访问 sibling SQL。
+
+| 候选列／约束 | 类型／必要性 |
+| --- | --- |
+| tenant_id／subject_id／project_id | TEXT NOT NULL；前两项来自受信上下文，project_id 为本仓 canonical parent 引用；按现关联表惯例复合 PRIMARY KEY (tenant_id,subject_id,project_id)，无独立资源 ID／UUID |
+| pinned_at | TIMESTAMPTZ(3) NOT NULL，首次 true 由数据库服务端时间赋值；复合键存在即已固定，重复 true 不更新，false 物理删除偏好关联，再 true 分配新的时间 |
+| 读序索引 | (tenant_id,subject_id,pinned_at DESC,project_id ASC)，project_id 比较／排序显式 C 字节序；服务当前个人 keyset 列表 |
+| parent 清理索引 | (tenant_id,project_id)，服务现 Project 删除事务清所有 subject 关联，不以个人查询索引假称覆盖该路径 |
+
+这是可逆设置的存在性关联，无独立历史／软删除恢复窗口；不加 is_pinned、updated_at、deleted_at、version、CAS、receipt、outbox、rank、扩展 JSON 或 pin 总 quota，不引 FOREIGN KEY／REFERENCES。应用层按同一 Project parent 锁维护引用：写入先核 tenant／当前 subject 的可见 owner-only、未删除 parent，删除墓碑的同一事务内清所有关联；回滚同时恢复墓碑／pin／原删除事实，不改原 release outbox 语义。当前读以本 owner 同库 join 过滤 parent，孤儿或不可见关联不返回；GET 不承担清理。关联偏好不授 Project 权限，不把表预留 subject 维度冒现有共享 ACL。
+
+并发以 parent 锁顺序串行、已提交状态 LWW；重复 true 采用冲突 no-op 并返回原 timestamp，不写 Project.updated_at，不伪造时间排序；false 的删除无历史命令回执。Project 墓碑先赢后续 pin／unpin404，pin先赢由后续删除清掉，取消／COMMIT未知交由当前状态只读确认，不能假称回滚。时间只用于稳定显示顺序，等毫秒用 project_id C 序消歧，不是跨设备逻辑时钟。
+
+Root 已核 D0，本地候选在唯一 `database/schema.sql` 增此关联及两个索引，并由具名 catalog 比对服务 fresh／drift 验证；尚未应用任何真实数据库、回填数据或安装迁移框架；现有非空应用 schema 的显式加表需 Root 单独授权，采用本仓具名 evolution 方式、锁／事务／精确 catalog 检查并保旧事实，不运行只适用于空 schema 的 db:apply-schema。新表初始为空、不从浏览器或 Project 顺序回填；正常启用前核旧源码在扩展 schema 上仍可用。回退保表和偏好行，停新写而不 DROP。实现需真实隔离 PG 证明唯一／重复 no-op、LWW、pin/delete 两顺序、跨 tenant／subject／orphan、时间并列／分页、取消／unknown 与整事务回滚；HTTP／App与正常跨设备证据分别验收。
+
+## TOOL-ACTION-DETAIL-D0：沿现 JSONB 的详情与不变绑定（2026-10-27，源码候选，无 DDL）
+
+本片基线 BFF `b2b9eb1eac4a3f0b0cd4099ed59cbf756f14124c`；已固定正式 Agent HTTP8.2.0 `fc8b0f09f3cfd96211b33d863d5e629bbed13e46`，本地 Public28.4 源码候选尚未发布／正常激活。唯一 Schema 仍 `database/schema.sql`，本片不编辑 Schema、DDL、migration／evolution、表／列／索引／版本或正常数据，不新建 action owner／registry／receipt／日志／传输。
+
+Agent 是受信详情唯一 producer。tool optional `display_detail` 为 closed `{kind:"file"|"mcp_tool",name}`：name 非空 NFC、1..120 Unicode scalar／UTF-8≤480 bytes、无 Cc／Cf／孤立代理；file name 另受 canonical basename pattern 约束（非 .／..、无 /／反斜杠／冒号），MCP 公有声明 name 不套用文件限制；file仅 read/write/deliver，mcp_tool仅 describe/call，其它类别 absent。BFF 沿正式生成 codec 接受原值，不从参数／结果／答案或当前元数据补值；absence 不等 null，不回填历史。详细 wire／生成边界以 [本片 API 设计](API_CONTRACT.md#tool-action-detail-d0public284-候选动作详情与-share-null2026-10-27源码候选) 为准。
+
+现 `bff_agui_event.event_payload`、`bff_agui_run_activity.safe_payload` 与 `bff_message.ordered_parts` 已为 owner JSONB；容器 CHECK 不枚举内部 detail，故无需 DDL。严格新 shape 仍由生成 decoder／本 owner 校验负责，不把 JSONB 容量当字段已获准。保 `projection_schema_version=1`、`parts_format_version=1`、现 Message／Run／tenant／subject关联；不改 public_sequence/source seq、opaque cursor、首／末 provenance、source digest 算法、排序、保留与 GC。
+
+写入仍在原 Conversation→stream／source/frame事务：`agui-process-projection.ts` 原 conflict 与 `message-parts.ts` 原 fold，在同 activity_id 覆盖前都核 immutable activity／segment_id／display_code／detail 的 presence+完整值；status按原行为。漂移失败使 source／frame／compact／ordered_parts／content／水位全回滚，不合并旧detail伪造完成，也不让legacy无parts绕过compact校验。正常同值更新固定first、只按原语义更新latest；重投不新增slot。现snapshot/process/parts/reopen读同持久safe值，无第二份字段事实或请求内补全。
+
+Share继续从独立public repository读取原Message正文／公开白名单，不读private compact／ordered parts；同服务出口将execution_process明确null并排除private head／rendering／parts/cursor。仅收窄现Share专用response，不变private snapshot、不改ACL或共享事实。原canonical允许非null而正式runtime缺required null的既存不一致在本片窄修，不能借修表示扩匿名可见性。
+
+资源验收沿现 `agui-projection.integration.mjs`／`message-parts-read.integration.mjs`／`chat-facts.integration.mjs`：新详情运行／完成／失败同值、compact与fold漂移事务回滚、重复／重开／分页、旧absent／旧行不回写、原身份／游标保护、完整HTTP Share secret-canary不泄且null、撤权race。仅Root授权隔离资源后运行；新持久详情后不盲降旧closed reader，恢复只配对升级不重派Run。本片不执行 DB 操作；真实持久／回滚／HTTP 资源测试已补到原入口，由 Root 供隔离资源并验收。
+
+## PROJECT-MCP-RECOMMENDATIONS-D1：本人项目推荐配置模型／演进计划（2026-10-27，本地候选、未正常DDL）
+
+唯一owner为BFF Project，canonical为本仓`database/schema.sql`；不新增owner、推荐表、跨owner FK、外部元数据镜像、receipt/journal/outbox或成员权限事实。Root选定三种闭合refs：provider/provider_key、mcp_connector/connector_id、custom_api/profile_id；按kind+ID去重并ASCII排序，最多16，`[]`为明确空配置。私有ref只属于当前可信subject，未来共享另走Project ACL，不转移凭据。
+
+| 本地canonical新增至 `bff_project` 的列 | 约束／语义 |
+| --- | --- |
+| `recommended_mcp_refs JSONB NOT NULL DEFAULT '[]'::jsonb` | DB至少约束array且length≤16；strict领域codec校验每个closed kind/ID、唯一和canonical顺序，坏持久值fail closed，不返回空成功 |
+| `mcp_recommendations_state_version INTEGER NOT NULL DEFAULT 1` | CHECK≥1；wire为canonical十进制string，独立CAS，不借Project updated_at／Skills列／Platform pin版本 |
+
+与现tenant_id/owner_id/project_id/deleted_at同row，不加索引（无推荐项反向检索用例）。GET读原refs+version，不连owner表或解析可用性；已失效引用仍保留供本人查看/显式删除。PUT先读current/version，按差集只校新增ref的现Platform exact可见性，不持行锁调用owner；之后parent行`FOR UPDATE`重核tenant/owner/exactID/未删与expected版本。CAS不符拒绝412；相同canonical集合不UPDATE、不增版；真正变更才更新两列和updated_at、版本+1，MAX拒绝变化。与现Project删除共享parent锁，提交全成或回滚；没有推荐命令回执写。COMMIT丢ACK不重试写，通过后继GET显示当前配置（同值不是原命令ACK）。外部读取与本库提交不宣称跨库原子性，偏好不授运行权限。
+
+**具名schema演进，不在本轮执行。** `scripts/apply-schema.mjs`仍只空`kokoro_bff`，canonical加入两列后用于fresh安装；已有owner库另授 `scripts/evolve-project-mcp-recommendations-schema.mjs` 的check/apply。从唯一canonical提取目标两列／CHECK，冻结当前精确旧bff_project定义／相关catalog摘要；在owner schema与原advisory锁下仅接受旧→current或current noop，其他drift／shadow relation／错schema拒绝。只加列及具名CHECK，不手写第二canonical、不建migration ledger，不批量UPDATE旧row、不重建/清表；PG fast default旧事实语义为[]／1，但须实证旧row/xmin及其他owner/表/索引/触发器/约束未变。有限表锁/statement/20秒总预算、取消及exact连接退休沿现具名evolution策略；COMMIT发出丢ACK记unknown，后继仅check确认。
+
+演进代码和canonical已在Root业务写区实现，仅运行自有隔离PG；隔离PG验fresh安装、精确父expand、current noop、drift/半装/错schema拒绝、取消/锁超时/COMMIT未知、旧事实/xmin不动。业务PG验空/三种ref、同值no-op、CAS双写/删除竞争、保留失效ref不调用owner、新增差集验证后CAS漂移拒绝；不触碰正常库。Custom API推荐可持久化但当前无Run Acquire/tool映射，模型不伪造Connection或execution_ready。App/Agent运行选择和授权数据仍原owner，本片runtime缺口保留OPEN。
+
+## 2026-10-26 MCP 已绑定图标读取（无数据模型变更）
+
+独立 Server icon GET 仅在请求内鲜读 Platform 已授权绑定／短引用并从现 Storage origin 验证≤1 MiB字节；无 BFF 表、缓存、镜像、签名URL持久化或新配置。绑定／回收/receipt仍归 Platform，字节与扫描归 Storage；canonical schema 原字节保持。
+
+## CHAT-ORDER-1：同 Message 有序 parts 与有界读取（2026-10-25 定案；2026-10-26 候选，正常未切）
+
+**2026-10-26 实测后的 legacy 空完成充分证明（批准的窄后继）：** 正常R6存在12个不同ID的END-only及一个delivery帧；缺START不证明空，旧正文/ledger保持原样。允许仅用已保留BFF行构造固定Agent已发布wire形状的空完成候选，并复用原source payload canonicalJson/SHA256唯一算法；完整候选与原source_digest逐字精确匹配才承接该空槽。`source_index = source_sequence - first_retained_source_sequence` 只作有界候选，不是Agent不变量或公开坐标；任一身份、索引、时间、optional字段presence、event_type、payload_json原字节差异都保持legacy，不搜索／兼容序列化或新增网络依赖。所有原当前scope／dispatch／source／range／GC／512帧／4MiB／10秒门保持；仍要求唯一可见START与delta等持久正文、合法terminal。已证空ID不得后续重开，fold该槽只用真实空串，绝不把最终全文灌入；delivery仅具名非parts承接并推进原公开位置。无机器契约、Schema、权限或旧行/xmin写入；原Agent真实GET仅作为Root诊断证据，不进入运行读路径。
+
+**D1D 公共坐标补充（2026-10-26，候选未正常生效）：** 原 `metadata.kokoro.seq` 是 Agent/BFF 各自源序号，不等于 durable public ledger 的 `public_sequence`；一次源事件可展开多个 frame，BFF admission 也占公开位置。每个 durable AG-UI data frame 的读取／replay 投影须从 PG 原十进制列暴露 required `metadata.kokoro.public_sequence`，保持原 seq 类型／source_owner、opaque cursor、source digest 与存储 payload/xmin 不变；不回填旧事件或改变 source 协议。完整 replay 字节预算计入新增字段，损坏位置／元数据不伪造。App 仅用该公开坐标与 parts revision 合并，绝不拿旧 seq/cursor 猜坐标；parts 领先 SSE 不推进全局 stream cursor，确认版本不因迟到 snapshot 降级。同段多页 confirmed baseline 与 live overlay 分开，避免重复 replay 后缀。Public27 尚未发布，追加固定 commit/digest 后消费者正规生成；完整 Public26 逆证与全部历史 hash 保持。
+
+**D0已批准；canonical三列/CHECK与fold为D1A源码候选，正常库未DDL。** BFF Chat唯一owner；保一Run一assistant Message、tenant/conversation/message/run普通列与dispatch/outbox守卫。在同row保存版本化呈现文档，不建parts表、owner、缓存、migration/版本历史体系，无跨Message parts搜索/JOIN职责；JSONB代价为写放大/detoast，本slice测代表性长Message，不扩成全域容量/EXPLAIN前置工程。
+
+拟在bff_message具名增加nullable ordered_parts JSONB、parts_format_version SMALLINT、parts_public_sequence BIGINT，无DEFAULT[]、无批量UPDATE旧行。新assistant原admission显式[]/1/0（0仅尚无公开frame），user/旧行三列全NULL表示不适用/legacy，不假装有完整空历史。
+
+具名CHECK只接三列全NULL，或role=assistant、ordered_parts显式非NULL且array、format/public_sequence均显式IS NOT NULL、format=1/public_sequence≥0，防SQL UNKNOWN吞半NULL。内部text/activity slot闭集、唯一identity和first≤latest由strict codec校验；身份/定位沿普通列/原索引，无新GIN或外键。
+
+原source/frame验证并分配BFF public_sequence后同事务fold：text START建精确segment slot、delta追加、同一已验证source的completed只替本slot；activity只替原slot safe payload/latest，first固定。ordered_parts、DB content原序原字节聚合、ledger与水位全成或全回滚；原expected/FIFO/subject/lease/outbox绑定和prelude守卫不改，重投不新增slot、身份/首位置漂移沿原冲突。
+
+parts只存已有public text及strict safe activity，不存summary/checkpoint/raw args/results/凭据/审批秘密。TEXT_END无完成全文且不提供phase；不能从lasttext、END、opaque ID或createdAt造final或语义分组。失败/取消不删已发生文字/过程；当前布局偏好不进入row/wire。
+
+private assistant read只返回ordered描述/content:null（未内联）及单Message有界continuation；user/legacy正文/shared/command ACK原形保持。每页≤32逻辑slot/每text≤4096scalar/最终envelope≤1MiB，snapshot先ref且沿现总出口，不做64KiB全snapshot或通用legacy/user分片。PG有限ordinal/substring投影，不先传巨JSONB到Node；读cap不截写侧已合法接纳Run。
+
+parts_public_sequence为此Message最近已fold公开frame版本，Agent source.seq不可混为同序域。opaque cursor绑定format/版本水位、当前主体scope、Message/run、ordinal/scalar offset；每页授权/RR，变动409保partial/live等显式重读，无自动episode/版本历史副本。旧content仅兼容派生值，不由其聚合字符串推断顺序。
+
+NULL旧行只在exact scope/run/dispatch/assistant、完整source/frame range及完成正文可验时请求内RR恢复；R6原89帧/合法prelude/唯一START42须delta拼接==持久content。最多512帧/4MiB/10秒，旧多段无证/缺源保legacy，不UPDATE旧row/xmin或批量backfill；GC竞争致后页缺源410，不猜补。新持久parts独立于ledger GC；原selected START/prelude/未决interaction pin与删除生命周期保持，无永久全历史pin/新清理器。
+
+fresh db:apply-schema仍只空kokoro_bff；正常非空后继具名additive check/apply从唯一canonical抽取目标，精确旧/目标catalog/validated CHECK、本地relation、owner advisory及有限表锁、20秒总预算/取消、COMMIT已发丢ACK=unknown后只check确认。Root后继备份/隔离恢复、排空旧content writer、升级并固定BFF/App配对；不重建/清库/改旧行，不并行旧新writer。真实PG须证原数据/xmin、半NULL/drift、重复/回滚、GC/legacy、Unicode分页/1MiB/409和原ACK保护；D1A已在Root唯一临时库通过59项AG-UI真实回归且回收；具名演进基本PG已过、lost-ACK夹具待修，无正常装配或模型/财务动作。
+
+## 2026-10-25 preflight compact 与 provenance retention（候选）
+
+canonical database/schema.sql 不变。合法 current trusted Skill prelude 只写现 source/event/activity；不造 bff_agui_run_process、start_source_* 或 latest START。initial terminal prelude 使用原 interaction compact，完整 source/frame/digest/主体/水位绑定保持；中间页不结算 dispatch，真正 Run terminal 才更新 Message/head。GC 的共享 retain-from 额外保护由当前真实 selected START 绑定 Run 的最早 activity.first_public_sequence，不按可能指向无 START 终态 Run 的 latest_run_id 选 process，也不永久保所有历史；后继真 START 释放旧 Run 的原回收边界。无 START 的保守跳过行为保持。
+
+## 2026-10-25 URL MCP 项目发布消费者（无新增 BFF 数据）
+
+错误profile与consumer向量仅为传输/恢复约束，不保存命令结果或新增BFF状态。已有unknown锁由消费者保留，任何缺回执或当前权限失败不证明原事务未提交；共享receipt事实仍只归Platform。
+
+BFF canonical database/schema.sql 原字节不变；仅通过现 projects.find 的 tenant/subject/current-owned/deleted 谓词读取本 owner 项目并核canonical ID。不新增 revision/pin/receipt 镜像、缓存、表或跨owner事务。Platform 独占不可变 URL revision、当前项目pin与历史ACK；项目删除后的后续读取/发布/执行准入立即失败，残余owner pin不复活项目。
+
+原命令未知结果不落BFF假成功，不从当前pin或源版本重构ACK；当前Session/项目资格与历史receipt分开。Header/OAuth/短时签名引用不复制、不落日志。本片不修改message/dispatch JSONB、执行选择/摘要、Agent Run或runtime模型；真实项目revision执行为后继明确开放。
+
+## 2026-10-24 图标暂存消费者
+
+本片 BFF 无新增数据 owner、表或 Schema。intent、绑定、回收及 receipt 归 Platform；文件／扫描归 Storage。BFF 不落库签名引用，不访问其数据库。原保存幂等由既有 owner receipt 承接。
+
+## 2026-10-24 普通会话 MCP 精确选择（BFF 候选实施，尚未正常配对）
+
+无SQL/Schema/新表。选择冻结进现bff_agent_dispatch_outbox的原launch JSON与request_digest；原Conversation/Message事实、tenant/project/subject/actor、单事务写入及永久幂等键保持。旧trace和旧payload不回写、不把历史诊断提升为执行许可；未选择新请求保持旧幂等material的语义/字节证据。恢复/重复投递沿原精确selection，未知提交不因当前UI勾选变化重建payload。Agent所持request_json、Platform授权和资金仍归各自owner。
+
+
+新非空选择在原幂等material末尾追加具名对象域；旧mcp_servers诊断槽固定null，不复用其数组位置，避免旧trace-only请求与新执行意图碰撞。缺省/[]保持原未选字节；旧trace只在持久payload reader保留，不成为新body别名。
+
+## 2026-10-24 Agent 待核对失败码纵向消费（候选，未正常激活）
+
+沿既有AGENT-1／CREDIT-1，只接受Agent正式HTTP7.3的具名model_settlement_pending且retryable=false；BFF不从异常文字、已有回答或余额推断结算，不写资金、不改历史generic失败。新码与已生成正文共同持久化，snapshot／replay同义，保持原AG-UI与source／watermark原子事务。Agent先交付固定commit和完整父证明，再以原generator固定单一新source并保原三操作消费范围；公开ChatMessage.failure追加同码后App正规固定消费，不单独提前重载新producer。
+
+持久边界必须同时承接：旧canonical database/schema.sql的ck_bff_message_agent_failure为十码闭集，新码在现PG写入会拒绝并回滚frame／message／watermark。不得仅改generator／UI。新增具名owner收敛只在精确原CHECK或目标CHECK、已validated／正确relation下原子替换并验证；fresh installer仍仅空schema，不能用于正常旧库、不重建／清数据。已有文本、旧码、原source／事务／actor／Run／取消／幂等均保持，非空隔离PG须验证升级／回滚／drift与新码持久回放后才正常配对。
+
+本片无新的业务表／资金模型／权限／服务或计价决定。未来只读展示用量待核对不证明已capture、released或可重派；unknown、坏回执和身份不符沿原失败。当前BFF候选已实现并在独占PostgreSQL验过具名升级／drift／有限锁等待取消、正文保留及snapshot／replay／重开连接／重复终态／回滚；完整门与App／正常配对仍后继；同一纵切片包含Agent→BFF→App和正常页面，不能把Agent组件通过当产品完成。
+
+具名入口 `KOKORO_BFF_POSTGRES_URL=... pnpm db:evolve-agent-failure check|apply`；URL必须显式schema=kokoro_bff，独占owner advisory lock及受影响表锁，只精确旧／目标、validated、本地非继承普通永久表CHECK可接纳。原CHECK字节固定，目标从唯一canonical提取，经PG原生定义核等；apply在同事务替换并重验，check回滚且不改owner。总预算20秒内、锁等待有限，取消前不迟发COMMIT，实际发送COMMIT后丢ACK为unknown。既有Message正文和xmin不重写；无自动运行迁移。正常旧库尚未apply，必须先备份及恢复演练并配对App后再启用新producer。
+
+## AGENT-1／CREDIT-1：恢复消费无新增事实（2026-10-22）
+
+无SQL／Schema／新表／缓存或用户token。原Chat来源只读取原tenant、user、Run，退休／terminal／会话软删后不改为live资格；原receipt和资金仍归Billing，Agent后继独立持久化金融关联，不把恢复当补grant／派发许可。BFF不写余额、回执或跨owner数据库；错来源／未配置时零owner请求。
+
+## AGENT-1／CREDIT-1：结算来源与持久化边界（2026-10-22）
+
+无SQL／Schema／迁移或新表。BFF复用已提交Chat的原tenant／subject／actor、Message与dispatch来源，不读取Billing／Agent数据库，也不持久化资金／sealed证据／用户token。移动、软删除、退休及terminal后原来源仍保留；结算不授新执行权。原Admission↔Run／payer、资金与永久ACK仍归Billing，Agent负责sealed生产与通知恢复。未来硬删持久来源的策略不在本片新增假想保留表解决。内部HTTP字段及固定artifact见API_CONTRACT本节，写面与失败恢复见TECHNICAL_DESIGN。
+
+## AGENT-1：消费主体由已提交Chat来源派生（2026-10-22，已实施）
+
+无SQL／Prisma／表／列／默认或migration变化。只读现bff_agent_dispatch_outbox、bff_conversation、bff_message，可信Agent credential给tenant、Run定位原提交者；完整原launch与message选择校验，不能从请求body猜payer。仅本owner JOIN，不访问IAM／Agent／Billing数据表。
+
+该读取用于同一资金命令首次／恢复的路由身份，不发执行许可；来源不因软删／项目移动／context退休／Run终态失效，不加当前project／lease过滤。现删除路径保留对应outbox/message来源；不为假设未来hard-delete建新retention表。首次授权仍由现IAM live binding单独核验，原live reader不放宽。proof、bearer、签名材料不落Run／outbox／receipt／日志；资金、price snapshot和永久幂等仍归Billing唯一owner。未知结果不写本地成功，不根据超时释放资金。
+
+## AGENT-1／MODEL-1：精确模型绑定消费者（2026-10-22，本地已验）
+
+本地停写七门全0、contract973／architecture36／默认1658 PASS及3原资源SKIP，真实compiled owner HTTP＋独占PG13项通过，758输入无漂移，独审Approved。正常未激活；详细证据与限制见CURRENT首节。
+
+沿Root有效主链及已批Billing rate2；主方唯一writer，BFF基线4d8a028，固定owner2d3ed0fbee9219a93f02b67b23f69492fd568917／exp6／7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962。沿原八操作生成链，只为原MeteringRate加入required闭集model_revision{id,content_digest}；保原商业字段供管理员显式配置，不由BFF猜映射／计价或验证System存在。发布与读回均完整保留pair，缺失／坏pair／额外字段拒绝，不添加旧rate fallback。
+
+Public升23.0.0表示必填字段破坏变更，186有序操作不变；build-only inverse逐字还原完整22.5原件，再沿原所有父门，无运行兼容。无SQL／配置／服务／身份或预算变化，三具名管理员route、同tenant/actor、绝对10秒、1MiB/12层、原key/body/time与未知恢复语义保持。写区仅canonical／固定owner vendor与正规SDK／精确inverse、直接风险回归及当前文档；既定方案不新增服务或协议。先请求／读回pair与旧缺字段真实RED，再正规配对／完整BFF门、真实compiled owner HTTP＋独占PG；正常激活及App/Admin后继，不以消费者绿称实际Agent扣分。
+
+## AGENT-1／CREDIT-1：计价事实仍由Billing唯一持有（2026-10-22）
+
+无BFF SQL/Schema/receipt/缓存/配置副本。Billing持有不可变price/policy revision、整数单次预算、永久命令identity/key/digest和audit；BFF仅当前管理员/tenant准入与具名透传/验证。GET是owner同一RR最新配置，不在BFF拼最大revision或根据effective_from推断当前价。未知发布意图仍由后继Admin按原命令保存，不把GET/null当作未提交证明，不落provider Key或计价SQL。
+
+## CREDIT-1：资金仍由Billing唯一写入（2026-10-22）
+
+BFF无DDL/余额表/资金receipt/权限缓存。Billing永久保存funding身份、幂等键/原payload digest、grant/journal/audit原子效果；IAM拥有当前tenant/member/admin。BFF仅按可信上下文校验并严格转送一次，不写其他owner数据库，也不把列表空/传输失败或超时推断成没有入账。表单恢复意图由后继Admin按原业务样式持有，刷新不主动发放。
+
 ## MODEL-1 上游模型候选（2026-10-22）
 
 无BFF Schema／数据迁移／receipt。System拥有已保存连接、密文与出站许可；本方仅投影瞬时候选ID，读取不推进任何目录／业务路由／计价事实，不落API Key或原供应商响应。选择候选后的定义／revision／发布／label仍归现System命令，实际扣积分仍归Billing。
@@ -393,6 +620,12 @@ BFF对自己的AI artifact/event关联与usage/share事实继续本仓查询，�
 
 <!-- T-K03.2-BFF-DATA-MODEL-END; complete original body follows -->
 
+### S13 目录发布方数据边界（Root 设计门已通过；实现候选未正常启用）
+
+正式/normal 基线 `394ae559cd2018206c32d5ca3014de248effa203`；本增量**无数据库 Schema、表、列、索引、状态机、receipt/outbox 或迁移变化**。Platform 继续唯一拥有当前 Skill/version 与 product.publisher ref、verified GitHub repository provenance；IAM 唯一拥有当前 user/organization display_name/image_url、Session/Member 与授权事实。BFF 仅在当前授权页请求内将同版本 product 与真实 publisher_profile 组合，不保存作者镜像、姓名缓存、任意用户目录或跨 owner SQL，也不把缺失旧 publisher 回填。
+
+同一 Hub 的可选展示事实 absence 仅为未知/不显示作者/不授权限，不保存 legacy 版本模式，不建立双 schema、迁移状态或28.7 required 后继；新 producer 的真实 current product/IAM 关联和错误严格失败义务不变。响应复用既有两个组件的 presence/三分支规则见 [API 的 S13 小节](API_CONTRACT.md)。IAM missing 是已授权查询的明确判别、非旧unknown；组织跨 tenant 的403及孤儿/损坏503不是“无作者”；这里403是 IAM 上游返回，当前 BFF client 将其作为依赖503，不新造浏览器403。GitHub owner_login 是 owner 已验证快照，与 IAM 实时显示名、creator/importer、资源 owner scope 分别保真；nullable image 不表示隐私开关。既有同 tenant publisher 读取隐私政策不变；跨 tenant/任意未成员真名或新增隐私事实须先由 IAM 另过设计门，本片不授此边界。App 只承接同一响应的展示事实，不借此改安装、发布、执行或其它 reader/cache 状态。
+
 ## R357-H1 当前人类 MCP 准入（2026-10-09）
 
 本切片归 BFF auth 与既有 MCP projection；IAM 唯一拥有身份/成员权限。只消费正式 IAM 55befe5092f96d617088549df3166e1d381e6b1c / 0.11.0 / SHA47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3。
@@ -778,7 +1011,7 @@ Project授权读取的**目标生命周期已裁决，实现待验**：当前无
 
 后继数据验证：BFF原catalog/facts不变；真实Storage同key重放/异义/并发/引用/最后引用/新代/旧cleanup不伤新代由owner证明；BFF真实授权取消/超时无泄漏及只调用本scope；Root用户确认→DELETE→权威列表/硬刷新独立验收。正常删除数据、授资格、DDL、进程切换均非本D0授权；原suffix与untracked var保护。
 
-Root最终补充裁决：现 `src/infrastructure/postgres/client.ts` 唯一Pool仅增加 `connectionTimeoutMillis: 1000`，有限约束底层connect与pending队列，堵住仅race/late-release仍可能无界等待；不改全局query_timeout/statement_timeout、max、credentials，不创建新Pool。此为D0目标并非源码已支持。保留五新普通文件和三现port/service/repository接缝；真实完整旧回归及pool饱和、SQL锁、取消、late acquire/连接故障门必须验证无泄漏及取消后零Storage IO。
+Root后续裁决（I3全量真实集成发现共享Pool回归）：撤销此前新增全局 `connectionTimeoutMillis:1000` 的决定，保留唯一共享Pool原有等待语义及所有既有业务期限。pg-pool公开connect无per-call取消；具名Project读取以required signal和绝对deadline终止本次调用，迟到取得的exact client仅正常release一次且零SQL，活动SQL取消只销毁自有lease。其他持有者永不归还时，不保证底层pending物理退队时刻，不冒称已取消connect；实际连接归还后的晚lease/池恢复须真实验证。不改全局query_timeout/statement_timeout、max、credentials，不创建第二Pool；取消后零Storage IO及原完整回归门保持。
 
 <!-- R261-BFF-FILE-DELETE-DATA-END -->
 
@@ -2356,3 +2589,152 @@ IAM remains the authoritative owner of tenant membership, invitations and roles.
 ## Connector command 恢复错误消费（2026-10-16，无数据变化）
 
 只消费已发布错误metadata并输出browser-private安全分类；canonical database/schema.sql、所有业务/receipt/AG-UI状态、Redis与权限不改。不存在BFF直读Platform DB、receipt副本或恢复写入；请求原文、secret、owner内部message/details不会进入生成profile、HTTP反馈或日志。所有未知结果继续原owner保障，错误分类不授权重建资源。
+
+
+Project resource item access/delete (2026-10-26) introduces no BFF or Storage DDL/table/association; Storage remains the sole Asset/Blob/deletion-receipt/cleanup owner, and BFF only derives a stable scoped command from the original public key.
+
+## 8395 分支历史证据（非本次验收）
+
+## I6 runtime review-fix candidate (2026-10-23)
+
+Calendar-to-calendar edits, pause, task deletion and Project deletion retain the existing calendar dispatch lifecycle. Prior RSS revisions and either trigger-kind transition retire only known-never-sent rows; leased, admitted and admission-unknown rows retain their original identities. Both dispatch ID and run ID must match before clearing active scope.
+
+Non-once outbox payloads reject an own run_at field. Additional real-PG oracles are written in the existing RSS integration suite for opposing claim/pause locks, Project eligibility, exact active release, recovery after deletion, epoch round-trips, two 200-item batches and authoritative details/run projection. The same logical nanosecond baseline is a controlled test query-result seam after real clock SQL; actual PostgreSQL now and observed_at are unchanged. These new PG assertions are not yet executed by the implementation writer; Root owns resource verification. Public20, canonical SQL and package remain unchanged.
+
+## I6 RSS 事务实施状态（2026-10-23，待真实运行时验收）
+
+实现使用唯一 canonical 的 task/poll/seen 与原 dispatch/scope/receipt：receipt→Project→task→poll→scope→dispatch/seen 锁序；未知/已送达命令保留，已知 never-sent 旧 revision 才停止。跨 epoch 1000 unfinished 在 task 锁内计数；100000 seen 永久停止优先于瞬时 queue_full，失败不落部分 seen。source 退休的 100k DELETE 在同 mutation 事务内受局部 5s statement/2s lock timeout，失败整体回滚。
+
+Root 已独立确认 fresh canonical 32 表与 100 条 SQL 约束 oracle；该证据不替代当前新运行时事务、取消、容量、锁序和清理成本验证。新增 integration 源尚未运行，本片没有数据库/Redis写入或迁移正常库。
+
+### I6 canonical 候选验证边界（2026-10-23）
+
+当前poll只由Scheduler的exact tenant/task callback访问；PK覆盖due和lease复验，不存在全局扫描消费者，因此不建独立due/lease索引。dispatch的RSS自然身份unique与跨epoch未完成计数partial索引各有实际查询职责。
+
+本节字段/约束已落入唯一database/schema.sql，尚未安装。task calendar/rss排他分支对必要列显式IS NOT NULL，并用IS TRUE拒NULL三值穿透；poll lease三列全空或全非空，seen匹配与dispatch引用同一行闭合，source identity另有RSS partial unique。1000未完成跨epoch容量必须在task锁内计数并整批验证，partial index不是行CHECK保证；seen100000计数一致性及退休成本同样待真实事务/PG验证。离线schema门资源skip不冒安装成功，无migration或正常库变化。
+
+## I6 RSS 持久化模型（2026-10-23，当前设计；仅fresh canonical，未安装）
+
+以下是当前唯一模型，替代下方reader阶段“无后继SQL变化”的草稿。所有表属于BFF ScheduledTask、唯一database/schema.sql，无FK/第二schema/migration链；仅自有fresh fixture验证，不自动改正常应用schema或他人数据。PostgreSQL为权威，Redis无seen/队列事实副本。
+
+### bff_scheduled_task 增量
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| trigger_kind | TEXT NOT NULL | calendar/rss闭集，无运行时缺省兼容。 |
+| trigger_epoch | BIGINT NOT NULL | 初始1，>=1，kind或规范feed URL改变递增，所有kind保留。 |
+| rss_url | TEXT NULL | 仅RSS必填，固定reader URL策略，<=2048UTF8字节。 |
+| rss_conditions | JSONB NULL | 仅RSS为已完整验证的有界OR/AND数组，calendar为NULL。 |
+| frequency/task_time/timezone/weekdays/month_days/local_date/run_at | 原类型，可空 | calendar保持原四规则且前三非空；RSS七列全部NULL。 |
+
+通用Project/owner/revision/expiry/状态不复制。trigger CHECK外包原calendar CHECK并显式IS NOT NULL，避免NULL三值逻辑穿透；RSS分支排斥日历，calendar排斥RSS。触发源更新revision+1同时epoch按源语义决定；poll失效/seen退休/never-sent队列失效与outbox v5同一事务。
+
+### bff_scheduled_rss_poll（一task一当前poll）
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| tenant_id/task_id | TEXT，联合PK | 唯一当前行，按task受信owner访问。 |
+| source_epoch/task_revision | BIGINT NOT NULL | >=1，绑定当前定义与fence。 |
+| subject_id | TEXT NOT NULL | 当前可信owner，禁止浏览器自报。 |
+| initialized | BOOLEAN NOT NULL | 第一次完整成功baseline后true。 |
+| poll_sequence | BIGINT NOT NULL | >=0，每份成功快照+1，与Agent seq不同。 |
+| seen_count | INTEGER NOT NULL | 0..100000，与当前epoch seen原子一致。 |
+| next_poll_at/last_checked_at | TIMESTAMPTZ，前者非空 | 当前due与实际观察；未读last为NULL。 |
+| failure_count/last_error_code | INTEGER非负/TEXT NULL | closed code派生backoff；limit_reached不再fetch。 |
+| lease_owner/lease_token/lease_until | TEXT/TEXT/TIMESTAMPTZ NULL | 三者同时空或同时非空，token+fence条件提交。 |
+| fence | BIGINT NOT NULL | >=0，领取及失效递增。 |
+| created_at/updated_at | TIMESTAMPTZ NOT NULL | DB事实时间。 |
+
+task创建RSS即初始化poll；同源revision变更更新绑定并废lease但保baseline/seen；换源清当前poll状态并退休旧epoch seen，epoch不复用；转calendar/物理删task则移除poll。旧dispatch/receipt/scope保留以恢复unknown。seen上限是终止当前源自动读取，不静默TTL重置。
+
+### bff_scheduled_rss_seen（条目幂等）
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| tenant_id/task_id/source_epoch/item_identity | TEXT/TEXT/BIGINT/TEXT，联合PK | item SHA256小写64；source隔离，唯一永久去重。 |
+| content_digest | TEXT NOT NULL | 规范Entry闭合JSON摘要，仅诊断，不作为身份。 |
+| first_poll_sequence/first_seen_at | BIGINT/TIMESTAMPTZ NOT NULL | >0，实际成功观察，非publisher日期。 |
+| matched/dispatch_id | BOOLEAN/TEXT NULL | 此新条目确已匹配并入队才true且dispatch非空；baseline/不匹配为false且NULL，CHECK一致。 |
+
+无FK完整性由同事务和当前task/poll锁保证。当前epoch seen不TTL。换源/转calendar/删除只按indexed tenant/task/epoch退休至多100000条，须真实测持锁耗时；达不到有界statement预算则改有界可恢复清理方案后再放行，不在失败事务里清半seen。按PK做已见查询，当前poll无需额外无用途全局索引。
+
+### 现dispatch/scope的增量
+
+| 表/字段 | 类型 | 说明 |
+| --- | --- | --- |
+| dispatch.source_kind | TEXT NOT NULL | calendar/rss，不能靠occurrence字符串猜。 |
+| dispatch.source_revision/source_epoch | BIGINT NOT NULL | 原冻结定义版本与源epoch，均>=1。 |
+| dispatch.source_item_identity | TEXT NULL | RSS必填SHA64，calendar为NULL。 |
+| dispatch.source_observed_at | TIMESTAMPTZ NULL | RSS实际DB发现事实，calendar为NULL，不能从逻辑键反推。 |
+| scope.rss_order_high_watermark | TEXT NULL | 固定9位UTC逻辑键，跨poll/epoch/kind与重启保留，非Agent seq。 |
+
+RSS新增唯一(tenant_id,task_id,source_epoch,source_item_identity) partial约束防重复；未完成容量/失效查询按真实谓词给partial索引，不建第二queue。现dispatch/session/run/idempotency/terminals及scope单active保持。RSS occurrence为rss:<epoch>:<item_sha>，全部run/key/dispatch身份摘要由trusted tenant/task/epoch/item闭合JSON固定。
+
+receipt→Project→task→poll→scope→dispatch/seen；网络在锁外，成功0..200seen/dispatch+poll+receipt固定summary同事务。BigInt逻辑key分配及真实source_observed_at见TECHNICAL_DESIGN；旧calendar排序含义不变。pause/update/删除使poll fence失效，失败化仅unknown=false且pending/retryable的never-sent，exact active同事务清两字段；unknown/leased/admitted保留原恢复/可信终态。claim never-sent不得现scope锁后反取task。Project删除顺序沿现Project→task并稳定task/item锁序，无反取Conversation。
+
+部署/回滚仅此fresh候选版本整体配对，不能对旧正常数据原地CREATE IF NOT EXISTS冒迁移成功。现normal服务仍旧9fac/schema；reader工程门通过不等于这些新表已验。
+
+## I6 RSS 安全 HTTPS reader（2026-10-23，源码候选待独审）
+
+`readRssFeed({url,signal})`仅返回完整有界bytes；显式内部factory供受控测试，生产固定node DNS/HTTPS和公网地址策略。新增`rss-feed-address.ts`拥有URL/BlockList策略，`rss-feed-reader.ts`拥有单pin、TLS、10秒总期限/5秒idle、16KiB头/1MiB正文及取消释放。没有配置覆盖、外网feed访问、公开接口、SQL、poll或Web激活。后继唯一编排调用点仍为计划中的`application/rss-poll-service.ts`，成功后再交现parser/conditions与持久事务。
+
+根外CDATA窄修同时检查sax `onopencdata`和`oncdata`：空CDATA不产生后一个事件，只有前一个检查可拒空输入；原92内核断言正文保持，根内CDATA仍正常。可执行stub定向RED为29项1PASS/28FAIL；首轮实现184项182PASS/2空CDATA FAIL后按Root裁决修复。首次全组stub因accepted等待未到而终止，保留原日志，不冒完成RED。
+
+自有loopback TLS factory仅映射已验证public pin，保Host/SNI/证书校验；该证据不代表公网可达。实际5秒idle与10秒drip总期限、错SAN、取消socket、启动时环境代理trap及响应边界纳入专项。准确终态计数、命令和全输入保护见A/测试验收/i6-rss-reader-worker-v1.json。未执行build/default/full/contract聚合、DB/Redis或正常Browser；新sax锁的旧生成provenance仍待Root后续聚合门，不在此片重生成。没有hix-code-review通过结论。
+
+## I6 RSS reader 无持久化变更（2026-10-23，实施前）
+
+网络层只拥有一次read的有界bytes/timer/取消和最多8个未物理完成DNS lookup的进程内资源，不拥有订阅事实/seen/receipt/缓存/DB/Redis。每次独立重新解析DNS，不能缓存上次地址作为后次授权；成功只返回完整bytes。所有网络在后继poll短事务之外，失败不会提前写baseline或seen。canonical、现索引和公开资源本片不变；后继source epoch/永久去重与执行队列必须另过数据设计门。
+
+## I6 XML 语义修正（2026-10-23，实施前）
+
+只修快照解码：literal CRLF/CR在实体解析前归一，opaque ID不额外trim；属性控制空白作为不支持输入整份拒绝。没有已持久化RSS identity可迁移，不重写现有任何事实、canonical或索引。后继seen必须消费通过修正验收后的identity，不能将原候选摘要当已发布持久契约。
+
+## I6 RSS 内核无持久化变更（2026-10-23）
+
+首片parse/match/安全读取只产生有界快照，不拥有持久状态。唯一canonical `database/schema.sql`、已有task/command/dispatch/receipt/索引原字节保持；无新表/列/缓存、跨owner JOIN、DDL、迁移或正常数据操作。identity只为feed内稳定标识，不能单独充当tenant授权或全局执行ID。
+
+后继持久方案仍归BFF ScheduledTask：真实calendar/rss互斥配置、URL变更新source epoch、首次成功poll baseline、seen item唯一tenant/task/epoch/identity、poll lease/fence及其结果与执行outbox原子提交。缺少seen/epoch/锁序与去重保留策略时不启用poll，不用内存Map或localStorage假装完成。数据生命周期、cas/幂等、Project→task→poll→execution锁序及当前资格复验必须随同后继canonical/三设计一起完成；不把这里的候选写成已安装schema。当前片无新数据表，故不创建空SQL或第二事实源。
+
+## I5 BFF 初始化切片验收（2026-10-21；尚未正常激活）
+
+Public19.3/168 固定 Billing158579f8 的正规v1四操作SDK。独立只读审查未发现确定P1/P2；原167操作与19.2全文、旧GET行为及历史断言均保留。格式/lint/types/direct build/架构均通过，原默认清单1697PASS/0FAIL/3资源SKIP，原contract:test完整清单1042PASS/0FAIL；聚合契约前置检查全部通过，Redocly保留44warnings。构建使用fresh dist移Trash后原tsc，测试包装仅把自有临时目录/当前PID套接字清理改为Trash，不改断言、时限或网络行为；原包装失败记录保留。
+
+真实 Node22 BFF→Node24 Billing src/main→自有fresh PostgreSQL 的9组场景全部通过，含并发重放、非零余额/generation/timestamps保持、disabled、已提交写丢ACK后只读恢复及最终撤权。原数据库catalog与仓库输入精确保持。IAM仍是受控admission，此验收不代表正常JWT、Web消费者或浏览器完成；完整资源integration未全部运行。无正常schema/账户/积分、支付/grant/Agent效果。本切片尚未提交或激活，消费者须固定后续已提交契约再接入。
+
+## 2026-10-21 I5 本人积分账户隐藏初始化（设计门；实现与激活待验）
+
+需求仍是首页与关联设置的真实功能；此片补本人积分页首次进入时的零余额初始化。正常 Manus 用量计费只展示余额、明细与升级，没有账户开户业务入口。旧显式开户草稿不构成本片产品要求；历史失败与原测试字节先保留，消费者阶段以更严格的隐藏初始化旅程覆盖其真实 owner 复读保障。Skills/MCP、支付、充值、grant、Agent 执行均不在修改面。
+
+### 数据权威与生命周期
+
+Billing独占 Credit account、ledger 与审计；复用已提交 owner PUT 的同 grant subject advisory lock/自然幂等：仅缺失时建 available=0、held=0、generation=1；原账户余额/held/generation/timestamps不变，首次一条审计与创建同事务，disabled拒绝。不创建 grant、journal、订单、积分赠送或现金事实。
+
+BFF仅传可信本人身份和空body并验证实际snapshot；没有账户缓存、本地opening receipt、余额副本、补偿、SQL、Redis key、表/列/索引或schema演进。未知提交用本人 GET 核实而非回滚/充值；撤权后不得显示ACK，但不能声称owner已执行事务被撤销。现 database/schema.sql 完整字节必须不变；Root真实验证仅使用自有 fresh Billing fixture，不在正常schema seed或reset。
+
+## 2026-10-21 I4 运行更新 metadata 读取（源码候选已实现，正常激活与独审待后继）
+
+BFF 拥有 ScheduledTask、dispatch 及已核验复制事件；Agent 仍是执行事件唯一生产方。先交付全局运行列表及可选 task_id 过滤，不虚构运行摘要、输出详情或会话链接。HTTP7 固定 artifact 的 payload_json 没有 run.completed / assistant.completed 机器 schema；摘要/输出及立即测试不在本切片完成范围。
+
+### 事实、资格、查询与索引
+
+不新增表、持久字段、外键、Run副本、查询缓存或数据迁移链。复用 bff_scheduled_task / bff_project / bff_scheduled_agent_dispatch / bff_scheduled_agent_source_event。task物理删除或Project软删后历史记录可能仍保留，但新查询不可见，不能据历史subject单独授权。父项目须当前同tenant/owner且deleted_at IS NULL；无项目任务正常。task当前暂停/failed/过期/once已过去仍可读有效历史，不借规则enabled/status抹掉执行记录。task不存在/owner变化/无效父在LIMIT之前过滤；exact task过滤先验证资格，不存在/不可见同404。
+
+页面按不可变occurrence_order_key COLLATE C DESC、dispatch_id COLLATE C DESC，原9位UTC文本不降精度。一个有界候选CTE先当前owner/父资格、taskfilter、keyset、limit+1，再lateral按exact tenant/task/run读取最多两条terminal事件以检测冲突；不把其他run终态投到本项。第二次同一完整查询与首次快照精确比较，任何变化失败，不做跨IAM长事务/范围锁或页面补满。query/connection耗尽同入口预算，最多两次页面快照。
+
+canonical只新增partial ix_bff_scheduled_source_terminal_run (tenant_id,task_id,source_run_id,source_sequence) WHERE event_type IN ('run.completed','run.failed')，对应已实际验证的exact terminal查询。不新增无计划支持的global dispatch索引。现单task dispatch order索引保留；全局实际服务大负载SLO仍待验，statement deadline提供失败上界而非性能保证。源payload在PG检查长度后才返回正文，metadata/raw totals及HTTP一律有界，超界整页503不截断。
+
+源事件、dispatch、task的生命周期/retention不变，本切片只读。canonical fresh schema先在自有fixture安装，正常应用库不自动DDL/演进；既有共享PG/Redis实例复用不重启/清空。索引回滚只移除此新增索引设计，历史事实不改；正式正常库激活另需具名操作与验证。
+## 2026-10-20 项目资源下载读取边界（I3 源码候选，真实 PG 待验）
+
+Public19.1.0/166 未发布候选只增加项目单 ASSET 下载 GET，不新增/修改表、列、索引、权限表、缓存、下载实体或本地 receipt。Project 权威仍是本仓 bff_project，Storage 权威仍是固定 v3 Asset/reference/object；没有 Project member 表，不能把 Team role、上传者或相同 digest 当资格。
+
+现已实现已裁决的 `findActiveResourceProjectId(scope,idOrSlug,signal:AbortSignal,deadlineAt:number):Promise<string|null>`。在现目录 `project-resource-access.ts` 拥有 exact checkout/短读取事务/连接退休，port→ProjectService→repository 只委托具名读取；唯一 SQL 谓词为 tenant_id、owner_id、deleted_at IS NULL 和 ID/slug，输出 canonical project ID/null。首次解析以后，发送前按该 canonical ID 再读当前资格；不缓存结果，不持数据库锁跨 Storage RPC 或对象下载，也不宣称跨 owner 原子撤权。
+
+signal 和 monotonic deadlineAt required，无默认/重置；它来自 IAM 前同一 20000 ms 入口预算。两次短事务各自设置不超过剩余时间的 statement_timeout、lock_timeout、client_connection_check_interval，结束即释放。唯一共享 Pool 保留原等待语义；caller 取消/期限与底层 pending 分开，公开 connect 不支持单次取消，不保证持有者永不归还时的物理退队；晚 acquire 必须正常 release 一次且零 SQL，活动 SQL 取消只 destroy 精确 leased client，不误关其他请求连接、不猜测 rollback。同步取消/耗尽后禁止新 Storage IO。上述生命周期只落在新的具名读取；旧 pool.query/findProject 未改，不能据此宣称所有旧查询都有相同边界。新读取真实 PG 门尚未执行。
+
+GetDownloadReference 使用 Storage 已有 command receipt，公共 GET 无新幂等 key；receipt 写属于 Storage，不复制到 BFF，也不能说整个下载零持久写。现 Storage project release 与有界旧引用失效语义保留，不演进 Storage schema。first-stage canonical 和测试前置没有执行数据库、正常资源、IAM 权限或服务激活动作。后继需真实隔离 PG 证明 pool 饱和、held SQL、late checkout、连接故障、取消和精确回收；受控 HTTP/Connect 不是资源集成通过。
+
+第二阶段仅实现现 bff_project 的上述本人 active 读取，无 DDL/数据演进/新 owner 权限。撤回本片新增的共享 Pool 全局 1000ms，旧调用者原等待/预算不变；新读取事务局部 statement/lock/client_connection_check 参数受同一剩余 deadline 限制。正常 COMMIT 后释放，失败或取消 destroy exact lease，不对可能仍运行 SQL 猜测 ROLLBACK；迟到 checkout 只有一次 release。单测替身证明边界接线，不等于真实 backend/队列资源已回收。
+
+真实 PG integration 已编写，须 Root 单独提供自有 temporary DB URL 与精确数据库名确认变量，验证 scope、已删项目、十 lease 饱和时 caller 有界/等待仍 pending、自有 lease 归还后 exact late acquire 一次 release 零 SQL 与池恢复、持表锁时取消 backend、其它 lease 不受影响、连接故障及恢复。仅该自有测试库可持锁/写独有 fixture/清理确切行；本阶段未运行，未访问正常数据库或 Redis。

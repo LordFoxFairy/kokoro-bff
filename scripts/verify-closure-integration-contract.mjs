@@ -4,6 +4,12 @@ import { restorePublic19SystemModelConnectionContract } from "./system-model-con
 // Exact proof of the two approved merge parents; never used by runtime decoders.
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
+import {
+  isProjectResourceDownloadContract,
+  restoreProjectResourceDownloadParent,
+  projectResourceDownloadParentBaseline,
+  inspectProjectResourceDownloadContract,
+} from "./project-resource-download-public-contract.mjs"
 const proof = JSON.parse(readFileSync(new URL("../contract/tests/closure-integration.json", import.meta.url), "utf8"))
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const current = (source) => /^  version: 19\.0\.0$/mu.test(source)
@@ -56,6 +62,18 @@ export function inspectClosureIntegrationContract(source, baseline) {
     closureLocalBaseline(baseline)
     closureMainBaseline(baseline)
     return []
+  } catch (error) {
+    return [error.message]
+  }
+}
+
+/** Exact legacy RSS branch proof, selected explicitly by its historical tests. */
+export function inspectLegacyRssClosureContract(source, baseline) {
+  try {
+    if (!isProjectResourceDownloadContract(source)) throw Error("historical RSS branch drift")
+    const errors = inspectProjectResourceDownloadContract(source, baseline)
+    if (errors.length) return errors
+    return inspectClosureIntegrationContract(restoreProjectResourceDownloadParent(source), projectResourceDownloadParentBaseline(baseline))
   } catch (error) {
     return [error.message]
   }

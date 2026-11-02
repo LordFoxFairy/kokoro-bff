@@ -61,7 +61,7 @@ function canonicalJson(value: unknown): string {
     .join(",")}}`
 }
 
-function digestOf(value: unknown): string {
+export function agUiSourcePayloadDigest(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex")
 }
 
@@ -167,6 +167,8 @@ function projectSources(
         frames,
         assistantUpdate: {
           runId,
+          segmentId: typeof event.payload.segment_id === "string" ? event.payload.segment_id : event.event_id,
+          completed: false,
           kind: frames.some((frame) => frame.type === "TEXT_MESSAGE_START") ? "replace" : "append",
           content,
         },
@@ -175,14 +177,36 @@ function projectSources(
     if (event.kind === "message.completed") {
       const content = event.payload.content
       if (typeof content !== "string") throw new AgUiSourceContractError()
-      return { ...sourceIdentity(source), frames, assistantUpdate: { runId, kind: "replace" as const, content } }
-    }
-    if (event.kind === "run.completed") {
-      if (event.payload.status !== "completed" && event.payload.status !== "cancelled") throw new AgUiSourceContractError()
       return {
         ...sourceIdentity(source),
         frames,
-        assistantUpdate: { runId, kind: event.payload.status === "cancelled" ? ("cancel" as const) : ("complete" as const) },
+        assistantUpdate: {
+          runId,
+          segmentId: typeof event.payload.segment_id === "string" ? event.payload.segment_id : event.event_id,
+          completed: true,
+          kind: "replace" as const,
+          content,
+        },
+      }
+    }
+    if (event.kind === "run.completed") {
+      if (event.payload.status !== "completed" && event.payload.status !== "cancelled") throw new AgUiSourceContractError()
+      if (
+        event.payload.final_segment_id !== undefined &&
+        (event.payload.status !== "completed" || typeof event.payload.final_segment_id !== "string" || event.payload.final_segment_id.trim() === "")
+      )
+        throw new AgUiSourceContractError()
+      return {
+        ...sourceIdentity(source),
+        frames,
+        assistantUpdate:
+          event.payload.status === "cancelled"
+            ? { runId, kind: "cancel" as const }
+            : {
+                runId,
+                kind: "complete" as const,
+                ...(event.payload.final_segment_id === undefined ? {} : { finalSegmentId: String(event.payload.final_segment_id) }),
+              },
         ...(skillUsageFact === undefined ? {} : { skillUsageFact }),
       }
     }
@@ -261,7 +285,7 @@ function sourceIdentity(source: AgentProjectionSource): AgUiSourceIdentity {
     sourceOwner: "kokoro-agent",
     sourceEventId: source.sourceEventId,
     sourceSequence: source.sourceSequence,
-    sourceDigest: digestOf(source.sourcePayload),
+    sourceDigest: agUiSourcePayloadDigest(source.sourcePayload),
     sourceOccurredAt: source.sourceOccurredAt,
   }
 }

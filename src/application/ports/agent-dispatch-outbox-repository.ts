@@ -1,6 +1,9 @@
+import type { RegenerateMessageInput, RegenerationSource } from "../chat/message-regeneration.js"
 import type { AgentDispatchCommand, AgentDispatchLease, AgentDispatchPayload, AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
 
 export type CommitChatTurn = {
+  regeneration?: Readonly<{ sourceMessageId: string; originalUserMessageId: string; sourceRunId: string; sourceFingerprint: string }>
+  lifetime?: Readonly<{ signal: AbortSignal; deadlineAt: number }>
   outboxId: string
   tenantId: string
   conversationId: string
@@ -31,6 +34,7 @@ export type AgentDispatchOutboxClaimInput = {
 
 /** Atomic Chat turn admission plus the durable Agent command queue. */
 export interface AgentDispatchOutboxRepository {
+  readRegenerationSource(input: RegenerateMessageInput): Promise<RegenerationSource | null>
   prepareChatTurnSelection(input: ChatTurnSelectionInput): Promise<ChatTurnSelection | null>
   commitChatTurn(command: CommitChatTurn): Promise<AgentDispatchReceipt | null>
   claimAgentDispatchOutbox(input: AgentDispatchOutboxClaimInput): Promise<AgentDispatchCommand[]>

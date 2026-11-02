@@ -463,11 +463,21 @@ it("a new START identity after a full interaction is rejected before committing 
 })
 
 for (const [activity, displayCode] of [
-  ["tool", "tool.execution"],
+  ...[
+    "tool.execution",
+    "tool.file.read",
+    "tool.mcp.discover",
+    "tool.mcp.describe",
+    "tool.mcp.call",
+    "tool.web.search",
+    "tool.web.fetch",
+    "tool.file.write",
+    "tool.file.deliver",
+  ].map((code) => ["tool", code]),
   ["subagent", "subagent.execution"],
 ]) {
   for (const status of ["running", "completed", "failed"]) {
-    it(`R123 maps ${activity}/${status} through the actual mapper and projector as one safe activity CUSTOM`, () => {
+    it(`R123 maps ${activity}/${displayCode}/${status} through the actual mapper and projector as one safe activity CUSTOM`, () => {
       const payload = {
         activity,
         activity_id: `act_${activity === "tool" ? "a".repeat(64) : "b".repeat(64)}`,
@@ -596,4 +606,134 @@ it("R353 carries strict Skill ready and terminal facts into the same source comm
       { kind: "terminal", runId: "run_1", status: "completed" },
     ],
   )
+})
+
+it("CHAT-ORDER retains exact text segment identity and distinguishes completed content from a new-segment delta", async () => {
+  const commits = []
+  const service = new AgUiProjectionService({
+    readStream: async () => ({ version: 0, sourceHighWatermark: 0, projectionState: { textMessageIds: [] }, expectedRunId: "run_1" }),
+    assertPersistedSources: async () => {},
+    commitProjection: async (command) => {
+      commits.push(command)
+      return { kind: "committed", insertedFrames: 3 }
+    },
+  })
+  const source = (seq, kind, payload) => ({
+    sourceRunId: "run_1",
+    sourceEventId: `ordered_${seq}`,
+    sourceSequence: seq,
+    sourceOccurredAt: new Date(seq * 1000).toISOString(),
+    sourcePayload: { kind, payload },
+    event: { event_id: `ordered_${seq}`, seq, session_id: "session_1", run_id: "run_1", timestamp: new Date(seq * 1000).toISOString(), kind, payload },
+  })
+  await service.ingest("tenant_1", "session_1", [
+    source(1, "message.delta", { segment_id: "first", delta: "Hello" }),
+    source(2, "message.completed", { segment_id: "first", content: "Hello corrected" }),
+    source(3, "message.completed", { segment_id: "second", content: "Final" }),
+  ])
+  assert.equal(commits.length, 1)
+  assert.deepEqual(
+    commits[0].sources.map((source) => source.assistantUpdate),
+    [
+      { runId: "run_1", segmentId: "first", completed: false, kind: "replace", content: "Hello" },
+      { runId: "run_1", segmentId: "first", completed: true, kind: "replace", content: "Hello corrected" },
+      { runId: "run_1", segmentId: "second", completed: true, kind: "replace", content: "Final" },
+    ],
+  )
+})
+
+import "./agui-message-parts.test.ts"
+
+it("Agent8 safe tool classes remain exact when the existing projector prepares compact SQL payloads", async () => {
+  const { projectRunProcessFrame } = await import("../dist/infrastructure/postgres/agui-process-projection.js")
+  for (const display_code of [
+    "tool.execution",
+    "tool.file.read",
+    "tool.mcp.discover",
+    "tool.mcp.describe",
+    "tool.mcp.call",
+    "tool.web.search",
+    "tool.web.fetch",
+    "tool.file.write",
+    "tool.file.deliver",
+  ]) {
+    const payload = { activity: "tool", activity_id: `act_${"a".repeat(64)}`, segment_id: `seg_${"b".repeat(64)}`, status: "completed", display_code }
+    const mapped = mapAgentEvent({
+      chat_event_id: "source",
+      session_id: "session_1",
+      run_id: "run_1",
+      source_index: 0,
+      event_type: "activity",
+      payload_json: JSON.stringify(payload),
+      seq: 1,
+      created_at: 0,
+    })
+    const [frame] = projectChatEvent(mapped, createAgUiProjectionState())
+    const calls = []
+    await projectRunProcessFrame(
+      {
+        query: async (sql, values) => {
+          if (sql.startsWith("SELECT safe_payload")) return { rows: [], rowCount: 0 }
+          calls.push(values)
+          return { rows: [], rowCount: 1 }
+        },
+      },
+      { tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" },
+      { sourceOwner: "kokoro-agent", sourceEventId: "source", sourceSequence: 1, sourceDigest: "a".repeat(64), sourceOccurredAt: new Date(0).toISOString() },
+      frame,
+      2,
+      "cursor",
+    )
+    assert.equal(calls.length, 1)
+    assert.deepEqual(JSON.parse(calls[0][6]), payload)
+    assert.equal(calls[0].at(-1), false, "tool classification must not gain the Skill pre-START exemption")
+  }
+})
+
+describe("AG-UI idle eligibility", () => {
+  for (const exhausted of [false, true]) {
+    it(`allows idle settlement only for a source snapshot exhausted=${exhausted}`, async () => {
+      const progress = []
+      const consumers = {
+        seedConsumers: async () => 0,
+        claimConsumers: async () => [lease()],
+        renewConsumerLease: async () => true,
+        markConsumerProgress: async (...args) => {
+          progress.push(args)
+          return true
+        },
+        markConsumerRetryable: async () => assert.fail("no source error"),
+        markConsumerBlocked: async () => assert.fail("no source error"),
+        releaseConsumer: async () => true,
+        collectGarbage: async () => ({
+          streamsScanned: 0,
+          framesDeleted: 0,
+          tombstonesInserted: 0,
+          tombstonesDeleted: 0,
+        }),
+      }
+      const now = "2026-09-02T12:00:00.000Z"
+      const runner = new AgUiProjectorRunner(
+        { ingest: async () => ({ sourceHighWatermark: 1, insertedFrames: 0 }) },
+        consumers,
+        {
+          read: async () => ({
+            events: [source(1)],
+            nextSequence: 1,
+            watermark: exhausted ? 1 : 2,
+            exhausted,
+          }),
+        },
+        {
+          workerId: "idle_gate",
+          maxPagesPerConsumer: 1,
+          now: () => new Date(now),
+        },
+      )
+      assert.equal((await runner.runOnce()).consumersSucceeded, 1)
+      assert.equal(progress.length, 1)
+      assert.equal(progress[0][3] ?? false, exhausted)
+      if (!exhausted) assert.equal(progress[0][1], now, "unread pages remain immediately eligible")
+    })
+  }
 })

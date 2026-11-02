@@ -1,3 +1,11 @@
+## 2026-10-22 当前内部模型预算入口
+
+Agent使用独立 `KOKORO_BFF_AGENT_MODEL_ADMISSION_CREDENTIAL_FILE` 调用内部POST；BFF从原提交Run来源派生租户／付款用户，再单次调用固定Billing d345025／exp8。无浏览器token回取、用户grant、额外服务或本地receipt；internal1.1新增一操作、public23／186不变。最小运行配置／边界见三设计首节，完整验收与尚待Agent消费者／实际结算见 `docs/CURRENT.md`。以下较早切片仅历史。
+
+## 当前实现入口（2026-10-22）
+
+当前公共契约 Public23.0.0／186 operations，计价费率必须绑定精确System模型修订ID／摘要；固定Billing exp6，旧无绑定rate拒绝。原管理／非现金充值不变，本地完整门与真实owner HTTP／PG已验，详细范围见 [docs/CURRENT.md](docs/CURRENT.md)。App/Admin新字段消费者及Agent实际用量结算后继，正常环境未因本片激活。下方日期段仅保留阶段历史。
+
 ## 2026-10-21 个人系列删除候选
 
 当前机器契约 Public22.1.0 /177，新增个人系列 DELETE，保留 distinct withdraw；严格 CAS/publication、当前 IAM delete_series 和原 key 回执。Platform Native 固定883d771、IAM0.15固定4db7012。公开三身份矩阵及 App 页面尚待接线，正常环境未激活；边界与实际验证见 `docs/CURRENT.md`。下方版本段为阶段历史。
@@ -191,3 +199,37 @@ Project resources can be reloaded with `GET /v1/projects/{projectId}/resources?l
 - `src/infrastructure/clients/agent/interaction-state.ts` 严格解码固定 owner schema；`src/application/agui/interaction-state.ts` 校验完整 revision/no-op；`src/application/chat-run-control.ts` 校验当前 pause 的完整 decision 集合。
 - `bff_agui_run_interaction` 是最新 run read projection；source/CUSTOM/cursor 与它同事务。`chat-repository.ts` 在授权 RR 中校验 head、完整 state 与 ledger provenance；ACK 不清除 pause。
 - 本轮静态/纯测试证据与未决 fixture 见 `docs/CURRENT.md`。真实 PG/Redis/HTTP、发布及 Web 消费归 Root 后续验收，不能以源码候选代替。
+
+### Agent 7.3 待核对失败码的既有库配对
+
+Public23.1只追加 `model_settlement_pending`（不可自动重试），不改变真实结算规则。新库继续用原fresh-only installer；非空旧owner须在备份及恢复演练后显式运行 `KOKORO_BFF_POSTGRES_URL=... pnpm db:evolve-agent-failure check` / `apply`，仅接纳精确旧或目标CHECK，绝不清库。此入口不随服务启动自动执行。正常激活须与固定Agent7.3和App消费者配对，具体当前状态见 `docs/CURRENT.md`；组件测试通过不代表正常整链已验收。
+
+## 8395 分支历史证据（待本次整合复验）
+
+## I6 RSS 安全 HTTPS reader（2026-10-23，源码候选待独审）
+
+`readRssFeed({url,signal})`仅返回完整有界bytes；显式内部factory供受控测试，生产固定node DNS/HTTPS和公网地址策略。新增`rss-feed-address.ts`拥有URL/BlockList策略，`rss-feed-reader.ts`拥有单pin、TLS、10秒总期限/5秒idle、16KiB头/1MiB正文及取消释放。没有配置覆盖、外网feed访问、公开接口、SQL、poll或Web激活。后继唯一编排调用点仍为计划中的`application/rss-poll-service.ts`，成功后再交现parser/conditions与持久事务。
+
+根外CDATA窄修同时检查sax `onopencdata`和`oncdata`：空CDATA不产生后一个事件，只有前一个检查可拒空输入；原92内核断言正文保持，根内CDATA仍正常。可执行stub定向RED为29项1PASS/28FAIL；首轮实现184项182PASS/2空CDATA FAIL后按Root裁决修复。首次全组stub因accepted等待未到而终止，保留原日志，不冒完成RED。
+
+自有loopback TLS factory仅映射已验证public pin，保Host/SNI/证书校验；该证据不代表公网可达。实际5秒idle与10秒drip总期限、错SAN、取消socket、启动时环境代理trap及响应边界纳入专项。准确终态计数、命令和全输入保护见A/测试验收/i6-rss-reader-worker-v1.json。未执行build/default/full/contract聚合、DB/Redis或正常Browser；新sax锁的旧生成provenance仍待Root后续聚合门，不在此片重生成。没有hix-code-review通过结论。
+
+## I6 内核 XML 语义窄修（2026-10-23，待独审）
+
+已修复独审P2：实体前literal CRLF/CR归一LF、实体CR保真；声明仅XML S、固定关键字和standalone值严格小写，仅UTF-8 encoding值可大小写折叠。所有解码属性（包括namespace/未知/字符引用）含TAB/LF/CR即整份拒绝，这是明确的支持子集，不声称完整XML属性归一。guid/id保留XML解码后精确值已由Root裁决；64KiB指投影文本字段和全属性，不限制未知扩展单字段，仍受1MiB/深度/节点总界。
+
+原58内核和37架构测试断言保持；新增行为RED为92项61PASS/31FAIL，修后92PASS。终态命令、哈希与保护见A/测试验收/i6-rss-kernel-worker-v2.json；v1日志/manifest原样保留。未开启reader/网络/资源/poll/Web。
+
+## I6 RSS 解析与条件内核（2026-10-23，候选）
+
+新增RSS2/Atom严格解析和闭合文本条件，尚未注册RSS接口或接入网络、Scheduler poll、持久去重、执行队列及Web。`src/infrastructure/clients/rss-feed-parser.ts`拥有sax解析/稳定摘要；`src/domain/scheduled-task/rss-feed.ts`仅只读条目类型，`rss-conditions.ts`拥有纯条件验证与匹配。后继唯一消费点为计划中的`application/rss-poll-service.ts`，本片不创建空入口或伪订阅。
+
+固定sax1.6.1/@types/sax1.2.7，安装禁scripts；官方registry integrity与lock一致。受控纯门和失败记录见CURRENT；不将内核通过称为完整RSS可用。公开契约19.3/168、SQL、生成物、owner pins和其它业务保持原字节。
+
+## I5 本人积分账户初始化（候选，未正常激活）
+
+Public19.3 新增 `PUT /v1/billing/credit-account`，仅当前受信本人、严格空 JSON、自然幂等。固定 Billing158579f8 正式 v1 四操作 SDK；一次 PUT，未知结果最多一次 GET 核实，成功前复验当前 IAM；总预算最多10秒。读取仍只读，返回实际账户，不 grant/充值/重置余额，不使用旧 v2。受控HTTP验收不替代 Root 后继真实 Billing/PG 与 Web 隐藏初始化验收。
+
+## 2026-10-21 当前候选 Public19.2 / 167 operations
+
+新增本人运行metadata列表及可选task过滤，读取持久dispatch与严格终态事实，不触发执行。源码已实现两次当前资格快照、首次/最终IAM、单一5秒总预算与有界分页；摘要/输出、Web正式消费和正常激活仍待后继。机器事实源仍为原OpenAPI；`scripts/scheduled-task-runs-public-contract.mjs`先完整逆回19.1，再执行所有历史证明。准确门禁与资源边界见`docs/CURRENT.md`。以下日期段是历史快照。

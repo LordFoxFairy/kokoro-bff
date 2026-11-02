@@ -13,9 +13,11 @@ export type SchedulerScheduleInput = {
     task_revision: number
     project_id?: string
     owner_id: string
-    prompt: string
-    auto_approve: boolean
-    timezone: string
+    trigger_kind: "calendar" | "rss"
+    trigger_epoch: string
+    prompt?: string
+    auto_approve?: boolean
+    timezone?: string
   }
   retry: { max_attempts: number; backoff_seconds: number; max_backoff_seconds: number; max_retry_window_seconds: number }
   misfire_policy: "fire_once"
@@ -29,6 +31,7 @@ export function schedulerScheduleName(taskId: string): string {
 }
 
 function trigger(task: ScheduledTaskFact): { schedule: string } | { run_at: string } {
+  if (task.triggerKind === "rss") return { schedule: "* * * * *" }
   const match = /^(\d{2}):(\d{2})$/u.exec(task.time)
   if (match === null) throw new Error("SCHEDULE_LOCAL_TIME_INVALID")
   const hour = Number(match[1]),
@@ -45,7 +48,7 @@ export function buildSchedulerSchedule(task: ScheduledTaskFact, tenantId: string
   return {
     name: schedulerScheduleName(task.id),
     ...trigger(task),
-    timezone: task.timezone,
+    timezone: task.triggerKind === "rss" ? "UTC" : task.timezone,
     url: targetUrl,
     method: "POST",
     body: {
@@ -54,9 +57,9 @@ export function buildSchedulerSchedule(task: ScheduledTaskFact, tenantId: string
       task_revision: task.revision,
       ...(task.projectId === undefined ? {} : { project_id: task.projectId }),
       owner_id: ownerId,
-      prompt: task.prompt,
-      auto_approve: task.autoApprove,
-      timezone: task.timezone,
+      trigger_kind: task.triggerKind,
+      trigger_epoch: task.triggerEpoch,
+      ...(task.triggerKind === "rss" ? {} : { prompt: task.prompt, auto_approve: task.autoApprove, timezone: task.timezone }),
     },
     retry: { max_attempts: 3, backoff_seconds: 30, max_backoff_seconds: 300, max_retry_window_seconds: 3600 },
     misfire_policy: "fire_once",

@@ -66,7 +66,7 @@ test("personal download is a versioned binary Product operation with stable erro
 })
 
 test("personal Storage download checks ASSET/CLEAN before signing, verifies exact metadata and bytes, and carries admitted scope", async () => {
-  const { PersonalFileDownloadClient } = await import("../dist/infrastructure/clients/storage/personal-file-download.js")
+  const { AssetDownloadClient } = await import("../dist/infrastructure/clients/storage/asset-download.js")
   const { createRouterTransport, ConnectError, Code } = await import("@connectrpc/connect")
   const { StorageService, UploadPurpose, ScanState } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const calls = []
@@ -111,8 +111,17 @@ test("personal Storage download checks ASSET/CLEAN before signing, verifies exac
     fetchCalls.push({ url, options })
     return new Response(bytes, { status: 200 })
   }
-  const client = new PersonalFileDownloadClient(storage, { tenantId: "tenant-1", subjectId: "subject-1", requestId: "request-1" }, transport, fetchImpl)
-  assert.deepEqual(await client.download("asset-1", AbortSignal.timeout(5000)), { bytes, mimeType: "text/plain", filename: "fox.txt" })
+  const client = new AssetDownloadClient(
+    storage,
+    { tenantId: "tenant-1", subjectId: "subject-1", requestId: "request-1", scope: { kind: "personal", id: "subject-1" } },
+    transport,
+    fetchImpl,
+  )
+  assert.deepEqual(await client.download("asset-1", AbortSignal.timeout(5000), performance.now() + 5000), {
+    bytes,
+    mimeType: "text/plain",
+    filename: "fox.txt",
+  })
   assert.deepEqual(
     calls.map(([name]) => name),
     ["asset", "reference"],
@@ -139,36 +148,36 @@ test("personal Storage download checks ASSET/CLEAN before signing, verifies exac
   assert.equal(fetchCalls[0].options.headers?.cookie, undefined)
 
   asset = { ...asset, uploadPurpose: UploadPurpose.CAPABILITY_PACKAGE }
-  await assert.rejects(client.download("asset-1", AbortSignal.timeout(5000)), (error) => error.status === 404)
+  await assert.rejects(client.download("asset-1", AbortSignal.timeout(5000), performance.now() + 5000), (error) => error.status === 404)
   assert.equal(fetchCalls.length, 1)
   asset = { ...asset, uploadPurpose: UploadPurpose.ASSET, scanState: ScanState.PENDING }
-  await assert.rejects(client.download("asset-1", AbortSignal.timeout(5000)), (error) => error.status === 404)
+  await assert.rejects(client.download("asset-1", AbortSignal.timeout(5000), performance.now() + 5000), (error) => error.status === 404)
   asset = { ...asset, scanState: ScanState.CLEAN }
   reference = { ...reference, sizeBytes: 6n }
-  await assert.rejects(client.download("asset-1", AbortSignal.timeout(5000)), (error) => error.status === 502)
+  await assert.rejects(client.download("asset-1", AbortSignal.timeout(5000), performance.now() + 5000), (error) => error.status === 502)
   reference = { ...reference, sizeBytes: 5n, downloadReference: { ...reference.downloadReference, url: "http://evil.test/x" } }
-  await assert.rejects(client.download("asset-1", AbortSignal.timeout(5000)), (error) => error.status === 502)
+  await assert.rejects(client.download("asset-1", AbortSignal.timeout(5000), performance.now() + 5000), (error) => error.status === 502)
   reference = { ...reference, downloadReference: { ...reference.downloadReference, url: "http://objects.test/x", expiresAt: { seconds: 1n } } }
-  await assert.rejects(client.download("asset-1", AbortSignal.timeout(5000)), (error) => error.status === 502)
+  await assert.rejects(client.download("asset-1", AbortSignal.timeout(5000), performance.now() + 5000), (error) => error.status === 502)
   reference = { ...reference, downloadReference: { ...reference.downloadReference, expiresAt: { seconds: BigInt(Math.floor(Date.now() / 1000) + 60) } } }
-  const badBytesClient = new PersonalFileDownloadClient(
+  const badBytesClient = new AssetDownloadClient(
     storage,
-    { tenantId: "tenant-1", subjectId: "subject-1", requestId: "request-2" },
+    { tenantId: "tenant-1", subjectId: "subject-1", requestId: "request-2", scope: { kind: "personal", id: "subject-1" } },
     transport,
     async () => new Response("bad", { status: 200 }),
   )
-  await assert.rejects(badBytesClient.download("asset-1", AbortSignal.timeout(5000)), (error) => error.status === 502)
-  const redirectClient = new PersonalFileDownloadClient(
+  await assert.rejects(badBytesClient.download("asset-1", AbortSignal.timeout(5000), performance.now() + 5000), (error) => error.status === 502)
+  const redirectClient = new AssetDownloadClient(
     storage,
-    { tenantId: "tenant-1", subjectId: "subject-1", requestId: "request-3" },
+    { tenantId: "tenant-1", subjectId: "subject-1", requestId: "request-3", scope: { kind: "personal", id: "subject-1" } },
     transport,
     async () => new Response(null, { status: 302, headers: { location: "http://evil.test/" } }),
   )
-  await assert.rejects(redirectClient.download("asset-1", AbortSignal.timeout(5000)), (error) => error.status === 502)
+  await assert.rejects(redirectClient.download("asset-1", AbortSignal.timeout(5000), performance.now() + 5000), (error) => error.status === 502)
   referenceError = new ConnectError("object version or digest is unhealthy", Code.FailedPrecondition)
   const fetchesBefore = fetchCalls.length
   await assert.rejects(
-    client.download("asset-1", AbortSignal.timeout(5000)),
+    client.download("asset-1", AbortSignal.timeout(5000), performance.now() + 5000),
     (error) => error.status === 502 && error.code === "storage_response_invalid" && !error.message.includes("object version"),
   )
   assert.equal(fetchCalls.length, fetchesBefore, "failed reference must not fetch or expose bytes")
@@ -347,7 +356,7 @@ test("live Product HTTP re-admits every download and never returns another subje
 })
 
 test("bounded GET transfer rejects unsafe references, oversized bytes and cancellation before public success", async () => {
-  const { readPersonalFileBytes } = await import("../dist/infrastructure/clients/storage/personal-file-download-transfer.js")
+  const { readAssetBytes } = await import("../dist/infrastructure/clients/storage/asset-download-transfer.js")
   const valid = { url: "http://objects.test/file?sig=private", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 60_000 }
   const signal = AbortSignal.timeout(5000)
   const neverFetch = async () => {
@@ -360,20 +369,20 @@ test("bounded GET transfer rejects unsafe references, oversized bytes and cancel
     { ...valid, url: "http://objects.test/file#fragment" },
     { ...valid, expiresAt: Date.now() - 1 },
   ])
-    await assert.rejects(readPersonalFileBytes(reference, 5, sha, storage.objectOrigin, signal, neverFetch), (error) => error.status === 502)
+    await assert.rejects(readAssetBytes(reference, 5, sha, storage.objectOrigin, signal, performance.now() + 5000, neverFetch), (error) => error.status === 502)
 
   await assert.rejects(
-    readPersonalFileBytes(valid, 5, sha, storage.objectOrigin, signal, async () => new Response("hello!", { status: 200 })),
+    readAssetBytes(valid, 5, sha, storage.objectOrigin, signal, performance.now() + 5000, async () => new Response("hello!", { status: 200 })),
     (error) => error.status === 502,
   )
   await assert.rejects(
-    readPersonalFileBytes(valid, 5, sha, storage.objectOrigin, signal, async () => new Response("other", { status: 200 })),
+    readAssetBytes(valid, 5, sha, storage.objectOrigin, signal, performance.now() + 5000, async () => new Response("other", { status: 200 })),
     (error) => error.status === 502,
   )
   const cancelled = new AbortController()
   cancelled.abort()
   await assert.rejects(
-    readPersonalFileBytes(valid, 5, sha, storage.objectOrigin, cancelled.signal, async (_url, options) => {
+    readAssetBytes(valid, 5, sha, storage.objectOrigin, cancelled.signal, performance.now() + 5000, async (_url, options) => {
       assert.equal(options.signal.aborted, true)
       throw new DOMException("cancelled", "AbortError")
     }),
@@ -497,6 +506,115 @@ test("Artifact spool admits at most two concurrent requests and releases slots o
     await Promise.all(settled.map((outcome) => outcome.value?.cleanup()))
     await fourthSpool?.cleanup()
     await secondSpool?.cleanup()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("Artifact spool cancels a response body when its fetch aborts synchronously before resolving", async () => {
+  const { spoolVerifiedArtifact } = await import("../dist/infrastructure/clients/storage/artifact-download-transfer.js")
+  const root = await mkdtemp(join(tmpdir(), "bff-artifact-fetch-abort-race-test-"))
+  const controller = new AbortController()
+  let canceled = 0
+  const reference = { url: "http://objects.test/original?sig=secret", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 60_000 }
+  try {
+    await assert.rejects(
+      spoolVerifiedArtifact(
+        reference,
+        5,
+        sha,
+        storage.objectOrigin,
+        controller.signal,
+        async () => {
+          controller.abort()
+          return new Response(
+            new ReadableStream({
+              cancel() {
+                canceled++
+                return new Promise(() => {})
+              },
+            }),
+          )
+        },
+        root,
+      ),
+      (error) => error.status === 503 && error.code === "storage_unavailable",
+    )
+    assert.equal(canceled, 1, "the response arriving across the abort boundary still belongs to the transfer")
+    assert.deepEqual(await readdir(root), [])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("Artifact spool retires non-cooperative fetches on abort and both deadlines, freeing both slots before late bodies arrive", async () => {
+  const { spoolVerifiedArtifact } = await import("../dist/infrastructure/clients/storage/artifact-download-transfer.js")
+  const root = await mkdtemp(join(tmpdir(), "bff-artifact-late-fetch-test-"))
+  const reference = { url: "http://objects.test/original?sig=secret", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 60_000 }
+  const settleWithin = async (pending) => {
+    let timer
+    try {
+      return await Promise.race([
+        pending,
+        new Promise((resolve) => {
+          timer = setTimeout(() => resolve("timed-out"), 1000)
+        }),
+      ])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  try {
+    for (const interruption of ["abort", "idle", "total"]) {
+      const controller = new AbortController()
+      const clock = controllableClock()
+      const gates = []
+      const attempts = [0, 1].map(() =>
+        spoolVerifiedArtifact(reference, 5, sha, storage.objectOrigin, controller.signal, async () => new Promise((resolve) => gates.push(resolve)), root, {
+          totalMs: interruption === "total" ? 10 : 100,
+          idleMs: interruption === "total" ? 100 : 10,
+          clock,
+        }).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        ),
+      )
+      let canceled = 0
+      const late = () =>
+        new Response(
+          new ReadableStream({
+            cancel() {
+              canceled++
+              return new Promise(() => {})
+            },
+          }),
+        )
+      const successful = []
+      try {
+        assert.equal(gates.length, 2)
+        if (interruption === "abort") controller.abort()
+        else clock.advance(10)
+        const outcomes = await settleWithin(Promise.all(attempts))
+        assert.notEqual(outcomes, "timed-out", interruption + " must fence a fetch that ignores its signal")
+        for (const outcome of outcomes) {
+          assert.equal(outcome.error?.code, "storage_unavailable")
+          assert.equal(outcome.error?.status, 503)
+        }
+        for (let index = 0; index < 2; index++)
+          successful.push(
+            await spoolVerifiedArtifact(reference, 5, sha, storage.objectOrigin, AbortSignal.timeout(5000), async () => new Response(bytes), root),
+          )
+        assert.equal(successful.length, 2, "both original slots must be reusable while old fetches remain pending")
+        for (const resolve of gates) resolve(late())
+        await new Promise((resolve) => setImmediate(resolve))
+        assert.equal(canceled, 2, "each late response body must be canceled even if cancellation never settles")
+      } finally {
+        for (const resolve of gates) resolve(late())
+        for (const outcome of await Promise.all(attempts)) await outcome.value?.cleanup()
+        await Promise.all(successful.map((spool) => spool.cleanup()))
+      }
+      assert.deepEqual(await readdir(root), [])
+    }
+  } finally {
     await rm(root, { recursive: true, force: true })
   }
 })
@@ -964,5 +1082,170 @@ test("Artifact route ends a stalled consumer socket after headers without report
     server.closeAllConnections()
     server.close()
     await rm(root, { recursive: true, force: true })
+  }
+})
+
+// A signal alone cannot bound a dependency that ignores it. Every controlled wait is
+// released in finally, so a failure is an observed production result, not a suite timeout.
+async function observeNonCooperativePersonalTransfer(stage) {
+  const { readAssetBytes } = await import("../src/infrastructure/clients/storage/asset-download-transfer.ts")
+  const cancellation = new AbortController()
+  let releaseWait
+  let reachedStage
+  let observedTimer
+  let entryTimer
+  const entered = new Promise((resolve) => {
+    reachedStage = resolve
+  })
+  const deferred = new Promise((resolve) => {
+    releaseWait = resolve
+  })
+  const complete = new Response(bytes, { status: 200 })
+  const fetcher = async () => {
+    if (stage === "fetch") {
+      reachedStage()
+      await deferred
+      return complete
+    }
+    if (stage === "cancel") {
+      return {
+        status: 502,
+        body: {
+          cancel() {
+            reachedStage()
+            return deferred
+          },
+        },
+      }
+    }
+    return {
+      status: 200,
+      headers: new Headers(),
+      body: {
+        getReader() {
+          let first = true
+          return {
+            read() {
+              reachedStage()
+              if (first) {
+                first = false
+                return deferred.then(() => ({ done: false, value: bytes }))
+              }
+              return Promise.resolve({ done: true })
+            },
+            cancel() {
+              return Promise.resolve()
+            },
+            releaseLock() {},
+          }
+        },
+      },
+    }
+  }
+  const work = readAssetBytes(
+    { url: "http://objects.test/file?sig=controlled-peer", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 60000 },
+    bytes.length,
+    sha,
+    "http://objects.test",
+    cancellation.signal,
+    performance.now() + 5000,
+    fetcher,
+  )
+  const settled = work.then(
+    () => "resolved",
+    () => "rejected",
+  )
+  try {
+    const entry = await Promise.race([
+      entered.then(() => "entered"),
+      settled.then(() => "finished-before-stage"),
+      new Promise((resolve) => {
+        entryTimer = setTimeout(() => resolve("stage-not-entered"), 1000)
+      }),
+    ])
+    assert.equal(entry, "entered", `${stage} controlled dependency must actually be exercised`)
+    clearTimeout(entryTimer)
+    cancellation.abort()
+    const observed = await Promise.race([
+      settled,
+      new Promise((resolve) => {
+        observedTimer = setTimeout(() => resolve("still-pending"), 100)
+      }),
+    ])
+    assert.equal(observed, "rejected", `${stage} must stop awaiting a non-cooperative dependency after cancellation`)
+  } finally {
+    clearTimeout(observedTimer)
+    clearTimeout(entryTimer)
+    releaseWait()
+    await settled
+  }
+}
+
+for (const stage of ["fetch", "read", "cancel"])
+  test(`personal ASSET transfer bounds non-cooperative ${stage} after caller cancellation`, async () => {
+    await observeNonCooperativePersonalTransfer(stage)
+  })
+
+test("shared ordinary ASSET client preserves personal PermissionDenied hiding and denies forged personal scope before RPC", async () => {
+  const { AssetDownloadClient } = await import("../src/infrastructure/clients/storage/asset-download.ts")
+  const { createRouterTransport, ConnectError, Code } = await import("@connectrpc/connect")
+  const { StorageService } = await import("../src/generated/storage-connect/kokoro/storage/v3/storage_pb.ts")
+  let calls = 0
+  const transport = createRouterTransport((router) =>
+    router.service(StorageService, {
+      getAsset() {
+        calls++
+        throw new ConnectError("private policy details", Code.PermissionDenied)
+      },
+    }),
+  )
+  const context = { tenantId: "tenant-1", subjectId: "subject-1", requestId: "request-1", scope: { kind: "personal", id: "subject-1" } }
+  const client = new AssetDownloadClient(storage, context, transport)
+  await assert.rejects(
+    client.download("asset-1", new AbortController().signal, performance.now() + 1000),
+    (error) => error.status === 404 && error.code === "library_file_not_found",
+  )
+  assert.equal(calls, 1)
+  assert.throws(
+    () => new AssetDownloadClient(storage, { ...context, scope: { kind: "personal", id: "other" } }, transport),
+    (error) => error.status === 503,
+  )
+  assert.equal(calls, 1)
+})
+
+test("ordinary ASSET cancellation cleanup shares the original deadline and cannot turn expiry into a malformed-response error", async () => {
+  const { readAssetBytes } = await import("../src/infrastructure/clients/storage/asset-download-transfer.ts")
+  let release,
+    cancels = 0
+  const held = new Promise((resolve) => {
+    release = resolve
+  })
+  const started = performance.now()
+  try {
+    await assert.rejects(
+      readAssetBytes(
+        { url: "http://objects.test/file", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 60000 },
+        bytes.length,
+        sha,
+        "http://objects.test",
+        new AbortController().signal,
+        started + 100,
+        async () => ({
+          status: 502,
+          body: {
+            cancel() {
+              cancels++
+              return held
+            },
+          },
+        }),
+      ),
+      (error) => error.status === 503 && error.code === "storage_unavailable",
+    )
+    assert.equal(cancels, 1)
+    assert.ok(performance.now() - started < 500)
+  } finally {
+    release()
+    await held
   }
 })

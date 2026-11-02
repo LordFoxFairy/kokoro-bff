@@ -114,3 +114,60 @@ export async function readProjectExecutionBinding(database: PostgresBffDatabase,
   if (digest !== input.selectionDigest) return null
   return { projectId: row.execution_project_ref, selectedSkillSourceRefs: refs, selectionDigest: digest }
 }
+
+/** Durable submitter lookup also serves recovery after a soft deletion, move or terminal Run. */
+export async function readSubmittedAgentRun(
+  database: PostgresBffDatabase,
+  input: import("../../application/ports/submitted-agent-run-reader.js").SubmittedAgentRunInput,
+): Promise<import("../../application/ports/submitted-agent-run-reader.js").SubmittedAgentRun | null> {
+  input.signal?.throwIfAborted()
+  const result = await bindingQuery<{
+    subject_id: string
+    actor_id: string
+    conversation_id: string
+    execution_project_ref: string | null
+    request_id: string
+    user_message_id: string
+    payload: unknown
+    content: string
+    selected_skill_source_refs: unknown
+  }>(
+    database,
+    {
+      text: `SELECT dispatch.subject_id,dispatch.actor_id,dispatch.conversation_id,dispatch.execution_project_ref,
+        dispatch.request_id,dispatch.user_message_id,dispatch.payload,message.content,message.selected_skill_source_refs
+      FROM bff_agent_dispatch_outbox AS dispatch
+      JOIN bff_conversation AS conversation
+        ON conversation.tenant_id=dispatch.tenant_id AND conversation.conversation_id=dispatch.conversation_id
+       AND conversation.owner_id=dispatch.subject_id
+      JOIN bff_message AS message
+        ON message.tenant_id=dispatch.tenant_id AND message.conversation_id=dispatch.conversation_id
+       AND message.message_id=dispatch.user_message_id AND message.run_id=dispatch.run_id AND message.role='user'
+      WHERE dispatch.tenant_id=$1 AND dispatch.run_id=$2`,
+      values: [input.tenantId, input.runId],
+    },
+    input.signal,
+  )
+  input.signal?.throwIfAborted()
+  if (result.rows.length !== 1) return null
+  const row = result.rows[0]!
+  if (row.subject_id !== row.actor_id) return null
+  let payload: ReturnType<typeof parseAgentDispatchPayload>
+  try {
+    payload = parseAgentDispatchPayload(row.payload)
+  } catch {
+    return null
+  }
+  if (
+    payload.launch.run_id !== input.runId ||
+    payload.launch.session_id !== row.conversation_id ||
+    payload.launch.request_id !== row.request_id ||
+    payload.launch.message_id !== row.user_message_id ||
+    payload.launch.project_ref !== row.execution_project_ref ||
+    payload.launch.content !== row.content
+  )
+    return null
+  const selection = parseSkillSourceSelection(row.selected_skill_source_refs)
+  if (selection === null || JSON.stringify(selection) !== JSON.stringify(payload.launch.selected_skill_source_refs)) return null
+  return { tenantId: input.tenantId, userId: row.subject_id, runId: input.runId, conversationId: row.conversation_id }
+}

@@ -52,3 +52,14 @@ describe("outer mutation idempotency", () => {
     assert.notEqual(compact, drifted)
   })
 })
+
+it("Custom API empty choice preserves the original outer receipt fingerprint while exact versions change it", () => {
+  const req = { ...request("/v1/sessions/session-a/messages"), method: "POST" }
+  const fingerprint = (body) => mutationFingerprint(req, ["sessions", "session-a", "messages"], body, Buffer.from(JSON.stringify(body)))
+  const original = fingerprint({ content: "hello" })
+  assert.equal(fingerprint({ content: "hello", selected_custom_api_profiles: [] }), original)
+  const selected = { content: "hello", selected_custom_api_profiles: [{ profile_id: "api-one", expected_state_version: 3 }] }
+  assert.notEqual(fingerprint(selected), original)
+  assert.notEqual(fingerprint({ ...selected, selected_custom_api_profiles: [{ profile_id: "api-one", expected_state_version: 4 }] }), fingerprint(selected))
+  assert.equal(fingerprint({ content: "hello", selected_custom_api_profiles: [{ expected_state_version: 3, profile_id: "api-one" }] }), fingerprint(selected))
+})

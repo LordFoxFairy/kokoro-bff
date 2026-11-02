@@ -1,0 +1,44 @@
+{
+  "profile": "custom-api-v1",
+  "version": "1.0.0",
+  "visibility": "internal-owner",
+  "owner": "Platform/CustomApi",
+  "service": "kokoro.platform.v1.ProductCustomApiService",
+  "aggregate": "CustomApiProfile",
+  "operations": [
+    "CreatePersonalCustomApi",
+    "GetPersonalCustomApi",
+    "ListPersonalCustomApis",
+    "UpdatePersonalCustomApi",
+    "DeletePersonalCustomApi"
+  ],
+  "persistence": {
+    "profile": "kokoro_platform.custom_api_profile",
+    "environment_secrets": "kokoro_platform.custom_api_environment_secret",
+    "writer": "Platform modules/mcp/custom-api",
+    "concurrency": "profile and environment state_version CAS"
+  },
+  "secret_projection": "environment values are write-only and never appear in profile, receipt, event, error, or log projections",
+  "excluded": [
+    "mcp",
+    "oauth",
+    "url",
+    "execution",
+    "agent",
+    "browser_adapter"
+  ],
+  "parent": {
+    "protoSha256": "9e9cc72e1bf9c9df4e8c2210e23214b9fd5bebc552f7a35ffb28387363e84df2",
+    "descriptorSha256": "75203f135ab9127c8c4d79486236a29e0c1f2271fe4667c926599e9f070ed16b",
+    "generatedSourceSha256": "9c30195b8a56f93689ef23beec8dda4c07d3e4b723e074807dfedef9bec7c58a"
+  },
+  "current": {
+    "protoSha256": "c7690b9b054373ae23aabe5840a507780ce5f8c7194213b50139d97cd061d218",
+    "descriptorSha256": "e510b66fee4df8913b9803bda2796205fc9412c37d952540c3647e4af70a7318",
+    "generatedSourceSha256": "4da2f518b42a0bec900843e041c6857d42116c752cbe9e8c044889fd7de26813",
+    "counts": {
+      "rpc": 97,
+      "command": 53
+    }
+  }
+}

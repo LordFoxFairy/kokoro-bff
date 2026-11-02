@@ -78,7 +78,7 @@ it("accepts owner once timestamp serialization but rejects a different full-prec
   }
 })
 
-it("freezes explicit rule selections and once instant in outbox4 without old-format decoding", async () => {
+it("freezes explicit rule selections and once instant in outbox5 without old-format decoding", async () => {
   const { tsImport } = await import("tsx/esm/api")
   const {
     buildScheduledTaskOutboxPayload: build,
@@ -87,6 +87,8 @@ it("freezes explicit rule selections and once instant in outbox4 without old-for
   } = await tsImport("../src/domain/scheduled-task/outbox.ts", import.meta.url)
   const lineage = { tenantId: "tenant", actorId: "owner", requestId: "request", idempotencyKey: "create-calendar" }
   const base = {
+    triggerKind: "calendar" as const,
+    triggerEpoch: "1",
     taskId: "scheduled_calendar",
     ownerId: "owner",
     title: "Calendar",
@@ -101,7 +103,7 @@ it("freezes explicit rule selections and once instant in outbox4 without old-for
     revision: 1,
   }
   const payload = build("register", lineage, base)
-  assert.equal(payload.schema_version, 4)
+  assert.equal(payload.schema_version, 5)
   assert.deepEqual(payload.task.weekdays, [0, 2, 6])
   assert.equal(Object.hasOwn(payload.task, "recurrence_anchor_at"), false)
   assert.deepEqual(internal(parse(payload).task), base)
@@ -116,6 +118,8 @@ it("freezes explicit rule selections and once instant in outbox4 without old-for
 })
 
 const task = {
+  triggerKind: "calendar" as const,
+  triggerEpoch: "1",
   taskId: "scheduled_fixture",
   projectId: "project_fixture",
   ownerId: "actor_fixture",
@@ -209,7 +213,7 @@ describe("ScheduledTask durable outbox", () => {
   it("builds a versioned scheduler command with complete lineage and stable identity", () => {
     const payload = buildScheduledTaskOutboxPayload("replace", lineage, task)
     assert.deepEqual(payload, {
-      schema_version: 4,
+      schema_version: 5,
       command_type: "scheduler.replace",
       lineage: {
         tenant_id: "tenant_fixture",
@@ -218,6 +222,8 @@ describe("ScheduledTask durable outbox", () => {
         idempotency_key: "schedule-fixture",
       },
       task: {
+        trigger_kind: "calendar",
+        trigger_epoch: "1",
         task_id: "scheduled_fixture",
         project_id: "project_fixture",
         owner_id: "actor_fixture",
@@ -350,3 +356,16 @@ describe("ScheduledTask durable outbox", () => {
     }
   })
 })
+
+for (const frequency of ["daily", "weekly", "monthly"] as const) {
+  it(`rejects own run_at on non-once ${frequency} outbox payload`, async () => {
+    const { tsImport } = await import("tsx/esm/api")
+    const { buildScheduledTaskOutboxPayload: build, parseScheduledTaskOutboxPayload: parse } = await tsImport(
+      "../src/domain/scheduled-task/outbox.ts",
+      import.meta.url,
+    )
+    const rule = { ...task, frequency, ...(frequency === "weekly" ? { weekdays: [1] } : {}), ...(frequency === "monthly" ? { monthDays: [1] } : {}) }
+    const payload = build("register", lineage, rule)
+    assert.throws(() => parse({ ...payload, task: { ...payload.task, run_at: "2030-01-01T08:00:00.000Z" } }), /INVALID/u)
+  })
+}

@@ -9,6 +9,10 @@ import {
 } from "../../generated/iam-http/zod.gen.js"
 import { strictParseRawJson } from "../raw-json.js"
 
+// Reuse the pinned IAM component; callers must preserve raw-vs-parsed exactness.
+export const skillPublisherProfileSchema = zResolveTenantPublisherProfilesResponse.shape.data.shape.items.element
+export type SkillPublisherProfile = import("zod").infer<typeof skillPublisherProfileSchema>
+
 /** One fresh bounded IAM batch per product page; no display-name inference or cache. */
 export class IamPublisherProfileClient {
   constructor(

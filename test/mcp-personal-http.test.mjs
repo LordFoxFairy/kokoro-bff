@@ -507,3 +507,151 @@ test("post-owner action transport failure does not leak the owner response", asy
     await f.close()
   }
 })
+
+test("all five icon routes use existing browser admission, original key and body; Get performs only a read", async () => {
+  const calls = []
+  const intent = "12345678-1234-1234-1234-123456789abc"
+  const f = await fixture(true, {
+    mcpPersonalClient: {
+      read: async () => {
+        throw Error("not connector read")
+      },
+      icon: async (operation, input) => {
+        calls.push({ operation, input })
+        return { intent: { intent_id: intent } }
+      },
+    },
+  })
+  try {
+    for (const [method, suffix, body, operation] of [
+      ["POST", "/uploads", { filename: "icon.png", mime_type: "image/png", content_sha256: "a".repeat(64), size_bytes: "1024" }, "beginIcon"],
+      ["POST", "/import", { image_url: "https://images.example/icon.png" }, "importIcon"],
+      ["GET", `/${intent}`, undefined, "getIcon"],
+      ["POST", `/${intent}/complete`, { expected_state_version: "1", source_version_id: "exact-version" }, "completeIcon"],
+      ["POST", `/${intent}/cancel`, { expected_state_version: "2" }, "cancelIcon"],
+    ]) {
+      const response = await fetch(`${f.origin}/browser/v1/mcp/icons${suffix}`, {
+        method,
+        headers: { ...headers, ...(body === undefined ? {} : { "content-type": "application/json", "idempotency-key": "original-icon-key" }) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
+      assert.equal(response.status, 200, operation)
+      assert.equal(response.headers.get("cache-control"), "no-store")
+      await response.arrayBuffer()
+      const last = calls.at(-1)
+      assert.equal(last.operation, operation)
+      assert.equal(last.input.tenant, "tenant-server")
+      assert.equal(last.input.subject, "human-one")
+      assert.equal(last.input.commandId, body === undefined ? undefined : "original-icon-key")
+    }
+    for (const [suffix, body] of [
+      [`/${intent}/complete`, { expected_state_version: 2, source_version_id: "v" }],
+      ["/uploads", { filename: "i.png", mime_type: "image/png", content_sha256: "a".repeat(64), size_bytes: "1", subject_id: "other" }],
+    ]) {
+      const response = await fetch(`${f.origin}/browser/v1/mcp/icons${suffix}`, {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json", "idempotency-key": "invalid-key" },
+        body: JSON.stringify(body),
+      })
+      assert.equal(response.status, 400)
+      await response.arrayBuffer()
+    }
+    assert.equal(calls.length, 5)
+  } finally {
+    await f.close()
+  }
+})
+
+test("denied icon mutation reaches no Platform command", async () => {
+  let count = 0
+  const f = await fixture(false, {
+    mcpPersonalClient: {
+      read: async () => ({}),
+      icon: async () => {
+        count++
+        return {}
+      },
+    },
+  })
+  try {
+    const response = await fetch(`${f.origin}/browser/v1/mcp/icons/uploads`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "denied-key" },
+      body: JSON.stringify({ filename: "icon.png", mime_type: "image/png", content_sha256: "a".repeat(64), size_bytes: "1024" }),
+    })
+    assert.equal(response.status, 403)
+    await response.arrayBuffer()
+    assert.equal(count, 0)
+  } finally {
+    await f.close()
+  }
+})
+
+for (const stage of ["public-pre-owner", "private-post-owner"]) {
+  for (const retryAfter of ["1", "86400", undefined, "0", "1.5", "86401", "tomorrow"]) {
+    test(`MCP429 ${stage} preserves only a bounded action delay: ${retryAfter ?? "absent"}`, async () => {
+      let checks = 0
+      let ownerReads = 0
+      const f = await fixture(true, {
+        check: async () => {
+          checks++
+          assert.equal(ownerReads, stage === "private-post-owner" ? 1 : 0)
+          return {
+            ok: false,
+            status: 429,
+            code: "session_rate_limited",
+            ...(retryAfter === undefined ? {} : { retryAfter }),
+          }
+        },
+        mcpPersonalClient: {
+          read: async () => {
+            ownerReads++
+            return { items: [connector], next_cursor: null }
+          },
+        },
+      })
+      try {
+        const response = await fetch(`${f.origin}${stage === "public-pre-owner" ? "/v1/mcp/connections" : "/browser/v1/mcp/connectors"}`, { headers })
+        assert.equal(response.status, 429)
+        assert.equal(response.headers.get("retry-after"), retryAfter === "1" || retryAfter === "86400" ? retryAfter : null)
+        assert.equal(response.headers.get("cache-control"), "no-store")
+        assert.equal(response.headers.get("x-request-id"), headers["x-request-id"])
+        const body = await response.json()
+        assert.deepEqual(Object.keys(body), ["error"])
+        assert.deepEqual(Object.keys(body.error).sort(), ["code", "message", "retryable"])
+        assert.equal(body.error.code, "session_rate_limited")
+        assert.equal(body.error.retryable, true)
+        assert.equal(checks, 1)
+        assert.equal(ownerReads, stage === "private-post-owner" ? 1 : 0)
+      } finally {
+        await f.close()
+      }
+    })
+  }
+  test(`MCP429 ${stage} never adds a delay to a non429 rejection`, async () => {
+    let checks = 0
+    const f = await fixture(true, {
+      check: async () => {
+        checks++
+        return {
+          ok: false,
+          status: 403,
+          code: "session_forbidden",
+          retryAfter: "60",
+        }
+      },
+      mcpPersonalClient: {
+        read: async () => ({ items: [connector], next_cursor: null }),
+      },
+    })
+    try {
+      const response = await fetch(`${f.origin}${stage === "public-pre-owner" ? "/v1/mcp/connections" : "/browser/v1/mcp/connectors"}`, { headers })
+      assert.equal(response.status, 403)
+      assert.equal(response.headers.get("retry-after"), null)
+      assert.equal((await response.json()).error.code, "session_forbidden")
+      assert.equal(checks, 1)
+    } finally {
+      await f.close()
+    }
+  })
+}

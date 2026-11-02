@@ -1,3 +1,5 @@
+import { setTimeout as sleep } from "node:timers/promises"
+import { isRecord } from "../../domain/json.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
 import { resumeControlFailure } from "../../application/chat-run-control.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
@@ -32,6 +34,7 @@ export async function callAgent(
   body: Buffer | undefined,
   identity: RequestContext,
   assertionRef: string,
+  timeoutBudgetMs?: number,
 ): Promise<{ status: number; body: unknown }> {
   const upstream = await proxyUpstream(
     config,
@@ -42,6 +45,9 @@ export async function callAgent(
     incomingHeaders(request),
     body,
     agentIdentityHeaders(identity.identity, assertionRef),
+    "kokoro-bff",
+    config.upstreamSecret,
+    timeoutBudgetMs,
   )
   return normalizeUpstreamResponse(upstream, requestId)
 }
@@ -275,8 +281,79 @@ export async function liveAgentSession(
         return true
       }
     }
+    // A durable BFF queued head can precede Agent run creation. Only its
+    // explicit pre-admission run_not_found may use this bounded startup bridge.
+    // Every delivery keeps the original command and only an actual Agent ACK
+    // is accepted; no local cancellation terminal or receipt is invented.
+    const cancelWindow = new AbortController()
+    const deadlineAt = performance.now() + config.upstreamTimeoutMs
+    const cancel = () => {
+      if (!response.writableEnded) cancelWindow.abort(new Error("control_caller_cancelled"))
+    }
+    const timer = control.kind === "run.cancel" ? setTimeout(() => cancelWindow.abort(new Error("control_deadline")), config.upstreamTimeoutMs) : undefined
+    if (control.kind === "run.cancel") {
+      request.once("aborted", cancel)
+      response.once("close", cancel)
+      if (request.aborted || response.destroyed) cancel()
+    }
+    const currentHead = async (requireQueued: boolean): Promise<boolean> => {
+      if (chat === null || cancelWindow.signal.aborted) return false
+      const readWindow = new AbortController()
+      try {
+        const state = await Promise.race([
+          chat.readRunControlState(context.identity.namespace, context.identity.userId, sessionId, authorization.projectRef),
+          sleep(Math.max(1, Math.ceil(deadlineAt - performance.now())), undefined, { signal: AbortSignal.any([cancelWindow.signal, readWindow.signal]) }).then(
+            () => {
+              throw new Error("control_deadline")
+            },
+          ),
+        ])
+        cancelWindow.signal.throwIfAborted()
+        return state?.executionHead?.runId === runId && (!requireQueued || state.executionHead.state === "queued")
+      } finally {
+        readWindow.abort()
+      }
+    }
     try {
-      const result = await callAgent(config, baseUrl, `/v1/runs/${encodeURIComponent(runId)}/control`, "POST", context.requestId, request, Buffer.from(JSON.stringify(control)), context, assertion)
+      const body = Buffer.from(JSON.stringify(control))
+      let result = await callAgent(
+        config,
+        baseUrl,
+        `/v1/runs/${encodeURIComponent(runId)}/control`,
+        "POST",
+        context.requestId,
+        request,
+        body,
+        context,
+        assertion,
+      )
+      let startupQualified = false
+      for (let attempt = 1; control.kind === "run.cancel" && attempt < 8; attempt++) {
+        if (result.status !== 404 || !isRecord(result.body) || !isRecord(result.body.error) || result.body.error.code !== "run_not_found" || chat === null)
+          break
+        cancelWindow.signal.throwIfAborted()
+        if (!(await currentHead(!startupQualified))) break
+        startupQualified = true
+        const delay = Math.min(50 * 2 ** (attempt - 1), 500)
+        if (deadlineAt - performance.now() <= delay) break
+        await sleep(delay, undefined, { signal: cancelWindow.signal })
+        if (!(await currentHead(false))) break
+        const remaining = Math.floor(deadlineAt - performance.now())
+        if (remaining < 1) break
+        result = await callAgent(
+          config,
+          baseUrl,
+          `/v1/runs/${encodeURIComponent(runId)}/control`,
+          "POST",
+          context.requestId,
+          request,
+          body,
+          context,
+          assertion,
+          remaining,
+        )
+      }
+      if (control.kind === "run.cancel") cancelWindow.signal.throwIfAborted()
       if (result.status >= 400) {
         await sendAgentFailure(response, result, context, idempotency, mutation)
         return true
@@ -294,7 +371,12 @@ export async function liveAgentSession(
       }
       reply(response, 202, ok({ run_id: runId, ...receipt }, context.requestId), context, idempotency, mutation)
     } catch {
-      reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
+      if (!request.aborted && !response.destroyed && !response.writableEnded)
+        reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
+    } finally {
+      clearTimeout(timer)
+      request.removeListener("aborted", cancel)
+      response.removeListener("close", cancel)
     }
     return true
   }

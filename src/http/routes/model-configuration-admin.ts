@@ -10,7 +10,8 @@ import {
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import { headerString, queryOf, requestContentType } from "../request.js"
 import { send } from "../response.js"
-import { rawHeaderCount, readBodyBeforeDeadline, page, errorMessage } from "./model-routing-admin.js"
+import { page, errorMessage } from "./model-routing-admin.js"
+import { rawHeaderCount, readBodyBeforeDeadline } from "../request-body.js"
 
 export async function liveModelConfigurationAdmin(
   request: IncomingMessage,

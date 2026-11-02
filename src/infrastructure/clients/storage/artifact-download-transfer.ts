@@ -2,6 +2,8 @@ import { createHash } from "node:crypto"
 import { mkdtemp, open, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { performance } from "node:perf_hooks"
+import { withinAssetDownloadBudget } from "../../../application/asset-download-budget.js"
 import { ProjectResourceError } from "../../../application/project-resource.error.js"
 
 export type ArtifactDownloadReference = Readonly<{ url: string; method: string; requiredHeaders: Record<string, string>; expiresAt: number }>
@@ -12,7 +14,7 @@ export type DeadlineClock = Readonly<{
 }>
 export type ArtifactSpoolTimings = Readonly<{ totalMs: number; idleMs: number; clock?: DeadlineClock }>
 
-const MAX_ARTIFACT_BYTES = 1_073_741_824
+export const MAX_VERIFIED_DOWNLOAD_BYTES = 1_073_741_824
 const MAX_ACTIVE_SPOOLS = 2
 const DEFAULT_TIMINGS: ArtifactSpoolTimings = { totalMs: 7 * 60_000, idleMs: 45_000 }
 const SYSTEM_CLOCK: DeadlineClock = { schedule: (callback, milliseconds) => setTimeout(callback, milliseconds), clear: (timer) => clearTimeout(timer) }
@@ -59,7 +61,7 @@ export async function spoolVerifiedArtifact(
     reference.expiresAt > Date.now() + 301_000 ||
     !Number.isSafeInteger(expectedSize) ||
     expectedSize < 0 ||
-    expectedSize > MAX_ARTIFACT_BYTES ||
+    expectedSize > MAX_VERIFIED_DOWNLOAD_BYTES ||
     !/^[0-9a-f]{64}$/u.test(expectedSha256)
   )
     throw new ProjectResourceError("storage_response_invalid", 502)
@@ -100,9 +102,20 @@ export async function spoolVerifiedArtifact(
   }
   try {
     transferSignal.throwIfAborted()
-    const response = await fetcher(url, { method: "GET", redirect: "manual", credentials: "omit", signal: transferSignal })
-    transferSignal.throwIfAborted()
+    const response = await withinAssetDownloadBudget(
+      transferSignal,
+      performance.now() + timings.totalMs,
+      () => fetcher(url, { method: "GET", redirect: "manual", credentials: "omit", signal: transferSignal }),
+      (late) => {
+        try {
+          void late.body?.cancel().catch(() => undefined)
+        } catch {
+          // A late response is still owned here, but must never retain a spool slot.
+        }
+      },
+    )
     body = response.body
+    transferSignal.throwIfAborted()
     if (response.status !== 200)
       throw new ProjectResourceError(
         response.status >= 500 ? "storage_unavailable" : "storage_response_invalid",
@@ -130,7 +143,7 @@ export async function spoolVerifiedArtifact(
         transferSignal.throwIfAborted()
         if (done) break
         length += value.byteLength
-        if (length > expectedSize || length > MAX_ARTIFACT_BYTES) throw new ProjectResourceError("storage_response_invalid", 502)
+        if (length > expectedSize || length > MAX_VERIFIED_DOWNLOAD_BYTES) throw new ProjectResourceError("storage_response_invalid", 502)
         digest.update(value)
         let written = 0
         while (written < value.byteLength) {

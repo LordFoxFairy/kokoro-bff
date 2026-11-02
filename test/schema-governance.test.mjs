@@ -17,6 +17,8 @@ const SAFE_FAILURE_CODES = [
   "model_unavailable",
   "dependency_unavailable",
   "model_access_denied",
+  "model_settlement_pending",
+  "context_window_exceeded",
 ]
 const RETRYABLE_FAILURE_CODES = ["model_unavailable", "dependency_unavailable"]
 
@@ -531,4 +533,27 @@ test("R353 canonical schema isolates typed shares and durable usage from frame G
   assert.match(canonical, /uq_bff_share_active_skill_revision/u)
   assert.match(canonical, /ck_bff_skill_usage_coverage_checkpoint/u)
   assert.doesNotMatch(canonical.match(/CREATE TABLE IF NOT EXISTS bff_skill_usage_coverage \([\s\S]*?\n\);/u)?.[0] ?? "", /started_at|session_high_watermark/iu)
+})
+
+test("B08 exact failure SQL inverse preserves historical oracles while every current DDL shape retains the new CHECK", async () => {
+  const { restoreContextWindowFailureSchema } = await import("../scripts/task-b-bff-integration-public-contract.mjs")
+  const { messageFinalAnswerDefinitions } = await import("../scripts/message-final-answer-schema.mjs")
+  const { messageRegenerationDefinitions } = await import("../scripts/message-regeneration-schema-catalog.mjs")
+  const { messagePartsSchemaDefinitions } = await import("../scripts/evolve-message-parts-schema.mjs")
+  const schema = await loadCanonicalSchema()
+  const final = messageFinalAnswerDefinitions(schema)
+  const regeneration = messageRegenerationDefinitions(schema)
+  const parts = messagePartsSchemaDefinitions(schema)
+  for (const source of [schema, final.current, final.prior, regeneration.prior, parts.oldTable]) {
+    assert.ok(source.includes("'context_window_exceeded'"), "current generated DDL must retain the legitimate code")
+    assert.equal(restoreContextWindowFailureSchema(source), source.replace(", 'context_window_exceeded'", ""))
+    for (const drift of [
+      source + "\n",
+      source.replace("'context_window_exceeded'", "'context_window_exceeded', 'unknown_failure'"),
+      source.replace("AND role = 'assistant'", "AND role <> ''"),
+    ])
+      assert.throws(() => restoreContextWindowFailureSchema(drift), /drift/)
+  }
+  for (const make of [messageFinalAnswerDefinitions, messageRegenerationDefinitions, messagePartsSchemaDefinitions])
+    assert.throws(() => make(schema.replace("'context_window_exceeded'", "'context_window_exceeded', 'unknown_failure'")), /drift|invalid_schema/)
 })

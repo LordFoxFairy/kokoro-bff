@@ -1,3 +1,6 @@
+import { restoreIntegrationParent, restoreIntegrationBaseline } from "./task-b-bff-integration-public-contract.mjs"
+import { inspectRssTriggerContract } from "./rss-trigger-public-contract.mjs"
+import { inspectBillingCreditAccountContract } from "./billing-credit-account-public-contract.mjs"
 import {
   inspectModelConfigurationContract,
   restorePublic21ModelConfigurationContract,
@@ -3261,7 +3264,14 @@ async function main(): Promise<void> {
   }
   const baseline = Reflect.get(parsedBaseline, "operations") as BaselineOperation[]
   const agentControlSnapshot: unknown = JSON.parse(agentControlSnapshotDocument)
-  const errors = [...inspectBffOpenApi(source, baseline), ...inspectAgentControlSnapshot(agentControlSnapshot)]
+  const rssParent = restoreIntegrationParent(source, "rss")
+  const rssBaseline = restoreIntegrationBaseline(baseline, "rss")
+  const errors = [
+    ...inspectRssTriggerContract(rssParent, rssBaseline),
+    ...inspectBillingCreditAccountContract(rssParent, rssBaseline),
+    ...inspectBffOpenApi(source, baseline),
+    ...inspectAgentControlSnapshot(agentControlSnapshot),
+  ]
   if (errors.length > 0) {
     console.error(errors.join("\n"))
     process.exitCode = 1
