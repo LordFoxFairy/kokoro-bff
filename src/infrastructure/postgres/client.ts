@@ -1,3 +1,4 @@
+import type { OnApplicationShutdown } from "@nestjs/common"
 import { createHash } from "node:crypto"
 import { Pool } from "pg"
 import { createClient, type RedisClientType } from "redis"
@@ -5,10 +6,11 @@ import { assertBffPostgresUrl } from "../../config/runtime.js"
 
 export const AGUI_NOTIFICATION_DEADLINE_MS = 50
 
-export class PostgresBffDatabase {
+export class PostgresBffDatabase implements OnApplicationShutdown {
   public readonly pool: Pool
   public readonly redis: RedisClientType
   private connection: Promise<void> | null = null
+  private closePromise: Promise<void> | null = null
 
   public constructor(postgresUrl: string, redisUrl: string) {
     assertBffPostgresUrl(postgresUrl)
@@ -63,10 +65,35 @@ export class PostgresBffDatabase {
     await this.redis.ping()
   }
 
-  public async close(): Promise<void> {
-    await this.pool.end()
-    if (this.redis.isReady) await this.redis.quit()
-    else if (this.redis.isOpen) this.redis.destroy()
+  public close(): Promise<void> {
+    if (this.closePromise !== null) return this.closePromise
+    this.closePromise = (async (): Promise<void> => {
+      let failed = false
+      try {
+        await this.pool.end()
+      } catch {
+        failed = true
+      }
+      try {
+        if (this.redis.isReady) {
+          try {
+            await this.redis.close()
+          } catch {
+            failed = true
+            if (this.redis.isOpen) this.redis.destroy()
+          }
+        } else if (this.redis.isOpen) this.redis.destroy()
+      } catch {
+        failed = true
+      }
+      // Neither a later caller nor the Nest hook may retry a failed resource release.
+      if (failed) throw new Error("bff_database_shutdown_failed")
+    })()
+    return this.closePromise
+  }
+
+  public onApplicationShutdown(): Promise<void> {
+    return this.close()
   }
 
   public async notifyAgUiProjection(tenantId: string, sessionId: string, cursor: string | null): Promise<void> {
