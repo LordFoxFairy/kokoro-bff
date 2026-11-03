@@ -4,12 +4,16 @@ import test from "node:test"
 import { createBffServer } from "../dist/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
+
+const credentials = await fixtureIamCredentials("tenant-verified")
 
 const session = (id) => ({ session_id: id, created_at: "2026-10-01T01:02:03.000Z", expires_at: "2026-11-01T01:02:03.000Z" })
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer account-token",
+  cookie: "kokoro-issuer.session_token=account-token",
+  origin: "https://web.example.test",
   "x-kokoro-request-id": "account-http",
 }
 async function listen(server) {
@@ -53,6 +57,8 @@ async function fixture(t, body, options = {}) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-verified",
     iamBaseUrl: ownerUrl,
+    iamWebOrigin: "https://web.example.test",
+    ...credentials,
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: options.timeout ?? 1000,
@@ -77,7 +83,7 @@ async function fixture(t, body, options = {}) {
   return { base, seen, admission, ownerClosed: () => ownerClosed }
 }
 
-test("profile PATCH preserves exact name and CAS through Product bearer without BFF storage or receipt", async (t) => {
+test("profile PATCH preserves exact name and CAS through admitted actor without BFF storage or receipt", async (t) => {
   const { base, seen } = await fixture(t, { data: { subject: "user-one", name: "New 名" } })
   const response = await fetch(`${base}/v1/account/profile`, {
     method: "PATCH",
@@ -88,7 +94,10 @@ test("profile PATCH preserves exact name and CAS through Product bearer without 
   assert.deepEqual(await response.json(), { data: { subject: "user-one", name: "New 名" } })
   assert.equal(seen.length, 1)
   assert.equal(seen[0].path, "/internal/v1/account/profile")
-  assert.equal(seen[0].headers.authorization, "Bearer account-token")
+  assert.equal(seen[0].headers.authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+  assert.equal(seen[0].headers["x-kokoro-actor-id"], "user-one")
+  assert.equal(seen[0].headers.cookie, undefined)
+  assert.equal(seen[0].headers.origin, undefined)
   assert.equal(seen[0].headers["idempotency-key"], undefined)
 })
 
@@ -100,7 +109,10 @@ test("profile GET preserves the admitted subject and returns the owner projectio
   assert.equal(seen.length, 1)
   assert.equal(seen[0].method, "GET")
   assert.equal(seen[0].path, "/internal/v1/account/profile")
-  assert.equal(seen[0].headers.authorization, "Bearer account-token")
+  assert.equal(seen[0].headers.authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+  assert.equal(seen[0].headers["x-kokoro-actor-id"], "user-one")
+  assert.equal(seen[0].headers.cookie, undefined)
+  assert.equal(seen[0].headers.origin, undefined)
   assert.equal(seen[0].body, undefined)
   assert.equal(response.headers.get("cache-control"), "no-store")
 })
@@ -121,10 +133,13 @@ const patch = (base, body, extra = {}) =>
   fetch(`${base}/v1/account/profile`, { method: "PATCH", headers: { ...headers, "content-type": "application/json", ...extra }, body })
 test("anonymous and rejected Product admission never call owner and have plain errors", async (t) => {
   const { base, seen, admission } = await fixture(t)
-  for (const auth of ["", "Bearer denied"]) {
+  for (const [cookie, expected] of [
+    ["", 401],
+    ["kokoro-issuer.session_token=denied", 403],
+  ]) {
     admission.deny("denied", { ok: false, status: 403, code: "session_forbidden" })
-    const r = await patch(base, JSON.stringify({ name: "New", expected_name: "Old" }), { authorization: auth })
-    assert.ok([401, 403].includes(r.status))
+    const r = await patch(base, JSON.stringify({ name: "New", expected_name: "Old" }), { cookie, authorization: "Bearer account-token" })
+    assert.equal(r.status, expected)
     const b = await r.json()
     assert.deepEqual(Object.keys(b), ["error"])
     assert.equal(r.headers.get("cache-control"), "no-store")
@@ -157,7 +172,13 @@ test("noncooperative admission consumes the single total budget and late accepta
   const r = await patch(base, JSON.stringify({ name: "New", expected_name: "Old" }))
   assert.equal(r.status, 503)
   assert.deepEqual(Object.keys(await r.json()), ["error"])
-  release({ ok: true, identity: { namespace: "tenant-verified", userId: "user-one" }, platformAdmin: false })
+  release({
+    ok: true,
+    identity: { namespace: "tenant-verified", userId: "user-one" },
+    platformAdmin: false,
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    setCookies: [],
+  })
   await new Promise((r) => setTimeout(r, 10))
   assert.equal(seen.length, 0)
 })
@@ -165,7 +186,13 @@ test("admission time is not renewed for owner body and no write is retried", asy
   const admission = {
     verify: async () => {
       await new Promise((r) => setTimeout(r, 400))
-      return { ok: true, identity: { namespace: "tenant-verified", userId: "user-one" }, platformAdmin: false }
+      return {
+        ok: true,
+        identity: { namespace: "tenant-verified", userId: "user-one" },
+        platformAdmin: false,
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        setCookies: [],
+      }
     },
   }
   const { base, seen, ownerClosed } = await fixture(t, () => ({ status: 200, hold: true }), { timeout: 1000, admission })

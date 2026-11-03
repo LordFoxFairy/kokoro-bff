@@ -4,7 +4,7 @@ import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
 import { AgentRunsMiddleware } from "./agent-runs.middleware.js"
 import type { SubmittedAgentRunReader } from "../../application/agent-runs/submitted-agent-run-reader.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
-import { AccountModule } from "../account/account.module.js"
+import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { ChatModule } from "../chat/chat.module.js"
 import { AgentDispatchModule } from "../agent-dispatch/agent-dispatch.module.js"
 import { ProjectAccessModule } from "../projects/project-access.module.js"
@@ -14,7 +14,7 @@ import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/ide
 import type { Pool } from "pg"
 
 @Module({
-  imports: [IamRelayModule, AccountModule, ChatModule, AgentDispatchModule, ProjectAccessModule, AguiModule, DatabaseModule],
+  imports: [IamRelayModule, AuthenticationModule, ChatModule, AgentDispatchModule, ProjectAccessModule, AguiModule, DatabaseModule],
   providers: [
     AgentRunsMiddleware,
     {

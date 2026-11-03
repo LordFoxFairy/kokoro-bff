@@ -1,3 +1,14 @@
+## 2026-11-03 原生认证边缘源码候选（未正常激活）
+
+当前普通私有请求只经受信Web/Admin服务envelope＋IAM issuer Cookie＋固定Origin进入唯一显式`AuthenticationModule`；官方`GET /iam/get-session`鲜读后，IAM `tenant/read`核当前Product资格。普通IAM业务只传专用服务身份＋真实actor，不传Cookie、Origin、登录Session或人类Bearer；独立公开API Key/OpenApp与执行／资金proof不变。
+
+- IAM固定`896405d146c4ff96f5f39d5c2ce1bc788d46c2c7`／internal0.20；配置snapshot Better Auth1.7.3与18个只读生成文件由现正常IAM生成命令校验。
+- `KOKORO_BFF_IAM_USER_CONTEXT_SERVICE_CREDENTIAL_FILE`用于17项普通私有业务；`KOKORO_BFF_IAM_ACCOUNT_SESSIONS_SERVICE_CREDENTIAL_FILE`只用于独立账户会话认证生命周期（服务身份 AND Cookie AND exact Origin）。旧ADMISSION配置不再读取。
+- browser-private `GET /browser/v1/auth/session`严格`refresh=true|false`，默认true供可写状态观察；RSC显式false。仅返回安全身份／真实expiry，request ID只在header；逐条安全Set-Cookie，不输出raw Session／set-auth-jwt。
+- 独立合同profile1.0.0及relay3.0.0已由Root提交`34c9f997`；浏览器raw get-session出口关闭。公开`/v1/me`三字段和原envelope保持。
+
+Root已在停写候选完成15个原integration suite、6个独立PG suite及schema补验，合423PASS/0SKIP，1087输入与DB inventory保持、自有资源清理通过；覆盖Message canonical重放/取消/未知提交、Project/Task锁与RR读取边界。Root完整format/check已通过（contract1347、default2369PASS/2条件SKIP；另有真实schema15补证），真实IAM认证relay亦通过；各项证据只覆盖对应停写候选与范围。Skill inspection owner组合及App/Admin浏览器G1仍待，不把PG或认证组件通过当Task A闭环；正常环境未切换。以下较早日期状态按历史读取。
+
 ## 2026-10-22 当前内部模型预算入口
 
 Agent使用独立 `KOKORO_BFF_AGENT_MODEL_ADMISSION_CREDENTIAL_FILE` 调用内部POST；BFF从原提交Run来源派生租户／付款用户，再单次调用固定Billing d345025／exp8。无浏览器token回取、用户grant、额外服务或本地receipt；internal1.1新增一操作、public23／186不变。最小运行配置／边界见三设计首节，完整验收与尚待Agent消费者／实际结算见 `docs/CURRENT.md`。以下较早切片仅历史。
@@ -71,7 +82,7 @@ Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / 
 | 能力                           | 当前事实                                                                                                                  |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | Public contract                | Public9 / 132 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata                                      |
-| User admission                 | 普通 `/v1/*` 使用 service envelope + 唯一 Bearer，并在线验证固定 IAM `0.10.0` contract；legacy identity headers 被忽略     |
+| User admission                 | 源码候选使用受信服务envelope＋原生issuer Cookie／固定Origin；官方Session鲜验与当前Product资格分离，普通业务走服务＋actor |
 | Project / ScheduledTask        | Live 使用本仓 PostgreSQL；Redis 用于 readiness/cache coordination                                                         |
 | Idempotency                    | business store 存在时有 PostgreSQL receipt；部分路径仍可能使用进程内 Map                                                  |
 | Chat / AG-UI                   | Live 先把 Agent source fact 与 AG-UI frame 原子投影到本仓 PostgreSQL，再从 ledger 输出 SSE                                |
@@ -135,12 +146,13 @@ pnpm dev
 x-kokoro-service: web-bff
 x-kokoro-internal-secret: TOKEN
 x-kokoro-request-id: REQUEST_ID
-Authorization: Bearer SESSION_TOKEN
+Cookie: kokoro-issuer.session_token=SESSION_COOKIE
+Origin: CONFIGURED_WEB_ORIGIN
 ```
 
 Live 必须配置 shared secret、`KOKORO_IAM_BASE_URL`、PostgreSQL 与 Redis。普通用户身份只采用 IAM 返回的
 `tenant_id`/`user_id`；legacy `x-kokoro-namespace`/`x-kokoro-principal-id`、Host、X-Domain 与 X-Forwarded-* 都不是身份
-authority。Bearer 只发送给 IAM，不转发给业务 owner。Share 与 runtime manifest 不要求或使用用户 Bearer；调用方额外携带
+authority。Cookie只进入IAM窄认证client及独立账户认证生命周期，不进入普通业务owner；普通IAM业务使用purpose固定的服务Bearer与受信actor。Share与runtime manifest不要求用户Cookie；调用方额外携带
 无关 Authorization header 不改变其 service-only 语义。完整规则见 [`docs/SECURITY.md`](./docs/SECURITY.md)。
 
 ## 质量门禁

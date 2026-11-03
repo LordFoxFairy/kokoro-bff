@@ -13,6 +13,7 @@ function scheduledTaskPath(request: IncomingMessage): string {
 }
 
 export function isScheduledTaskReadRequest(request: IncomingMessage): boolean {
+  if (request.method !== "GET") return false
   const path = scheduledTaskPath(request)
   return path === "/v1/scheduled-tasks" || /^\/v1\/scheduled-tasks\/[^/]+$/u.test(path)
 }
@@ -38,7 +39,7 @@ export async function handleScheduledTaskReadRequest(
   request.once("aborted", onAborted)
   response.once("close", onClosed)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal, response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true
@@ -51,7 +52,7 @@ export async function handleScheduledTaskReadRequest(
       admitted.context,
       reader,
       taskId,
-      async (signal) => authorizeUserRequest(request, config, admission, id, signal),
+      async (signal) => authorizeUserRequest(request, config, admission, id, signal, response),
       Math.max(0, deadlineAt - performance.now()),
     )
     return true

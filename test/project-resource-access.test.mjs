@@ -180,7 +180,17 @@ test("metadata route freshly checks owner and canonical Project before any Stora
   }
   assert.equal(calls.length, 0)
   const res = response()
-  await projectResourceReadRoute(request("GET", "/v1/projects/slug/resources/asset-1"), res, { storage }, context, "slug", "asset-1", false, store.projectService, factory)
+  await projectResourceReadRoute(
+    request("GET", "/v1/projects/slug/resources/asset-1"),
+    res,
+    { storage },
+    context,
+    "slug",
+    "asset-1",
+    false,
+    store.projectService,
+    factory,
+  )
   assert.equal(res.statusCode, 200)
   assert.equal(calls[0].projectId, "project-1")
   for (const suffix of ["?scope_id=forged", "?download=true"]) {
@@ -205,23 +215,37 @@ test("Projects feature handler owns item metadata reads without entering the leg
   const calls = []
   const req = request("GET", "/v1/projects/slug/resources/asset-1")
   req.headers = {
-    authorization: "Bearer user",
+    cookie: "kokoro-issuer.session_token=user",
+    origin: "https://web.example.test",
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "web-secret",
-    origin: "https://web.example",
   }
   req.rawHeaders = [
-    "Authorization", "Bearer user",
-    "X-Kokoro-Service", "web-bff",
-    "X-Kokoro-Internal-Secret", "web-secret",
-    "X-Kokoro-Request-Id", "request-1",
+    "Cookie",
+    "kokoro-issuer.session_token=user",
+    "Origin",
+    "https://web.example.test",
+    "X-Kokoro-Service",
+    "web-bff",
+    "X-Kokoro-Internal-Secret",
+    "web-secret",
+    "X-Kokoro-Request-Id",
+    "request-1",
   ]
   const res = response()
   const handled = await handleProjectResourceReadRequest(
     req,
     res,
-    { storage, tenantId: "tenant-1", sharedSecret: "web-secret" },
-    { verify: async ({ token }) => ({ ok: true, identity: { namespace: "tenant-1", userId: token === "user" ? "subject-1" : "other" } }) },
+    { storage, tenantId: "tenant-1", sharedSecret: "web-secret", iamWebOrigin: "https://web.example.test" },
+    {
+      verify: async ({ cookie }) => ({
+        ok: true,
+        identity: { namespace: "tenant-1", userId: cookie === "kokoro-issuer.session_token=user" ? "subject-1" : "other" },
+        platformAdmin: false,
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        setCookies: [],
+      }),
+    },
     { find: store.projectService.find },
     (_config, scope) => {
       calls.push(scope)
@@ -333,12 +357,7 @@ test("Project ownership cancellation wins over a store response which has not se
   const pending = new Promise((resolve) => {
     settle = resolve
   })
-  const result = currentResourceProject(
-    { find: () => pending },
-    { tenantId: "tenant-1", subjectId: "subject-1" },
-    "project-1",
-    abort.signal,
-  )
+  const result = currentResourceProject({ find: () => pending }, { tenantId: "tenant-1", subjectId: "subject-1" }, "project-1", abort.signal)
   abort.abort()
   await assert.rejects(result, (e) => e.status === 503)
   settle({ id: "project-1" })
@@ -421,6 +440,7 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
     )
     const cfg = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -433,7 +453,8 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
         readiness: async () => {},
         businessStore: store,
         sessionAdmission: {
-          verify: async ({ token }) => {
+          verify: async ({ cookie }) => {
+            const token = cookie.slice("kokoro-issuer.session_token=".length)
             admissions++
             return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "other" : "subject-1" } }
           },
@@ -441,7 +462,8 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
       }),
     )
     const headers = {
-      authorization: "Bearer user",
+      cookie: "kokoro-issuer.session_token=user",
+      origin: "https://web.example.test",
       "x-kokoro-service": "web-bff",
       "x-kokoro-internal-secret": "web-secret",
       "x-kokoro-request-id": "project-http",
@@ -456,7 +478,7 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
     assert.equal(result.status, 200)
     assert.deepEqual(Buffer.from(await result.arrayBuffer()), bytes)
     const before = calls.length
-    result = await fetch(bff + path, { headers: { ...headers, authorization: "Bearer other" } })
+    result = await fetch(bff + path, { headers: { ...headers, cookie: "kokoro-issuer.session_token=other", origin: "https://web.example.test" } })
     assert.equal(result.status, 404)
     assert.equal(calls.length, before)
     const remove = { method: "DELETE", headers: { ...headers, "idempotency-key": "original-key" } }

@@ -41,16 +41,18 @@ export async function handleMcpProjectPublicationRequest(
   response.setHeader("x-request-id", id)
   response.setHeader("cache-control", "no-store")
   startMcpRequestBudget(request)
-  const admitted = await authorizeUserRequest(request, config, provider.sessionAdmission, id, AbortSignal.timeout(10_000))
+  const admitted = await authorizeUserRequest(request, config, provider.sessionAdmission, id, AbortSignal.timeout(10_000), response)
   if (!admitted.ok) {
     response.statusCode = admitted.status
     response.setHeader("content-type", "application/json; charset=utf-8")
-    response.end(JSON.stringify({ error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status >= 500 } }))
+    response.end(
+      JSON.stringify({ error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status >= 500 } }),
+    )
     return true
   }
   const identity = { tenant: admitted.context.identity.namespace, subject: admitted.context.identity.userId, requestId: id }
   const currentAccess = async (projectIds: string[], action: "read" | "manage", signal: AbortSignal): Promise<void> => {
-    const fresh = await authorizeUserRequest(request, config, provider.sessionAdmission, id, signal)
+    const fresh = await authorizeUserRequest(request, config, provider.sessionAdmission, id, signal, response)
     if (!fresh.ok) throw accessError(fresh.status, "MCP project publication admission failed")
     if (fresh.context.identity.namespace !== identity.tenant || fresh.context.identity.userId !== identity.subject)
       throw new ConnectError("Project not found", Code.NotFound)

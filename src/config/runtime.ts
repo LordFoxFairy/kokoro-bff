@@ -69,7 +69,8 @@ export type BffConfig = {
   iamBaseUrl: string | null
   /** Native first-party session admission inputs; optional on transitional fixtures. */
   iamWebOrigin?: string | null
-  iamSessionAdmissionCredentialFile?: string | null
+  iamUserContextServiceCredentialFile?: string | null
+  iamAccountSessionsServiceCredentialFile?: string | null
   iamRelay?: Readonly<{
     webOrigin: string
     secureCookies: boolean
@@ -389,7 +390,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     tenantId: env.KOKORO_TENANT_ID?.trim() || null,
     iamBaseUrl: optionalOrigin(env.KOKORO_IAM_BASE_URL),
     iamWebOrigin,
-    iamSessionAdmissionCredentialFile: env.KOKORO_BFF_IAM_SESSION_ADMISSION_CREDENTIAL_FILE?.trim() || null,
+    iamUserContextServiceCredentialFile: env.KOKORO_BFF_IAM_USER_CONTEXT_SERVICE_CREDENTIAL_FILE?.trim() || null,
+    iamAccountSessionsServiceCredentialFile: env.KOKORO_BFF_IAM_ACCOUNT_SESSIONS_SERVICE_CREDENTIAL_FILE?.trim() || null,
     ...(relay === undefined ? {} : { iamRelay: relay }),
     ...(storageBase !== null && storageOrigin !== null && storageSecret !== null
       ? {

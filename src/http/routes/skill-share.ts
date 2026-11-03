@@ -14,7 +14,7 @@ import { send } from "../response.js"
 export async function skillShareRoute(
   request: IncomingMessage,
   response: ServerResponse,
-  context: RequestContext & { humanBearer?: string },
+  context: RequestContext,
   path: string[],
   repository: SkillShareRepository | undefined,
   client: SkillProductConnectClient | null,
@@ -37,7 +37,7 @@ export async function skillShareRoute(
     const readSummary = async (sourceRef: string) => {
       signal.throwIfAborted()
       if (!specification) throw new ConnectError("Share metadata unavailable", Code.Unavailable)
-      const raw = await specification.revisionSummary(sourceRef, { ...context, humanBearer: context.humanBearer ?? "" }, signal, deadlineAt)
+      const raw = await specification.revisionSummary(sourceRef, context, signal, deadlineAt)
       signal.throwIfAborted()
       const parsed = sharedSkillSummarySchema.safeParse(raw)
       if (!parsed.success || sourceRef !== `skill:${parsed.data.skill_id}`) throw new Error("skill_response_invalid")

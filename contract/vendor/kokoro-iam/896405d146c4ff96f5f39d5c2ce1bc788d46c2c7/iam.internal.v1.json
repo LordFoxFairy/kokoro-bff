@@ -2013,6 +2013,17 @@
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
           }
         ],
         "responses": {
@@ -2296,6 +2307,9 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
@@ -2306,7 +2320,25 @@
         "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-permission": "iam:oauth-operator",
         "x-kokoro-stability": "stable",
-        "x-kokoro-visibility": "internal-owner"
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/account/profile": {
@@ -2321,6 +2353,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -2548,6 +2591,9 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
@@ -2558,7 +2604,25 @@
         "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-permission": "iam:account-profile.write",
         "x-kokoro-stability": "stable",
-        "x-kokoro-visibility": "internal-owner"
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       },
       "patch": {
         "operationId": "updateAccountProfile",
@@ -2571,6 +2635,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -2896,6 +2971,9 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
@@ -2906,7 +2984,25 @@
         "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-permission": "iam:account-profile.write",
         "x-kokoro-stability": "stable",
-        "x-kokoro-visibility": "internal-owner"
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/account/sessions": {
@@ -2943,6 +3039,16 @@
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "Exact IAM_WEB_ORIGIN, including GET. Native authentication lifecycle CSRF boundary."
           }
         ],
         "responses": {
@@ -3277,7 +3383,8 @@
         },
         "security": [
           {
-            "internalBearer": []
+            "accountSessionServiceBearer": [],
+            "accountSessionIssuerCookie": []
           }
         ],
         "summary": "",
@@ -3288,7 +3395,23 @@
         "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-permission": "iam:account-session.read",
         "x-kokoro-stability": "stable",
-        "x-kokoro-visibility": "internal-owner"
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-identity-modes": [
+          "account_sessions"
+        ],
+        "x-kokoro-account-session-lifecycle": {
+          "caller": "kokoro-bff",
+          "credential_surface": "account_sessions",
+          "origin": "exact IAM_WEB_ORIGIN",
+          "native_read": {
+            "disableCookieCache": true,
+            "disableRefresh": true
+          },
+          "cursor_version": 2,
+          "old_cursor_status": 400,
+          "actor_header": "forbidden",
+          "fallback": false
+        }
       }
     },
     "/internal/v1/account/sessions/{session_id}": {
@@ -3314,6 +3437,16 @@
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "Exact IAM_WEB_ORIGIN, including GET. Native authentication lifecycle CSRF boundary."
           }
         ],
         "responses": {
@@ -3613,7 +3746,8 @@
         },
         "security": [
           {
-            "internalBearer": []
+            "accountSessionServiceBearer": [],
+            "accountSessionIssuerCookie": []
           }
         ],
         "summary": "",
@@ -3624,7 +3758,23 @@
         "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-permission": "iam:account-session.revoke",
         "x-kokoro-stability": "stable",
-        "x-kokoro-visibility": "internal-owner"
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-identity-modes": [
+          "account_sessions"
+        ],
+        "x-kokoro-account-session-lifecycle": {
+          "caller": "kokoro-bff",
+          "credential_surface": "account_sessions",
+          "origin": "exact IAM_WEB_ORIGIN",
+          "native_read": {
+            "disableCookieCache": true,
+            "disableRefresh": true
+          },
+          "cursor_version": 2,
+          "old_cursor_status": 400,
+          "actor_header": "forbidden",
+          "fallback": false
+        }
       }
     },
     "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/context": {
@@ -3791,16 +3941,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -3889,16 +4032,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -3987,16 +4123,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -4085,16 +4214,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -4183,16 +4305,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -4311,16 +4426,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -4386,16 +4494,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -4484,16 +4585,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -4658,16 +4752,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -4733,16 +4820,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -4808,16 +4888,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -4883,16 +4956,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -4958,16 +5024,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -5042,16 +5101,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -5117,16 +5169,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -5192,16 +5237,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -5338,16 +5376,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -5413,16 +5444,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -5488,16 +5512,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -5563,16 +5580,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -5638,16 +5648,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -5722,16 +5725,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -5797,16 +5793,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -5872,16 +5861,9 @@
                             "PAYLOAD_TOO_LARGE",
                             "RATE_LIMITED",
                             "DEPENDENCY_UNAVAILABLE",
-                            "native_session_request_invalid",
-                            "native_session_missing",
-                            "native_session_invalid",
-                            "native_session_revoked",
-                            "native_session_expired",
-                            "native_session_origin_forbidden",
-                            "native_session_csrf_failed",
-                            "native_session_rate_limited",
-                            "native_session_service_unavailable",
-                            "native_session_deadline_exceeded",
+                            "bff_user_context_service_unauthenticated",
+                            "account_session_service_unauthenticated",
+                            "account_session_invalid",
                             "INTERNAL"
                           ]
                         },
@@ -6293,284 +6275,6 @@
         "x-kokoro-idempotency": "none",
         "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-permission": "system:introspect",
-        "x-kokoro-stability": "stable",
-        "x-kokoro-visibility": "internal-owner"
-      }
-    },
-    "/internal/v1/native-session-admission/verify": {
-      "post": {
-        "operationId": "verifyNativeSession",
-        "parameters": [
-          {
-            "name": "x-request-id",
-            "in": "header",
-            "required": false,
-            "description": "Caller correlation identifier. Missing or invalid values are replaced by the service.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{1,128}$"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "subject_id": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "tenant_id": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "session_id": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "permissions": {
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "minLength": 1
-                          }
-                        },
-                        "session_expires_at": {
-                          "type": "string",
-                          "format": "date-time",
-                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
-                        }
-                      },
-                      "required": [
-                        "subject_id",
-                        "tenant_id",
-                        "session_id",
-                        "permissions",
-                        "session_expires_at"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "meta": {
-                      "type": "object",
-                      "properties": {
-                        "request_id": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "contract_version": {
-                          "type": "string",
-                          "enum": [
-                            "1.0.0"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "request_id",
-                        "contract_version"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "data",
-                    "meta"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            },
-            "headers": {
-              "x-request-id": {
-                "description": "Final service request identifier used for this response.",
-                "schema": {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Stable internal API error envelope.",
-            "headers": {
-              "Cache-Control": {
-                "description": "The admission decision must not be cached.",
-                "schema": {
-                  "type": "string",
-                  "example": "no-store"
-                }
-              },
-              "x-request-id": {
-                "description": "Final service request identifier used for this response.",
-                "schema": {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Stable internal API error envelope.",
-            "headers": {
-              "Cache-Control": {
-                "description": "The admission decision must not be cached.",
-                "schema": {
-                  "type": "string",
-                  "example": "no-store"
-                }
-              },
-              "x-request-id": {
-                "description": "Final service request identifier used for this response.",
-                "schema": {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Stable internal API error envelope.",
-            "headers": {
-              "Cache-Control": {
-                "description": "The admission decision must not be cached.",
-                "schema": {
-                  "type": "string",
-                  "example": "no-store"
-                }
-              },
-              "x-request-id": {
-                "description": "Final service request identifier used for this response.",
-                "schema": {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Stable internal API error envelope.",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds until the fixed-window quota resets.",
-                "schema": {
-                  "type": "string",
-                  "example": "60"
-                }
-              },
-              "Cache-Control": {
-                "description": "The admission decision must not be cached.",
-                "schema": {
-                  "type": "string",
-                  "example": "no-store"
-                }
-              },
-              "x-request-id": {
-                "description": "Final service request identifier used for this response.",
-                "schema": {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Stable internal API error envelope.",
-            "headers": {
-              "Cache-Control": {
-                "description": "The admission decision must not be cached.",
-                "schema": {
-                  "type": "string",
-                  "example": "no-store"
-                }
-              },
-              "x-request-id": {
-                "description": "Final service request identifier used for this response.",
-                "schema": {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "Stable internal API error envelope.",
-            "headers": {
-              "Cache-Control": {
-                "description": "The admission decision must not be cached.",
-                "schema": {
-                  "type": "string",
-                  "example": "no-store"
-                }
-              },
-              "x-request-id": {
-                "description": "Final service request identifier used for this response.",
-                "schema": {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "internalBearer": []
-          }
-        ],
-        "summary": "",
-        "tags": [
-          "Native Session Admission"
-        ],
-        "x-kokoro-idempotency": "none",
-        "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-stability": "stable",
         "x-kokoro-visibility": "internal-owner"
       }
@@ -7854,6 +7558,17 @@
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
           }
         ],
         "responses": {
@@ -8168,6 +7883,9 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
@@ -8178,7 +7896,25 @@
         "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-permission": "iam:member.read",
         "x-kokoro-stability": "stable",
-        "x-kokoro-visibility": "internal-owner"
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/tenants/{tenant_id}/members/me": {
@@ -8202,6 +7938,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -8414,12 +8161,33 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
         "tags": [
           "Members"
-        ]
+        ],
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/tenants/{tenant_id}/members/{member_id}": {
@@ -8452,6 +8220,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -8664,12 +8443,33 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
         "tags": [
           "Members"
-        ]
+        ],
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/tenants/{tenant_id}/members/{member_id}/roles": {
@@ -8702,6 +8502,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -8964,12 +8775,33 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
         "tags": [
           "Members"
-        ]
+        ],
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/tenants/{tenant_id}/roles": {
@@ -9014,6 +8846,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -9423,6 +9266,9 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
@@ -9433,7 +9279,25 @@
         "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-permission": "iam:role.read",
         "x-kokoro-stability": "stable",
-        "x-kokoro-visibility": "internal-owner"
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/tenants/{tenant_id}/roles/{role_id}": {
@@ -9466,6 +9330,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -9719,12 +9594,33 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
         "tags": [
           "Roles"
-        ]
+        ],
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       },
       "delete": {
         "operationId": "deleteTenantRole",
@@ -9755,6 +9651,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -9967,12 +9874,33 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
         "tags": [
           "Roles"
-        ]
+        ],
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/tenants/{tenant_id}/invitations": {
@@ -10017,6 +9945,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -10337,6 +10276,9 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
@@ -10347,7 +10289,25 @@
         "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-permission": "iam:invitation.read",
         "x-kokoro-stability": "stable",
-        "x-kokoro-visibility": "internal-owner"
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       },
       "post": {
         "operationId": "createTenantInvitation",
@@ -10369,6 +10329,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -10633,12 +10604,33 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
         "tags": [
           "Invitations"
-        ]
+        ],
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/tenants/{tenant_id}/invitations/{invitation_id}/resend": {
@@ -10671,6 +10663,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -10902,12 +10905,33 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
         "tags": [
           "Invitations"
-        ]
+        ],
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/tenants/{tenant_id}/invitations/{invitation_id}": {
@@ -10940,6 +10964,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -11152,12 +11187,33 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
         "tags": [
           "Invitations"
-        ]
+        ],
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/tenants/{tenant_id}/publisher-profiles/resolve": {
@@ -11182,6 +11238,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -11537,6 +11604,9 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
@@ -11547,7 +11617,25 @@
         "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-permission": "iam:publisher-profile.read",
         "x-kokoro-stability": "stable",
-        "x-kokoro-visibility": "internal-owner"
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/healthz": {
@@ -11833,6 +11921,17 @@
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             }
           }
         ],
@@ -12268,12 +12367,33 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
         "tags": [
           "Authorization"
-        ]
+        ],
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     },
     "/internal/v1/billing-authorizations/verify": {
@@ -13563,6 +13683,17 @@
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
+          },
+          {
+            "name": "x-kokoro-actor-id",
+            "in": "header",
+            "required": false,
+            "description": "Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
           }
         ],
         "requestBody": {
@@ -13893,6 +14024,9 @@
         "security": [
           {
             "internalBearer": []
+          },
+          {
+            "bffUserContextServiceBearer": []
           }
         ],
         "summary": "",
@@ -13903,14 +14037,32 @@
         "x-kokoro-owner": "kokoro-iam",
         "x-kokoro-permission": "iam:skill-authorization.check",
         "x-kokoro-stability": "stable",
-        "x-kokoro-visibility": "internal-owner"
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-identity-modes": [
+          "oauth",
+          "bff_user_context"
+        ],
+        "x-kokoro-bff-user-context": {
+          "caller": "kokoro-bff",
+          "credential_surface": "bff_user_context",
+          "actor_header": "x-kokoro-actor-id",
+          "tenant": "receiver-credential",
+          "subject": "actor",
+          "forbidden": [
+            "Cookie",
+            "Origin",
+            "Session reference",
+            "human Bearer"
+          ],
+          "fallback": false
+        }
       }
     }
   },
   "info": {
     "title": "Kokoro IAM Internal API",
     "description": "IAM-owned liveness, Tenancy, Authorization and Audit operations.",
-    "version": "0.18.0",
+    "version": "0.20.0",
     "contact": {}
   },
   "tags": [],
@@ -13928,6 +14080,24 @@
         "bearerFormat": "opaque-service-credential",
         "type": "http",
         "description": "Receiver-owned direct service credential, bound to kokoro-billing, billing_authorization and one tenant; no OAuth token or introspection."
+      },
+      "bffUserContextServiceBearer": {
+        "scheme": "bearer",
+        "bearerFormat": "opaque-service-credential",
+        "type": "http",
+        "description": "Receiver-owned kokoro-bff/bff_user_context credential bound to one tenant. Requires one x-kokoro-actor-id; no Cookie or user OAuth token."
+      },
+      "accountSessionServiceBearer": {
+        "scheme": "bearer",
+        "bearerFormat": "opaque-service-credential",
+        "type": "http",
+        "description": "Independent kokoro-bff/account_sessions receiver credential. Requires native issuer Cookie AND exact IAM_WEB_ORIGIN."
+      },
+      "accountSessionIssuerCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "kokoro-issuer.session_token",
+        "description": "Allowlisted issuer Cookie; production uses __Secure- prefix. Exact Origin and fresh Session/User/active tenant/member required."
       },
       "internalBearer": {
         "scheme": "bearer",
@@ -13975,16 +14145,9 @@
                   "PAYLOAD_TOO_LARGE",
                   "RATE_LIMITED",
                   "DEPENDENCY_UNAVAILABLE",
-                  "native_session_request_invalid",
-                  "native_session_missing",
-                  "native_session_invalid",
-                  "native_session_revoked",
-                  "native_session_expired",
-                  "native_session_origin_forbidden",
-                  "native_session_csrf_failed",
-                  "native_session_rate_limited",
-                  "native_session_service_unavailable",
-                  "native_session_deadline_exceeded",
+                  "bff_user_context_service_unauthenticated",
+                  "account_session_service_unauthenticated",
+                  "account_session_invalid",
                   "INTERNAL"
                 ]
               },

@@ -23,8 +23,12 @@ export async function handleSkillPackageInspectionRequest(
   if (projectPath && project === null) return false
   const id = requestId(request)
   response.setHeader("x-request-id", id)
-  const access = async (projectRef: string, context: { requestId: string; identity: { namespace: string; userId: string } }, signal: AbortSignal): Promise<string | null> => {
-    const fresh = await authorizeUserRequest(request, config, admission, id, signal)
+  const access = async (
+    projectRef: string,
+    context: { requestId: string; identity: { namespace: string; userId: string } },
+    signal: AbortSignal,
+  ): Promise<string | null> => {
+    const fresh = await authorizeUserRequest(request, config, admission, id, signal, response)
     signal.throwIfAborted()
     if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
     if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)

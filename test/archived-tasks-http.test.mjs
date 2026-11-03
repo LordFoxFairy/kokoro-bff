@@ -9,7 +9,8 @@ const item = { session_id: "历史任务😀", title: "本人归档", archived_a
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer shared-token",
+  cookie: "kokoro-issuer.session_token=shared-token",
+  origin: "https://web.example.test",
   "x-kokoro-request-id": "shared-http",
 }
 async function fixture(t, options = {}) {
@@ -39,6 +40,7 @@ async function fixture(t, options = {}) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-verified",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: options.timeout ?? 1000,
@@ -88,7 +90,7 @@ for (const [method, path, body] of [
 test("archive anonymous and invalid input never reach owner", async (t) => {
   const { base, reads } = await fixture(t)
   for (const path of ["/v1/account/archived-tasks", "/v1/sessions/a/archive"]) {
-    assert.equal((await fetch(base + path, { headers: { ...headers, authorization: "" } })).status, 401)
+    assert.equal((await fetch(base + path, { headers: { ...headers, cookie: "", origin: "https://web.example.test" } })).status, 401)
   }
   for (const path of [
     "/v1/account/archived-tasks?limit=0",

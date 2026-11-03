@@ -1,3 +1,5 @@
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
+import { fixtureNativeSession } from "./doubles/iam-native-session.ts"
 import { startMcpRequestBudget } from "../dist/http/mcp-request-budget.js"
 import assert from "node:assert/strict"
 import { createServer, request as nodeRequest } from "node:http"
@@ -8,7 +10,8 @@ import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer human-session",
+  cookie: "kokoro-issuer.session_token=human-session",
+  origin: "https://web.example.test",
   "x-request-id": "mcp-http-1",
 }
 const paths = [
@@ -34,35 +37,20 @@ async function fixture(decision, { realSession = false, check, routeHandler, mcp
       "cache-control": "no-store",
       "x-request-id": request.headers["x-request-id"],
     })
-    response.end(
-      JSON.stringify({
-        data:
-          request.url === "/internal/v1/session-authorizations/verify"
-            ? {
-                allowed: true,
-                tenant_id: "tenant-server",
-                user_id: "human-one",
-                platform_admin: false,
-                session_id: "session-one",
-                client_id: "web-one",
-              }
-            : {
-                allowed: decision,
-                tenant_id: "tenant-server",
-                subject_id: "human-one",
-                decision_source: "current_membership",
-              },
-      }),
-    )
+    if (request.url.startsWith("/iam/get-session")) response.end(JSON.stringify(fixtureNativeSession("tenant-server", "human-one")))
+    else
+      response.end(JSON.stringify({ data: { allowed: decision, tenant_id: "tenant-server", subject_id: "human-one", decision_source: "current_membership" } }))
   })
   await new Promise((resolve) => iam.listen(0, "127.0.0.1", resolve))
   const config = {
+    ...(await fixtureIamCredentials("tenant-server")),
     host: "127.0.0.1",
     port: 0,
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-server",
     iamBaseUrl: `http://127.0.0.1:${iam.address().port}`,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: "upstream-secret",
     upstreamTimeoutMs: 5000,

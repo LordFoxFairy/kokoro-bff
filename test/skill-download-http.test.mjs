@@ -57,7 +57,7 @@ test("Package proxy verifies all bytes then re-admits exact revision and session
       },
     },
   }
-  const config = { tenantId: "tenant", sharedSecret: "test", storageObjectOrigin: origin }
+  const config = { tenantId: "tenant", sharedSecret: "test", storageObjectOrigin: origin, iamWebOrigin: "https://web.example.test" }
   const journeys = []
   const proxy = createServer((request, response) => {
     journeys.push(skillDownloadHandleRoute(request, response, config, composition, "request", ["skill-downloads", entry.handle]))
@@ -66,7 +66,12 @@ test("Package proxy verifies all bytes then re-admits exact revision and session
   await once(proxy, "listening")
   try {
     const url = `http://127.0.0.1:${proxy.address().port}/skill-downloads/${entry.handle}`,
-      headers = { authorization: "Bearer human", "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test" }
+      headers = {
+        cookie: "kokoro-issuer.session_token=human",
+        origin: "https://web.example.test",
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "test",
+      }
     let response = await fetch(url, { headers })
     assert.equal(response.status, 200)
     assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes)
@@ -123,7 +128,7 @@ test("Exact prepare accepts real empty POST and rejects payload or encoded slash
       },
     },
   }
-  const config = { tenantId: "tenant", sharedSecret: "test" }
+  const config = { tenantId: "tenant", sharedSecret: "test", iamWebOrigin: "https://web.example.test" }
   const server = createServer((request, response) => {
     let path
     try {
@@ -137,7 +142,12 @@ test("Exact prepare accepts real empty POST and rejects payload or encoded slash
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
   const base = `http://127.0.0.1:${server.address().port}`,
-    headers = { authorization: "Bearer human", "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test" }
+    headers = {
+      cookie: "kokoro-issuer.session_token=human",
+      origin: "https://web.example.test",
+      "x-kokoro-service": "web-bff",
+      "x-kokoro-internal-secret": "test",
+    }
   try {
     let response = await fetch(`${base}/browser/v1/skill-installations/install-1/download`, { method: "POST", headers })
     assert.equal(response.status, 200)
@@ -199,7 +209,14 @@ test("Exact prepare wrong methods return the complete private 405 envelope befor
   }
   const server = createServer((request, response) => {
     const path = new URL(request.url, "http://bff").pathname.split("/").filter(Boolean).map(decodeURIComponent)
-    void exactSkillDownloadRoute(request, response, { tenantId: "tenant", sharedSecret: "test" }, composition, "request-exact-405", path)
+    void exactSkillDownloadRoute(
+      request,
+      response,
+      { tenantId: "tenant", sharedSecret: "test", iamWebOrigin: "https://web.example.test" },
+      composition,
+      "request-exact-405",
+      path,
+    )
   })
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
@@ -250,14 +267,19 @@ test("Exact installation HTTP rejects mismatched fresh owner ID before download 
     },
     exactSkillDownloadSource: service,
   }
-  const config = { tenantId: "tenant", sharedSecret: "test" }
+  const config = { tenantId: "tenant", sharedSecret: "test", iamWebOrigin: "https://web.example.test" }
   const server = createServer((request, response) => {
     const path = new URL(request.url, "http://bff").pathname.split("/").filter(Boolean).map(decodeURIComponent)
     void exactSkillDownloadRoute(request, response, config, composition, "request", path)
   })
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
-  const headers = { authorization: "Bearer human", "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test" }
+  const headers = {
+    cookie: "kokoro-issuer.session_token=human",
+    origin: "https://web.example.test",
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": "test",
+  }
   try {
     const response = await fetch(`http://127.0.0.1:${server.address().port}/browser/v1/skill-installations/install-1/download`, { method: "POST", headers })
     assert.equal(response.status, 502)
@@ -290,7 +312,7 @@ test("Exact download policy maps application authorization and deadline failures
         },
       },
     }
-    const config = { tenantId: "tenant", sharedSecret: "test" }
+    const config = { tenantId: "tenant", sharedSecret: "test", iamWebOrigin: "https://web.example.test" }
     const server = createServer((request, response) => {
       const path = new URL(request.url, "http://bff").pathname.split("/").filter(Boolean).map(decodeURIComponent)
       void exactSkillDownloadRoute(request, response, config, composition, "request", path)
@@ -300,7 +322,12 @@ test("Exact download policy maps application authorization and deadline failures
     try {
       const response = await fetch(`http://127.0.0.1:${server.address().port}/browser/v1/skills/version-1/download`, {
         method: "POST",
-        headers: { authorization: "Bearer human", "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test" },
+        headers: {
+          cookie: "kokoro-issuer.session_token=human",
+          origin: "https://web.example.test",
+          "x-kokoro-service": "web-bff",
+          "x-kokoro-internal-secret": "test",
+        },
       })
       assert.equal(response.status, status)
       assert.equal((await response.json()).error.code, code)
@@ -338,7 +365,7 @@ test("published opaque-byte contract matches actual bare failures and FailedPrec
     expiresAt: Date.now() + 60_000,
     transfer: { url: `${origin}/object`, method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 60_000 },
   })
-  const config = { tenantId: "tenant", sharedSecret: "test", storageObjectOrigin: origin }
+  const config = { tenantId: "tenant", sharedSecret: "test", storageObjectOrigin: origin, iamWebOrigin: "https://web.example.test" }
   const composition = {
     skillDownloadHandles: handles,
     sessionAdmission: { verify: async () => sessionFailure ?? { ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: false } },
@@ -359,7 +386,12 @@ test("published opaque-byte contract matches actual bare failures and FailedPrec
   await once(proxy, "listening")
   const base = `http://127.0.0.1:${proxy.address().port}`,
     path = `/skill-downloads/${entry.handle}`
-  const headers = { authorization: "Bearer human", "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test" }
+  const headers = {
+    cookie: "kokoro-issuer.session_token=human",
+    origin: "https://web.example.test",
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": "test",
+  }
   const policy = SKILL_DOWNLOAD_POLICY.byte_operation
   const checkError = async (response, status, code, retryable) => {
     assert.equal(response.status, status)

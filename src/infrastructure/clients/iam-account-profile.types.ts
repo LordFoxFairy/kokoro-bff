@@ -1,9 +1,9 @@
 /** Owner I/O is tied to one admitted identity and the request's existing budget. */
 export type AccountProfileInput = Readonly<{
   baseUrl: string | null
-  token: string
-  cookie?: string
-  origin?: string
+  tenantId: string
+  credentialFile: string | null | undefined
+  subjectId: string
   requestId: string
   signal: AbortSignal
   deadlineAt: number
@@ -14,9 +14,9 @@ export type AccountProfileInput = Readonly<{
 }>
 export type AccountProfileReadInput = Readonly<{
   baseUrl: string | null
-  token: string
-  cookie?: string
-  origin?: string
+  tenantId: string
+  credentialFile: string | null | undefined
+  subjectId: string
   requestId: string
   signal: AbortSignal
   deadlineAt: number

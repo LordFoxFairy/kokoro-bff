@@ -6,7 +6,13 @@ import { createBffServer } from "../dist/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { startMcpRequestBudget } from "../dist/http/mcp-request-budget.js"
 
-const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", authorization: "Bearer human-session", "x-request-id": "icon-http" }
+const headers = {
+  "x-kokoro-service": "web-bff",
+  "x-kokoro-internal-secret": "test-secret",
+  cookie: "kokoro-issuer.session_token=human-session",
+  origin: "https://web.example.test",
+  "x-request-id": "icon-http",
+}
 const path = "/browser/v1/mcp/servers/server-one/icon"
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64")
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -45,6 +51,7 @@ async function fixture(options = {}) {
       domain: "dev.kokoro.localhost",
       tenantId: "tenant-one",
       iamBaseUrl: "http://127.0.0.1:1",
+      iamWebOrigin: "https://web.example.test",
       sharedSecret: "test-secret",
       upstreamSecret: "owner-secret",
       upstreamTimeoutMs: 5000,

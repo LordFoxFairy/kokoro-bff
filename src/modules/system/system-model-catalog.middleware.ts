@@ -13,7 +13,10 @@ import { handleSystemModelCatalogBusiness, systemModelCatalogRequest } from "../
 export class SystemModelCatalogMiddleware implements NestMiddleware {
   private readonly idempotency = new Map<string, import("../../application/idempotency.js").IdempotencyEntry>()
 
-  public constructor(@Inject(BFF_CONFIG) private readonly config: BffConfig, @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission) {}
+  public constructor(
+    @Inject(BFF_CONFIG) private readonly config: BffConfig,
+    @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
+  ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     if (!systemModelCatalogRequest(request)) {
@@ -21,14 +24,15 @@ export class SystemModelCatalogMiddleware implements NestMiddleware {
       return
     }
     void this.handle(request, response).catch(() => {
-      if (!response.headersSent && !response.writableEnded && !response.destroyed) send(response, 503, failure("system_projection_not_configured", "System model catalog is unavailable", requestId(request)))
+      if (!response.headersSent && !response.writableEnded && !response.destroyed)
+        send(response, 503, failure("system_projection_not_configured", "System model catalog is unavailable", requestId(request)))
     })
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const id = requestId(request)
     response.setHeader("x-request-id", id)
-    const admitted = await authorizeUserRequest(request, this.config, this.admission, id, AbortSignal.timeout(10_000))
+    const admitted = await authorizeUserRequest(request, this.config, this.admission, id, AbortSignal.timeout(10_000), response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return

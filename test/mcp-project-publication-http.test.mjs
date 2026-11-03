@@ -9,7 +9,8 @@ import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer human-session",
+  cookie: "kokoro-issuer.session_token=human-session",
+  origin: "https://web.example.test",
   "x-request-id": "publication-test",
 }
 const source = { server_id: "source-server", connector_id: "source-connector", expected_source_state_version: "3" }
@@ -51,6 +52,7 @@ async function fixture({ execute = async () => publication(), find, verify, chec
       upstreamTimeoutMs: timeout,
       upstreamMaxResponseBytes: 1048576,
       iamBaseUrl: null,
+      iamWebOrigin: "https://web.example.test",
       schedulerServiceToken: null,
       schedulerTargetUrl: null,
       agentEnabled: false,
@@ -479,7 +481,7 @@ test("shared receipt expiry is not generic CAS rejection and exact original requ
 test("publication profile covers service, missing bearer, configured tenant and current tenant admission boundaries", async () => {
   for (const [options, headers, status, code] of [
     [{}, { "x-kokoro-internal-secret": "wrong-test-secret" }, 403, "service_auth_failed"],
-    [{}, { authorization: "" }, 401, "session_authentication_required"],
+    [{}, { cookie: "", origin: "https://web.example.test" }, 401, "session_authentication_required"],
     [{ tenantId: null }, {}, 503, "product_tenant_not_configured"],
     [{ verify: async () => ({ ok: true, identity: { namespace: "foreign", userId: "reader" }, platformAdmin: false }) }, {}, 403, "product_tenant_forbidden"],
   ]) {

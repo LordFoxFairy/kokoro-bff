@@ -13,6 +13,7 @@ async function fixture({ verify, read, session } = {}) {
     mode: "live",
     domain: "bff.test",
     tenantId: "tenant",
+    iamWebOrigin: "https://web.example.test",
     iamBaseUrl: null,
     sharedSecret: "fixture-secret",
     upstreamSecret: null,
@@ -62,6 +63,7 @@ async function fixture({ verify, read, session } = {}) {
           authorization: "Bearer opaque-credential",
           "x-request-id": "public-test",
           ...extra.headers,
+          origin: "https://web.example.test",
         },
         ...extra,
       })
@@ -161,6 +163,7 @@ test("website RPC still requires original Session and never consumes public key 
             "x-kokoro-service": "web-bff",
             "x-kokoro-internal-secret": "fixture-secret",
             authorization: "Bearer opaque-credential",
+            origin: "https://web.example.test",
           },
         })
       ).status,
@@ -168,7 +171,7 @@ test("website RPC still requires original Session and never consumes public key 
     )
     assert.deepEqual(
       fixtureApp.calls.map((c) => c.kind),
-      ["session"],
+      [],
     )
   } finally {
     await fixtureApp.close()
@@ -183,7 +186,7 @@ test("public identity remains inside the existing service envelope and no neighb
     assert.equal((await fixtureApp.request("/v1/self/skills")).status, 401)
     assert.deepEqual(
       fixtureApp.calls.map((c) => c.kind),
-      ["session"],
+      [],
     )
   } finally {
     await fixtureApp.close()

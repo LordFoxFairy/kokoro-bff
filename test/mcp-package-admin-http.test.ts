@@ -5,7 +5,12 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import { createBffServer } from "../src/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.js"
 import { startMcpRequestBudget } from "../src/http/mcp-request-budget.js"
-const headers = { "x-kokoro-service": "admin-web-bff", "x-kokoro-internal-secret": "admin-test-secret", authorization: "Bearer admin-session" }
+const headers = {
+  "x-kokoro-service": "admin-web-bff",
+  "x-kokoro-internal-secret": "admin-test-secret",
+  cookie: "kokoro-issuer.session_token=admin-session",
+  origin: "https://web.example.test",
+}
 const packageId = "package-1",
   uploadId = "upload-1",
   base = `/v1/admin/mcp/packages/${packageId}`
@@ -31,6 +36,7 @@ async function fixture(t: import("node:test").TestContext, budget?: number) {
       adminWebSharedSecret: "admin-test-secret",
       tenantId: "tenant-one",
       iamBaseUrl: null,
+      iamWebOrigin: "https://web.example.test",
       iamServiceToken: null,
       iamAdmissionTimeoutMs: 5000,
       iamAdmissionMaxResponseBytes: 65536,

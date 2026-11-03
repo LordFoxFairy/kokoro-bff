@@ -4,7 +4,6 @@ import { isDeepStrictEqual } from "node:util"
 import type { BffConfig } from "../../config/runtime.js"
 import { failure } from "../../contracts/index.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import { ownerSessionAuth, type UserAdmissionResult } from "../../auth/user-admission.js"
 import { zCreateTenantInvitationBody, zReplaceTenantMemberRolesBody } from "../../generated/iam-http/zod.gen.js"
 import { readIamTeamPage, writeIamTeam, type TeamReadKind, type TeamWriteKind } from "../../infrastructure/clients/iam-team.js"
 import { queryOf, readBody, requestContentType } from "../request.js"
@@ -29,7 +28,6 @@ export async function liveTeamRead(
   response: ServerResponse,
   config: BffConfig,
   context: RequestContext,
-  admission: Extract<UserAdmissionResult, { ok: true }>,
   businessPath: readonly string[],
 ): Promise<void> {
   response.setHeader("x-request-id", context.requestId)
@@ -51,13 +49,7 @@ export async function liveTeamRead(
   request.once("aborted", onAbort)
   response.once("close", onClose)
   try {
-    let ownerAuth
-    try {
-      ownerAuth = await ownerSessionAuth(request, config, admission, abort.signal)
-    } catch {
-      if (!response.destroyed) send(response, 503, failure("team_owner_unavailable", "Team owner is unavailable", context.requestId))
-      return
-    }
+    const ownerAuth = { credentialFile: config.iamUserContextServiceCredentialFile, subjectId: context.identity.userId }
     const result = await readIamTeamPage({
       baseUrl: config.iamBaseUrl,
       tenantId: context.identity.namespace,
@@ -97,7 +89,6 @@ export async function liveTeamWrite(
   response: ServerResponse,
   config: BffConfig,
   context: RequestContext,
-  admission: Extract<UserAdmissionResult, { ok: true }>,
   businessPath: readonly string[],
 ): Promise<void> {
   response.setHeader("x-request-id", context.requestId)
@@ -138,13 +129,7 @@ export async function liveTeamWrite(
   request.once("aborted", onAbort)
   response.once("close", onClose)
   try {
-    let ownerAuth
-    try {
-      ownerAuth = await ownerSessionAuth(request, config, admission, abort.signal)
-    } catch {
-      if (!response.destroyed) send(response, 503, failure("team_owner_unavailable", "Team owner is unavailable", context.requestId))
-      return
-    }
+    const ownerAuth = { credentialFile: config.iamUserContextServiceCredentialFile, subjectId: context.identity.userId }
     const result = await writeIamTeam({
       baseUrl: config.iamBaseUrl,
       tenantId: context.identity.namespace,

@@ -28,7 +28,8 @@ afterEach(async () => {
 const browser = {
   "x-kokoro-service": "admin-web-bff",
   "x-kokoro-internal-secret": "admin-browser-secret",
-  authorization: "Bearer current-admin-session",
+  cookie: "kokoro-issuer.session_token=current-admin-session",
+  origin: "https://web.example.test",
   "x-kokoro-request-id": "metering-request-1",
 }
 const key = "original-pricing-key"
@@ -88,6 +89,7 @@ async function setup(options = {}) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-current",
     iamBaseUrl: "http://127.0.0.1:1",
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "product-browser-secret",
     adminWebSharedSecret: "admin-browser-secret",
     upstreamSecret: "billing-internal-secret-0000000000001",

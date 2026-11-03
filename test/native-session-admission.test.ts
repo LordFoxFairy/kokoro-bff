@@ -1,393 +1,310 @@
-import { createServer, type IncomingMessage, type Server } from "node:http"
-import { mkdtemp, chmod, rm, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { afterEach, test } from "node:test"
 import assert from "node:assert/strict"
-import { SessionAdmissionClient } from "../dist/auth/session-admission.client.js"
-import { nativeSessionCookie } from "../dist/auth/user-admission.js"
+import { createServer, type IncomingMessage, type Server } from "node:http"
+import test from "node:test"
 import { loadConfig } from "../dist/config/runtime.js"
-import { ProjectService } from "../dist/application/project-service.js"
-import { ProjectMutationMiddleware } from "../dist/modules/projects/project-mutation.middleware.js"
-import type { ProjectRepository } from "../src/application/projects/project-repository.js"
-import type { IdempotencyRepository } from "../src/application/ports/idempotency-repository.js"
+import { createBffServer } from "../dist/bootstrap/server.js"
+import { nativeSessionCookie } from "../dist/auth/user-admission.js"
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
 
-const servers: Server[] = []
-const directories: string[] = []
-
+const tenant = "tenant-browser"
+const origin = "https://web.example.test"
+const sessionHeaders = {
+  "x-kokoro-service": "web-bff",
+  "x-kokoro-internal-secret": "browser-fixture",
+  origin,
+  cookie: "kokoro-issuer.session_token=browser-session",
+}
+const native = () => ({
+  session: {
+    id: "PRIVATE_SID_CANARY",
+    token: "PRIVATE_TOKEN_CANARY",
+    userId: "subject",
+    activeOrganizationId: tenant,
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ipAddress: "PRIVATE_IP_CANARY",
+    userAgent: "PRIVATE_UA_CANARY",
+  },
+  user: {
+    id: "subject",
+    name: "Person",
+    email: "person@example.test",
+    emailVerified: true,
+    image: null,
+    platformAdmin: false,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+})
 async function listen(server: Server): Promise<string> {
-  servers.push(server)
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject)
-    server.listen(0, "127.0.0.1", resolve)
-  })
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address()
   assert.ok(address && typeof address !== "string")
   return `http://127.0.0.1:${address.port}`
 }
-
-async function credentialFile(): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), "kokoro-bff-native-session-"))
-  directories.push(directory)
-  const path = join(directory, "session-admission.json")
-  await writeFile(
-    path,
-    JSON.stringify({
-      version: 1,
-      entries: [{ credential_id: "native-primary", caller: "kokoro-bff", surface: "session_admission", tenant_id: "tenant-1", secret: "s".repeat(48) }],
-    }),
-    { mode: 0o600 },
-  )
-  await chmod(path, 0o600)
-  return path
+async function close(server: Server) {
+  server.closeAllConnections()
+  await new Promise<void>((resolve) => server.close(() => resolve()))
 }
-
-afterEach(async () => {
-  await Promise.all(
-    servers.splice(0).map(
-      (server) =>
-        new Promise<void>((resolve) => {
-          server.closeAllConnections()
-          server.close(() => resolve())
-        }),
-    ),
-  )
-  await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })))
-})
-
-const request = (cookie: string, origin = "https://web.example.test"): IncomingMessage =>
-  ({
-    rawHeaders: ["cookie", cookie, "origin", origin],
-    headers: { cookie, origin },
-  }) as IncomingMessage
-
-test("native session admission sends direct service credential plus allowlisted cookie and origin", async () => {
-  const calls: Array<{ authorization: string; cookie: string; origin: string; body: string }> = []
-  const baseUrl = await listen(
-    createServer((request, response) => {
-      const chunks: Buffer[] = []
-      request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
-      request.on("end", () => {
-        calls.push({
-          authorization: request.headers.authorization ?? "",
-          cookie: request.headers.cookie ?? "",
-          origin: request.headers.origin ?? "",
-          body: Buffer.concat(chunks).toString("utf8"),
-        })
-        response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "iam-native-1" })
-        response.end(
-          JSON.stringify({
-            data: {
-              subject_id: "user-1",
-              tenant_id: "tenant-1",
-              session_id: "session-1",
-              permissions: ["tenant.read"],
-              session_expires_at: "2030-01-01T00:00:00.000Z",
-            },
-            meta: { request_id: "iam-native-1", contract_version: "1.0.0" },
-          }),
-        )
-      })
-    }),
-  )
-  const client = new SessionAdmissionClient({
-    baseUrl,
-    credentialFile: await credentialFile(),
-    webOrigin: "https://web.example.test",
-    tenantId: "tenant-1",
-    timeoutMs: 1000,
-    maxResponseBytes: 65_536,
-  })
-  const result = await client.verifyNative({
-    cookie: "kokoro-issuer.session_token=session; kokoro-issuer.session_data=data",
-    origin: "https://web.example.test",
-    requestId: "request-1",
-    signal: new AbortController().signal,
-  })
-  assert.deepEqual(result, { ok: true, identity: { namespace: "tenant-1", userId: "user-1" }, platformAdmin: false })
-  assert.deepEqual(calls, [
-    {
-      authorization: `Bearer ${"s".repeat(48)}`,
-      cookie: "kokoro-issuer.session_token=session; kokoro-issuer.session_data=data",
-      origin: "https://web.example.test",
-      body: "",
-    },
-  ])
-})
-
-test("native cookie projection rejects Product, duplicate, and malformed cookie headers", () => {
-  assert.equal(nativeSessionCookie(request("kokoro-issuer.session_token=session; authjs.session-token=product")), null)
-  assert.equal(nativeSessionCookie(request("kokoro-issuer.session_token=one; kokoro-issuer.session_token=two")), null)
-  assert.equal(nativeSessionCookie(request("kokoro-issuer.session_token")), null)
-  assert.equal(nativeSessionCookie(request("kokoro-issuer.session_token=session")), "kokoro-issuer.session_token=session")
-})
-
-test("native session admission rejects an origin mismatch before IAM I/O", async () => {
-  let calls = 0
-  const baseUrl = await listen(
-    createServer((_request, response) => {
-      calls += 1
-      response.writeHead(500).end()
-    }),
-  )
-  const client = new SessionAdmissionClient({
-    baseUrl,
-    credentialFile: await credentialFile(),
-    webOrigin: "https://web.example.test",
-    tenantId: "tenant-1",
-    timeoutMs: 1000,
-    maxResponseBytes: 65_536,
-  })
-  await assert.deepEqual(
-    await client.verifyNative({
-      cookie: "kokoro-issuer.session_token=session",
-      origin: "https://evil.example.test",
-      requestId: "request-1",
-      signal: new AbortController().signal,
-    }),
-    { ok: false, status: 403, code: "session_forbidden" },
-  )
-  assert.equal(calls, 0)
-})
-
-test("production project middleware rejects native transport failures before project creation or receipt claim", { timeout: 10_000 }, async (t) => {
-  let mode: "disconnect" | "timeout" | "success" = "disconnect"
-  const iamRequests: string[] = []
-  const baseUrl = await listen(
-    createServer((request, response) => {
-      iamRequests.push(request.url ?? "")
-      if (mode === "disconnect") {
-        request.socket.destroy()
+async function fixture(
+  run: (base: string, requests: IncomingMessage[], setState: (value: "valid" | "anonymous" | "foreign" | "outage") => void) => Promise<void>,
+) {
+  let state = "valid"
+  const requests: IncomingMessage[] = []
+  const peer = createServer((request, response) => {
+    requests.push(request)
+    response.setHeader("content-type", "application/json")
+    response.setHeader("cache-control", "no-store")
+    response.setHeader("x-request-id", request.headers["x-request-id"] ?? "peer")
+    response.setHeader("set-auth-jwt", "PRIVATE_JWT_CANARY")
+    if (request.url?.startsWith("/iam/get-session")) {
+      if (state === "outage") {
+        response.statusCode = 500
+        response.end(JSON.stringify({ message: "PRIVATE_OWNER_ERROR_CANARY" }))
         return
       }
-      if (mode === "timeout") return
-      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "iam-native-1" })
-      response.end(
-        JSON.stringify({
-          data: {
-            subject_id: "user-1",
-            tenant_id: "tenant-1",
-            session_id: "session-1",
-            permissions: ["tenant.read"],
-            session_expires_at: "2030-01-01T00:00:00.000Z",
-          },
-          meta: { request_id: "iam-native-1", contract_version: "1.0.0" },
-        }),
-      )
-    }),
-  )
-  const config = loadConfig({
-    KOKORO_BFF_SHARED_SECRET: "native-middleware-test-only",
-    KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused_native_fixture?schema=kokoro_bff",
-    KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
-    KOKORO_IAM_BASE_URL: baseUrl,
-    KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
-    KOKORO_BFF_IAM_SESSION_ADMISSION_CREDENTIAL_FILE: await credentialFile(),
-    KOKORO_TENANT_ID: "tenant-1",
-    KOKORO_UPSTREAM_TIMEOUT_MS: "200",
-  })
-  const client = new SessionAdmissionClient({
-    baseUrl: config.iamBaseUrl,
-    credentialFile: config.iamSessionAdmissionCredentialFile,
-    webOrigin: config.iamWebOrigin,
-    tenantId: config.tenantId,
-    timeoutMs: config.upstreamTimeoutMs,
-    maxResponseBytes: config.upstreamMaxResponseBytes,
-  })
-  const legacyVerify = t.mock.method(client, "verify")
-  const project = {
-    id: "project-native",
-    name: "Native admission control",
-    slug: "native-admission-control",
-    description: "",
-    created_at: "2026-11-01T00:00:00.000Z",
-    updated_at: "2026-11-01T00:00:00.000Z",
-  }
-  const createProject = t.mock.fn<ProjectRepository["createProject"]>(async () => project)
-  const repository: Pick<ProjectRepository, "createProject"> = { createProject }
-  // This HTTP test reaches only create; the real service still invokes its repository.
-  const projects = new ProjectService(repository as ProjectRepository)
-  const create = t.mock.method(projects, "create")
-  const receipts = {
-    getReceipt: async () => assert.fail("Project creation must claim, not read, a receipt"),
-    claimReceipt: t.mock.fn<IdempotencyRepository["claimReceipt"]>(async () => ({ claimed: true, receipt: null })),
-    putReceipt: t.mock.fn<IdempotencyRepository["putReceipt"]>(async () => undefined),
-    compareAndSetReceipt: async () => assert.fail("Project creation does not replace a receipt"),
-    releaseReceipt: async () => assert.fail("Rejected admission must not acquire a receipt to release"),
-  } satisfies IdempotencyRepository
-  const middleware = new ProjectMutationMiddleware(config, client, projects, receipts)
-  const next = t.mock.fn()
-  const bffUrl = await listen(
-    createServer((request, response) => {
-      middleware.use(request, response, () => {
-        next()
-        response.writeHead(404).end()
-      })
-    }),
-  )
-  const sendMutation = () =>
-    fetch(`${bffUrl}/v1/projects`, {
-      method: "POST",
-      headers: {
-        "x-kokoro-service": "web-bff",
-        "x-kokoro-internal-secret": "native-middleware-test-only",
-        cookie: "kokoro-issuer.session_token=session",
-        origin: "https://web.example.test",
-        authorization: "Bearer must-not-fallback",
-        "content-type": "application/json",
-        "idempotency-key": `native-${mode}`,
-      },
-      body: JSON.stringify({ name: project.name }),
-      signal: AbortSignal.timeout(3000),
-    })
-  for (const failureMode of ["disconnect", "timeout"] as const) {
-    mode = failureMode
-    const attemptsBefore = iamRequests.length
-    const started = performance.now()
-    const response = await sendMutation()
-    assert.equal(response.status, 503, failureMode)
-    const body = (await response.json()) as { error: { code: string } }
-    assert.equal(body.error.code, "iam_admission_unavailable", failureMode)
-    // The 200 ms transport budget has scheduling room, but not the outer 3 s watchdog.
-    assert.ok(performance.now() - started < 2000, failureMode)
-    assert.equal(iamRequests.length, attemptsBefore + 1, failureMode)
-    assert.equal(iamRequests.at(-1), "/internal/v1/native-session-admission/verify")
-    assert.equal(legacyVerify.mock.callCount(), 0)
-    assert.equal(create.mock.callCount(), 0)
-    assert.equal(createProject.mock.callCount(), 0)
-    assert.equal(receipts.claimReceipt.mock.callCount(), 0)
-    assert.equal(receipts.putReceipt.mock.callCount(), 0)
-    assert.equal(next.mock.callCount(), 0)
-  }
-  // A successful request through the same middleware proves the side-effect observers are live.
-  mode = "success"
-  const response = await sendMutation()
-  assert.equal(response.status, 200)
-  assert.deepEqual(((await response.json()) as { data: { project: typeof project } }).data.project, project)
-  assert.deepEqual(iamRequests, Array(3).fill("/internal/v1/native-session-admission/verify"))
-  assert.equal(legacyVerify.mock.callCount(), 0)
-  assert.equal(create.mock.callCount(), 1)
-  assert.equal(createProject.mock.callCount(), 1)
-  const createArguments = [{ tenantId: "tenant-1", subjectId: "user-1" }, project.name, ""]
-  assert.deepEqual(create.mock.calls[0]!.arguments, createArguments)
-  assert.deepEqual(createProject.mock.calls[0]!.arguments, createArguments)
-  assert.equal(receipts.claimReceipt.mock.callCount(), 1)
-  assert.equal(receipts.putReceipt.mock.callCount(), 1)
-  assert.equal(next.mock.callCount(), 0)
-})
-
-test("native session admission preserves the owner's required, closed and versioned success fields", async () => {
-  const success = {
-    data: {
-      subject_id: "user-1",
-      tenant_id: "tenant-1",
-      session_id: "session-1",
-      permissions: ["platform.admin"],
-      session_expires_at: "2030-01-01T05:30:00+05:30",
-    },
-    meta: { request_id: "iam-native-1", contract_version: "1.0.0" },
-  }
-  let body: unknown = success
-  const baseUrl = await listen(
-    createServer((_request, response) => {
-      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "iam-native-1" })
-      response.end(JSON.stringify(body))
-    }),
-  )
-  const client = new SessionAdmissionClient({
-    baseUrl,
-    credentialFile: await credentialFile(),
-    webOrigin: "https://web.example.test",
-    tenantId: "tenant-1",
-    timeoutMs: 1000,
-    maxResponseBytes: 65_536,
-  })
-  const verify = () =>
-    client.verifyNative({
-      cookie: "kokoro-issuer.session_token=session",
-      origin: "https://web.example.test",
-      requestId: "request-1",
-      signal: new AbortController().signal,
-    })
-  assert.deepEqual(await verify(), { ok: true, identity: { namespace: "tenant-1", userId: "user-1" }, platformAdmin: true })
-
-  const invalid: Array<[string, unknown]> = [
-    ["missing data", { meta: success.meta }],
-    ["missing meta", { data: success.data }],
-    ["extra envelope field", { ...success, extra: true }],
-    ["extra data field", { ...success, data: { ...success.data, extra: true } }],
-    ["extra meta field", { ...success, meta: { ...success.meta, extra: true } }],
-    ["unknown contract version", { ...success, meta: { ...success.meta, contract_version: "2.0.0" } }],
-    ["empty permission", { ...success, data: { ...success.data, permissions: [""] } }],
-    ["invalid calendar date", { ...success, data: { ...success.data, session_expires_at: "2030-02-29T00:00:00Z" } }],
-    ["missing timezone", { ...success, data: { ...success.data, session_expires_at: "2030-01-01T00:00:00" } }],
-  ]
-  for (const section of ["data", "meta"] as const) {
-    for (const field of Object.keys(success[section])) {
-      const incomplete: Record<string, unknown> = { ...success[section] }
-      delete incomplete[field]
-      invalid.push([`missing ${section}.${field}`, { ...success, [section]: incomplete }])
+      response.setHeader("set-cookie", [
+        "kokoro-issuer.session_token=rolling; Path=/; HttpOnly; Secure; SameSite=Lax",
+        "kokoro-issuer.session_data=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+      ])
+      const value = native()
+      if (state === "foreign") value.session.activeOrganizationId = "foreign"
+      response.end(JSON.stringify(state === "anonymous" ? null : value))
+    } else {
+      assert.equal(request.url, "/internal/v1/authorization/check")
+      assert.equal(request.headers.authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+      assert.equal(request.headers["x-kokoro-actor-id"], "subject")
+      assert.equal(request.headers.cookie, undefined)
+      assert.equal(request.headers.origin, undefined)
+      response.end(JSON.stringify({ data: { allowed: true, tenant_id: tenant, subject_id: "subject", decision_source: "current_membership" } }))
     }
+  })
+  const owner = await listen(peer)
+  const config = {
+    ...loadConfig({
+      KOKORO_IAM_BASE_URL: owner,
+      KOKORO_IAM_WEB_ORIGIN: origin,
+      KOKORO_TENANT_ID: tenant,
+      KOKORO_BFF_SHARED_SECRET: "browser-fixture",
+      KOKORO_BFF_POSTGRES_URL: "postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=kokoro_bff",
+      KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:1/8",
+    }),
+    ...(await fixtureIamCredentials(tenant)),
   }
-  for (const [label, payload] of invalid) {
-    body = payload
-    assert.deepEqual(await verify(), { ok: false, status: 503, code: "iam_admission_unavailable" }, label)
+  const bff = createBffServer(config, { businessStore: null, readiness: async () => undefined })
+  const base = await listen(bff)
+  try {
+    await run(base, requests, (value) => {
+      state = value
+    })
+  } finally {
+    await close(bff)
+    await close(peer)
+  }
+}
+
+test("native cookie projection rejects Product, duplicate, and malformed cookie headers", () => {
+  const request = (rawHeaders: string[]) => ({ rawHeaders, headers: {} }) as IncomingMessage
+  assert.equal(nativeSessionCookie(request(["Cookie", "kokoro-issuer.session_token=a"])), "kokoro-issuer.session_token=a")
+  for (const raw of [
+    ["Cookie", "product=a"],
+    ["Cookie", "kokoro-issuer.session_token=a; kokoro-issuer.session_token=b"],
+    ["Cookie", "kokoro-issuer.session_token=a", "Cookie", "kokoro-issuer.session_token=b"],
+    ["Cookie", "bad"],
+  ])
+    assert.equal(nativeSessionCookie(request(raw)), null)
+})
+
+test("real browser HTTP closes raw Session relay and discloses only safe status or the unchanged me DTO", async () =>
+  fixture(async (base, requests) => {
+    for (const path of ["/iam/get-session", "/iam/get-session?disableCookieCache=true"]) {
+      const rejected = await fetch(base + path, { headers: sessionHeaders })
+      assert.equal(rejected.status, 404)
+    }
+    assert.equal(requests.length, 0)
+    const status = await fetch(base + "/browser/v1/auth/session", { headers: sessionHeaders })
+    assert.equal(status.status, 200)
+    assert.equal(status.headers.get("cache-control"), "no-store")
+    assert.equal(status.headers.getSetCookie().length, 2)
+    assert.equal(status.headers.get("set-auth-jwt"), null)
+    const body = await status.text()
+    assert.doesNotMatch(body, /PRIVATE_|token|session_id|meta/)
+    assert.deepEqual(JSON.parse(body), { data: { authenticated: true, subject: "subject", tenant_id: tenant, expires_at: "2099-01-01T00:00:00.000Z" } })
+    assert.equal(requests[0]!.url, "/iam/get-session?disableCookieCache=true")
+    const me = await fetch(base + "/v1/me", { headers: sessionHeaders })
+    assert.equal(me.status, 200)
+    const dto = await me.json()
+    assert.deepEqual(dto.data, { user_id: "subject", tenant_id: tenant, platform_admin: false })
+    assert.deepEqual(Object.keys(dto).sort(), ["data", "meta"])
+    assert.equal(requests[2]!.url, "/iam/get-session?disableCookieCache=true&disableRefresh=true")
+  }))
+
+test("status separates anonymous, qualification and dependency failures; false is nonrolling and ambiguous input is rejected", async () =>
+  fixture(async (base, requests, setState) => {
+    for (const path of ["?refresh=0", "?refresh=true&refresh=false", "?extra=true"])
+      assert.equal((await fetch(base + "/browser/v1/auth/session" + path, { headers: sessionHeaders })).status, 400)
+    assert.equal(requests.length, 0)
+    const missing = await fetch(base + "/browser/v1/auth/session", { headers: { ...sessionHeaders, cookie: "", authorization: "Bearer not-a-native-login" } })
+    assert.deepEqual(await missing.json(), { data: { authenticated: false } })
+    assert.equal(requests.length, 0, "Bearer never falls back to login")
+    setState("anonymous")
+    const anonymous = await fetch(base + "/browser/v1/auth/session?refresh=false", { headers: sessionHeaders })
+    assert.deepEqual(await anonymous.json(), { data: { authenticated: false } })
+    assert.equal(anonymous.headers.getSetCookie().length, 2, "invalid Cookie cleanup survives nonrolling reads")
+    assert.equal(requests[0]!.url, "/iam/get-session?disableCookieCache=true&disableRefresh=true")
+    setState("foreign")
+    const forbidden = await fetch(base + "/browser/v1/auth/session", { headers: sessionHeaders })
+    assert.equal(forbidden.status, 403)
+    assert.deepEqual(await forbidden.json(), { error: { code: "product_tenant_forbidden", message: "Product tenant is not permitted", retryable: false } })
+    setState("outage")
+    const outage = await fetch(base + "/browser/v1/auth/session", { headers: sessionHeaders })
+    assert.equal(outage.status, 503)
+    assert.doesNotMatch(await outage.text(), /PRIVATE_|authenticated/)
+  }))
+
+test("real Nest middleware share one explicit authentication provider across status and Account before response", async () => {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { AuthenticationModule } = await import("../dist/modules/authentication/authentication.module.js")
+  const { AccountModule } = await import("../dist/modules/account/account.module.js")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const config = loadConfig({
+    KOKORO_BFF_SHARED_SECRET: "browser-fixture",
+    KOKORO_BFF_ADMIN_WEB_SHARED_SECRET: "admin-fixture",
+    KOKORO_IAM_BASE_URL: "http://127.0.0.1:1",
+    KOKORO_IAM_WEB_ORIGIN: origin,
+    KOKORO_TENANT_ID: tenant,
+    KOKORO_BFF_POSTGRES_URL: "postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=kokoro_bff",
+    KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:1/8",
+  })
+  const calls: unknown[] = []
+  const provider = {
+    verify: async (input: unknown) => {
+      calls.push(input)
+      return { ok: true, identity: { namespace: tenant, userId: "subject" }, platformAdmin: false, expiresAt: "2099-01-01T00:00:00.000Z", setCookies: [] }
+    },
+  }
+  const unexpected = () => assert.fail("HTTP authentication must not access owner databases")
+  const module = await Test.createTestingModule({ imports: [AuthenticationModule, AccountModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected }, close: async () => undefined })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(provider)
+    .compile()
+  const app = module.createNestApplication({ logger: false })
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
+  try {
+    assert.equal(module.get(SESSION_ADMISSION, { each: true }).length, 1)
+    const me = await fetch(base + "/v1/me", { headers: sessionHeaders })
+    assert.equal(me.status, 200)
+    const status = await fetch(base + "/browser/v1/auth/session?refresh=false", {
+      headers: { ...sessionHeaders, "x-kokoro-service": "admin-web-bff", "x-kokoro-internal-secret": "admin-fixture" },
+    })
+    assert.equal(status.status, 200)
+    assert.equal(calls.length, 2)
+  } finally {
+    await app.close()
   }
 })
 
-test("native session admission accepts owner error codes but fails closed on malformed envelopes", async () => {
-  const error = { code: "native_session_invalid", message: "owner-only diagnostic", retryable: false, details: [] }
-  let status = 401
-  let body: unknown = { error }
-  const baseUrl = await listen(
-    createServer((_request, response) => {
-      response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "iam-native-1", "retry-after": "60" })
-      response.end(JSON.stringify(body))
-    }),
-  )
-  const client = new SessionAdmissionClient({
-    baseUrl,
-    credentialFile: await credentialFile(),
-    webOrigin: "https://web.example.test",
-    tenantId: "tenant-1",
-    timeoutMs: 1000,
-    maxResponseBytes: 65_536,
-  })
-  const verify = () =>
-    client.verifyNative({
-      cookie: "kokoro-issuer.session_token=session",
-      origin: "https://web.example.test",
-      requestId: "request-1",
-      signal: new AbortController().signal,
-    })
-  for (const [ownerStatus, ownerCode, expectedStatus, expectedCode] of [
-    [401, "native_session_invalid", 401, "session_invalid"],
-    [401, "UNAUTHENTICATED", 401, "session_invalid"],
-    [403, "native_session_origin_forbidden", 403, "session_forbidden"],
-    [429, "native_session_rate_limited", 429, "session_rate_limited"],
-    [503, "native_session_service_unavailable", 503, "iam_admission_unavailable"],
-    [504, "native_session_deadline_exceeded", 503, "iam_admission_unavailable"],
+test("production Project middleware rejects failed native authentication before body, receipt claim or owner mutation", { timeout: 10000 }, async () => {
+  const { SessionAdmissionClient } = await import("../dist/auth/session-admission.client.js")
+  const { ProjectMutationMiddleware } = await import("../dist/modules/projects/project-mutation.middleware.js")
+  for (const [scenario, expected] of [
+    ["anonymous", 401],
+    ["foreign", 403],
+    ["corrupt", 503],
+    ["service-denied", 503],
+    ["wrong-origin", 403],
   ] as const) {
-    status = ownerStatus
-    body = { error: { ...error, code: ownerCode } }
-    assert.deepEqual(await verify(), { ok: false, status: expectedStatus, code: expectedCode, ...(ownerStatus === 429 ? { retryAfter: "60" } : {}) })
-  }
-  status = 401
-  const invalid: Array<[string, unknown]> = [
-    ["unknown error code", { error: { ...error, code: "future_native_session_error" } }],
-    ["extra envelope field", { error, extra: true }],
-    ["extra error field", { error: { ...error, extra: true } }],
-    ["empty message", { error: { ...error, message: "" } }],
-    ["wrong retryable type", { error: { ...error, retryable: "false" } }],
-    ["wrong details type", { error: { ...error, details: {} } }],
-  ]
-  for (const field of Object.keys(error)) {
-    const incomplete: Record<string, unknown> = { ...error }
-    delete incomplete[field]
-    invalid.push([`missing error.${field}`, { error: incomplete }])
-  }
-  for (const [label, payload] of invalid) {
-    body = payload
-    assert.deepEqual(await verify(), { ok: false, status: 503, code: "iam_admission_unavailable" }, label)
+    let ownerCalls = 0,
+      claims = 0,
+      mutations = 0
+    const peer = createServer((request, response) => {
+      ownerCalls++
+      response.setHeader("content-type", "application/json")
+      response.setHeader("cache-control", "no-store")
+      response.setHeader("x-request-id", request.headers["x-request-id"] ?? "project")
+      if (request.url?.startsWith("/iam/get-session")) {
+        const value = native()
+        if (scenario === "foreign") value.session.activeOrganizationId = "foreign"
+        response.end(
+          JSON.stringify(scenario === "anonymous" ? null : scenario === "corrupt" ? { ...value, user: { ...value.user, platformAdmin: undefined } } : value),
+        )
+      } else {
+        response.statusCode = 401
+        response.end(
+          JSON.stringify({ error: { code: "bff_user_context_service_unauthenticated", message: "private service failure", retryable: false, details: [] } }),
+        )
+      }
+    })
+    const owner = await listen(peer)
+    const config = {
+      ...loadConfig({
+        KOKORO_IAM_BASE_URL: owner,
+        KOKORO_IAM_WEB_ORIGIN: origin,
+        KOKORO_TENANT_ID: tenant,
+        KOKORO_BFF_SHARED_SECRET: "browser-fixture",
+        KOKORO_BFF_POSTGRES_URL: "postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=kokoro_bff",
+        KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:1/8",
+      }),
+      ...(await fixtureIamCredentials(tenant)),
+    }
+    const authentication = new SessionAdmissionClient({
+      baseUrl: owner,
+      credentialFile: config.iamUserContextServiceCredentialFile,
+      tenantId: tenant,
+      webOrigin: origin,
+      timeoutMs: 200,
+      maxResponseBytes: 8192,
+    })
+    const middleware = new ProjectMutationMiddleware(
+      config,
+      authentication,
+      {
+        create: async () => {
+          mutations++
+          assert.fail("rejected authentication must not mutate")
+        },
+      } as never,
+      {
+        claimReceipt: async () => {
+          claims++
+          assert.fail("rejected authentication must not claim a receipt")
+        },
+      } as never,
+    )
+    const bff = createServer((request, response) =>
+      middleware.use(request, response, () => {
+        response.statusCode = 404
+        response.end()
+      }),
+    )
+    const base = await listen(bff)
+    try {
+      const response = await fetch(base + "/v1/projects", {
+        method: "POST",
+        headers: {
+          ...sessionHeaders,
+          origin: scenario === "wrong-origin" ? "https://foreign.example.test" : origin,
+          authorization: "Bearer forbidden-fallback",
+          "content-type": "application/json",
+          "idempotency-key": "native-negative",
+        },
+        body: JSON.stringify({ name: "Must not be read" }),
+      })
+      assert.equal(response.status, expected, scenario)
+      assert.equal(claims, 0)
+      assert.equal(mutations, 0)
+      if (scenario === "wrong-origin") assert.equal(ownerCalls, 0)
+      assert.doesNotMatch(await response.text(), /private service failure|forbidden-fallback/)
+    } finally {
+      await close(bff)
+      await close(peer)
+    }
   }
 })

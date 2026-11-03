@@ -33,13 +33,13 @@ export async function handleMessageFeedbackRequest(
   request.once("aborted", onAborted)
   response.once("close", onClosed)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal, response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true
     }
     await messageFeedbackRoute(request, response, admitted.context, pathOf(request).slice(1), provider, deadlineAt, async (signal) => {
-      const fresh = await authorizeUserRequest(request, config, admission, id, signal)
+      const fresh = await authorizeUserRequest(request, config, admission, id, signal, response)
       if (!fresh.ok) throw new MessageFeedbackAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
       if (fresh.context.identity.namespace !== admitted.context.identity.namespace || fresh.context.identity.userId !== admitted.context.identity.userId)
         throw new MessageFeedbackAdmissionError(404, "message_not_found")

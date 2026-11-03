@@ -531,6 +531,7 @@ test("live Product POST recovers lost Complete through personal Connect, persist
     )
     const config = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -543,7 +544,8 @@ test("live Product POST recovers lost Complete through personal Connect, persist
         businessStore: store,
         readiness: async () => {},
         sessionAdmission: {
-          async verify({ token }) {
+          async verify({ cookie }) {
+            const token = cookie.slice("kokoro-issuer.session_token=".length)
             admissions++
             return revoked
               ? { ok: false, status: 401, code: "session_invalid" }
@@ -560,7 +562,8 @@ test("live Product POST recovers lost Complete through personal Connect, persist
       const response = await fetch(`${bff}/v1/library/files`, {
         method: "POST",
         headers: {
-          authorization: "Bearer owner",
+          cookie: "kokoro-issuer.session_token=owner",
+          origin: "https://web.example.test",
           "x-kokoro-service": "web-bff",
           "x-kokoro-internal-secret": "web-secret",
           "x-kokoro-request-id": "upload-request",
@@ -585,7 +588,12 @@ test("live Product POST recovers lost Complete through personal Connect, persist
     assert.equal(completes, 1)
     assert.equal((await post()).status, 200, "terminal public receipt replays")
     const listing = await fetch(`${bff}/v1/library?kind=file`, {
-      headers: { authorization: "Bearer owner", "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret" },
+      headers: {
+        cookie: "kokoro-issuer.session_token=owner",
+        origin: "https://web.example.test",
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "web-secret",
+      },
     })
     assert.equal(listing.status, 200)
     assert.equal((await listing.json()).data.items[0].asset_id, "asset-1")

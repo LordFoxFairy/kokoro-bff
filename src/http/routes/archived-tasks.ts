@@ -58,7 +58,7 @@ export async function archivedTasksRoute(
     active()
     const input = parseArchiveInput(request)
     list = input.kind === "list"
-    const admitted = await Promise.race([authorizeUserRequest(request, config, admission, requestId, controller.signal), interrupted])
+    const admitted = await Promise.race([authorizeUserRequest(request, config, admission, requestId, controller.signal, response), interrupted])
     active()
     if (!admitted.ok) {
       const allowed: Record<number, readonly string[]> = {

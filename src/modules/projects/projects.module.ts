@@ -16,7 +16,7 @@ import {
 import type { BffConfig } from "../../config/runtime.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import { ProjectService } from "../../application/project-service.js"
-import { AccountModule } from "../account/account.module.js"
+import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { ChatModule } from "../chat/chat.module.js"
 import { ProjectPinMiddleware } from "./project-pin.middleware.js"
 import { ProjectMutationMiddleware } from "./project-mutation.middleware.js"
@@ -53,7 +53,7 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, OnApplicationS
 }
 
 @Module({
-  imports: [AccountModule, ChatModule, DatabaseModule, SkillsModule, ProjectAccessModule],
+  imports: [AuthenticationModule, ChatModule, DatabaseModule, SkillsModule, ProjectAccessModule],
   providers: [
     ProjectPinMiddleware,
     ProjectMutationMiddleware,

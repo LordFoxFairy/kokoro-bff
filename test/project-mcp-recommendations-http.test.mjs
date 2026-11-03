@@ -182,6 +182,7 @@ async function bootstrapFixture(t, { denyMcp = false } = {}) {
       upstreamTimeoutMs: 1000,
       upstreamMaxResponseBytes: 1048576,
       iamBaseUrl: null,
+      iamWebOrigin: "https://web.example.test",
       schedulerServiceToken: null,
       schedulerTargetUrl: null,
       agentEnabled: false,
@@ -272,7 +273,8 @@ async function bootstrapFixture(t, { denyMcp = false } = {}) {
   const headers = {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
-    authorization: "Bearer real-fixture-session",
+    cookie: "kokoro-issuer.session_token=real-fixture-session",
+    origin: "https://web.example.test",
     "x-request-id": "recommendation-bootstrap",
   }
   const request = (body, path = "/v1/projects/project/mcp-recommendations") =>

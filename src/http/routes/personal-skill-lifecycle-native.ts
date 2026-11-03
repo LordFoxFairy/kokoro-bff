@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import { withSkillActionAdmission } from "../../auth/user-admission.js"
 import type { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
 import type { CatalogConnectClient } from "../../infrastructure/clients/platform/catalog-connect.js"
 import { createPersonalSkillVersionRoute } from "./create-personal-skill-version.js"
@@ -40,14 +39,13 @@ export async function handlePersonalSkillLifecycleRequest(
 ): Promise<boolean> {
   const operation = match(request)
   if (operation === null) return false
-  const guarded = withSkillActionAdmission(admission, skillAuthorization, operation.action, config.tenantId)
   const id = requestId(request)
   if (operation.action === "create_version") {
-    await createPersonalSkillVersionRoute(request, response, config, guarded, id, operation.skillId, client)
+    await createPersonalSkillVersionRoute(request, response, config, admission, id, operation.skillId, client, skillAuthorization)
   } else if (operation.action === "withdraw") {
-    await withdrawPersonalSkillRoute(request, response, config, guarded, id, operation.skillId, client)
+    await withdrawPersonalSkillRoute(request, response, config, admission, id, operation.skillId, client, skillAuthorization)
   } else {
-    await deletePersonalSkillSeriesRoute(request, response, config, guarded, id, operation.skillId, client)
+    await deletePersonalSkillSeriesRoute(request, response, config, admission, id, operation.skillId, client, skillAuthorization)
   }
   return true
 }

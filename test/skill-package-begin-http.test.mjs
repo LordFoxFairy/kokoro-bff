@@ -13,6 +13,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -28,7 +29,8 @@ const config = {
   skillDraft: { enabled: false, platformBaseUrl: null, credentialFile: null, timeoutMs: 100 },
 }
 const headers = {
-  authorization: "Bearer session",
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
   "content-type": "application/json",
@@ -168,7 +170,7 @@ test("Begin rejects invalid transfer references without leaking signed query", a
     { url: "http://user:pass@127.0.0.1:39190/b?sig=private" },
     { url: "http://127.0.0.1:39190/b#fragment" },
     { method: "GET" },
-    { requiredHeaders: { "content-type": "application/zip", authorization: "Bearer secret" } },
+    { requiredHeaders: { "content-type": "application/zip", cookie: "kokoro-issuer.session_token=secret", origin: "https://web.example.test" } },
     { requiredHeaders: { "content-type": "text/plain" } },
     { requiredHeaders: undefined },
     { url: "http://127.0.0.1:39190/b\n?sig=private" },
@@ -444,7 +446,8 @@ test("Begin requires configured approved object origin without affecting Get", a
       assert.equal(get.status, 400) // Get rejects an Idempotency-Key, independent of Begin's origin gate.
       const cleanGet = await fetch(`${base}/v1/skills/skill-1/package-upload`, {
         headers: {
-          authorization: headers.authorization,
+          cookie: headers.cookie,
+          origin: headers.origin,
           "x-kokoro-service": headers["x-kokoro-service"],
           "x-kokoro-internal-secret": headers["x-kokoro-internal-secret"],
         },

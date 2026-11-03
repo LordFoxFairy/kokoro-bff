@@ -14,15 +14,40 @@ test("published browser-private policy is a deterministic read-only projection o
   const bytes = await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url))
   const published = JSON.parse(bytes.toString("utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "b2adc766332c1ca87b55900f359f5cc931b7f50505a19ea21cbb0c36faf9f72f")
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "c88bab0bd1d5529573eee318e50ac2dd41349a03fc84e8b7284416af700a0ebe")
+  // Undo only the v3 owner repin and raw Session relay removal; preserve the complete v2.1 oracle.
+  const historical = {
+    ...IAM_RELAY_POLICY,
+    version: "2.1.0",
+    iamOwnerCommit: "e3c035b99cf9479ac8357c7d38147f1541dcbcac",
+    iamSnapshotSha256: "b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1",
+    iamOpenapiVersion: "0.7.0",
+    iamOpenapiSha256: "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2",
+    routes: Object.fromEntries(
+      Object.entries(IAM_RELAY_POLICY.routes).flatMap(([route, methods]) =>
+        route === "/organization/set-active"
+          ? [
+              ["/get-session", ["GET"]],
+              [route, methods],
+            ]
+          : [[route, methods]],
+      ),
+    ),
+  }
+  assert.equal(
+    createHash("sha256")
+      .update(JSON.stringify(historical, null, 2) + "\n")
+      .digest("hex"),
+    "b2adc766332c1ca87b55900f359f5cc931b7f50505a19ea21cbb0c36faf9f72f",
+  )
   assert.deepEqual(IAM_RELAY_POLICY.webInteractionPaths, ["/auth/sign-in", "/auth/select-tenant", "/iam/interactions/invitation"])
-  assert.equal(IAM_RELAY_POLICY.version, "2.1.0")
-  assert.equal(IAM_RELAY_POLICY.iamOpenapiVersion, "0.7.0")
-  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "e3c035b99cf9479ac8357c7d38147f1541dcbcac")
+  assert.equal(IAM_RELAY_POLICY.version, "3.0.0")
+  assert.equal(IAM_RELAY_POLICY.iamOpenapiVersion, "0.20.0")
+  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7")
   assert.equal(IAM_RELAY_POLICY.iamAllowlistSha256, "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead")
   assert.equal(
     (IAM_RELAY_POLICY as unknown as { iamOpenapiSha256?: string }).iamOpenapiSha256,
-    "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2",
+    "61cf99b4fe836deafedb9f59d9fa2ea3446ce172f4069944f7facb14e816c7ca",
   )
   assert.deepEqual((IAM_RELAY_POLICY.routes as Record<string, readonly string[]>)["/sign-up/email"], ["POST"])
   assert.equal(
@@ -69,13 +94,14 @@ test("published browser-private policy is a deterministic read-only projection o
   })
 })
 
-test("vendored IAM 0.18.0 contract and generated-client manifest pin the execution owner bytes", async () => {
-  const ownerCommit = "497900ab6ec7274c800f1889cc06c993662dd9d6"
-  const expectedDigest = "399e994f93c7f007103d642d866b90edf2457c479e2da2da767d81633198ad62"
+test("vendored IAM 0.20.0 contract and generated-client manifest pin the current owner bytes", async () => {
+  const ownerCommit = "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7"
+  const expectedDigest = "61cf99b4fe836deafedb9f59d9fa2ea3446ce172f4069944f7facb14e816c7ca"
   const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
   assert.notEqual(vendor, null)
   assert.equal(createHash("sha256").update(vendor!).digest("hex"), expectedDigest)
   await assert.rejects(readFile(new URL("../contract/vendor/kokoro-iam/c64faa7992301f31495e163d04049c48a23d0225/iam.internal.v1.json", import.meta.url)))
+  await assert.rejects(readFile(new URL("../contract/vendor/kokoro-iam/497900ab6ec7274c800f1889cc06c993662dd9d6/iam.internal.v1.json", import.meta.url)))
   const oldVendor = await readFile(
     new URL("../contract/vendor/kokoro-iam/4d981441d154c83b63987f284e3a82a559595870/iam.internal.v1.json", import.meta.url),
   ).catch(() => null)
@@ -89,14 +115,14 @@ test("vendored IAM 0.18.0 contract and generated-client manifest pin the executi
   ).catch(() => null)
   assert.equal(retiredAdmissionVendor, null, "retired 0.7 admission vendor path must be removed")
   const contract = JSON.parse(vendor!.toString("utf8")) as { info?: { version?: string } }
-  assert.equal(contract.info?.version, "0.18.0")
+  assert.equal(contract.info?.version, "0.20.0")
   const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8")) as {
     owner?: { repository_commit?: string; contract_version?: string; contract_sha256?: string }
   }
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: ownerCommit,
-    contract_version: "0.18.0",
+    contract_version: "0.20.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: expectedDigest,
   })
@@ -167,6 +193,9 @@ test("invitation matcher accepts only the three exact owner routes with canonica
 })
 
 test("relay route matrix is exact and never treats aliases as owner paths", () => {
+  for (const target of ["/iam/get-session", "/iam/get-session?disableCookieCache=true", "/iam/get-session?disableRefresh=true"]) {
+    assert.equal(iamRelayRoute(target, "GET"), null, target)
+  }
   assert.equal(iamRelayRoute("/iam/organization/list", "GET"), null)
   assert.equal(iamRelayRoute("/iam/organization/set-active", "POST")?.path, "/organization/set-active")
   const verificationQuery = "?token=opaque%2B%2F%3D&callbackURL=http%3A%2F%2Fweb.example.test%2Fauth%2Fsign-in&x=one&x=two"

@@ -27,16 +27,9 @@ export const zApiErrorResponse = z
           "PAYLOAD_TOO_LARGE",
           "RATE_LIMITED",
           "DEPENDENCY_UNAVAILABLE",
-          "native_session_request_invalid",
-          "native_session_missing",
-          "native_session_invalid",
-          "native_session_revoked",
-          "native_session_expired",
-          "native_session_origin_forbidden",
-          "native_session_csrf_failed",
-          "native_session_rate_limited",
-          "native_session_service_unavailable",
-          "native_session_deadline_exceeded",
+          "bff_user_context_service_unauthenticated",
+          "account_session_service_unauthenticated",
+          "account_session_invalid",
           "INTERNAL",
         ]),
         message: z.string().min(1),
@@ -121,6 +114,7 @@ export const zVerifyOpenAppManagementAuthorizationHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zVerifyOpenAppManagementAuthorizationPath = z.object({
@@ -141,6 +135,7 @@ export const zReadAccountProfileHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zReadAccountProfileResponse = z.object({
@@ -162,6 +157,7 @@ export const zUpdateAccountProfileHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zUpdateAccountProfileResponse = z.object({
@@ -176,6 +172,7 @@ export const zListAccountSessionsHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  Origin: z.url(),
 })
 
 export const zListAccountSessionsQuery = z.object({
@@ -226,6 +223,7 @@ export const zRevokeAccountSessionHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  Origin: z.url(),
 })
 
 export const zRevokeAccountSessionPath = z.object({
@@ -310,36 +308,12 @@ export const zRejectTenantInvitationResponse = z.object({
   }),
 })
 
-export const zVerifyNativeSessionHeaders = z.object({
-  "x-request-id": z
-    .string()
-    .regex(/^[A-Za-z0-9_-]{1,128}$/)
-    .optional(),
-})
-
-export const zVerifyNativeSessionResponse = z.strictObject({
-  data: z.strictObject({
-    subject_id: z.string().min(1),
-    tenant_id: z.string().min(1),
-    session_id: z.string().min(1),
-    permissions: z.array(z.string().min(1)),
-    session_expires_at: z.iso
-      .datetime({ offset: true })
-      .regex(
-        /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$/,
-      ),
-  }),
-  meta: z.strictObject({
-    request_id: z.string().min(1),
-    contract_version: z.enum(["1.0.0"]),
-  }),
-})
-
 export const zListTenantMembersHeaders = z.object({
   "x-request-id": z
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zListTenantMembersPath = z.object({
@@ -384,6 +358,7 @@ export const zLeaveTenantHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zLeaveTenantPath = z.object({
@@ -402,6 +377,7 @@ export const zRemoveTenantMemberHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zRemoveTenantMemberPath = z.object({
@@ -434,6 +410,7 @@ export const zReplaceTenantMemberRolesHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zReplaceTenantMemberRolesPath = z.object({
@@ -461,6 +438,7 @@ export const zListTenantRolesHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zListTenantRolesPath = z.object({
@@ -547,6 +525,7 @@ export const zListTenantInvitationsHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zListTenantInvitationsPath = z.object({
@@ -609,6 +588,7 @@ export const zCreateTenantInvitationHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zCreateTenantInvitationPath = z.object({
@@ -627,6 +607,7 @@ export const zResendTenantInvitationHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zResendTenantInvitationPath = z.object({
@@ -646,6 +627,7 @@ export const zCancelTenantInvitationHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zCancelTenantInvitationPath = z.object({
@@ -677,6 +659,7 @@ export const zResolveTenantPublisherProfilesHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zResolveTenantPublisherProfilesPath = z.object({
@@ -735,6 +718,7 @@ export const zCheckAuthorizationHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zCheckAuthorizationResponse = z.object({
@@ -745,28 +729,6 @@ export const zCheckAuthorizationResponse = z.object({
     decision_source: z.enum(["current_membership", "client_scope"]),
   }),
 })
-
-export const zVerifySessionAuthorizationHeaders = z.object({
-  "x-request-id": z
-    .string()
-    .regex(/^[A-Za-z0-9_-]{1,128}$/)
-    .optional(),
-})
-
-export const zVerifySessionAuthorizationResponse = z
-  .object({
-    data: z
-      .object({
-        allowed: z.literal(true),
-        platform_admin: z.boolean(),
-        tenant_id: z.string().min(1),
-        user_id: z.string().min(1),
-        session_id: z.string().min(1),
-        client_id: z.string().min(1),
-      })
-      .strict(),
-  })
-  .strict()
 
 export const zCheckTenantSkillAuthorizationBody = z.object({
   action: z.enum([
@@ -803,6 +765,7 @@ export const zCheckTenantSkillAuthorizationHeaders = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,128}$/)
     .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
 })
 
 export const zCheckTenantSkillAuthorizationPath = z.object({

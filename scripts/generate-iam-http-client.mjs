@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/iam-http")
 const manifestPath = path.join(root, "contract/dependencies/iam-http.json")
 const configPath = path.join(root, "openapi-ts.iam.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "497900ab6ec7274c800f1889cc06c993662dd9d6"
+const ownerCommit = "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7"
 const vendorPath = path.join(root, `contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`)
-const ownerDigest = "399e994f93c7f007103d642d866b90edf2457c479e2da2da767d81633198ad62"
+const ownerDigest = "61cf99b4fe836deafedb9f59d9fa2ea3446ce172f4069944f7facb14e816c7ca"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -149,27 +149,7 @@ async function normalizeGeneratorCompatibility(directory) {
       1,
       "strict IAM error envelope",
     ],
-    [
-      `        client_id: z.string().min(1)
-    })
-});`,
-      `        client_id: z.string().min(1)
-    }).strict()
-}).strict();`,
-      1,
-      "strict IAM admission response",
-    ],
   ])
-  // The pinned owner closes all three native response objects and permits RFC
-  // 3339 offsets. openapi-ts otherwise strips extra keys and forces UTC here.
-  const zodPath = path.join(directory, "zod.gen.ts")
-  const zodSource = await readFile(zodPath, "utf8")
-  const nativeResponses = [...zodSource.matchAll(/export const zVerifyNativeSessionResponse = z\.object\(\{[\s\S]*?\n\}\);/gu)]
-  assert.equal(nativeResponses.length, 1, "expected one generated native session response")
-  const nativeResponse = nativeResponses[0][0]
-  let normalized = replaceExactInSource(nativeResponse, "z.object({", "z.strictObject({", 3, "closed native session response objects")
-  normalized = replaceExactInSource(normalized, "z.iso.datetime()", "z.iso.datetime({ offset: true })", 1, "native session RFC 3339 offsets")
-  await writeFile(zodPath, replaceExactInSource(zodSource, nativeResponse, normalized, 1, "native session response"))
 }
 
 async function run(command, args, options = {}) {
@@ -235,7 +215,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-iam",
       repository_commit: ownerCommit,
-      contract_version: "0.18.0",
+      contract_version: "0.20.0",
       contract_path: "contract/openapi/iam.internal.v1.json",
       contract_sha256: ownerDigest,
     },
@@ -261,6 +241,7 @@ async function main() {
   assert.ok(mode === "--write" || mode === "--check", "expected --write or --check")
   assert.equal(process.versions.node, "24.20.0", "Consumer generation requires pinned Node 24.20.0")
   assert.equal(await readFile(path.join(root, ".node-version"), "utf8"), "24.20.0\n", ".node-version must pin Node 24.20.0")
+  await run(process.execPath, [path.join(root, "scripts/generate-iam-auth-client.mjs"), mode])
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "kokoro-iam-http-"))
   const temporaryOutput = path.join(temporaryRoot, "generated")
   const repeatedOutput = path.join(temporaryRoot, "generated-again")

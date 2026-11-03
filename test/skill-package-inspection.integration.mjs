@@ -46,13 +46,29 @@ async function loadProtectedInput(path) {
   }
   assertClosedKeys(
     document,
-    ["bff_base_url", "user_access_token", "web_secret", "managed_skill_id", "installation_id", "source_ref", "revision", "files"],
+    ["bff_base_url", "issuer_cookie", "web_origin", "web_secret", "managed_skill_id", "installation_id", "source_ref", "revision", "files"],
     INPUT_ENV,
   )
-  for (const key of ["bff_base_url", "user_access_token", "web_secret", "managed_skill_id", "installation_id", "source_ref", "revision"]) {
+  for (const key of ["bff_base_url", "issuer_cookie", "web_origin", "web_secret", "managed_skill_id", "installation_id", "source_ref", "revision"]) {
     assertFixtureString(document[key], `${INPUT_ENV}.${key}`)
   }
-  assert.ok(!/[\s\u0000]/u.test(document.user_access_token), `${INPUT_ENV}.user_access_token must be one bearer value`)
+  assert.ok(!/[\r\n\u0000]/u.test(document.issuer_cookie), `${INPUT_ENV}.issuer_cookie must not contain header controls`)
+  let webOrigin
+  try {
+    webOrigin = new URL(document.web_origin)
+  } catch {
+    throw new Error(`${INPUT_ENV}.web_origin must be a valid origin`)
+  }
+  assert.ok(
+    ["http:", "https:"].includes(webOrigin.protocol) &&
+      webOrigin.origin === document.web_origin &&
+      webOrigin.username === "" &&
+      webOrigin.password === "" &&
+      webOrigin.pathname === "/" &&
+      webOrigin.search === "" &&
+      webOrigin.hash === "",
+    `${INPUT_ENV}.web_origin must be a canonical HTTP(S) origin without credentials, path, query or fragment`,
+  )
   assert.ok(!/[\r\n\u0000]/u.test(document.web_secret), `${INPUT_ENV}.web_secret must not contain header controls`)
 
   let baseUrl
@@ -86,7 +102,8 @@ async function loadProtectedInput(path) {
 
   return {
     baseUrl: baseUrl.origin,
-    userAccessToken: document.user_access_token,
+    issuerCookie: document.issuer_cookie,
+    webOrigin: webOrigin.origin,
     webSecret: document.web_secret,
     managedSkillId: document.managed_skill_id,
     installationId: document.installation_id,
@@ -112,7 +129,8 @@ async function fetchBoundedJson(path, requestId, label) {
       signal: controller.signal,
       headers: {
         accept: "application/json",
-        authorization: `Bearer ${fixture.userAccessToken}`,
+        cookie: fixture.issuerCookie,
+        origin: fixture.webOrigin,
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": fixture.webSecret,
         "x-request-id": requestId,

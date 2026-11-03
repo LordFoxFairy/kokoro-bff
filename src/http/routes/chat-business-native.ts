@@ -47,7 +47,7 @@ export async function handleChatBusinessReadRequest(
   request.once("aborted", onAborted)
   response.once("close", onClosed)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal, response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true

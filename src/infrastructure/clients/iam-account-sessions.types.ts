@@ -2,9 +2,10 @@
 export type AccountSessionInput = Readonly<
   {
     baseUrl: string | null
-    token: string
-    cookie?: string
-    origin?: string
+    credentialFile: string | null | undefined
+    tenantId: string
+    cookie: string
+    origin: string
     requestId: string
     signal: AbortSignal
     deadlineAt: number

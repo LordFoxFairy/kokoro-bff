@@ -12,10 +12,12 @@ import type { SessionAdmission } from "../src/auth/session-admission.types.ts"
 
 function featureServer(configuration: BffConfig, admission: SessionAdmission, entries = new Map()): Server {
   const middleware = new MusicMiddleware(configuration, admission, { entries })
-  return createServer((request, response) => middleware.use(request, response, () => {
-    response.writeHead(404)
-    response.end()
-  }))
+  return createServer((request, response) =>
+    middleware.use(request, response, () => {
+      response.writeHead(404)
+      response.end()
+    }),
+  )
 }
 
 const servers: Server[] = []
@@ -39,6 +41,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     domain: "dev.kokoro.localhost",
     tenantId: "ns_test",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: "bff-upstream-secret",
     upstreamTimeoutMs: 5000,
@@ -67,7 +70,8 @@ function authHeaders(): Record<string, string> {
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
-    authorization: "Bearer test-session",
+    cookie: "kokoro-issuer.session_token=test-session",
+    origin: "https://web.example.test",
   }
 }
 
@@ -78,17 +82,25 @@ afterEach(async () => {
 describe("Mori Music owner adapter", () => {
   it("feature middleware re-admits receipt replay and rejects changed intent without a second owner command", async () => {
     let calls = 0
-    const owner = await listen(createServer(async (request, response) => {
-      for await (const _chunk of request) { /* consume the original command */ }
-      calls++
-      assert.equal(request.url, "/internal/bff/mori/projects/project_123/generations")
-      response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({ data: { generation_ref: "generation_1", status: "queued" } }))
-    }))
+    const owner = await listen(
+      createServer(async (request, response) => {
+        for await (const _chunk of request) {
+          /* consume the original command */
+        }
+        calls++
+        assert.equal(request.url, "/internal/bff/mori/projects/project_123/generations")
+        response.setHeader("content-type", "application/json")
+        response.end(JSON.stringify({ data: { generation_ref: "generation_1", status: "queued" } }))
+      }),
+    )
     const admission = new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } })
     const entries = new Map()
     const base = await listen(featureServer(config({ upstreams: { ...config().upstreams, music: owner } }), admission, entries))
-    const init = { method: "POST", headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "native-generation" }, body: JSON.stringify({ prompt: "original" }) }
+    const init = {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "native-generation" },
+      body: JSON.stringify({ prompt: "original" }),
+    }
     const first = await fetch(`${base}/v1/mori/projects/project_123/generations`, init)
     assert.equal(first.status, 200)
     const original = await first.json()
@@ -107,21 +119,41 @@ describe("Mori Music owner adapter", () => {
     let release!: (value: Awaited<ReturnType<SessionAdmission["verify"]>>) => void
     let admittedSignal!: AbortSignal
     let entered!: () => void
-    const entry = new Promise<void>((resolve) => { entered = resolve })
+    const entry = new Promise<void>((resolve) => {
+      entered = resolve
+    })
     const entries = new Map()
-    const base = await listen(featureServer(config(), { verify: ({ signal }) => {
-      admittedSignal = signal
-      entered()
-      return new Promise((resolve) => { release = resolve })
-    } }, entries))
+    const base = await listen(
+      featureServer(
+        config(),
+        {
+          verify: ({ signal }) => {
+            admittedSignal = signal
+            entered()
+            return new Promise((resolve) => {
+              release = resolve
+            })
+          },
+        },
+        entries,
+      ),
+    )
     const abort = new AbortController()
-    const pending = fetch(`${base}/v1/mori/projects/project_123/generations`, { method: "POST", headers: { ...authHeaders(), "idempotency-key": "held" }, body: "{}", signal: abort.signal }).catch(() => null)
+    const pending = fetch(`${base}/v1/mori/projects/project_123/generations`, {
+      method: "POST",
+      headers: { ...authHeaders(), "idempotency-key": "held" },
+      body: "{}",
+      signal: abort.signal,
+    }).catch(() => null)
     await entry
     const cancelled = new Promise<void>((resolve) => admittedSignal.addEventListener("abort", () => resolve(), { once: true }))
     abort.abort()
     await pending
     try {
-      await Promise.race([cancelled, new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("caller cancellation was not propagated")), 300))])
+      await Promise.race([
+        cancelled,
+        new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("caller cancellation was not propagated")), 300)),
+      ])
     } finally {
       release({ ok: true, identity: { namespace: "ns_test", userId: "user_test" }, platformAdmin: false })
     }
@@ -146,24 +178,31 @@ describe("Mori Music owner adapter", () => {
   it("rejects undocumented methods, malformed refs, and provider query parameters", () => {
     assert.equal(musicOwnerRoute(["mori", "projects", "project_123"], "POST", "/v1/mori/projects/project_123"), null)
     assert.equal(musicOwnerRoute(["mori", "projects", "project/with-slash"], "GET", "/v1/mori/projects/project%2Fwith-slash"), null)
-    assert.equal(musicOwnerRoute(["mori", "generations", "generation_1", "events"], "GET", "/v1/mori/generations/generation_1/events?provider_task_id=secret")?.path, "/internal/bff/mori/generations/generation_1/events")
+    assert.equal(
+      musicOwnerRoute(["mori", "generations", "generation_1", "events"], "GET", "/v1/mori/generations/generation_1/events?provider_task_id=secret")?.path,
+      "/internal/bff/mori/generations/generation_1/events",
+    )
     assert.equal(musicOwnerRoute(["mori", "unknown"], "GET", "/v1/mori/unknown"), null)
   })
 
   it("projects a Music owner response to the public Mori fields", () => {
-    const projected = projectMoriResponse("project", {
-      data: {
-        project_ref: "project_123",
-        title: "First Light",
-        description: "A warm sketch.",
-        current_version_ref: null,
-        candidate_count: 2,
-        last_activity_at: "2026-09-02T12:00:00.000Z",
-        provider_task_id: "provider-secret",
-        provider_name: "private-provider",
+    const projected = projectMoriResponse(
+      "project",
+      {
+        data: {
+          project_ref: "project_123",
+          title: "First Light",
+          description: "A warm sketch.",
+          current_version_ref: null,
+          candidate_count: 2,
+          last_activity_at: "2026-09-02T12:00:00.000Z",
+          provider_task_id: "provider-secret",
+          provider_name: "private-provider",
+        },
+        meta: { request_id: "owner-request" },
       },
-      meta: { request_id: "owner-request" },
-    }, "bff-request")
+      "bff-request",
+    )
 
     assert.deepEqual(projected, {
       data: {
@@ -182,7 +221,32 @@ describe("Mori Music owner adapter", () => {
   it("projects SSE envelopes and preserves replay framing", () => {
     const projected = projectMoriEventStream(
       "generation_1",
-      Buffer.from([
+      Buffer.from(
+        [
+          ": keep-alive",
+          "",
+          "id: generation_1:3",
+          "event: generation.progress",
+          `data: ${JSON.stringify({
+            data: {
+              generation_ref: "generation_1",
+              project_ref: "project_123",
+              status: "generating",
+              progress: 64,
+              candidate_refs: [],
+              provider_task_id: "provider-secret",
+            },
+            meta: { request_id: "owner-request" },
+          })}`,
+          "",
+        ].join("\n"),
+      ),
+      "bff-request",
+    )
+
+    assert.equal(
+      projected?.toString("utf8"),
+      [
         ": keep-alive",
         "",
         "id: generation_1:3",
@@ -194,33 +258,13 @@ describe("Mori Music owner adapter", () => {
             status: "generating",
             progress: 64,
             candidate_refs: [],
-            provider_task_id: "provider-secret",
           },
-          meta: { request_id: "owner-request" },
+          meta: { request_id: "bff-request" },
         })}`,
         "",
-      ].join("\n")),
-      "bff-request",
+        "",
+      ].join("\n"),
     )
-
-    assert.equal(projected?.toString("utf8"), [
-      ": keep-alive",
-      "",
-      "id: generation_1:3",
-      "event: generation.progress",
-      `data: ${JSON.stringify({
-        data: {
-          generation_ref: "generation_1",
-          project_ref: "project_123",
-          status: "generating",
-          progress: 64,
-          candidate_refs: [],
-        },
-        meta: { request_id: "bff-request" },
-      })}`,
-      "",
-      "",
-    ].join("\n"))
   })
 
   it("forwards a live Mori request through the Music owner boundary", async () => {
@@ -230,18 +274,20 @@ describe("Mori Music owner adapter", () => {
       receivedPath = request.url || ""
       receivedAuthorization = typeof request.headers.authorization === "string" ? request.headers.authorization : ""
       response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({
-        data: {
-          project_ref: "project_123",
-          title: "First Light",
-          description: "A warm sketch.",
-          current_version_ref: null,
-          candidate_count: 2,
-          last_activity_at: "2026-09-02T12:00:00.000Z",
-          provider_task_id: "provider-secret",
-        },
-        meta: { request_id: "owner-request" },
-      }))
+      response.end(
+        JSON.stringify({
+          data: {
+            project_ref: "project_123",
+            title: "First Light",
+            description: "A warm sketch.",
+            current_version_ref: null,
+            candidate_count: 2,
+            last_activity_at: "2026-09-02T12:00:00.000Z",
+            provider_task_id: "provider-secret",
+          },
+          meta: { request_id: "owner-request" },
+        }),
+      )
     })
     const ownerBase = await listen(owner)
     const bff = await listen(createLiveTestBffServer(config({ upstreams: { ...config().upstreams, music: ownerBase } })))
@@ -249,7 +295,7 @@ describe("Mori Music owner adapter", () => {
     const response = await fetch(`${bff}/v1/mori/projects/project_123?provider=secret`, {
       headers: authHeaders(),
     })
-    const body = await response.json() as { data: { project_ref: string; candidate_count: number; provider_task_id?: string }; meta: { request_id: string } }
+    const body = (await response.json()) as { data: { project_ref: string; candidate_count: number; provider_task_id?: string }; meta: { request_id: string } }
 
     assert.equal(response.status, 200)
     assert.equal(receivedPath, "/internal/bff/mori/projects/project_123")
@@ -270,12 +316,14 @@ describe("Mori Music owner adapter", () => {
     const owner = createServer((request, response) => {
       assert.equal(request.url, "/internal/bff/mori/generations/generation_1/events")
       response.writeHead(200, { "content-type": "text/event-stream" })
-      response.end([
-        "id: generation_1:3",
-        "event: generation.progress",
-        `data: ${JSON.stringify({ data: { generation_ref: "generation_1", project_ref: "project_123", status: "generating", progress: 64, candidate_refs: [], provider_task_id: "provider-secret" }, meta: { request_id: "owner-request" } })}`,
-        "",
-      ].join("\n"))
+      response.end(
+        [
+          "id: generation_1:3",
+          "event: generation.progress",
+          `data: ${JSON.stringify({ data: { generation_ref: "generation_1", project_ref: "project_123", status: "generating", progress: 64, candidate_refs: [], provider_task_id: "provider-secret" }, meta: { request_id: "owner-request" } })}`,
+          "",
+        ].join("\n"),
+      )
     })
     const ownerBase = await listen(owner)
     const bff = await listen(createLiveTestBffServer(config({ upstreams: { ...config().upstreams, music: ownerBase } })))

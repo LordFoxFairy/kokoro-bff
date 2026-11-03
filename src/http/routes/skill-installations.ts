@@ -126,7 +126,7 @@ export async function handlePersonalSkillInstallationRequest(
   response.setHeader("x-request-id", id)
   response.setHeader("cache-control", "no-store")
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
       send(
         response,
@@ -153,7 +153,17 @@ export async function handlePersonalSkillInstallationRequest(
         return true
       }
     }
-    await skillInstallationRoute(request, response, admitted.context, skillPath, client, signal, config.iamBaseUrl)
+    await skillInstallationRoute(
+      request,
+      response,
+      admitted.context,
+      skillPath,
+      client,
+      signal,
+      config.iamBaseUrl,
+      undefined,
+      config.iamUserContextServiceCredentialFile,
+    )
   } catch (error) {
     if (response.writableEnded || response.destroyed) return true
     const status =
@@ -192,7 +202,7 @@ export async function handleProjectSkillInstallationRequest(
   response.setHeader("x-request-id", id)
   response.setHeader("cache-control", "no-store")
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
       send(
         response,
@@ -220,7 +230,7 @@ export async function handleProjectSkillInstallationRequest(
     const skillPath = parts.slice(3).map((value) => decodeURIComponent(value))
     const businessPath = ["projects", projectRef, ...skillPath]
     const currentProject = async (currentSignal: AbortSignal): Promise<string> => {
-      const fresh = await authorizeUserRequest(request, config, admission, id, currentSignal)
+      const fresh = await authorizeUserRequest(request, config, admission, id, currentSignal, response)
       if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
       if (fresh.context.identity.namespace !== admitted.context.identity.namespace || fresh.context.identity.userId !== admitted.context.identity.userId)
         throw new ConnectError("Project not found", Code.NotFound)
@@ -236,7 +246,17 @@ export async function handleProjectSkillInstallationRequest(
         throw new ConnectError("Project not found", Code.NotFound)
       return project.id
     }
-    await skillInstallationRoute(request, response, admitted.context, skillPath, client, undefined, config.iamBaseUrl, currentProject)
+    await skillInstallationRoute(
+      request,
+      response,
+      admitted.context,
+      skillPath,
+      client,
+      undefined,
+      config.iamBaseUrl,
+      currentProject,
+      config.iamUserContextServiceCredentialFile,
+    )
   } catch (error) {
     if (response.writableEnded || response.destroyed) return true
     const status =
@@ -274,6 +294,7 @@ export async function skillInstallationRoute(
   signal?: AbortSignal,
   iamBaseUrl?: string | null,
   projectAccess?: (signal: AbortSignal) => Promise<string>,
+  credentialFile?: string | null,
 ): Promise<boolean> {
   if (path[0] !== "skill-installations") return false
   response.setHeader("x-request-id", context.requestId)
@@ -311,9 +332,9 @@ export async function skillInstallationRoute(
     }
   }
   const enrich = async <T>(value: T) => {
-    const result = await new IamPublisherProfileClient(iamBaseUrl ?? "", 5000).enrich(
+    const result = await new IamPublisherProfileClient(iamBaseUrl ?? "", 5000, credentialFile ?? null).enrich(
       context.identity.namespace,
-      /^Bearer ([^\s,]+)$/iu.exec(request.headers.authorization ?? "")?.[1] ?? "",
+      context.identity.userId,
       context.requestId,
       value,
       signal!,

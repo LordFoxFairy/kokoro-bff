@@ -1,11 +1,13 @@
 import { isDeepStrictEqual } from "node:util"
 import type { z } from "zod"
 import { zApiErrorResponse, zVerifyOpenAppManagementAuthorizationResponse } from "../generated/iam-http/zod.gen.js"
-import { strictParseRawJson } from "../infrastructure/raw-json.js"
-import { SessionAdmissionTransport, type SessionAdmissionTransportInput } from "./session-admission.transport.js"
+import { createIamHttpClient } from "../infrastructure/clients/iam-http-transport.js"
+import { iamUserContextHeaders } from "./iam-user-context.js"
+import { verifyOpenAppManagementAuthorization } from "../generated/iam-http/sdk.gen.js"
+import type { IamUserContextInput } from "./iam-user-context.js"
 import type { SessionAdmissionClientOptions } from "./session-admission.client.js"
 
-export type OpenAppManagementInput = SessionAdmissionTransportInput & Readonly<{ tenantId: string; appId: string }>
+export type OpenAppManagementInput = IamUserContextInput & Readonly<{ tenantId: string; appId: string }>
 export type OpenAppRegistration = z.infer<typeof zVerifyOpenAppManagementAuthorizationResponse>["data"]
 export type OpenAppManagementResult =
   Readonly<{ ok: true; registration: OpenAppRegistration }> | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
@@ -14,14 +16,32 @@ const unavailable = (): OpenAppManagementResult => ({ ok: false, status: 503, co
 
 /** Fresh IAM operator eligibility and exact current registration, not platform-admin authority. */
 export class OpenAppManagementAdmissionClient implements OpenAppManagementAdmission {
-  private readonly transport: SessionAdmissionTransport | null
+  private readonly client: ReturnType<typeof createIamHttpClient> | null
+  private readonly credentialFile: string | null
   constructor(options: SessionAdmissionClientOptions) {
-    this.transport = options.baseUrl === null ? null : new SessionAdmissionTransport({ ...options, baseUrl: options.baseUrl })
+    this.credentialFile = options.credentialFile ?? null
+    this.client = options.baseUrl === null ? null : createIamHttpClient({ ...options, baseUrl: options.baseUrl })
   }
   async verify(input: OpenAppManagementInput): Promise<OpenAppManagementResult> {
-    if (this.transport === null || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(input.appId)) return unavailable()
+    if (this.client === null || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(input.appId)) return unavailable()
     try {
-      const response = await this.transport.requestOpenAppManagement(input)
+      const result = await verifyOpenAppManagementAuthorization({
+        client: this.client,
+        path: { app_id: input.appId },
+        headers: {
+          ...(await iamUserContextHeaders({ ...input, credentialFile: this.credentialFile })),
+          accept: "application/json",
+          "x-request-id": input.requestId,
+        },
+        signal: input.signal,
+        responseValidator: async (raw) => {
+          const parsed = zVerifyOpenAppManagementAuthorizationResponse.parse(raw)
+          if (!isDeepStrictEqual(parsed, raw)) throw new Error("iam_operator_response_invalid")
+          return parsed
+        },
+      })
+      const response = result.response
+      if (response === undefined) return unavailable()
       input.signal.throwIfAborted()
       if (
         response.headers.get("x-request-id") !== input.requestId ||
@@ -29,7 +49,7 @@ export class OpenAppManagementAdmissionClient implements OpenAppManagementAdmiss
         response.headers.get("content-type")?.split(";", 1)[0] !== "application/json"
       )
         return unavailable()
-      const raw = strictParseRawJson(new TextDecoder("utf-8", { fatal: true }).decode(response.body))
+      const raw: unknown = response.status === 200 ? result.data : result.error
       if (response.status === 200) {
         const result = zVerifyOpenAppManagementAuthorizationResponse.safeParse(raw)
         if (
@@ -42,7 +62,7 @@ export class OpenAppManagementAdmissionClient implements OpenAppManagementAdmiss
         return { ok: true, registration: Object.freeze(result.data.data) }
       }
       if (!zApiErrorResponse.safeParse(raw).success) return unavailable()
-      if (response.status === 401) return { ok: false, status: 401, code: "session_invalid" }
+      if (response.status === 401) return unavailable()
       if ([403, 404, 409].includes(response.status)) return { ok: false, status: 403, code: "open_app_management_forbidden" }
       if (response.status === 429) {
         const retryAfter = response.headers.get("retry-after")

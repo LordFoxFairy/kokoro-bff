@@ -4,6 +4,7 @@ import { DatabaseModule } from "./common/database/database.module.js"
 import { RedisModule } from "./common/redis/redis.module.js"
 import { HealthModule } from "./modules/health/health.module.js"
 import { IamRelayModule } from "./modules/iam-relay/iam-relay.module.js"
+import { AuthenticationModule } from "./modules/authentication/authentication.module.js"
 import { AccountModule } from "./modules/account/account.module.js"
 import { ChatModule } from "./modules/chat/chat.module.js"
 import { AgentRunsModule } from "./modules/agent-runs/agent-runs.module.js"
@@ -23,6 +24,7 @@ import { MusicModule } from "./modules/music/music.module.js"
     RedisModule,
     HealthModule,
     IamRelayModule,
+    AuthenticationModule,
     AccountModule,
     ChatModule,
     AgentRunsModule,

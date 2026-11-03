@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "owner": {
+    "repository_path": "apps/kokoro-iam",
+    "repository_commit": "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7",
+    "framework": "better-auth",
+    "framework_version": "1.7.3",
+    "contract_path": "contract/vendor/better-auth.v1.7.3.json",
+    "contract_sha256": "823d36d5dae8e667e1b92d486e03a21348a86b7e2a4dadb07787a485b7cbcdd2"
+  },
+  "generator": {
+    "package": "@hey-api/openapi-ts",
+    "version": "0.99.0",
+    "config_path": "openapi-ts.iam-auth.config.ts",
+    "config_sha256": "6396a36c2083e9a12cf7abc7f169f2be1327cbd452311c07d6b8207f7aa49e8f"
+  },
+  "runtime": {
+    "node": "24.20.0",
+    "pnpm": "11.25.0",
+    "zod": "4.5.4"
+  },
+  "lockfile_sha256": "a1ad899d8f43809ca95a975b65122e6352b30b90120db6e37adb7c511000f617",
+  "generated": [
+    {
+      "path": "types.gen.ts",
+      "sha256": "abb44655c13b9e57656c01ab6dba66fc5588d47d6feabeb8075fe6ceca443359"
+    },
+    {
+      "path": "zod.gen.ts",
+      "sha256": "4a98e0983d61107d9099c76c698d60b864ea77c8665461247e8bdbd66212cdd1"
+    }
+  ]
+}

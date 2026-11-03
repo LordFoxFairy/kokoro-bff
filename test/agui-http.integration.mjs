@@ -60,7 +60,8 @@ function auth(tenantId, subjectId = "user_integration") {
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "web-secret",
-    authorization: `Bearer ${token}`,
+    cookie: `kokoro-issuer.session_token=${token}`,
+    origin: "https://web.example.test",
   }
 }
 
@@ -80,6 +81,7 @@ function bffConfig({ agentEnabled, agentBase, agUi }) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_a",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -192,7 +194,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
         run_id: "run_1",
         source_index: 3,
         event_type: "run.completed",
-        payload_json: '{"status":"completed","token_usage":null}',
+        payload_json: '{"status":"completed"}',
         seq: 4,
         created_at: 4000,
       },
@@ -396,7 +398,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
         run_id: secondTurn.run_id,
         source_index: 5,
         event_type: "run.completed",
-        payload_json: '{"status":"completed","token_usage":null}',
+        payload_json: '{"status":"completed"}',
         seq: 6,
         created_at: 6000,
       },
@@ -1164,7 +1166,7 @@ integrationTest(
                   run_id: b.run_id,
                   source_index: seq - 1,
                   event_type: seq === 3 ? "run.started" : "run.completed",
-                  payload_json: JSON.stringify(seq === 3 ? { status: "running" } : { status: "completed", token_usage: null }),
+                  payload_json: JSON.stringify(seq === 3 ? { status: "running" } : { status: "completed" }),
                   seq,
                   created_at: seq * 1000,
                 }))
@@ -2004,13 +2006,21 @@ integrationTest("R124 101 safe activities paginate on one immutable watermark an
     const hex = index.toString(16).padStart(64, "0")
     await c.ingest(
       index + 3,
-      {
-        activity: "tool",
-        activity_id: "act_" + hex,
-        segment_id: "seg_" + hex,
-        status: "running",
-        display_code: "tool.execution",
-      },
+      index === 100
+        ? {
+            activity: "skill",
+            activity_id: "act_" + hex,
+            preflight_id: "spf_" + "e".repeat(64),
+            source_refs: ["skill:first"],
+            phase: "ready",
+          }
+        : {
+            activity: "tool",
+            activity_id: "act_" + hex,
+            segment_id: "seg_" + hex,
+            status: "running",
+            display_code: "tool.execution",
+          },
       "activity.updated",
     )
   }

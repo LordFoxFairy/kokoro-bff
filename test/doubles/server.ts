@@ -6,7 +6,7 @@ import type { BffServerOptions } from "../../src/bootstrap/server.ts"
 import { MockBffStore } from "./bff-store.ts"
 import { MoriMockBffStore } from "./mori-store.ts"
 import { mockBusiness } from "./mock-route.ts"
-import { SessionAdmissionDouble } from "./session-admission.ts"
+import { TEST_WEB_ORIGIN, SessionAdmissionDouble } from "./session-admission.ts"
 
 export type TestBffServer = {
   server: Server
@@ -30,7 +30,14 @@ export function createTestBffServer(config: BffConfig, options: { moriAutoProgre
     },
     sharedSessionReader: store,
   }
-  return { server: createBffServer({ ...config, mode: "live" }, serverOptions), store, mori }
+  return {
+    server: createBffServer(
+      { ...config, iamWebOrigin: config.iamWebOrigin === undefined ? (config.iamRelay?.webOrigin ?? TEST_WEB_ORIGIN) : config.iamWebOrigin, mode: "live" },
+      serverOptions,
+    ),
+    store,
+    mori,
+  }
 }
 
 /** Explicit no-database composition for owner/upstream unit tests. */
@@ -39,13 +46,18 @@ export function createLiveTestBffServer(
   options: Omit<BffServerOptions, "businessStore" | "readiness"> & { readiness?: () => Promise<void> } = {},
 ): Server {
   const { readiness, ...otherOptions } = options
-  return createBffServer(config, {
-    ...otherOptions,
-    sessionAdmission: otherOptions.sessionAdmission ?? new SessionAdmissionDouble({
-      "test-session": { namespace: "ns_test", userId: "user_test" },
-      "control-session": { namespace: "tenant_control", userId: "user_control" },
-    }),
-    businessStore: null,
-    readiness: readiness ?? (async (): Promise<void> => undefined),
-  })
+  return createBffServer(
+    { ...config, iamWebOrigin: config.iamWebOrigin === undefined ? (config.iamRelay?.webOrigin ?? TEST_WEB_ORIGIN) : config.iamWebOrigin },
+    {
+      ...otherOptions,
+      sessionAdmission:
+        otherOptions.sessionAdmission ??
+        new SessionAdmissionDouble({
+          "test-session": { namespace: "ns_test", userId: "user_test" },
+          "control-session": { namespace: "tenant_control", userId: "user_control" },
+        }),
+      businessStore: null,
+      readiness: readiness ?? (async (): Promise<void> => undefined),
+    },
+  )
 }

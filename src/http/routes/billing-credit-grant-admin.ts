@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { AdmittedUserRequestContext } from "../../domain/request-context.js"
-import type { SessionAdmission, SessionAdmissionResult } from "../../auth/session-admission.types.js"
+import type { UserAdmissionResult } from "../../auth/user-admission.js"
 import { failure, ok } from "../../contracts/index.js"
 import { issueBillingCreditGrant } from "../../infrastructure/clients/owner/billing-credit-grant.js"
 import { readIamTeamPage } from "../../infrastructure/clients/iam-team.js"
@@ -14,8 +14,7 @@ export async function liveAdminCreditGrant(
   response: ServerResponse,
   config: BffConfig,
   context: AdmittedUserRequestContext,
-  token: string,
-  admission: SessionAdmission,
+  recheck: (signal: AbortSignal) => Promise<UserAdmissionResult>,
   deadlineAt: number,
 ): Promise<void> {
   response.setHeader("cache-control", "no-store")
@@ -80,7 +79,8 @@ export async function liveAdminCreditGrant(
       const members = await readIamTeamPage({
         baseUrl: config.iamBaseUrl,
         tenantId: context.identity.namespace,
-        token,
+        credentialFile: config.iamUserContextServiceCredentialFile,
+        subjectId: context.identity.userId,
         kind: "members",
         limit: 100,
         cursor,
@@ -112,7 +112,7 @@ export async function liveAdminCreditGrant(
       return
     }
     checkBudget()
-    const current = await new Promise<SessionAdmissionResult>((resolve, reject) => {
+    const current = await new Promise<UserAdmissionResult>((resolve, reject) => {
       const onAbort = () => {
         abort.signal.removeEventListener("abort", onAbort)
         reject(new Error("Administrator recheck deadline"))
@@ -123,13 +123,7 @@ export async function liveAdminCreditGrant(
         return
       }
       void Promise.resolve()
-        .then(() =>
-          admission.verify({
-            token,
-            requestId: context.requestId,
-            signal: abort.signal,
-          }),
-        )
+        .then(() => recheck(abort.signal))
         .then(
           (value) => {
             abort.signal.removeEventListener("abort", onAbort)
@@ -146,7 +140,11 @@ export async function liveAdminCreditGrant(
       fail(current.status, current.code)
       return
     }
-    if (!current.platformAdmin || current.identity.namespace !== context.identity.namespace || current.identity.userId !== context.identity.userId) {
+    if (
+      !current.context.platformAdmin ||
+      current.context.identity.namespace !== context.identity.namespace ||
+      current.context.identity.userId !== context.identity.userId
+    ) {
       fail(403, "admin_billing_forbidden")
       return
     }

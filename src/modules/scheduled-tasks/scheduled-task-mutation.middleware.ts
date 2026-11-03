@@ -33,7 +33,8 @@ export class ScheduledTaskMutationMiddleware implements NestMiddleware {
       return
     }
     void this.handle(request, response).catch(() => {
-      if (!response.headersSent && !response.writableEnded && !response.destroyed) send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", requestId(request)))
+      if (!response.headersSent && !response.writableEnded && !response.destroyed)
+        send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", requestId(request)))
     })
   }
 
@@ -41,27 +42,56 @@ export class ScheduledTaskMutationMiddleware implements NestMiddleware {
     const id = requestId(request)
     response.setHeader("x-request-id", id)
     const abort = new AbortController()
-    const close = (): void => { if (!response.writableEnded) abort.abort() }
+    const close = (): void => {
+      if (!response.writableEnded) abort.abort()
+    }
     request.once("aborted", close)
     response.once("close", close)
     let mutation: import("../../application/idempotency.js").MutationTicket | null = null
     try {
-      const admitted = await authorizeUserRequest(request, this.config, this.admission, id, abort.signal)
-      if (!admitted.ok) { send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter); return }
+      const admitted = await authorizeUserRequest(request, this.config, this.admission, id, abort.signal, response)
+      if (!admitted.ok) {
+        send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+        return
+      }
       const body = await readBody(request)
       const json = requestBodyJson(request, body)
-      if (json === null) { send(response, 400, failure("invalid_json", "Request body must be a JSON object", id)); return }
+      if (json === null) {
+        send(response, 400, failure("invalid_json", "Request body must be a JSON object", id))
+        return
+      }
       const key = idempotencyKey(request)
-      if (key === null) { send(response, 400, failure("idempotency_key_required", "Mutations require Idempotency-Key", id)); return }
+      if (key === null) {
+        send(response, 400, failure("idempotency_key_required", "Mutations require Idempotency-Key", id))
+        return
+      }
       const path = pathOf(request).slice(1)
-      const ticket = await mutationTicket(key, request.method ?? "POST", `/${path.join("/")}`, admitted.context, mutationFingerprint(request, path, json, body), this.idempotency, this.persistent)
-      if (ticket.replay !== null) { send(response, ticket.replay.status, ticket.replay.body); return }
-      if (ticket.conflict) { send(response, 409, failure("idempotency_conflict", "Idempotency key already used with a different request payload", id)); return }
-      if (ticket.pending) { send(response, 409, failure("idempotency_in_progress", "An identical mutation is already in progress", id)); return }
+      const ticket = await mutationTicket(
+        key,
+        request.method ?? "POST",
+        `/${path.join("/")}`,
+        admitted.context,
+        mutationFingerprint(request, path, json, body),
+        this.idempotency,
+        this.persistent,
+      )
+      if (ticket.replay !== null) {
+        send(response, ticket.replay.status, ticket.replay.body)
+        return
+      }
+      if (ticket.conflict) {
+        send(response, 409, failure("idempotency_conflict", "Idempotency key already used with a different request payload", id))
+        return
+      }
+      if (ticket.pending) {
+        send(response, 409, failure("idempotency_in_progress", "An identical mutation is already in progress", id))
+        return
+      }
       mutation = ticket.ticket
       await handleScheduledTaskMutationBusiness(request, response, admitted.context, this.tasks, this.projects, json, mutation, this.idempotency)
     } catch (error) {
-      if (!response.headersSent && !response.writableEnded && !response.destroyed) send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", id))
+      if (!response.headersSent && !response.writableEnded && !response.destroyed)
+        send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", id))
     } finally {
       request.removeListener("aborted", close)
       response.removeListener("close", close)

@@ -17,6 +17,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -30,7 +31,12 @@ const config = {
   upstreams: {},
   skillDraft: { enabled: false, platformBaseUrl: null, credentialFile: null, timeoutMs: 100 },
 }
-const headers = { authorization: "Bearer session", "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" }
+const headers = {
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
+  "x-kokoro-service": "web-bff",
+  "x-kokoro-internal-secret": "secret",
+}
 
 async function withServer(client, run, admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "user" } })) {
   const server = createLiveTestBffServer(config, {

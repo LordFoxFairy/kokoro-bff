@@ -57,15 +57,20 @@ export async function handleProjectSkillSelectionRequest(
   response.setHeader("x-request-id", id)
   response.setHeader("cache-control", "no-store")
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
-      send(response, admitted.status, {
-        error: {
-          code: admitted.code,
-          message: "BFF user admission failed",
-          retryable: admitted.status === 429 || admitted.status === 503,
+      send(
+        response,
+        admitted.status,
+        {
+          error: {
+            code: admitted.code,
+            message: "BFF user admission failed",
+            retryable: admitted.status === 429 || admitted.status === 503,
+          },
         },
-      }, admitted.retryAfter)
+        admitted.retryAfter,
+      )
       return true
     }
     const context = admitted.context
@@ -79,14 +84,11 @@ export async function handleProjectSkillSelectionRequest(
     }
     await projectSkillSelectionRoute(request, response, context, store, client, async (projectSignal) => {
       if (!store) throw new ConnectError("Project owner unavailable", Code.Unavailable)
-      const fresh = await authorizeUserRequest(request, config, admission, id, projectSignal)
+      const fresh = await authorizeUserRequest(request, config, admission, id, projectSignal, response)
       if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
       if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
         throw new ConnectError("Project not found", Code.NotFound)
-      const project = await store.find(
-        { tenantId: context.identity.namespace, subjectId: context.identity.userId },
-        decodedProjectRef,
-      )
+      const project = await store.find({ tenantId: context.identity.namespace, subjectId: context.identity.userId }, decodedProjectRef)
       projectSignal.throwIfAborted()
       if (!project) throw new ConnectError("Project not found", Code.NotFound)
       return project.id

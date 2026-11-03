@@ -23,22 +23,28 @@ export async function handleBillingAdminRequest(
   let metering: ReturnType<typeof matchMeteringAdmin> = null
   if (!creditGrant) {
     let path: string[]
-    try { path = pathOf(request) } catch { return false }
+    try {
+      path = pathOf(request)
+    } catch {
+      return false
+    }
     metering = matchMeteringAdmin(request.method ?? "GET", path.slice(1))
   }
   if (!creditGrant && metering === null) return false
   const id = requestId(request)
   const deadlineAt = Date.now() + Math.min(config.upstreamTimeoutMs, 10_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(Math.max(1, deadlineAt - Date.now())))
+    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(Math.max(1, deadlineAt - Date.now())), response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true
     }
-    if (creditGrant) await liveAdminCreditGrant(request, response, config, admitted.context, admitted.bearerToken, admission, deadlineAt)
-    else await liveAdminMetering(request, response, config, admitted.context, admitted.bearerToken, admission, metering!, deadlineAt)
+    const recheck = (signal: AbortSignal) => authorizeUserRequest(request, config, admission, id, signal, response)
+    if (creditGrant) await liveAdminCreditGrant(request, response, config, admitted.context, recheck, deadlineAt)
+    else await liveAdminMetering(request, response, config, admitted.context, recheck, metering!, deadlineAt)
   } catch {
-    if (!response.headersSent && !response.destroyed && !response.writableEnded) send(response, 503, failure("billing_admin_unavailable", "Billing administrator route is unavailable", id))
+    if (!response.headersSent && !response.destroyed && !response.writableEnded)
+      send(response, 503, failure("billing_admin_unavailable", "Billing administrator route is unavailable", id))
     else if (!response.writableEnded && !response.destroyed) response.destroy()
   }
   return true

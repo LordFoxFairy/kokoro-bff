@@ -1,3 +1,4 @@
+import { PostgresPersonalizationRepository } from "../dist/infrastructure/postgres/personalization-repository.js"
 import { ProjectService } from "../dist/application/project-service.js"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
@@ -46,7 +47,8 @@ function auth(namespace, principal = "user_integration") {
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "web-secret",
-    authorization: `Bearer ${token}`,
+    cookie: `kokoro-issuer.session_token=${token}`,
+    origin: "https://web.example.test",
   }
 }
 
@@ -63,6 +65,7 @@ function bffConfig(overrides = {}) {
     domain: "dev.kokoro.localhost",
     tenantId: overrides.tenantId ?? "tenant_test",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -1283,7 +1286,8 @@ integrationTest("R237 HTTP Move and Message reject inactive sources targets and 
 function r237AfterQueryDatabase(pool, onQuery) {
   const run = async (target, args) => {
     const result = await target.query(...args)
-    await onQuery(typeof args[0] === "string" ? args[0] : args[0].text, result)
+    const values = typeof args[0] === "string" ? args[1] : args[0].values
+    await onQuery(typeof args[0] === "string" ? args[0] : args[0].text, result, values)
     return result
   }
   return {
@@ -1331,10 +1335,25 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
         f.tenant,
         project.id,
       ])
+      const originalPage =
+        operation === "messages" ? await new PostgresChatRepository({ pool: f.pool }).listMessages(f.tenant, f.owner, conversation, 20, null) : null
+      if (operation === "messages") {
+        assert.ok(originalPage)
+        assert.equal(originalPage.messages.length, 1)
+        assert.equal(originalPage.messages[0].content, "Private message")
+      }
       let changed = false
       let expected
-      const database = r237AfterQueryDatabase(f.pool, async (sql) => {
-        const firstLookup = operation === "messages" ? /^SELECT conversation_id FROM bff_conversation/u.test(sql.trim()) : /FROM bff_project\s+WHERE/u.test(sql)
+      const database = r237AfterQueryDatabase(f.pool, async (sql, result, values) => {
+        const firstLookup =
+          operation === "messages"
+            ? /^\s*SELECT\b/iu.test(sql) &&
+              /\bFROM\s+bff_conversation\b/iu.test(sql) &&
+              values?.[0] === f.tenant &&
+              values?.[1] === f.owner &&
+              values?.[2] === conversation &&
+              result.rows.some((row) => row.conversation_id === conversation)
+            : /FROM bff_project\s+WHERE/u.test(sql)
         if (!changed && firstLookup) {
           changed = true
           await f.pool.query("UPDATE bff_project SET deleted_at=$2 WHERE project_id=$1", [project.id, r237Tombstone])
@@ -1343,7 +1362,9 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
       })
       if (operation === "messages") {
         const result = await new PostgresChatRepository(database).listMessages(f.tenant, f.owner, conversation, 20, null)
-        assert.deepEqual(result, { messages: [], next_cursor: null })
+        // This in-flight Message read owns one RR snapshot; the next read must observe the committed tombstone.
+        assert.deepEqual(result, originalPage)
+        assert.equal(await new PostgresChatRepository({ pool: f.pool }).listMessages(f.tenant, f.owner, conversation, 20, null), null)
       } else {
         const repository = new PostgresProjectRepository(database)
         const result =
@@ -1590,7 +1611,12 @@ async function r241Fixture(t, observeDeletionSignal) {
   const admission = new SessionAdmissionDouble()
   const token = `r241-${randomUUID()}`
   admission.allow(token, { namespace: tenant, userId: owner })
-  const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret", authorization: `Bearer ${token}` }
+  const headers = {
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": "web-secret",
+    cookie: `kokoro-issuer.session_token=${token}`,
+    origin: "https://web.example.test",
+  }
   let store
   let server
   let base
@@ -1639,6 +1665,7 @@ async function r241Fixture(t, observeDeletionSignal) {
     server = createBffServer(bffConfig({ tenantId: configTenant }), {
       businessStore: store,
       sessionAdmission: admission,
+      personalizationProvider: new PostgresPersonalizationRepository(store.database),
       agentDispatchDispatcher: r237IdleWorker,
       agentCancellationDispatcher: r237IdleWorker,
       agUiProjector: r237IdleWorker,
@@ -1861,7 +1888,17 @@ integrationTest("R241 rename current owner tenant active and IAM admission prece
   ]) {
     const token = `r241-${label}-${randomUUID()}`
     f.admission.allow(token, identity)
-    await f.denied(() => f.request(path, "PATCH", { name: "已提交" }, { authorization: `Bearer ${token}`, "idempotency-key": "replay-key" }), status, code)
+    await f.denied(
+      () =>
+        f.request(
+          path,
+          "PATCH",
+          { name: "已提交" },
+          { cookie: `kokoro-issuer.session_token=${token}`, origin: "https://web.example.test", "idempotency-key": "replay-key" },
+        ),
+      status,
+      code,
+    )
   }
   await f.denied(() => f.rename(`project_${randomUUID()}`, "合法"), 404, "project_not_found")
   for (const [status, code] of [
@@ -1875,7 +1912,7 @@ integrationTest("R241 rename current owner tenant active and IAM admission prece
   }
   f.admission.allow(f.token, { namespace: f.tenant, userId: f.owner })
   await f.denied(
-    () => f.request(path, "PATCH", { name: "合法" }, { authorization: "", "idempotency-key": "missing-session" }),
+    () => f.request(path, "PATCH", { name: "合法" }, { cookie: "", origin: "https://web.example.test", "idempotency-key": "missing-session" }),
     401,
     "session_authentication_required",
   )
@@ -2626,22 +2663,34 @@ integrationTest("R257 personalization absent read is read-only and current owner
   assert.equal((await f.request(path, "PUT", { expected_revision: 0, ...fields })).status, 200)
   const otherToken = `r257-other-${randomUUID()}`
   f.admission.allow(otherToken, { namespace: f.tenant, userId: "r257_other" })
-  const other = await f.request(path, "GET", undefined, { authorization: `Bearer ${otherToken}` })
+  const other = await f.request(path, "GET", undefined, { cookie: `kokoro-issuer.session_token=${otherToken}`, origin: "https://web.example.test" })
   assert.deepEqual(other.body, { data: { personalization: null, revision: 0 } })
   const otherFields = r257PersonalizationFields("另一本人")
-  const otherSave = await f.request(path, "PUT", { expected_revision: 0, ...otherFields }, { authorization: `Bearer ${otherToken}` })
+  const otherSave = await f.request(
+    path,
+    "PUT",
+    { expected_revision: 0, ...otherFields },
+    { cookie: `kokoro-issuer.session_token=${otherToken}`, origin: "https://web.example.test" },
+  )
   assert.equal(otherSave.status, 200)
   const crossToken = `r257-cross-${randomUUID()}`
   f.admission.allow(crossToken, { namespace: `${f.tenant}_other`, userId: f.owner })
-  r257PersonalizationError(await f.request(path, "GET", undefined, { authorization: `Bearer ${crossToken}` }), 403, "product_tenant_forbidden")
+  r257PersonalizationError(
+    await f.request(path, "GET", undefined, { cookie: `kokoro-issuer.session_token=${crossToken}`, origin: "https://web.example.test" }),
+    403,
+    "product_tenant_forbidden",
+  )
   await f.restart()
   assert.deepEqual((await f.request(path)).body, { data: { personalization: fields, revision: 1 } })
   const empty = { nickname: "", occupation: "", about: "", instructions: "" }
   assert.deepEqual((await f.request(path, "PUT", { expected_revision: 1, ...empty })).body, { data: { personalization: empty, revision: 2 } })
   assert.deepEqual((await f.request(path)).body, { data: { personalization: empty, revision: 2 } })
-  assert.deepEqual((await f.request(path, "GET", undefined, { authorization: `Bearer ${otherToken}` })).body, {
-    data: { personalization: otherFields, revision: 1 },
-  })
+  assert.deepEqual(
+    (await f.request(path, "GET", undefined, { cookie: `kokoro-issuer.session_token=${otherToken}`, origin: "https://web.example.test" })).body,
+    {
+      data: { personalization: otherFields, revision: 1 },
+    },
+  )
   assert.equal((await f.pool.query("SELECT count(*)::int AS n FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [f.tenant])).rows[0].n, 0)
 })
 
@@ -2690,7 +2739,11 @@ integrationTest("R257 personalization rejects malformed requests without inserti
   assert.equal((await f.pool.query("SELECT count(*)::int AS n FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [f.tenant])).rows[0].n, 0)
   const denied = `r257-denied-${randomUUID()}`
   f.admission.deny(denied, { ok: false, status: 403, code: "session_forbidden" })
-  r257PersonalizationError(await f.request(path, "PUT", valid, { authorization: `Bearer ${denied}` }), 403, "session_forbidden")
+  r257PersonalizationError(
+    await f.request(path, "PUT", valid, { cookie: `kokoro-issuer.session_token=${denied}`, origin: "https://web.example.test" }),
+    403,
+    "session_forbidden",
+  )
   assert.equal((await f.request(path, "PUT", valid)).status, 200, "a later valid save must still work")
 })
 
@@ -2844,8 +2897,10 @@ async function r257RawPersonalization(f, { method = "PUT", suffix = "", raw = ""
           "web-bff",
           "x-kokoro-internal-secret",
           "web-secret",
-          "authorization",
-          `Bearer ${f.token}`,
+          "cookie",
+          `kokoro-issuer.session_token=${f.token}`,
+          "origin",
+          "https://web.example.test",
           "Content-Type",
           "application/json",
           "Content-Length",
@@ -3665,8 +3720,10 @@ async function r279RawHttp(f, method, path, rawHeaders = [], body = "") {
           "web-bff",
           "x-kokoro-internal-secret",
           "web-secret",
-          "authorization",
-          `Bearer ${f.token}`,
+          "cookie",
+          `kokoro-issuer.session_token=${f.token}`,
+          "origin",
+          "https://web.example.test",
           ...rawHeaders,
         ],
         signal: AbortSignal.timeout(6000),
@@ -4144,7 +4201,12 @@ async function r285ReleaseFixture(t, release) {
   const admission = new SessionAdmissionDouble()
   const token = `r285-${randomUUID()}`
   admission.allow(token, { namespace: tenant, userId: owner })
-  const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret", authorization: `Bearer ${token}` }
+  const headers = {
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": "web-secret",
+    cookie: `kokoro-issuer.session_token=${token}`,
+    origin: "https://web.example.test",
+  }
   let store
   let bff
   let base
@@ -5093,7 +5155,7 @@ integrationTest("current scheduled HTTP reads authoritative next, rechecks admis
     bff,
     owner
   const headers = auth(suffix, subject)
-  const token = headers.authorization.slice(7)
+  const token = headers.cookie.slice("kokoro-issuer.session_token=".length)
   const repository = new PostgresScheduledTaskRepository({ pool })
   const isolation = await pool.connect()
   try {

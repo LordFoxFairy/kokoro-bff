@@ -14,6 +14,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant-personal",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -33,7 +34,8 @@ const config = {
   },
 }
 const baseHeaders = {
-  authorization: "Bearer session",
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
   "content-type": "application/json",
@@ -222,8 +224,10 @@ test("personal Skill lifecycle closes raw input, framing, key, UTF-8 and reason 
           headers: [
             "host",
             new URL(origin).host,
-            "authorization",
-            "Bearer session",
+            "cookie",
+            "kokoro-issuer.session_token=session",
+            "origin",
+            "https://web.example.test",
             "x-kokoro-service",
             "web-bff",
             "x-kokoro-internal-secret",
@@ -885,6 +889,7 @@ test("P4 owned Skills production HTTP forwards literal Unicode query and owner c
     {
       ...config,
       iamBaseUrl: "http://iam.test",
+      iamWebOrigin: "https://web.example.test",
       platformProjection: { baseUrl: "http://platform.test", credentialFile: "/unused-token-fixture", timeoutMs: 1000 },
     },
     { sessionAdmission: admission, skillAuthorization: { check: async () => ({ ok: true }) } },

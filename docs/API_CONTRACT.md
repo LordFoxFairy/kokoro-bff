@@ -1,3 +1,63 @@
+> 当前候选（2026-11-03）：D0已通过；IAM固定896405d／internal0.20与Better Auth1.7.3正式snapshot，BFF源码正在同片收口。独立browser-private合同已由Root在34c9f997发行；Root已完成完整工程门、423项真实PG及真实IAM认证relay验证，各项证据只覆盖对应停写候选与范围。Skill inspection owner组合及含共享Admin的浏览器G1仍待，不代表正常环境已切换。
+
+I-49仅恢复现机器合同已有行为：Message本地坏JSON/输入400、超限413，canonical digest冲突409、原scope缺失404；移除外围HTTP成功cache后每次重放仍鲜准入并交canonical owner。ScheduledTask owner具名Project缺失为404 project_not_found，未识别依赖错误仍503；Project DELETE尾斜杠仍400 invalid_project_deletion_request而非合法删除。无新path/DTO/状态码或Schema，未知写入不换key、不自动重放；最终真实IAM与浏览器组合另验。
+## 2026-11-02 AUTH-STD-D0：原生认证、受信 actor 与安全状态投影（合同已独立发行；源码候选未激活）
+
+**状态。** BFF 基线 `b6d98f825bc43816948a7249b68661e5fecd0e32`；D0已通过；独立状态合同已发行，普通私有调用及认证源码为未激活候选，完整消费者／G1仍待Root验收。依据 [Root ADR-035](../../../docs/kokoro-handbook/decisions/ADR-035-direct-internal-service-authentication.md) 与 [Task A §3.6](../../../docs/superpowers/plans/2026-11-01-task-a-c1-c4-technical-plan.md)，本候选替代旧 proof 目标；下方撤销通知／I29 原文仅历史保留。认证、业务授权、服务身份各自有唯一 owner contract，不在 Root 或本仓复制 IAM 的可编辑事实源。
+
+### 原生认证 client 与业务 wire 分离
+
+| 边界 | 目标合同 |
+| --- | --- |
+| Web same-origin adapter → BFF | 原受信 Web／Admin 服务 envelope、allowlisted IAM Cookie、固定 Origin 与受控 request ID；普通业务一次 BFF 调用，不用前后 `/v1/me` 代替业务准入。原浏览器写请求 CSRF 验证保持；adapter 注入固定 Origin 本身不替代 CSRF |
+| BFF 认证 client → IAM | 正式锁定 Better Auth 原生 `GET /iam/get-session`；业务入口／重要私有交付或派发复验固定官方 `disableCookieCache=true&disableRefresh=true`。无服务 Bearer、用户 access token mint、SessionRef 或第二 admission 成功形状；从正式 `{session,user}`／`null` pick 真实主体与实际会话元数据，不透传整个 Session |
+| BFF → IAM 17项普通私有业务 | `Authorization: Bearer` 仅为专用 `bff_user_context` 直接服务凭据，唯一 `x-kokoro-actor-id` 由已认证主体派生；IAM 先验 caller／purpose／固定 tenant，核对 route tenant，并拒重复 actor 与不允许的凭据／身份字段。无 Cookie／Origin／登录 Session ID／SessionRef／人类 Bearer；服务身份不授业务权限 |
+| BFF 账户认证 adapter → IAM 认证生命周期 | 现GET `/internal/v1/account/sessions`／DELETE `/internal/v1/account/sessions/{session_id}`；IAM AuthModule具名`AccountSessionGuard`先验独立 `caller=kokoro-bff`／`surface=account_sessions`／固定tenant receiver凭据，再验原生Cookie／exact Origin并调用官方get-session双true。peerBearer＋issuerCookie是AND要求，无actor header／外部caller Session ID／人类Bearer；Cookie不进入普通业务SDK／principal，生成合同由IAM owner正式发行后固定消费 |
+
+原生 get-session 的 active tenant 字段不证明成员资格。BFF 保护业务随后消费现 `checkAuthorization` 的 `tenant/read` 服务＋actor 分支，鲜读 User／Tenant／member 核心资格，不扩全角色扫描门。Skills／MCP／OpenApp、Account／Team 的角色／operator／资源／CAS／last-owner／审计政策仍由 IAM 对应业务事务执行；BFF 只使用真实 `userId`／`tenantId`，`platformAdmin` 可供UI与既有BFF global-admin gate使用，但不作跨owner业务凭据或替代具体policy；其私有version完整性由IAM官方认证投影检查，BFF不读取。所有私有业务客户端、publisher 嵌套链、AdminTeam／Billing 每页及必要末端复验同步切换，不留空 Bearer 或 legacy fallback。
+
+17项仅限定 BFF 第一方调用统一 service＋actor，不是删除整个 operation 的合法 OAuth 身份面；独立 OAuth／tenant_machine 仍按 IAM 每 operation 正式合同，BFF 该服务身份失败不 fallback OAuth／native，不新增 OAuth／refresh／token cache，亦不因本片整删 IAM OAuth helper。
+
+`platformAdmin returned:true` 是 Better Auth 全局 User 输出变更，正式发行必须同时使现 `src/http/routes/iam-protocol-relay.ts::SIGN_UP_SUCCESS_SCHEMA.user` 等 strict 认证响应 parser 从同版 owner generated 形状派生／窄pick，显式允许安全只读 boolean、仍拒未知字段／客户端 `platformAdmin` 输入并保 `input:false`，以正常注册、防枚举 synthetic User 和邀请真实HTTP回归证明不再被旧parser误映射502，而非新增自定义Session接口或宽松passthrough。
+
+认证 HTTP 的明确 `200 null`／合同内人类失效映射业务401；固定 Product tenant 不符或当前资格不足为403，不强制注销仍有效的登录。原生认证未使用服务凭据，不沿用旧 native-admission 的服务401错误矩阵；IAM 私有业务的服务凭据拒绝及不明401属于503依赖错误，不伪装人类失效。损坏 wire、网络／依赖故障保持503或原具名坏回包政策；429保受控 Retry-After，零自动重试。原具体业务404／409／取消／unknown／receipt规则保持，后继失败不证明先前写入未提交。
+
+### 公开 `/v1/me` 与唯一 browser-private 状态 API
+
+`GET /v1/me` 的公开 DTO 保持 `data.user_id`／`data.tenant_id`／`data.platform_admin` 及既有 envelope 不变，仅在后继正式契约中修正旧 Bearer 认证说明；不向该 DTO 塞 Session／expiry／token。App 需要的当前认证状态走独立正常投影：
+
+| 项 | `GET /browser/v1/auth/session` 候选约定 |
+| --- | --- |
+| Owner／范围 | BFF 认证 feature 独占，browser-private／beta／无幂等写命令，不进入 Project contract、public `/v1/me` 或 Root contract 镜像 |
+| 输入 | 仅 GET，无 body；query 只允许至多一个 `refresh`，省略为布尔 true，字面 `true`／`false` 精确解析，其余值／重复／额外参数为400；不以 `Boolean("false")` 等宽松转换解析。此 query 是本项目 HTTP 行为选择，不冒称 OAuth 标准 |
+| 刷新 | 默认 true 供可写 HTTP RouteHandler 状态观察，消费框架正常 rolling；RSC 明确 false，BFF 转为官方 `disableCookieCache=true&disableRefresh=true`。两者都从 IAM 当前数据观察，不缓存允许结果，无第二 endpoint／私有身份 header |
+| 已认证200 | strict `data` 为 `{authenticated:true,subject,tenant_id,expires_at}`；subject／tenant为真实主体，expires_at为 IAM 实际 expiry 的 RFC3339 UTC 序列化，不造 TTL、token／accessExpiresAt／id／generation／SessionRef |
+| 匿名200 | strict `data` 仅 `{authenticated:false}`；仅明确缺失／失效登录得到匿名，不用匿名吞掉 tenant／资格或依赖错误 |
+| 失败 | 输入400；可信服务 envelope／固定 tenant／Product 资格拒绝403；限流429及合法 Retry-After；IAM网络／依赖／坏wire或私有服务认证失败503；合同正式闭合 status／code／retryable 后实施 |
+| 响应 | `Cache-Control: no-store`、受控 `x-request-id`，request ID只在响应 header，不在该新 JSON中复造meta；整个原始 Session／token、Cookie值与 `set-auth-jwt` 不进入表示或日志 |
+| Cookie | 仅认证边缘允许的安全 `Set-Cookie` 逐条经可写 HTTP adapter传回浏览器，不逗号拼接、不丢续期Cookie。`refresh=false`仍可能遇到框架清失效Cookie；RSC无写响应能力时仅显示匿名，后续正常状态GET清理。普通业务owner响应仍拒绝Set-Cookie |
+| 唯一机器源 | BFF 认证 feature 的 code-first response／query／error定义生成只读 `contract/openapi/browser/v1/auth-session.json`；先固定版本／digest与校验，再正式发行给App生成消费。已生成只读机器文件；正式34c9f997／profile1.0.0 SHA256 `a7b5876632f6ad91b9fc162c9abcf48b36b2677a3b15a6a497d3305aeaea81ba`，App固定后生成；无另一份手写App schema或新SDK |
+
+此状态 API 是当前显示／重读投影，不是跨 owner 票据或后续业务授权。普通业务每次在 BFF 认证；重要私有响应／派发前继续边缘鲜验、精确主体／tenant和原 action／资格检查。原生 expiry展示不替代当前 Session 校验，UI `platformAdmin`不替代管理员政策；同主体更换有效会话的迟到 UI 响应由 App 本地 auth-change invalidation／abort退役，不构造网络 generation。
+
+**同时关闭raw Session浏览器出口。** 现BFF code-first `src/http/routes/iam-protocol-relay.policy.ts`及其只读`contract/iam-relay-policy.json`后继正式移除浏览器`GET /iam/get-session`闭集项（含query直达），递增policy version并固定新digest后由App正规生成消费；浏览器只用`GET /api/auth/session`安全状态。不是删除IAM upstream get-session／snapshot，不影响login／verifyEmail／setActive等已允许认证交互。真实HTTP检查旧browser路径拒绝／零upstream调用，以及原生响应中的token／内部Session ID／IP／UA secret-canary不进入安全状态／普通业务响应或日志；账户安全资源session_id依独立合同保留。仅UI不再调用不构成边界关闭。policy3.0.0已正式移除raw get-session并由34c9f997发行；只读产物SHA256 `c88bab0bd1d5529573eee318e50ac2dd41349a03fc84e8b7284416af700a0ebe`。真实loopback HTTP零upstream／secret-canary已定向验证，不代表真实IAM／浏览器组合完成。
+
+### 账户认证生命周期与保留协议
+
+账户两操作留在 IAM 认证生命周期，保原current／other安全DTO、IAM独立current删除保护、callerSession／target锁、目标归属／单向终止／关联OAuth revoke／Audit事务；不增加框架或重写撤销逻辑。独立`account_sessions` receiver凭据不复用`bff_user_context`／旧admission；原生Cookie只经具名账户认证adapter，exact Origin与浏览器DELETE严格CSRF保持，不接actor／外部caller sid。BFF直接投影owner安全表示与keyset，不重建all-active／current识别／过滤／补读。目标 `session_id`仍是资源路径标识，不传当前Session ID当普通业务证明；Cookie不进入17项普通业务服务＋actor合同，不恢复全局OwnerSessionAuth fallback。
+
+账户cursor正式v2去掉伪OAuth `client_id`，保user／tenant／由IAM Cookie认证得到的current_sid及原keyset／排序绑定；内部current_sid是分页授权范围，不是外部登录证明。旧v1明确400、从首屏重读，非401／注销、不丢失未决写意图，不解旧OAuth namespace兼容；这是正式breaking合同变化，不宣称cursor字节兼容。IAM先生成／发行路径、安全AND要求、错误及v2 cursor合同，BFF再固定同一owner artifact。
+
+合法公共 API Key／OpenApp 的 `GET /v1/skill.list`、`publicBearer`／`resolvePublic`、第三方OAuth、独立service-only、执行proof／lease／Run和资金合同不变；OpenApp管理仍当前operator＋exact tenant/app/client，不由平台管理员替代。撤销后下一保护请求拒绝；当前复验不保证跨owner在途副作用的全局原子撤权，也不自动重放未知提交。
+
+### 发行与验收门
+
+先由Root复核本候选与IAM三面／必要ADR，正式固定原生认证snapshot、17普通业务服务＋actor错误闭集、tenant/read及两操作账户认证生命周期合同；BFF再按同一owner commit／version／digest正规生成，全部59调用文件及隐蔽参数链迁完后删除旧SessionAdmission双mode／optional native／`verify`fallback／`OwnerSessionAuth`／空Bearer／wrapper。状态API依上述单一code-first来源先发行再由App消费。必要证据为原生认证／状态多Cookie与无秘密泄漏、真实Nest middleware、wrapper／publisher／OpenApp、AdminTeam／Billing分页及末端资格、账户callerSession／current／cursor与目标撤销事务、取消／unknown／迟到响应与独立公共身份负控；真实owner I/O／事务和浏览器验收另列，不用替身或历史数字代替。持久边界见 [数据模型](DATA_MODEL.md)，调用／删除边界见 [技术设计](TECHNICAL_DESIGN.md)。
+
+## 2026-11-02 认证重设计：I-38 会话引用方案已撤销
+
+用户已明确否决请求内 Session 引用方案；该提案及未提交引用代码/生成物/相邻测试已撤销，不再作为实施依据。下方 I29 仅保留原阶段设计与行为基线，不代表新的标准认证设计已批准，也不自动恢复逐业务 Cookie 方案。当前先按后端规范与官方认证标准重开设计门，统一以 Root 有效 Task A 方案追踪；新方案通过前不继续其契约/消费者切换。
+
 ## I29-D0：native2 固定消费与第一方业务认证（目标，未发行／未切换）
 
 当前固定 IAM internal **0.18.0**／native **1.0.0**；以下目标依 IAM 正式发布后实施，不将文档当机器契约。BFF public endpoint、operationId、业务 DTO、权限及错误 profile 不因本片新增版本或接口；不在本仓或 Root 维护第二份 IAM 可编辑 contract。字段唯一来源为 IAM 下一正式发布物，BFF 只经现生成链固定 version／commit／digest。

@@ -53,7 +53,7 @@ export async function handleAccountNativeRequest(
   request.once("aborted", onAborted)
   response.once("close", onClosed)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal, response)
     if (!admitted.ok) {
       response.setHeader("x-request-id", id)
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
@@ -89,12 +89,12 @@ export async function handleAccountNativeRequest(
       return true
     }
     if (businessPath[0] === "account" && businessPath[1] === "sessions") {
-      await accountSessionsRoute(request, response, config, admitted.context, admitted, businessPath)
+      await accountSessionsRoute(request, response, config, admitted.context, businessPath)
       return true
     }
     if (businessPath[0] === "team") {
-      if (request.method === "GET") await liveTeamRead(request, response, config, admitted.context, admitted, businessPath)
-      else await liveTeamWrite(request, response, config, admitted.context, admitted, businessPath)
+      if (request.method === "GET") await liveTeamRead(request, response, config, admitted.context, businessPath)
+      else await liveTeamWrite(request, response, config, admitted.context, businessPath)
       return true
     }
     return false

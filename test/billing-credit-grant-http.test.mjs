@@ -1,3 +1,4 @@
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
 import assert from "node:assert/strict"
 import { createServer, request as nodeRequest } from "node:http"
 import { afterEach, test } from "node:test"
@@ -41,7 +42,8 @@ const u1 = (value) => "u1." + Buffer.from(value).toString("base64url")
 const browserHeaders = {
   "x-kokoro-service": "admin-web-bff",
   "x-kokoro-internal-secret": "admin-browser-secret",
-  authorization: "Bearer current-admin-session",
+  cookie: "kokoro-issuer.session_token=current-admin-session",
+  origin: "https://web.example.test",
   "content-type": "application/json",
   "idempotency-key": "original-funding-key",
   "x-kokoro-request-id": "funding-request-1",
@@ -101,12 +103,14 @@ async function setup(options = {}) {
     }),
   )
   const config = {
+    ...(await fixtureIamCredentials("tenant-current")),
     host: "127.0.0.1",
     port: 0,
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-current",
     iamBaseUrl: iam,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "product-browser-secret",
     adminWebSharedSecret: "admin-browser-secret",
     upstreamSecret: "billing-internal-secret-0000000000001",
@@ -180,7 +184,7 @@ test("current administrator funds a current-tenant member once through the fixed
   assert.equal(sent.headers["x-kokoro-tenant-id"], u1("tenant-current"))
   assert.equal(sent.headers["x-kokoro-proxy-secret"], state.config.billingOperatorProxySecret)
   assert.equal(sent.headers["idempotency-key"], browserHeaders["idempotency-key"])
-  assert.equal(state.memberCalls[0].authorization, browserHeaders.authorization)
+  assert.equal(state.memberCalls[0].authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
   assert.equal(state.memberCalls[0].url, "/internal/v1/tenants/tenant-current/members?limit=100")
   assert.equal(state.admissions.length, 2)
 })
@@ -459,7 +463,7 @@ test("rejects duplicate transport headers using actual HTTP bytes", async () => 
   const state = await setup()
   for (const [name, expected] of [
     ["idempotency-key", 400],
-    ["authorization", 401],
+    ["cookie", 401],
     ["x-kokoro-internal-secret", 403],
   ]) {
     const status = await new Promise((resolve, reject) => {

@@ -9,7 +9,8 @@ const item = { session_id: "conv_owned", title: "本人分享", shared_at: "2026
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer shared-token",
+  cookie: "kokoro-issuer.session_token=shared-token",
+  origin: "https://web.example.test",
   "x-kokoro-request-id": "shared-http",
 }
 async function fixture(t, options = {}) {
@@ -27,6 +28,7 @@ async function fixture(t, options = {}) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-verified",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: options.timeout ?? 1000,
@@ -61,7 +63,7 @@ test("shared tasks canonical GET reads admitted owner and returns only four safe
 })
 test("shared tasks anonymous request cannot reach owner read", async (t) => {
   const { base, reads } = await fixture(t)
-  const response = await fetch(`${base}/v1/account/shared-tasks`, { headers: { ...headers, authorization: "" } })
+  const response = await fetch(`${base}/v1/account/shared-tasks`, { headers: { ...headers, cookie: "", origin: "https://web.example.test" } })
   assert.equal(response.status, 401)
   assert.equal(reads.length, 0)
 })

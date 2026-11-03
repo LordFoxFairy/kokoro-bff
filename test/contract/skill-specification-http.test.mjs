@@ -1,3 +1,5 @@
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "../doubles/iam-credentials.ts"
+const credentials = await fixtureIamCredentials("tenant")
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createServer } from "node:http"
@@ -14,7 +16,8 @@ const website = "/skill.v1.SkillOptionalService/"
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer human",
+  cookie: "kokoro-issuer.session_token=human",
+  origin: "https://web.example.test",
   "x-request-id": "spec-request",
 }
 const publicSkill = {
@@ -66,6 +69,7 @@ async function fixture(
     domain: "bff.test",
     tenantId: "tenant",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: 1000,
@@ -109,7 +113,9 @@ async function fixture(
     async request(path, input, extra = {}) {
       const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, {
         headers: {
-          ...headers,
+          ...(path.split("?", 1)[0] === "/v1/skill.list"
+            ? { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", authorization: "Bearer human", "x-request-id": "spec-request" }
+            : headers),
           ...(input === undefined ? {} : { "content-type": "application/json" }),
           ...extra.headers,
         },
@@ -1272,7 +1278,6 @@ async function specificationServiceFixture() {
   const context = Object.freeze({
     requestId: "aggregate-request",
     identity: Object.freeze({ namespace: "tenant", userId: "human" }),
-    humanBearer: "actual-human",
     publicBearer: "actual-human",
     principal: Object.freeze({ kind: "user_api_key", tenant_id: "tenant", user_id: "human", key_id: "key" }),
   })
@@ -1452,6 +1457,7 @@ test("R357 production composition uses the formal Skills aggregation rather than
   const config = {
     upstreams: { agents: null },
     iamBaseUrl: "http://iam.test",
+    iamWebOrigin: "https://web.example.test",
     upstreamTimeoutMs: 1000,
     platformProjection: {
       baseUrl: "http://platform.test",
@@ -2482,7 +2488,6 @@ async function s13HubFixture(productPatch) {
   app.context = {
     requestId: app.context.requestId,
     identity: app.context.identity,
-    humanBearer: app.context.humanBearer,
   }
   return app
 }
@@ -2504,7 +2509,7 @@ test("S13 Hub resolves publisher distinct from creator and preserves exact owner
     app.calls.filter((call) => call.kind === "profiles").map((call) => call.refs),
     [[{ kind: "user", id: "actual-publisher" }]],
   )
-  assert.equal(app.calls.find((call) => call.kind === "profiles").bearer, "actual-human")
+  assert.equal(app.calls.find((call) => call.kind === "profiles").bearer, "human")
 })
 for (const [kind, status] of [
   ["user", "missing"],
@@ -2524,7 +2529,7 @@ for (const [kind, status] of [
     let refsSeen
     app.deps.profiles.resolve = async (tenant, bearer, requestId, refs) => {
       assert.equal(tenant, "tenant")
-      assert.equal(bearer, "actual-human")
+      assert.equal(bearer, "human")
       assert.equal(requestId, "aggregate-request")
       refsSeen = refs
       return new Map(
@@ -2701,7 +2706,7 @@ test("S13 Hub upstream IAM403 remains website dependency503, never publisher mis
       iam: { kind: "organization", id: "foreign-organization" },
     },
   }))
-  service.deps.profiles = new IamPublisherProfileClient(`http://127.0.0.1:${iam.address().port}`, 1000)
+  service.deps.profiles = new IamPublisherProfileClient(`http://127.0.0.1:${iam.address().port}`, 1000, credentials.iamUserContextServiceCredentialFile)
   const app = await fixture(service.service)
   try {
     const result = await app.request(website + "ListHubSkills", {})
@@ -2709,7 +2714,7 @@ test("S13 Hub upstream IAM403 remains website dependency503, never publisher mis
     assert.deepEqual(seen, [
       {
         path: "/internal/v1/tenants/tenant/publisher-profiles/resolve",
-        bearer: "Bearer human",
+        bearer: `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`,
         refs: [{ kind: "organization", id: "foreign-organization" }],
       },
     ])
@@ -2754,7 +2759,7 @@ test("S13 Hub deduplicates only current publisher refs and never exceeds the IAM
   const batches = []
   app.deps.profiles.resolve = async (tenant, bearer, _id, refs, signal) => {
     assert.equal(tenant, "tenant")
-    assert.equal(bearer, "actual-human")
+    assert.equal(bearer, "human")
     assert.equal(signal, app.signal)
     assert.ok(refs.length <= 100)
     batches.push(refs)

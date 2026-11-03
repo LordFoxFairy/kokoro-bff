@@ -6,6 +6,9 @@ import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { createBffServer } from "../dist/bootstrap/server.js"
 import type { BffConfig } from "../src/config/runtime.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
+
+const credentials = await fixtureIamCredentials("tenant-verified")
 
 const servers: Server[] = []
 async function listen(server: Server): Promise<string> {
@@ -34,6 +37,8 @@ function config(iamBaseUrl: string): BffConfig {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-verified",
     iamBaseUrl,
+    iamWebOrigin: "https://web.example.test",
+    ...credentials,
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: 1000,
@@ -47,7 +52,12 @@ function config(iamBaseUrl: string): BffConfig {
     upstreams: {},
   }
 }
-const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", authorization: "Bearer team-token" }
+const headers = {
+  "x-kokoro-service": "web-bff",
+  "x-kokoro-internal-secret": "test-secret",
+  cookie: "kokoro-issuer.session_token=team-token",
+  origin: "https://web.example.test",
+}
 const routes = [
   {
     method: "POST",
@@ -99,7 +109,7 @@ function ownerHeaders() {
   return { "content-type": "application/json", "x-request-id": "iam-team-write-1" }
 }
 
-test("six Team mutations use only admitted tenant and user Bearer, one IAM call, no cache", async () => {
+test("six Team mutations use only admitted tenant, actor and service credential, one IAM call, no cache", async () => {
   const seen: Array<{ method: string; path: string; body: string; headers: IncomingMessage["headers"] }> = []
   const owner = await listen(
     createServer(async (request, response) => {
@@ -118,6 +128,7 @@ test("six Team mutations use only admitted tenant and user Bearer, one IAM call,
         ...headers,
         "x-kokoro-tenant-id": "tenant-attacker",
         "x-kokoro-principal-id": "user-attacker",
+        "x-kokoro-actor-id": "user-attacker",
         ...(route.body ? { "content-type": "application/json" } : {}),
       },
       ...(route.body ? { body: JSON.stringify(route.body) } : {}),
@@ -129,13 +140,16 @@ test("six Team mutations use only admitted tenant and user Bearer, one IAM call,
   assert.equal(seen.length, 6)
   for (let index = 0; index < routes.length; index++) {
     assert.equal(seen[index]?.path, routes[index]?.owner)
-    assert.equal(seen[index]?.headers.authorization, "Bearer team-token")
+    assert.equal(seen[index]?.headers.authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+    assert.equal(seen[index]?.headers["x-kokoro-actor-id"], "user-1")
+    assert.equal(seen[index]?.headers.cookie, undefined)
+    assert.equal(seen[index]?.headers.origin, undefined)
     assert.equal(seen[index]?.headers["x-kokoro-tenant-id"], undefined)
     assert.equal(seen[index]?.body, routes[index]?.body ? JSON.stringify(routes[index]?.body) : "")
   }
 })
 
-test("Team mutation rejects extra identity, invalid body, query and absent bearer before IAM I/O", async () => {
+test("Team mutation rejects extra identity, invalid body, query and absent session before IAM I/O", async () => {
   let calls = 0
   const owner = await listen(
     createServer((_request, response) => {
@@ -157,8 +171,12 @@ test("Team mutation rejects extra identity, invalid body, query and absent beare
   assert.equal((await fetch(`${app}/v1/team/members/me?tenant_id=other`, { method: "DELETE", headers })).status, 400)
   assert.equal((await fetch(`${app}/v1/team/members/me`, { method: "DELETE", headers: { ...headers, "idempotency-key": "unsupported" } })).status, 400)
   assert.equal(
-    (await fetch(`${app}/v1/team/members/me`, { method: "DELETE", headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret" } }))
-      .status,
+    (
+      await fetch(`${app}/v1/team/members/me`, {
+        method: "DELETE",
+        headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", origin: "https://web.example.test" },
+      })
+    ).status,
     401,
   )
   assert.equal(calls, 0)
@@ -277,4 +295,38 @@ test("Team mutation still rejects malformed owner media type and request ID with
   responseHeaders = { "content-type": "application/json" }
   result = await call()
   assert.equal(result.status, 502)
+})
+
+test("real Team write service401 is dependency503 while unknown, malformed or wrong tuples remain502", async () => {
+  let status = 401
+  let error: Record<string, unknown> = { code: "bff_user_context_service_unauthenticated", message: "TEAM_SERVICE_CANARY", retryable: false, details: [] }
+  let calls = 0
+  const owner = await listen(
+    createServer((request, reply) => {
+      calls++
+      assert.equal(request.method, "DELETE")
+      assert.equal(request.url, "/internal/v1/tenants/tenant-verified/members/me")
+      assert.equal(request.headers.authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+      assert.equal(request.headers["x-kokoro-actor-id"], "user-1")
+      assert.equal(request.headers.cookie, undefined)
+      assert.equal(request.headers.origin, undefined)
+      reply.writeHead(status, ownerHeaders()).end(JSON.stringify({ error }))
+    }),
+  )
+  const app = await listen(bff(owner))
+  for (const [wireStatus, code, extra, expectedStatus] of [
+    [401, "bff_user_context_service_unauthenticated", {}, 503],
+    [401, "UNKNOWN_SERVICE_DENIAL", {}, 502],
+    [403, "bff_user_context_service_unauthenticated", {}, 502],
+    [401, "bff_user_context_service_unauthenticated", { token: "secret" }, 502],
+  ] as const) {
+    status = wireStatus
+    error = { code, message: "TEAM_SERVICE_CANARY", retryable: false, details: [], ...extra }
+    const result = await fetch(`${app}/v1/team/members/me`, { method: "DELETE", headers })
+    assert.equal(result.status, expectedStatus)
+    const body = await result.json()
+    assert.equal(body.error.code, expectedStatus === 503 ? "team_owner_unavailable" : "team_owner_response_invalid")
+    assert.doesNotMatch(JSON.stringify(body), /TEAM_SERVICE_CANARY|secret/)
+  }
+  assert.equal(calls, 4, "each mutation has exactly one owner attempt")
 })

@@ -7,6 +7,10 @@ import { createBffServer } from "../dist/bootstrap/server.js"
 import { schedulerDispatchDigest } from "../dist/infrastructure/clients/scheduler/dispatch-identity.js"
 import { parseSchedulerDispatchWebhook } from "../dist/infrastructure/clients/scheduler/webhook-contract.js"
 import { buildScheduledAgentLaunch } from "../dist/infrastructure/clients/agent/index.js"
+import { handleScheduledTaskMutationBusiness, scheduledTaskMutation } from "../dist/http/routes/scheduled-task-mutation-native.js"
+import { handleScheduledTaskReadRequest } from "../dist/http/routes/scheduled-task-native.js"
+import { mutationTicket } from "../dist/application/idempotency.js"
+import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 import { scheduledTaskId } from "../dist/http/routes/scheduler.js"
 
 function headers(overrides: Record<string, string> = {}) {
@@ -492,5 +496,124 @@ describe("Agent launch identities", () => {
     assert.equal(left.receipt.run_id, right.receipt.run_id)
     assert.equal(left.identityAssertionRef, right.identityAssertionRef)
     assert.notEqual(left.body.request_id, right.body.request_id)
+  })
+})
+
+describe("ScheduledTask HTTP method ownership", () => {
+  it("completes a 404 receipt only for the exact Project-not-found owner error and releases unknown failures", async () => {
+    const context = { requestId: "mutation-error", identity: { namespace: "tenant_fixture", userId: "owner" } }
+    const idempotency = new Map()
+    let ownerError: unknown
+    let receiptScope = ""
+    const server = createServer((request, response) => {
+      void mutationTicket("original-key", "PATCH", "/scheduled-tasks/task-1", context, "original-fingerprint", idempotency).then(async (claim) => {
+        assert.ok(claim.ticket)
+        receiptScope = claim.ticket.scope
+        await handleScheduledTaskMutationBusiness(
+          request,
+          response,
+          context,
+          {
+            update: async () => {
+              throw ownerError
+            },
+          } as never,
+          {} as never,
+          { status: "active", enabled: true },
+          claim.ticket,
+          idempotency,
+        )
+      })
+    })
+    const base = await listen(server)
+    try {
+      for (const [error, status, code, message] of [
+        [new Error("PROJECT_NOT_FOUND"), 404, "project_not_found", "Project was not found"],
+        [new Error("database-secret-canary"), 503, "business_store_unavailable", "The BFF business store is unavailable"],
+        ["PROJECT_NOT_FOUND", 503, "business_store_unavailable", "The BFF business store is unavailable"],
+      ] as const) {
+        ownerError = error
+        idempotency.clear()
+        const response = await fetch(base + "/v1/scheduled-tasks/task-1", { method: "PATCH", headers: { "idempotency-key": "original-key" } })
+        assert.equal(response.status, status)
+        assert.equal(response.headers.get("x-request-id"), context.requestId)
+        assert.equal(response.headers.get("cache-control"), "no-store")
+        const body = await response.json()
+        assert.deepEqual(body, { error: { code, message }, meta: { request_id: context.requestId } })
+        if (status === 404) assert.deepEqual([...idempotency.entries()], [[receiptScope, { fingerprint: "original-fingerprint", receipt: { status, body } }]])
+        else assert.equal(idempotency.size, 0)
+      }
+    } finally {
+      await close(server)
+    }
+  })
+
+  it("matches collection create without treating item POST as create and preserves existing mutation targets", async () => {
+    const server = createServer((request, response) => {
+      response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(scheduledTaskMutation(request)))
+    })
+    const base = await listen(server)
+    try {
+      for (const [method, path, expected] of [
+        ["POST", "/v1/scheduled-tasks", { kind: "create" }],
+        ["POST", "/v1/scheduled-tasks/task-1", null],
+        ["POST", "/v1/projects/project-1/scheduled-tasks", { kind: "project_create", projectId: "project-1" }],
+        ["POST", "/v1/scheduled-tasks/task-1/retry", { kind: "retry", taskId: "task-1" }],
+        ["PATCH", "/v1/scheduled-tasks/task-1", { kind: "patch", taskId: "task-1" }],
+        ["DELETE", "/v1/scheduled-tasks/task-1", { kind: "delete", taskId: "task-1" }],
+      ] as const) {
+        const response = await fetch(base + path, { method })
+        assert.equal(response.status, 200)
+        assert.deepEqual(await response.json(), expected, `${method} ${path}`)
+      }
+    } finally {
+      await close(server)
+    }
+  })
+
+  it("current-state GET never intercepts non-GET methods or authenticates their requests", async () => {
+    const admission = new SessionAdmissionDouble({ session: { namespace: "tenant_fixture", userId: "owner" } })
+    let reads = 0
+    const reader = {
+      read: async (_scope: unknown, _requestId: string, _signal: AbortSignal, options: { revalidate(): Promise<void> }) => {
+        reads++
+        await options.revalidate()
+        return []
+      },
+    }
+    const server = createServer((request, response) => {
+      void handleScheduledTaskReadRequest(
+        request,
+        response,
+        { ...config(null, 1000), iamWebOrigin: "https://web.example.test" },
+        admission,
+        reader as never,
+      ).then((handled) => {
+        if (!handled) response.writeHead(404).end()
+      })
+    })
+    const base = await listen(server)
+    const native = {
+      "x-kokoro-service": "web-bff",
+      "x-kokoro-internal-secret": "web-secret",
+      cookie: "kokoro-issuer.session_token=session",
+      origin: "https://web.example.test",
+    }
+    try {
+      for (const method of ["POST", "PATCH", "DELETE", "PUT"]) {
+        const response = await fetch(`${base}/v1/scheduled-tasks`, { method, headers: native })
+        assert.equal(response.status, 404, method)
+        await response.arrayBuffer()
+        assert.equal(reads, 0)
+        assert.equal(admission.calls.length, 0)
+      }
+      const response = await fetch(`${base}/v1/scheduled-tasks`, { headers: native })
+      assert.equal(response.status, 200)
+      assert.deepEqual((await response.json()).data, { tasks: [] })
+      assert.equal(reads, 1)
+      assert.equal(admission.calls.length, 2)
+    } finally {
+      await close(server)
+    }
   })
 })

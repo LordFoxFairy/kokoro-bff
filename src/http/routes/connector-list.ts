@@ -105,7 +105,7 @@ export async function connectorListRoute(
       readAll(client.read.bind(client), "providers", input, controller.signal, deadlineAt),
     ])
     controller.signal.throwIfAborted()
-    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal)
+    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal, response)
     if (!current.ok) {
       connectorListFailure(
         response,

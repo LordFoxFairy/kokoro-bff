@@ -540,8 +540,9 @@ test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and
 })
 
 test("Chat admission commits messages, AG-UI lineage, and Agent delivery before asynchronous dispatch", async () => {
-  const [route, chatRepository, dispatchRepository, chatTurnCommit, registration, dispatcher, runtime, schema] = await Promise.all([
+  const [route, messageRoute, chatRepository, dispatchRepository, chatTurnCommit, registration, dispatcher, runtime, schema] = await Promise.all([
     readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/chat-message.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/agent-dispatch-outbox-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/chat-turn-commit.ts"), "utf8"),
@@ -551,8 +552,9 @@ test("Chat admission commits messages, AG-UI lineage, and Agent delivery before 
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
 
-  assert.match(route, /chatTurnServiceOf\(store\)\.submit/u)
-  assert.doesNotMatch(route, /callAgent|buildAgentLaunch/u)
+  // Canonical submission/replay is exercised by chat-business-native.test.mjs;
+  // real chat-facts.integration.mjs retains transaction, lease and unknown-result recovery evidence.
+  for (const handler of [route, messageRoute]) assert.doesNotMatch(handler, /callAgent|buildAgentLaunch/u)
   assert.doesNotMatch(chatRepository, /commitChatTurn|claimAgentDispatchOutbox/u)
   assert.equal(dispatchRepository.match(/return commitChatTurn\(/gu)?.length, 1)
   assert.doesNotMatch(dispatchRepository, /INSERT INTO bff_message/u)
@@ -606,7 +608,7 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
   assert.match(route, /chatServiceOf\(store\)/u)
   assert.match(route, /subjectId/u)
-  assert.match(route, /chatTurnServiceOf\(store\)\.submit/u)
+  // Keep submission/replay coverage in the HTTP and real-PG suites, not a private call-expression lock.
   assert.doesNotMatch(route, /callAgent/u)
   assert.doesNotMatch(route, /Agent.*messages.*GET/u)
   assert.match(sharedRoute, /publicShareSnapshot/u)
@@ -925,8 +927,15 @@ test("BFF user identity crosses one pinned IAM admission boundary and service-on
   assert.match(runtime, /sessionAdmission\?: SessionAdmission/u)
   assert.match(manifest, /authorizeServerOnly/u)
   assert.doesNotMatch(manifest, /authorizeUserRequest|userId:\s*["']runtime-manifest/u)
-  assert.match(config, /POST \/internal\/v1\/session-authorizations\/verify/u)
-  assert.match(generatedSdk, /export const verifySessionAuthorization/u)
+  assert.doesNotMatch(config, /POST \/internal\/v1\/(?:session-authorizations|native-sessions)\/verify/u)
+  const { SessionAdmissionClient } = await import("../dist/auth/session-admission.client.js")
+  const sdk = await import("../dist/generated/iam-http/sdk.gen.js")
+  const authentication = new SessionAdmissionClient({ baseUrl: null, timeoutMs: 1000, maxResponseBytes: 4096 })
+  assert.equal(typeof authentication.verify, "function")
+  assert.equal("verifyNative" in authentication, false)
+  assert.equal("legacyFallback" in authentication, false)
+  assert.equal("verifySessionAuthorization" in sdk, false)
+  assert.equal("verifyNativeSession" in sdk, false)
   assert.doesNotMatch(generatedSdk, /getMetrics|healthz|readyz/u)
 })
 
@@ -975,7 +984,10 @@ test("current administrator qualification belongs only to admitted user context 
   assert.doesNotMatch(admissionTypes, /platformAdmin\?/u)
   assert.match(admission, /context: AdmittedUserRequestContext/u)
   assert.match(admission, /platformAdmin: result\.platformAdmin/u)
-  assert.match(client, /platformAdmin: parsed\.data\.data\.platform_admin/u)
+  const { zUser } = await import("../dist/generated/iam-auth/zod.gen.js")
+  assert.equal(zUser.shape.platformAdmin.parse(true), true)
+  assert.equal(zUser.shape.platformAdmin.parse(false), false)
+  assert.equal(zUser.shape.platformAdmin.safeParse(undefined).success, false, "missing IAM administrator qualification cannot become a default false")
   assert.doesNotMatch(client, /platform_admin\s*\?\?|decodeJwt|jwtDecode/u)
   assert.match(accountNative, /platform_admin: admitted\.context\.platformAdmin/u)
   assert.doesNotMatch(server, /businessPath\[0\] === "me"/u)

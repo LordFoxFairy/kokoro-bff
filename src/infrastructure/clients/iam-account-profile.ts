@@ -1,3 +1,4 @@
+import { iamUserContextHeaders } from "../../auth/iam-user-context.js"
 import { strictParseRawJson } from "../raw-json.js"
 import { isDeepStrictEqual } from "node:util"
 import { createClient } from "../../generated/iam-http/client/index.js"
@@ -7,7 +8,7 @@ import type { AccountProfileInput, AccountProfileReadInput, AccountProfileReadRe
 
 type AccountProfileTransportInput = Pick<
   AccountProfileReadInput,
-  "baseUrl" | "token" | "cookie" | "origin" | "requestId" | "signal" | "deadlineAt" | "maxResponseBytes"
+  "baseUrl" | "credentialFile" | "tenantId" | "subjectId" | "requestId" | "signal" | "deadlineAt" | "maxResponseBytes"
 >
 
 type AccountProfileTransportResult<T> = Readonly<{ ok: true; value: AccountProfileOwnerResult<T> }> | Readonly<{ ok: false; reason: "unavailable" | "invalid" }>
@@ -117,7 +118,8 @@ function mapAccountProfileError(
   if (!parsed.success || !isDeepStrictEqual(parsed.data, result.error)) return { ok: false, status: 502, code: invalid }
   const code = parsed.data.error.code
   if (status === 400 && code === "INVALID_ARGUMENT") return { ok: false, status: 400, code: "account_profile_input_invalid" }
-  if (status === 401 && code === "UNAUTHENTICATED") return { ok: false, status: 401, code: "session_invalid" }
+  if (status === 401 && (code === "UNAUTHENTICATED" || code === "bff_user_context_service_unauthenticated"))
+    return { ok: false, status: 503, code: unavailable }
   if (status === 403 && code === "PERMISSION_DENIED") return { ok: false, status: 403, code: "account_profile_forbidden" }
   if (status === 429 && code === "RATE_LIMITED") {
     const retry = result.response.headers.get("retry-after") ?? ""
@@ -132,10 +134,9 @@ function mapAccountProfileError(
 export async function requestIamAccountProfile(input: AccountProfileInput): Promise<AccountProfileResult> {
   const transport = await withAccountProfileTransport(input, async (client) => {
     const headers = {
-      authorization: `Bearer ${input.token}`,
+      ...(await iamUserContextHeaders(input)),
       "x-request-id": input.requestId,
       accept: "application/json",
-      ...(input.cookie === undefined || input.origin === undefined ? {} : { cookie: input.cookie, origin: input.origin }),
     }
     // Override the generated validator at the official pre-strip boundary.
     const responseValidator = async (raw: unknown) => {
@@ -173,10 +174,9 @@ export async function requestIamAccountProfile(input: AccountProfileInput): Prom
 export async function requestIamAccountProfileRead(input: AccountProfileReadInput): Promise<AccountProfileReadResult> {
   const transport = await withAccountProfileTransport(input, async (client) => {
     const headers = {
-      authorization: `Bearer ${input.token}`,
+      ...(await iamUserContextHeaders(input)),
       "x-request-id": input.requestId,
       accept: "application/json",
-      ...(input.cookie === undefined || input.origin === undefined ? {} : { cookie: input.cookie, origin: input.origin }),
     }
     const responseValidator = async (raw: unknown) => {
       const parsed = zReadAccountProfileResponse.safeParse(raw)

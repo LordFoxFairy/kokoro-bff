@@ -219,9 +219,9 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
-test("the IAM consumer pins the complete 0.18.0 owner artifact and generates only approved admission, profile, human qualification, Skill, Team and invitation operations", async () => {
-  const commit = "497900ab6ec7274c800f1889cc06c993662dd9d6"
-  const digest = "399e994f93c7f007103d642d866b90edf2457c479e2da2da767d81633198ad62"
+test("the IAM consumer pins the complete 0.20.0 owner and native authentication artifacts without retired BFF admission operations", async () => {
+  const commit = "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7"
+  const digest = "61cf99b4fe836deafedb9f59d9fa2ea3446ce172f4069944f7facb14e816c7ca"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -234,18 +234,39 @@ test("the IAM consumer pins the complete 0.18.0 owner artifact and generates onl
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.18.0")
-  const admissionSchema = owner.paths["/internal/v1/session-authorizations/verify"].post.responses["200"].content["application/json"].schema.properties.data
-  assert.ok(admissionSchema.required.includes("platform_admin"))
-  assert.deepEqual(admissionSchema.properties.platform_admin, {
-    type: "boolean",
-  })
-  assert.match(types, /platform_admin: boolean/u)
+  assert.equal(owner.info.version, "0.20.0")
+  // This operation still serves independent OAuth consumers; only the BFF include is retired.
+  assert.ok(owner.paths["/internal/v1/session-authorizations/verify"])
+  for (const [ownerPath, method] of [
+    ["/internal/v1/account/sessions", "get"],
+    ["/internal/v1/account/sessions/{session_id}", "delete"],
+  ]) {
+    const operation = owner.paths[ownerPath][method]
+    assert.deepEqual(operation.security, [{ accountSessionServiceBearer: [], accountSessionIssuerCookie: [] }])
+    assert.equal(
+      operation.parameters.some(({ in: location, name, required }) => location === "header" && name === "Origin" && required === true),
+      true,
+    )
+    assert.equal(
+      operation.parameters.some(({ name }) => name === "x-kokoro-actor-id"),
+      false,
+    )
+  }
+  const profileOperation = owner.paths["/internal/v1/account/profile"].get
+  assert.deepEqual(profileOperation.security, [{ internalBearer: [] }, { bffUserContextServiceBearer: [] }])
+  assert.equal(
+    profileOperation.parameters.some(({ name }) => name === "x-kokoro-actor-id"),
+    true,
+  )
+  assert.equal(
+    profileOperation.parameters.some(({ name }) => name === "Cookie" || name === "Origin"),
+    false,
+  )
   assert.ok(Object.keys(owner.paths).length > 1)
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.18.0",
+    contract_version: "0.20.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -262,7 +283,7 @@ test("the IAM consumer pins the complete 0.18.0 owner artifact and generates onl
   })
   assert.equal(manifest.lockfile_sha256, sha256(lockfile))
   assert.equal(manifest.generated.length, 16)
-  assert.match(sdk, /export const verifySessionAuthorization/u)
+  assert.doesNotMatch(sdk, /export const (?:verifySessionAuthorization|verifyNativeSession)\b/u)
   for (const operation of [
     "listAccountSessions",
     "revokeAccountSession",
@@ -303,24 +324,53 @@ test("the IAM consumer pins the complete 0.18.0 owner artifact and generates onl
     "resolveTenantPublisherProfiles",
     "revokeAccountSession",
     "updateAccountProfile",
-    "verifyNativeSession",
     "verifyOpenAppManagementAuthorization",
-    "verifySessionAuthorization",
     "verifySkillListIdentity",
   ])
   assert.doesNotMatch(`${sdk}\n${types}`, /getMetrics|healthz|readyz/u)
   assert.match(config, /POST \/internal\/v1\/authorization\/check/u)
-  assert.match(config, /POST \/internal\/v1\/session-authorizations\/verify/u)
+  assert.doesNotMatch(config, /POST \/internal\/v1\/(?:session-authorizations|native-sessions)\/verify/u)
   assert.doesNotMatch(config, /POST \/internal\/v1\/execution-authorizations\/verify/u)
   assert.doesNotMatch(config, /POST \/internal\/v1\/platform-workload-tokens\/introspect/u)
   for (const resource of ["members", "invitations", "roles"]) {
     assert.match(config, new RegExp(`GET /internal/v1/tenants/\\{tenant_id\\}/${resource}`, "u"))
   }
+  const [authManifestSource, authConfig, authVendor] = await Promise.all([
+    readFile(new URL("../contract/dependencies/iam-auth.json", import.meta.url), "utf8"),
+    readFile(new URL("../openapi-ts.iam-auth.config.ts", import.meta.url), "utf8"),
+    readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/better-auth.v1.7.3.json`, import.meta.url)),
+  ])
+  const authManifest = JSON.parse(authManifestSource)
+  assert.deepEqual(authManifest.owner, {
+    repository_path: "apps/kokoro-iam",
+    repository_commit: commit,
+    framework: "better-auth",
+    framework_version: "1.7.3",
+    contract_path: "contract/vendor/better-auth.v1.7.3.json",
+    contract_sha256: "823d36d5dae8e667e1b92d486e03a21348a86b7e2a4dadb07787a485b7cbcdd2",
+  })
+  assert.equal(sha256(authVendor), authManifest.owner.contract_sha256)
+  assert.deepEqual(authManifest.generator, {
+    package: "@hey-api/openapi-ts",
+    version: "0.99.0",
+    config_path: "openapi-ts.iam-auth.config.ts",
+    config_sha256: sha256(authConfig),
+  })
+  assert.deepEqual(authManifest.runtime, manifest.runtime)
+  assert.equal(authManifest.lockfile_sha256, sha256(lockfile))
+  assert.deepEqual(authManifest.generated.map(({ path }) => path).sort(), ["types.gen.ts", "zod.gen.ts"])
+  for (const artifact of authManifest.generated) {
+    assert.equal(sha256(await readFile(new URL(`../src/generated/iam-auth/${artifact.path}`, import.meta.url))), artifact.sha256)
+  }
+  assert.match(authConfig, /include: \["GET \/get-session"\]/u)
 })
 
-test("the default test entry includes native session admission regressions", async () => {
+test("the default test entry includes native admission and safe browser session contract regressions exactly once", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"))
-  assert.ok(packageJson.scripts.test.split(/\s+/u).includes("test/native-session-admission.test.ts"))
+  const entries = packageJson.scripts.test.split(/\s+/u)
+  for (const suite of ["test/native-session-admission.test.ts", "test/auth-session-contract.test.mjs"]) {
+    assert.equal(entries.filter((entry) => entry === suite).length, 1, `default test must collect ${suite} once`)
+  }
 })
 
 test("the IAM generator normalizer and generated-tree allowlist fail closed on drift", async () => {

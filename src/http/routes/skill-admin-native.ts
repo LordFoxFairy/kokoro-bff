@@ -64,7 +64,7 @@ export async function handleSkillAdminRequest(
   const id = requestId(request)
   const signal = AbortSignal.timeout(10_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
       send(
         response,
@@ -81,7 +81,7 @@ export async function handleSkillAdminRequest(
       })
       return true
     }
-    await skillAdminRoute(request, response, admitted.context, path, client, config.iamBaseUrl)
+    await skillAdminRoute(request, response, admitted.context, path, client, config.iamBaseUrl, config.iamUserContextServiceCredentialFile)
   } catch {
     if (!response.headersSent && !response.destroyed && !response.writableEnded)
       send(response, 503, { error: { code: "skill_dependency_unavailable", message: "Skill admin dependency is unavailable", retryable: true } })

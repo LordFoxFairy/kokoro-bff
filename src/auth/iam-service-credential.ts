@@ -10,7 +10,7 @@ const credentialFile = z.strictObject({
       z.strictObject({
         credential_id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u),
         caller: z.literal("kokoro-bff"),
-        surface: z.literal("session_admission"),
+        surface: z.enum(["bff_user_context", "account_sessions"]),
         tenant_id: z
           .string()
           .min(1)
@@ -29,10 +29,15 @@ const credentialFile = z.strictObject({
 
 const MAX_CREDENTIAL_FILE_BYTES = 65_536
 
-/** Read the BFF-owned IAM session-admission credential afresh for every request. */
-export async function readIamSessionAdmissionCredential(path: string, tenantId: string | null, signal: AbortSignal): Promise<string> {
+/** Read the BFF-owned IAM purpose-separated service credential afresh for every request. */
+export async function readIamServiceCredential(
+  path: string,
+  tenantId: string | null,
+  surface: "bff_user_context" | "account_sessions",
+  signal: AbortSignal,
+): Promise<string> {
   signal.throwIfAborted()
-  if (!tenantId) throw new Error("iam_session_admission_tenant_unavailable")
+  if (!tenantId) throw new Error("iam_service_tenant_unavailable")
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
   try {
     const before = await handle.stat()
@@ -43,7 +48,7 @@ export async function readIamSessionAdmissionCredential(path: string, tenantId: 
       ![0o400, 0o600].includes(before.mode & 0o777) ||
       before.size > MAX_CREDENTIAL_FILE_BYTES
     )
-      throw new Error("iam_session_admission_credentials_unavailable")
+      throw new Error("iam_service_credentials_unavailable")
     const bytes = Buffer.alloc(MAX_CREDENTIAL_FILE_BYTES + 1)
     let size = 0
     while (size < bytes.length) {
@@ -63,14 +68,14 @@ export async function readIamSessionAdmissionCredential(path: string, tenantId: 
       after.uid !== before.uid ||
       after.nlink !== 1
     )
-      throw new Error("iam_session_admission_credentials_changed")
+      throw new Error("iam_service_credentials_changed")
     const parsed = credentialFile.parse(strictParseRawJson(bytes.subarray(0, size)))
     if (
-      parsed.entries.some((entry) => entry.tenant_id !== tenantId) ||
+      parsed.entries.some((entry) => entry.tenant_id !== tenantId || entry.surface !== surface) ||
       new Set(parsed.entries.map((entry) => entry.credential_id)).size !== parsed.entries.length ||
       new Set(parsed.entries.map((entry) => entry.secret)).size !== parsed.entries.length
     )
-      throw new Error("iam_session_admission_credentials_invalid")
+      throw new Error("iam_service_credentials_invalid")
     signal.throwIfAborted()
     return parsed.entries[0]!.secret
   } finally {

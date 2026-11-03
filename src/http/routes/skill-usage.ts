@@ -59,7 +59,7 @@ export async function handleSkillUsageRequest(
   if (pathname !== "/v1/skills/usage" || request.method !== "POST") return false
   const id = requestId(request)
   const signal = AbortSignal.timeout(10_000)
-  const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+  const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
   if (!admitted.ok) {
     send(
       response,

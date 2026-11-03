@@ -1,13 +1,28 @@
 import { randomUUID } from "node:crypto"
-
-import { zApiErrorResponse, zVerifyNativeSessionResponse, zVerifySessionAuthorizationResponse } from "../generated/iam-http/zod.gen.js"
-import type { NativeSessionAdmissionInput, SessionAdmission, SessionAdmissionInput, SessionAdmissionResult } from "./session-admission.types.js"
+import { z } from "zod"
+import { zUser, zSession } from "../generated/iam-auth/zod.gen.js"
+import { createIamHttpClient } from "../infrastructure/clients/iam-http-transport.js"
+import { checkAuthorization } from "../generated/iam-http/sdk.gen.js"
+import { iamUserContextHeaders } from "./iam-user-context.js"
+import { zApiErrorResponse, zCheckAuthorizationResponse } from "../generated/iam-http/zod.gen.js"
+import { strictParseRawJson } from "../infrastructure/raw-json.js"
+import type { SessionAdmission, SessionAdmissionInput, SessionAdmissionResult } from "./session-admission.types.js"
 import { SessionAdmissionTransport } from "./session-admission.transport.js"
-import { readIamSessionAdmissionCredential } from "./iam-session-admission-credential.js"
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u
-const RETRY_AFTER_PATTERN = /^[1-9][0-9]{0,4}$/u
-
+const responseSchema = z
+  .strictObject({
+    user: zUser.omit({ platformAdminVersion: true }).extend({ image: zUser.shape.image.nullable() }).strict(),
+    session: zSession
+      .extend({
+        ipAddress: zSession.shape.ipAddress.nullable(),
+        userAgent: zSession.shape.userAgent.nullable(),
+        activeOrganizationId: zSession.shape.activeOrganizationId.nullable(),
+      })
+      .strict(),
+  })
+  .nullable()
+const membershipSchema = zCheckAuthorizationResponse.extend({ data: zCheckAuthorizationResponse.shape.data.strict() }).strict()
 export type SessionAdmissionClientOptions = Readonly<{
   baseUrl: string | null
   credentialFile?: string | null | undefined
@@ -16,122 +31,133 @@ export type SessionAdmissionClientOptions = Readonly<{
   timeoutMs: number
   maxResponseBytes: number
 }>
-
-function unavailable(): SessionAdmissionResult {
-  return { ok: false, status: 503, code: "iam_admission_unavailable" }
+const unavailable = (): SessionAdmissionResult => ({ ok: false, status: 503, code: "iam_admission_unavailable" })
+function safeCookies(headers: Headers, origin: string): string[] {
+  const secure = new URL(origin).protocol === "https:"
+  return headers.getSetCookie().filter((cookie) => {
+    if (/[\r\n\x00]/u.test(cookie)) return false
+    const [pair, ...attributes] = cookie.split(";").map((value) => value.trim())
+    if (!/^(?:__Secure-)?kokoro-issuer\.(?:session_token|session_data|dont_remember)=[^;\r\n]*$/u.test(pair ?? "")) return false
+    const names = attributes.map((value) => value.split("=", 1)[0]?.toLowerCase())
+    if (new Set(names).size !== names.length || names.includes("domain")) return false
+    if (!names.includes("httponly") || (secure && !names.includes("secure"))) return false
+    if (!attributes.some((value) => /^path=\/$/iu.test(value))) return false
+    return attributes.every((value) => /^(?:HttpOnly|Secure|Path=\/|SameSite=(?:Lax|Strict|None)|Max-Age=-?\d+|Expires=[\x20-\x7e]+)$/iu.test(value))
+  })
 }
-
-function controlledRequestId(value: string): string {
-  return REQUEST_ID_PATTERN.test(value) ? value : randomUUID()
-}
-
-function validResponseHeaders(headers: Headers): boolean {
-  const requestId = headers.get("x-request-id")
-  const cacheControl = headers.get("cache-control")
-  return (
-    requestId !== null &&
-    REQUEST_ID_PATTERN.test(requestId) &&
-    cacheControl !== null &&
-    cacheControl.split(",").some((directive) => directive.trim().toLowerCase() === "no-store")
-  )
-}
-
-function parseJson(body: Buffer): unknown | null {
-  try {
-    return JSON.parse(body.toString("utf8")) as unknown
-  } catch {
-    return null
+function limited(headers: Headers): SessionAdmissionResult {
+  const after = headers.get("retry-after")
+  return {
+    ok: false,
+    status: 429,
+    code: "session_rate_limited",
+    ...(after !== null && /^[1-9][0-9]{0,4}$/u.test(after) && Number(after) <= 86400 ? { retryAfter: after } : {}),
   }
 }
 
-function retryAfter(headers: Headers): string | null {
-  const value = headers.get("retry-after")
-  if (value === null || !RETRY_AFTER_PATTERN.test(value)) return null
-  const seconds = Number(value)
-  return Number.isSafeInteger(seconds) && seconds >= 1 && seconds <= 86_400 ? value : null
-}
-
+/** Sole native authentication edge. It discards framework secrets before ordinary business policy. */
 export class SessionAdmissionClient implements SessionAdmission {
   private readonly transport: SessionAdmissionTransport | null
+  private readonly membership: ReturnType<typeof createIamHttpClient> | null
   private readonly credentialFile: string | null
   private readonly webOrigin: string | null
   private readonly tenantId: string | null
-
   public constructor(options: SessionAdmissionClientOptions) {
     this.credentialFile = options.credentialFile ?? null
+    this.membership = options.baseUrl === null ? null : createIamHttpClient({ ...options, baseUrl: options.baseUrl })
     this.webOrigin = options.webOrigin ?? null
     this.tenantId = options.tenantId ?? null
-    this.transport =
-      options.baseUrl === null
-        ? null
-        : new SessionAdmissionTransport({ baseUrl: options.baseUrl, timeoutMs: options.timeoutMs, maxResponseBytes: options.maxResponseBytes })
+    this.transport = options.baseUrl === null ? null : new SessionAdmissionTransport({ ...options, baseUrl: options.baseUrl })
   }
-
   public async verify(input: SessionAdmissionInput): Promise<SessionAdmissionResult> {
-    if (this.transport === null) return unavailable()
-    try {
-      const response = await this.transport.request({ ...input, requestId: controlledRequestId(input.requestId) })
-      if (!validResponseHeaders(response.headers)) return unavailable()
-      const body = parseJson(response.body)
-      if (body === null) return unavailable()
-      if (response.status === 200) {
-        const parsed = zVerifySessionAuthorizationResponse.safeParse(body)
-        if (!parsed.success) return unavailable()
-        return {
-          ok: true,
-          identity: { namespace: parsed.data.data.tenant_id, userId: parsed.data.data.user_id },
-          platformAdmin: parsed.data.data.platform_admin,
-        }
-      }
-      if (!zApiErrorResponse.safeParse(body).success) return unavailable()
-      if (response.status === 401) return { ok: false, status: 401, code: "session_invalid" }
-      if (response.status === 403 || response.status === 404 || response.status === 409) {
-        return { ok: false, status: 403, code: "session_forbidden" }
-      }
-      if (response.status === 429) {
-        const header = retryAfter(response.headers)
-        return {
-          ok: false,
-          status: 429,
-          code: "session_rate_limited",
-          ...(header === null ? {} : { retryAfter: header }),
-        }
-      }
-      return unavailable()
-    } catch {
-      return unavailable()
-    }
-  }
-
-  public async verifyNative(input: NativeSessionAdmissionInput): Promise<SessionAdmissionResult> {
-    if (this.transport === null || this.credentialFile === null || this.webOrigin === null) return unavailable()
+    if (this.transport === null || this.membership === null || this.webOrigin === null || this.tenantId === null) return unavailable()
     if (input.origin !== this.webOrigin) return { ok: false, status: 403, code: "session_forbidden" }
+    const requestId = REQUEST_ID_PATTERN.test(input.requestId) ? input.requestId : randomUUID()
+    let setCookies: readonly string[] = []
+    const dependencyUnavailable = (): SessionAdmissionResult => ({
+      ok: false,
+      status: 503,
+      code: "iam_admission_unavailable",
+      ...(setCookies.length ? { setCookies } : {}),
+    })
     try {
-      const credential = await readIamSessionAdmissionCredential(this.credentialFile, this.tenantId, input.signal)
-      const response = await this.transport.requestNativeSession({ ...input, credential, requestId: controlledRequestId(input.requestId) })
-      if (!validResponseHeaders(response.headers)) return unavailable()
-      const body = parseJson(response.body)
-      if (body === null) return unavailable()
-      if (response.status === 200) {
-        const parsed = zVerifyNativeSessionResponse.safeParse(body)
-        if (!parsed.success) return unavailable()
-        return {
-          ok: true,
-          identity: { namespace: parsed.data.data.tenant_id, userId: parsed.data.data.subject_id },
-          platformAdmin: parsed.data.data.permissions.includes("platform.admin"),
-        }
+      input.signal.throwIfAborted()
+      const response = await this.transport.requestSession({ ...input, requestId })
+      input.signal.throwIfAborted()
+      if (response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") return dependencyUnavailable()
+      const raw = strictParseRawJson(response.body)
+      setCookies = safeCookies(response.headers, this.webOrigin)
+      if (response.status === 401) {
+        // Better Auth's human authentication failure, not a private service credential response.
+        if (!z.strictObject({ message: z.string(), code: z.string().optional() }).safeParse(raw).success) return dependencyUnavailable()
+        return { ok: false, status: 401, code: "session_invalid", setCookies }
       }
-      if (!zApiErrorResponse.safeParse(body).success) return unavailable()
-      if (response.status === 401) return { ok: false, status: 401, code: "session_invalid" }
-      if (response.status === 403) return { ok: false, status: 403, code: "session_forbidden" }
-      if (response.status === 429) {
-        const header = retryAfter(response.headers)
-        return { ok: false, status: 429, code: "session_rate_limited", ...(header === null ? {} : { retryAfter: header }) }
+      if (response.status === 429) return { ...limited(response.headers), setCookies }
+      if (response.status !== 200) return dependencyUnavailable()
+      const parsed = responseSchema.safeParse(raw)
+      if (!parsed.success) return dependencyUnavailable()
+      if (parsed.data === null) return { ok: false, status: 401, code: "session_invalid", setCookies }
+      const { user, session } = parsed.data
+      if (!user.id || session.userId !== user.id || !session.id || !session.token || !Number.isFinite(Date.parse(session.expiresAt)))
+        return dependencyUnavailable()
+      if (Date.parse(session.expiresAt) <= Date.now()) return { ok: false, status: 401, code: "session_invalid", setCookies }
+      if (session.activeOrganizationId !== this.tenantId) return { ok: false, status: 403, code: "product_tenant_forbidden", setCookies }
+      // The framework authenticates the session; the existing IAM business operation owns current core membership.
+      const qualified = await checkAuthorization({
+        client: this.membership,
+        body: { resource: "tenant", action: "read" },
+        headers: {
+          ...(await iamUserContextHeaders({
+            tenantId: this.tenantId,
+            subjectId: user.id,
+            requestId,
+            signal: input.signal,
+            credentialFile: this.credentialFile,
+          })),
+          accept: "application/json",
+          "x-request-id": requestId,
+        },
+        signal: input.signal,
+        responseValidator: async (raw) => membershipSchema.parse(raw),
+      })
+      const checked = qualified.response
+      if (checked === undefined) return dependencyUnavailable()
+      input.signal.throwIfAborted()
+      if (
+        checked.headers.get("x-request-id") !== requestId ||
+        !checked.headers
+          .get("cache-control")
+          ?.split(",")
+          .some((value) => value.trim().toLowerCase() === "no-store") ||
+        checked.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json"
+      )
+        return dependencyUnavailable()
+      const decision: unknown = checked.status === 200 ? qualified.data : qualified.error
+      if (checked.status !== 200) {
+        const error = zApiErrorResponse.safeParse(decision)
+        if (!error.success) return dependencyUnavailable()
+        if (checked.status === 429 && error.data.error.code === "RATE_LIMITED") return { ...limited(checked.headers), setCookies }
+        if (checked.status === 403 && error.data.error.code === "PERMISSION_DENIED") return { ok: false, status: 403, code: "session_forbidden", setCookies }
+        return dependencyUnavailable()
       }
-      if (response.status === 504) return { ok: false, status: 503, code: "iam_admission_unavailable" }
-      return unavailable()
+      const member = membershipSchema.safeParse(decision)
+      if (
+        !member.success ||
+        member.data.data.tenant_id !== this.tenantId ||
+        member.data.data.subject_id !== user.id ||
+        member.data.data.decision_source !== "current_membership"
+      )
+        return dependencyUnavailable()
+      if (!member.data.data.allowed) return { ok: false, status: 403, code: "session_forbidden", setCookies }
+      return {
+        ok: true,
+        identity: { namespace: this.tenantId, userId: user.id },
+        platformAdmin: user.platformAdmin,
+        expiresAt: new Date(session.expiresAt).toISOString(),
+        setCookies,
+      }
     } catch {
-      return unavailable()
+      return dependencyUnavailable()
     }
   }
 }

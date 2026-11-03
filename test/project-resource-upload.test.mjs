@@ -140,7 +140,7 @@ test("Projects feature handler owns resource upload with persistent receipt reco
     void handleProjectResourceUploadRequest(
       request,
       response,
-      { tenantId: "tenant-1", sharedSecret: "web-secret", storage: {} },
+      { tenantId: "tenant-1", sharedSecret: "web-secret", storage: {}, iamWebOrigin: "https://web.example.test" },
       { verify: async () => ({ ok: true, identity: { namespace: "tenant-1", userId: "subject-1" } }) },
       {
         find: async () => ({ id: "project-1" }),
@@ -159,7 +159,8 @@ test("Projects feature handler owns resource upload with persistent receipt reco
     const result = await fetch(url, {
       method: "POST",
       headers: {
-        authorization: "Bearer user",
+        cookie: "kokoro-issuer.session_token=user",
+        origin: "https://web.example.test",
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": "web-secret",
         "idempotency-key": "upload-key",
@@ -280,6 +281,7 @@ test("Storage v3 facade uses generated Connect calls and only trusted project me
 test("Storage configuration is independent, atomic and origin-only", async () => {
   const { loadConfig } = await import("../dist/config/runtime.js")
   const env = {
+    KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
     KOKORO_BFF_SHARED_SECRET: "secret",
     KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
     KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -412,6 +414,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
     )
     const config = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -453,7 +456,8 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
       return fetch(`${bff}/v1/projects/slug/resources`, {
         method: "POST",
         headers: {
-          authorization: "Bearer test",
+          cookie: "kokoro-issuer.session_token=test",
+          origin: "https://web.example.test",
           "x-kokoro-service": "web-bff",
           "x-kokoro-internal-secret": "web-secret",
           "idempotency-key": "key-1",

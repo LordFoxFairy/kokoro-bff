@@ -136,17 +136,24 @@ const auth = { requestId: "request-1", identity: { namespace: "tenant-1", userId
 async function invokeProjectResourceDelete(request, response, config, context, _projectRef, _assetId, store, clientFactory) {
   request.headers = {
     ...request.headers,
-    authorization: `Bearer ${context.identity.namespace}:${context.identity.userId}`,
+    cookie: `kokoro-issuer.session_token=${context.identity.namespace}:${context.identity.userId}`,
+    origin: "https://web.example.test",
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "web-secret",
     "x-request-id": context.requestId,
   }
   request.rawHeaders = [
     ...request.rawHeaders,
-    "authorization", request.headers.authorization,
-    "x-kokoro-service", "web-bff",
-    "x-kokoro-internal-secret", "web-secret",
-    "x-request-id", context.requestId,
+    "cookie",
+    request.headers.cookie,
+    "origin",
+    request.headers.origin,
+    "x-kokoro-service",
+    "web-bff",
+    "x-kokoro-internal-secret",
+    "web-secret",
+    "x-request-id",
+    context.requestId,
   ]
   const provider = {
     list: async () => [],
@@ -156,8 +163,21 @@ async function invokeProjectResourceDelete(request, response, config, context, _
     rename: async () => ({ kind: "conflict" }),
     delete: async () => ({ kind: "not_found" }),
   }
-  const nativeConfig = { ...config, tenantId: context.identity.namespace, sharedSecret: "web-secret", upstreamTimeoutMs: 10_000, iamBaseUrl: null }
-  const admission = { verify: async ({ token }) => { const [namespace, userId] = token.split(":"); return { ok: true, identity: { namespace, userId } } } }
+  const nativeConfig = {
+    ...config,
+    tenantId: context.identity.namespace,
+    sharedSecret: "web-secret",
+    upstreamTimeoutMs: 10_000,
+    iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
+  }
+  const admission = {
+    verify: async ({ cookie }) => {
+      const token = cookie.slice("kokoro-issuer.session_token=".length)
+      const [namespace, userId] = token.split(":")
+      return { ok: true, identity: { namespace, userId } }
+    },
+  }
   return handleProjectResourceDeleteRequest(request, response, nativeConfig, admission, provider, clientFactory)
 }
 

@@ -14,7 +14,12 @@ import { SkillPackageInspectionConnectClient } from "../src/infrastructure/clien
 
 const canonicalProject = "project-canonical",
   installationId = "installation-exact"
-const headers = { authorization: "Bearer session", "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" }
+const headers = {
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
+  "x-kokoro-service": "web-bff",
+  "x-kokoro-internal-secret": "secret",
+}
 const stamp = () => ({ $typeName: "google.protobuf.Timestamp", seconds: 1n, nanos: 0 })
 const listen = async (server) => {
   server.listen(0, "127.0.0.1")
@@ -197,6 +202,7 @@ async function withProjectContent(run) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "secret",
     upstreamSecret: null,
     upstreamTimeoutMs: 1000,

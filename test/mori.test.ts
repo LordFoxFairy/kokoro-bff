@@ -35,6 +35,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     domain: "dev.kokoro.localhost",
     tenantId: "ns_test",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: "bff-upstream-secret",
     upstreamTimeoutMs: 5000,
@@ -63,7 +64,8 @@ function authHeaders(): Record<string, string> {
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
-    authorization: "Bearer test-session",
+    cookie: "kokoro-issuer.session_token=test-session",
+    origin: "https://web.example.test",
   }
 }
 
@@ -80,7 +82,7 @@ describe("Mori music projection", () => {
     const base = await listen(testServer(config()))
     const projectRef = "project_preview_first_light"
     const project = await fetch(`${base}/v1/mori/projects/${projectRef}`, { headers: authHeaders() })
-    const projectBody = await project.json() as { data: { project_ref: string; candidate_count: number }; meta: { request_id: string } }
+    const projectBody = (await project.json()) as { data: { project_ref: string; candidate_count: number }; meta: { request_id: string } }
     assert.equal(project.status, 200)
     assert.equal(projectBody.data.project_ref, projectRef)
     assert.equal(projectBody.data.candidate_count, 2)
@@ -103,7 +105,7 @@ describe("Mori music projection", () => {
     }
     const first = await fetch(`${base}/v1/mori/projects/${projectRef}/generations`, init)
     const replay = await fetch(`${base}/v1/mori/projects/${projectRef}/generations`, init)
-    const firstBody = await first.json() as { data: { generation_ref: string; status: string }; meta: { request_id: string } }
+    const firstBody = (await first.json()) as { data: { generation_ref: string; status: string }; meta: { request_id: string } }
     assert.equal(first.status, 202)
     assert.deepEqual(firstBody, await replay.json())
     assert.equal(firstBody.data.status, "queued")
@@ -123,7 +125,7 @@ describe("Mori music projection", () => {
     assert.doesNotMatch(replayedEventText, new RegExp(`id: ${firstBody.data.generation_ref}:1`, "u"))
     assert.match(replayedEventText, new RegExp(`id: ${firstBody.data.generation_ref}:2`, "u"))
     const snapshot = await fetch(`${base}/v1/mori/generations/${firstBody.data.generation_ref}`, { headers: authHeaders() })
-    const snapshotBody = await snapshot.json() as { data: { status: string; progress: number; candidate_refs: string[] } }
+    const snapshotBody = (await snapshot.json()) as { data: { status: string; progress: number; candidate_refs: string[] } }
     assert.equal(snapshot.status, 200)
     assert.equal(snapshotBody.data.status, "succeeded")
     assert.equal(snapshotBody.data.progress, 100)
@@ -146,16 +148,20 @@ describe("Mori music projection", () => {
     })
     const missingKey = await fetch(path, { method: "POST", headers: { ...authHeaders(), "content-type": "application/json" }, body })
     assert.equal(missingKey.status, 400)
-    assert.equal((await missingKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
+    assert.equal(((await missingKey.json()) as { error: { code: string } }).error.code, "idempotency_key_required")
 
-    const created = await fetch(path, { method: "POST", headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-generation-cancel" }, body })
-    const createdBody = await created.json() as { data: { generation_ref: string } }
+    const created = await fetch(path, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-generation-cancel" },
+      body,
+    })
+    const createdBody = (await created.json()) as { data: { generation_ref: string } }
     const cancel = await fetch(`${base}/v1/mori/generations/${createdBody.data.generation_ref}/cancel`, {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-cancel-1" },
       body: "{}",
     })
-    const cancelBody = await cancel.json() as { data: { status: string } }
+    const cancelBody = (await cancel.json()) as { data: { status: string } }
     assert.equal(cancel.status, 202)
     assert.equal(cancelBody.data.status, "cancelled")
   })
@@ -167,7 +173,7 @@ describe("Mori music projection", () => {
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-project-1" },
       body: JSON.stringify({ title: "Blue Hour", description: "A patient electronic sketch." }),
     })
-    const projectBody = await createProject.json() as { data: { project_ref: string; current_version_ref: string | null } }
+    const projectBody = (await createProject.json()) as { data: { project_ref: string; current_version_ref: string | null } }
     assert.equal(createProject.status, 201)
     assert.equal(projectBody.data.current_version_ref, null)
 
@@ -184,12 +190,14 @@ describe("Mori music projection", () => {
         lyrics_intent: "leave the day with a little more room to breathe",
       }),
     })
-    const planBody = await plan.json() as { data: { song_plan_ref: string; project_ref: string } }
+    const planBody = (await plan.json()) as { data: { song_plan_ref: string; project_ref: string } }
     assert.equal(plan.status, 201)
     assert.equal(planBody.data.project_ref, projectBody.data.project_ref)
 
     const candidatesResponse = await fetch(`${base}/v1/mori/projects/project_preview_first_light/candidates`, { headers: authHeaders() })
-    const candidatesBody = await candidatesResponse.json() as { data: { candidates: Array<{ candidate_ref: string; version_ref: string }>; next_cursor: string | null } }
+    const candidatesBody = (await candidatesResponse.json()) as {
+      data: { candidates: Array<{ candidate_ref: string; version_ref: string }>; next_cursor: string | null }
+    }
     assert.equal(candidatesResponse.status, 200)
     assert.equal(candidatesBody.data.candidates.length, 2)
     assert.equal(candidatesBody.data.next_cursor, null)
@@ -199,7 +207,7 @@ describe("Mori music projection", () => {
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-promote-1" },
       body: "{}",
     })
-    const promotedBody = await promoted.json() as { data: { version_ref: string; source_candidate_ref: string; status: string } }
+    const promotedBody = (await promoted.json()) as { data: { version_ref: string; source_candidate_ref: string; status: string } }
     assert.equal(promoted.status, 201)
     assert.equal(promotedBody.data.source_candidate_ref, candidatesBody.data.candidates[1]?.candidate_ref)
     assert.equal(promotedBody.data.status, "current")
@@ -209,7 +217,7 @@ describe("Mori music projection", () => {
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-remix-1" },
       body: "{}",
     })
-    const remixBody = await remix.json() as { data: { generation_ref: string; status: string } }
+    const remixBody = (await remix.json()) as { data: { generation_ref: string; status: string } }
     assert.equal(remix.status, 202)
     assert.equal(remixBody.data.status, "queued")
 
@@ -218,19 +226,19 @@ describe("Mori music projection", () => {
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-export-1" },
       body: JSON.stringify({ format: "wav" }),
     })
-    const exportBody = await exportResponse.json() as { data: { export_ref: string; status: string } }
+    const exportBody = (await exportResponse.json()) as { data: { export_ref: string; status: string } }
     assert.equal(exportResponse.status, 202)
     assert.equal(exportBody.data.status, "queued")
 
     await wait(140)
     const library = await fetch(`${base}/v1/mori/library?kind=all&limit=10`, { headers: authHeaders() })
-    const libraryBody = await library.json() as { data: { items: Array<{ version_ref: string }>; next_cursor: string | null } }
+    const libraryBody = (await library.json()) as { data: { items: Array<{ version_ref: string }>; next_cursor: string | null } }
     assert.equal(library.status, 200)
     assert.equal(libraryBody.data.items.length, 2)
     assert.equal(libraryBody.data.next_cursor, null)
 
     const exportSnapshot = await fetch(`${base}/v1/mori/exports/${exportBody.data.export_ref}`, { headers: authHeaders() })
-    const exportSnapshotBody = await exportSnapshot.json() as { data: { status: string; format: string; download_url: string | null } }
+    const exportSnapshotBody = (await exportSnapshot.json()) as { data: { status: string; format: string; download_url: string | null } }
     assert.equal(exportSnapshot.status, 200)
     assert.equal(exportSnapshotBody.data.status, "succeeded")
     assert.equal(exportSnapshotBody.data.format, "wav")
@@ -238,13 +246,13 @@ describe("Mori music projection", () => {
 
     const invalidCursor = await fetch(`${base}/v1/mori/library?cursor=not-a-cursor`, { headers: authHeaders() })
     assert.equal(invalidCursor.status, 400)
-    assert.equal((await invalidCursor.json() as { error: { code: string } }).error.code, "invalid_cursor")
+    assert.equal(((await invalidCursor.json()) as { error: { code: string } }).error.code, "invalid_cursor")
   })
 
   it("fails closed when the live Music owner is not configured", async () => {
     const base = await listen(liveServer(config({ mode: "live" })))
     const response = await fetch(`${base}/v1/mori/projects/project_preview_first_light`, { headers: authHeaders() })
-    const body = await response.json() as { error: { code: string } }
+    const body = (await response.json()) as { error: { code: string } }
     assert.equal(response.status, 503)
     assert.equal(body.error.code, "music_owner_not_configured")
   })

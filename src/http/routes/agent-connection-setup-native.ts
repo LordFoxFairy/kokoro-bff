@@ -69,7 +69,7 @@ export async function handleAgentConnectionSetupRequest(
   }
   const selectedPlatform = platform
 
-  const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(Math.min(config.upstreamTimeoutMs, 10_000)))
+  const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(Math.min(config.upstreamTimeoutMs, 10_000)), response)
   if (!admitted.ok) {
     send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
     return true

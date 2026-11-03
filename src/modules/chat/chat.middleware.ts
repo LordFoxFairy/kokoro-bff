@@ -83,22 +83,7 @@ export class ChatMiddleware implements NestMiddleware {
             this.sourceProjectionActive,
           ),
       )
-      .then(
-        (handled) =>
-          handled ||
-          handleChatMessageRequest(
-            request,
-            response,
-            this.config,
-            this.admission,
-            this.chat,
-            this.chatTurns,
-            this.projects,
-            this.installations,
-            this.idempotency,
-            this.chatIdempotency,
-          ),
-      )
+      .then((handled) => handled || handleChatMessageRequest(request, response, this.config, this.admission, this.chatTurns, this.projects, this.installations))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

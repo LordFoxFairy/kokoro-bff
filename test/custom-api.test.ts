@@ -38,7 +38,8 @@ const profile = {
 const browserHeaders = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer human-session",
+  cookie: "kokoro-issuer.session_token=human-session",
+  origin: "https://web.example.test",
   "x-request-id": "custom-api-http-1",
 }
 
@@ -50,6 +51,7 @@ async function customApiFixture(execute: (operation: string, input: Record<strin
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-server",
     iamBaseUrl: "http://iam.invalid",
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: "upstream-secret",
     upstreamTimeoutMs: 5_000,

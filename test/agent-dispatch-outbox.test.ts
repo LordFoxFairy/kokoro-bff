@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { EventEmitter } from "node:events"
 import { createHash } from "node:crypto"
 import { describe, it } from "node:test"
 
@@ -564,4 +565,286 @@ it("snapshots Custom API objects before awaited defaults so mutation cannot spli
   resume()
   await submitting
   assert.deepEqual(repository.commits[0].payload.launch.selected_custom_api_profiles, [{ profile_id: "profile-a", expected_state_version: 3 }])
+})
+
+it("one ChatTurn lifetime binds omitted-selection prepare, Skills resolver and canonical commit", async () => {
+  const repository = new RecordingRepository()
+  let prepared, resolved
+  repository.prepareChatTurnSelection = async (input) => {
+    prepared = input.lifetime
+    return { kind: "new", projectId: "project", installationIds: ["installation"] }
+  }
+  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  await service.submit(
+    { tenantId: "tenant", conversationId: "conv", subjectId: "subject", actorId: "subject", requestId: "request", idempotencyKey: "key", content: "hello" },
+    async (_project, _ids, lifetime) => {
+      resolved = lifetime
+      return ["skill:version"]
+    },
+  )
+  assert.ok(prepared, "prepare must receive the admission deadline and signal")
+  assert.equal(resolved?.deadlineAt, prepared.deadlineAt)
+  assert.equal(resolved?.signal, prepared.signal)
+  assert.equal(repository.commits[0].lifetime?.deadlineAt, prepared.deadlineAt)
+  assert.equal(repository.commits[0].lifetime?.signal, prepared.signal)
+})
+
+it("prepare queue abort retires the waiter and normally releases a late unused lease without SQL", async () => {
+  const { prepareChatTurnSelection } = await import("../dist/infrastructure/postgres/chat-turn-commit.js")
+  let deliver
+  const connected = new Promise((resolve) => {
+    deliver = resolve
+  })
+  const releases = [],
+    queries = []
+  const client = {
+    on() {},
+    removeListener() {},
+    release(value) {
+      releases.push(value)
+    },
+    async query(sql) {
+      queries.push(sql)
+      return { rows: [] }
+    },
+  }
+  const controller = new AbortController()
+  const pending = prepareChatTurnSelection({ pool: { connect: () => connected } } as never, {
+    tenantId: "tenant",
+    subjectId: "subject",
+    conversationId: "conv",
+    idempotencyKey: "key",
+    requestDigest: "a".repeat(64),
+    lifetime: { signal: controller.signal, deadlineAt: performance.now() + 1000 },
+  })
+  let retired = false
+  const outcome = pending.then(
+    () => {
+      retired = true
+    },
+    () => {
+      retired = true
+    },
+  )
+  controller.abort()
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 15))
+    assert.equal(retired, true, "caller abort must return without waiting for a PG pool slot")
+  } finally {
+    deliver(client)
+    await outcome
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(queries, [])
+  assert.deepEqual(releases, [undefined], "an unused clean late lease is not destroyed")
+})
+
+it("caller abort retires a suspended prepare or resolver without any late canonical commit", async () => {
+  for (const stage of ["prepare", "resolve"]) {
+    const repository = new RecordingRepository()
+    const controller = new AbortController()
+    let entered, release
+    const started = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    const blocked = new Promise((resolve) => {
+      release = resolve
+    })
+    repository.prepareChatTurnSelection = async () => {
+      if (stage === "prepare") {
+        entered()
+        await blocked
+        return { kind: "replay", receipt: { run_id: "late", user_message_id: "late-user", assistant_message_id: "late-assistant" } }
+      }
+      return { kind: "new", projectId: "project", installationIds: ["installation"] }
+    }
+    const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+    const pending = service.submit(
+      { tenantId: "tenant", conversationId: "conv", subjectId: "subject", actorId: "subject", requestId: "request", idempotencyKey: "key", content: "hello" },
+      async (_project, _ids, lifetime) => {
+        assert.equal(lifetime.signal.aborted, false)
+        entered()
+        await blocked
+        return ["skill:version"]
+      },
+      { signal: controller.signal, deadlineAt: performance.now() + 1000 },
+    )
+    const rejected = assert.rejects(pending, /caller cancelled/)
+    try {
+      await started
+      controller.abort(new Error("caller cancelled"))
+      await rejected
+    } finally {
+      release()
+      await pending.catch(() => undefined)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.equal(repository.commits.length, 0)
+  }
+})
+
+it("resolver exhausts the original admission deadline and cannot restart a commit budget", async () => {
+  const repository = new RecordingRepository()
+  let release, resolvedLifetime
+  const blocked = new Promise((resolve) => {
+    release = resolve
+  })
+  repository.prepareChatTurnSelection = async () => ({ kind: "new", projectId: "project", installationIds: ["installation"] })
+  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const deadlineAt = performance.now() + 80
+  const pending = service.submit(
+    { tenantId: "tenant", conversationId: "conv", subjectId: "subject", actorId: "subject", requestId: "request", idempotencyKey: "key", content: "hello" },
+    async (_project, _ids, lifetime) => {
+      resolvedLifetime = lifetime
+      await blocked
+      return ["skill:version"]
+    },
+    { signal: new AbortController().signal, deadlineAt },
+  )
+  try {
+    await assert.rejects(pending, /CHAT_TURN_BUDGET_EXHAUSTED/)
+    assert.equal(resolvedLifetime.deadlineAt, deadlineAt)
+    assert.equal(resolvedLifetime.signal.aborted, true)
+  } finally {
+    release()
+    await pending.catch(() => undefined)
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(repository.commits.length, 0)
+})
+
+it("canonical COMMIT unknown is never retried automatically and explicit recovery keeps the same key and digest", async () => {
+  const repository = new RecordingRepository()
+  let unknown = true
+  repository.commitChatTurn = async (command) => {
+    repository.commits.push(command)
+    if (unknown) throw new Error("CHAT_TURN_COMMIT_UNKNOWN")
+    return { run_id: command.runId, user_message_id: command.userMessageId, assistant_message_id: command.assistantMessageId }
+  }
+  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conv",
+    subjectId: "subject",
+    actorId: "subject",
+    requestId: "request",
+    idempotencyKey: "original-key",
+    content: "original body",
+    selectedSkillSourceRefs: [],
+  }
+  await assert.rejects(service.submit(input), /CHAT_TURN_COMMIT_UNKNOWN/)
+  assert.equal(repository.commits.length, 1)
+  unknown = false
+  await service.submit(input)
+  assert.equal(repository.commits.length, 2)
+  assert.equal(repository.commits[1].requestDigest, repository.commits[0].requestDigest)
+  assert.equal(repository.commits[1].idempotencyKey, "original-key")
+  assert.equal(repository.commits[1].runId, repository.commits[0].runId)
+})
+
+it("prepare checkout abort destroys exactly its controlled lease and discards a late SQL result", async () => {
+  const { prepareChatTurnSelection } = await import("../dist/infrastructure/postgres/chat-turn-commit.js")
+  let entered, finish
+  const started = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const answer = new Promise((resolve) => {
+    finish = resolve
+  })
+  const releases = []
+  const client = Object.assign(new EventEmitter(), {
+    async query() {
+      entered()
+      return answer
+    },
+    release(destroy) {
+      releases.push(destroy)
+    },
+  })
+  const controller = new AbortController()
+  const pending = prepareChatTurnSelection({ pool: { connect: async () => client } } as never, {
+    tenantId: "tenant",
+    subjectId: "subject",
+    conversationId: "conv",
+    idempotencyKey: "key",
+    requestDigest: "a".repeat(64),
+    lifetime: { signal: controller.signal, deadlineAt: performance.now() + 1000 },
+  })
+  const rejected = assert.rejects(pending, /caller cancelled/)
+  try {
+    await started
+    controller.abort(new Error("caller cancelled"))
+    await rejected
+  } finally {
+    finish({ rows: [] })
+    await pending.catch(() => undefined)
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(releases, [true])
+  assert.equal(client.listenerCount("error"), 0)
+})
+
+it("canonical owner COMMIT-unknown classification survives caller retirement without an outer race masking it", async () => {
+  const repository = new RecordingRepository()
+  const controller = new AbortController()
+  let entered
+  const started = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  repository.commitChatTurn = (command) =>
+    new Promise((_resolve, reject) => {
+      repository.commits.push(command)
+      command.lifetime.signal.addEventListener("abort", () => queueMicrotask(() => reject(new Error("CHAT_TURN_COMMIT_UNKNOWN"))), { once: true })
+      entered()
+    })
+  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const pending = service.submit(
+    {
+      tenantId: "tenant",
+      conversationId: "conv",
+      subjectId: "subject",
+      actorId: "subject",
+      requestId: "request",
+      idempotencyKey: "key",
+      content: "hello",
+      selectedSkillSourceRefs: [],
+    },
+    undefined,
+    { signal: controller.signal, deadlineAt: performance.now() + 1000 },
+  )
+  const rejection = assert.rejects(pending, /CHAT_TURN_COMMIT_UNKNOWN/)
+  await started
+  controller.abort(new Error("caller retired"))
+  await rejection
+  assert.equal(repository.commits.length, 1)
+})
+
+it("expired or pre-aborted prepare performs no checkout and no SQL", async () => {
+  const { prepareChatTurnSelection } = await import("../dist/infrastructure/postgres/chat-turn-commit.js")
+  let checkouts = 0
+  const database = {
+    pool: {
+      connect: async () => {
+        checkouts++
+        throw Error("unexpected checkout")
+      },
+    },
+  }
+  const stopped = new AbortController()
+  stopped.abort(new Error("caller cancelled"))
+  for (const lifetime of [
+    { signal: new AbortController().signal, deadlineAt: performance.now() - 1 },
+    { signal: stopped.signal, deadlineAt: performance.now() + 1000 },
+  ])
+    await assert.rejects(
+      prepareChatTurnSelection(database as never, {
+        tenantId: "tenant",
+        subjectId: "subject",
+        conversationId: "conv",
+        idempotencyKey: "key",
+        requestDigest: "a".repeat(64),
+        lifetime,
+      }),
+    )
+  assert.equal(checkouts, 0)
 })

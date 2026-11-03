@@ -31,7 +31,7 @@ import { ScheduledAgentTerminalConsumer } from "../../application/scheduled-agen
 import { ScheduledAgentDispatchDelivery } from "../../infrastructure/clients/agent/scheduled-dispatch-delivery.js"
 import { ScheduledAgentTerminalSource } from "../../infrastructure/clients/agent/scheduled-terminal-source.js"
 import { AgentRunsModule } from "../agent-runs/agent-runs.module.js"
-import { AccountModule } from "../account/account.module.js"
+import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { ProjectsModule } from "../projects/projects.module.js"
 import { ScheduledTaskReadMiddleware } from "./scheduled-task-read.middleware.js"
 import { SchedulerDispatchMiddleware } from "./scheduler-dispatch.middleware.js"
@@ -70,7 +70,7 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdow
 }
 
 @Module({
-  imports: [AccountModule, ProjectsModule, AgentRunsModule, DatabaseModule],
+  imports: [AuthenticationModule, ProjectsModule, AgentRunsModule, DatabaseModule],
   providers: [
     ScheduledTaskReadMiddleware,
     SchedulerDispatchMiddleware,

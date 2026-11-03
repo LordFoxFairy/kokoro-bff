@@ -29,7 +29,7 @@ export async function handlePublishedSkillPackageRequest(
   const id = requestId(request)
   const signal = AbortSignal.timeout(10_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
       send(
         response,

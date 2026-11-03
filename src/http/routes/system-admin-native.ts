@@ -24,13 +24,17 @@ export async function handleSystemAdminRequest(
   admission: SessionAdmission,
 ): Promise<boolean> {
   let path: string[]
-  try { path = pathOf(request).slice(1) } catch { return false }
+  try {
+    path = pathOf(request).slice(1)
+  } catch {
+    return false
+  }
   const configuration = matchModelConfiguration(request.method ?? "GET", path)
   if (configuration === null && !matchesRouting(request.method ?? "GET", path)) return false
   const id = requestId(request)
   const deadlineAt = Date.now() + Math.min(config.upstreamTimeoutMs, 10_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(Math.max(1, deadlineAt - Date.now())))
+    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(Math.max(1, deadlineAt - Date.now())), response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true
@@ -38,7 +42,8 @@ export async function handleSystemAdminRequest(
     if (configuration !== null) await liveModelConfigurationAdmin(request, response, config, admitted.context, path, deadlineAt)
     else await liveModelRoutingAdmin(request, response, config, admitted.context, path)
   } catch {
-    if (!response.headersSent && !response.destroyed && !response.writableEnded) send(response, 503, failure("system_admin_unavailable", "System administrator route is unavailable", id))
+    if (!response.headersSent && !response.destroyed && !response.writableEnded)
+      send(response, 503, failure("system_admin_unavailable", "System administrator route is unavailable", id))
     else if (!response.writableEnded && !response.destroyed) response.destroy()
   }
   return true

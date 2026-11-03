@@ -27,16 +27,9 @@ export type ApiErrorResponse = {
       | "PAYLOAD_TOO_LARGE"
       | "RATE_LIMITED"
       | "DEPENDENCY_UNAVAILABLE"
-      | "native_session_request_invalid"
-      | "native_session_missing"
-      | "native_session_invalid"
-      | "native_session_revoked"
-      | "native_session_expired"
-      | "native_session_origin_forbidden"
-      | "native_session_csrf_failed"
-      | "native_session_rate_limited"
-      | "native_session_service_unavailable"
-      | "native_session_deadline_exceeded"
+      | "bff_user_context_service_unauthenticated"
+      | "account_session_service_unauthenticated"
+      | "account_session_invalid"
       | "INTERNAL"
     message: string
     retryable: boolean
@@ -193,6 +186,10 @@ export type VerifyOpenAppManagementAuthorizationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     app_id: string
@@ -258,6 +255,10 @@ export type ReadAccountProfileData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path?: never
   query?: never
@@ -322,6 +323,10 @@ export type UpdateAccountProfileData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path?: never
   query?: never
@@ -382,11 +387,15 @@ export type UpdateAccountProfileResponse = UpdateAccountProfileResponses[keyof U
 
 export type ListAccountSessionsData = {
   body?: never
-  headers?: {
+  headers: {
     /**
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Exact IAM_WEB_ORIGIN, including GET. Native authentication lifecycle CSRF boundary.
+     */
+    Origin: string
   }
   path?: never
   query?: {
@@ -457,11 +466,15 @@ export type ListAccountSessionsResponse = ListAccountSessionsResponses[keyof Lis
 
 export type RevokeAccountSessionData = {
   body?: never
-  headers?: {
+  headers: {
     /**
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Exact IAM_WEB_ORIGIN, including GET. Native authentication lifecycle CSRF boundary.
+     */
+    Origin: string
   }
   path: {
     session_id: string
@@ -565,16 +578,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -607,16 +613,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -649,16 +648,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -691,16 +683,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -733,16 +718,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -775,16 +753,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -817,16 +788,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -859,16 +823,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -931,16 +888,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -973,16 +923,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1015,16 +958,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1057,16 +993,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1099,16 +1028,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1141,16 +1063,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1183,16 +1098,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1225,16 +1133,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1294,16 +1195,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1336,16 +1230,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1378,16 +1265,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1420,16 +1300,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1462,16 +1335,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1504,16 +1370,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1546,16 +1405,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1588,16 +1440,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
-        | "native_session_request_invalid"
-        | "native_session_missing"
-        | "native_session_invalid"
-        | "native_session_revoked"
-        | "native_session_expired"
-        | "native_session_origin_forbidden"
-        | "native_session_csrf_failed"
-        | "native_session_rate_limited"
-        | "native_session_service_unavailable"
-        | "native_session_deadline_exceeded"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1619,66 +1464,6 @@ export type RejectTenantInvitationResponses = {
 
 export type RejectTenantInvitationResponse = RejectTenantInvitationResponses[keyof RejectTenantInvitationResponses]
 
-export type VerifyNativeSessionData = {
-  body?: never
-  headers?: {
-    /**
-     * Caller correlation identifier. Missing or invalid values are replaced by the service.
-     */
-    "x-request-id"?: string
-  }
-  path?: never
-  query?: never
-  url: "/internal/v1/native-session-admission/verify"
-}
-
-export type VerifyNativeSessionErrors = {
-  /**
-   * Stable internal API error envelope.
-   */
-  400: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  401: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  403: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  429: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  503: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  504: ApiErrorResponse
-}
-
-export type VerifyNativeSessionError = VerifyNativeSessionErrors[keyof VerifyNativeSessionErrors]
-
-export type VerifyNativeSessionResponses = {
-  200: {
-    data: {
-      subject_id: string
-      tenant_id: string
-      session_id: string
-      permissions: Array<string>
-      session_expires_at: string
-    }
-    meta: {
-      request_id: string
-      contract_version: "1.0.0"
-    }
-  }
-}
-
-export type VerifyNativeSessionResponse = VerifyNativeSessionResponses[keyof VerifyNativeSessionResponses]
-
 export type ListTenantMembersData = {
   body?: never
   headers?: {
@@ -1686,6 +1471,10 @@ export type ListTenantMembersData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1759,6 +1548,10 @@ export type LeaveTenantData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1822,6 +1615,10 @@ export type RemoveTenantMemberData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1888,6 +1685,10 @@ export type ReplaceTenantMemberRolesData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1956,6 +1757,10 @@ export type ListTenantRolesData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -2053,6 +1858,10 @@ export type ListTenantInvitationsData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -2129,6 +1938,10 @@ export type CreateTenantInvitationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -2196,6 +2009,10 @@ export type ResendTenantInvitationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -2264,6 +2081,10 @@ export type CancelTenantInvitationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -2333,6 +2154,10 @@ export type ResolveTenantPublisherProfilesData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -2424,6 +2249,10 @@ export type CheckAuthorizationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path?: never
   query?: never
@@ -2484,75 +2313,6 @@ export type CheckAuthorizationResponses = {
 
 export type CheckAuthorizationResponse = CheckAuthorizationResponses[keyof CheckAuthorizationResponses]
 
-export type VerifySessionAuthorizationData = {
-  body?: never
-  headers?: {
-    /**
-     * Caller correlation identifier. Missing or invalid values are replaced by the service.
-     */
-    "x-request-id"?: string
-  }
-  path?: never
-  query?: never
-  url: "/internal/v1/session-authorizations/verify"
-}
-
-export type VerifySessionAuthorizationErrors = {
-  /**
-   * Stable internal API error envelope.
-   */
-  400: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  401: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  403: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  404: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  409: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  413: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  429: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  500: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  503: ApiErrorResponse
-}
-
-export type VerifySessionAuthorizationError = VerifySessionAuthorizationErrors[keyof VerifySessionAuthorizationErrors]
-
-export type VerifySessionAuthorizationResponses = {
-  200: {
-    data: {
-      allowed: true
-      platform_admin: boolean
-      tenant_id: string
-      user_id: string
-      session_id: string
-      client_id: string
-    }
-  }
-}
-
-export type VerifySessionAuthorizationResponse = VerifySessionAuthorizationResponses[keyof VerifySessionAuthorizationResponses]
-
 export type CheckTenantSkillAuthorizationData = {
   body: {
     action:
@@ -2587,6 +2347,10 @@ export type CheckTenantSkillAuthorizationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string

@@ -23,7 +23,7 @@ export async function handlePersonalKnowledgeRequest(
   const id = requestId(request)
   const signal = AbortSignal.timeout(5_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
       send(
         response,

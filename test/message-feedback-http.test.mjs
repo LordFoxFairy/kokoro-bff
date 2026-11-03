@@ -14,6 +14,7 @@ async function fixture(t) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: 1000,
@@ -52,7 +53,8 @@ async function fixture(t) {
       headers: {
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": "test-secret",
-        authorization: "Bearer feedback-session",
+        cookie: "kokoro-issuer.session_token=feedback-session",
+        origin: "https://web.example.test",
         "x-kokoro-request-id": "feedback-test",
         ...(body === undefined ? {} : { "content-type": "application/json" }),
         ...extra,

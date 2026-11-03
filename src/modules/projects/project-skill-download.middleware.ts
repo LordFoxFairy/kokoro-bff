@@ -20,10 +20,7 @@ import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { handleSkillDownloadRequest } from "../../http/routes/skill-download-native.js"
 import { requestId } from "../../http/request.js"
 
-function exactSource(
-  personal: ExactSkillDownloadSource | null,
-  project: ExactSkillDownloadSource | null,
-): ExactSkillDownloadSource {
+function exactSource(personal: ExactSkillDownloadSource | null, project: ExactSkillDownloadSource | null): ExactSkillDownloadSource {
   return {
     prepare: (qualifier, context, signal, deadlineAt) =>
       (qualifier.kind === "project_installation" ? project : personal)?.prepare(qualifier, context, signal, deadlineAt) ?? unavailable(),
@@ -50,8 +47,12 @@ export class ProjectSkillDownloadMiddleware implements NestMiddleware {
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     const id = requestId(request)
-    const access = async (projectId: string, context: { requestId: string; identity: { namespace: string; userId: string } }, signal: AbortSignal): Promise<string | null> => {
-      const fresh = await authorizeUserRequest(request, this.config, this.admission, id, signal)
+    const access = async (
+      projectId: string,
+      context: { requestId: string; identity: { namespace: string; userId: string } },
+      signal: AbortSignal,
+    ): Promise<string | null> => {
+      const fresh = await authorizeUserRequest(request, this.config, this.admission, id, signal, response)
       signal.throwIfAborted()
       if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
       if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
@@ -61,8 +62,19 @@ export class ProjectSkillDownloadMiddleware implements NestMiddleware {
       if (!value) throw new ConnectError("Project not found", Code.NotFound)
       return value.id
     }
-    void handleSkillDownloadRequest(request, response, this.config, this.admission, this.handles, this.specification, exactSource(this.personalExact, this.exact), access)
-      .then((handled) => { if (!handled && !response.writableEnded && !response.destroyed) next() })
+    void handleSkillDownloadRequest(
+      request,
+      response,
+      this.config,
+      this.admission,
+      this.handles,
+      this.specification,
+      exactSource(this.personalExact, this.exact),
+      access,
+    )
+      .then((handled) => {
+        if (!handled && !response.writableEnded && !response.destroyed) next()
+      })
       .catch(() => {
         if (!response.headersSent && !response.writableEnded && !response.destroyed) {
           response.statusCode = 500

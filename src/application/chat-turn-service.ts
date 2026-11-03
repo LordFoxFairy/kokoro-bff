@@ -7,8 +7,11 @@ import {
   type AgentDispatchInput,
   type AgentDispatchReceipt,
 } from "../domain/chat/agent-dispatch.js"
+import type { CommitChatTurn } from "./agent-dispatch/agent-dispatch-outbox-repository.js"
 import type { AgentDispatchOutboxRepository } from "./agent-dispatch/agent-dispatch-outbox-repository.js"
 import type { StableIdGenerator } from "./scheduled/stable-id-generator.js"
+
+export const CHAT_TURN_TOTAL_BUDGET_MS = 4500
 
 export class ChatTurnApplicationService {
   public constructor(
@@ -78,53 +81,89 @@ export class ChatTurnApplicationService {
 
   public async submit(
     input: AgentDispatchInput,
-    resolveProjectSkills?: (projectId: string, installationIds: string[]) => Promise<string[]>,
-    signal?: AbortSignal,
+    resolveProjectSkills?: (projectId: string, installationIds: string[], lifetime: NonNullable<CommitChatTurn["lifetime"]>) => Promise<string[]>,
+    lifetime?: NonNullable<CommitChatTurn["lifetime"]>,
   ): Promise<AgentDispatchReceipt | null> {
-    signal?.throwIfAborted()
-    const suffix = this.stableIdGenerator.generate(agentDispatchIdentityMaterial(input))
-    // The same connector intent must bind both digest and payload across awaited defaults.
-    if (input.selectedMcpConnectionIds !== undefined) input = { ...input, selectedMcpConnectionIds: [...input.selectedMcpConnectionIds] }
-    if (input.selectedCustomApiProfiles !== undefined)
-      input = { ...input, selectedCustomApiProfiles: input.selectedCustomApiProfiles.map((profile) => ({ ...profile })) }
-    const runId = `run_bff_${suffix}`
-    const userMessageId = `msg_bff_${suffix}_user`
-    const assistantMessageId = `msg_bff_${suffix}_assistant`
-    const requestDigest = this.stableIdGenerator.generate(agentDispatchRequestMaterial(input))
-    let skillSelection: { projectId: string | null; installationIds: string[] } | undefined
-    let selectedSkillSourceRefs = input.selectedSkillSourceRefs
-    if (selectedSkillSourceRefs === undefined) {
-      const current = await this.repository.prepareChatTurnSelection({ ...input, requestDigest })
-      signal?.throwIfAborted()
-      if (current === null) return null
-      if (current.kind === "replay") return current.receipt
-      skillSelection = { projectId: current.projectId, installationIds: current.installationIds }
-      if (current.installationIds.length === 0) selectedSkillSourceRefs = []
-      else {
-        if (current.projectId === null || resolveProjectSkills === undefined) throw new Error("CHAT_SKILL_SELECTION_UNAVAILABLE")
-        selectedSkillSourceRefs = await resolveProjectSkills(current.projectId, current.installationIds)
-        if (parseSkillSourceSelection(selectedSkillSourceRefs) === null || selectedSkillSourceRefs.length !== current.installationIds.length)
-          throw new Error("CHAT_SKILL_SELECTION_INVALID")
+    const controller = new AbortController()
+    const signal = lifetime === undefined ? controller.signal : AbortSignal.any([controller.signal, lifetime.signal])
+    const deadlineAt = Math.min(performance.now() + CHAT_TURN_TOTAL_BUDGET_MS, lifetime?.deadlineAt ?? Infinity)
+    const admissionLifetime = { signal, deadlineAt }
+    const check = (): void => {
+      if (!Number.isFinite(deadlineAt) || performance.now() >= deadlineAt) controller.abort(new Error("CHAT_TURN_BUDGET_EXHAUSTED"))
+      signal.throwIfAborted()
+    }
+    check()
+    const timer = setTimeout(() => controller.abort(new Error("CHAT_TURN_BUDGET_EXHAUSTED")), Math.max(0, deadlineAt - performance.now()))
+    const within = async <T>(start: () => Promise<T>): Promise<T> => {
+      check()
+      let onAbort!: () => void
+      const interrupted = new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(signal.reason)
+      })
+      signal.addEventListener("abort", onAbort, { once: true })
+      try {
+        check()
+        const result = await Promise.race([start(), interrupted])
+        check()
+        return result
+      } finally {
+        signal.removeEventListener("abort", onAbort)
       }
     }
-    signal?.throwIfAborted()
-    return this.repository.commitChatTurn({
-      outboxId: `agent_outbox_${suffix.slice(0, 32)}`,
-      tenantId: input.tenantId,
-      conversationId: input.conversationId,
-      ...(input.projectRef === undefined ? {} : { projectRef: input.projectRef }),
-      subjectId: input.subjectId,
-      actorId: input.actorId,
-      requestId: input.requestId,
-      idempotencyKey: input.idempotencyKey,
-      requestDigest,
-      runId,
-      userMessageId,
-      assistantMessageId,
-      identityAssertionRef: `bff:${suffix}`,
-      content: input.content,
-      ...(skillSelection === undefined ? {} : { skillSelection }),
-      payload: buildAgentDispatchPayload({ ...input, selectedSkillSourceRefs }, { runId, userMessageId }),
-    })
+    try {
+      const suffix = this.stableIdGenerator.generate(agentDispatchIdentityMaterial(input))
+      // The same connector intent must bind both digest and payload across awaited defaults.
+      if (input.selectedMcpConnectionIds !== undefined) input = { ...input, selectedMcpConnectionIds: [...input.selectedMcpConnectionIds] }
+      if (input.selectedCustomApiProfiles !== undefined)
+        input = { ...input, selectedCustomApiProfiles: input.selectedCustomApiProfiles.map((profile) => ({ ...profile })) }
+      const runId = `run_bff_${suffix}`
+      const userMessageId = `msg_bff_${suffix}_user`
+      const assistantMessageId = `msg_bff_${suffix}_assistant`
+      const requestDigest = this.stableIdGenerator.generate(agentDispatchRequestMaterial(input))
+      let skillSelection: { projectId: string | null; installationIds: string[] } | undefined
+      let selectedSkillSourceRefs = input.selectedSkillSourceRefs
+      if (selectedSkillSourceRefs === undefined) {
+        const current = await within(() => this.repository.prepareChatTurnSelection({ ...input, requestDigest, lifetime: admissionLifetime }))
+        check()
+        if (current === null) return null
+        if (current.kind === "replay") return current.receipt
+        skillSelection = { projectId: current.projectId, installationIds: current.installationIds }
+        if (current.installationIds.length === 0) selectedSkillSourceRefs = []
+        else {
+          const projectId = current.projectId
+          const resolve = resolveProjectSkills
+          if (projectId === null || resolve === undefined) throw new Error("CHAT_SKILL_SELECTION_UNAVAILABLE")
+          selectedSkillSourceRefs = await within(() => resolve(projectId, current.installationIds, admissionLifetime))
+          if (parseSkillSourceSelection(selectedSkillSourceRefs) === null || selectedSkillSourceRefs.length !== current.installationIds.length)
+            throw new Error("CHAT_SKILL_SELECTION_INVALID")
+        }
+      }
+      check()
+      // Once commit is invoked, its bounded owner lifetime classifies dispatched COMMIT/ACK loss.
+      // Do not race it with another rejection that could mask CHAT_TURN_COMMIT_UNKNOWN.
+      const receipt = await this.repository.commitChatTurn({
+        lifetime: admissionLifetime,
+        outboxId: `agent_outbox_${suffix.slice(0, 32)}`,
+        tenantId: input.tenantId,
+        conversationId: input.conversationId,
+        ...(input.projectRef === undefined ? {} : { projectRef: input.projectRef }),
+        subjectId: input.subjectId,
+        actorId: input.actorId,
+        requestId: input.requestId,
+        idempotencyKey: input.idempotencyKey,
+        requestDigest,
+        runId,
+        userMessageId,
+        assistantMessageId,
+        identityAssertionRef: `bff:${suffix}`,
+        content: input.content,
+        ...(skillSelection === undefined ? {} : { skillSelection }),
+        payload: buildAgentDispatchPayload({ ...input, selectedSkillSourceRefs }, { runId, userMessageId }),
+      })
+      check()
+      return receipt
+    } finally {
+      clearTimeout(timer)
+    }
   }
 }

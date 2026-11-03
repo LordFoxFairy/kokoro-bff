@@ -1285,7 +1285,6 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
           wire(6, "assistant.completed", { content: "" }, "final-segment"),
           wire(7, "run.completed", {
             status: "completed",
-            token_usage: null,
           }),
         ],
         next_seq: 7,

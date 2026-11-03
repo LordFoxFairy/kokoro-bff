@@ -31,6 +31,7 @@ function config(baseUrl, overrides = {}) {
     domain: "dev.kokoro.localhost",
     tenantId: "ns_test",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: "billing-internal-secret",
     upstreamTimeoutMs: 75,
@@ -54,7 +55,8 @@ function publicHeaders(requestId) {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
     "x-kokoro-request-id": requestId,
-    authorization: "Bearer test-session",
+    cookie: "kokoro-issuer.session_token=test-session",
+    origin: "https://web.example.test",
   }
 }
 
@@ -167,7 +169,7 @@ test("personal Credit transport preserves the maximum admitted Unicode identitie
     },
     async (base) => {
       const response = await fetch(`${base}/v1/billing/summary`, {
-        headers: { ...publicHeaders("billing-boundary"), authorization: "Bearer boundary-session" },
+        headers: { ...publicHeaders("billing-boundary"), cookie: "kokoro-issuer.session_token=boundary-session", origin: "https://web.example.test" },
       })
       assert.equal(response.status, 200)
     },
@@ -199,7 +201,11 @@ for (const [name, identity] of [
       },
       async (base) => {
         const response = await fetch(`${base}/v1/billing/summary`, {
-          headers: { ...publicHeaders("billing-invalid-identity"), authorization: "Bearer invalid-identity-session" },
+          headers: {
+            ...publicHeaders("billing-invalid-identity"),
+            cookie: "kokoro-issuer.session_token=invalid-identity-session",
+            origin: "https://web.example.test",
+          },
         })
         assert.equal(response.status, 503)
         assert.equal(((await response.json()).error ?? {}).code, "billing_unavailable")
@@ -221,7 +227,7 @@ test("personal Credit admission rejects an empty tenant before owner I/O", async
     },
     async (base) => {
       const response = await fetch(`${base}/v1/billing/summary`, {
-        headers: { ...publicHeaders("billing-empty-tenant"), authorization: "Bearer empty-tenant-session" },
+        headers: { ...publicHeaders("billing-empty-tenant"), cookie: "kokoro-issuer.session_token=empty-tenant-session", origin: "https://web.example.test" },
       })
       assert.equal(response.status, 403)
       assert.equal(((await response.json()).error ?? {}).code, "product_tenant_forbidden")
@@ -569,7 +575,12 @@ test("initialization does not call the owner for an unauthenticated principal", 
       json(response, 200, { data: account })
     },
     async (base) => {
-      const headers = { ...publicHeaders("anonymous-init"), "content-type": "application/json", authorization: "Bearer unknown-session" }
+      const headers = {
+        ...publicHeaders("anonymous-init"),
+        "content-type": "application/json",
+        cookie: "kokoro-issuer.session_token=unknown-session",
+        origin: "https://web.example.test",
+      }
       const response = await fetch(`${base}/v1/billing/credit-account`, { method: "PUT", headers, body: "{}" })
       assert.equal(response.status, 401)
     },

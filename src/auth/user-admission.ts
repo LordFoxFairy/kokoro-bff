@@ -1,10 +1,9 @@
-import type { IncomingMessage } from "node:http"
+import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { BffConfig } from "../config/runtime.js"
 import type { AdmittedUserRequestContext } from "../domain/request-context.js"
 import type { SessionAdmission } from "./session-admission.types.js"
 import { admitBrowserService } from "./browser-service-credential.policy.js"
-import { readIamSessionAdmissionCredential } from "./iam-session-admission-credential.js"
 
 const NATIVE_COOKIE_NAMES = new Set([
   "kokoro-issuer.session_token",
@@ -18,15 +17,7 @@ const NATIVE_COOKIE_NAMES = new Set([
 ])
 
 export type UserAdmissionResult =
-  | Readonly<{ ok: true; context: AdmittedUserRequestContext; bearerToken: string }>
-  | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
-
-/** Authentication material for IAM owner calls after one BFF admission. */
-export type OwnerSessionAuth = Readonly<{
-  token: string
-  cookie?: string
-  origin?: string
-}>
+  Readonly<{ ok: true; context: AdmittedUserRequestContext }> | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
 
 function authorizationValues(request: IncomingMessage): string[] {
   const values: string[] = []
@@ -62,63 +53,48 @@ export function nativeSessionCookie(request: IncomingMessage): string | null {
   return [...parsed].map(([name, value]) => `${name}=${value}`).join("; ") || null
 }
 
+export function writeSessionCookies(response: ServerResponse | undefined, cookies: readonly string[] | undefined): void {
+  if (response === undefined || response.headersSent || !cookies?.length) return
+  const existing = response.getHeader("set-cookie")
+  response.setHeader("set-cookie", [...(Array.isArray(existing) ? existing.map(String) : existing === undefined ? [] : [String(existing)]), ...cookies])
+}
+
+export async function authenticateBrowserRequest(
+  request: IncomingMessage,
+  config: BffConfig,
+  admission: SessionAdmission,
+  requestId: string,
+  signal: AbortSignal,
+  refresh = false,
+): Promise<import("./session-admission.types.js").SessionAdmissionResult> {
+  if (admitBrowserService(request, config, { kind: "business" }) === null) return { ok: false, status: 403, code: "service_auth_failed" }
+  const tenant = config.tenantId?.trim()
+  if (!tenant) return { ok: false, status: 503, code: "product_tenant_not_configured" }
+  const fixedOrigin = config.iamWebOrigin ?? config.iamRelay?.webOrigin
+  if (!fixedOrigin) return { ok: false, status: 503, code: "iam_admission_unavailable" }
+  const origins: string[] = []
+  for (let i = 0; i < request.rawHeaders.length; i += 2) if (request.rawHeaders[i]?.toLowerCase() === "origin") origins.push(request.rawHeaders[i + 1] ?? "")
+  const origin = origins.length === 1 ? origins[0]!.trim() : ""
+  if (!origin || origin !== fixedOrigin) return { ok: false, status: 403, code: "session_forbidden" }
+  const cookie = nativeSessionCookie(request)
+  if (cookie === null) return { ok: false, status: 401, code: "session_authentication_required" }
+  const result = await admission.verify({ cookie, origin, requestId, signal, refresh })
+  if (result.ok && result.identity.namespace !== tenant) return { ok: false, status: 403, code: "product_tenant_forbidden" }
+  return result
+}
+
 export async function authorizeUserRequest(
   request: IncomingMessage,
   config: BffConfig,
   admission: SessionAdmission,
   requestId: string,
   signal: AbortSignal,
+  response?: ServerResponse,
 ): Promise<UserAdmissionResult> {
-  if (admitBrowserService(request, config, { kind: "business" }) === null) return { ok: false, status: 403, code: "service_auth_failed" }
-
-  const fixedTenantId = config.tenantId?.trim()
-  if (!fixedTenantId) return { ok: false, status: 503, code: "product_tenant_not_configured" }
-  const cookie = nativeSessionCookie(request)
-  const origin = request.headers.origin?.trim() ?? ""
-  const nativeConfigured = config.iamSessionAdmissionCredentialFile != null && (config.iamWebOrigin ?? config.iamRelay?.webOrigin) != null
-  const result =
-    nativeConfigured && typeof admission.verifyNative === "function"
-      ? cookie === null
-        ? ({ ok: false, status: 401, code: "session_authentication_required" } as const)
-        : await admission.verifyNative({ cookie, origin, requestId, signal })
-      : await (async () => {
-          const token = bearerToken(request)
-          if (token === null) return { ok: false, status: 401, code: "session_authentication_required" } as const
-          return admission.verify({ token, requestId, signal })
-        })()
+  const result = await authenticateBrowserRequest(request, config, admission, requestId, signal)
+  writeSessionCookies(response, result.setCookies)
   if (!result.ok) return result
-  if (result.identity.namespace !== fixedTenantId) return { ok: false, status: 403, code: "product_tenant_forbidden" }
-  return {
-    ok: true,
-    context: { requestId, identity: result.identity, platformAdmin: result.platformAdmin },
-    // Native admission intentionally has no user bearer. The empty value keeps
-    // legacy owner-call ports fail-closed until their native equivalents land.
-    bearerToken: nativeConfigured && typeof admission.verifyNative === "function" ? "" : bearerToken(request)!,
-  }
-}
-
-/**
- * Materialize the owner-side transport credential only for feature routes that
- * have a native-session IAM contract. Legacy bearer consumers keep their exact
- * admitted token; native consumers receive the allowlisted cookie plus the
- * fixed IAM Web origin and the BFF direct credential.
- */
-export async function ownerSessionAuth(
-  request: IncomingMessage,
-  config: BffConfig,
-  admission: Extract<UserAdmissionResult, { ok: true }>,
-  signal: AbortSignal,
-): Promise<OwnerSessionAuth> {
-  if (admission.bearerToken !== "") return { token: admission.bearerToken }
-  const cookie = nativeSessionCookie(request)
-  const origin = config.iamWebOrigin ?? config.iamRelay?.webOrigin ?? null
-  const credentialFile = config.iamSessionAdmissionCredentialFile ?? null
-  if (cookie === null || origin === null || credentialFile === null) throw new Error("native_owner_auth_unavailable")
-  return {
-    token: await readIamSessionAdmissionCredential(credentialFile, config.tenantId, signal),
-    cookie,
-    origin,
-  }
+  return { ok: true, context: { requestId, identity: result.identity, platformAdmin: result.platformAdmin } }
 }
 
 /** Human admission is fresh for every Skill command and Skills admin read. */
@@ -129,7 +105,6 @@ export async function authorizeSkillAction(
   signal: AbortSignal,
 ) {
   return source.check({
-    token: admission.bearerToken,
     requestId: admission.context.requestId,
     signal,
     tenantId: admission.context.identity.namespace,
@@ -187,25 +162,6 @@ export function skillActionForRequest(method: string, path: string[]): import(".
   return method === "POST" || method === "PATCH" ? (actions[path[2]!] ?? null) : null
 }
 
-/** Adds current Skill action admission inside an existing route's single admission/deadline boundary. */
-export function withSkillActionAdmission(
-  session: SessionAdmission,
-  checks: Pick<import("./skill-authorization.client.js").SkillAuthorizationClient, "check">,
-  action: import("./skill-authorization.types.js").SkillAuthorizationInput["action"],
-  tenant: string | null | undefined,
-): SessionAdmission {
-  return {
-    verify: async (input) => {
-      const result = await session.verify(input)
-      if (!result.ok || result.identity.namespace !== tenant) return result
-      input.signal.throwIfAborted()
-      const checked = await checks.check({ ...input, tenantId: result.identity.namespace, subjectId: result.identity.userId, action })
-      input.signal.throwIfAborted()
-      return checked.ok ? result : checked
-    },
-  }
-}
-
 /** Only current human MCP membership is accepted; workload scope is not user authority. */
 export async function authorizeMcpAction(
   source: Pick<import("./mcp-authorization.client.js").McpAuthorizationClient, "check">,
@@ -215,7 +171,6 @@ export async function authorizeMcpAction(
 ) {
   signal.throwIfAborted()
   const result = await source.check({
-    token: admission.bearerToken,
     requestId: admission.context.requestId,
     signal,
     tenantId: admission.context.identity.namespace,
@@ -235,7 +190,6 @@ export async function authorizeMcpCatalogAction(
 ) {
   signal.throwIfAborted()
   const result = await source.check({
-    token: admission.bearerToken,
     requestId: admission.context.requestId,
     signal,
     tenantId: admission.context.identity.namespace,

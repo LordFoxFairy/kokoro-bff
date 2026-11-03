@@ -24,6 +24,7 @@ async function fixture({ admin = false, operator = true, failure } = {}) {
     domain: "bff.test",
     tenantId: "tenant",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "fixture-secret",
     adminWebSharedSecret: "admin-secret",
     upstreamSecret: null,
@@ -78,7 +79,8 @@ async function fixture({ admin = false, operator = true, failure } = {}) {
         headers: {
           "x-kokoro-service": service,
           "x-kokoro-internal-secret": service === "web-bff" ? "fixture-secret" : "admin-secret",
-          authorization: "Bearer operator-session",
+          cookie: "kokoro-issuer.session_token=operator-session",
+          origin: "https://web.example.test",
           "x-request-id": "binding-http",
           ...(body === undefined ? {} : { "content-type": "application/json", "idempotency-key": "original-key" }),
         },
@@ -102,7 +104,8 @@ test("App binding management admits current operator even without platform-admin
       app.calls.map((c) => c.kind),
       ["session", "operator", "list"],
     )
-    assert.equal(app.calls[1].input.token, "operator-session")
+    assert.equal(app.calls[1].input.subjectId, "operator")
+    for (const key of ["token", "cookie", "origin"]) assert.equal(Object.hasOwn(app.calls[1].input, key), false)
     assert.equal(app.calls[1].input.tenantId, "tenant")
     assert.deepEqual(app.calls[2].context, { requestId: "binding-http", tenant: "tenant", subject: "operator", appId: "app" })
     assert.deepEqual(app.calls[2].page, { limit: 2, cursor: "original-cursor" })

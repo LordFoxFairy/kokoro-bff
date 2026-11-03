@@ -267,7 +267,7 @@ export async function skillSpecificationReadRoute(
       if (!response.destroyed && !response.writableEnded) send(response, 200, { ok: true, request_id: requestId, data: parsed.data })
       return true
     }
-    const admission = await within(authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal))
+    const admission = await within(authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal, response))
     if (!admission.ok) {
       if (admission.retryAfter !== undefined) response.setHeader("retry-after", admission.retryAfter)
       error(admission.status, admission.code, "Current user admission is required")
@@ -275,7 +275,7 @@ export async function skillSpecificationReadRoute(
     }
     const source = composition.skillSpecificationSource
     if (source === null) throw new Error("skill_dependency_unavailable")
-    const context = Object.freeze({ ...admission.context, identity: Object.freeze({ ...admission.context.identity }), humanBearer: admission.bearerToken })
+    const context = Object.freeze({ ...admission.context, identity: Object.freeze({ ...admission.context.identity }) })
     let payload: unknown
     if (operation === "GetSkill") {
       const raw = await within(source.readDetail(input.skillId as string, context, controller.signal, deadlineAt))

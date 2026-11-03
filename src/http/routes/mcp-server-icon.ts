@@ -75,7 +75,7 @@ export async function mcpServerIconRoute(
     const fresh = binding(await within(client.server("server", input, controller.signal, deadlineAt)), serverId)
     if (identity(icon) !== identity(fresh)) throw new ConnectError("MCP icon changed", Code.NotFound)
     mcpIconTransfer(fresh, origin)
-    const admitted = await within(authorizeUserRequest(request, config, composition.sessionAdmission, input.requestId, controller.signal))
+    const admitted = await within(authorizeUserRequest(request, config, composition.sessionAdmission, input.requestId, controller.signal, response))
     if (!admitted.ok) {
       fail(admitted.status, admitted.code, admitted.status === 429 || admitted.status === 503, admitted.retryAfter)
       return

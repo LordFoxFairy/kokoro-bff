@@ -23,8 +23,9 @@ export async function handleMoveSessionRequest(
 ): Promise<boolean> {
   if (!isMovePath(request)) return false
   const id = requestId(request)
+  response.setHeader("x-request-id", id)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000))
+    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000), response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true
@@ -32,7 +33,8 @@ export async function handleMoveSessionRequest(
     const conversationId = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean)[2] ?? ""
     await moveSessionRoute(request, response, admitted.context, conversationId, chat)
   } catch {
-    if (!response.headersSent && !response.destroyed && !response.writableEnded) send(response, 503, failure("chat_move_unavailable", "Conversation move is unavailable", id))
+    if (!response.headersSent && !response.destroyed && !response.writableEnded)
+      send(response, 503, failure("chat_move_unavailable", "Conversation move is unavailable", id))
     else if (!response.writableEnded && !response.destroyed) response.destroy()
   }
   return true

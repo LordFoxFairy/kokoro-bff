@@ -23,14 +23,15 @@ export async function handleAdminIdentityRequest(
   if (path === null) return false
   const id = requestId(request)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000))
+    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000), response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true
     }
-    await liveAdminIdentityRead(request, response, config, admitted.context, admitted.bearerToken, path)
+    await liveAdminIdentityRead(request, response, config, admitted.context, path)
   } catch {
-    if (!response.headersSent && !response.destroyed && !response.writableEnded) send(response, 503, failure("iam_admission_unavailable", "Administrator identity read is unavailable", id))
+    if (!response.headersSent && !response.destroyed && !response.writableEnded)
+      send(response, 503, failure("iam_admission_unavailable", "Administrator identity read is unavailable", id))
     else if (!response.writableEnded && !response.destroyed) response.destroy()
   }
   return true

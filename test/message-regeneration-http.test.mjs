@@ -18,6 +18,7 @@ async function fixture(t) {
     domain: "qa.test",
     tenantId: "tenant",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "secret",
     upstreamSecret: null,
     upstreamTimeoutMs: 1000,
@@ -47,7 +48,8 @@ async function fixture(t) {
       headers: {
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": "secret",
-        authorization: "Bearer qa",
+        cookie: "kokoro-issuer.session_token=qa",
+        origin: "https://web.example.test",
         "content-type": "application/json",
         "idempotency-key": "new-explicit-regen",
         ...headers,

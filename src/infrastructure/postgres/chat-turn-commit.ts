@@ -10,7 +10,7 @@ import { firstMessageConversationTitle, isClientCreatedConversationId } from "..
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
 import { AGUI_NOTIFICATION_DEADLINE_MS, type PostgresBffDatabase } from "./client.js"
 
-const CHAT_TURN_TOTAL_BUDGET_MS = 4500
+import { CHAT_TURN_TOTAL_BUDGET_MS } from "../../application/chat-turn-service.js"
 const CHAT_TURN_LOCK_BUDGET_MS = 1000
 const CHAT_TURN_MAX_SCOPE_ATTEMPTS = 4
 
@@ -46,14 +46,32 @@ function remainingMilliseconds(deadline: number, code = "CHAT_TURN_BUDGET_EXHAUS
   return remaining
 }
 
-async function startWithin<T>(deadline: number, code: string, start: () => Promise<T>, onTimeout?: () => void, maximumMs?: number): Promise<T> {
+async function startWithin<T>(
+  deadline: number,
+  code: string,
+  start: () => Promise<T>,
+  onTimeout?: () => void,
+  maximumMs?: number,
+  signal?: AbortSignal,
+): Promise<T> {
+  signal?.throwIfAborted()
   const milliseconds = Math.min(remainingMilliseconds(deadline, code), maximumMs ?? Number.MAX_SAFE_INTEGER)
   let timer: NodeJS.Timeout | undefined
-  let operation: Promise<T> | undefined
+  let onAbort: (() => void) | undefined
+  const interrupted = new Promise<never>((_resolve, reject) => {
+    if (signal !== undefined) {
+      onAbort = () => {
+        onTimeout?.()
+        reject(signal.reason)
+      }
+      signal.addEventListener("abort", onAbort, { once: true })
+    }
+  })
   try {
-    operation = start()
+    signal?.throwIfAborted()
     return await Promise.race([
-      operation,
+      start(),
+      interrupted,
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
           onTimeout?.()
@@ -63,17 +81,27 @@ async function startWithin<T>(deadline: number, code: string, start: () => Promi
     ])
   } finally {
     if (timer !== undefined) clearTimeout(timer)
+    if (onAbort !== undefined) signal?.removeEventListener("abort", onAbort)
   }
 }
 
-async function acquireClient(database: PostgresBffDatabase, deadline: number): Promise<PoolClient> {
+async function acquireClient(database: PostgresBffDatabase, deadline: number, signal?: AbortSignal): Promise<PoolClient> {
   const acquisition: { promise: Promise<PoolClient> | null } = { promise: null }
   try {
-    return await startWithin(deadline, "CHAT_TURN_POOL_TIMEOUT", () => {
-      acquisition.promise = database.pool.connect()
-      return acquisition.promise
-    })
+    return await startWithin(
+      deadline,
+      "CHAT_TURN_POOL_TIMEOUT",
+      () => {
+        acquisition.promise = database.pool.connect()
+        return acquisition.promise
+      },
+      undefined,
+      undefined,
+      signal,
+    )
   } catch (error) {
+    // pg-pool does not expose cancellation of an individual queued checkout.
+    // Retire this waiter; release any clean late lease without starting SQL.
     if (acquisition.promise !== null) {
       void acquisition.promise.then(
         (lateClient) => lateClient.release(),
@@ -86,14 +114,26 @@ async function acquireClient(database: PostgresBffDatabase, deadline: number): P
 
 /** The pre-resolution read shares Chat's bounded checkout and late-client cleanup. */
 export async function prepareChatTurnSelection(database: PostgresBffDatabase, input: ChatTurnSelectionInput): Promise<ChatTurnSelection | null> {
-  const deadline = performance.now() + CHAT_TURN_TOTAL_BUDGET_MS
-  const client = await acquireClient(database, deadline)
+  const deadline = Math.min(performance.now() + CHAT_TURN_TOTAL_BUDGET_MS, input.lifetime?.deadlineAt ?? Infinity)
+  input.lifetime?.signal.throwIfAborted()
+  const client = await acquireClient(database, deadline, input.lifetime?.signal)
   let destroyClient = false
+  let leaseReleased = false
+  const onCallerAbort = (): void => {
+    destroyClient = true
+    if (!leaseReleased) {
+      leaseReleased = true
+      client.release(true)
+    }
+  }
   const onError = () => {
     destroyClient = true
   }
   client.on("error", onError)
+  input.lifetime?.signal.addEventListener("abort", onCallerAbort, { once: true })
+  if (input.lifetime?.signal.aborted) onCallerAbort()
   try {
+    input.lifetime?.signal.throwIfAborted()
     type SelectionRow = {
       missing_project: boolean
       project_id: string | null
@@ -129,7 +169,7 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
         input.projectRef ?? null,
         isClientCreatedConversationId(input.conversationId),
       ],
-      query_timeout: 4500,
+      query_timeout: remainingMilliseconds(deadline),
     }
     const result = await startWithin(
       deadline,
@@ -138,7 +178,11 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
       () => {
         destroyClient = true
       },
+      undefined,
+      input.lifetime?.signal,
     )
+    input.lifetime?.signal.throwIfAborted()
+    remainingMilliseconds(deadline)
     const row = result.rows[0]
     if (!row) return null
     if (row.missing_project) throw new Error("CHAT_TURN_PROJECT_NOT_FOUND")
@@ -152,8 +196,9 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
     return { kind: "new", projectId: row.project_id, installationIds: ids }
   } finally {
     try {
-      client.release(destroyClient)
+      if (!leaseReleased) client.release(destroyClient)
     } finally {
+      input.lifetime?.signal.removeEventListener("abort", onCallerAbort)
       client.removeListener("error", onError)
     }
   }
@@ -271,7 +316,7 @@ export async function commitChatTurn(
   )
     throw new Error("AGENT_DISPATCH_LINEAGE_MISMATCH")
 
-  const client = await acquireClient(database, deadline)
+  const client = await acquireClient(database, deadline, command.lifetime?.signal)
   let transactionOpen = false
   let destroyClient = false
   let leaseReleased = false
@@ -300,6 +345,8 @@ export async function commitChatTurn(
       () => {
         destroyClient = true
       },
+      undefined,
+      command.lifetime?.signal,
     )
   }
   async function rollback(): Promise<void> {
@@ -333,6 +380,8 @@ export async function commitChatTurn(
         () => {
           destroyClient = true
         },
+        undefined,
+        command.lifetime?.signal,
       )
       transactionOpen = false
     } catch (error) {
@@ -494,6 +543,8 @@ export async function commitChatTurn(
         () => {
           destroyClient = true
         },
+        undefined,
+        command.lifetime?.signal,
       )
       await query("UPDATE bff_conversation SET updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND conversation_id=$2", [
         command.tenantId,

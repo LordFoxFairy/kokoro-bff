@@ -174,7 +174,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
       const profiles = await resolver.call(
         this.dependencies.profiles,
         context.identity.namespace,
-        "principal" in context ? context.publicBearer : context.humanBearer,
+        "principal" in context ? context.publicBearer : context.identity.userId,
         context.requestId,
         refs.slice(offset, offset + 100),
         signal,
@@ -461,7 +461,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
     for (let offset = 0; offset < refs.length; offset += 100) {
       this.active(signal, deadlineAt)
       const batch = refs.slice(offset, offset + 100)
-      const profiles = await this.dependencies.profiles.resolve(context.identity.namespace, context.humanBearer, context.requestId, batch, signal)
+      const profiles = await this.dependencies.profiles.resolve(context.identity.namespace, context.identity.userId, context.requestId, batch, signal)
       this.active(signal, deadlineAt)
       if (profiles.size !== batch.length) throw new Error("skill_response_invalid")
       for (const ref of batch) {

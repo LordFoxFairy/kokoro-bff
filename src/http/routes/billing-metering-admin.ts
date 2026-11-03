@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { AdmittedUserRequestContext } from "../../domain/request-context.js"
-import type { SessionAdmission, SessionAdmissionResult } from "../../auth/session-admission.types.js"
+import type { UserAdmissionResult } from "../../auth/user-admission.js"
 import { failure, ok } from "../../contracts/index.js"
 import { requestBillingMetering } from "../../infrastructure/clients/owner/billing-metering.js"
 import { parseMeteringCommand, type MeteringOperation } from "../../infrastructure/clients/owner/billing-metering-wire.js"
@@ -20,8 +20,7 @@ export async function liveAdminMetering(
   response: ServerResponse,
   config: BffConfig,
   context: AdmittedUserRequestContext,
-  token: string,
-  admission: SessionAdmission,
+  recheck: (signal: AbortSignal) => Promise<UserAdmissionResult>,
   kind: "read" | "rate" | "policy",
   deadlineAt: number,
 ): Promise<void> {
@@ -97,7 +96,7 @@ export async function liveAdminMetering(
       }
       operation = parsed
     }
-    const current = await new Promise<SessionAdmissionResult>((resolve, reject) => {
+    const current = await new Promise<UserAdmissionResult>((resolve, reject) => {
       const onAbort = () => {
         abort.signal.removeEventListener("abort", onAbort)
         reject(new Error("Metering administrator deadline"))
@@ -110,7 +109,7 @@ export async function liveAdminMetering(
       void Promise.resolve()
         .then(() => {
           check()
-          return admission.verify({ token, requestId: context.requestId, signal: abort.signal })
+          return recheck(abort.signal)
         })
         .then(
           (value) => {
@@ -128,7 +127,11 @@ export async function liveAdminMetering(
       fail(current.status, current.code)
       return
     }
-    if (!current.platformAdmin || current.identity.namespace !== context.identity.namespace || current.identity.userId !== context.identity.userId) {
+    if (
+      !current.context.platformAdmin ||
+      current.context.identity.namespace !== context.identity.namespace ||
+      current.context.identity.userId !== context.identity.userId
+    ) {
       fail(403, "admin_billing_forbidden")
       return
     }

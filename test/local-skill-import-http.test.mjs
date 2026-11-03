@@ -40,6 +40,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "123e4567-e89b-42d3-a456-426614174000",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -111,7 +112,8 @@ const currentSkillV2 = () => ({ ...skill(), skillId: { value: "skill-2" }, sourc
 const currentInstallationV2 = () => ({ ...installation(), sourceRef: { value: "skill:skill-2" }, revision: 2n })
 
 const headers = {
-  authorization: "Bearer current-session",
+  cookie: "kokoro-issuer.session_token=current-session",
+  origin: "https://web.example.test",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
   "content-type": "application/json",
@@ -138,7 +140,8 @@ test("browser-private local import Begin performs fresh create_draft AND install
       sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
       skillAuthorization: {
         check: async (input) => {
-          actions.push({ token: input.token, tenantId: input.tenantId, subjectId: input.subjectId, action: input.action })
+          for (const key of ["token", "cookie", "origin"]) assert.equal(Object.hasOwn(input, key), false)
+          actions.push({ tenantId: input.tenantId, subjectId: input.subjectId, action: input.action })
           return { ok: true }
         },
       },
@@ -160,8 +163,8 @@ test("browser-private local import Begin performs fresh create_draft AND install
     },
   )
   assert.deepEqual(actions, [
-    { token: "current-session", tenantId: "123e4567-e89b-42d3-a456-426614174000", subjectId: "user", action: "create_draft" },
-    { token: "current-session", tenantId: "123e4567-e89b-42d3-a456-426614174000", subjectId: "user", action: "install" },
+    { tenantId: "123e4567-e89b-42d3-a456-426614174000", subjectId: "user", action: "create_draft" },
+    { tenantId: "123e4567-e89b-42d3-a456-426614174000", subjectId: "user", action: "install" },
   ])
   assert.equal(ownerCalls.length, 1)
 })
@@ -267,7 +270,7 @@ test("all four browser-private routes preserve exact method, body and fresh read
       assert.equal(finalize.status, 502)
       assert.equal((await finalize.json()).error.code, "local_skill_import_response_invalid")
       const get = await fetch(`${base}/browser/v1/skills/local-imports/intent-1`, {
-        headers: { authorization: headers.authorization, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
+        headers: { cookie: headers.cookie, origin: headers.origin, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
       })
       assert.equal(get.status, 200)
       assert.equal((await get.json()).data.phase, "uploaded")
@@ -280,6 +283,7 @@ test("production composition registers all four local-import owner methods only 
   const complete = {
     ...config,
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     skillDraft: {
       enabled: true,
       platformBaseUrl: "https://platform.example",
@@ -431,6 +435,7 @@ test("complete production composition dispatches all four private routes through
   const live = {
     ...config,
     iamBaseUrl: `http://127.0.0.1:${iam.address().port}`,
+    iamWebOrigin: "https://web.example.test",
     skillDraft: { enabled: true, platformBaseUrl: `http://127.0.0.1:${owner.address().port}`, credentialFile: catalog, timeoutMs: 1000 },
     platformProjection: { baseUrl: `http://127.0.0.1:${owner.address().port}`, credentialFile: projection, timeoutMs: 1000 },
   }
@@ -453,7 +458,7 @@ test("complete production composition dispatches all four private routes through
         ]
         for (const [method, url, body] of requests) {
           const requestHeaders =
-            method === "GET" ? { authorization: headers.authorization, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" } : headers
+            method === "GET" ? { cookie: headers.cookie, origin: headers.origin, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" } : headers
           const response = await fetch(url, { method, headers: requestHeaders, body: body === null ? undefined : JSON.stringify(body) })
           assert.ok(response.ok, `${method} ${url}: ${response.status}`)
         }
@@ -661,7 +666,7 @@ test("Get binds completed top-level skill identity and optional installation to 
         },
         async (base) => {
           const response = await fetch(`${base}/browser/v1/skills/local-imports/intent-1`, {
-            headers: { authorization: headers.authorization, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
+            headers: { cookie: headers.cookie, origin: headers.origin, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
           })
           assert.equal(response.status, 502)
           assert.equal((await response.json()).error.code, "local_skill_import_response_invalid")
@@ -696,7 +701,7 @@ test("Get accepts a current revision whose exact skill id changed while the stab
         },
         async (base) => {
           const response = await fetch(`${base}/browser/v1/skills/local-imports/intent-1`, {
-            headers: { authorization: headers.authorization, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
+            headers: { cookie: headers.cookie, origin: headers.origin, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
           })
           assert.equal(response.status, 200)
           const payload = await response.json()

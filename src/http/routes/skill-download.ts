@@ -81,14 +81,14 @@ export async function skillDownloadHandleRoute(
     async (signal, deadlineAt) => {
       assertSkillReadRequest(request, [])
       const admit = async () => {
-        const result = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, signal)
+        const result = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, signal, response)
         signal.throwIfAborted()
         if (!result.ok) {
           if (result.retryAfter !== undefined) response.setHeader("retry-after", result.retryAfter)
           send(response, result.status, { error: { code: result.code, message: "Current user admission is required" } })
           return null
         }
-        return Object.freeze({ ...result.context, identity: Object.freeze({ ...result.context.identity }), humanBearer: result.bearerToken })
+        return Object.freeze({ ...result.context, identity: Object.freeze({ ...result.context.identity }) })
       }
       const context = await admit()
       if (context === null) return
@@ -265,7 +265,7 @@ export async function exactSkillDownloadRoute(
         !(await emptyBody(request, signal))
       )
         throw new ConnectError("Skill download input invalid", Code.InvalidArgument)
-      const admission = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, signal)
+      const admission = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, signal, response)
       signal.throwIfAborted()
       if (!admission.ok) {
         if (admission.retryAfter !== undefined) response.setHeader("retry-after", admission.retryAfter)
@@ -274,7 +274,7 @@ export async function exactSkillDownloadRoute(
       }
       const source = composition.exactSkillDownloadSource
       if (!source) throw new ConnectError("Skill download dependency missing", Code.Unavailable)
-      const context = Object.freeze({ ...admission.context, identity: Object.freeze({ ...admission.context.identity }), humanBearer: admission.bearerToken })
+      const context = Object.freeze({ ...admission.context, identity: Object.freeze({ ...admission.context.identity }) })
       if (qualifier.kind === "project_installation") {
         if (!projectAccess) throw new ConnectError("Project download not permitted", Code.PermissionDenied)
         const projectId = await projectAccess(qualifier.projectId, context, signal)

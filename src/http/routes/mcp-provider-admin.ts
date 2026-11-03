@@ -140,7 +140,7 @@ export async function mcpProviderAdminRoute(
         return
       }
     }
-    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal)
+    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal, response)
     if (!current.ok) {
       fail(response, current.status, current.code, current.status === 429 || current.status === 503)
       return

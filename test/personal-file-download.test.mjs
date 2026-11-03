@@ -293,6 +293,7 @@ test("live Product HTTP re-admits every download and never returns another subje
     )
     const config = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -305,7 +306,8 @@ test("live Product HTTP re-admits every download and never returns another subje
         readiness: async () => {},
         businessStore: null,
         sessionAdmission: {
-          async verify({ token }) {
+          async verify({ cookie }) {
+            const token = cookie.slice("kokoro-issuer.session_token=".length)
             admissions++
             return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "subject-2" : "subject-1" } }
           },
@@ -315,7 +317,8 @@ test("live Product HTTP re-admits every download and never returns another subje
     const get = async (token = "user", path = "/v1/library/files/asset-1/content") =>
       fetch(`${bff}${path}`, {
         headers: {
-          authorization: `Bearer ${token}`,
+          cookie: `kokoro-issuer.session_token=${token}`,
+          origin: "https://web.example.test",
           "x-kokoro-service": "web-bff",
           "x-kokoro-internal-secret": "web-secret",
           "x-kokoro-request-id": "download-http",

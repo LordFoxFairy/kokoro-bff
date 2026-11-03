@@ -36,7 +36,7 @@ export async function handleSkillDraftRequest(
   }
   const signal = AbortSignal.timeout(10_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
       admissionFailure(response, admitted)
       return true

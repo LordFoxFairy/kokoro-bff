@@ -13,6 +13,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "test-secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 1000,
@@ -35,7 +36,6 @@ async function listen(server) {
 test("Chat message POST uses the ChatModule outbox provider and bypasses LegacyRoutes", async (t) => {
   const admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "subject" } })
   const calls = []
-  const chat = { findConversation: async () => ({ conversationId: "session" }) }
   const projects = { find: async () => ({ id: "project-1" }) }
   const chatTurns = {
     submit: async (input) => {
@@ -44,7 +44,7 @@ test("Chat message POST uses the ChatModule outbox provider and bypasses LegacyR
     },
   }
   const server = createServer((request, response) => {
-    void handleChatMessageRequest(request, response, config, admission, chat, chatTurns, projects, null, new Map(), null).then((handled) => {
+    void handleChatMessageRequest(request, response, config, admission, chatTurns, projects, null).then((handled) => {
       if (!handled && !response.writableEnded) {
         response.writeHead(404)
         response.end()
@@ -59,7 +59,8 @@ test("Chat message POST uses the ChatModule outbox provider and bypasses LegacyR
   const response = await fetch(`${base}/v1/sessions/session/messages`, {
     method: "POST",
     headers: {
-      authorization: "Bearer session",
+      cookie: "kokoro-issuer.session_token=session",
+      origin: "https://web.example.test",
       "x-kokoro-service": "web-bff",
       "x-kokoro-internal-secret": "test-secret",
       "x-kokoro-request-id": "chat-message-test",

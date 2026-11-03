@@ -29,22 +29,30 @@ export class LibraryMiddleware implements NestMiddleware {
       return
     }
     void this.handle(request, response).catch(() => {
-      if (!response.headersSent && !response.writableEnded && !response.destroyed) send(response, 503, failure("storage_unavailable", "Library request is unavailable", requestId(request)))
+      if (!response.headersSent && !response.writableEnded && !response.destroyed)
+        send(response, 503, failure("storage_unavailable", "Library request is unavailable", requestId(request)))
     })
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const id = requestId(request)
-    const admitted = await authorizeUserRequest(request, this.config, this.admission, id, AbortSignal.timeout(10_000))
+    const admitted = await authorizeUserRequest(request, this.config, this.admission, id, AbortSignal.timeout(10_000), response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return
     }
     const body = request.method === "POST" ? await readBody(request) : Buffer.alloc(0)
-    await handleLibraryRequest(request, response, this.config, admitted.context, {
-      artifactLibrary: this.artifactLibrary,
-      receipts: this.receipts,
-      idempotency: this.idempotency,
-    }, body)
+    await handleLibraryRequest(
+      request,
+      response,
+      this.config,
+      admitted.context,
+      {
+        artifactLibrary: this.artifactLibrary,
+        receipts: this.receipts,
+        idempotency: this.idempotency,
+      },
+      body,
+    )
   }
 }

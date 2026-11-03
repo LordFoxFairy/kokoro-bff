@@ -56,7 +56,7 @@ export async function handleSkillCatalogCommandRequest(
   response.setHeader("cache-control", "no-store")
   const signal = AbortSignal.timeout(10_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
       send(
         response,
@@ -112,7 +112,7 @@ export async function handleSkillPackageUploadReadRequest(
   const id = requestId(request)
   const signal = AbortSignal.timeout(10_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
       send(
         response,
@@ -156,7 +156,7 @@ export async function handleSkillCoverRequest(
   const id = requestId(request)
   const signal = AbortSignal.timeout(10_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
       send(
         response,
@@ -176,7 +176,7 @@ export async function handleSkillCoverRequest(
       }
     }
     const readmit = async (currentSignal: AbortSignal): Promise<void> => {
-      const current = await authorizeUserRequest(request, config, admission, id, currentSignal)
+      const current = await authorizeUserRequest(request, config, admission, id, currentSignal, response)
       if (!current.ok && current.status >= 500) throw new Error("skill_dependency_unavailable")
       if (
         !current.ok ||
@@ -214,7 +214,7 @@ export async function handleSkillGithubPreviewRequest(
   const id = requestId(request)
   const signal = AbortSignal.timeout(10_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
       send(
         response,
@@ -225,7 +225,7 @@ export async function handleSkillGithubPreviewRequest(
       return true
     }
     const readmit = async (currentSignal: AbortSignal): Promise<void> => {
-      const current = await authorizeUserRequest(request, config, admission, id, currentSignal)
+      const current = await authorizeUserRequest(request, config, admission, id, currentSignal, response)
       if (!current.ok && current.status >= 500) throw new Error("skill_dependency_unavailable")
       if (
         !current.ok ||

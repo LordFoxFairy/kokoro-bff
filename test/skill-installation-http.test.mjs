@@ -42,6 +42,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -61,7 +62,8 @@ const config = {
   },
 }
 const headers = {
-  authorization: "Bearer session",
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
 }
@@ -858,8 +860,8 @@ test("Project installation six routes use the current owned project, distinct co
         },
       },
       chatTurnService: {
-        submit: async (_input, resolve) => {
-          await resolve(project.id, ["i"])
+        submit: async (_input, resolve, lifetime) => {
+          await resolve(project.id, ["i"], lifetime)
           commits++
           throw Error("unexpected commit")
         },

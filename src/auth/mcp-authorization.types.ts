@@ -1,5 +1,5 @@
 import type { CheckAuthorizationData } from "../generated/iam-http/types.gen.js"
-import type { SessionAdmissionInput } from "./session-admission.types.js"
+import type { IamUserContextInput } from "./iam-user-context.js"
 
 export type McpAuthorizationSubject =
   | Readonly<{
@@ -11,7 +11,7 @@ export type McpAuthorizationSubject =
       action: Extract<CheckAuthorizationData["body"], { resource: "mcp_catalog" }>["action"]
     }>
 
-export type McpAuthorizationInput = SessionAdmissionInput &
+export type McpAuthorizationInput = IamUserContextInput &
   Readonly<{
     tenantId: string
     subjectId: string

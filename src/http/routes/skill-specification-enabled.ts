@@ -104,7 +104,7 @@ export async function skillSpecificationEnabledRoute(
     } catch {
       throw new ConnectError("Skill installation request is invalid", Code.InvalidArgument)
     }
-    const admission = await within(authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal))
+    const admission = await within(authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal, response))
     if (!admission.ok) {
       if (admission.retryAfter !== undefined) response.setHeader("retry-after", admission.retryAfter)
       send(

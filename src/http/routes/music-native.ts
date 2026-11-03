@@ -34,13 +34,15 @@ export async function handleMoriRequest(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10_000)
   const aborted = (): void => controller.abort()
-  const closed = (): void => { if (!response.writableEnded) controller.abort() }
+  const closed = (): void => {
+    if (!response.writableEnded) controller.abort()
+  }
   request.once("aborted", aborted)
   response.once("close", closed)
   if (request.aborted || response.destroyed) controller.abort()
   const work = Promise.resolve().then(() => {
     controller.signal.throwIfAborted()
-    return authorizeUserRequest(request, config, admission, id, controller.signal)
+    return authorizeUserRequest(request, config, admission, id, controller.signal, response)
   })
   const admitted = await new Promise<Awaited<typeof work>>((resolve) => {
     const unavailable = (): void => resolve({ ok: false, status: 503, code: "iam_admission_unavailable" })
@@ -109,7 +111,14 @@ export async function handleMoriRequest(
   try {
     await liveMoriBusiness(request, response, config, admitted.context, businessPath, body, mutation, idempotency.entries)
   } catch {
-    await reply(response, 503, failure("music_owner_unavailable", "The configured Music owner is unavailable", id), admitted.context, idempotency.entries, mutation)
+    await reply(
+      response,
+      503,
+      failure("music_owner_unavailable", "The configured Music owner is unavailable", id),
+      admitted.context,
+      idempotency.entries,
+      mutation,
+    )
   }
   return true
 }

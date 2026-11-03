@@ -3,10 +3,24 @@ import { readdir, readFile } from "node:fs/promises"
 import { test } from "node:test"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import ts from "typescript"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
-const featureModules = ["account", "chat", "agent-runs", "projects", "agui", "scheduled-tasks", "skills", "mcp", "billing", "system", "music"] as const
+const featureModules = [
+  "authentication",
+  "account",
+  "chat",
+  "agent-runs",
+  "projects",
+  "agui",
+  "scheduled-tasks",
+  "skills",
+  "mcp",
+  "billing",
+  "system",
+  "music",
+] as const
 
 test("AppModule registers the canonical feature graph", async () => {
   const appModule = await readFile(path.join(root, "src/app.module.ts"), "utf8")
@@ -30,7 +44,7 @@ test("scheduled-task state reader port is owned by its feature module", async ()
   assert.equal(await fileExists("src/application/ports/scheduled-task-state-reader.ts"), false)
 })
 
-test("AccountModule owns the SessionAdmission provider", async () => {
+test("AuthenticationModule alone owns SessionAdmission and AccountModule retains only its real feature providers", async () => {
   const [accountModule, middleware, nativeRoute, server, runtime] = await Promise.all([
     readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/account/account.middleware.ts"), "utf8"),
@@ -38,9 +52,26 @@ test("AccountModule owns the SessionAdmission provider", async () => {
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
-  assert.match(accountModule, /provide: SESSION_ADMISSION/u)
-  assert.match(accountModule, /PERSONAL_KNOWLEDGE_REPOSITORY/u)
-  assert.match(accountModule, /exports: \[[^\]]*SESSION_ADMISSION/u)
+  await import("reflect-metadata")
+  const { AuthenticationModule } = await import("../dist/modules/authentication/authentication.module.js")
+  const { AccountModule } = await import("../dist/modules/account/account.module.js")
+  const { SESSION_ADMISSION, PERSONAL_KNOWLEDGE_REPOSITORY } = await import("../dist/common/tokens.js")
+  const providers = (owner: Function): Array<Function | { provide: unknown }> => Reflect.getMetadata("providers", owner) ?? []
+  const authenticationProviders = providers(AuthenticationModule).filter((provider) => typeof provider !== "function" && provider.provide === SESSION_ADMISSION)
+  assert.equal(authenticationProviders.length, 1)
+  assert.deepEqual(Reflect.getMetadata("exports", AuthenticationModule), [SESSION_ADMISSION])
+  assert.notEqual(Reflect.getMetadata("__module:global__", AuthenticationModule), true)
+  assert.equal(
+    providers(AccountModule).some((provider) => typeof provider !== "function" && provider.provide === SESSION_ADMISSION),
+    false,
+  )
+  assert.equal(
+    providers(AccountModule).some((provider) => typeof provider !== "function" && provider.provide === PERSONAL_KNOWLEDGE_REPOSITORY),
+    true,
+  )
+  assert.equal(Reflect.getMetadata("imports", AccountModule).includes(AuthenticationModule), true)
+  assert.equal(Reflect.getMetadata("exports", AccountModule).includes(SESSION_ADMISSION), false)
+  assert.doesNotMatch(accountModule, /provide: SESSION_ADMISSION/u)
   assert.match(runtime, /sessionAdmission/u)
   assert.match(middleware, /handleAdminIdentityRequest/u)
   assert.match(nativeRoute, /handleAdminIdentityRequest/u)
@@ -93,7 +124,13 @@ test("SystemModule owns model catalog and administrator configuration/routing ro
     readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/owner-request.ts"), "utf8"),
   ])
-  assert.match(moduleSource, /AccountModule/u)
+  await import("reflect-metadata")
+  const { SystemModule } = await import("../dist/modules/system/system.module.js")
+  const { AuthenticationModule } = await import("../dist/modules/authentication/authentication.module.js")
+  const { AccountModule } = await import("../dist/modules/account/account.module.js")
+  const imports = Reflect.getMetadata("imports", SystemModule)
+  assert.equal(imports.includes(AuthenticationModule), true)
+  assert.equal(imports.includes(AccountModule), false)
   assert.match(moduleSource, /SystemModelCatalogMiddleware/u)
   assert.match(middleware, /handleSystemAdminRequest/u)
   assert.match(modelMiddleware, /SystemModelCatalogMiddleware/u)
@@ -170,8 +207,16 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
   assert.match(chatModule, /SkillInstallationAccessModule/u)
   assert.match(eventsRoute, /liveAgentSession/u)
   assert.match(eventsRoute, /registerConsumer/u)
-  assert.match(messageRoute, /liveChatBusiness/u)
-  assert.match(messageRoute, /commitChatTurn|chatTurns/u)
+  const importsLegacyChat = (source: string): boolean =>
+    ts
+      .createSourceFile("chat-message-native.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+      .statements.some((node) => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./chat.js")
+  assert.equal(importsLegacyChat(messageRoute), false, "native Message must not depend on the legacy Chat dispatcher")
+  assert.equal(importsLegacyChat('import { handler } from "./chat-message.js"'), false)
+  assert.equal(importsLegacyChat('import { handler } from "./chat.js"'), true)
+  assert.equal(importsLegacyChat('// import { handler } from "./chat.js"\nconst example = \'import { handler } from "./chat.js"\''), false)
+  // Canonical submission/replay and transaction semantics are covered by the HTTP/service suites and real chat-facts.integration.mjs,
+  // rather than private helper names in the native HTTP adapter.
   assert.match(aguiModule, /AGUI_PROJECTION/u)
   assert.match(aguiModule, /AGUI_RUNTIME/u)
   assert.match(server, /handleChatNativeRequest/u)

@@ -4,12 +4,16 @@ import test from "node:test"
 import { createBffServer } from "../dist/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
+import { fixtureIamCredentials, TEST_IAM_ACCOUNT_SESSIONS_SECRET } from "./doubles/iam-credentials.ts"
+
+const credentials = await fixtureIamCredentials("tenant-verified")
 
 const session = (id) => ({ session_id: id, created_at: "2026-10-01T01:02:03.000Z", expires_at: "2026-11-01T01:02:03.000Z" })
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer account-token",
+  cookie: "kokoro-issuer.session_token=account-token",
+  origin: "https://web.example.test",
   "x-kokoro-request-id": "account-http",
 }
 async function listen(server) {
@@ -47,6 +51,8 @@ async function fixture(t, body) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-verified",
     iamBaseUrl: ownerUrl,
+    iamWebOrigin: "https://web.example.test",
+    ...credentials,
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: 1000,
@@ -82,7 +88,10 @@ test("account list reaches only the owner after Product admission and projects a
   assert.equal(body.meta.request_id, "account-http")
   assert.equal(response.headers.get("cache-control"), "no-store")
   assert.equal(seen[0].path, "/internal/v1/account/sessions?limit=2")
-  assert.equal(seen[0].headers.authorization, "Bearer account-token")
+  assert.equal(seen[0].headers.authorization, `Bearer ${TEST_IAM_ACCOUNT_SESSIONS_SECRET}`)
+  assert.equal(seen[0].headers.cookie, headers.cookie)
+  assert.equal(seen[0].headers.origin, headers.origin)
+  assert.equal(seen[0].headers["x-kokoro-actor-id"], undefined)
 })
 
 test("revoke projects only a confirmed matching owner ACK without receipt or body", async (t) => {
@@ -124,9 +133,9 @@ test("rejects raw duplicate query and revoke query/body/receipt key before owner
 test("normal Product and browser-service admission still reject anonymous and machine callers", async (t) => {
   const { base, seen } = await fixture(t)
   for (const [extra, expected] of [
-    [{ authorization: "" }, 401],
+    [{ cookie: "", origin: "https://web.example.test" }, 401],
     [{ "x-kokoro-service": "machine" }, 403],
-    [{ authorization: "Bearer retired" }, 401],
+    [{ cookie: "kokoro-issuer.session_token=retired", origin: "https://web.example.test" }, 401],
   ]) {
     const response = await fetch(`${base}/v1/account/sessions`, { headers: { ...headers, ...extra } })
     assert.equal(response.status, expected)

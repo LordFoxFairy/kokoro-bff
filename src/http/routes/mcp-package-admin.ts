@@ -82,7 +82,7 @@ export async function mcpPackageAdminRoute(
   try {
     const raw = mutation ? await readMcpPackageBody(request, controller.signal) : Buffer.alloc(0)
     if (mutation && Number(length) !== raw.byteLength) throw new ConnectError("Invalid body length", Code.InvalidArgument)
-    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal)
+    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal, response)
     controller.signal.throwIfAborted()
     if (!current.ok) {
       fail(response, current.status, current.code, current.status === 429 || current.status === 503)

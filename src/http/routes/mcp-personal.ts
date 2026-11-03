@@ -74,7 +74,7 @@ export async function handleMcpPersonalRequest(
   const id = requestId(request)
   response.setHeader("x-request-id", id)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000))
+    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000), response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true
@@ -443,9 +443,7 @@ export async function mcpPersonalRoute(
                 : validateMcpPersonalPublic(operation as McpPersonalOperation, result, input)
     const [sessionOutcome, actionOutcome] = await within(
       Promise.allSettled([
-        mutation || receiptLookup
-          ? authorizeUserRequest(request, config, composition.sessionAdmission, context.requestId, controller.signal)
-          : Promise.resolve(initialAdmission),
+        authorizeUserRequest(request, config, composition.sessionAdmission, context.requestId, controller.signal, response),
         authorizeMcpAction(composition.mcpAuthorization, initialAdmission, mutation ? "manage" : "read", controller.signal),
       ]),
     )

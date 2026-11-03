@@ -42,7 +42,7 @@ export async function sharedTasksRoute(
   try {
     active()
     const input = parseSharedTasksInput(request)
-    const admitted = await Promise.race([authorizeUserRequest(request, config, admission, requestId, controller.signal), interruption])
+    const admitted = await Promise.race([authorizeUserRequest(request, config, admission, requestId, controller.signal, response), interruption])
     active()
     if (!admitted.ok) {
       const allowed: Record<number, readonly string[]> = {

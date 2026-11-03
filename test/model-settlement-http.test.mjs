@@ -83,6 +83,7 @@ async function setup(options = {}) {
     upstreams: { billing, scheduler: null, agents: null },
     agentModelAdmissionCredentialFile: file,
     ...options.config,
+    iamWebOrigin: "https://web.example.test",
   }
   const base = await listen(
     createBffServer(config, {

@@ -1,11 +1,6 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import {
-  BFF_CONFIG,
-  PROJECT_IDEMPOTENCY,
-  PROJECT_SERVICE,
-  SESSION_ADMISSION,
-} from "../../common/tokens.js"
+import { BFF_CONFIG, PROJECT_IDEMPOTENCY, PROJECT_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ProjectService } from "../../application/project-service.js"
@@ -53,7 +48,7 @@ export class ProjectMutationMiddleware implements NestMiddleware {
     response.once("close", close)
     let mutation: import("../../application/idempotency.js").MutationTicket | null = null
     try {
-      const admitted = await authorizeUserRequest(request, this.config, this.admission, id, abort.signal)
+      const admitted = await authorizeUserRequest(request, this.config, this.admission, id, abort.signal, response)
       if (!admitted.ok) {
         send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
         return

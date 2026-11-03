@@ -38,6 +38,13 @@ test("the compiled production AppModule resolves its real provider graph without
     .useValue(database)
     .compile()
   try {
+    const { SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+    const { AccountModule } = await import("../dist/modules/account/account.module.js")
+    assert.throws(() => module.select(AccountModule).get(SESSION_ADMISSION, { strict: true }), "authentication must not be owned by AccountModule")
+    const { AuthenticationModule } = await import("../dist/modules/authentication/authentication.module.js")
+    const authentications = module.get(SESSION_ADMISSION, { each: true })
+    assert.equal(authentications.length, 1)
+    assert.equal(authentications[0], module.select(AuthenticationModule).get(SESSION_ADMISSION, { strict: true }))
     assert.ok(module.get(AppModule) instanceof AppModule)
     assert.equal(module.get(BFF_POOL), database.pool)
     assert.equal(module.get(BFF_REDIS), database.redis)

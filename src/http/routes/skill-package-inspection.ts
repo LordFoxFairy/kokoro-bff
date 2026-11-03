@@ -176,7 +176,7 @@ export async function skillPackageInspectionRoute(
     let admission
     try {
       if (expired()) throw controller.signal.reason
-      admission = await whileActive(authorizeUserRequest(request, config, admissionSource, requestId, controller.signal), controller.signal)
+      admission = await whileActive(authorizeUserRequest(request, config, admissionSource, requestId, controller.signal, response), controller.signal)
       if (expired()) throw controller.signal.reason
     } catch {
       failIfActive(503, "skill_package_dependency_unavailable", "Skill package dependency is unavailable", true)

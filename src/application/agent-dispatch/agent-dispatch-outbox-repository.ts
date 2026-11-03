@@ -22,7 +22,10 @@ export type CommitChatTurn = {
   payload: AgentDispatchPayload
 }
 
-export type ChatTurnSelectionInput = Pick<CommitChatTurn, "tenantId" | "conversationId" | "subjectId" | "projectRef" | "idempotencyKey" | "requestDigest">
+export type ChatTurnSelectionInput = Pick<
+  CommitChatTurn,
+  "tenantId" | "conversationId" | "subjectId" | "projectRef" | "idempotencyKey" | "requestDigest" | "lifetime"
+>
 export type ChatTurnSelection = { kind: "new"; projectId: string | null; installationIds: string[] } | { kind: "replay"; receipt: AgentDispatchReceipt }
 
 export type AgentDispatchOutboxClaimInput = {

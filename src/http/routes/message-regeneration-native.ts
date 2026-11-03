@@ -22,7 +22,14 @@ export async function handleMessageRegenerationRequest(
   if (!isMessageRegenerationNativeRequest(request)) return false
   const id = requestId(request)
   const deadlineAt = performance.now() + Math.min(config.upstreamTimeoutMs, 10_000)
-  const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(Math.max(1, Math.floor(deadlineAt - performance.now()))))
+  const admitted = await authorizeUserRequest(
+    request,
+    config,
+    admission,
+    id,
+    AbortSignal.timeout(Math.max(1, Math.floor(deadlineAt - performance.now()))),
+    response,
+  )
   if (!admitted.ok) {
     send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
     return true
@@ -36,7 +43,7 @@ export async function handleMessageRegenerationRequest(
       { chatTurnService: chatTurns },
       deadlineAt,
       async (signal) => {
-        const fresh = await authorizeUserRequest(request, config, admission, id, signal)
+        const fresh = await authorizeUserRequest(request, config, admission, id, signal, response)
         if (!fresh.ok) throw new MessageRegenerationAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
         if (fresh.context.identity.namespace !== admitted.context.identity.namespace || fresh.context.identity.userId !== admitted.context.identity.userId)
           throw new MessageRegenerationAdmissionError(404, "message_not_found")

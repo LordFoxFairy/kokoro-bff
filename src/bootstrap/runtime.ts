@@ -295,7 +295,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     options.sessionAdmission ??
     new SessionAdmissionClient({
       baseUrl: config.iamBaseUrl,
-      credentialFile: config.iamSessionAdmissionCredentialFile,
+      credentialFile: config.iamUserContextServiceCredentialFile,
       webOrigin: config.iamWebOrigin ?? config.iamRelay?.webOrigin,
       tenantId: config.tenantId,
       timeoutMs: config.upstreamTimeoutMs,
@@ -304,6 +304,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const mcpAuthorization =
     options.mcpAuthorization ??
     new McpAuthorizationClient({
+      credentialFile: config.iamUserContextServiceCredentialFile,
       baseUrl: config.iamBaseUrl,
       timeoutMs: 5000,
       maxResponseBytes: 65_536,
@@ -311,6 +312,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const skillAuthorization =
     options.skillAuthorization ??
     new SkillAuthorizationClient({
+      credentialFile: config.iamUserContextServiceCredentialFile,
       baseUrl: config.iamBaseUrl,
       timeoutMs: 5000,
       maxResponseBytes: 65_536,
@@ -637,7 +639,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                 projection: projectionClient!,
               }),
               ...(projectService === null ? {} : { projects: projectService }),
-              profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
+              profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs, config.iamUserContextServiceCredentialFile ?? null),
               ...(skillUsageReader === null ? {} : { usage: skillUsageReader }),
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
             })
@@ -837,6 +839,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     openAppManagementAdmission:
       options.openAppManagementAdmission ??
       new OpenAppManagementAdmissionClient({
+        credentialFile: config.iamUserContextServiceCredentialFile,
         baseUrl: config.iamBaseUrl,
         timeoutMs: config.upstreamTimeoutMs,
         maxResponseBytes: config.upstreamMaxResponseBytes,

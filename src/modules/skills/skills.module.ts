@@ -1,6 +1,6 @@
 import { Inject, Injectable, MiddlewareConsumer, Module, NestModule, OnApplicationShutdown, RequestMethod } from "@nestjs/common"
 import { BffConfigModule } from "../../config/config.module.js"
-import { AccountModule } from "../account/account.module.js"
+import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
 import {
   APP_SKILL_BINDING_CLIENT,
@@ -69,7 +69,7 @@ class SkillsRuntime implements OnApplicationShutdown {
 }
 
 @Module({
-  imports: [AccountModule, ChatModule, DatabaseModule, IamRelayModule, BffConfigModule, SkillInstallationAccessModule],
+  imports: [AuthenticationModule, ChatModule, DatabaseModule, IamRelayModule, BffConfigModule, SkillInstallationAccessModule],
   providers: [
     SkillsMiddleware,
     SkillsRuntime,
@@ -186,6 +186,7 @@ class SkillsRuntime implements OnApplicationShutdown {
       inject: [BFF_CONFIG],
       useFactory: (config: BffConfig): OpenAppManagementAdmissionClient =>
         new OpenAppManagementAdmissionClient({
+          credentialFile: config.iamUserContextServiceCredentialFile,
           baseUrl: config.iamBaseUrl,
           timeoutMs: config.upstreamTimeoutMs,
           maxResponseBytes: config.upstreamMaxResponseBytes,
@@ -208,7 +209,12 @@ class SkillsRuntime implements OnApplicationShutdown {
       provide: SKILL_AUTHORIZATION,
       inject: [BFF_CONFIG],
       useFactory: (config: BffConfig): SkillAuthorizationClient =>
-        new SkillAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 }),
+        new SkillAuthorizationClient({
+          credentialFile: config.iamUserContextServiceCredentialFile,
+          baseUrl: config.iamBaseUrl,
+          timeoutMs: 5000,
+          maxResponseBytes: 65_536,
+        }),
     },
     {
       provide: SKILL_DRAFT_CLIENT,
@@ -328,7 +334,7 @@ class SkillsRuntime implements OnApplicationShutdown {
         )
         return new SkillSpecificationService({
           owner: new PlatformSkillSpecificationFacade({ product, installations, projection }),
-          profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
+          profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs, config.iamUserContextServiceCredentialFile ?? null),
           usage,
           objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
         })

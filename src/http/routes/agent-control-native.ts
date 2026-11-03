@@ -47,7 +47,7 @@ export async function handleAgentControlRequest(
   request.once("aborted", onAborted)
   response.once("close", onAborted)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal, response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true
@@ -71,7 +71,15 @@ export async function handleAgentControlRequest(
       send(response, 400, failure("idempotency_key_required", "Control requests require Idempotency-Key", id))
       return true
     }
-    const ticket = await mutationTicket(key, "POST", `/${businessPath.join("/")}`, admitted.context, mutationFingerprint(request, businessPath, json, body), idempotency, persistent ?? undefined)
+    const ticket = await mutationTicket(
+      key,
+      "POST",
+      `/${businessPath.join("/")}`,
+      admitted.context,
+      mutationFingerprint(request, businessPath, json, body),
+      idempotency,
+      persistent ?? undefined,
+    )
     if (ticket.replay !== null) {
       send(response, ticket.replay.status, ticket.replay.body)
       return true
@@ -84,10 +92,25 @@ export async function handleAgentControlRequest(
       send(response, 409, failure("idempotency_in_progress", "An identical mutation is already in progress", id))
       return true
     }
-    await liveAgentSession(request, response, config, admitted.context, businessPath, json, ticket.ticket, idempotency, null, runtime, false, authorization, chat)
+    await liveAgentSession(
+      request,
+      response,
+      config,
+      admitted.context,
+      businessPath,
+      json,
+      ticket.ticket,
+      idempotency,
+      null,
+      runtime,
+      false,
+      authorization,
+      chat,
+    )
     return true
   } catch {
-    if (!response.headersSent && !response.writableEnded && !response.destroyed) send(response, 503, failure("agent_control_unavailable", "Agent control request failed", id))
+    if (!response.headersSent && !response.writableEnded && !response.destroyed)
+      send(response, 503, failure("agent_control_unavailable", "Agent control request failed", id))
     return true
   } finally {
     request.removeListener("aborted", onAborted)

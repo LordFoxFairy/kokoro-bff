@@ -52,12 +52,13 @@ export async function handleChatMutationRequest(
 ): Promise<boolean> {
   if (!isChatMutationRequest(request)) return false
   const id = requestId(request)
+  response.setHeader("x-request-id", id)
   const abort = new AbortController()
   const onAborted = (): void => abort.abort()
   request.once("aborted", onAborted)
   response.once("close", onAborted)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal, response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true

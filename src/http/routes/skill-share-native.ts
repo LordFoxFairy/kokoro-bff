@@ -44,12 +44,17 @@ export async function handleSkillShareRequest(
   const id = requestId(request)
   const signal = AbortSignal.timeout(10_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
-      send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+      send(
+        response,
+        admitted.status,
+        { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } },
+        admitted.retryAfter,
+      )
       return true
     }
-    await skillShareRoute(request, response, { ...admitted.context, humanBearer: admitted.bearerToken }, path, repository, client, config.iamRelay?.webOrigin, specification)
+    await skillShareRoute(request, response, { ...admitted.context }, path, repository, client, config.iamRelay?.webOrigin, specification)
   } catch {
     if (!response.headersSent && !response.destroyed && !response.writableEnded)
       send(response, 503, { error: { code: "skill_dependency_unavailable", message: "Skill share dependency is unavailable", retryable: true } })

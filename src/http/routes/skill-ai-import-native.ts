@@ -25,15 +25,24 @@ export async function handleSkillAiImportRequest(
   const id = requestId(request)
   const signal = AbortSignal.timeout(10_000)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
-      send(response, admitted.status, { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } }, admitted.retryAfter)
+      send(
+        response,
+        admitted.status,
+        { error: { code: admitted.code, message: "BFF user admission failed", retryable: admitted.status === 429 || admitted.status === 503 } },
+        admitted.retryAfter,
+      )
       return true
     }
     const readmit = async (currentSignal: AbortSignal): Promise<void> => {
-      const current = await authorizeUserRequest(request, config, admission, id, currentSignal)
+      const current = await authorizeUserRequest(request, config, admission, id, currentSignal, response)
       if (!current.ok && current.status >= 500) throw new Error("skill_dependency_unavailable")
-      if (!current.ok || current.context.identity.namespace !== admitted.context.identity.namespace || current.context.identity.userId !== admitted.context.identity.userId)
+      if (
+        !current.ok ||
+        current.context.identity.namespace !== admitted.context.identity.namespace ||
+        current.context.identity.userId !== admitted.context.identity.userId
+      )
         throw new Error("skill_not_found")
       currentSignal.throwIfAborted()
     }

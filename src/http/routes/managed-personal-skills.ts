@@ -154,7 +154,7 @@ export async function managedPersonalSkillsRoute(
         fail(response, requestId, 503, "iam_admission_unavailable", "BFF user admission failed")
         return
       }
-      admission = await whileActive(authorizeUserRequest(request, config, admissionSource, requestId, deadline.signal), deadline.signal)
+      admission = await whileActive(authorizeUserRequest(request, config, admissionSource, requestId, deadline.signal, response), deadline.signal)
       if (expired()) {
         if (!response.destroyed && !response.writableEnded) fail(response, requestId, 503, "iam_admission_unavailable", "BFF user admission failed")
         return
@@ -203,9 +203,9 @@ export async function managedPersonalSkillsRoute(
       const enriched =
         operation === "managedSkillHistory"
           ? result.data
-          : await new IamPublisherProfileClient(config.iamBaseUrl ?? "", 5000).enrich(
+          : await new IamPublisherProfileClient(config.iamBaseUrl ?? "", 5000, config.iamUserContextServiceCredentialFile ?? null).enrich(
               admission.context.identity.namespace,
-              admission.bearerToken,
+              admission.context.identity.userId,
               requestId,
               result.data,
               deadline.signal,

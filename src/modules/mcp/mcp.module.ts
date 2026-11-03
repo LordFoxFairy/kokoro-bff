@@ -28,7 +28,7 @@ import { PlatformProjectionMiddleware } from "./platform-projection.middleware.j
 import { McpPersonalMiddleware } from "./mcp-personal.middleware.js"
 import { CustomApiMiddleware, type CustomApiClient } from "./custom-api.middleware.js"
 import type { ProjectMcpRecommendationsProvider } from "../../http/routes/project-mcp-recommendations.js"
-import { AccountModule } from "../account/account.module.js"
+import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
 import { ProjectsModule } from "../projects/projects.module.js"
 
@@ -67,7 +67,7 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
 }
 
 @Module({
-  imports: [AccountModule, IamRelayModule, ProjectsModule, BffConfigModule],
+  imports: [AuthenticationModule, IamRelayModule, ProjectsModule, BffConfigModule],
   providers: [
     ProjectMcpRecommendationsMiddleware,
     ConnectorListMiddleware,
@@ -91,7 +91,12 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
       provide: MCP_AUTHORIZATION,
       inject: [BFF_CONFIG],
       useFactory: (config: BffConfig): McpAuthorizationClient =>
-        new McpAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 }),
+        new McpAuthorizationClient({
+          credentialFile: config.iamUserContextServiceCredentialFile,
+          baseUrl: config.iamBaseUrl,
+          timeoutMs: 5000,
+          maxResponseBytes: 65_536,
+        }),
     },
     {
       provide: PROJECT_MCP_RECOMMENDATIONS_PROVIDER,

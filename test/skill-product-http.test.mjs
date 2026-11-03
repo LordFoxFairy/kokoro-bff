@@ -1,3 +1,5 @@
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
+const credentials = await fixtureIamCredentials("tenant")
 import assert from "node:assert/strict"
 import test from "node:test"
 import { create } from "@bufbuild/protobuf"
@@ -117,6 +119,7 @@ const productConfig = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -137,7 +140,8 @@ const productConfig = {
   },
 }
 const headers = {
-  authorization: "Bearer session",
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
   "content-type": "application/json",
@@ -229,7 +233,10 @@ test("IAM enrichment batches exact repeated publishers and represents missing wi
     let body = ""
     for await (const chunk of request) body += chunk
     calls++
-    assert.equal(request.headers.authorization, "Bearer session")
+    assert.equal(request.headers.authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+    assert.equal(request.headers["x-kokoro-actor-id"], "session")
+    assert.equal(request.headers.cookie, undefined)
+    assert.equal(request.headers.origin, undefined)
     assert.match(request.url, /\/tenant\//u)
     assert.deepEqual(JSON.parse(body), {
       refs: [{ kind: "user", id: "user-1" }],
@@ -253,7 +260,7 @@ test("IAM enrichment batches exact repeated publishers and represents missing wi
   owner.listen(0, "127.0.0.1")
   await once(owner, "listening")
   try {
-    const client = new IamPublisherProfileClient(`http://127.0.0.1:${owner.address().port}`, 1000),
+    const client = new IamPublisherProfileClient(`http://127.0.0.1:${owner.address().port}`, 1000, credentials.iamUserContextServiceCredentialFile),
       item = {
         product: {
           publisher: { kind: "iam", iam: { kind: "user", id: "user-1" } },

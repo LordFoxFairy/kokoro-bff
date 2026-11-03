@@ -56,7 +56,8 @@ async function post(base, key, filename, content, bearer = "owner") {
   const response = await fetch(`${base}/v1/library/files`, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${bearer}`,
+      cookie: `kokoro-issuer.session_token=${bearer}`,
+      origin: "https://web.example.test",
       "x-kokoro-service": "web-bff",
       "x-kokoro-internal-secret": "web-secret",
       "idempotency-key": key,
@@ -190,6 +191,7 @@ integrationTest("personal upload survives lost Complete response and lost public
     const admission = { revoked: false, calls: 0 }
     const config = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: databaseUrl.toString(),
       KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:9/0",
@@ -204,7 +206,8 @@ integrationTest("personal upload survives lost Complete response and lost public
         businessStore: new PostgresIdempotencyRepository(pool),
         readiness: async () => {},
         sessionAdmission: {
-          async verify({ token }) {
+          async verify({ cookie }) {
+            const token = cookie.slice("kokoro-issuer.session_token=".length)
             admission.calls++
             return admission.revoked
               ? { ok: false, status: 401, code: "session_invalid" }

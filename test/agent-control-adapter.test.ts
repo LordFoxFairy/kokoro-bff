@@ -35,6 +35,7 @@ function config(agentBase: string): BffConfig {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_control",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -64,7 +65,8 @@ function authHeaders(commandId: string): Record<string, string> {
     "idempotency-key": commandId,
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "web-secret",
-    authorization: "Bearer control-session",
+    cookie: "kokoro-issuer.session_token=control-session",
+    origin: "https://web.example.test",
   }
 }
 
@@ -83,21 +85,22 @@ function bffServer(configValue: BffConfig, authorized = true, chat: Parameters<t
     replayCacheTtlMs: configValue.agUi.replayCacheTtlMs,
   })
   return createLiveTestBffServer(configValue, {
-    routeHandler: ({ request, response, businessPath, context, json, mutation, idempotency }) => liveAgentSession(
-      request,
-      response,
-      configValue,
-      context,
-      businessPath,
-      json,
-      mutation,
-      idempotency,
-      null,
-      runtime,
-      false,
-      authorized ? { ok: true } : null,
-      chat,
-    ),
+    routeHandler: ({ request, response, businessPath, context, json, mutation, idempotency }) =>
+      liveAgentSession(
+        request,
+        response,
+        configValue,
+        context,
+        businessPath,
+        json,
+        mutation,
+        idempotency,
+        null,
+        runtime,
+        false,
+        authorized ? { ok: true } : null,
+        chat,
+      ),
   })
 }
 
@@ -106,15 +109,17 @@ test("routes Agent control through the raw compatibility chain", async () => {
   const agent = createServer((request, response) => {
     observed.push(request.url ?? "")
     response.writeHead(202, { "content-type": "application/json" })
-    response.end(JSON.stringify({
-      data: {
-        command_id: "command_raw",
-        request_digest: canonicalDigest,
-        status: "pending",
-        replayed: false,
-      },
-      meta: { request_id: "agent_request" },
-    }))
+    response.end(
+      JSON.stringify({
+        data: {
+          command_id: "command_raw",
+          request_digest: canonicalDigest,
+          status: "pending",
+          replayed: false,
+        },
+        meta: { request_id: "agent_request" },
+      }),
+    )
   })
   const agentBase = await listen(agent)
   const receipts = new Map<string, { fingerprint: string; status: number; body: unknown }>()
@@ -128,17 +133,35 @@ test("routes Agent control through the raw compatibility chain", async () => {
       receipts.set(scope, pending)
       return { claimed: true, receipt: null }
     },
-    async getReceipt(scope: string) { return receipts.get(scope) ?? null },
-    async putReceipt(scope: string, receipt: { fingerprint: string; status: number; body: unknown }) { receipts.set(scope, receipt) },
-    async compareAndSetReceipt() { return { updated: false, receipt: null } },
-    async releaseReceipt(scope: string) { receipts.delete(scope) },
+    async getReceipt(scope: string) {
+      return receipts.get(scope) ?? null
+    },
+    async putReceipt(scope: string, receipt: { fingerprint: string; status: number; body: unknown }) {
+      receipts.set(scope, receipt)
+    },
+    async compareAndSetReceipt() {
+      return { updated: false, receipt: null }
+    },
+    async releaseReceipt(scope: string) {
+      receipts.delete(scope)
+    },
   }
   const chat = {
     async findConversation() {
-      return { session_id: "session_control", title: "Raw", owner_id: "user_control", created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z" }
+      return {
+        session_id: "session_control",
+        title: "Raw",
+        owner_id: "user_control",
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+      }
     },
   }
-  const projects = { async find() { return null } }
+  const projects = {
+    async find() {
+      return null
+    },
+  }
   const raw = createBffServer(config(agentBase), {
     businessStore,
     chatService: chat as never,
@@ -146,7 +169,7 @@ test("routes Agent control through the raw compatibility chain", async () => {
     readiness: async (): Promise<void> => undefined,
     sessionAdmission: new (class {
       async verify(input: { token: string; requestId: string; signal: AbortSignal }) {
-        if (input.token !== "control-session") return { ok: false as const, status: 401 as const, code: "session_invalid" }
+        if (input.cookie !== "kokoro-issuer.session_token=control-session") return { ok: false as const, status: 401 as const, code: "session_invalid" }
         return { ok: true as const, identity: { namespace: "tenant_control", userId: "user_control" }, platformAdmin: false }
       }
     })(),
@@ -171,8 +194,16 @@ test("routes Agent control through the raw compatibility chain", async () => {
 test("terminates unknown live session paths before the raw session fallback", async () => {
   const raw = createBffServer(config("http://127.0.0.1:9"), {
     businessStore: { ready: async (): Promise<void> => undefined, close: async (): Promise<void> => undefined } as never,
-    chatService: { async findConversation() { return null } } as never,
-    projectService: { async find() { return null } } as never,
+    chatService: {
+      async findConversation() {
+        return null
+      },
+    } as never,
+    projectService: {
+      async find() {
+        return null
+      },
+    } as never,
     readiness: async (): Promise<void> => undefined,
     sessionAdmission: new (class {
       async verify() {
@@ -204,15 +235,17 @@ test("projects the canonical Agent receipt without trusting an upstream run_id",
         headers: request.headers,
       })
       response.writeHead(202, { "content-type": "application/json" })
-      response.end(JSON.stringify({
-        data: {
-          command_id: "command_control",
-          request_digest: canonicalDigest,
-          status: "pending",
-          replayed: false,
-        },
-        meta: { request_id: "agent_request" },
-      }))
+      response.end(
+        JSON.stringify({
+          data: {
+            command_id: "command_control",
+            request_digest: canonicalDigest,
+            status: "pending",
+            replayed: false,
+          },
+          meta: { request_id: "agent_request" },
+        }),
+      )
     })
   })
   const agentBase = await listen(agent)
@@ -255,25 +288,30 @@ test("projects the canonical Agent receipt without trusting an upstream run_id",
 })
 
 test("rejects receipt identity drift and extra owner fields", async () => {
-  assert.equal(parseAgentControlReceipt({
-    command_id: "command_control",
-    request_digest: canonicalDigest,
-    status: "pending",
-    replayed: false,
-    run_id: "untrusted",
-  }), null)
+  assert.equal(
+    parseAgentControlReceipt({
+      command_id: "command_control",
+      request_digest: canonicalDigest,
+      status: "pending",
+      replayed: false,
+      run_id: "untrusted",
+    }),
+    null,
+  )
 
   const agent = createServer((_request, response) => {
     response.writeHead(202, { "content-type": "application/json" })
-    response.end(JSON.stringify({
-      data: {
-        command_id: "command_drift",
-        request_digest: "sha256:wrong",
-        status: "pending",
-        replayed: false,
-      },
-      meta: { request_id: "agent_request" },
-    }))
+    response.end(
+      JSON.stringify({
+        data: {
+          command_id: "command_drift",
+          request_digest: "sha256:wrong",
+          status: "pending",
+          replayed: false,
+        },
+        meta: { request_id: "agent_request" },
+      }),
+    )
   })
   const agentBase = await listen(agent)
   const base = await listen(bffServer(config(agentBase)))
@@ -311,7 +349,6 @@ test("does not call Agent control when private Chat authorization is absent", as
   assert.equal(body.error.code, "session_not_found")
   assert.equal(calls, 0)
 })
-
 
 // R57: published Agent e977923 HTTP4; append-only behavior RED, no production substitutes.
 
@@ -557,9 +594,12 @@ for (const [name, firstHead, nextHead, ownerCode] of [
       response.end(JSON.stringify({ error: { code: ownerCode, message: "Not found" } }))
     })
     const base = await listen(agent)
-    const chat = { readRunControlState: async () => { const head = reads++ === 0 ? firstHead : nextHead; return head === "unreadable" ? null : { executionHead: head } } } as unknown as NonNullable<
-      Parameters<typeof liveAgentSession>[12]
-    >
+    const chat = {
+      readRunControlState: async () => {
+        const head = reads++ === 0 ? firstHead : nextHead
+        return head === "unreadable" ? null : { executionHead: head }
+      },
+    } as unknown as NonNullable<Parameters<typeof liveAgentSession>[12]>
     const bff = await listen(bffServer(config(base), true, chat))
     const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
       method: "POST",

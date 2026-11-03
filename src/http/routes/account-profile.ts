@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import { authorizeUserRequest, ownerSessionAuth } from "../../auth/user-admission.js"
+import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { requestIamAccountProfile, requestIamAccountProfileRead } from "../../infrastructure/clients/iam-account-profile.js"
 import { accountProfileMetadataValid, accountProfileReadMetadataValid, parseAccountProfileBody } from "../account-profile-input.js"
 import { send } from "../response.js"
@@ -52,7 +52,7 @@ export async function accountProfileRoute(
       return
     }
     const admitted = await bounded(
-      authorizeUserRequest(request, config, admission, requestId, abort.signal).catch(() => {
+      authorizeUserRequest(request, config, admission, requestId, abort.signal, response).catch(() => {
         throw new Error("profile_admission_unavailable")
       }),
     )
@@ -60,7 +60,11 @@ export async function accountProfileRoute(
       failure(admitted.status, admitted.code, admitted.retryAfter)
       return
     }
-    const ownerAuth = await bounded(ownerSessionAuth(request, config, admitted, abort.signal))
+    const ownerAuth = {
+      credentialFile: config.iamUserContextServiceCredentialFile,
+      tenantId: admitted.context.identity.namespace,
+      subjectId: admitted.context.identity.userId,
+    }
     if (read) {
       const result = await bounded(
         requestIamAccountProfileRead({
@@ -148,8 +152,7 @@ export async function accountProfileRoute(
   } catch (error) {
     const cause = error instanceof Error ? error.message : ""
     if (cause === "profile_body_too_large") failure(413, "account_profile_request_too_large")
-    else if (["profile_retired", "profile_body_unavailable", "profile_admission_unavailable", "native_owner_auth_unavailable"].includes(cause))
-      failure(503, "account_profile_unavailable")
+    else if (["profile_retired", "profile_body_unavailable", "profile_admission_unavailable"].includes(cause)) failure(503, "account_profile_unavailable")
     else failure(500, "internal_error")
   } finally {
     clearTimeout(timer)

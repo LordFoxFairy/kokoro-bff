@@ -17,6 +17,7 @@ function config(tenantId = "tenant_test") {
     domain: "dev.kokoro.localhost",
     tenantId,
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -67,7 +68,12 @@ async function fixture(t, timeout = 5000) {
   const headers = (user = subject) => {
     const token = `set47_${user}`
     admission.allow(token, { namespace: tenant, userId: user })
-    return { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret", authorization: `Bearer ${token}` }
+    return {
+      "x-kokoro-service": "web-bff",
+      "x-kokoro-internal-secret": "web-secret",
+      cookie: `kokoro-issuer.session_token=${token}`,
+      origin: "https://web.example.test",
+    }
   }
   const store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
   await store.ready()

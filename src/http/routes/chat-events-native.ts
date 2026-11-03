@@ -43,7 +43,7 @@ export async function handleChatEventsRequest(
   if (!chatEventsPath(request)) return false
   const id = requestId(request)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000))
+    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000), response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true

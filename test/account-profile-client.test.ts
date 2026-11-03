@@ -1,14 +1,20 @@
 import assert from "node:assert/strict"
+import { createServer } from "node:http"
 import { afterEach, test } from "node:test"
 import { requestIamAccountProfile, requestIamAccountProfileRead } from "../src/infrastructure/clients/iam-account-profile.ts"
 import type { AccountProfileInput, AccountProfileReadInput } from "../src/infrastructure/clients/iam-account-profile.types.ts"
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
+
+const credentials = await fixtureIamCredentials("tenant-verified")
 const original = globalThis.fetch
 afterEach(() => {
   globalThis.fetch = original
 })
 const input = (extra: Partial<AccountProfileInput> = {}): AccountProfileInput => ({
   baseUrl: "http://iam.test",
-  token: "delegated",
+  credentialFile: credentials.iamUserContextServiceCredentialFile,
+  tenantId: "tenant-verified",
+  subjectId: "subject",
   requestId: "profile-client",
   expectedSubject: "subject",
   name: "新 名",
@@ -23,7 +29,9 @@ const response = (body: unknown, status = 200, headers: Record<string, string> =
   Response.json(body, { status, headers: { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "profile-client", ...headers } })
 const readInput = (extra: Partial<AccountProfileReadInput> = {}): AccountProfileReadInput => ({
   baseUrl: "http://iam.test",
-  token: "delegated",
+  credentialFile: credentials.iamUserContextServiceCredentialFile,
+  tenantId: "tenant-verified",
+  subjectId: "subject",
   requestId: "profile-client",
   expectedSubject: "subject",
   deadlineAt: performance.now() + 500,
@@ -33,12 +41,14 @@ const readInput = (extra: Partial<AccountProfileReadInput> = {}): AccountProfile
 })
 const readAck = () => ({ data: { subject: "subject", name: "Current", email: "user@example.test", email_verified: true } })
 
-test("generated GET forwards the admitted bearer and canonical profile projection", async () => {
+test("generated GET forwards only the service credential, admitted actor and canonical profile projection", async () => {
   globalThis.fetch = async (req) => {
     const r = req as Request
     assert.equal(r.url, "http://iam.test/internal/v1/account/profile")
     assert.equal(r.method, "GET")
-    assert.equal(r.headers.get("authorization"), "Bearer delegated")
+    assert.equal(r.headers.get("authorization"), `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+    assert.equal(r.headers.get("x-kokoro-actor-id"), "subject")
+    assert.equal(r.headers.get("origin"), null)
     assert.equal(r.headers.get("cookie"), null)
     assert.equal(await r.text(), "")
     return response(readAck())
@@ -46,18 +56,18 @@ test("generated GET forwards the admitted bearer and canonical profile projectio
   assert.deepEqual(await requestIamAccountProfileRead(readInput()), { ok: true, data: readAck().data })
 })
 
-test("native GET forwards only the allowlisted cookie, fixed origin and direct credential", async () => {
-  globalThis.fetch = async (req) => {
-    const r = req as Request
-    assert.equal(r.headers.get("authorization"), "Bearer direct")
-    assert.equal(r.headers.get("cookie"), "kokoro-issuer.session_token=session")
-    assert.equal(r.headers.get("origin"), "https://iam.test")
+test("profile business rejects an account-session credential before owner I/O", async () => {
+  let calls = 0
+  globalThis.fetch = async () => {
+    calls++
     return response(readAck())
   }
-  assert.deepEqual(
-    await requestIamAccountProfileRead(readInput({ token: "direct", cookie: "kokoro-issuer.session_token=session", origin: "https://iam.test" })),
-    { ok: true, data: readAck().data },
-  )
+  assert.deepEqual(await requestIamAccountProfileRead(readInput({ credentialFile: credentials.iamAccountSessionsServiceCredentialFile })), {
+    ok: false,
+    status: 503,
+    code: "account_profile_unavailable",
+  })
+  assert.equal(calls, 0)
 })
 
 for (const body of [
@@ -68,14 +78,16 @@ for (const body of [
     globalThis.fetch = async () => response(body)
     assert.deepEqual(await requestIamAccountProfileRead(readInput()), { ok: false, status: 502, code: "account_profile_response_invalid" })
   })
-test("normal generated PATCH forwards exact CAS and admitted bearer once", async () => {
+test("normal generated PATCH forwards exact CAS and admitted actor once", async () => {
   let calls = 0
   globalThis.fetch = async (req) => {
     calls++
     const r = req as Request
     assert.equal(r.url, "http://iam.test/internal/v1/account/profile")
     assert.equal(r.method, "PATCH")
-    assert.equal(r.headers.get("authorization"), "Bearer delegated")
+    assert.equal(r.headers.get("authorization"), `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+    assert.equal(r.headers.get("x-kokoro-actor-id"), "subject")
+    assert.equal(r.headers.get("origin"), null)
     assert.equal(r.headers.get("cookie"), null)
     assert.deepEqual(await r.json(), { name: "新 名", expected_name: " Old " })
     return response(ack())
@@ -106,7 +118,7 @@ for (const headers of [
   })
 for (const [status, code, expectedStatus, expectedCode] of [
   [400, "INVALID_ARGUMENT", 400, "account_profile_input_invalid"],
-  [401, "UNAUTHENTICATED", 401, "session_invalid"],
+  [401, "UNAUTHENTICATED", 503, "account_profile_unavailable"],
   [403, "PERMISSION_DENIED", 403, "account_profile_forbidden"],
   [404, "TENANT_NOT_FOUND", 403, "session_forbidden"],
   [409, "TENANT_DISABLED", 403, "session_forbidden"],
@@ -231,4 +243,50 @@ test("RATE_LIMITED Retry-After is closed and sanitized errors reject unknown raw
   }
   globalThis.fetch = async () => response({ error: { code: "CONFLICT", message: "private", retryable: false, details: [], secret: "token" } }, 409)
   assert.equal((await requestIamAccountProfile(input())).ok, false)
+})
+
+test("real profile GET and PATCH map only the declared service401 tuple to dependency503", async () => {
+  let status = 401
+  let error: Record<string, unknown> = { code: "bff_user_context_service_unauthenticated", message: "PROFILE_SERVICE_CANARY", retryable: false, details: [] }
+  const seen: string[] = []
+  const owner = createServer((request, reply) => {
+    seen.push(request.method ?? "")
+    assert.equal(request.url, "/internal/v1/account/profile")
+    assert.equal(request.headers.authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+    assert.equal(request.headers["x-kokoro-actor-id"], "subject")
+    assert.equal(request.headers.cookie, undefined)
+    assert.equal(request.headers.origin, undefined)
+    request.resume()
+    reply
+      .writeHead(status, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "profile-client" })
+      .end(JSON.stringify({ error }))
+  })
+  await new Promise<void>((resolve) => owner.listen(0, "127.0.0.1", resolve))
+  const address = owner.address()
+  assert.ok(address && typeof address !== "string")
+  const baseUrl = `http://127.0.0.1:${address.port}`
+  try {
+    for (const operation of [() => requestIamAccountProfileRead(readInput({ baseUrl })), () => requestIamAccountProfile(input({ baseUrl }))]) {
+      for (const [wireStatus, code, extra, expectedStatus] of [
+        [401, "bff_user_context_service_unauthenticated", {}, 503],
+        [401, "UNKNOWN_SERVICE_DENIAL", {}, 502],
+        [403, "bff_user_context_service_unauthenticated", {}, 502],
+        [401, "bff_user_context_service_unauthenticated", { token: "secret" }, 502],
+      ] as const) {
+        status = wireStatus
+        error = { code, message: "PROFILE_SERVICE_CANARY", retryable: false, details: [], ...extra }
+        const result = await operation()
+        assert.deepEqual(result, {
+          ok: false,
+          status: expectedStatus,
+          code: expectedStatus === 503 ? "account_profile_unavailable" : "account_profile_response_invalid",
+        })
+        assert.doesNotMatch(JSON.stringify(result), /PROFILE_SERVICE_CANARY|secret/)
+      }
+    }
+    assert.deepEqual(seen, ["GET", "GET", "GET", "GET", "PATCH", "PATCH", "PATCH", "PATCH"])
+  } finally {
+    owner.closeAllConnections()
+    await new Promise<void>((resolve) => owner.close(() => resolve()))
+  }
 })

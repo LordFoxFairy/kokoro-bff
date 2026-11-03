@@ -9,7 +9,8 @@ import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 const headers = {
   "x-kokoro-service": "admin-web-bff",
   "x-kokoro-internal-secret": "admin-test-secret",
-  authorization: "Bearer admin-session",
+  cookie: "kokoro-issuer.session_token=admin-session",
+  origin: "https://web.example.test",
   "x-request-id": "provider-admin-test",
 }
 const provider = {
@@ -34,6 +35,7 @@ async function fixture({ allowed = true, client = null } = {}) {
       domain: "dev.kokoro.localhost",
       tenantId: "tenant-one",
       iamBaseUrl: null,
+      iamWebOrigin: "https://web.example.test",
       sharedSecret: "test-secret",
       adminWebSharedSecret: "admin-test-secret",
       upstreamSecret: "upstream-secret",

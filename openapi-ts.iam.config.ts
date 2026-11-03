@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 import { defineConfig } from "@hey-api/openapi-ts"
 
 const repositoryRoot = dirname(fileURLToPath(import.meta.url))
-const ownerCommit = "497900ab6ec7274c800f1889cc06c993662dd9d6"
+const ownerCommit = "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7"
 
 export default defineConfig({
   input: resolve(repositoryRoot, `contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`),
@@ -23,8 +23,6 @@ export default defineConfig({
           "POST /internal/v1/open-app-registrations/{app_id}/management-authorizations/verify",
           "GET /internal/v1/account/sessions",
           "DELETE /internal/v1/account/sessions/{session_id}",
-          "POST /internal/v1/session-authorizations/verify",
-          "POST /internal/v1/native-session-admission/verify",
           "POST /internal/v1/authorization/check",
           "POST /internal/v1/tenants/{tenant_id}/skill-authorizations/check",
           "POST /internal/v1/tenants/{tenant_id}/publisher-profiles/resolve",

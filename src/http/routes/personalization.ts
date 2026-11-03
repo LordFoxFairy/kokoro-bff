@@ -186,7 +186,7 @@ export async function handlePersonalizationRequest(
   request.once("aborted", onAborted)
   response.once("close", onClosed)
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal, response)
     if (!admitted.ok) {
       response.setHeader("x-request-id", id)
       response.setHeader("cache-control", "no-store")

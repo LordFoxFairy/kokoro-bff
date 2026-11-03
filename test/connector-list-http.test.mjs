@@ -7,7 +7,8 @@ import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer human-session",
+  cookie: "kokoro-issuer.session_token=human-session",
+  origin: "https://web.example.test",
   "x-request-id": "connector-list-request",
 }
 
@@ -47,6 +48,7 @@ async function fixture({ client, permitted = true } = {}) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-server",
     iamBaseUrl: `http://127.0.0.1:${iam.address().port}`,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: "upstream-secret",
     upstreamTimeoutMs: 5_000,

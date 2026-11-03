@@ -37,7 +37,7 @@ export function scheduledTaskMutation(request: IncomingMessage): ScheduledTaskMu
     return null
   }
   if (path[0] === "v1" && path[1] === "scheduled-tasks") {
-    if (path.length === 3 && request.method === "POST") return { kind: "create" }
+    if (path.length === 2 && request.method === "POST") return { kind: "create" }
     const taskId = path[2]
     if (typeof taskId !== "string" || taskId === "") return null
     if (path.length === 4 && path[3] === "retry" && request.method === "POST") return { kind: "retry", taskId }
@@ -63,20 +63,20 @@ export async function authorizeScheduledTaskMutation(
   const scope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
   if (businessPath[0] === "projects" && businessPath.length > 1) {
     const projectId = businessPath[1]
-    if (projectId !== undefined && await owners.projects.find(scope, projectId) === null)
+    if (projectId !== undefined && (await owners.projects.find(scope, projectId)) === null)
       return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
     return { ok: true }
   }
   if (businessPath[0] !== "scheduled-tasks") return null
   if (businessPath.length > 1) {
     const taskId = businessPath[1]
-    if (taskId !== undefined && await owners.scheduledTasks.find(scope, taskId) === null)
+    if (taskId !== undefined && (await owners.scheduledTasks.find(scope, taskId)) === null)
       return { ok: false, status: 404, code: "scheduled_task_not_found", message: "Scheduled task was not found" }
     return { ok: true }
   }
   if (method === "POST") {
     if (scheduledCreate === null) return { ok: false, status: 400, code: "invalid_scheduled_task", message: "Scheduled task fields are invalid" }
-    if (scheduledCreate.projectId !== undefined && await owners.projects.find(scope, scheduledCreate.projectId) === null)
+    if (scheduledCreate.projectId !== undefined && (await owners.projects.find(scope, scheduledCreate.projectId)) === null)
       return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
   }
   return { ok: true }
@@ -114,7 +114,14 @@ export async function handleScheduledTaskMutationBusiness(
   try {
     if (route.kind === "create" || route.kind === "project_create") {
       if (new URL(request.url ?? "/", "http://bff.local").search !== "") {
-        await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task creation does not accept query parameters", id), context, idempotency, mutation)
+        await reply(
+          response,
+          400,
+          failure("invalid_scheduled_task", "Scheduled task creation does not accept query parameters", id),
+          context,
+          idempotency,
+          mutation,
+        )
         return true
       }
       const input = scheduledCreateInput(json, route.kind === "project_create" ? route.projectId : undefined)
@@ -122,7 +129,7 @@ export async function handleScheduledTaskMutationBusiness(
         await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", id), context, idempotency, mutation)
         return true
       }
-      if (input.projectId !== undefined && await projects.find(scope, input.projectId) === null) {
+      if (input.projectId !== undefined && (await projects.find(scope, input.projectId)) === null) {
         await reply(response, 404, failure("project_not_found", "Project was not found", id), context, idempotency, mutation)
         return true
       }
@@ -137,20 +144,54 @@ export async function handleScheduledTaskMutationBusiness(
         return true
       }
       const task = await tasks.update(scope, route.taskId, patch, mutationLineage(context, key))
-      await reply(response, task === null ? 404 : 200, task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", id) : ok({ task: scheduledTaskResponse(task) }, id), context, idempotency, mutation)
+      await reply(
+        response,
+        task === null ? 404 : 200,
+        task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", id) : ok({ task: scheduledTaskResponse(task) }, id),
+        context,
+        idempotency,
+        mutation,
+      )
       return true
     }
     if (route.kind === "delete") {
       const deleted = await tasks.delete(scope, route.taskId, mutationLineage(context, key))
-      await reply(response, deleted ? 200 : 404, deleted ? ok({ ok: true }, id) : failure("scheduled_task_not_found", "Scheduled task was not found", id), context, idempotency, mutation)
+      await reply(
+        response,
+        deleted ? 200 : 404,
+        deleted ? ok({ ok: true }, id) : failure("scheduled_task_not_found", "Scheduled task was not found", id),
+        context,
+        idempotency,
+        mutation,
+      )
       return true
     }
     const task = await tasks.update(scope, route.taskId, { status: "active", enabled: true }, mutationLineage(context, key))
-    await reply(response, task === null ? 404 : 200, task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", id) : ok({ task: scheduledTaskResponse(task) }, id), context, idempotency, mutation)
+    await reply(
+      response,
+      task === null ? 404 : 200,
+      task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", id) : ok({ task: scheduledTaskResponse(task) }, id),
+      context,
+      idempotency,
+      mutation,
+    )
     return true
   } catch (error) {
-    const invalid = error instanceof Error && ["SCHEDULED_TASK_CALENDAR_INVALID", "SCHEDULED_TASK_LOCAL_TIME_GAP", "SCHEDULED_TASK_ONCE_NOT_FUTURE"].includes(error.message)
-    await reply(response, invalid ? 400 : 503, failure(invalid ? "invalid_scheduled_task" : "business_store_unavailable", invalid ? "Scheduled task fields are invalid" : "The BFF business store is unavailable", id), context, idempotency, mutation)
+    const projectNotFound = error instanceof Error && error.message === "PROJECT_NOT_FOUND"
+    const invalid =
+      error instanceof Error && ["SCHEDULED_TASK_CALENDAR_INVALID", "SCHEDULED_TASK_LOCAL_TIME_GAP", "SCHEDULED_TASK_ONCE_NOT_FUTURE"].includes(error.message)
+    await reply(
+      response,
+      projectNotFound ? 404 : invalid ? 400 : 503,
+      failure(
+        projectNotFound ? "project_not_found" : invalid ? "invalid_scheduled_task" : "business_store_unavailable",
+        projectNotFound ? "Project was not found" : invalid ? "Scheduled task fields are invalid" : "The BFF business store is unavailable",
+        id,
+      ),
+      context,
+      idempotency,
+      mutation,
+    )
     return true
   }
 }

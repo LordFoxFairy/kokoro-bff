@@ -13,6 +13,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "test-secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 1000,
@@ -73,7 +74,8 @@ test("Chat direct title/share/delete mutations use feature-owned idempotency", a
     const response = await fetch(`${base}${path}`, {
       method,
       headers: {
-        authorization: "Bearer session",
+        cookie: "kokoro-issuer.session_token=session",
+        origin: "https://web.example.test",
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": "test-secret",
         "x-kokoro-request-id": "chat-mutation-test",

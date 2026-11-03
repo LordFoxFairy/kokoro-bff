@@ -6,7 +6,7 @@ import { PostgresChatRepository } from "../../infrastructure/postgres/chat-repos
 import { PostgresPublicShareRepository } from "../../infrastructure/postgres/public-share-repository.js"
 import { ChatApplicationService } from "../../application/chat-service.js"
 import { PublicShareApplicationService } from "../../application/public-share-service.js"
-import { AccountModule } from "../account/account.module.js"
+import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { ChatMiddleware } from "./chat.middleware.js"
 import { PostgresConversationArtifactLibrary } from "../../infrastructure/postgres/conversation-artifact-library.js"
 import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
@@ -18,7 +18,7 @@ import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/ide
 import type { Pool } from "pg"
 
 @Module({
-  imports: [AccountModule, DatabaseModule, AgentDispatchModule, AguiModule, ProjectAccessModule, SkillInstallationAccessModule],
+  imports: [AuthenticationModule, DatabaseModule, AgentDispatchModule, AguiModule, ProjectAccessModule, SkillInstallationAccessModule],
   providers: [
     ChatMiddleware,
     {

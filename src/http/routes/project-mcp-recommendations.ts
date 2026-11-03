@@ -62,7 +62,7 @@ export async function handleProjectMcpRecommendationsRequest(
   response.setHeader("x-request-id", id)
   response.setHeader("cache-control", "no-store")
   try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, signal)
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
     if (!admitted.ok) {
       send(
         response,
@@ -96,7 +96,7 @@ export async function handleProjectMcpRecommendationsRequest(
       provider?.clients ?? { mcpPersonalClient: null, customApiClient: null },
       async (mcpRead, currentSignal, deadlineAt) => {
         void deadlineAt
-        const fresh = await authorizeUserRequest(request, config, admission, id, currentSignal)
+        const fresh = await authorizeUserRequest(request, config, admission, id, currentSignal, response)
         if (!fresh.ok) throw new ProjectMcpRecommendationsAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
         if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
           throw new ConnectError("Project not found", Code.NotFound)

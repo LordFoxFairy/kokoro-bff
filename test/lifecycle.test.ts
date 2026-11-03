@@ -27,6 +27,7 @@ function config(): BffConfig {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_lifecycle",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -98,7 +99,8 @@ test("shutdown stops admission and drains HTTP plus workers before closing store
       headers: {
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": "web-secret",
-        authorization: "Bearer lifecycle-session",
+        cookie: "kokoro-issuer.session_token=lifecycle-session",
+        origin: "https://web.example.test",
       },
     })
     await requestStarted.promise

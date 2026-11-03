@@ -146,6 +146,7 @@ test("bootstrap admission rejects Platform reads with strict error-only envelope
     domain: "dev.kokoro.localhost",
     tenantId: "123e4567-e89b-42d3-a456-426614174000",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: 1000,
@@ -160,27 +161,51 @@ test("bootstrap admission rejects Platform reads with strict error-only envelope
     platformProjection: { baseUrl: null, credentialFile: null, timeoutMs: 1000 },
     skillDraft: { enabled: false, platformBaseUrl: null, credentialFile: null, timeoutMs: 1000 },
   }
+  let admissionCalls = 0
+  let ownerDispatches = 0
   const server = createBffServer(config, {
     businessStore: null,
     readiness: async () => undefined,
-    sessionAdmission: { verify: async () => ({ ok: false, status: 429, code: "session_rate_limited", retryAfter: "3" }) },
+    sessionAdmission: {
+      verify: async () => {
+        admissionCalls++
+        return { ok: false, status: 429, code: "session_rate_limited", retryAfter: "3" }
+      },
+    },
+    routeHandler: async () => {
+      ownerDispatches++
+      return false
+    },
   })
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
   const origin = `http://127.0.0.1:${server.address().port}`
   try {
     for (const resource of ["/v1/mcp/servers", "/v1/mcp/connections"]) {
-      const missing = await fetch(`${origin}${resource}`, { headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret" } })
+      const missing = await fetch(`${origin}${resource}`, {
+        headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", origin: "https://web.example.test" },
+      })
       assert.equal(missing.status, 401, resource)
-      assert.deepEqual(Object.keys(await missing.json()), ["error"], resource)
+      assert.deepEqual(
+        await missing.json(),
+        { error: { code: "session_authentication_required", message: "BFF user admission failed", retryable: false } },
+        resource,
+      )
       assert.equal(missing.headers.get("cache-control"), "no-store")
       assert.ok(missing.headers.get("x-request-id"))
       const limited = await fetch(`${origin}${resource}`, {
-        headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", authorization: "Bearer test-session" },
+        headers: {
+          "x-kokoro-service": "web-bff",
+          "x-kokoro-internal-secret": "test-secret",
+          cookie: "kokoro-issuer.session_token=test-session",
+          origin: "https://web.example.test",
+        },
       })
       assert.equal(limited.status, 429, resource)
       assert.deepEqual(await limited.json(), { error: { code: "session_rate_limited", message: "BFF user admission failed", retryable: true } }, resource)
       assert.equal(limited.headers.get("retry-after"), "3")
     }
+    assert.equal(admissionCalls, 2, "only the two requests carrying Cookie reach the authentication provider")
+    assert.equal(ownerDispatches, 0, "no refused read reaches the owner route dispatcher")
   } finally {
     await new Promise((resolve) => server.close(resolve))
   }
@@ -435,6 +460,7 @@ function managedConfig(credentialFile) {
     domain: "dev.kokoro.localhost",
     tenantId: "123e4567-e89b-42d3-a456-426614174000",
     iamBaseUrl: "http://iam.test",
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: 1000,
@@ -455,7 +481,8 @@ function managedBrowserHeaders(extra = {}) {
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
-    authorization: "Bearer current-session",
+    cookie: "kokoro-issuer.session_token=current-session",
+    origin: "https://web.example.test",
     ...extra,
   }
 }

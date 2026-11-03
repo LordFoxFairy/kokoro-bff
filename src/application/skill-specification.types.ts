@@ -1,7 +1,7 @@
 import type { SkillListPrincipal } from "../auth/skill-list-admission.client.js"
 import type { RequestContext } from "../domain/request-context.js"
 import type { SkillDownloadBinding } from "./skill-download-handles.js"
-export type SkillSpecificationContext = RequestContext & Readonly<{ humanBearer: string }>
+export type SkillSpecificationContext = RequestContext
 export type PublicSkillListContext = RequestContext & Readonly<{ publicBearer: string; principal: SkillListPrincipal }>
 export type SkillSpecificationOperation = "skill.list" | "ListSkills" | "ListHubSkills" | "GetSkill" | "DownloadSkill"
 export type SkillPublisherProfileFact = Readonly<{

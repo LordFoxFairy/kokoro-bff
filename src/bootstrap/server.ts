@@ -1,3 +1,4 @@
+import { handleBrowserAuthSessionRequest } from "../auth/auth-session.http.js"
 import { handleRunDisplayRequest } from "../http/routes/run-display.js"
 import { messageRegenerationRoute, MessageRegenerationAdmissionError } from "../http/routes/message-regeneration.js"
 import { handleMessageFeedbackRequest } from "../http/routes/message-feedback-native.js"
@@ -102,7 +103,7 @@ function projectContentAccessForRequest(
   requestIdValue: string,
 ): ProjectSkillContentAccess {
   return async (projectRef, context, signal) => {
-    const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, requestIdValue, signal)
+    const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, requestIdValue, signal, response)
     signal.throwIfAborted()
     if (!fresh.ok) {
       if (fresh.retryAfter !== undefined) response.setHeader("retry-after", fresh.retryAfter)
@@ -293,7 +294,7 @@ export async function handleBffRequest(
   request.once("aborted", onRequestAborted)
   response.once("close", onResponseClosed)
   const admissionWork = Promise.resolve()
-    .then(() => authorizeUserRequest(request, config, composition.sessionAdmission, id, admissionAbort.signal))
+    .then(() => authorizeUserRequest(request, config, composition.sessionAdmission, id, admissionAbort.signal, response))
     .then(async (result) => {
       if (result.ok && mcpAction !== null && !defersMcpPersonalReadAction) {
         admissionAbort.signal.throwIfAborted()
@@ -393,7 +394,7 @@ export async function handleBffRequest(
       composition.chatTurnService === null ? null : { chatTurnService: composition.chatTurnService },
       messageRegenerationDeadline,
       async (signal) => {
-        const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+        const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal, response)
         if (!fresh.ok) throw new MessageRegenerationAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
         if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
           throw new MessageRegenerationAdmissionError(404, "message_not_found")
@@ -402,7 +403,7 @@ export async function handleBffRequest(
     return
   }
   const currentProjectAccess = async (projectRef: string, signal: AbortSignal): Promise<string> => {
-    const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+    const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal, response)
     if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
     if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
       throw new ConnectError("Project not found", Code.NotFound)
@@ -677,7 +678,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
         }
   const schedulerProvider = schedulerDispatchProviderForComposition(composition)
   const server = createServer({ maxHeaderSize: 32768 }, (request, response) => {
-    const handler = handleHealthRequest(request, response, config, composition.readiness)
+    const handler = handleBrowserAuthSessionRequest(request, response, config, composition.sessionAdmission)
+      .then((handled) => (handled ? true : handleHealthRequest(request, response, config, composition.readiness)))
       .then((handled) => (handled ? true : handleIamRelayRequest(request, response, config)))
       .then((handled) => (handled ? true : schedulerDispatch(request, response, config, schedulerProvider, composition.idempotency)))
       .then((handled) =>
@@ -864,12 +866,9 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
                 response,
                 config,
                 composition.sessionAdmission,
-                composition.chatService,
                 composition.chatTurnService,
                 composition.projectService,
                 composition.installationClient,
-                composition.idempotency,
-                composition.businessStore,
               ),
       )
       .then((handled) =>

@@ -50,6 +50,7 @@ function config(systemBaseUrl: string, timeoutMs = 1000): BffConfig {
     domain: "dev.kokoro.localhost",
     tenantId,
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "browser-secret",
     upstreamSecret: "owner-secret",
     upstreamTimeoutMs: timeoutMs,
@@ -83,7 +84,8 @@ function browserHeaders(extra: Record<string, string> = {}): Record<string, stri
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "browser-secret",
-    authorization: "Bearer admitted-admin-session",
+    cookie: "kokoro-issuer.session_token=admitted-admin-session",
+    origin: "https://web.example.test",
     ...extra,
   }
 }

@@ -26,9 +26,7 @@ function retiredOwnerForRequest(request: IncomingMessage, preserveRawSkillNotFou
   const method = request.method ?? "GET"
   const removedSkillRead =
     method === "GET" &&
-    (path.length === 2 ||
-      (path.length === 3 && !["quota", "drafts", "github"].includes(path[2] ?? "")) ||
-      (path.length === 4 && path[3] === "download"))
+    (path.length === 2 || (path.length === 3 && !["quota", "drafts", "github"].includes(path[2] ?? "")) || (path.length === 4 && path[3] === "download"))
   const removedSkillToggle = path.length === 4 && ["enable", "disable"].includes(path[3] ?? "")
   return removedSkillRead || removedSkillToggle ? null : owner
 }
@@ -86,7 +84,7 @@ async function handleRetiredOwnerRequestInternal(
 ): Promise<boolean> {
   if (retiredOwnerForRequest(request, preserveRawSkillNotFound) === null) return false
   const id = requestId(request)
-  const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000))
+  const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000), response)
   if (!admitted.ok) {
     send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
     return true

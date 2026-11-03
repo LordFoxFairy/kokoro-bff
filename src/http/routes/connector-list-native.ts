@@ -17,19 +17,35 @@ export async function handleConnectorListRequest(
   mcpAuthorization: Pick<McpAuthorizationClient, "check">,
 ): Promise<boolean> {
   let path: string[]
-  try { path = pathOf(request).slice(1) } catch { return false }
+  try {
+    path = pathOf(request).slice(1)
+  } catch {
+    return false
+  }
   if (!isConnectorListRequest(path, request.method ?? "GET")) return false
   const id = requestId(request)
   response.setHeader("x-request-id", id)
   const signal = AbortSignal.timeout(10_000)
-  const current = await authorizeUserRequest(request, config, admission, id, signal)
+  const current = await authorizeUserRequest(request, config, admission, id, signal, response)
   if (!current.ok) {
-    connectorListFailure(response, current.status, id, current.status === 401 ? "Unauthenticated" : current.status === 403 ? "PermissionDenied" : "Unavailable", "Connector list access is unavailable")
+    connectorListFailure(
+      response,
+      current.status,
+      id,
+      current.status === 401 ? "Unauthenticated" : current.status === 403 ? "PermissionDenied" : "Unavailable",
+      "Connector list access is unavailable",
+    )
     return true
   }
   const action = await authorizeMcpAction(mcpAuthorization, current, "read", signal)
   if (!action.ok) {
-    connectorListFailure(response, action.status, id, action.status === 401 ? "Unauthenticated" : action.status === 403 ? "PermissionDenied" : "Unavailable", "Connector list access is unavailable")
+    connectorListFailure(
+      response,
+      action.status,
+      id,
+      action.status === 401 ? "Unauthenticated" : action.status === 403 ? "PermissionDenied" : "Unavailable",
+      "Connector list access is unavailable",
+    )
     return true
   }
   const provider: ConnectorListProvider = { mcpPersonalClient, sessionAdmission: admission, mcpAuthorization }

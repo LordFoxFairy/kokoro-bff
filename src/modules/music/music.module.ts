@@ -1,6 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common"
 import { BffConfigModule } from "../../config/config.module.js"
-import { AccountModule } from "../account/account.module.js"
+import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { DatabaseModule } from "../../common/database/database.module.js"
 import { BFF_POOL, MUSIC_IDEMPOTENCY } from "../../common/tokens.js"
 import type { Pool } from "pg"
@@ -8,7 +8,7 @@ import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/ide
 import { MusicMiddleware } from "./music.middleware.js"
 
 @Module({
-  imports: [AccountModule, BffConfigModule, DatabaseModule],
+  imports: [AuthenticationModule, BffConfigModule, DatabaseModule],
   providers: [
     MusicMiddleware,
     {

@@ -15,7 +15,8 @@ const errorEnvelope = fromJSONSchema(
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer pin-session",
+  cookie: "kokoro-issuer.session_token=pin-session",
+  origin: "https://web.example.test",
   "x-kokoro-request-id": "pin-test",
 }
 async function fixture(t) {
@@ -41,6 +42,7 @@ async function fixture(t) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: 1000,
@@ -100,7 +102,10 @@ test("bad bodies, scoped cursor/filter combinations and command headers never ca
   for (const key of ["idempotency-key", "if-match"])
     assert.equal((await f.request("/v1/projects/project/pin", { is_pinned: true }, { [key]: "not-allowed" })).status, 400)
   assert.equal(f.calls.length, 0)
-  assert.equal((await f.request("/v1/self/project-pins", undefined, { authorization: "Bearer wrong" })).status, 401)
+  assert.equal(
+    (await f.request("/v1/self/project-pins", undefined, { cookie: "kokoro-issuer.session_token=wrong", origin: "https://web.example.test" })).status,
+    401,
+  )
   assert.equal(f.calls.length, 0)
 })
 
@@ -132,7 +137,7 @@ test("all pin failures and initial Session denials use the canonical error envel
   check(await invalid.request("/v1/projects/project/pin", { is_pinned: null }), 400)
   check(await invalid.request("/v1/self/project-pins?project_id=foreign"), 404)
   check(await invalid.request("/v1/projects/project/pin"), 405)
-  check(await invalid.request("/v1/self/project-pins", undefined, { authorization: "Bearer wrong" }), 401)
+  check(await invalid.request("/v1/self/project-pins", undefined, { cookie: "kokoro-issuer.session_token=wrong", origin: "https://web.example.test" }), 401)
   for (const status of [401, 403, 429, 503]) {
     const denied = await fixture(t)
     denied.admission.deny("pin-session", { ok: false, status, code: "fixture_admission_denied", ...(status === 429 ? { retryAfter: "7" } : {}) })

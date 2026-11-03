@@ -42,6 +42,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     domain: "dev.kokoro.localhost",
     tenantId: "ns_test",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: "bff-upstream-secret",
     upstreamTimeoutMs: 5000,
@@ -77,7 +78,8 @@ function authHeaders(): Record<string, string> {
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
-    authorization: "Bearer test-session",
+    cookie: "kokoro-issuer.session_token=test-session",
+    origin: "https://web.example.test",
   }
 }
 
@@ -300,16 +302,18 @@ describe("kokoro-bff v1 mock contract", () => {
       assert.equal(request.url, "/v1/agents/connections/setup?platform=telegram")
       assert.equal(request.headers["x-kokoro-subject-ref"], "user_test")
       response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({
-        data: {
-          platform: "telegram",
-          status: "pending",
-          qr_value: "kokoro://connect/telegram/fixture",
-          continue_url: "https://dev.kokoro.localhost/app/agents?platform=telegram",
-          expires_at: "2026-11-01T00:15:00.000Z",
-        },
-        meta: { request_id: "agent-owner-request" },
-      }))
+      response.end(
+        JSON.stringify({
+          data: {
+            platform: "telegram",
+            status: "pending",
+            qr_value: "kokoro://connect/telegram/fixture",
+            continue_url: "https://dev.kokoro.localhost/app/agents?platform=telegram",
+            expires_at: "2026-11-01T00:15:00.000Z",
+          },
+          meta: { request_id: "agent-owner-request" },
+        }),
+      )
     })
     const agentBase = await listen(agent)
     const base = await listen(liveServer(config({ agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } })))
@@ -757,6 +761,7 @@ describe("kokoro-bff v1 mock contract", () => {
         "x-kokoro-internal-secret": "test-secret",
         "x-kokoro-request-id": "manifest-live",
         authorization: "Bearer irrelevant-user-session",
+        origin: "https://web.example.test",
       },
     })
     assert.equal(response.status, 200)
@@ -987,7 +992,12 @@ describe("kokoro-bff v1 mock contract", () => {
       runtimeConfig.tenantId = "tenant_manifest"
       const base = await listen(liveServer(runtimeConfig))
       const response = await fetch(`${base}/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web`, {
-        headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", "x-kokoro-request-id": "invalid-system-owner" },
+        headers: {
+          "x-kokoro-service": "web-bff",
+          "x-kokoro-internal-secret": "test-secret",
+          "x-kokoro-request-id": "invalid-system-owner",
+          origin: "https://web.example.test",
+        },
       })
       assert.equal(response.status, 502)
       assert.equal(((await response.json()) as { error: { code: string } }).error.code, "upstream_response_invalid")
@@ -1158,7 +1168,8 @@ describe("kokoro-bff v1 mock contract", () => {
     const secretlessBase = await listen(liveServer(config({ sharedSecret: null })))
     const missingServiceOnSecretless = await fetch(`${secretlessBase}/v1/projects`, {
       headers: {
-        authorization: "Bearer test-session",
+        cookie: "kokoro-issuer.session_token=test-session",
+        origin: "https://web.example.test",
       },
     })
     assert.equal(missingServiceOnSecretless.status, 403)
@@ -1167,7 +1178,8 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: {
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": "wrong",
-        authorization: "Bearer test-session",
+        cookie: "kokoro-issuer.session_token=test-session",
+        origin: "https://web.example.test",
       },
     })
     assert.equal(wrongSecret.status, 403)
@@ -1176,6 +1188,7 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: {
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": "test-secret",
+        origin: "https://web.example.test",
       },
     })
     assert.equal(missingBearer.status, 401)
@@ -1362,6 +1375,7 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: {
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": "test-secret",
+        origin: "https://web.example.test",
       },
     })
     assert.equal(publicShare.status, 200)
@@ -1525,12 +1539,9 @@ describe("kokoro-bff v1 mock contract", () => {
     })
     const ownerBase = await listen(owner)
     const base = await listen(
-      liveServer(
-        config({ upstreams: { ...config().upstreams, system: ownerBase, platform: ownerBase } }),
-        {
-          skillAuthorization: { check: async () => ({ ok: true }) },
-        },
-      ),
+      liveServer(config({ upstreams: { ...config().upstreams, system: ownerBase, platform: ownerBase } }), {
+        skillAuthorization: { check: async () => ({ ok: true }) },
+      }),
     )
 
     for (const [path, code] of [
@@ -1549,7 +1560,11 @@ describe("kokoro-bff v1 mock contract", () => {
     ] as const) {
       const response = await fetch(`${base}${path}`, { ...init, headers: { ...authHeaders(), ...init.headers } })
       assert.equal(response.status, 404, path)
-      assert.equal(((await response.json()) as { error: { code: string } }).error.code, path.endsWith("/enable") ? "bff_route_not_found" : "route_not_found", path)
+      assert.equal(
+        ((await response.json()) as { error: { code: string } }).error.code,
+        path.endsWith("/enable") ? "bff_route_not_found" : "route_not_found",
+        path,
+      )
     }
 
     const fixtureBase = await listen(testServer(config()))

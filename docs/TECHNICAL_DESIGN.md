@@ -1,3 +1,63 @@
+> 当前候选（2026-11-03）：D0已通过；IAM固定896405d／internal0.20与Better Auth1.7.3正式snapshot，BFF源码正在同片收口。独立browser-private合同已由Root在34c9f997发行；Root已完成完整工程门、423项真实PG及真实IAM认证relay验证，各项证据只覆盖对应停写候选与范围。Skill inspection owner组合及含共享Admin的浏览器G1仍待，不代表正常环境已切换。
+
+## 2026-11-02 AUTH-STD-D0：原生认证边缘与业务 principal（源码候选，未正常激活）
+
+**状态与范围。** 基线 `b6d98f825bc43816948a7249b68661e5fecd0e32`；本节对应已通过D0的替代方案；当前源码实现不代表G1或运行验收。沿 [Root ADR-035](../../../docs/kokoro-handbook/decisions/ADR-035-direct-internal-service-authentication.md) 的直接服务认证、ADR-036 的唯一 Nest runtime 与 [Task A §3.6](../../../docs/superpowers/plans/2026-11-01-task-a-c1-c4-technical-plan.md) 收敛；下方撤销通知及 I29 保持历史原文，不恢复 native proof／逐业务 Cookie 方案。本片不推进 C-2/C-3 业务重写。
+
+### I-49 既有业务保障承接（不新增Schema/公开协议）
+
+Message原分支移动为唯一具名handler，native与临时raw测试入口委派同一实现，不为迁移复制第二份输入/Skills/错误映射。唯一提交及重放事实仍是现ChatTurn/outbox：当前Project/Conversation核验之后比对原digest、返回原run/user/assistant三ID，Message/dispatch/AG-UI同事务；native Message不再claim/replay通用HTTP receipt。其他mutation的既有receipt不机械删除。Message admission从prepare、Project/Skills解析到commit共享既有4500ms绝对deadline与signal，不逐阶段重开；不扩称认证/body统一HTTP SLO。PG池排队仅退休等待者并释放未用晚lease，checkout后的取消精确销毁该lease；Project只读端口无物理取消能力，仅退休其晚结果。COMMIT已发后的失败保持UNKNOWN，由原key/body显式恢复，不外围race吞分类或自动重试。
+
+Message读取继续沿现RR只读单快照投影head/page；快照后提交Project墓碑不追溯擦除该在途页，新的读取必须拒绝，并保两条SQL自身的tenant/owner/active/Project谓词。ScheduledTask原Project锁→Task锁、原outbox/ACK恢复优先不变，具名PROJECT_NOT_FOUND按现404合同投影；未知异常仍安全503。Project DELETE单尾斜杠只进入原严格400校验，不规范化成合法删除，也不吞其他资源子路由。Root已完成同一停写候选423项真实PG/schema验证；这不是生产Nest生命周期、真实IAM授权或浏览器G1完成证明。
+
+### 唯一认证边缘与显式 DI
+
+- IAM 继续独占 Better Auth 实例与 Session 生命周期。BFF 窄认证 client 直接消费锁定版本的原生 `GET /iam/get-session`，业务入口和重要私有发送／派发前复验固定使用官方 `disableCookieCache=true&disableRefresh=true`：鲜读 Session，不信任允许结果缓存，不滚动续期。框架的失效 Cookie／过期 Session 清理仍按原生行为处理，不宣称认证 GET 永远零写入。
+- 认证 client 只在边缘解码 `{session,user}`／`null`，检查原生 subject／active tenant 的一致性并映射真实 `userId`／`tenantId`；固定 Product tenant 不符仍为403。`platformAdmin` 是IAM输出的当前全局管理员事实，可供UI及BFF既有global-admin gate使用；不充当跨owner凭据，也不替代具体action、资金或资源policy。私有version完整性由IAM官方认证投影检查，BFF不读取或复制；缺失正式字段不补默认 false。会话 token、Cookie、Origin、Session ID／expiry 不进入普通业务 principal。
+- IAM `platformAdmin returned:true` 影响所有框架 User 输出而非仅 get-session，故现 `src/http/routes/iam-protocol-relay.ts` 的 strict `SIGN_UP_SUCCESS_SCHEMA.user` 及相邻认证消费者须同版从正式 owner generated User 形状派生窄 parser／safe-pick，显式允许并安全投影该只读 boolean、继续禁止客户端输入与未知字段，不用 passthrough／新自定义Session端点解阻，并保正常注册、防枚举 synthetic User 与邀请旅程的真实HTTP回归。
+- 原生 get-session 不保证当前租户 active／membership。保护业务在认证后通过 IAM 现 `checkAuthorization` 的 `tenant/read` 服务＋actor 分支鲜读 User／Tenant／member 核心资格，再处理 BFF 自有业务；该成员门不扫描全租户角色、不新增无关 roles 完整性门。原 Skills／MCP action、管理员、operator 等业务政策另按各 operation 保留。
+- `AuthenticationModule` 拥有唯一认证 provider，消费 feature 显式 import／inject；从 AccountModule 移出认证注册，仅移除纯认证用途的 Account 依赖，保留真实业务依赖。不用 `@Global()`、全局 locator、认证结果 Map／WeakMap／ALS cache、共享认证 SDK 或 broker。
+- 现 feature middleware 先匹配路由，再显式调用同一 provider；未命中不认证、不提前读取 body。middleware 可直接结束响应，故只加 Nest Guard 不覆盖当前入口；本片不为安装 Guard 提前把所有 route 改写成 controller。现有匹配／HTTP adapter、signal／绝对总期限和断连取消继续承接，认证材料封闭在 HTTP 边缘。
+
+### 普通业务跨 owner 仅传真实用户上下文
+
+17项普通 IAM 私有业务调用使用专用 `bff_user_context` 直接服务凭据与唯一 `x-kokoro-actor-id`；`Authorization` 只承载该服务凭据。接收方先验固定 caller／purpose／tenant，再将受限 actor metadata 解释为受信主体，并按 route／凭据核对 tenant；浏览器自报 header／body 不参与 authority。该 wire 是 ADR-035 约束下的项目委托，不冒称 OAuth 用户 access token。账户会话 list／revoke 两操作属于下述认证生命周期，不加入普通业务委托。
+
+此处17项限定 BFF 第一方调用，不将整个 operation 改成 direct-only；真实独立 OAuth／tenant_machine 调用者仍遵 IAM 每 operation 正式合同，BFF 新服务身份失败不 fallback OAuth／native，不增加 BFF OAuth／refresh／token cache，也不整体删除 IAM OAuth helper。BFF 第一方普通业务不接 Cookie／Origin／登录 Session ID／Session 引用／人类 Bearer，不再每个方法跑登录。IAM 在业务事务鲜读 User／Tenant／member 及 operation 实际需要的 role／operator，保 CAS、last-owner、审计与回滚；数据 owner 仍检查自身资源、状态和写入资格。BFF 不以入口认证、UI `platformAdmin` 或服务身份替代这些政策，也不造 OAuth client／scope。
+
+### 最小完整消费者切片与删除
+
+当前 `authorizeUserRequest` 扣除定义后有59个调用文件（51个 HTTP route、7个直接调用的 feature middleware、1个 raw 测试入口），不是59个 operation。实现以完整调用链而非文件改名为准：
+
+| 组 | 必须同片承接 |
+| --- | --- |
+| 认证与 composition | 原 `session-admission.{types,client,transport}.ts`／`user-admission.ts` 收敛唯一必需原生认证能力；全部 feature DI 同步；raw 测试 composition 只适配新接口，不恢复生产 listener 或趁机推进 C-2 删除 |
+| wrapper／action | 删除伪装 SessionAdmission 的 `withSkillActionAdmission`；生命周期显式认证后以 principal 检查 action；local import 保 `create_draft`＋`install`，MCP 原 resource／action 闭集与最终资格保持 |
+| publisher／规格／下载／分享 | 私有 publisher client、`skill-admin`／`skill-installations` 正则抽取、`managed-personal-skills`、specification、download、share、platform projection 的全部 `humanBearer` 参数链改为 principal；保每页 refs 去重／精确回包、有界预算和必要交付复验 |
+| App binding | 删除准入后第二次 `bearerToken(request)`；正常 IAM operator／exact tenant／app／client 检查保留，不用 platform-admin 替代 |
+| Account profile／Team／AdminTeam／Billing | Account profile、Team 各动作、管理员列表及 Billing 收款主体分页改为独立服务身份＋同一 principal；所有页、原末端管理员／成员复验与 dispatch gate 保留，不留 token-only 隐藏分支 |
+| Account 会话生命周期 | list／revoke 两操作只由具名账户认证 adapter 消费现路径的 IAM 认证生命周期合同；使用独立 `account_sessions` receiver 凭据＋Cookie＋exact Origin，不发送actor／调用者Session ID，不加入普通业务SDK／principal或全局owner auth fallback |
+
+整条私有链切换后删除旧 SessionAdmission 双 mode、optional `verifyNative`／`verify` Bearer fallback、`OwnerSessionAuth`／`ownerSessionAuth`、空 Bearer 哨兵及仅服务旧形状的 wrapper／生成物。认证 transport 只处理原生认证，业务 client 直接消费 owner 生成契约，不另加一层 SDK。合法公共 `GET /v1/skill.list` 的 API Key／OpenApp、`publicBearer`／`resolvePublic` 与实际所需 Bearer parser 独立保留，不作第一方 fallback；第三方 OAuth、service-only、Run／proof／lease／资金授权不动。
+
+同片关闭浏览器原样读取框架Session的旁路：在BFF正式browser-relay policy中移除浏览器可达`GET /iam/get-session`（含query），重发policy version／digest，由App正规生成消费闭合集。浏览器仅经`/api/auth/session`取得安全认证状态，状态不含原始token／内部Session ID／IP／UA。IAM upstream get-session与snapshot继续供BFF认证client消费，login／verifyEmail／setActive等真实认证交互保留。真实HTTP负控须证明旧browser路径拒绝且不调用upstream，secret-canary只进入认证client后被安全挑选、不出现在浏览器状态／普通业务响应／日志；账户安全资源session_id仍按其独立合同投影。不以只删UI调用或更新近似decoder冒关闭旁路。
+
+### 账户认证生命周期、状态投影与复验责任
+
+- 账户会话保现 `GET /internal/v1/account/sessions`／`DELETE /internal/v1/account/sessions/{session_id}`，由 IAM AuthModule 的具名 `AccountSessionGuard` 验独立 receiver 凭据（`caller=kokoro-bff`／`surface=account_sessions`／固定tenant）、原生Cookie与exact Origin，再以官方get-session双true建立真实caller Session；不接actor header、外部caller Session ID或人类Bearer。Cookie只在该账户认证adapter→IAM认证边缘传递，保IAM current删除保护、callerSession／target锁、目标归属、单向撤销、关联OAuth revoke／Audit原事务。BFF直接投影原current／other安全表示，不改all-active、不识别／过滤current、不重造分页或补读。目标 `session_id`仅账户资源路径标识，不是普通principal或登录证明。
+- 账户cursor正式v2去除伪OAuth `client_id`，保IAM从Cookie认证得到的user／tenant／current_sid与原keyset绑定；current_sid只在IAM认证内确定，不接受BFF传入其作为证明。旧v1返回400并从首屏重读，不当401注销、不丢失未决写意图、不保OAuth namespace alias／兼容fallback。具体生成／错误合同由IAM owner正式发行，BFF固定消费，不手改wire。浏览器DELETE严格CSRF及IAM exact Origin保持，不因独立peer凭据放宽。
+- `/v1/me` 公开三字段 DTO 不变。App 需要的实际认证状态／expiry 通过唯一 browser-private `GET /browser/v1/auth/session` 安全投影；同一接口 `refresh` 严格布尔 query 默认 true，普通可写 HTTP 状态观察允许框架 rolling 并逐条转发安全 `Set-Cookie`，RSC 明确 false 映射官方双 true，避免 DB 续期但 Cookie 留旧。失效 Cookie 的原生清理不等于 rolling；RSC 无写响应能力时只呈匿名，后续正常状态 GET 完成 Cookie 清理。不透传 raw Session token／`set-auth-jwt`，不造60秒 TTL／generation／SessionRef。协议与唯一 code-first 发行见 [API 设计](API_CONTRACT.md)。
+- App 普通业务 adapter 直接作一次 BFF 请求，不再 `me→business→me`；认证和重要私有响应／派发前复验归 BFF HTTP 边缘。保持原身份／tenant 精确匹配与 action 检查，同一 signal／总期限内失败关闭。前后复验不证明先前命令未提交，原 key／receipt／unknown／取消恢复不变。
+- 撤销提交后的下一保护请求拒绝，不承诺已认证在途副作用与撤权的跨 owner 全局原子排序。同主体换到另一个仍有效浏览器会话时，BFF 重验旧请求 Cookie 只证明旧请求当前资格；App 通过无秘密 auth-change invalidation／abort 退休迟到 UI 响应，不伪造服务端 generation 或传 Session 引用。
+
+### 放行条件与最低充分证据
+
+先经 Root／IAM 三面复核，固定原生认证 snapshot、17普通业务 `bff_user_context` 与 actor 错误闭集、`tenant/read` 核心成员语义、两操作账户认证生命周期、状态 code-first contract；owner 正式发行后 BFF 固定 commit／version／digest 正规生成，再切全部消费者。测试按风险覆盖：原生真实成功／null／故障／多 Cookie／无 token 泄漏；真实 Nest DI 单 provider 与 middleware HTTP；wrapper＋双 action、私有 publisher、OpenApp exact、AdminTeam／Billing 两页与末端撤权；普通业务 wire 无 Cookie／Session，账户 Cookie 仅认证生命周期；原 callerSession／current／cursor／目标撤销事务；迟到私有交付／取消／unknown；公共 API Key／OpenApp／OAuth／service-only 负控。完整相关工程门、真实 owner HTTP／事务与 App 浏览器旅程分别验收，不以源码扫描／替身成功放行 G0。当前源码已按本节切换；独立状态合同／relay policy已发行，相关HTTP／DI定向验证为组件证据；Schema、服务和部署未变，最终门与真实组合由Root负责。
+
+## 2026-11-02 认证重设计：I-38 会话引用方案已撤销
+
+用户已明确否决请求内 Session 引用方案；该提案及未提交引用代码/生成物/相邻测试已撤销，不再作为实施依据。下方 I29 仅保留原阶段设计与行为基线，不代表新的标准认证设计已批准，也不自动恢复逐业务 Cookie 方案。当前先按后端规范与官方认证标准重开设计门，统一以 Root 有效 Task A 方案追踪；新方案通过前不继续其契约/消费者切换。
+
 ## I29-D0：第一方 native 消费者闭环（目标设计，未实现）
 
 承接 Root ADR-035／ADR-036 的既定 cutover，沿现 Nest feature modules／显式 providers 完成认证消费者，不重开 runtime 架构或新增 owner。当前 BFF 基线 `f81f2715c4a3e5dd79b9cb0c7e6e7c5d28847351` 固定消费 IAM internal0.18.0／native1.0.0；源码仍有 optional `verifyNative`、Bearer fallback、空 token 哨兵和后续业务 Bearer 读取。下述为 D0 目标，不表示当前实现、正常装配或四个用户旅程已验收；历史设计段保持原文，不能当作新切换状态。
@@ -1626,7 +1686,7 @@ Root Node22 build/check/format 均0，当前15真PG行为通过（Storage wire/A
 
 后继仅可写上述4个新业务文件、4个现装配入口，以及Root另行批准的具名测试；不改Schema、public contract/generated、`project-delete.ts`命令生成或原HTTP receipt。真实矩阵至少覆盖：普通claim不动blocked；无配置零claim；同command丢ACK/重启replay；双worker过期lease与晚ACK CAS0；正规CONFLICT/Unavailable保持pending；资格UNAUTHENTICATED进入受限恢复而PermissionDenied/InvalidArgument/digest/precondition不进入；坏ACK不released；shutdown/timeout无悬挂；Project+Conversation N+1全ACK后logical released/physical pending。必须调用固定Storage owner/受控wire与真实PostgreSQL，不以source mock替代owner。
 
-## R282 Project 删除本地实现状态（候选，未发行）
+## R282 Project 删除本地实现状态（合同已独立发行；源码候选未激活）
 
 R276 方案的 BFF 本地边界已在当前工作树实现：专用 DELETE/status 路由、单事务 Project→Conversation→ScheduledTask 锁序、同 client Conversation 删除核心、Scheduler replace outbox、Project deletion receipt 与 N+1 Storage release outbox。Root 隔离 HTTP/PostgreSQL 16/0 与工程门通过；正常 runtime 仍为 `39db` / public `8.5.0`。`8.6.0 / 105` 机器和 runtime 候选未正式发行，Storage worker、Web 与 17 条用户链仍待后继。下方 R276 设计语义继续为本实现的权威方案。
 

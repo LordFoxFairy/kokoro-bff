@@ -185,9 +185,17 @@ test("GET route checks current owner before Storage and binds every page to cano
       return { kind: "not_found" }
     },
   }
-  const config = { storage: storageConfig, tenantId: "tenant-1", sharedSecret: "web-secret", upstreamTimeoutMs: 5000, iamBaseUrl: null }
+  const config = {
+    storage: storageConfig,
+    tenantId: "tenant-1",
+    sharedSecret: "web-secret",
+    upstreamTimeoutMs: 5000,
+    iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
+  }
   const admission = {
-    async verify({ token }) {
+    async verify({ cookie }) {
+      const token = cookie.slice("kokoro-issuer.session_token=".length)
       const [namespace, userId] = token.split(":")
       return { ok: true, identity: { namespace, userId } }
     },
@@ -197,14 +205,17 @@ test("GET route checks current owner before Storage and binds every page to cano
     req.method = "GET"
     req.url = `/v1/projects/${ref}/resources${query}`
     req.headers = {
-      authorization: `Bearer ${identity.namespace}:${identity.userId}`,
+      cookie: `kokoro-issuer.session_token=${identity.namespace}:${identity.userId}`,
+      origin: "https://web.example.test",
       "x-kokoro-service": "web-bff",
       "x-kokoro-internal-secret": "web-secret",
       "x-request-id": "req-list",
     }
     req.rawHeaders = [
-      "authorization",
-      req.headers.authorization,
+      "cookie",
+      req.headers.cookie,
+      "origin",
+      req.headers.origin,
       "x-kokoro-service",
       "web-bff",
       "x-kokoro-internal-secret",
@@ -327,6 +338,7 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
     )
     const config = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -344,7 +356,8 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
           },
         },
         sessionAdmission: {
-          async verify({ token }) {
+          async verify({ cookie }) {
+            const token = cookie.slice("kokoro-issuer.session_token=".length)
             return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "other" : "subject-1" } }
           },
         },
@@ -353,7 +366,8 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
     const get = async (path, token = "user") => {
       const response = await fetch(`${bff}/v1/projects/${path}`, {
         headers: {
-          authorization: `Bearer ${token}`,
+          cookie: `kokoro-issuer.session_token=${token}`,
+          origin: "https://web.example.test",
           "x-kokoro-service": "web-bff",
           "x-kokoro-internal-secret": "web-secret",
           "x-request-id": "request-list",

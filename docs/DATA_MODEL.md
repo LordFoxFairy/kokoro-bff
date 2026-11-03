@@ -1,3 +1,34 @@
+> 当前候选（2026-11-03）：D0已通过；IAM固定896405d／internal0.20与Better Auth1.7.3正式snapshot，BFF源码正在同片收口。独立browser-private合同已由Root在34c9f997发行；Root已完成完整工程门、423项真实PG及真实IAM认证relay验证，各项证据只覆盖对应停写候选与范围。Skill inspection owner组合及含共享Admin的浏览器G1仍待，不代表正常环境已切换。
+
+## 2026-11-02 AUTH-STD-D0：真实 principal，无 BFF 会话／授权副本（源码候选，未正常激活）
+
+**状态。** 基线 `b6d98f825bc43816948a7249b68661e5fecd0e32`；D0已由Root复核；本节约束源码候选，独立安全状态合同已发行，运行与G1仍未切换／验收。沿 [Root ADR-035](../../../docs/kokoro-handbook/decisions/ADR-035-direct-internal-service-authentication.md) 与 [Task A §3.6](../../../docs/superpowers/plans/2026-11-01-task-a-c1-c4-technical-plan.md)；下方撤销通知／I29保持历史原文，不再据旧proof模型实施。
+
+本候选不改唯一 `database/schema.sql`：无DDL、表／列／索引、回填、迁移、Session镜像、认证允许结果cache、Redis key、权限副本或新receipt／outbox。IAM独占User／Session／Tenant／member／role／operator／OpenApp事实，BFF不跨owner SQL；专用 `bff_user_context` 服务凭据只属私有配置，不落业务数据库、contract实值、日志或异常。
+
+Message幂等唯一由现bff_agent_dispatch_outbox的request_digest与原run/user/assistant三ID承接；该入口不再claim/replay bff_idempotency_receipt，后者的表和其他mutation用途保留。Message/dispatch/AG-UI仍同事务，无新receipt或回填。Message head/page继续RR只读单快照，快照后墓碑不改该在途视图，但下一鲜读必须拒绝；未改隔离级别或资格SQL。
+
+| 数据／状态 | 边界与不变量 |
+| --- | --- |
+| 普通业务principal | 真实认证派生的userId／tenantId及既有请求关联；`platformAdmin`仅在UI与既有BFF global-admin gate使用，不镜像私有version／permission数组、不持久化管理员资格，不作为跨owner凭据或泛业务许可。现业务已需持久化的tenant／subject事实保持，不新增Session绑定 |
+| 认证材料与会话元数据 | Cookie／Origin／raw Session token封闭在HTTP认证adapter／client；实际expiresAt仅作安全认证状态投影。账户两操作Cookie只经具名adapter到IAM认证生命周期，响应session_id只是owner安全资源表示，不由BFF另存current映射。不进入普通业务principal、17项普通IAM业务wire、Conversation／Message／Run／dispatch／receipt／审计payload |
+| BFF第一方普通业务服务＋actor | 17项仅限定BFF第一方调用：验证固定caller／purpose／tenant的 `bff_user_context` 后解释唯一actor metadata，按operation事务鲜读当前资格；无Cookie／Session引用／人类Bearer／伪OAuth client／scope或本地授权快照。独立OAuth／tenant_machine仍按IAM每operation合同，不整删OAuth helper或新增BFF OAuth／refresh／token cache，服务失败不fallback |
+| Product成员资格 | 原生get-session只证明登录；现 `checkAuthorization tenant/read` 新服务＋actor分支鲜读User／Tenant／member核心状态，不扩全角色扫描门。Skills／MCP／operator／管理员政策仍各按实际业务事务，不以一次入口成功代替 |
+| 会话状态投影 | 唯一browser-private状态API只输出authenticated与真实subject／tenant／expiry；无SessionRef／token／generation／假TTL，不写BFF状态。业务认证使用官方双true抑制rolling；普通状态GET可rolling，RSC refresh=false仍依框架清理行为，不把GET概称零写入 |
+| 账户认证生命周期 | 现`/internal/v1/account/sessions`两操作由IAM AuthModule具名AccountSessionGuard验独立account_sessions receiver凭据＋Cookie／exact Origin、官方get-session双true后建立真实caller Session；无actor／外部caller sid。IAM保current删除保护、callerSession／target锁和目标归属／单向撤销／关联OAuth revoke／Audit原事务。BFF直接投影原current／other安全资源，不重建all-active／current过滤／补读或游标映射；目标session_id仅资源标识，不是跨owner登录证明 |
+
+账户cursor仅为IAM原keyset的正式v2合同：去伪OAuth client_id，保user／tenant／IAM认证内current_sid／排序及位置绑定，不增加数据库状态。旧v1返回400从首屏重读，非401／注销、不丢失未决写意图，无OAuth namespace兼容或旧decode fallback；BFF不接caller sid作为证明。独立account_sessions凭据只属私有receiver配置，与17业务bff_user_context和旧session_admission用途隔离，不扩大普通业务Cookie面；机器安全／错误合同先由IAM正式发行。
+
+重要私有发送／派发前复验继续留在BFF HTTP边缘；IAM业务事务保持User／Tenant／member与实际role／operator／目标资源／CAS／last-owner／Audit／回滚保障。明确人类失效、资格403和依赖503分别处理，不因服务故障记用户注销或清业务事实；不凭后续失败认定先前写入未提交，不换key自动重放。原幂等digest／receipt／outbox／ledger、取消与unknown恢复保持。
+
+撤销提交后的下一保护请求拒绝，不承诺已认证在途业务与撤权的跨owner全局原子排序。同主体切换另一个有效浏览器会话的UI退休由App本地无秘密通知／abort承担，不在BFF创建认证generation。公共API Key／OpenApp、第三方OAuth、service-only、Run／proof／lease及资金授权／持久模型均不因本片改变。
+
+后继验收核canonical零diff、秘密／Session不进入业务wire与持久化／日志、原账户资源分页与撤销事务、CAS／审计／unknown／取消回归；原生框架rolling／只读观察、真实owner HTTP／事务及App旅程各自取证。无BFF数据模型变更，不对正常应用库迁移或回填；验收仅在自有隔离fixture安装现canonical schema；owner合同已正式固定，后继按Root冻结组合验证消费者。API唯一来源／状态发行见 [API设计](API_CONTRACT.md)，DI／完整删除条件见 [技术设计](TECHNICAL_DESIGN.md)。
+
+## 2026-11-02 认证重设计：I-38 会话引用方案已撤销
+
+用户已明确否决请求内 Session 引用方案；该提案及未提交引用代码/生成物/相邻测试已撤销，不再作为实施依据。下方 I29 仅保留原阶段设计与行为基线，不代表新的标准认证设计已批准，也不自动恢复逐业务 Cookie 方案。当前先按后端规范与官方认证标准重开设计门，统一以 Root 有效 Task A 方案追踪；新方案通过前不继续其契约/消费者切换。
+
 ## I29-D0：native 请求内 proof，无新增持久模型（目标）
 
 当前 IAM native1.0／internal、SDK0.18 消费者未完成本片切换；目标 native2 只是第一方请求身份／授权调用链收敛。BFF 唯一 `database/schema.sql` 原字节保持：无 DDL、表／列／索引、数据回填、持久权限副本、admission cache、Redis key、Session 镜像或新 receipt/outbox。IAM 独占 User／Session／active tenant／Member／Role／operator／OpenApp 注册事实，BFF 不跨 owner SQL。

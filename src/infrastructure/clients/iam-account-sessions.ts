@@ -1,3 +1,4 @@
+import { readIamServiceCredential } from "../../auth/iam-service-credential.js"
 import { isDeepStrictEqual } from "node:util"
 import { createClient } from "../../generated/iam-http/client/index.js"
 import { listAccountSessions, revokeAccountSession } from "../../generated/iam-http/sdk.gen.js"
@@ -83,11 +84,14 @@ export async function requestIamAccountSessions(input: AccountSessionInput): Pro
   try {
     const operation = async (): Promise<AccountSessionResult> => {
       const client = createClient({ baseUrl: input.baseUrl!, fetch: boundedFetch })
+      if (!input.credentialFile || !input.cookie || !input.origin) return unavailable()
+      const credential = await readIamServiceCredential(input.credentialFile, input.tenantId, "account_sessions", input.signal)
       const headers = {
-        authorization: `Bearer ${input.token}`,
+        authorization: `Bearer ${credential}`,
         "x-request-id": input.requestId,
         accept: "application/json",
-        ...(input.cookie === undefined || input.origin === undefined ? {} : { cookie: input.cookie, origin: input.origin }),
+        cookie: input.cookie,
+        Origin: input.origin,
       }
       // Override the generated validator at the official pre-strip boundary.
       const responseValidator = async (raw: unknown) => {
@@ -130,7 +134,8 @@ export async function requestIamAccountSessions(input: AccountSessionInput): Pro
       if (!parsed.success || !isDeepStrictEqual(parsed.data, result.error)) return invalid()
       const code = parsed.data.error.code
       if (status === 400 && code === "INVALID_ARGUMENT") return { ok: false, status: 400, code: "account_session_input_invalid" }
-      if (status === 401 && code === "UNAUTHENTICATED") return { ok: false, status: 401, code: "session_invalid" }
+      if (status === 401 && code === "account_session_invalid") return { ok: false, status: 401, code: "session_invalid" }
+      if (status === 401) return unavailable()
       if (status === 403 && code === "PERMISSION_DENIED") return { ok: false, status: 403, code: "account_session_forbidden" }
       if (status === 404 && code === "NOT_FOUND") return { ok: false, status: 404, code: "account_session_not_found" }
       if (status === 409 && code === "TENANT_DISABLED") return { ok: false, status: 403, code: "session_forbidden" }
