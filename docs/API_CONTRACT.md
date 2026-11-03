@@ -1,6 +1,14 @@
 > 当前候选（2026-11-03）：D0已通过；IAM固定896405d／internal0.20与Better Auth1.7.3正式snapshot，BFF源码正在同片收口。独立browser-private合同已由Root在34c9f997发行；Root已完成完整工程门、423项真实PG及真实IAM认证relay验证，各项证据只覆盖对应停写候选与范围。Skill inspection owner组合及含共享Admin的浏览器G1仍待，不代表正常环境已切换。
 
 I-49仅恢复现机器合同已有行为：Message本地坏JSON/输入400、超限413，canonical digest冲突409、原scope缺失404；移除外围HTTP成功cache后每次重放仍鲜准入并交canonical owner。ScheduledTask owner具名Project缺失为404 project_not_found，未识别依赖错误仍503；Project DELETE尾斜杠仍400 invalid_project_deletion_request而非合法删除。无新path/DTO/状态码或Schema，未知写入不换key、不自动重放；最终真实IAM与浏览器组合另验。
+## 2026-11-03 I-56：原生 Cookie 安全模式承接（BFF源码候选已实现，组合待验）
+
+**基线与不变协议。** 已交付BFF `21b3a516405ef4f2b34f403f37aa0a1eedc19f68` 的工程/PG/真实relay验证不等于新G1通过；本后继只纠正HTTPS配置的Cookie模式不一致，详见 [技术设计](TECHNICAL_DESIGN.md) 与 [Task A §3.6 I-56](../../../docs/superpowers/plans/2026-11-01-task-a-c1-c4-technical-plan.md)。原生退出无body请求、精确200/删除Cookie、旧Cookie安全状态严格匿名及受保护业务拒绝保持，不接受扩大状态集合掩盖未清Cookie。
+
+IAM继续拥有Cookie内容、名称及属性，后继移除NODE_ENV对`useSecureCookies`的覆写，使用框架按公开issuer URL/baseURL选择的默认。BFF/App既有relay配置按可信public origin为HTTPS或NODE_ENV为production选Secure模式，保原生产安全floor；HTTP开发/测试只收plain名，HTTPS开发/测试及生产只收`__Secure-`名并要求Secure，仍限原policy名称/Path/HttpOnly/SameSite/host-only规则。BFF认证client的HTTPS过滤不变，不给删除Cookie开不安全例外、不补签改名；合法框架Set-Cookie逐条转发及RSC不可承诺写Cookie的边界保持。Root fixture issuer等于webOrigin加`/iam`，IAM现有生产配置schema要求issuer与Web均HTTPS；BFF本片保HTTPS OR production安全floor，不新增production+HTTP拒绝/跨字段校验；不新增跨字段校验或mixed-scheme支持承诺、配置flag、Cookie SDK或fallback。
+
+安全状态DTO、refresh/query、错误分类、no-store/noJWT与request ID仅header均不变，无Schema/依赖变化。正常生成检查已证明现relay3.0及status1.0唯一code-first产物字节不变，版本/digest、DTO与generated/vendor均未改。旧开发HTTPS Cookie只清旧Cookie后重新登录，不删除业务/草稿/未决写意图。BFF配置与原测试已实现并通过定向loopback，未改认证client过滤；固定新源码、完整相关门及真实Cookie清除/另一会话存续的组合验证仍待Root后继验收。
+
 ## 2026-11-02 AUTH-STD-D0：原生认证、受信 actor 与安全状态投影（合同已独立发行；源码候选未激活）
 
 **状态。** BFF 基线 `b6d98f825bc43816948a7249b68661e5fecd0e32`；D0已通过；独立状态合同已发行，普通私有调用及认证源码为未激活候选，完整消费者／G1仍待Root验收。依据 [Root ADR-035](../../../docs/kokoro-handbook/decisions/ADR-035-direct-internal-service-authentication.md) 与 [Task A §3.6](../../../docs/superpowers/plans/2026-11-01-task-a-c1-c4-technical-plan.md)，本候选替代旧 proof 目标；下方撤销通知／I29 原文仅历史保留。认证、业务授权、服务身份各自有唯一 owner contract，不在 Root 或本仓复制 IAM 的可编辑事实源。

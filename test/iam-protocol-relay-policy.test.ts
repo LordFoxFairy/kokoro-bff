@@ -224,6 +224,7 @@ test("only the locked issuer cookie names pass in their deployment mode", () => 
   assert.equal(iamRelayCookieName("kokoro-issuer.session_token", false), true)
   assert.equal(iamRelayCookieName("__Secure-kokoro-issuer.session_token", true), true)
   assert.equal(iamRelayCookieName("kokoro-issuer.session_token", true), false)
+  assert.equal(iamRelayCookieName("__Secure-kokoro-issuer.session_token", false), false)
   assert.equal(iamRelayCookieName("kokoro-issuer.evil", false), false)
   assert.equal(iamRelayCookieName("authjs.session-token", false), false)
 })
@@ -235,7 +236,21 @@ test("native relay configuration requires only the canonical Web origin", () => 
     KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
     KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
   }
-  assert.deepEqual(loadConfig(base).iamRelay, { webOrigin: base.KOKORO_IAM_WEB_ORIGIN, secureCookies: false })
+  for (const [origin, environment, secureCookies] of [
+    ["http://web.example.test", "development", false],
+    ["http://web.example.test", "test", false],
+    ["https://web.example.test", "development", true],
+    ["https://web.example.test", "test", true],
+    ["https://web.example.test", "production", true],
+    // Preserve the existing production security floor, without adding an HTTP rejection.
+    ["http://web.example.test", "production", true],
+  ] as const) {
+    assert.deepEqual(
+      loadConfig({ ...base, KOKORO_IAM_WEB_ORIGIN: origin, NODE_ENV: environment }).iamRelay,
+      { webOrigin: origin, secureCookies },
+      `${origin} / ${environment}`,
+    )
+  }
   assert.throws(() => loadConfig({ ...base, KOKORO_IAM_WEB_ORIGIN: "https://user:pass@web.example.test" }), /KOKORO_IAM_BASE_URL|KOKORO_IAM_WEB_ORIGIN/u)
 })
 

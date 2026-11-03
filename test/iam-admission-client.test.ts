@@ -86,7 +86,7 @@ async function withPeer(
   }
 }
 const input = () => ({
-  cookie: "kokoro-issuer.session_token=COOKIE_CANARY",
+  cookie: "__Secure-kokoro-issuer.session_token=COOKIE_CANARY",
   origin: "https://app.example.test",
   requestId: "test-auth",
   signal: new AbortController().signal,
@@ -155,8 +155,8 @@ test("service denial never becomes human logout, and normal status refresh prese
       if (request.url?.startsWith("/iam/get-session")) {
         assert.equal(request.url, "/iam/get-session?disableCookieCache=true")
         response.setHeader("set-cookie", [
-          "kokoro-issuer.session_token=fresh; Path=/; HttpOnly; Secure; SameSite=Lax",
-          "kokoro-issuer.session_data=gone; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+          "__Secure-kokoro-issuer.session_token=fresh; Path=/; HttpOnly; Secure; SameSite=Lax",
+          "__Secure-kokoro-issuer.session_data=gone; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
         ])
         response.end(JSON.stringify(nativeSession()))
       } else if (serviceDenied) {

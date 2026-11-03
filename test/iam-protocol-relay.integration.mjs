@@ -10,6 +10,8 @@ if (!ownerBase || !/^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/u.test(ownerBase))
 }
 
 const webOrigin = process.env.KOKORO_TEST_IAM_WEB_ORIGIN ?? "https://iam.example.test"
+const secureCookies = new URL(webOrigin).protocol === "https:"
+const sessionCookieName = `${secureCookies ? "__Secure-" : ""}kokoro-issuer.session_token`
 const tenantId = process.env.KOKORO_TEST_TENANT_ID
 const credentialFile = process.env.KOKORO_BFF_IAM_USER_CONTEXT_SERVICE_CREDENTIAL_FILE
 if (!tenantId || !credentialFile) throw new Error("A fixture-owned Product tenant and canonical BFF IAM user-context credential file are required")
@@ -43,7 +45,9 @@ test("BFF preserves native sign-in, safe session status and sign-out over real o
     })
     assert.equal(signedIn.status, 200)
     const issuerCookies = signedIn.headers.getSetCookie()
-    assert.ok(issuerCookies.some((value) => value.startsWith("kokoro-issuer.session_token=")))
+    const issuedSessionCookies = issuerCookies.filter((value) => value.startsWith(`${sessionCookieName}=`))
+    assert.equal(issuedSessionCookies.length, 1)
+    assert.equal(/(?:^|;)\s*Secure(?:;|$)/iu.test(issuedSessionCookies[0]), secureCookies)
     assert.ok(issuerCookies.every((value) => !value.startsWith("authjs.")))
     const cookie = issuerCookies.map((value) => value.split(";", 1)[0]).join("; ")
 
@@ -69,9 +73,10 @@ test("BFF preserves native sign-in, safe session status and sign-out over real o
       redirect: "manual",
     })
     assert.equal(signedOut.status, 200)
-    const deletedIssuerCookies = signedOut.headers.getSetCookie().filter((value) => value.startsWith("kokoro-issuer.session_token="))
+    const deletedIssuerCookies = signedOut.headers.getSetCookie().filter((value) => value.startsWith(`${sessionCookieName}=`))
     assert.equal(deletedIssuerCookies.length, 1)
-    assert.equal(deletedIssuerCookies[0].split(";", 1)[0] === "kokoro-issuer.session_token=", true)
+    assert.equal(/(?:^|;)\s*Secure(?:;|$)/iu.test(deletedIssuerCookies[0]), secureCookies)
+    assert.equal(deletedIssuerCookies[0].split(";", 1)[0] === `${sessionCookieName}=`, true)
     assert.equal(/(?:^|;)\s*Max-Age=0(?:;|$)/iu.test(deletedIssuerCookies[0]), true)
     assert.equal(signedOut.headers.has("set-auth-jwt"), false)
 

@@ -155,7 +155,7 @@ function iamRelayConfig(env: NodeJS.ProcessEnv): BffConfig["iamRelay"] {
   if (webOrigin === null) throw new Error("KOKORO_IAM_WEB_ORIGIN must be an HTTP(S) origin")
   return {
     webOrigin,
-    secureCookies: env.NODE_ENV === "production",
+    secureCookies: new URL(webOrigin).protocol === "https:" || env.NODE_ENV === "production",
   }
 }
 

@@ -1,5 +1,15 @@
 > 当前候选（2026-11-03）：D0已通过；IAM固定896405d／internal0.20与Better Auth1.7.3正式snapshot，BFF源码正在同片收口。独立browser-private合同已由Root在34c9f997发行；Root已完成完整工程门、423项真实PG及真实IAM认证relay验证，各项证据只覆盖对应停写候选与范围。Skill inspection owner组合及含共享Admin的浏览器G1仍待，不代表正常环境已切换。
 
+## 2026-11-03 I-56：原生 Cookie Secure 模式统一（BFF源码候选已实现，组合待验）
+
+**当前基线。** BFF `21b3a516405ef4f2b34f403f37aa0a1eedc19f68` 已交付，完整工程门、423项真实PG及真实IAM/raw BFF relay证据仍只覆盖各自范围。后续真实G1在独立撤销处暴露Cookie清理不一致：IAM已撤销A且安全状态为匿名，B仍有效；HTTPS测试组合的owner删除Cookie没有Secure，BFF认证client正确过滤为零，浏览器旧Cookie仍在。此处不是会话撤销失效，也不以放宽401分类或Cookie过滤消除失败。本片依据 [Task A §3.6 I-56](../../../docs/superpowers/plans/2026-11-01-task-a-c1-c4-technical-plan.md) 已落地BFF既有配置及定向测试；新组合尚待Root验证。
+
+**唯一owner与消费策略。** IAM移除`useSecureCookies`的NODE_ENV覆写，交锁定Better Auth按`IAM_ISSUER_URL`/baseURL选择Secure及`__Secure-`名称的官方默认；BFF不补签、改名或重写Cookie。BFF/App仅在既有relay配置中按可信canonical public origin的HTTPS **或** `NODE_ENV=production`选择Secure，保留生产Secure安全floor，不把production+HTTP降为plain。HTTP开发/测试使用plain模式，HTTPS开发/测试及生产使用Secure模式，按已发布policy精确选择一个名称模式；不新增flag、Cookie SDK、兼容fallback或跨字段校验。当前Root fixture的issuer为同webOrigin加`/iam`，IAM现有生产配置schema要求issuer与Web均HTTPS；BFF本片保HTTPS OR production安全floor，不新增production+HTTP拒绝/跨字段校验；非生产mixed-scheme配置可解析不等于已承诺支持该原生组合。
+
+`SessionAdmissionClient.safeCookies`现有HTTPS安全过滤原样保留，失效删除Cookie也不豁免Secure；合法rolling及删除Cookie仍逐条写回可写HTTP响应，不逗号拼接，不宣称RSC可写。旧开发HTTPS的plain Cookie仅在重新配对后清理旧Cookie并重新登录，不清业务事实、草稿或未决意图，不恢复旧Cookie模式回退。
+
+**实现与验证边界。** 本仓只修改既有relay配置的Secure派生及直接受影响原测试。定向loopback覆盖HTTP/plain与HTTPS/__Secure签发、无body退出的逐条删除、错模式与不安全删除拒绝；配置正控覆盖HTTPS非生产、生产HTTPS及production+HTTP原安全floor。原认证负控保持，fresh build、类型与源码lint通过。无Schema、依赖或DTO变更；正常generator check已证明relay3.0/status1.0产物字节不变，版本/digest未改。固定新源码、完整相关门、真实框架删除Cookie经BFF到浏览器清除与独立B会话存续，以及Root重新配对后的真实G1仍待验，不以原21b门禁或本次loopback代替。
+
 ## 2026-11-02 AUTH-STD-D0：原生认证边缘与业务 principal（源码候选，未正常激活）
 
 **状态与范围。** 基线 `b6d98f825bc43816948a7249b68661e5fecd0e32`；本节对应已通过D0的替代方案；当前源码实现不代表G1或运行验收。沿 [Root ADR-035](../../../docs/kokoro-handbook/decisions/ADR-035-direct-internal-service-authentication.md) 的直接服务认证、ADR-036 的唯一 Nest runtime 与 [Task A §3.6](../../../docs/superpowers/plans/2026-11-01-task-a-c1-c4-technical-plan.md) 收敛；下方撤销通知及 I29 保持历史原文，不恢复 native proof／逐业务 Cookie 方案。本片不推进 C-2/C-3 业务重写。

@@ -12,7 +12,7 @@ const sessionHeaders = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "browser-fixture",
   origin,
-  cookie: "kokoro-issuer.session_token=browser-session",
+  cookie: "__Secure-kokoro-issuer.session_token=browser-session",
 }
 const native = () => ({
   session: {
@@ -65,8 +65,8 @@ async function fixture(
         return
       }
       response.setHeader("set-cookie", [
-        "kokoro-issuer.session_token=rolling; Path=/; HttpOnly; Secure; SameSite=Lax",
-        "kokoro-issuer.session_data=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+        "__Secure-kokoro-issuer.session_token=rolling; Path=/; HttpOnly; Secure; SameSite=Lax",
+        "__Secure-kokoro-issuer.session_data=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
       ])
       const value = native()
       if (state === "foreign") value.session.activeOrganizationId = "foreign"

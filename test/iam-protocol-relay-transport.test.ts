@@ -23,14 +23,15 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`
 }
 
-function bff(iamBaseUrl: string, tenantId?: string): Server {
+function bff(iamBaseUrl: string, tenantId?: string, publicOrigin = webOrigin): Server {
   return createLiveTestBffServer(
     loadConfig({
       KOKORO_BFF_SHARED_SECRET: "test-secret",
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused_bff_relay_fixture?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
       KOKORO_IAM_BASE_URL: iamBaseUrl,
-      KOKORO_IAM_WEB_ORIGIN: webOrigin,
+      KOKORO_IAM_WEB_ORIGIN: publicOrigin,
+      NODE_ENV: "test",
       ...(tenantId === undefined ? {} : { KOKORO_TENANT_ID: tenantId }),
     }),
   )
@@ -171,4 +172,63 @@ test("signup accepts the same required read-only User projection for normal and 
   const before = calls.length
   assert.equal((await post({ ...signup, platformAdmin: true } as typeof signup)).status, 400)
   assert.equal(calls.length, before, "client input cannot promote the returned read-only field")
+})
+
+test("native relay uses one public-origin Cookie mode for issuance and bodyless deletion", async () => {
+  for (const publicOrigin of ["http://web.example.test", "https://web.example.test"]) {
+    const secure = new URL(publicOrigin).protocol === "https:"
+    const prefix = secure ? "__Secure-" : ""
+    const name = `${prefix}kokoro-issuer.session_token`
+    const otherName = `${secure ? "" : "__Secure-"}kokoro-issuer.session_token`
+    const attributes = `Path=/; HttpOnly;${secure ? " Secure;" : ""} SameSite=Lax`
+    const issued = [`${name}=issued; ${attributes}`, `${prefix}kokoro-issuer.session_data=cache; ${attributes}`]
+    const deleted = [
+      `${name}=; ${attributes}; Max-Age=0`,
+      `${prefix}kokoro-issuer.session_data=; ${attributes}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0`,
+    ]
+    let setCookies = issued
+    const calls: Array<{ url: string | undefined; cookie: string | undefined; body: string }> = []
+    const iam = await listen(
+      createServer(async (request, response) => {
+        const chunks = []
+        for await (const chunk of request) chunks.push(Buffer.from(chunk))
+        calls.push({ url: request.url, cookie: request.headers.cookie, body: Buffer.concat(chunks).toString() })
+        response.writeHead(200, { "content-type": "application/json", "set-cookie": setCookies, "set-auth-jwt": "PRIVATE_JWT_CANARY" })
+        response.end("{}")
+      }),
+    )
+    const base = await listen(bff(iam, undefined, publicOrigin))
+    const signIn = await fetch(base + "/iam/sign-in/email", {
+      method: "POST",
+      headers: { ...webServiceHeaders, origin: publicOrigin, "content-type": "application/json" },
+      body: JSON.stringify({ email: "person@example.test", password: "fixture-password" }),
+    })
+    assert.equal(signIn.status, 200, publicOrigin)
+    assert.deepEqual(signIn.headers.getSetCookie(), issued)
+    assert.equal(signIn.headers.has("set-auth-jwt"), false)
+
+    const signOut = () =>
+      fetch(base + "/iam/sign-out", {
+        method: "POST",
+        headers: { ...webServiceHeaders, origin: publicOrigin, cookie: `${name}=issued; ${otherName}=wrong-mode; product=private` },
+      })
+    setCookies = deleted
+    const signedOut = await signOut()
+    assert.equal(signedOut.status, 200)
+    assert.deepEqual(signedOut.headers.getSetCookie(), deleted, "Expires comma must not merge separate deletion cookies")
+    assert.equal(signedOut.headers.has("set-auth-jwt"), false)
+    assert.deepEqual(calls[1], { url: "/iam/sign-out", cookie: `${name}=issued`, body: "" })
+
+    for (const invalid of [
+      `${otherName}=; ${attributes}; Max-Age=0`,
+      `${name}=; ${attributes}; Domain=web.example.test; Max-Age=0`,
+      ...(secure ? [`${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`] : []),
+    ]) {
+      setCookies = [invalid]
+      const rejected = await signOut()
+      assert.equal(rejected.status, 502, invalid)
+      assert.deepEqual(rejected.headers.getSetCookie(), [])
+      assert.doesNotMatch(await rejected.text(), /PRIVATE_JWT_CANARY/)
+    }
+  }
 })
