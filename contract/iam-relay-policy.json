@@ -1,11 +1,11 @@
 {
-  "version": "2.1.0",
-  "iamOwnerCommit": "e3c035b99cf9479ac8357c7d38147f1541dcbcac",
+  "version": "3.0.0",
+  "iamOwnerCommit": "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7",
   "iamAllowlistSha256": "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead",
-  "iamSnapshotSha256": "b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1",
+  "iamSnapshotSha256": "823d36d5dae8e667e1b92d486e03a21348a86b7e2a4dadb07787a485b7cbcdd2",
   "iamOpenapiPath": "contract/openapi/iam.internal.v1.json",
-  "iamOpenapiVersion": "0.7.0",
-  "iamOpenapiSha256": "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2",
+  "iamOpenapiVersion": "0.20.0",
+  "iamOpenapiSha256": "61cf99b4fe836deafedb9f59d9fa2ea3446ce172f4069944f7facb14e816c7ca",
   "routes": {
     "/sign-up/email": [
       "POST"
@@ -18,9 +18,6 @@
     ],
     "/sign-out": [
       "POST"
-    ],
-    "/get-session": [
-      "GET"
     ],
     "/organization/set-active": [
       "POST"

@@ -344,3 +344,45 @@ if (process.argv.slice(2).join(" ") === "--write") {
   await mkdir(new URL("./", prepareReceiptTarget), { recursive: true })
   await writeFile(prepareReceiptTarget, prepareReceiptBytes)
 } else if ((await readFile(prepareReceiptTarget, "utf8")) !== prepareReceiptBytes) throw new Error("MCP Prepare receipt private contract drifted")
+
+// Authentication owns one independent safe browser status, never the raw framework Session.
+const { BROWSER_AUTH_SESSION_POLICY, browserAuthSessionResponse, browserAuthSessionError, browserAuthSessionPublicQuery } =
+  await import("../src/auth/auth-session.contract.ts")
+const authTarget = new URL("../contract/openapi/browser/v1/auth-session.json", import.meta.url)
+const authDocument = {
+  openapi: "3.1.0",
+  info: { title: "Kokoro BFF browser-private authentication status", version: BROWSER_AUTH_SESSION_POLICY.version },
+  "x-kokoro-auth-session-policy": BROWSER_AUTH_SESSION_POLICY,
+  paths: {
+    [BROWSER_AUTH_SESSION_POLICY.path]: {
+      get: {
+        operationId: BROWSER_AUTH_SESSION_POLICY.operation_id,
+        "x-kokoro-owner": "kokoro-bff",
+        "x-kokoro-visibility": "browser-private",
+        "x-kokoro-stability": "beta",
+        "x-kokoro-idempotency": "none",
+        "x-kokoro-permission": "current_native_session_and_product_membership",
+        description:
+          "Explicit absent or invalid login is anonymous. Qualification denial and dependency failure remain errors. Only allowlisted framework Set-Cookie fields may be relayed individually; set-auth-jwt is never forwarded. RSC callers use refresh=false and do not claim cookie writes.",
+        parameters: [{ in: "query", name: "refresh", required: false, schema: json(browserAuthSessionPublicQuery).properties.refresh }],
+        responses: Object.fromEntries(
+          [200, 400, 403, 429, 503].map((status) => [
+            status,
+            {
+              description: status === 200 ? "Safe current authentication observation" : "Closed safe error; request correlation only in the response header",
+              headers: {
+                "cache-control": { required: true, schema: { const: "no-store" } },
+                "x-request-id": { required: true, schema: { type: "string", pattern: "^[A-Za-z0-9_-]{1,128}$" } },
+                ...(status === 429 ? { "retry-after": { schema: { type: "string", pattern: "^[1-9][0-9]{0,4}$" } } } : {}),
+              },
+              content: content(status === 200 ? browserAuthSessionResponse : browserAuthSessionError(status)),
+            },
+          ]),
+        ),
+      },
+    },
+  },
+}
+const authBytes = JSON.stringify(authDocument, null, 2) + "\n"
+if (process.argv.slice(2).join(" ") === "--write") await writeFile(authTarget, authBytes)
+else if ((await readFile(authTarget, "utf8")) !== authBytes) throw new Error("browser auth status contract drifted")
