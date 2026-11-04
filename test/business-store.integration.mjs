@@ -573,37 +573,53 @@ function r73CreatePayload(extra = {}) {
 
 async function r73CreateFixture(t) {
   const { randomUUID } = await import("node:crypto")
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, SCHEDULED_TASK_DISPATCHER, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { HealthModule } = await import("../dist/modules/health/health.module.js")
+  const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
   const suffix = randomUUID().replaceAll("-", "")
   const tenant = `r73_${suffix}`
   const otherTenant = `${tenant}_other`
   const owner = `owner_${suffix}`
   const otherOwner = `other_${suffix}`
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  const instances = []
+  const instances = new Set()
+  const stop = async (app) => {
+    if (instances.delete(app)) await app.close()
+  }
   t.after(async () => {
     try {
-      for (const server of instances) await server.shutdown()
+      for (const app of instances) await stop(app)
     } finally {
       await pool.end()
     }
   })
   const start = async (tenantId) => {
-    const server = createBffServer(bffConfig({ tenantId }), {
-      sessionAdmission,
+    const module = await Test.createTestingModule({ imports: [HealthModule, ScheduledTasksModule] })
+      .overrideProvider(BFF_CONFIG)
+      // Readiness checks IAM URL presence and real PG/Redis; admission still uses the original double.
+      .useValue({ ...bffConfig({ tenantId }), iamBaseUrl: "http://127.0.0.1:1" })
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(sessionAdmission)
       // Admission/atomic-create tests intentionally leave real outbox rows pending.
       // Only delivery scheduling is disabled; persistence and HTTP responses remain production code.
-      scheduledTaskDispatcher: { start() {}, async stop() {} },
-    })
-    instances.push(server)
-    const base = await listen(server)
+      .overrideProvider(SCHEDULED_TASK_DISPATCHER)
+      .useValue({ start() {}, async stop() {} })
+      .compile()
+    const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    instances.add(app)
+    await app.listen(0, "127.0.0.1")
+    const base = await app.getUrl()
     const readiness = await fetch(`${base}/readyz`, { signal: AbortSignal.timeout(5000) })
     await readiness.arrayBuffer()
     assert.equal(readiness.status, 200, "Root-owned canonical PostgreSQL/Redis fixture must be ready before business assertions")
-    return { server, base }
+    return { app, base }
   }
   const fixture = { suffix, tenant, otherTenant, owner, otherOwner, pool, start, ...(await start(tenant)) }
   fixture.restart = async () => {
-    await fixture.server.shutdown()
+    await stop(fixture.app)
     Object.assign(fixture, await start(tenant))
   }
   fixture.project = async (name, subject = owner, tenantId = tenant, base = fixture.base) => {

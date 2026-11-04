@@ -101,6 +101,7 @@ export async function handleScheduledTaskMutationBusiness(
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,
+  checkedCreate?: ScheduledTaskCreateInput,
 ): Promise<boolean> {
   const route = scheduledTaskMutation(request)
   if (route === null) return false
@@ -113,7 +114,8 @@ export async function handleScheduledTaskMutationBusiness(
   const scope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
   try {
     if (route.kind === "create" || route.kind === "project_create") {
-      if (new URL(request.url ?? "/", "http://bff.local").search !== "") {
+      const preflight = route.kind === "create" ? checkedCreate : undefined
+      if (preflight === undefined && new URL(request.url ?? "/", "http://bff.local").search !== "") {
         await reply(
           response,
           400,
@@ -124,12 +126,12 @@ export async function handleScheduledTaskMutationBusiness(
         )
         return true
       }
-      const input = scheduledCreateInput(json, route.kind === "project_create" ? route.projectId : undefined)
+      const input = preflight ?? scheduledCreateInput(json, route.kind === "project_create" ? route.projectId : undefined)
       if (input === null) {
         await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", id), context, idempotency, mutation)
         return true
       }
-      if (input.projectId !== undefined && (await projects.find(scope, input.projectId)) === null) {
+      if (preflight === undefined && input.projectId !== undefined && (await projects.find(scope, input.projectId)) === null) {
         await reply(response, 404, failure("project_not_found", "Project was not found", id), context, idempotency, mutation)
         return true
       }
