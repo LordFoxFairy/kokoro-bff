@@ -1,8 +1,8 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, SCHEDULED_AGENT_DISPATCH_REPOSITORY, SCHEDULED_TASK_SERVICE, SCHEDULER_DISPATCH_RECEIPTS } from "../../common/tokens.js"
+import { BFF_CONFIG, SCHEDULED_AGENT_DISPATCH_REPOSITORY, SCHEDULER_DISPATCH_RECEIPTS } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
-import type { ScheduledTaskService } from "../../application/scheduled-task-service.js"
+import { SCHEDULED_TASK_CALLBACK_LOOKUP, type ScheduledTaskCallbackLookup } from "./scheduled-task.providers.js"
 import type { SchedulerDispatchReceiptRepository } from "../../application/scheduled/scheduler-dispatch-receipt-repository.js"
 import type { ScheduledAgentDispatchRepository } from "../../application/scheduled/scheduled-agent-dispatch-repository.js"
 import { schedulerDispatch } from "../../http/routes/scheduler.js"
@@ -13,7 +13,7 @@ export class SchedulerDispatchMiddleware implements NestMiddleware {
 
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
-    @Inject(SCHEDULED_TASK_SERVICE) private readonly scheduledTasks: ScheduledTaskService,
+    @Inject(SCHEDULED_TASK_CALLBACK_LOOKUP) private readonly scheduledTasks: ScheduledTaskCallbackLookup,
     @Inject(SCHEDULER_DISPATCH_RECEIPTS) private readonly receipts: SchedulerDispatchReceiptRepository,
     @Inject(SCHEDULED_AGENT_DISPATCH_REPOSITORY) private readonly scheduledAgentDispatch: ScheduledAgentDispatchRepository,
   ) {}

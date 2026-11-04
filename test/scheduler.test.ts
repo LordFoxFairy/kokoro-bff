@@ -15,11 +15,11 @@ import {
   SCHEDULED_AGENT_DISPATCHER,
   SCHEDULED_AGENT_TERMINAL_CONSUMER,
   SCHEDULED_TASK_DISPATCHER,
-  SCHEDULED_TASK_SERVICE,
   SCHEDULER_DISPATCH_RECEIPTS,
 } from "../dist/common/tokens.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { SCHEDULED_TASK_CALLBACK_LOOKUP } from "../dist/modules/scheduled-tasks/scheduled-task.providers.js"
 import { ScheduledTasksModule } from "../dist/modules/scheduled-tasks/scheduled-tasks.module.js"
 import { schedulerDispatchDigest } from "../dist/infrastructure/clients/scheduler/dispatch-identity.js"
 import { parseSchedulerDispatchWebhook } from "../dist/infrastructure/clients/scheduler/webhook-contract.js"
@@ -128,7 +128,7 @@ async function startSchedulerReceiver(runtimeConfig: ReturnType<typeof config>, 
       ready: unexpectedDatabaseIo,
       close: async () => undefined,
     })
-    .overrideProvider(SCHEDULED_TASK_SERVICE)
+    .overrideProvider(SCHEDULED_TASK_CALLBACK_LOOKUP)
     .useValue(scheduledTasks)
     .overrideProvider(SCHEDULER_DISPATCH_RECEIPTS)
     .useValue(receipts)

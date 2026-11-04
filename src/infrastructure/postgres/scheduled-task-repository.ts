@@ -24,8 +24,7 @@ import type {
   ScheduledTaskPatch,
   ScheduledTaskRecord,
   ScheduledTaskReadSnapshot,
-  ScheduledTaskRepository,
-} from "../../application/scheduled/scheduled-task-repository.js"
+} from "../../application/scheduled/task-facts.js"
 import type { PostgresBffDatabase } from "./client.js"
 import { scheduledTaskOutboxId } from "../identifiers/scheduled-task-outbox-id.js"
 
@@ -259,7 +258,7 @@ function claimedCommandFromRow(row: ScheduledTaskOutboxRow): ScheduledTaskOutbox
   }
 }
 
-export class PostgresScheduledTaskRepository implements ScheduledTaskRepository, ScheduledTaskOutboxRepository {
+export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepository {
   public constructor(
     private readonly database: PostgresBffDatabase,
     private readonly clock: () => Date = () => new Date(),
@@ -316,17 +315,6 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
       if (cancel !== undefined) signal.removeEventListener("abort", cancel)
       release(signal.aborted)
     }
-  }
-
-  public async listScheduledTasks(scope: ScheduledTaskOwnerScope): Promise<ScheduledTaskFact[]> {
-    const result = await this.database.pool.query<ScheduledTaskRow>(
-      `SELECT ${TASK_COLUMNS}
-         FROM bff_scheduled_task
-        WHERE tenant_id = $1 AND owner_id = $2
-        ORDER BY created_at ASC, task_id ASC`,
-      [scope.tenantId, scope.subjectId],
-    )
-    return result.rows.map(scheduledTaskFromRow)
   }
 
   public async findScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string): Promise<ScheduledTaskFact | null> {

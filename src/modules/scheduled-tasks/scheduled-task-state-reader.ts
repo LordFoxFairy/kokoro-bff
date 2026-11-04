@@ -1,5 +1,5 @@
 import type { ScheduledTaskFact } from "../../domain/scheduled-task/task.js"
-import type { ScheduledTaskOwnerScope } from "../../application/scheduled/scheduled-task-repository.js"
+import type { ScheduledTaskOwnerScope } from "../../application/scheduled/task-facts.js"
 
 export type ScheduledTaskSchedulingState = "pending" | "active" | "paused" | "exhausted" | "failed"
 export type ScheduledTaskCurrentState = Readonly<{ state: "active" | "paused" | "exhausted"; nextRunAt: Date | null }>

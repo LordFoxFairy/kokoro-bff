@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { ScheduledTaskCreateInput, ScheduledTaskMutationLineage } from "../../application/scheduled/scheduled-task-repository.js"
+import type { ScheduledTaskCreateInput, ScheduledTaskMutationLineage } from "../../application/scheduled/task-facts.js"
 import type { ScheduledTaskService } from "../../application/scheduled-task-service.js"
 import type { ProjectService } from "../../application/project-service.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"

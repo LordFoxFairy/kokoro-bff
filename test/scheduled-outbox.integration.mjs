@@ -220,11 +220,11 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     assert.equal(registerRow.rows[0].payload.lineage.tenant_id, tenants.core)
     assert.equal(Object.hasOwn(registerRow.rows[0].payload.task, "recurrence_anchor_at"), false)
 
-    assert.deepEqual(await repository.listScheduledTasks(ownerScope(`${tenants.core}_other`, suffix)), [])
+    assert.deepEqual(await repository.readScheduledTaskSnapshots(ownerScope(`${tenants.core}_other`, suffix), AbortSignal.timeout(1000)), [])
     assert.equal(await repository.findScheduledTask(ownerScope(`${tenants.core}_other`, suffix), taskId), null)
 
     const otherOwnerScope = { tenantId: tenants.core, subjectId: `actor_other_${suffix}` }
-    assert.deepEqual(await repository.listScheduledTasks(otherOwnerScope), [])
+    assert.deepEqual(await repository.readScheduledTaskSnapshots(otherOwnerScope, AbortSignal.timeout(1000)), [])
     assert.equal(await repository.findScheduledTask(otherOwnerScope, taskId), null)
     const beforeDeniedOutbox = await count(pool, "bff_scheduled_task_outbox", tenants.core)
     assert.equal(

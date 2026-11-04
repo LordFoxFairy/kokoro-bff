@@ -140,7 +140,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/chat/chat-repository.ts",
     "src/application/agent-dispatch/agent-dispatch-outbox-repository.ts",
     "src/application/agent-dispatch/agent-dispatch-delivery.ts",
-    "src/application/scheduled/scheduled-task-repository.ts",
+    "src/application/scheduled/task-facts.ts",
     "src/application/scheduled/scheduled-task-outbox-repository.ts",
     "src/application/scheduled/scheduled-task-outbox-delivery.ts",
     "src/application/scheduled/scheduler-dispatch-receipt-repository.ts",
@@ -625,7 +625,7 @@ test("private BFF resources use named owner scopes before receipts and keep serv
   const [projectPort, projectRepository, scheduledPort, scheduledRepository, chatAuthorization, client, openapi, schema] = await Promise.all([
     readFile(path.join(root, "src/application/projects/project-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/project-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/application/scheduled/scheduled-task-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/scheduled/task-facts.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-authorization.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/client.ts"), "utf8"),

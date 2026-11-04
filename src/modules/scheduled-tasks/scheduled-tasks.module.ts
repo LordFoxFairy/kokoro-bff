@@ -11,7 +11,6 @@ import {
   SCHEDULED_AGENT_TERMINAL_CONSUMER,
   SCHEDULED_TASK_DISPATCHER,
   SCHEDULED_TASK_OUTBOX,
-  SCHEDULED_TASK_REPOSITORY,
   SCHEDULED_TASK_READ_SERVICE,
   SCHEDULED_TASK_SERVICE,
 } from "../../common/tokens.js"
@@ -20,7 +19,7 @@ import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.j
 import { PostgresScheduledTaskRepository } from "../../infrastructure/postgres/scheduled-task-repository.js"
 import { SchedulerControlClient } from "../../infrastructure/clients/scheduler/control-client.js"
 import { SchedulerTaskStateReader } from "../../infrastructure/clients/scheduler/task-state-reader.js"
-import { ScheduledTaskReadService } from "../../application/scheduled-task-read-service.js"
+import { ScheduledTaskReadService, type ScheduledTaskSnapshots } from "../../application/scheduled-task-read-service.js"
 import { ScheduledTaskOutboxDispatcher } from "../../application/scheduled-task-outbox-dispatcher.js"
 import { SchedulerOutboxDelivery } from "../../infrastructure/clients/scheduler/outbox-delivery.js"
 import type { ScheduledTaskOutboxRepository } from "../../application/scheduled/scheduled-task-outbox-repository.js"
@@ -43,6 +42,7 @@ import type { Pool } from "pg"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import { randomUUID } from "node:crypto"
+import { SCHEDULED_TASK_CALLBACK_LOOKUP, SCHEDULED_TASK_SNAPSHOTS, type ScheduledTaskCallbackLookup } from "./scheduled-task.providers.js"
 
 function scheduledWorkerLog(event: { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }): void {
   process.stderr.write(`${JSON.stringify({ service: "kokoro-bff", ...event })}\n`)
@@ -93,13 +93,13 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, BeforeApplicationShu
     SchedulerDispatchMiddleware,
     ScheduledTaskMutationMiddleware,
     {
-      provide: SCHEDULED_TASK_REPOSITORY,
+      provide: PostgresScheduledTaskRepository,
       inject: [BFF_DATABASE],
       useFactory: (database: PostgresBffDatabase): PostgresScheduledTaskRepository => new PostgresScheduledTaskRepository(database),
     },
     {
       provide: SCHEDULED_TASK_SERVICE,
-      inject: [SCHEDULED_TASK_REPOSITORY],
+      inject: [PostgresScheduledTaskRepository],
       useFactory: (repository: PostgresScheduledTaskRepository): ScheduledTaskService => new ScheduledTaskService(repository),
     },
     {
@@ -113,22 +113,33 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, BeforeApplicationShu
       useFactory: (pool: Pool): IdempotencyRepository => new PostgresIdempotencyRepository(pool),
     },
     {
+      provide: SCHEDULED_TASK_SNAPSHOTS,
+      inject: [PostgresScheduledTaskRepository],
+      useFactory: (repository: PostgresScheduledTaskRepository): ScheduledTaskSnapshots => ({
+        snapshots: (scope, signal, taskId) => repository.readScheduledTaskSnapshots(scope, signal, taskId),
+      }),
+    },
+    {
+      provide: SCHEDULED_TASK_CALLBACK_LOOKUP,
+      inject: [PostgresScheduledTaskRepository],
+      useFactory: (repository: PostgresScheduledTaskRepository): ScheduledTaskCallbackLookup => ({
+        findRecord: (tenantId, taskId) => repository.findScheduledTaskRecord(tenantId, taskId),
+      }),
+    },
+    {
       provide: SCHEDULED_TASK_READ_SERVICE,
-      inject: [BFF_CONFIG, SCHEDULED_TASK_REPOSITORY],
-      useFactory: (config: BffConfig, repository: PostgresScheduledTaskRepository): ScheduledTaskReadService => {
+      inject: [BFF_CONFIG, SCHEDULED_TASK_SNAPSHOTS],
+      useFactory: (config: BffConfig, snapshots: ScheduledTaskSnapshots): ScheduledTaskReadService => {
         const scheduler =
           typeof config.upstreams.scheduler === "string" && config.schedulerServiceToken !== null
             ? new SchedulerControlClient(config.upstreams.scheduler, config.schedulerServiceToken, config.upstreamTimeoutMs, config.upstreamMaxResponseBytes)
             : null
-        return new ScheduledTaskReadService(
-          { snapshots: (scope, signal, taskId) => repository.readScheduledTaskSnapshots(scope, signal, taskId) },
-          new SchedulerTaskStateReader(scheduler, config.schedulerTargetUrl),
-        )
+        return new ScheduledTaskReadService(snapshots, new SchedulerTaskStateReader(scheduler, config.schedulerTargetUrl))
       },
     },
     {
       provide: SCHEDULED_TASK_OUTBOX,
-      inject: [SCHEDULED_TASK_REPOSITORY],
+      inject: [PostgresScheduledTaskRepository],
       useFactory: (repository: PostgresScheduledTaskRepository): ScheduledTaskOutboxRepository => repository,
     },
     {
@@ -176,7 +187,6 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, BeforeApplicationShu
   ],
   exports: [
     SCHEDULED_TASK_READ_SERVICE,
-    SCHEDULED_TASK_REPOSITORY,
     SCHEDULED_TASK_SERVICE,
     SCHEDULER_DISPATCH_RECEIPTS,
     SCHEDULED_TASK_OUTBOX,

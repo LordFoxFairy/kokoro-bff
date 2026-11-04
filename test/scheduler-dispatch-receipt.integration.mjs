@@ -27,6 +27,7 @@ import { PostgresScheduledAgentDispatchRepository } from "../dist/infrastructure
 import { PostgresScheduledTaskRepository } from "../dist/infrastructure/postgres/scheduled-task-repository.js"
 import { PostgresSchedulerDispatchReceiptRepository } from "../dist/infrastructure/postgres/scheduler-dispatch-receipt-repository.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { SCHEDULED_TASK_CALLBACK_LOOKUP } from "../dist/modules/scheduled-tasks/scheduled-task.providers.js"
 import { ScheduledTasksModule } from "../dist/modules/scheduled-tasks/scheduled-tasks.module.js"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
@@ -135,6 +136,7 @@ async function createSchedulerReceiver(agentBase, { holdAgentConsumption = false
   try {
     const database = module.get(BFF_DATABASE)
     const scheduledTasks = module.get(SCHEDULED_TASK_SERVICE)
+    const taskLookup = module.select(ScheduledTasksModule).get(SCHEDULED_TASK_CALLBACK_LOOKUP, { strict: true })
     const receipts = module.get(SCHEDULER_DISPATCH_RECEIPTS)
     const scheduledAgentDispatch = module.get(SCHEDULED_AGENT_DISPATCH_REPOSITORY)
     const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
@@ -142,6 +144,7 @@ async function createSchedulerReceiver(agentBase, { holdAgentConsumption = false
     return {
       database,
       scheduledTasks,
+      taskLookup,
       receipts,
       scheduledAgentDispatch,
       listen: async () => {
@@ -903,7 +906,7 @@ async function r66LifecycleFixture(context) {
     return task
   }
   const prepare = async () => {
-    const record = await receiver.scheduledTasks.findRecord(tenant, taskId)
+    const record = await receiver.taskLookup.findRecord(tenant, taskId)
     assert.ok(record !== null)
     assert.equal(record.task.projectId, undefined)
     const requestId = `prepared-${suffix}`
@@ -955,6 +958,9 @@ async function r66LifecycleFixture(context) {
     prepare,
     get scheduledTasks() {
       return receiver.scheduledTasks
+    },
+    get taskLookup() {
+      return receiver.taskLookup
     },
     get scheduledAgentDispatch() {
       return receiver.scheduledAgentDispatch
@@ -1097,7 +1103,7 @@ receiverIntegrationTest("R66 accepted admitted head survives pause and restart w
   assert.deepEqual(await fixture.callback(), accepted)
   assert.deepEqual(await fixture.receipt(), terminal)
   assert.deepEqual(await fixture.facts(), before)
-  const task = await fixture.scheduledTasks.findRecord(fixture.tenant, fixture.taskId)
+  const task = await fixture.taskLookup.findRecord(fixture.tenant, fixture.taskId)
   assert.equal(task.task.status, "paused")
   assert.equal(task.task.enabled, false)
 })

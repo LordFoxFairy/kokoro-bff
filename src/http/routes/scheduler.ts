@@ -14,14 +14,14 @@ import { schedulerDispatchDigest, schedulerDispatchScope, schedulerOccurrenceIde
 import { schedulerScheduleName } from "../../infrastructure/clients/scheduler/schedule.js"
 import { parseSchedulerDispatchWebhook } from "../../infrastructure/clients/scheduler/webhook-contract.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
-import type { ScheduledTaskService } from "../../application/scheduled-task-service.js"
+import type { ScheduledTaskCallbackLookup } from "../../modules/scheduled-tasks/scheduled-task.providers.js"
 import type { ScheduledAgentDispatchRepository } from "../../application/scheduled/scheduled-agent-dispatch-repository.js"
 import { send } from "../response.js"
 import { headerString, readBody, requestBodyJson, requestId } from "../request.js"
 
 export type SchedulerDispatchProvider = Readonly<{
   schedulerDispatchReceipts: SchedulerDispatchReceiptRepository
-  scheduledTasks: Pick<ScheduledTaskService, "findRecord">
+  scheduledTasks: ScheduledTaskCallbackLookup
   scheduledAgentDispatch?: ScheduledAgentDispatchRepository
 }>
 

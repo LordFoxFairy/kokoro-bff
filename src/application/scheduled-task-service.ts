@@ -4,25 +4,34 @@ import type {
   ScheduledTaskPatch,
   ScheduledTaskMutationLineage,
   ScheduledTaskOwnerScope,
-  ScheduledTaskRecord,
-  ScheduledTaskReadSnapshot,
-  ScheduledTaskRepository,
-} from "./scheduled/scheduled-task-repository.js"
+} from "./scheduled/task-facts.js"
+
+type ScheduledTaskMutationStore = {
+  findScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string): Promise<ScheduledTaskFact | null>
+  /** Fact mutation and its Scheduler command are committed in one local transaction. */
+  createScheduledTask(
+    scope: ScheduledTaskOwnerScope,
+    input: ScheduledTaskCreateInput,
+    requestedTaskId: string | undefined,
+    lineage: ScheduledTaskMutationLineage,
+  ): Promise<ScheduledTaskFact>
+  updateScheduledTask(
+    scope: ScheduledTaskOwnerScope,
+    taskId: string,
+    input: ScheduledTaskPatch,
+    lineage: ScheduledTaskMutationLineage,
+  ): Promise<ScheduledTaskFact | null>
+  /** Read-only evidence of a committed delete in the same owner/key lineage. */
+  hasCommittedDelete(scope: ScheduledTaskOwnerScope, taskId: string, key: string): Promise<boolean>
+  deleteScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean>
+}
 
 /** Scheduled-task use cases. Fact and outbound command commit together; delivery is asynchronous. */
 export class ScheduledTaskService {
-  public constructor(private readonly repository: ScheduledTaskRepository) {}
+  public constructor(private readonly repository: ScheduledTaskMutationStore) {}
 
-  public snapshots(scope: ScheduledTaskOwnerScope, signal: AbortSignal, taskId?: string): Promise<ScheduledTaskReadSnapshot[]> {
-    return this.repository.readScheduledTaskSnapshots(scope, signal, taskId)
-  }
-
-  public list(scope: ScheduledTaskOwnerScope): Promise<ScheduledTaskFact[]> { return this.repository.listScheduledTasks(scope) }
   public find(scope: ScheduledTaskOwnerScope, taskId: string): Promise<ScheduledTaskFact | null> {
     return this.repository.findScheduledTask(scope, taskId)
-  }
-  public findRecord(tenantId: string, taskId: string): Promise<ScheduledTaskRecord | null> {
-    return this.repository.findScheduledTaskRecord(tenantId, taskId)
   }
   public create(scope: ScheduledTaskOwnerScope, input: ScheduledTaskCreateInput, requestedTaskId: string | undefined, lineage: ScheduledTaskMutationLineage): Promise<ScheduledTaskFact> {
     return this.repository.createScheduledTask(scope, input, requestedTaskId, lineage)

@@ -347,28 +347,31 @@ test("ProjectsModule owns project-scope release worker lifecycle", async () => {
   assert.match(projectsModule, /ProjectScopeReleaseWorkerLifecycle/u)
 })
 
-test("ScheduledTask repository and outbox ports are feature-local", async () => {
+test("ScheduledTask consumers use distinct feature-owned capabilities", async () => {
   for (const file of [
-    "src/application/scheduled/scheduled-task-repository.ts",
     "src/application/scheduled/scheduled-task-outbox-repository.ts",
     "src/application/scheduled/scheduled-task-outbox-delivery.ts",
   ])
     assert.equal(await fileExists(file), true, `${file} must exist`)
   for (const file of [
     "src/application/ports/scheduled-task-repository.ts",
+    "src/application/scheduled/scheduled-task-repository.ts",
     "src/application/ports/scheduled-task-outbox-repository.ts",
     "src/application/ports/scheduled-task-outbox-delivery.ts",
   ])
     assert.equal(await fileExists(file), false, `${file} must stay deleted`)
-  const [moduleSource, service, dispatcher, repository, delivery] = await Promise.all([
+  const [moduleSource, service, dispatcher, repository, delivery, callback] = await Promise.all([
     readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled-task-service.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled-task-outbox-dispatcher.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/clients/scheduler/outbox-delivery.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/scheduled-tasks/scheduler-dispatch.middleware.ts"), "utf8"),
   ])
   assert.match(moduleSource, /application\/scheduled\/scheduled-task-outbox-repository\.js/u)
-  assert.match(service, /scheduled\/scheduled-task-repository\.js/u)
+  assert.doesNotMatch(service, /public (?:snapshots|list|findRecord)\(/u)
+  assert.match(callback, /@Inject\(SCHEDULED_TASK_CALLBACK_LOOKUP\)/u)
+  assert.doesNotMatch(callback, /SCHEDULED_TASK_SERVICE/u)
   assert.match(dispatcher, /scheduled\/scheduled-task-outbox-(?:repository|delivery)\.js/u)
   assert.match(repository, /application\/scheduled\/scheduled-task-(?:repository|outbox-repository)\.js/u)
   assert.match(delivery, /application\/scheduled\/scheduled-task-outbox-delivery\.js/u)
@@ -421,7 +424,7 @@ test("ScheduledTasksModule owns the scheduled outbox worker lifecycle", async ()
   const scheduledModule = await readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8")
   assert.match(scheduledModule, /provide: SCHEDULED_TASK_OUTBOX/u)
   assert.match(scheduledModule, /provide: SCHEDULED_TASK_DISPATCHER/u)
-  assert.match(scheduledModule, /provide: SCHEDULED_TASK_REPOSITORY/u)
+  assert.doesNotMatch(scheduledModule, /SCHEDULED_TASK_REPOSITORY/u)
   assert.match(scheduledModule, /provide: SCHEDULED_TASK_SERVICE/u)
   assert.match(scheduledModule, /provide: SCHEDULER_DISPATCH_RECEIPTS/u)
   assert.match(scheduledModule, /SchedulerDispatchMiddleware/u)

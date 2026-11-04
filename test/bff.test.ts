@@ -987,11 +987,11 @@ describe("kokoro-bff versioned HTTP contracts", () => {
       BFF_DATABASE,
       PROJECT_SERVICE,
       SCHEDULED_TASK_DISPATCHER,
-      SCHEDULED_TASK_REPOSITORY,
       SESSION_ADMISSION,
     } = await import("../dist/common/tokens.js")
     const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
     const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
+    const { SCHEDULED_TASK_SNAPSHOTS } = await import("../dist/modules/scheduled-tasks/scheduled-task.providers.js")
     const { SystemModule } = await import("../dist/modules/system/system.module.js")
     const ownerCalls: Array<string | undefined> = []
     const upstream = createServer((request, response) => {
@@ -1023,8 +1023,8 @@ describe("kokoro-bff versioned HTTP contracts", () => {
       .useValue(new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } }))
       .overrideProvider(PROJECT_SERVICE)
       .useValue({ list: readLocalDefinitions, find: unexpected, skillSelection: unexpected, replaceSkillSelection: unexpected })
-      .overrideProvider(SCHEDULED_TASK_REPOSITORY)
-      .useValue({ readScheduledTaskSnapshots: readLocalDefinitions })
+      .overrideProvider(SCHEDULED_TASK_SNAPSHOTS)
+      .useValue({ snapshots: readLocalDefinitions })
     for (const token of [AGENT_CANCELLATION_DISPATCHER, AGENT_DISPATCH_DISPATCHER, AGUI_PROJECTOR, SCHEDULED_TASK_DISPATCHER]) {
       builder.overrideProvider(token).useValue(null)
     }
