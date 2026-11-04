@@ -1,6 +1,6 @@
 import "reflect-metadata"
 import { Test } from "@nestjs/testing"
-import { BFF_CONFIG, BFF_DATABASE, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_CONFIG, BFF_DATABASE, PROJECT_LOOKUP, PROJECT_PINS, SESSION_ADMISSION } from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
 import { ProjectsModule } from "../dist/modules/projects/projects.module.js"
 import assert from "node:assert/strict"
@@ -27,7 +27,6 @@ async function fixture(t) {
   const calls = []
   let saved = null
   const projects = {
-    find: async () => assert.fail("pin requests must use the scoped pin owner methods"),
     listPins: async (q) => {
       calls.push(["read", q])
       return q.projectId === "foreign" ? null : { items: saved ? [saved] : [], nextPosition: null }
@@ -69,10 +68,10 @@ async function fixture(t) {
       pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
       redis: Object.freeze({}),
     })
-    .overrideProvider(PROJECT_SERVICE)
+    .overrideProvider(PROJECT_PINS)
     .useValue(projects)
-    .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
-    .useValue(null)
+    .overrideProvider(PROJECT_LOOKUP)
+    .useValue({ find: () => assert.fail("pin requests must use the scoped pin owner methods") })
     .overrideProvider(SESSION_ADMISSION)
     .useValue(admission)
     .compile()

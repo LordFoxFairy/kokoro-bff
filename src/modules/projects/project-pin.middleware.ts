@@ -3,6 +3,8 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import {
   BFF_CONFIG,
   BFF_POOL,
+  PROJECT_PINS,
+  PROJECT_TASK_READER,
   PROJECT_SERVICE,
   PROJECT_SKILL_SELECTION_PROVIDER,
   SKILL_AUTHORIZATION,
@@ -13,7 +15,8 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { Pool } from "pg"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
-import type { ProjectPinProvider } from "../../http/routes/project-pin.js"
+import type { ProjectPinProvider } from "../../infrastructure/postgres/project-pin.js"
+import type { ProjectTaskReader } from "../../infrastructure/postgres/project-repository.js"
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import {
   handleProjectSkillSelectionRequest,
@@ -43,7 +46,9 @@ export class ProjectPinMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(PROJECT_SERVICE) private readonly projectService: ProjectPinProvider & ProjectCoreReadProvider,
+    @Inject(PROJECT_SERVICE) private readonly projectService: ProjectCoreReadProvider,
+    @Inject(PROJECT_PINS) private readonly pins: ProjectPinProvider,
+    @Inject(PROJECT_TASK_READER) private readonly readTasks: ProjectTaskReader,
     @Inject(PROJECT_SKILL_SELECTION_PROVIDER) private readonly projectSkillSelection: ProjectSkillSelectionProvider,
     @Inject(SKILL_INSTALLATION_CLIENT) private readonly installationClient: SkillInstallationConnectClient | null,
     @Inject(SKILL_AUTHORIZATION) private readonly skillAuthorization: Pick<SkillAuthorizationClient, "check">,
@@ -83,8 +88,8 @@ export class ProjectPinMiddleware implements NestMiddleware {
       )
       .then((handled) => handled || handleProjectResourceReadRequest(request, response, this.config, this.admission, this.projectService))
       .then((handled) => handled || handleProjectResourceListRequest(request, response, this.config, this.admission, this.projectService))
-      .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.projectService))
-      .then((handled) => handled || handleProjectPinRequest(request, response, this.config, this.admission, this.projectService))
+      .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.projectService, this.readTasks))
+      .then((handled) => handled || handleProjectPinRequest(request, response, this.config, this.admission, this.pins))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

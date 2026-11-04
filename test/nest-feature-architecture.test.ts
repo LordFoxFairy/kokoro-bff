@@ -315,7 +315,6 @@ test("ProjectsModule owns the project command/read adapters and provider", async
   assert.match(mutationMiddleware, /ProjectMutationMiddleware/u)
   assert.match(mutationMiddleware, /PROJECT_IDEMPOTENCY/u)
   assert.match(mutationMiddleware, /handleProjectMutationBusiness/u)
-  assert.match(nativeRoute, /tasks\(scope/u)
   assert.match(middleware, /handleProjectSkillSelectionRequest/u)
   assert.match(middleware, /handleProjectSkillInstallationRequest/u)
   assert.match(accessModule, /provide: PROJECT_SKILL_SELECTION_PROVIDER/u)

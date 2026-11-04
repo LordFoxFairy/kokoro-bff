@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectPinProvider } from "../../infrastructure/postgres/project-pin.js"
 import { projectPinId, projectPinInstant } from "../../domain/project/pin.js"
 import { parseProjectPinInput, parseProjectPinQuery, encodeProjectPinCursor } from "../project-pin-input.js"
 import { readBodyBeforeDeadline, rawHeaderCount } from "../request-body.js"
@@ -17,14 +17,12 @@ export class ProjectPinAdmissionError extends Error {
   }
 }
 
-export type ProjectPinProvider = Pick<ProjectService, "listPins" | "setPin">
-
 export async function projectPinRoute(
   request: IncomingMessage,
   response: ServerResponse,
   context: RequestContext,
   path: readonly string[],
-  store: ProjectPinProvider | null,
+  store: ProjectPinProvider,
   deadlineAt: number,
   currentAdmission: (signal: AbortSignal) => Promise<void>,
 ): Promise<void> {
@@ -95,7 +93,6 @@ export async function projectPinRoute(
       isPinned = parseProjectPinInput(bytes)
     }
     await within(() => currentAdmission(controller.signal))
-    if (!store) throw new Error("project_pin_unavailable")
     let data: unknown
     if (query) {
       const result = await within(() => store.listPins({ ...scope, ...query, signal: controller.signal, deadlineAt }))

@@ -18,14 +18,15 @@ import { idempotencyKey, pathOf, readBody, requestId } from "../request.js"
 import { reply, send } from "../response.js"
 import { parseProjectResource } from "../project-resource-input.js"
 import { StorageUploadClient } from "../../infrastructure/clients/storage/client.js"
-import { projectPinRoute, ProjectPinAdmissionError, type ProjectPinProvider } from "./project-pin.js"
+import type { ProjectPinProvider } from "../../infrastructure/postgres/project-pin.js"
+import type { ProjectTaskReader } from "../../infrastructure/postgres/project-repository.js"
+import { projectPinRoute, ProjectPinAdmissionError } from "./project-pin.js"
 import { projectResourceReadRoute, type ProjectResourceReadClientFactory, type ProjectResourceReadSpooler } from "./project-resource-read.js"
 
 export type ProjectCoreReadProvider = Readonly<{
   list(scope: Readonly<{ tenantId: string; subjectId: string }>): Promise<readonly unknown[]>
   find(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<unknown | null>
   revisions(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<readonly unknown[] | null>
-  tasks(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string): Promise<readonly unknown[] | null>
   deletion(scope: Readonly<{ tenantId: string; subjectId: string }>, projectId: string, signal: AbortSignal): Promise<unknown | null>
   rename(
     scope: Readonly<{ tenantId: string; subjectId: string }>,
@@ -620,6 +621,7 @@ export async function handleProjectCoreReadRequest(
   config: BffConfig,
   admission: SessionAdmission,
   projects: ProjectCoreReadProvider | null,
+  readTasks: ProjectTaskReader,
 ): Promise<boolean> {
   if (!isProjectCoreReadRequest(request)) return false
   const id = requestId(request)
@@ -646,7 +648,7 @@ export async function handleProjectCoreReadRequest(
     const path = (request.url ?? "").split("?", 1)[0] ?? ""
     const projectId = path === "/v1/projects" ? null : path.slice("/v1/projects/".length)
     if (projectId !== null && projectId.endsWith("/tasks")) {
-      const tasks = await projects.tasks(scope, projectId.slice(0, -"/tasks".length))
+      const tasks = await readTasks(scope, projectId.slice(0, -"/tasks".length))
       if (abort.signal.aborted || response.destroyed || response.writableEnded) return true
       send(response, tasks === null ? 404 : 200, tasks === null ? failure("project_not_found", "Project was not found", id) : ok({ tasks }, id))
       return true
@@ -686,7 +688,7 @@ export async function handleProjectPinRequest(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
-  projectPins: ProjectPinProvider | null,
+  projectPins: ProjectPinProvider,
 ): Promise<boolean> {
   if (!isProjectPinRequest(request)) return false
   const id = requestId(request)

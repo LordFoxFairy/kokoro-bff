@@ -1,6 +1,6 @@
-import type { ProjectPinList, ProjectPinPosition, ProjectPinState } from "../../domain/project/pin.js"
+import type { ProjectPinPosition } from "../../domain/project/pin.js"
 import type { ProjectMcpRecommendation, ProjectMcpRecommendations } from "../../domain/project/mcp-recommendations.js"
-import type { Project, ProjectInstructionRevision, Task } from "../../contracts/index.js"
+import type { Project, ProjectInstructionRevision } from "../../contracts/index.js"
 
 export type ProjectOwnerScope = Readonly<{
   tenantId: string
@@ -40,8 +40,6 @@ export type ProjectPinQuery = ProjectOwnerScope &
   Readonly<{ projectId: string | null; limit: number; position: ProjectPinPosition | null; signal: AbortSignal; deadlineAt: number }>
 export type SetProjectPin = ProjectOwnerScope & Readonly<{ projectId: string; isPinned: boolean; signal: AbortSignal; deadlineAt: number }>
 export interface ProjectRepository {
-  listProjectPins(input: ProjectPinQuery): Promise<ProjectPinList | null>
-  setProjectPin(input: SetProjectPin): Promise<ProjectPinState | null>
   projectMcpRecommendations(input: ProjectMcpRecommendationQuery): Promise<ProjectMcpRecommendations | null>
   replaceProjectMcpRecommendations(input: ReplaceProjectMcpRecommendations): Promise<ReplaceProjectMcpRecommendationsResult>
   deleteProject(
@@ -61,7 +59,6 @@ export interface ProjectRepository {
   instructionRevisions(scope: ProjectOwnerScope, idOrSlug: string): Promise<ProjectInstructionRevision[] | null>
   projectSkillSelection(scope: ProjectOwnerScope, projectId: string): Promise<ProjectSkillSelection | null>
   replaceProjectSkillSelection(command: ReplaceProjectSkillSelectionCommand): Promise<ReplaceProjectSkillSelectionResult>
-  listTasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null>
 }
 
 export type ProjectMcpRecommendationQuery = ProjectOwnerScope & Readonly<{ projectId: string; signal: AbortSignal; deadlineAt: number }>

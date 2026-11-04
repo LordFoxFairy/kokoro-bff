@@ -1,5 +1,3 @@
-import { listProjectPins, setProjectPin } from "./project-pin.js"
-import type { ProjectPinQuery, SetProjectPin } from "../../application/projects/project-repository.js"
 import { readProjectMcpRecommendations, replaceProjectMcpRecommendations } from "./project-mcp-recommendations.js"
 import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations } from "../../application/projects/project-repository.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
@@ -103,15 +101,31 @@ export function createProjectLookup(pool: Pick<Pool, "query">): ProjectLookup {
   return { find: (scope, idOrSlug) => findOwnedProject(pool, scope, idOrSlug) }
 }
 
+export function createProjectTaskReader(pool: Pick<Pool, "query">) {
+  return async function readProjectTasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null> {
+    const project = await findOwnedProject(pool, scope, projectId)
+    if (project === null) return null
+    const result = await pool.query<ProjectTaskRow>(
+      `SELECT task_id, tenant_id, project_id, title, status, updated_at
+         FROM bff_project_task
+        WHERE tenant_id = $1 AND project_id = $2
+          AND EXISTS (
+            SELECT 1 FROM bff_project
+             WHERE bff_project.tenant_id = bff_project_task.tenant_id
+               AND bff_project.project_id = bff_project_task.project_id
+               AND bff_project.owner_id = $3 AND bff_project.deleted_at IS NULL
+          )
+        ORDER BY updated_at DESC, task_id ASC`,
+      [scope.tenantId, project.id, scope.subjectId],
+    )
+    return result.rows.map(taskFromRow)
+  }
+}
+
+export type ProjectTaskReader = ReturnType<typeof createProjectTaskReader>
+
 export class PostgresProjectRepository implements ProjectRepository {
   public constructor(private readonly database: PostgresBffDatabase) {}
-
-  public listProjectPins(input: ProjectPinQuery) {
-    return listProjectPins(this.database, input)
-  }
-  public setProjectPin(input: SetProjectPin) {
-    return setProjectPin(this.database, input)
-  }
 
   public projectMcpRecommendations(input: ProjectMcpRecommendationQuery) {
     return readProjectMcpRecommendations(this.database, input)
@@ -230,25 +244,6 @@ export class PostgresProjectRepository implements ProjectRepository {
   }
   public replaceProjectSkillSelection(command: ReplaceProjectSkillSelectionCommand): Promise<ReplaceProjectSkillSelectionResult> {
     return replaceProjectSkillSelection(this.database, command)
-  }
-
-  public async listTasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null> {
-    const project = await this.findProject(scope, projectId)
-    if (project === null) return null
-    const result = await this.database.pool.query<ProjectTaskRow>(
-      `SELECT task_id, tenant_id, project_id, title, status, updated_at
-         FROM bff_project_task
-        WHERE tenant_id = $1 AND project_id = $2
-          AND EXISTS (
-            SELECT 1 FROM bff_project
-             WHERE bff_project.tenant_id = bff_project_task.tenant_id
-               AND bff_project.project_id = bff_project_task.project_id
-               AND bff_project.owner_id = $3 AND bff_project.deleted_at IS NULL
-          )
-        ORDER BY updated_at DESC, task_id ASC`,
-      [scope.tenantId, project.id, scope.subjectId],
-    )
-    return result.rows.map(taskFromRow)
   }
 
   public deleteProject(

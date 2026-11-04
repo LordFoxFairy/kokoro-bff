@@ -1,19 +1,12 @@
-import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations, ProjectPinQuery, SetProjectPin } from "./projects/project-repository.js"
+import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations } from "./projects/project-repository.js"
 import { createHash } from "node:crypto"
 
-import type { Project, ProjectInstructionRevision, Task } from "../contracts/index.js"
+import type { Project, ProjectInstructionRevision } from "../contracts/index.js"
 import type { DeleteProjectResult, ProjectDeletionResource, ProjectOwnerScope, ProjectRepository, RenameProjectResult } from "./projects/project-repository.js"
 
 /** Project use cases. HTTP handlers depend on this service, not on SQL adapters. */
 export class ProjectService {
   public constructor(private readonly repository: ProjectRepository) {}
-
-  public listPins(input: ProjectPinQuery) {
-    return this.repository.listProjectPins(input)
-  }
-  public setPin(input: SetProjectPin) {
-    return this.repository.setProjectPin(input)
-  }
 
   public mcpRecommendations(input: ProjectMcpRecommendationQuery) {
     return this.repository.projectMcpRecommendations(input)
@@ -64,9 +57,6 @@ export class ProjectService {
         .update(JSON.stringify(["project.skill-selection:v1", projectId, installationIds]), "utf8")
         .digest("hex"),
     })
-  }
-  public tasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null> {
-    return this.repository.listTasks(scope, projectId)
   }
   public delete(scope: ProjectOwnerScope, projectId: string, key: string, requestId: string, signal: AbortSignal): Promise<DeleteProjectResult> {
     const fingerprint = createHash("sha256")

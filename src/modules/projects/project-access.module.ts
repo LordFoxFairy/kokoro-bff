@@ -1,9 +1,18 @@
 import { Module } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
-import { BFF_DATABASE, BFF_POOL, PROJECT_LOOKUP, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER } from "../../common/tokens.js"
+import {
+  BFF_DATABASE,
+  BFF_POOL,
+  PROJECT_LOOKUP,
+  PROJECT_PINS,
+  PROJECT_TASK_READER,
+  PROJECT_SERVICE,
+  PROJECT_SKILL_SELECTION_PROVIDER,
+} from "../../common/tokens.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import type { Pool } from "pg"
-import { createProjectLookup, PostgresProjectRepository } from "../../infrastructure/postgres/project-repository.js"
+import { createProjectLookup, createProjectTaskReader, PostgresProjectRepository } from "../../infrastructure/postgres/project-repository.js"
+import { createProjectPins } from "../../infrastructure/postgres/project-pin.js"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
 import { ProjectService } from "../../application/project-service.js"
 import type { ProjectSkillSelectionProvider } from "../../http/routes/project-skill-selection.js"
@@ -12,6 +21,8 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
 @Module({
   imports: [DatabaseModule],
   providers: [
+    { provide: PROJECT_PINS, inject: [BFF_DATABASE], useFactory: createProjectPins },
+    { provide: PROJECT_TASK_READER, inject: [BFF_POOL], useFactory: createProjectTaskReader },
     { provide: PROJECT_LOOKUP, inject: [BFF_POOL], useFactory: createProjectLookup },
     {
       provide: PROJECT_SERVICE,
@@ -32,6 +43,6 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
       },
     },
   ],
-  exports: [PROJECT_LOOKUP, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER],
+  exports: [PROJECT_LOOKUP, PROJECT_PINS, PROJECT_TASK_READER, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER],
 })
 export class ProjectAccessModule {}

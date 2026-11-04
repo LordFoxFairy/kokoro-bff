@@ -174,3 +174,12 @@ export function setProjectPin(database: PostgresBffDatabase, input: SetProjectPi
     false,
   )
 }
+
+export function createProjectPins(database: PostgresBffDatabase) {
+  return {
+    listPins: listProjectPins.bind(null, database),
+    setPin: setProjectPin.bind(null, database),
+  }
+}
+
+export type ProjectPinProvider = ReturnType<typeof createProjectPins>

@@ -30,6 +30,8 @@ test("the compiled production AppModule resolves its real provider graph without
     CHAT_MOVE,
     CHAT_TURN_SERVICE,
     PROJECT_LOOKUP,
+    PROJECT_PINS,
+    PROJECT_TASK_READER,
     PROJECT_SERVICE,
     PROJECT_SKILL_SELECTION_PROVIDER,
     RUN_DISPLAY_PROVIDER,
@@ -89,6 +91,8 @@ test("the compiled production AppModule resolves its real provider graph without
       [AgentRunsModule, RUN_FINAL_ANSWER_LOOKUP],
       [AccountModule, PERSONALIZATION_PROVIDER],
       [ProjectAccessModule, PROJECT_LOOKUP],
+      [ProjectAccessModule, PROJECT_PINS],
+      [ProjectAccessModule, PROJECT_TASK_READER],
       [ProjectAccessModule, PROJECT_SERVICE],
       [ProjectAccessModule, PROJECT_SKILL_SELECTION_PROVIDER],
       [SkillInstallationAccessModule, SKILL_INSTALLATION_CLIENT],
@@ -102,6 +106,8 @@ test("the compiled production AppModule resolves its real provider graph without
     const lookup = projectAccess.get(PROJECT_LOOKUP, { strict: true })
     assert.deepEqual(Reflect.ownKeys(lookup), ["find"], "lookup must not expose Project mutations or another capability")
     assert.equal(typeof lookup.find, "function")
+    assert.deepEqual(Reflect.ownKeys(projectAccess.get(PROJECT_PINS, { strict: true })), ["listPins", "setPin"])
+    assert.equal(typeof projectAccess.get(PROJECT_TASK_READER, { strict: true }), "function")
     assert.notEqual(lookup, projectAccess.get(PROJECT_SERVICE, { strict: true }))
     const reader = module.select(AgentRunsModule).get(AGENT_RUNS_READER, { strict: true })
     assert.notEqual(reader, module.select(AgentDispatchModule).get(AGENT_DISPATCH_OUTBOX, { strict: true }))

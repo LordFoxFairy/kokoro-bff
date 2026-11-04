@@ -1073,7 +1073,7 @@ import { PostgresProjectScopeReleaseOutboxRepository } from "../dist/infrastruct
 import { ProjectScopeReleaseOutboxDispatcher } from "../dist/application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../dist/infrastructure/clients/storage/scope-release-client.js"
 import { ScheduledTaskService } from "../dist/application/scheduled-task-service.js"
-import { PostgresProjectRepository } from "../dist/infrastructure/postgres/project-repository.js"
+import { createProjectTaskReader, PostgresProjectRepository } from "../dist/infrastructure/postgres/project-repository.js"
 import { createOwnedRunProcessReader } from "../dist/infrastructure/postgres/agui-process-page.js"
 import { PostgresChatSessionStore } from "../dist/infrastructure/postgres/chat-session-store.js"
 import { PostgresScheduledTaskRepository } from "../dist/infrastructure/postgres/scheduled-task-repository.js"
@@ -1391,6 +1391,15 @@ integrationTest("R237 HTTP Project active and denied ID-slug matrix leaves compl
       const f = await r237Fixture(t, "project-matrix")
       const active = await f.project()
       const hidden = await f.project(kind)
+      const taskId = `task_${randomUUID()}`
+      const taskUpdatedAt = "2026-10-27T00:00:00.000Z"
+      await f.pool.query("INSERT INTO bff_project_task(task_id,tenant_id,project_id,title,status,updated_at) VALUES($1,$2,$3,$4,'todo',$5)", [
+        taskId,
+        f.tenant,
+        active.id,
+        "Owned task",
+        taskUpdatedAt,
+      ])
       const list = await f.request("projects")
       assert.equal(list.status, 200)
       assert.deepEqual(
@@ -1414,7 +1423,13 @@ integrationTest("R237 HTTP Project active and denied ID-slug matrix leaves compl
         assert.equal((await f.request(`projects/${ref}`, "PATCH", { instruction: `Allowed ${ref}` })).status, 200)
         assert.equal((await f.request(`projects/${ref}/skill-selection`, "PUT", { installation_ids: [] })).status, 200)
         assert.equal((await f.request(`projects/${ref}/instruction-revisions`)).status, 200)
-        assert.equal((await f.request(`projects/${ref}/tasks`)).status, 200)
+        const beforeTaskRead = await f.facts()
+        const taskPage = await f.request(`projects/${ref}/tasks`)
+        assert.equal(taskPage.status, 200)
+        assert.deepEqual(taskPage.body.data, {
+          tasks: [{ id: taskId, project_id: active.id, title: "Owned task", status: "todo", updated_at: taskUpdatedAt }],
+        })
+        assert.deepEqual(await f.facts(), beforeTaskRead)
         assert.equal((await f.request("scheduled-tasks", "POST", r237Schedule(ref))).status, 200)
       }
       assert.equal((await f.pool.query("SELECT instruction FROM bff_project WHERE project_id=$1", [active.id])).rows[0].instruction, `Allowed ${active.slug}`)
@@ -1622,7 +1637,9 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
       } else {
         const repository = new PostgresProjectRepository(database)
         const result =
-          operation === "revisions" ? await repository.instructionRevisions(f.scope, project.id) : await repository.listTasks(f.scope, project.slug)
+          operation === "revisions"
+            ? await repository.instructionRevisions(f.scope, project.id)
+            : await createProjectTaskReader(database.pool)(f.scope, project.slug)
         assert.deepEqual(result, [])
       }
       assert.equal(changed, true, "real pre-read-to-read race must execute")
