@@ -330,14 +330,21 @@ test("public project resource contract is a bounded single file with explicit as
     assert.ok(source.split("    ProjectResourceUploadResponse:")[1].split("    RequestId:")[0].includes(field))
 })
 
-test("HTTP composition performs Connect upload and exact presigned PUT then replays without another asset", async () => {
+test("HTTP composition performs Connect upload and exact presigned PUT then replays without another asset", async (t) => {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { createBffServer } = await import("../dist/bootstrap/server.js")
+  const { BFF_CONFIG, BFF_DATABASE, PROJECT_SCOPE_RELEASE_DISPATCHER, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER, SESSION_ADMISSION } =
+    await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
+  const { PostgresIdempotencyRepository } = await import("../dist/infrastructure/postgres/idempotency-repository.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const { StorageService, UploadState, ScanState, UploadPurpose } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const f = fixture(),
     servers = []
+  let app
   const listen = async (server) => {
     servers.push(server)
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
@@ -438,18 +445,36 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
       }
       await persist(key, receipt)
     }
-    const bff = await listen(
-      createBffServer(config, {
-        businessStore: store,
-        projectService,
-        readiness: async () => {},
-        sessionAdmission: {
-          async verify() {
-            return { ok: true, identity: { namespace: "tenant-1", userId: "subject-1" } }
-          },
-        },
-      }),
-    )
+    // The real upload middleware constructs its repository directly. Keep this
+    // test's original receipt double at that boundary instead of simulating SQL.
+    for (const operation of ["getReceipt", "claimReceipt", "putReceipt", "compareAndSetReceipt", "releaseReceipt"]) {
+      t.mock.method(PostgresIdempotencyRepository.prototype, operation, (...args) => store[operation](...args))
+    }
+    const admission = {
+      async verify() {
+        return { ok: true, identity: { namespace: "tenant-1", userId: "subject-1" } }
+      },
+    }
+    const module = await Test.createTestingModule({ imports: [ProjectsModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({
+        pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
+        redis: Object.freeze({}),
+      })
+      .overrideProvider(PROJECT_SERVICE)
+      .useValue(projectService)
+      .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
+      .useValue(null)
+      .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
+      .useValue(null)
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(admission)
+      .compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+    await app.listen(0, "127.0.0.1")
+    const bff = await app.getUrl()
     const upload = async (files = 1) => {
       const form = new FormData()
       for (let i = 0; i < files; i++) form.append("files", new File([f.input.bytes], "fox.txt", { type: "text/plain" }))
@@ -487,9 +512,13 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
     await response.arrayBuffer()
     assert.equal(completes, 1)
   } finally {
-    for (const server of servers.reverse()) {
-      server.closeAllConnections()
-      await new Promise((resolve) => server.close(resolve))
+    try {
+      await app?.close()
+    } finally {
+      for (const server of servers.reverse()) {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
     }
   }
 })

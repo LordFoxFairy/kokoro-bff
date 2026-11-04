@@ -1,3 +1,15 @@
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
+import {
+  BFF_CONFIG,
+  BFF_DATABASE,
+  PROJECT_SCOPE_RELEASE_DISPATCHER,
+  PROJECT_SERVICE,
+  PROJECT_SKILL_SELECTION_PROVIDER,
+  SESSION_ADMISSION,
+} from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { ProjectsModule } from "../dist/modules/projects/projects.module.js"
 import { recommendationsParentBaseline } from "../scripts/project-mcp-recommendations-public-contract.mjs"
 import { AssetOrigin } from "../src/generated/storage-connect/kokoro/storage/v3/storage_pb.ts"
 import assert from "node:assert/strict"
@@ -368,9 +380,9 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { ConnectError, Code } = await import("@connectrpc/connect")
   const { StorageService } = await import("../src/generated/storage-connect/kokoro/storage/v3/storage_pb.ts")
-  const { createBffServer } = await import("../src/bootstrap/server.ts")
   const { loadConfig } = await import("../src/config/runtime.ts")
   const servers = []
+  let app
   const calls = []
   let deleted = false
   let originalCommand = null
@@ -448,19 +460,33 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
       KOKORO_BFF_STORAGE_SECRET: "fixture-secret",
       KOKORO_STORAGE_OBJECT_ORIGIN: objectOrigin,
     })
-    const bff = await listen(
-      createBffServer(cfg, {
-        readiness: async () => {},
-        businessStore: store,
-        sessionAdmission: {
-          verify: async ({ cookie }) => {
-            const token = cookie.slice("kokoro-issuer.session_token=".length)
-            admissions++
-            return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "other" : "subject-1" } }
-          },
-        },
-      }),
-    )
+    const admission = {
+      verify: async ({ cookie }) => {
+        const token = cookie.slice("kokoro-issuer.session_token=".length)
+        admissions++
+        return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "other" : "subject-1" } }
+      },
+    }
+    const module = await Test.createTestingModule({ imports: [ProjectsModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(cfg)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({
+        pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
+        redis: Object.freeze({}),
+      })
+      .overrideProvider(PROJECT_SERVICE)
+      .useValue(store.projectService)
+      .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
+      .useValue(null)
+      .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
+      .useValue(null)
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(admission)
+      .compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+    await app.listen(0, "127.0.0.1")
+    const bff = await app.getUrl()
     const headers = {
       cookie: "kokoro-issuer.session_token=user",
       origin: "https://web.example.test",
@@ -495,9 +521,13 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
       ["delete", "delete"],
     )
   } finally {
-    for (const server of servers.reverse()) {
-      server.closeAllConnections()
-      await new Promise((resolve) => server.close(resolve))
+    try {
+      await app?.close()
+    } finally {
+      for (const server of servers.reverse()) {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
     }
   }
 })

@@ -8,7 +8,6 @@ import { join } from "node:path"
 import { createHash } from "node:crypto"
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf"
 import * as wire from "../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts"
-import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { SkillPackageInspectionConnectClient } from "../src/infrastructure/clients/platform/skill-package-inspection-connect.ts"
 
@@ -159,35 +158,6 @@ async function withProjectContent(run) {
       }
     },
   }
-  const receipts = new Map()
-  const store = {
-    async ready() {},
-    async close() {},
-    async getReceipt(scope) {
-      return receipts.get(scope) ?? null
-    },
-    async claimReceipt(scope, fingerprint) {
-      const prior = receipts.get(scope)
-      if (prior) return { claimed: false, receipt: prior }
-      const receipt = { fingerprint, status: 102, body: {} }
-      receipts.set(scope, receipt)
-      return { claimed: true, receipt }
-    },
-    async putReceipt(scope, receipt) {
-      receipts.set(scope, receipt)
-    },
-    async compareAndSetReceipt(scope, fingerprint, expected, replacement) {
-      const current = receipts.get(scope)
-      if (!current || current.fingerprint !== fingerprint || JSON.stringify(current) !== JSON.stringify(expected))
-        return { updated: false, receipt: current ?? null }
-      receipts.set(scope, replacement)
-      return { updated: true, receipt: replacement }
-    },
-    async releaseReceipt(scope, fingerprint) {
-      const current = receipts.get(scope)
-      if (current?.fingerprint === fingerprint) receipts.delete(scope)
-    },
-  }
   const projectService = {
     find: async (identity, ref) => {
       state.projectReads.push({ identity, ref })
@@ -219,8 +189,7 @@ async function withProjectContent(run) {
     platformProjection: { baseUrl: nativeOrigin, credentialFile, timeoutMs: 1000 },
     skillDraft: { enabled: false, platformBaseUrl: null, credentialFile: null, timeoutMs: 1000 },
   }
-  const server = createBffServer(config, {
-    businessStore: store,
+  const dependencies = {
     projectService,
     skillShareRepository: { findActive: async () => null },
     installationClient,
@@ -241,16 +210,67 @@ async function withProjectContent(run) {
         throw Error("Read is not a management action")
       },
     },
-  })
-  const base = await listen(server)
-  const client = new SkillPackageInspectionConnectClient(nativeOrigin, credentialFile, 1000)
+  }
+  let app
   try {
-    await run({ state, base, client, bytes, digest, text, store })
+    await import("reflect-metadata")
+    const { Test } = await import("@nestjs/testing")
+    const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
+    const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+    const {
+      BFF_CONFIG,
+      BFF_DATABASE,
+      PROJECT_SERVICE,
+      SKILL_SHARE_REPOSITORY,
+      SKILL_INSTALLATION_CLIENT,
+      SKILL_PRODUCT_CLIENT,
+      SESSION_ADMISSION,
+      SKILL_AUTHORIZATION,
+      PROJECT_SCOPE_RELEASE_DISPATCHER,
+    } = await import("../dist/common/tokens.js")
+    const unexpectedStorage = () => {
+      throw new Error("Skill HTTP fixture must not touch BFF storage")
+    }
+    const module = await Test.createTestingModule({ imports: [ProjectsModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({ pool: { query: unexpectedStorage, connect: unexpectedStorage }, redis: {}, ready: unexpectedStorage })
+      .overrideProvider(PROJECT_SERVICE)
+      .useValue({
+        ...dependencies.projectService,
+        skillSelection: unexpectedStorage,
+        replaceSkillSelection: unexpectedStorage,
+      })
+      .overrideProvider(SKILL_SHARE_REPOSITORY)
+      .useValue(dependencies.skillShareRepository)
+      .overrideProvider(SKILL_INSTALLATION_CLIENT)
+      .useValue(dependencies.installationClient)
+      .overrideProvider(SKILL_PRODUCT_CLIENT)
+      .useValue(dependencies.skillProductClient)
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(dependencies.sessionAdmission)
+      .overrideProvider(SKILL_AUTHORIZATION)
+      .useValue(dependencies.skillAuthorization)
+      .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
+      .useValue(null)
+      .compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+    await app.listen(0, "127.0.0.1")
+    const base = await app.getUrl()
+    const client = new SkillPackageInspectionConnectClient(nativeOrigin, credentialFile, 1000)
+    await run({ state, base, client, bytes, digest, text })
   } finally {
-    await close(server)
-    await close(native)
-    await close(object)
-    await rm(directory, { recursive: true, force: true })
+    try {
+      app?.getHttpServer().closeAllConnections()
+      await app?.close()
+    } finally {
+      try {
+        await Promise.all([close(native), close(object)])
+      } finally {
+        await rm(directory, { recursive: true, force: true })
+      }
+    }
   }
 }
 

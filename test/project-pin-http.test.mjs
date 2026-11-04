@@ -1,9 +1,13 @@
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { ProjectsModule } from "../dist/modules/projects/projects.module.js"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { readFile } from "node:fs/promises"
 import { load } from "js-yaml"
 import { fromJSONSchema } from "zod"
-import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 const spec = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
@@ -23,6 +27,7 @@ async function fixture(t) {
   const calls = []
   let saved = null
   const projects = {
+    find: async () => assert.fail("pin requests must use the scoped pin owner methods"),
     listPins: async (q) => {
       calls.push(["read", q])
       return q.projectId === "foreign" ? null : { items: saved ? [saved] : [], nextPosition: null }
@@ -56,15 +61,28 @@ async function fixture(t) {
     upstreams: {},
   }
   const admission = new SessionAdmissionDouble({ "pin-session": { namespace: "tenant", userId: "subject" } })
-  const server = createBffServer(config, { businessStore: null, projectService: projects, readiness: async () => undefined, sessionAdmission: admission })
-  await new Promise((r) => server.listen(0, "127.0.0.1", r))
-  t.after(async () => {
-    server.closeAllConnections()
-    await new Promise((r) => server.close(r))
-  })
+  const module = await Test.createTestingModule({ imports: [ProjectsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({
+      pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
+      redis: Object.freeze({}),
+    })
+    .overrideProvider(PROJECT_SERVICE)
+    .useValue(projects)
+    .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
+    .useValue(null)
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+  t.after(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
   const request = async (path, body, extra = {}, method) => {
     const r = await fetch(
-      `http://127.0.0.1:${server.address().port}${path}`,
+      `${base}${path}`,
       body === undefined
         ? { method: method ?? "GET", headers: { ...headers, ...extra } }
         : {

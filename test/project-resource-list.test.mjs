@@ -1,3 +1,15 @@
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
+import {
+  BFF_CONFIG,
+  BFF_DATABASE,
+  PROJECT_SCOPE_RELEASE_DISPATCHER,
+  PROJECT_SERVICE,
+  PROJECT_SKILL_SELECTION_PROVIDER,
+  SESSION_ADMISSION,
+} from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { ProjectsModule } from "../dist/modules/projects/projects.module.js"
 import "./project-resource-access.test.mjs"
 import "./project-resource-delete.test.mjs"
 import assert from "node:assert/strict"
@@ -289,10 +301,10 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { ConnectError, Code } = await import("@connectrpc/connect")
-  const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const servers = []
+  let app
   let calls = 0
   let unavailable = false
   const listen = async (server) => {
@@ -346,23 +358,37 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
       KOKORO_BFF_STORAGE_SECRET: "storage-secret",
       KOKORO_STORAGE_OBJECT_ORIGIN: "http://objects.test",
     })
-    const bff = await listen(
-      createBffServer(config, {
-        readiness: async () => {},
-        businessStore: { ready: async () => {}, close: async () => {} },
-        projectService: {
-          async find(scope, ref) {
-            return scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
-          },
-        },
-        sessionAdmission: {
-          async verify({ cookie }) {
-            const token = cookie.slice("kokoro-issuer.session_token=".length)
-            return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "other" : "subject-1" } }
-          },
-        },
-      }),
-    )
+    const projectService = {
+      async find(scope, ref) {
+        return scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
+      },
+    }
+    const admission = {
+      async verify({ cookie }) {
+        const token = cookie.slice("kokoro-issuer.session_token=".length)
+        return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "other" : "subject-1" } }
+      },
+    }
+    const module = await Test.createTestingModule({ imports: [ProjectsModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({
+        pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
+        redis: Object.freeze({}),
+      })
+      .overrideProvider(PROJECT_SERVICE)
+      .useValue(projectService)
+      .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
+      .useValue(null)
+      .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
+      .useValue(null)
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(admission)
+      .compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+    await app.listen(0, "127.0.0.1")
+    const bff = await app.getUrl()
     const get = async (path, token = "user") => {
       const response = await fetch(`${bff}/v1/projects/${path}`, {
         headers: {
@@ -399,9 +425,13 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
     assert.equal(result.body.data, undefined)
     assert.ok(!JSON.stringify(result.body).includes("private"))
   } finally {
-    for (const server of servers.reverse()) {
-      server.closeAllConnections()
-      await new Promise((resolve) => server.close(resolve))
+    try {
+      await app?.close()
+    } finally {
+      for (const server of servers.reverse()) {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
     }
   }
 })
