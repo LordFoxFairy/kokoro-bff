@@ -39,8 +39,9 @@ export async function authorizeChatRequest(
   context: RequestContext,
   businessPath: readonly string[],
   json: Readonly<Record<string, unknown>>,
-  store: ChatBusinessProvider,
+  store: ChatBusinessProvider & Readonly<{ signal?: AbortSignal }>,
 ): Promise<ChatAuthorization | null> {
+  store.signal?.throwIfAborted()
   if (businessPath[0] !== "sessions") return null
   const queryScope = privateChatQuery(request)
   if (!queryScope.ok) return queryScope
@@ -63,8 +64,11 @@ export async function authorizeChatRequest(
   // Existing Message resources are authorized by their current Conversation owner.
   // The raw Project ref remains a new-command precondition in the locked repository;
   // applying it here would reject an exact replay after a successful Move.
-  if (projectRef !== undefined && (await projectServiceOf(store).find(ownerScope, projectRef)) === null) {
-    return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
+  if (projectRef !== undefined) {
+    store.signal?.throwIfAborted()
+    const project = await projectServiceOf(store).find(ownerScope, projectRef)
+    store.signal?.throwIfAborted()
+    if (project === null) return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
   }
 
   if (isConversationCollection) {
@@ -74,10 +78,12 @@ export async function authorizeChatRequest(
 
   if (businessPath.length >= 2) {
     const conversationId = businessPath[1]
-    const currentConversation =
-      conversationId === undefined || conversationId === ""
-        ? null
-        : await chatServiceOf(store).findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
+    let currentConversation = null
+    if (conversationId !== undefined && conversationId !== "") {
+      store.signal?.throwIfAborted()
+      currentConversation = await chatServiceOf(store).findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
+      store.signal?.throwIfAborted()
+    }
     if (conversationId === undefined || conversationId === "" || currentConversation === null) {
       return { ok: false, status: 404, code: "session_not_found", message: "Session was not found" }
     }

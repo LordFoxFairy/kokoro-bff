@@ -1,4 +1,4 @@
-import { Inject, Injectable, Module, OnApplicationShutdown, OnModuleInit } from "@nestjs/common"
+import { BeforeApplicationShutdown, Inject, Injectable, Module, OnModuleInit } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
 import {
   AGENT_CANCELLATION_DISPATCHER,
@@ -22,7 +22,7 @@ import { Sha256StableIdGenerator } from "../../infrastructure/identifiers/schedu
 import { randomUUID } from "node:crypto"
 
 @Injectable()
-class AgentDispatchWorkerLifecycle implements OnModuleInit, OnApplicationShutdown {
+class AgentDispatchWorkerLifecycle implements OnModuleInit, BeforeApplicationShutdown {
   public constructor(
     @Inject(AGENT_DISPATCH_DISPATCHER) private readonly dispatch: AgentDispatchOutboxDispatcher | null,
     @Inject(AGENT_CANCELLATION_DISPATCHER) private readonly cancellation: AgentCancellationOutboxDispatcher | null,
@@ -33,9 +33,22 @@ class AgentDispatchWorkerLifecycle implements OnModuleInit, OnApplicationShutdow
     this.cancellation?.start()
   }
 
-  public async onApplicationShutdown(): Promise<void> {
-    await this.cancellation?.stop()
-    await this.dispatch?.stop()
+  public async beforeApplicationShutdown(): Promise<void> {
+    let failed = false
+    try {
+      await this.cancellation?.stop()
+    } catch {
+      failed = true
+    }
+    try {
+      await this.dispatch?.stop()
+    } catch {
+      failed = true
+    }
+    if (failed) {
+      process.exitCode = 1
+      throw new Error("bff_agent_dispatch_shutdown_failed")
+    }
   }
 }
 

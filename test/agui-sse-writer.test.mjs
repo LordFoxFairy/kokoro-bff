@@ -85,6 +85,53 @@ describe("AG-UI SSE writer", () => {
     assert.equal(response.writes.length, 1)
   })
 
+  it("retires a backpressured transport on its signal without leaking listeners or writing the next frame", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 })
+    const request = new RequestFixture()
+    const response = new ResponseFixture()
+    const transport = new AbortController()
+    response.writeResults.push(false, true)
+    const writer = new sse.AgUiSseWriter(
+      request,
+      response,
+      {
+        maxFrames: 10,
+        maxBytes: 64 * 1024,
+        maxDurationMs: 1000,
+      },
+      Date.now,
+      transport.signal,
+    )
+
+    let settled = false
+    const writing = writer.writeFrames([frame(1), frame(2)]).then((result) => {
+      settled = true
+      return result
+    })
+    try {
+      await new Promise((resolve) => setImmediate(resolve))
+      assert.equal(response.listenerCount("drain"), 1, "the write really reached backpressure")
+      transport.abort()
+      await new Promise((resolve) => setImmediate(resolve))
+      assert.equal(Date.now(), 1000, "the stream duration and its timer have not advanced")
+      assert.equal(settled, true, "transport retirement must wake the write before the duration timer fires")
+      assert.deepEqual(await writing, {
+        status: "aborted",
+        lastCursor: frame(1).cursor,
+        writtenFrames: 1,
+      })
+      assert.equal(response.writes.length, 1)
+      assert.equal(request.listenerCount("aborted"), 0)
+      for (const event of ["close", "error", "drain"]) assert.equal(response.listenerCount(event), 0)
+      assert.deepEqual(await writer.writeFrames([frame(2)]), { status: "aborted", lastCursor: null, writtenFrames: 0 })
+      assert.equal(response.writes.length, 1, "a retired transport never accepts a later frame")
+    } finally {
+      request.aborted = true
+      request.emit("aborted")
+      await Promise.allSettled([writing])
+    }
+  })
+
   it("bounds one connection by frame count and serialized bytes", async () => {
     assert.equal(typeof sse.AgUiSseWriter, "function")
     const request = new RequestFixture()
@@ -115,11 +162,16 @@ describe("AG-UI SSE writer", () => {
     let now = 100
     const request = new RequestFixture()
     const response = new ResponseFixture()
-    const writer = new sse.AgUiSseWriter(request, response, {
-      maxFrames: 10,
-      maxBytes: 64 * 1024,
-      maxDurationMs: 50,
-    }, () => now)
+    const writer = new sse.AgUiSseWriter(
+      request,
+      response,
+      {
+        maxFrames: 10,
+        maxBytes: 64 * 1024,
+        maxDurationMs: 50,
+      },
+      () => now,
+    )
     now = 151
 
     assert.deepEqual(await writer.writeFrames([frame(1)]), {

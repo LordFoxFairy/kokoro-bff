@@ -1,4 +1,4 @@
-import { Inject, Injectable, Module, MiddlewareConsumer, NestModule, OnApplicationShutdown, OnModuleInit, RequestMethod } from "@nestjs/common"
+import { BeforeApplicationShutdown, Inject, Injectable, Module, MiddlewareConsumer, NestModule, OnModuleInit, RequestMethod } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
 import {
   BFF_CONFIG,
@@ -49,7 +49,7 @@ function scheduledWorkerLog(event: { operation: string; result: "error"; errorCo
 }
 
 @Injectable()
-class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdown {
+class ScheduledTaskWorkerLifecycle implements OnModuleInit, BeforeApplicationShutdown {
   public constructor(
     @Inject(SCHEDULED_TASK_DISPATCHER) private readonly dispatcher: ScheduledTaskOutboxDispatcher | null,
     @Inject(SCHEDULED_AGENT_DISPATCHER) private readonly agentDispatcher: ScheduledAgentDispatcher | null,
@@ -62,10 +62,27 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, OnApplicationShutdow
     this.terminalConsumer?.start()
   }
 
-  public async onApplicationShutdown(): Promise<void> {
-    await this.terminalConsumer?.stop()
-    await this.agentDispatcher?.stop()
-    await this.dispatcher?.stop()
+  public async beforeApplicationShutdown(): Promise<void> {
+    let failed = false
+    try {
+      await this.terminalConsumer?.stop()
+    } catch {
+      failed = true
+    }
+    try {
+      await this.agentDispatcher?.stop()
+    } catch {
+      failed = true
+    }
+    try {
+      await this.dispatcher?.stop()
+    } catch {
+      failed = true
+    }
+    if (failed) {
+      process.exitCode = 1
+      throw new Error("bff_scheduled_task_shutdown_failed")
+    }
   }
 }
 

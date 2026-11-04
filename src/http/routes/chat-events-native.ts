@@ -6,9 +6,10 @@ import type { ProjectService } from "../../application/project-service.js"
 import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
 import type { AgUiProjectionConsumerRepository } from "../../application/agui/ports/agui-projection-repository.js"
-import { authorizeUserRequest } from "../../auth/user-admission.js"
+import { authenticateBrowserRequest, writeSessionCookies } from "../../auth/user-admission.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
-import { liveAgentSession } from "./agent.js"
+import { liveAgentSessionEvents } from "./agent.js"
+import { runAgUiHttpTransport } from "../../interfaces/http/agui/sse.js"
 import { pathOf, requestId } from "../request.js"
 import { failure } from "../../contracts/index.js"
 import { send } from "../response.js"
@@ -42,48 +43,42 @@ export async function handleChatEventsRequest(
 ): Promise<boolean> {
   if (!chatEventsPath(request)) return false
   const id = requestId(request)
-  try {
-    const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000), response)
-    if (!admitted.ok) {
-      send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
-      return true
+  await runAgUiHttpTransport(request, response, runtime, async (signal) => {
+    try {
+      signal.throwIfAborted()
+      const admitted = await authenticateBrowserRequest(request, config, admission, id, AbortSignal.any([signal, AbortSignal.timeout(10_000)]))
+      signal.throwIfAborted()
+      writeSessionCookies(response, admitted.setCookies)
+      if (!admitted.ok) {
+        send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+        return
+      }
+      const context = { requestId: id, identity: admitted.identity, platformAdmin: admitted.platformAdmin }
+      const businessPath = pathOf(request).slice(1)
+      signal.throwIfAborted()
+      const authorization = await authorizeChatRequest(request, context, businessPath, {}, { chatService: chat, projectService: projects, signal })
+      signal.throwIfAborted()
+      if (authorization === null) return
+      if (!authorization.ok) {
+        send(response, authorization.status, failure(authorization.code, authorization.message, id))
+        return
+      }
+      signal.throwIfAborted()
+      const conversation = await chat.findConversation(context.identity.namespace, context.identity.userId, businessPath[1] ?? "", authorization.projectRef)
+      signal.throwIfAborted()
+      if (conversation === null) {
+        send(response, 404, failure("session_not_found", "Session was not found", id))
+        return
+      }
+      signal.throwIfAborted()
+      await consumers.registerConsumer(context.identity.namespace, businessPath[1] ?? "", conversation.owner_id)
+      signal.throwIfAborted()
+      await liveAgentSessionEvents(request, response, config, context, businessPath[1] ?? "", projection, sourceProjectionActive, runtime, signal)
+      signal.throwIfAborted()
+    } catch {
+      if (!signal.aborted && !response.headersSent && !response.writableEnded && !response.destroyed)
+        send(response, 503, failure("agui_ledger_unavailable", "The durable AG-UI ledger is unavailable", id))
     }
-    const businessPath = pathOf(request).slice(1)
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, {}, { chatService: chat, projectService: projects })
-    if (authorization === null) return false
-    if (!authorization.ok) {
-      send(response, authorization.status, failure(authorization.code, authorization.message, id))
-      return true
-    }
-    const conversation = await chat.findConversation(
-      admitted.context.identity.namespace,
-      admitted.context.identity.userId,
-      businessPath[1] ?? "",
-      authorization.projectRef,
-    )
-    if (conversation === null) {
-      send(response, 404, failure("session_not_found", "Session was not found", id))
-      return true
-    }
-    await consumers.registerConsumer(admitted.context.identity.namespace, businessPath[1] ?? "", conversation.owner_id)
-    await liveAgentSession(
-      request,
-      response,
-      config,
-      admitted.context,
-      businessPath,
-      {},
-      null,
-      new Map(),
-      projection,
-      runtime,
-      sourceProjectionActive,
-      authorization,
-      chat,
-    )
-  } catch {
-    if (!response.headersSent && !response.writableEnded && !response.destroyed)
-      send(response, 503, failure("agui_ledger_unavailable", "The durable AG-UI ledger is unavailable", id))
-  }
+  })
   return true
 }

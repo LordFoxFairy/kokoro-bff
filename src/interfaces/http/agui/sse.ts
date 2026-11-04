@@ -1,5 +1,44 @@
 import { EventSchemas } from "@ag-ui/core"
 import type { IncomingMessage, ServerResponse } from "node:http"
+import type { AgUiSessionRuntime } from "../../../application/agui/session-runtime.js"
+
+/** Bind only this HTTP transport; the feature runtime owns its full physical settlement. */
+export async function runAgUiHttpTransport(
+  request: IncomingMessage,
+  response: ServerResponse,
+  runtime: AgUiSessionRuntime,
+  work: (signal: AbortSignal) => Promise<void>,
+): Promise<void> {
+  const accepted = await runtime.runHandler(async (retirement) => {
+    const client = new AbortController()
+    const onAborted = (): void => client.abort()
+    const onClose = (): void => {
+      if (!response.writableEnded) client.abort()
+    }
+    request.once("aborted", onAborted)
+    response.once("close", onClose)
+    const signal = AbortSignal.any([retirement, client.signal])
+    const retire = (): void => {
+      if (response.destroyed || response.writableEnded) return
+      if (response.headersSent) response.end()
+      else response.destroy()
+    }
+    signal.addEventListener("abort", retire, { once: true })
+    if (request.aborted || response.destroyed) client.abort()
+    if (signal.aborted) retire()
+    try {
+      signal.throwIfAborted()
+      await work(signal)
+    } catch (error) {
+      if (!signal.aborted) throw error
+    } finally {
+      request.off("aborted", onAborted)
+      response.off("close", onClose)
+      signal.removeEventListener("abort", retire)
+    }
+  })
+  if (!accepted && !response.destroyed && !response.writableEnded) response.destroy()
+}
 
 /** Match EventEncoder's SSE shape: one JSON AG-UI event per data frame. */
 export function agUiSseFrame(event: unknown, cursor: string): string {
@@ -39,17 +78,22 @@ export class AgUiSseWriter {
     private readonly response: ServerResponse,
     private readonly budget: AgUiSseBudget,
     private readonly now: () => number = Date.now,
+    private readonly signal?: AbortSignal,
   ) {
     if (
-      !Number.isSafeInteger(budget.maxFrames) || budget.maxFrames < 1
-      || !Number.isSafeInteger(budget.maxBytes) || budget.maxBytes < 1
-      || !Number.isSafeInteger(budget.maxDurationMs) || budget.maxDurationMs < 1
-    ) throw new Error("AG-UI SSE budget must contain positive safe integers")
+      !Number.isSafeInteger(budget.maxFrames) ||
+      budget.maxFrames < 1 ||
+      !Number.isSafeInteger(budget.maxBytes) ||
+      budget.maxBytes < 1 ||
+      !Number.isSafeInteger(budget.maxDurationMs) ||
+      budget.maxDurationMs < 1
+    )
+      throw new Error("AG-UI SSE budget must contain positive safe integers")
     this.startedAt = this.now()
   }
 
   private stopped(): boolean {
-    return this.request.aborted || this.response.destroyed || this.response.writableEnded
+    return this.signal?.aborted === true || this.request.aborted || this.response.destroyed || this.response.writableEnded
   }
 
   private durationExhausted(): boolean {
@@ -62,12 +106,16 @@ export class AgUiSseWriter {
     if (remainingMs <= 0) return Promise.resolve("budget_exhausted")
     return new Promise((resolve) => {
       let timer: ReturnType<typeof setTimeout>
+      let finished = false
       const finish = (result: DrainResult): void => {
+        if (finished) return
+        finished = true
         clearTimeout(timer)
         this.request.off("aborted", onAbort)
         this.response.off("close", onAbort)
         this.response.off("error", onAbort)
         this.response.off("drain", onDrain)
+        this.signal?.removeEventListener("abort", onAbort)
         resolve(result)
       }
       const onAbort = (): void => finish("aborted")
@@ -77,6 +125,8 @@ export class AgUiSseWriter {
       this.response.once("close", onAbort)
       this.response.once("error", onAbort)
       this.response.once("drain", onDrain)
+      this.signal?.addEventListener("abort", onAbort, { once: true })
+      if (this.stopped()) onAbort()
     })
   }
 

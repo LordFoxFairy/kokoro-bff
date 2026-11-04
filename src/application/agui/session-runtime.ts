@@ -81,11 +81,13 @@ export type AgUiLedgerWaitConfig = {
 
 type WaitDependencies = {
   random?: () => number
-  sleep?: (milliseconds: number) => Promise<void>
+  sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>
 }
 
 type WaitEntry = {
   inFlight: Promise<void> | null
+  abort: AbortController | null
+  waiters: number
   nextDelayMs: number
 }
 
@@ -96,10 +98,14 @@ function sessionKey(tenantId: string, sessionId: string): string {
 export class AgUiLedgerWaitCoordinator {
   private readonly entries = new Map<string, WaitEntry>()
   private readonly random: () => number
-  private readonly sleep: (milliseconds: number) => Promise<void>
+  private readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>
   private waits = 0
+  private closed = false
 
-  public constructor(private readonly config: AgUiLedgerWaitConfig, dependencies: WaitDependencies = {}) {
+  public constructor(
+    private readonly config: AgUiLedgerWaitConfig,
+    dependencies: WaitDependencies = {},
+  ) {
     positiveSafeInteger(config.baseDelayMs, "AG-UI ledger wait base delay")
     positiveSafeInteger(config.maxDelayMs, "AG-UI ledger wait maximum delay")
     if (config.maxDelayMs < config.baseDelayMs) throw new Error("AG-UI ledger wait maximum delay must not be below its base delay")
@@ -107,7 +113,19 @@ export class AgUiLedgerWaitCoordinator {
       throw new Error("AG-UI ledger wait jitter ratio must be between zero and one")
     }
     this.random = dependencies.random ?? Math.random
-    this.sleep = dependencies.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)))
+    this.sleep =
+      dependencies.sleep ??
+      ((milliseconds, signal) =>
+        new Promise((resolve) => {
+          const finish = (): void => {
+            clearTimeout(timer)
+            signal.removeEventListener("abort", finish)
+            resolve()
+          }
+          const timer = setTimeout(finish, milliseconds)
+          signal.addEventListener("abort", finish, { once: true })
+          if (signal.aborted) finish()
+        }))
   }
 
   private jitter(delayMs: number): number {
@@ -115,28 +133,59 @@ export class AgUiLedgerWaitCoordinator {
     return Math.max(1, Math.round(delayMs * (1 + offset)))
   }
 
-  private async execute(entry: WaitEntry): Promise<void> {
+  private async execute(entry: WaitEntry, signal: AbortSignal): Promise<void> {
     const delayMs = entry.nextDelayMs
     this.waits += 1
-    await this.sleep(this.jitter(delayMs))
-    entry.nextDelayMs = Math.min(this.config.maxDelayMs, delayMs * 2)
+    await this.sleep(this.jitter(delayMs), signal)
+    if (!signal.aborted) entry.nextDelayMs = Math.min(this.config.maxDelayMs, delayMs * 2)
   }
 
-  public wait(tenantId: string, sessionId: string): Promise<void> {
+  public wait(tenantId: string, sessionId: string, signal?: AbortSignal): Promise<void> {
+    if (this.closed || signal?.aborted) return Promise.resolve()
     const key = sessionKey(tenantId, sessionId)
     const entry = this.entries.get(key) ?? {
       inFlight: null,
+      abort: null,
+      waiters: 0,
       nextDelayMs: this.config.baseDelayMs,
     }
     this.entries.set(key, entry)
-    if (entry.inFlight !== null) return entry.inFlight
-    const pending = this.execute(entry)
-    entry.inFlight = pending
-    pending.then(
-      () => { if (entry.inFlight === pending) entry.inFlight = null },
-      () => { if (entry.inFlight === pending) entry.inFlight = null },
-    )
-    return pending
+    if (entry.inFlight === null) {
+      entry.abort = new AbortController()
+      const pending = this.execute(entry, entry.abort.signal)
+      entry.inFlight = pending
+      const settled = (): void => {
+        if (entry.inFlight === pending) {
+          entry.inFlight = null
+          entry.abort = null
+        }
+      }
+      pending.then(settled, settled)
+    }
+    const pending = entry.inFlight
+    entry.waiters += 1
+    return new Promise((resolve, reject) => {
+      let finished = false
+      const finish = (error?: unknown): void => {
+        if (finished) return
+        finished = true
+        signal?.removeEventListener("abort", onAbort)
+        entry.waiters -= 1
+        if (entry.waiters === 0 && entry.inFlight !== null) {
+          if (this.entries.get(key) === entry) this.entries.delete(key)
+          entry.abort?.abort()
+        }
+        if (error === undefined) resolve()
+        else reject(error)
+      }
+      const onAbort = (): void => finish(signal?.reason)
+      signal?.addEventListener("abort", onAbort, { once: true })
+      pending.then(
+        () => finish(),
+        (error: unknown) => finish(error),
+      )
+      if (signal?.aborted) onAbort()
+    })
   }
 
   public observedChange(tenantId: string, sessionId: string): void {
@@ -148,6 +197,12 @@ export class AgUiLedgerWaitCoordinator {
     const key = sessionKey(tenantId, sessionId)
     const entry = this.entries.get(key)
     if (entry?.inFlight === null) this.entries.delete(key)
+  }
+
+  public close(): void {
+    this.closed = true
+    for (const entry of this.entries.values()) entry.abort?.abort()
+    this.entries.clear()
   }
 
   public snapshot(): { waits: number; entries: number } {
@@ -200,8 +255,12 @@ export class AgUiReplayCoordinator {
     entry.promise = pending
     this.entries.set(key, entry)
     pending.then(
-      () => { if (this.entries.get(key) === entry) entry.expiresAt = this.now() + this.config.cacheTtlMs },
-      () => { if (this.entries.get(key) === entry) this.entries.delete(key) },
+      () => {
+        if (this.entries.get(key) === entry) entry.expiresAt = this.now() + this.config.cacheTtlMs
+      },
+      () => {
+        if (this.entries.get(key) === entry) this.entries.delete(key)
+      },
     )
     return pending
   }
@@ -216,6 +275,10 @@ export class AgUiReplayCoordinator {
   public snapshot(): { loads: number; entries: number } {
     return { loads: this.loads, entries: this.entries.size }
   }
+
+  public clear(): void {
+    this.entries.clear()
+  }
 }
 
 export type AgUiSessionRuntimeOptions = {
@@ -228,11 +291,42 @@ export class AgUiSessionRuntime {
   public readonly connections: AgUiConnectionLimiter
   public readonly ledgerWaits: AgUiLedgerWaitCoordinator
   public readonly replays: AgUiReplayCoordinator
+  private readonly retirement = new AbortController()
+  private readonly handlers = new Set<Promise<void>>()
+  private closing: Promise<void> | null = null
 
   public constructor(options: AgUiSessionRuntimeOptions) {
     this.connections = new AgUiConnectionLimiter(options.connections)
     this.ledgerWaits = new AgUiLedgerWaitCoordinator(options.ledgerWait)
     this.replays = new AgUiReplayCoordinator({ cacheTtlMs: options.replayCacheTtlMs })
+  }
+
+  /** Anonymous transport work remains owned until its actual finally, including uncancellable reads. */
+  public async runHandler(work: (signal: AbortSignal) => Promise<void>): Promise<boolean> {
+    if (this.retirement.signal.aborted) return false
+    let settle!: () => void
+    const settled = new Promise<void>((resolve) => {
+      settle = resolve
+    })
+    this.handlers.add(settled)
+    try {
+      await work(this.retirement.signal)
+    } finally {
+      this.handlers.delete(settled)
+      settle()
+    }
+    return true
+  }
+
+  public onModuleDestroy(): Promise<void> {
+    if (this.closing === null) {
+      this.retirement.abort()
+      this.ledgerWaits.close()
+      this.closing = Promise.all([...this.handlers]).then(() => {
+        this.replays.clear()
+      })
+    }
+    return this.closing
   }
 
   public snapshot(): {

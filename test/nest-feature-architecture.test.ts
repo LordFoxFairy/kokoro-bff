@@ -625,7 +625,6 @@ test("AgentDispatchModule owns Agent outbox worker lifecycle", async () => {
   assert.match(dispatchModule, /provide: AGENT_CANCELLATION_DISPATCHER/u)
   assert.match(dispatchModule, /AgentDispatchWorkerLifecycle/u)
   assert.match(dispatchModule, /onModuleInit/u)
-  assert.match(dispatchModule, /onApplicationShutdown/u)
   assert.match(runtime, /explicitlySuppliedAgentDispatchDispatcher/u)
   assert.match(runtime, /explicitlySuppliedAgentCancellationDispatcher/u)
 })

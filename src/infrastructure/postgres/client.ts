@@ -92,8 +92,13 @@ export class PostgresBffDatabase implements OnApplicationShutdown {
     return this.closePromise
   }
 
-  public onApplicationShutdown(): Promise<void> {
-    return this.close()
+  public async onApplicationShutdown(): Promise<void> {
+    try {
+      await this.close()
+    } catch {
+      process.exitCode = 1
+      throw new Error("bff_database_shutdown_failed")
+    }
   }
 
   public async notifyAgUiProjection(tenantId: string, sessionId: string, cursor: string | null): Promise<void> {

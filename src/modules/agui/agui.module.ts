@@ -1,4 +1,4 @@
-import { Inject, Injectable, Module, OnApplicationShutdown, OnModuleInit } from "@nestjs/common"
+import { BeforeApplicationShutdown, Inject, Injectable, Module, OnModuleInit } from "@nestjs/common"
 import {
   AGUI_PROJECTION,
   AGUI_PROJECTION_CONSUMERS,
@@ -21,15 +21,20 @@ import { AgentAgUiSourceReader } from "../../infrastructure/clients/agent/projec
 import { randomUUID } from "node:crypto"
 
 @Injectable()
-class AguiProjectorLifecycle implements OnModuleInit, OnApplicationShutdown {
+class AguiProjectorLifecycle implements OnModuleInit, BeforeApplicationShutdown {
   public constructor(@Inject(AGUI_PROJECTOR) private readonly projector: AgUiProjectorRunner | null) {}
 
   public onModuleInit(): void {
     this.projector?.start()
   }
 
-  public async onApplicationShutdown(): Promise<void> {
-    await this.projector?.stop()
+  public async beforeApplicationShutdown(): Promise<void> {
+    try {
+      await this.projector?.stop()
+    } catch {
+      process.exitCode = 1
+      throw new Error("bff_agui_projector_shutdown_failed")
+    }
   }
 }
 

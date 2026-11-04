@@ -1,4 +1,4 @@
-import { Inject, Injectable, MiddlewareConsumer, Module, NestModule, OnApplicationShutdown, OnModuleInit, RequestMethod } from "@nestjs/common"
+import { BeforeApplicationShutdown, Inject, Injectable, MiddlewareConsumer, Module, NestModule, OnModuleInit, RequestMethod } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
 import {
   BFF_CONFIG,
@@ -40,15 +40,20 @@ import type { IdempotencyRepository } from "../../application/ports/idempotency-
 import type { Pool } from "pg"
 
 @Injectable()
-class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, OnApplicationShutdown {
+class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, BeforeApplicationShutdown {
   public constructor(@Inject(PROJECT_SCOPE_RELEASE_DISPATCHER) private readonly dispatcher: ProjectScopeReleaseOutboxDispatcher | null) {}
 
   public onModuleInit(): void {
     this.dispatcher?.start()
   }
 
-  public async onApplicationShutdown(): Promise<void> {
-    await this.dispatcher?.stop()
+  public async beforeApplicationShutdown(): Promise<void> {
+    try {
+      await this.dispatcher?.stop()
+    } catch {
+      process.exitCode = 1
+      throw new Error("bff_project_scope_release_shutdown_failed")
+    }
   }
 }
 

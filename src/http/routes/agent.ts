@@ -14,12 +14,12 @@ import {
   parseAgentControlReceipt,
 } from "../../infrastructure/clients/agent/index.js"
 import { agentSessionAssertion, dataOf } from "../../application/projections.js"
-import { reply } from "../response.js"
+import { reply, send } from "../response.js"
 import { normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
 import { headerString, incomingHeaders, idempotencyKey } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
-import { AgUiSseWriter } from "../../interfaces/http/agui/sse.js"
+import { AgUiSseWriter, runAgUiHttpTransport } from "../../interfaces/http/agui/sse.js"
 import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
 import type { AuthorizedChatRequest } from "./chat-authorization.js"
@@ -72,7 +72,7 @@ function startAgUiStream(response: ServerResponse, requestId: string): void {
   })
 }
 
-async function durableAgentEventStream(
+export async function liveAgentSessionEvents(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
@@ -80,30 +80,42 @@ async function durableAgentEventStream(
   sessionId: string,
   projection: AgUiProjectionService | null,
   sourceProjectionActive: boolean,
-  idempotency: Map<string, IdempotencyEntry>,
-  mutation: MutationTicket | null,
   runtime: AgUiSessionRuntime,
+  signal: AbortSignal,
 ): Promise<void> {
+  const fail = (status: number, code: string, message: string): void => {
+    signal.throwIfAborted()
+    if (response.destroyed || response.writableEnded) return
+    response.setHeader("x-request-id", context.requestId)
+    send(response, status, failure(code, message, context.requestId))
+  }
+  signal.throwIfAborted()
   if (projection === null) {
-    reply(response, 503, failure("business_store_not_configured", "BFF AG-UI projection store is not configured", context.requestId), context, idempotency, mutation)
+    fail(503, "business_store_not_configured", "BFF AG-UI projection store is not configured")
     return
   }
 
   const tenantId = context.identity.namespace
   const connection = runtime.connections.acquire(tenantId, sessionId)
   if (connection === null) {
-    reply(response, 429, failure("agui_connection_limit_exceeded", "AG-UI stream connection capacity was exceeded", context.requestId), context, idempotency, mutation)
+    fail(429, "agui_connection_limit_exceeded", "AG-UI stream connection capacity was exceeded")
     return
   }
 
   const cursorHeader = request.headers["last-event-id"]
   let cursor = cursorHeader === undefined ? null : headerString(cursorHeader).trim()
   let streamStarted = false
-  const writer = new AgUiSseWriter(request, response, {
-    maxFrames: config.agUi.streamMaxFrames,
-    maxBytes: config.agUi.streamMaxBytes,
-    maxDurationMs: config.agUi.streamMaxDurationMs,
-  })
+  const writer = new AgUiSseWriter(
+    request,
+    response,
+    {
+      maxFrames: config.agUi.streamMaxFrames,
+      maxBytes: config.agUi.streamMaxBytes,
+      maxDurationMs: config.agUi.streamMaxDurationMs,
+    },
+    Date.now,
+    signal,
+  )
 
   const drainLedger = async (): Promise<{
     state: "head" | "terminal" | "invalid_cursor" | "expired_cursor" | "stopped"
@@ -111,26 +123,18 @@ async function durableAgentEventStream(
   }> => {
     let wroteFrames = false
     for (;;) {
-      const page = await runtime.replays.replay(
-        tenantId,
-        sessionId,
-        cursor,
-        config.agUi.replayPageFrames,
-        config.agUi.replayPageBytes,
-        () => projection.replay(
-          tenantId,
-          sessionId,
-          cursor,
-          config.agUi.replayPageFrames,
-          config.agUi.replayPageBytes,
-        ),
+      signal.throwIfAborted()
+      const page = await runtime.replays.replay(tenantId, sessionId, cursor, config.agUi.replayPageFrames, config.agUi.replayPageBytes, () =>
+        projection.replay(tenantId, sessionId, cursor, config.agUi.replayPageFrames, config.agUi.replayPageBytes),
       )
+      signal.throwIfAborted()
       if (page.kind === "invalid_cursor") return { state: "invalid_cursor", wroteFrames }
       if (page.kind === "expired_cursor") return { state: "expired_cursor", wroteFrames }
       if (page.frames.length > 0) {
         startAgUiStream(response, context.requestId)
         streamStarted = true
         const write = await writer.writeFrames(page.frames)
+        signal.throwIfAborted()
         cursor = write.lastCursor ?? cursor
         wroteFrames = wroteFrames || write.writtenFrames > 0
         if (write.status !== "written") {
@@ -144,13 +148,15 @@ async function durableAgentEventStream(
   }
 
   try {
+    signal.throwIfAborted()
     const initial = await drainLedger()
+    signal.throwIfAborted()
     if (initial.state === "invalid_cursor") {
-      reply(response, 400, failure("invalid_event_cursor", "Last-Event-ID is invalid for this session", context.requestId), context, idempotency, mutation)
+      fail(400, "invalid_event_cursor", "Last-Event-ID is invalid for this session")
       return
     }
     if (initial.state === "expired_cursor") {
-      reply(response, 410, failure("event_cursor_expired", "Last-Event-ID is outside the retained replay window", context.requestId), context, idempotency, mutation)
+      fail(410, "event_cursor_expired", "Last-Event-ID is outside the retained replay window")
       return
     }
     if (initial.state === "stopped") return
@@ -159,11 +165,13 @@ async function durableAgentEventStream(
       response.end()
       return
     }
+    signal.throwIfAborted()
     const initialStatus = await projection.status(tenantId, sessionId)
+    signal.throwIfAborted()
     if (initialStatus.consumerState === "blocked") {
       const code = initialStatus.consumerLastErrorCode ?? "projection_blocked"
       if (!streamStarted) {
-        reply(response, 502, failure("agui_projection_blocked", `AG-UI projection is blocked (${code})`, context.requestId), context, idempotency, mutation)
+        fail(502, "agui_projection_blocked", `AG-UI projection is blocked (${code})`)
       } else {
         if (!response.writableEnded && !response.destroyed) response.end()
       }
@@ -171,7 +179,7 @@ async function durableAgentEventStream(
     }
     if (!sourceProjectionActive) {
       if (!streamStarted) {
-        reply(response, 503, failure("agui_projector_not_configured", "The durable AG-UI projector is not configured", context.requestId), context, idempotency, mutation)
+        fail(503, "agui_projector_not_configured", "The durable AG-UI projector is not configured")
       } else {
         if (!response.writableEnded && !response.destroyed) response.end()
       }
@@ -180,17 +188,23 @@ async function durableAgentEventStream(
 
     startAgUiStream(response, context.requestId)
     streamStarted = true
-    if (await writer.writeComment("keep-alive") !== "written") return
+    if ((await writer.writeComment("keep-alive")) !== "written") return
+    signal.throwIfAborted()
     for (;;) {
-      await runtime.ledgerWaits.wait(tenantId, sessionId)
+      signal.throwIfAborted()
+      await runtime.ledgerWaits.wait(tenantId, sessionId, signal)
+      signal.throwIfAborted()
       const drained = await drainLedger()
+      signal.throwIfAborted()
       if (drained.state === "stopped") return
       if (drained.state === "invalid_cursor" || drained.state === "expired_cursor") {
         if (!response.writableEnded && !response.destroyed) response.end()
         return
       }
       if (drained.wroteFrames) runtime.ledgerWaits.observedChange(tenantId, sessionId)
+      signal.throwIfAborted()
       const status = await projection.status(tenantId, sessionId)
+      signal.throwIfAborted()
       if (status.consumerState === "blocked") {
         break
       }
@@ -198,12 +212,14 @@ async function durableAgentEventStream(
         response.end()
         return
       }
-      if (!drained.wroteFrames && await writer.writeComment("keep-alive") !== "written") break
+      if (!drained.wroteFrames && (await writer.writeComment("keep-alive")) !== "written") break
+      signal.throwIfAborted()
       if (request.aborted || response.destroyed || response.writableEnded) break
     }
     if (!response.writableEnded) response.end()
   } catch {
-    if (!streamStarted) reply(response, 503, failure("agui_ledger_unavailable", "The durable AG-UI ledger is unavailable", context.requestId), context, idempotency, mutation)
+    if (signal.aborted) return
+    if (!streamStarted) fail(503, "agui_ledger_unavailable", "The durable AG-UI ledger is unavailable")
     else if (!response.writableEnded && !response.destroyed) {
       response.end()
     }
@@ -239,7 +255,9 @@ export async function liveAgentSession(
   }
 
   if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
-    await durableAgentEventStream(request, response, config, context, sessionId, agUiProjection, sourceProjectionActive, idempotency, mutation, agUiRuntime)
+    await runAgUiHttpTransport(request, response, agUiRuntime, (signal) =>
+      liveAgentSessionEvents(request, response, config, context, sessionId, agUiProjection, sourceProjectionActive, agUiRuntime, signal),
+    )
     return true
   }
 

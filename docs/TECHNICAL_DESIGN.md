@@ -1,3 +1,19 @@
+## 2026-11-03 T-17：BFF 生命周期与 AG-UI 传输退役（本地已验证）
+
+**基线与状态。** 实施基线为 `8cb6169cf1d15d54c3a3bacad9ea622695642228`；G1/T-05 已在 Root 冻结组合验收。T-17 已在冻结 BFF 源码完成正常 worker/HTTP drain、Nest 原生关闭拒入、AG-UI 传输退役与物理 settlement、有限关闭失败，以及唯一进程 owner 的本地验收。以下范围不代表 T-11 遗留入口已删除、C-4 精确组合已验、Root 已重新固定版本或正常环境已切换。下方较早认证/组合状态按对应日期读取。
+
+**唯一 owner 与生命周期。** 沿现 `AGUI_RUNTIME` 跟踪 events 路由首次 await 前进入的匿名 HTTP handler；这是内存中的传输生命周期，不是身份、Session 引用、网络字段或持久事实。runtime 的原生 `onModuleDestroy` 封闭登记、广播传输取消，并等待所有已登记 handler 的真实 finally，早于 worker 的 `beforeApplicationShutdown`。客户端断连只影响本 handler，停机才影响全部。只用现 AbortController/AbortSignal 与 feature runtime，不新增全局生命周期管理器或第二运行时。
+
+**物理工作与响应。** 既有准入、Project/Conversation 授权、consumer 注册及 replay/status 查询每次 await 前后检查 signal；已经开始的 I/O 必须真实 settle，退役后不新发后续查询或写 Cookie/响应，不用 Promise.race 或关共享 Pool 冒充取消。原生 events 可组合现 authenticateBrowserRequest/writeSessionCookies，在物理准入返回后先检查 signal；授权 helper 仅在现 options 上接受标准可选 signal，SSE 必传。保留唯一 durable events 实现及控制路由原签名、权限与事务。
+
+**共享与恢复。** tenant/session shared wait 继续合并；单 waiter 退出不取消其他 waiter，最后 waiter 或 runtime 退出清理自有 timer。shared replay 的实际加载不绑定单客户端 signal。writer 背压等待由传输 signal 唤醒并清监听。只结束传输与 connection lease，不取消 Run、不造 terminal/frame/cursor、不改 consumer 持久语义；仍按原 durable ledger 与 Last-Event-ID 恢复。原 10 秒准入阶段和 stream 容量/frame/byte/duration 预算保持，挂住 I/O 的进程硬期限另由进程 owner 承接。
+
+**有限失败切片（准确 RED→最小五 hook 修复→Root 冻结相关门及独审通过）。** 锁定 Nest 会收集、记录而不向 `app.close()` 调用方传播有限 hook 错误。四 feature hook 保持原 stop 顺序，逐项等待并尽力尝试独立 stop；错误仅保留本 owner 固定安全类别，不保留原 cause，并设置非零进程退出状态。数据库 `close()` 的正常、幂等及失败后 Redis 尽力关闭不重做，仅在其 Nest hook 失败时承接非零状态。原测试的临时退出状态在 finally 归还，生产成功路径不得把失败 latch 重置为零。本片不并行化有序 stop，不新增生命周期管理器、重试或资源关停旁路；`app.close()` resolve 本身不作为真实进程退出证据。
+
+**唯一进程 owner（已实现）。** `main.ts` 的真实 bootstrap 调用薄 `startBffApplication`，统一真实 init/listen、SIGINT/SIGTERM 与一次公开 `app.close()`；从 main 移除旧 fake `ShutdownServer` 信号接线，不与 Nest `enableShutdownHooks` 双注册。终止时等待已启动的初始化/监听实际 settle；若初始化期间已请求终止，不再发起 listen。应用创建后的启动失败同走关闭出口，重复信号不重入，成功路径不清除失败状态。生产终止启动保活的 31 秒硬期限，30 秒仅用 HTTP server 的公开方法收口连接，31 秒未结束则打印固定诊断并退出 1。不新增运行时、全局管理器或环境测试 flag。
+
+**验证与边界。** Root 在真实 Nest listener 验证活动 SSE、六个 pending 阶段、同 session 客户端隔离、背压唤醒与原 cursor、授权、容量和正常 drain；实际 Nest 子进程覆盖启动挂起、重复信号及 worker/Pool/Redis 关闭失败或挂起，其中依赖故障由测试替身注入，不算真实 IAM/PG 集成。实际 `node dist/main.js` 另以自有 fresh BFF Schema 和受管 PostgreSQL/Redis 验证：旧正常信号退出为 −2/−15（不等于资源回收失败）；修复后 SIGINT/SIGTERM 就绪后均退出 0，真实端口冲突不监听并退出 1。由真实 BFF worker 等待 PostgreSQL 锁触发超期时，新 HTTP 被拒入，在途连接于 30.002 秒 EOF、进程仍存活，31.030 秒退出 1；无夹具兜底，源码与产物保持，自有资源在进程静止后回收，数据库清单与凭据扫描通过。本片不改公开 API、数据库、Schema、认证合同或依赖，不提前删除 raw 入口。
+
 > 当前候选（2026-11-03）：D0已通过；IAM固定896405d／internal0.20与Better Auth1.7.3正式snapshot，BFF源码正在同片收口。独立browser-private合同已由Root在34c9f997发行；Root已完成完整工程门、423项真实PG及真实IAM认证relay验证，各项证据只覆盖对应停写候选与范围。Skill inspection owner组合及含共享Admin的浏览器G1仍待，不代表正常环境已切换。
 
 ## 2026-11-03 I-56：原生 Cookie Secure 模式统一（BFF源码候选已实现，组合待验）
