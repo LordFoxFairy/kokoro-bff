@@ -196,14 +196,40 @@ test("Library route builds personal scope anew, has response header, and never t
   assert.ok(!JSON.stringify(fault.body).includes("private owner details"))
 })
 
+async function startLibraryTestApp(config, sessionAdmission, repository) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, LIBRARY_ARTIFACT_REPOSITORY, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { AccountModule } = await import("../dist/modules/account/account.module.js")
+  const unexpected = () => assert.fail("Library HTTP fixture must not use an unconfigured database")
+  const builder = Test.createTestingModule({ imports: [AccountModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected }, ready: unexpected })
+  if (repository !== undefined) builder.overrideProvider(LIBRARY_ARTIFACT_REPOSITORY).useValue(repository)
+  const ref = await builder.compile()
+  const app = ref.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  try {
+    await app.listen(0, "127.0.0.1")
+    return { base: await app.getUrl(), close: () => app.close() }
+  } catch (error) {
+    await app.close()
+    throw error
+  }
+}
+
 test("live Product HTTP re-admits each page and calls personal Storage Connect without trusting forged identity", async () => {
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { ConnectError, Code } = await import("@connectrpc/connect")
-  const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const servers = []
+  let app
   const calls = []
   let admissions = 0
   const listen = async (server) => {
@@ -261,19 +287,14 @@ test("live Product HTTP re-admits each page and calls personal Storage Connect w
       KOKORO_BFF_STORAGE_SECRET: "storage-secret",
       KOKORO_STORAGE_OBJECT_ORIGIN: "http://objects.test",
     })
-    const bff = await listen(
-      createBffServer(config, {
-        readiness: async () => {},
-        businessStore: null,
-        sessionAdmission: {
-          async verify({ cookie }) {
-            const token = cookie.slice("kokoro-issuer.session_token=".length)
-            admissions++
-            return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "subject-2" : "subject-1" } }
-          },
-        },
-      }),
-    )
+    app = await startLibraryTestApp(config, {
+      async verify({ cookie }) {
+        const token = cookie.slice("kokoro-issuer.session_token=".length)
+        admissions++
+        return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "subject-2" : "subject-1" } }
+      },
+    })
+    const bff = app.base
     const get = async (query, token = "user") => {
       const response = await fetch(`${bff}/v1/library${query}`, {
         headers: {
@@ -304,7 +325,11 @@ test("live Product HTTP re-admits each page and calls personal Storage Connect w
       { subject: "subject-2", scope: "subject-2", kind: "personal", tenant: "tenant-1", cursor: "page-2" },
     ])
   } finally {
-    await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
+    try {
+      await app?.close()
+    } finally {
+      await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
+    }
   }
 })
 
@@ -510,12 +535,12 @@ test("Artifact Library scans only bounded authorized candidates and binds keyset
 test("private Artifact Product HTTP list, item and download keep original bytes behind current admission", async () => {
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const { StorageService, ArtifactKind } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const bytes = Buffer.from("hello")
   const digest = (await import("node:crypto")).createHash("sha256").update(bytes).digest("hex")
   const servers = []
+  let app
   const listen = async (server) => {
     servers.push(server)
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
@@ -609,22 +634,21 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
       KOKORO_BFF_STORAGE_SECRET: "storage-secret",
       KOKORO_STORAGE_OBJECT_ORIGIN: objectOrigin,
     })
-    const bff = await listen(
-      createBffServer(config, {
-        readiness: async () => {},
-        businessStore: { artifactLibrary: repository, ready: async () => {}, close: async () => {} },
-        sessionAdmission: {
-          async verify({ cookie }) {
-            const token = cookie.slice("kokoro-issuer.session_token=".length)
-            admissions++
-            return {
-              ok: true,
-              identity: { namespace: token === "outside" ? "tenant-other" : "tenant-1", userId: token === "other" ? "subject-other" : "subject-1" },
-            }
-          },
+    app = await startLibraryTestApp(
+      config,
+      {
+        async verify({ cookie }) {
+          const token = cookie.slice("kokoro-issuer.session_token=".length)
+          admissions++
+          return {
+            ok: true,
+            identity: { namespace: token === "outside" ? "tenant-other" : "tenant-1", userId: token === "other" ? "subject-other" : "subject-1" },
+          }
         },
-      }),
+      },
+      repository,
     )
+    const bff = app.base
     const get = (path, token = "user") =>
       fetch(`${bff}${path}`, {
         headers: {
@@ -671,7 +695,11 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
     assert.equal(repoCalls, beforeCrossTenant)
     assert.equal(admissions, 8)
   } finally {
-    await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
+    try {
+      await app?.close()
+    } finally {
+      await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
+    }
   }
 })
 

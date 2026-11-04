@@ -405,10 +405,15 @@ test("live Product POST recovers lost Complete through personal Connect, persist
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { ConnectError, Code } = await import("@connectrpc/connect")
-  const { createBffServer } = await import("../dist/bootstrap/server.js")
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { ACCOUNT_IDEMPOTENCY, BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { AccountModule } = await import("../dist/modules/account/account.module.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const { StorageService, UploadPurpose, UploadState, ScanState } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const servers = []
+  let app
   const rows = new Map()
   let puts = 0
   let completes = 0
@@ -539,21 +544,30 @@ test("live Product POST recovers lost Complete through personal Connect, persist
       KOKORO_BFF_STORAGE_SECRET: "storage-secret",
       KOKORO_STORAGE_OBJECT_ORIGIN: objects,
     })
-    const bff = await listen(
-      createBffServer(config, {
-        businessStore: store,
-        readiness: async () => {},
-        sessionAdmission: {
-          async verify({ cookie }) {
-            const token = cookie.slice("kokoro-issuer.session_token=".length)
-            admissions++
-            return revoked
-              ? { ok: false, status: 401, code: "session_invalid" }
-              : { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "subject-2" : "subject-1" } }
-          },
+    const databaseCall = () => {
+      throw new Error("Personal file HTTP fixture must not query PostgreSQL")
+    }
+    const module = await Test.createTestingModule({ imports: [AccountModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({ pool: { query: databaseCall, connect: databaseCall } })
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue({
+        async verify({ cookie }) {
+          const token = cookie.slice("kokoro-issuer.session_token=".length)
+          admissions++
+          return revoked
+            ? { ok: false, status: 401, code: "session_invalid" }
+            : { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "subject-2" : "subject-1" } }
         },
-      }),
-    )
+      })
+      .overrideProvider(ACCOUNT_IDEMPOTENCY)
+      .useValue(store)
+      .compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    await app.listen(0, "127.0.0.1")
+    const bff = await app.getUrl()
     const form = new FormData()
     form.append("files", new File([input.bytes], input.filename, { type: input.mimeType }))
     const wire = new Request("http://bff.test", { method: "POST", body: form })
@@ -603,6 +617,6 @@ test("live Product POST recovers lost Complete through personal Connect, persist
     assert.equal(puts, 1)
     assert.equal(admissions, 5)
   } finally {
-    await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
+    await Promise.all([app?.close(), ...servers.map((server) => new Promise((resolve) => server.close(resolve)))])
   }
 })
