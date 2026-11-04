@@ -1,15 +1,31 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
 import { createServer, type Server } from "node:http"
 import { afterEach, test } from "node:test"
+import { Test } from "@nestjs/testing"
 
-import { AgUiSessionRuntime } from "../dist/application/agui/session-runtime.js"
+import type { ChatApplicationService } from "../dist/application/chat-service.js"
+import type { IdempotencyRepository } from "../dist/application/ports/idempotency-repository.js"
+import {
+  AGENT_CANCELLATION_DISPATCHER,
+  AGENT_CONTROL_IDEMPOTENCY,
+  AGENT_DISPATCH_DISPATCHER,
+  AGUI_PROJECTOR,
+  BFF_CONFIG,
+  BFF_DATABASE,
+  CHAT_SERVICE,
+  PROJECT_SERVICE,
+  PROJECT_SKILL_SELECTION_PROVIDER,
+  SESSION_ADMISSION,
+} from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { AgentRunsModule } from "../dist/modules/agent-runs/agent-runs.module.js"
 import { DEFAULT_AGUI_CONFIG, type BffConfig } from "../dist/config/runtime.js"
 import { parseAgentControlReceipt } from "../dist/infrastructure/clients/agent/control-receipt.js"
-import { liveAgentSession } from "../dist/http/routes/agent.js"
-import { createLiveTestBffServer } from "./doubles/server.ts"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const servers: Server[] = []
+const closeApps: (() => Promise<void>)[] = []
 const canonicalDigest = "sha256:25f421bfa958a4ed2ee20e9f23f67881d6ebd0be17df1581c729b2527c50409c"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -70,41 +86,54 @@ function authHeaders(commandId: string): Record<string, string> {
   }
 }
 
-function bffServer(configValue: BffConfig, authorized = true, chat: Parameters<typeof liveAgentSession>[12] = null): Server {
-  const runtime = new AgUiSessionRuntime({
-    connections: {
-      global: configValue.agUi.maxConnectionsGlobal,
-      perTenant: configValue.agUi.maxConnectionsPerTenant,
-      perSession: configValue.agUi.maxConnectionsPerSession,
+type ControlChat = Partial<Pick<ChatApplicationService, "findConversation" | "readRunControlState">>
+
+async function startAgentControlApp(
+  configValue: BffConfig,
+  authorized = true,
+  chat: ControlChat | null = null,
+  receipts: IdempotencyRepository | null = null,
+): Promise<string> {
+  const admission = new SessionAdmissionDouble({ "control-session": { namespace: "tenant_control", userId: "user_control" } })
+  const chatService = {
+    async findConversation(tenantId: string, subjectId: string, sessionId: string) {
+      if (!authorized || tenantId !== "tenant_control" || subjectId !== "user_control") return null
+      return {
+        session_id: sessionId,
+        title: "Agent control",
+        owner_id: subjectId,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+      }
     },
-    ledgerWait: {
-      baseDelayMs: configValue.agUi.ledgerPollBaseDelayMs,
-      maxDelayMs: configValue.agUi.ledgerPollMaxDelayMs,
-      jitterRatio: configValue.agUi.ledgerPollJitterPercent / 100,
-    },
-    replayCacheTtlMs: configValue.agUi.replayCacheTtlMs,
-  })
-  return createLiveTestBffServer(configValue, {
-    routeHandler: ({ request, response, businessPath, context, json, mutation, idempotency }) =>
-      liveAgentSession(
-        request,
-        response,
-        configValue,
-        context,
-        businessPath,
-        json,
-        mutation,
-        idempotency,
-        null,
-        runtime,
-        false,
-        authorized ? { ok: true } : null,
-        chat,
-      ),
-  })
+    ...chat,
+  }
+  const builder = Test.createTestingModule({ imports: [AgentRunsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(configValue)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: Object.freeze({}), redis: Object.freeze({}) })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+    .overrideProvider(CHAT_SERVICE)
+    .useValue(chatService)
+    .overrideProvider(PROJECT_SERVICE)
+    .useValue({ find: async () => null })
+    .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
+    .useValue(null)
+    .overrideProvider(AGENT_CONTROL_IDEMPOTENCY)
+    .useValue(receipts)
+  for (const token of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) {
+    builder.overrideProvider(token).useValue(null)
+  }
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+  closeApps.push(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  return app.getUrl()
 }
 
-test("routes Agent control through the raw compatibility chain", async () => {
+test("routes Agent control through the AgentRunsModule owner", async () => {
   const observed: string[] = []
   const agent = createServer((request, response) => {
     observed.push(request.url ?? "")
@@ -123,9 +152,7 @@ test("routes Agent control through the raw compatibility chain", async () => {
   })
   const agentBase = await listen(agent)
   const receipts = new Map<string, { fingerprint: string; status: number; body: unknown }>()
-  const businessStore = {
-    ready: async (): Promise<void> => undefined,
-    close: async (): Promise<void> => undefined,
+  const controlReceipts = {
     async claimReceipt(scope: string, fingerprint: string) {
       const prior = receipts.get(scope)
       if (prior !== undefined) return { claimed: false, receipt: prior }
@@ -157,24 +184,7 @@ test("routes Agent control through the raw compatibility chain", async () => {
       }
     },
   }
-  const projects = {
-    async find() {
-      return null
-    },
-  }
-  const raw = createBffServer(config(agentBase), {
-    businessStore,
-    chatService: chat as never,
-    projectService: projects as never,
-    readiness: async (): Promise<void> => undefined,
-    sessionAdmission: new (class {
-      async verify(input: { token: string; requestId: string; signal: AbortSignal }) {
-        if (input.cookie !== "kokoro-issuer.session_token=control-session") return { ok: false as const, status: 401 as const, code: "session_invalid" }
-        return { ok: true as const, identity: { namespace: "tenant_control", userId: "user_control" }, platformAdmin: false }
-      }
-    })(),
-  })
-  const base = await listen(raw)
+  const base = await startAgentControlApp(config(agentBase), true, chat, controlReceipts)
   const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
     method: "POST",
     headers: authHeaders("command_raw"),
@@ -191,36 +201,12 @@ test("routes Agent control through the raw compatibility chain", async () => {
   assert.deepEqual(observed, ["/v1/runs/run_control/control"])
 })
 
-test("terminates unknown live session paths before the raw session fallback", async () => {
-  const raw = createBffServer(config("http://127.0.0.1:9"), {
-    businessStore: { ready: async (): Promise<void> => undefined, close: async (): Promise<void> => undefined } as never,
-    chatService: {
-      async findConversation() {
-        return null
-      },
-    } as never,
-    projectService: {
-      async find() {
-        return null
-      },
-    } as never,
-    readiness: async (): Promise<void> => undefined,
-    sessionAdmission: new (class {
-      async verify() {
-        return { ok: true as const, identity: { namespace: "tenant_control", userId: "user_control" }, platformAdmin: false }
-      }
-    })(),
-  })
-  const base = await listen(raw)
-  const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/unknown`, {
-    headers: authHeaders("command_unknown"),
-  })
-  assert.equal(response.status, 404)
-  assert.equal((await response.json()).error.code, "bff_route_not_found")
-})
-
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
+  try {
+    await Promise.all(closeApps.splice(0).map((close) => close()))
+  } finally {
+    await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
+  }
 })
 
 test("projects the canonical Agent receipt without trusting an upstream run_id", async () => {
@@ -249,7 +235,7 @@ test("projects the canonical Agent receipt without trusting an upstream run_id",
     })
   })
   const agentBase = await listen(agent)
-  const base = await listen(bffServer(config(agentBase)))
+  const base = await startAgentControlApp(config(agentBase))
 
   const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
     method: "POST",
@@ -314,7 +300,7 @@ test("rejects receipt identity drift and extra owner fields", async () => {
     )
   })
   const agentBase = await listen(agent)
-  const base = await listen(bffServer(config(agentBase)))
+  const base = await startAgentControlApp(config(agentBase))
 
   const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
     method: "POST",
@@ -335,7 +321,7 @@ test("does not call Agent control when private Chat authorization is absent", as
     response.writeHead(500).end()
   })
   const agentBase = await listen(agent)
-  const base = await listen(bffServer(config(agentBase), false))
+  const base = await startAgentControlApp(config(agentBase), false)
 
   const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
     method: "POST",
@@ -552,8 +538,8 @@ test("immediate stop reaches the real Agent cancel path after its exact durable 
       reads++
       return { executionHead: { runId: "run_startup", state: reads === 1 ? "queued" : "active", pendingPauses: [] } }
     },
-  } as unknown as NonNullable<Parameters<typeof liveAgentSession>[12]>
-  const bff = await listen(bffServer(config(base), true, chat))
+  } as unknown as ControlChat
+  const bff = await startAgentControlApp(config(base), true, chat)
   const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
     method: "POST",
     headers: authHeaders("startup-stop"),
@@ -599,8 +585,8 @@ for (const [name, firstHead, nextHead, ownerCode] of [
         const head = reads++ === 0 ? firstHead : nextHead
         return head === "unreadable" ? null : { executionHead: head }
       },
-    } as unknown as NonNullable<Parameters<typeof liveAgentSession>[12]>
-    const bff = await listen(bffServer(config(base), true, chat))
+    } as unknown as ControlChat
+    const bff = await startAgentControlApp(config(base), true, chat)
     const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
       method: "POST",
       headers: authHeaders(`reject-${name}`),
@@ -625,8 +611,8 @@ test("startup cancel stops waiting on caller abort without delivering a second c
       setTimeout(() => controller.abort(), 5)
       return { executionHead: { runId: "run_startup", state: "queued", pendingPauses: [] } }
     },
-  } as unknown as NonNullable<Parameters<typeof liveAgentSession>[12]>
-  const bff = await listen(bffServer(config(base), true, chat))
+  } as unknown as ControlChat
+  const bff = await startAgentControlApp(config(base), true, chat)
   await assert.rejects(
     fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
       method: "POST",
@@ -647,10 +633,8 @@ test("startup cancel never renews its absolute request budget or invents a recei
     response.end(JSON.stringify({ error: { code: "run_not_found", message: "Run was not found" } }))
   })
   const base = await listen(agent)
-  const chat = { readRunControlState: async () => ({ executionHead: { runId: "run_startup", state: "queued", pendingPauses: [] } }) } as unknown as NonNullable<
-    Parameters<typeof liveAgentSession>[12]
-  >
-  const bff = await listen(bffServer({ ...config(base), upstreamTimeoutMs: 25 }, true, chat))
+  const chat = { readRunControlState: async () => ({ executionHead: { runId: "run_startup", state: "queued", pendingPauses: [] } }) } as unknown as ControlChat
+  const bff = await startAgentControlApp({ ...config(base), upstreamTimeoutMs: 25 }, true, chat)
   const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
     method: "POST",
     headers: authHeaders("deadline-startup"),

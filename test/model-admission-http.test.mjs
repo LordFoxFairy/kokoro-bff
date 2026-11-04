@@ -104,7 +104,7 @@ async function setup(options = {}) {
   const { Test } = await import("@nestjs/testing")
   const { AgentRunsModule } = await import("../dist/modules/agent-runs/agent-runs.module.js")
   const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
-  const { BffExpressAdapter } = await import("../dist/infrastructure/http/bff-express-adapter.js")
+  const { BffExpressAdapter } = await import("../dist/http/bff-express-adapter.js")
   const { BFF_CONFIG, BFF_DATABASE, AGENT_RUNS_READER, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
   const unexpectedStorage = () => {
     throw new Error("billing HTTP fixture must not touch BFF storage")

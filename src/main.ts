@@ -3,7 +3,7 @@ import type { INestApplication } from "@nestjs/common"
 import { NestFactory } from "@nestjs/core"
 import { AppModule } from "./app.module.js"
 import { loadConfig, type BffConfig } from "./config/runtime.js"
-import { BffExpressAdapter } from "./infrastructure/http/bff-express-adapter.js"
+import { BffExpressAdapter } from "./http/bff-express-adapter.js"
 
 const SHUTDOWN_GRACE_PERIOD_MS = 30_000
 const SHUTDOWN_HARD_DEADLINE_MS = 31_000

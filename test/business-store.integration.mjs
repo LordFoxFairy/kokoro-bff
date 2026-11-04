@@ -133,7 +133,7 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
     const { Test } = await import("@nestjs/testing")
     const { BFF_CONFIG, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
     const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
-    const { BffExpressAdapter } = await import("../dist/infrastructure/http/bff-express-adapter.js")
+    const { BffExpressAdapter } = await import("../dist/http/bff-express-adapter.js")
     const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
     // ScheduledTasksModule imports the real ProjectsModule; keep its real repositories and workers.
     const module = await Test.createTestingModule({ imports: [ScheduledTasksModule] })

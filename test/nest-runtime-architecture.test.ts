@@ -77,6 +77,123 @@ test("the compiled production AppModule resolves its real provider graph without
   }
 })
 
+test("unmatched Product routes keep the BFF error envelope without calling any owner", async (t) => {
+  await import("reflect-metadata")
+  const { createServer } = await import("node:http")
+  const { once } = await import("node:events")
+  const { Test } = await import("@nestjs/testing")
+  const { AppModule } = await import("../dist/app.module.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { loadConfig } = await import("../dist/config/runtime.js")
+  const { BffExpressAdapter } = await import("../dist/http/bff-express-adapter.js")
+  const { SessionAdmissionDouble } = await import("./doubles/session-admission.ts")
+  const {
+    AGENT_CANCELLATION_DISPATCHER,
+    AGENT_DISPATCH_DISPATCHER,
+    AGUI_PROJECTOR,
+    BFF_CONFIG,
+    BFF_DATABASE,
+    PROJECT_SCOPE_RELEASE_DISPATCHER,
+    SESSION_ADMISSION,
+    SCHEDULED_TASK_DISPATCHER,
+    SCHEDULED_AGENT_DISPATCHER,
+    SCHEDULED_AGENT_TERMINAL_CONSUMER,
+  } = await import("../dist/common/tokens.js")
+  let ownerCalls = 0
+  const owner = createServer((_request, response) => {
+    ownerCalls++
+    response.writeHead(502).end()
+  })
+  t.after(() => new Promise<void>((resolve) => owner.close(() => resolve())))
+  owner.listen(0, "127.0.0.1")
+  await once(owner, "listening")
+  const address = owner.address()
+  assert.ok(address !== null && typeof address !== "string")
+  const baseUrl = `http://127.0.0.1:${address.port}`
+  const config = loadConfig({
+    KOKORO_BFF_SHARED_SECRET: "test-secret",
+    KOKORO_INTERNAL_SECRET_BFF: "fixture-internal-secret",
+    KOKORO_BILLING_BFF_SERVICE_TOKEN: "fixture-billing-token",
+    KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
+    KOKORO_BFF_POSTGRES_URL: "postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=kokoro_bff",
+    KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:1/8",
+    KOKORO_AGENT_ENABLED: "true",
+    KOKORO_AGENT_BASE_URL: baseUrl,
+    KOKORO_BILLING_BASE_URL: baseUrl,
+    KOKORO_STORAGE_RPC_BASE_URL: baseUrl,
+    KOKORO_STORAGE_OBJECT_ORIGIN: baseUrl,
+    KOKORO_BFF_STORAGE_SECRET: "fixture-storage-secret",
+  })
+  const admission = new SessionAdmissionDouble({ "unknown-product-session": { namespace: "test-tenant", userId: "test-user" } })
+  let storageCalls = 0
+  const unexpected = (): never => {
+    storageCalls++
+    assert.fail("unmatched Product routes must not access PostgreSQL")
+  }
+  const builder = Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue({ ...config, upstreams: { ...config.upstreams, model: baseUrl } })
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected } })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+  for (const token of [
+    AGENT_CANCELLATION_DISPATCHER,
+    AGENT_DISPATCH_DISPATCHER,
+    AGUI_PROJECTOR,
+    PROJECT_SCOPE_RELEASE_DISPATCHER,
+    SCHEDULED_TASK_DISPATCHER,
+    SCHEDULED_AGENT_DISPATCHER,
+    SCHEDULED_AGENT_TERMINAL_CONSUMER,
+  ])
+    builder.overrideProvider(token).useValue(null)
+  const module = await builder.compile()
+  const app = module.createNestApplication(new BffExpressAdapter(), { ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  t.after(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
+  const headers = {
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": "test-secret",
+    cookie: "kokoro-issuer.session_token=unknown-product-session",
+    origin: "https://web.example.test",
+    "x-request-id": "unknown-product-test",
+  }
+  for (const route of [
+    "connectors",
+    "preferences",
+    "cloud-computers",
+    "integrations",
+    "agents/unknown",
+    "billing/unknown",
+    "models/unknown",
+    "library/unknown",
+    "sessions/session_control/runs/run_control/unknown",
+  ]) {
+    const response = await fetch(`${base}/v1/${route}`, { headers })
+    assert.equal(response.status, 404, route)
+    assert.equal(response.headers.get("x-request-id"), "unknown-product-test", route)
+    assert.equal(response.headers.get("cache-control"), "no-store", route)
+    assert.deepEqual(
+      await response.json(),
+      {
+        error: { code: "bff_route_not_found", message: "Business route was not found" },
+        meta: { request_id: "unknown-product-test" },
+      },
+      route,
+    )
+  }
+  const health = await fetch(`${base}/healthz`)
+  assert.equal(health.status, 200)
+  await health.arrayBuffer()
+  const outside = await fetch(`${base}/v10/connectors`)
+  assert.equal(outside.status, 404)
+  assert.equal((await outside.json()).statusCode, 404)
+  assert.equal(admission.calls.length, 0)
+  assert.equal(storageCalls, 0)
+  assert.equal(ownerCalls, 0)
+})
+
 test("HealthModule preserves the probe response when readiness is blocked", async (t) => {
   await import("reflect-metadata")
   const { Test } = await import("@nestjs/testing")
