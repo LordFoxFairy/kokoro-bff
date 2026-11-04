@@ -19,11 +19,13 @@ test("the compiled production AppModule resolves its real provider graph without
     BFF_DATABASE,
     BFF_POOL,
     BFF_REDIS,
+    CHAT_CONVERSATION_LOOKUP,
     CHAT_SERVICE,
     CHAT_TURN_SERVICE,
     PROJECT_SERVICE,
     PROJECT_SKILL_SELECTION_PROVIDER,
     RUN_DISPLAY_PROVIDER,
+    RUN_FINAL_ANSWER_LOOKUP,
     SKILL_INSTALLATION_CLIENT,
   } = await import("../dist/common/tokens.js")
   const { PERSONALIZATION_PROVIDER } = await import("../dist/modules/account/personalization.provider.js")
@@ -67,6 +69,8 @@ test("the compiled production AppModule resolves its real provider graph without
       [AgentDispatchModule, CHAT_TURN_SERVICE],
       [AgentRunsModule, AGENT_RUNS_READER],
       [ChatModule, CHAT_SERVICE],
+      [ChatModule, CHAT_CONVERSATION_LOOKUP],
+      [AgentRunsModule, RUN_FINAL_ANSWER_LOOKUP],
       [AccountModule, PERSONALIZATION_PROVIDER],
       [ProjectAccessModule, PROJECT_SERVICE],
       [ProjectAccessModule, PROJECT_SKILL_SELECTION_PROVIDER],
@@ -81,7 +85,10 @@ test("the compiled production AppModule resolves its real provider graph without
     assert.notEqual(reader, module.select(AgentDispatchModule).get(AGENT_DISPATCH_OUTBOX, { strict: true }))
     assert.equal(typeof reader.readProjectExecutionBinding, "function")
     assert.equal(typeof reader.readSubmittedAgentRun, "function")
-    assert.equal(module.select(AgentRunsModule).get(RUN_DISPLAY_PROVIDER, { strict: true }).submittedAgentRuns, reader)
+    const display = module.select(AgentRunsModule).get(RUN_DISPLAY_PROVIDER, { strict: true })
+    assert.equal(display.submittedAgentRuns, reader)
+    assert.equal(display.findConversation, module.select(ChatModule).get(CHAT_CONVERSATION_LOOKUP, { strict: true }))
+    assert.equal(display.readRunFinalAnswer, module.select(AgentRunsModule).get(RUN_FINAL_ANSWER_LOOKUP, { strict: true }))
   } finally {
     await module.close()
   }

@@ -1,6 +1,5 @@
 import { readChatComposerSelection } from "./chat-composer-selection.js"
-import { readRunFinalAnswer } from "./run-final-answer-read.js"
-import type { RunFinalAnswerQuery, RunFinalAnswer } from "../../application/chat/chat-repository.js"
+import { createChatConversationLookup, type ChatConversationLookup } from "./chat-conversation-lookup.js"
 import { readMessageFeedback, setMessageFeedback } from "./message-feedback.js"
 import type { MessageFeedbackQuery, SetMessageFeedback } from "../../application/chat/message-feedback-input.js"
 import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "../../application/chat/chat-repository.js"
@@ -11,7 +10,7 @@ import { readRunInteraction } from "./agui-interaction-projection.js"
 import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
 import type { MessagePartsPage } from "../../contracts/chat.js"
-import type { MessagePartsQuery, PrivateMessageReadContext, PrivateMessagePage, MessageReadLifetime } from "../../application/chat/chat-repository.js"
+import type { MessagePartsQuery, PrivateMessageReadContext, PrivateMessagePage } from "../../application/chat/chat-repository.js"
 import { withMessageReadClient, messageReadLifetime, privateMessagesFromRows, readMessageParts, type PrivateMessageRow } from "./message-parts-read.js"
 
 import type {
@@ -108,9 +107,11 @@ function artifactDeliveryFromRow(row: ArtifactDeliveryRow): ChatArtifactDelivery
 
 export class PostgresChatRepository implements ChatRepository {
   private readonly database: PostgresBffDatabase
+  public readonly findConversation: ChatConversationLookup
 
   public constructor(database: PostgresBffDatabase) {
     this.database = database
+    this.findConversation = createChatConversationLookup(database.pool)
   }
 
   public async moveConversation(command: MoveConversationCommand): Promise<MoveConversationResult> {
@@ -186,36 +187,6 @@ export class PostgresChatRepository implements ChatRepository {
     }
   }
 
-  public async findConversation(
-    tenantId: string,
-    subjectId: string,
-    conversationId: string,
-    projectRef: string | undefined,
-    lifetime?: MessageReadLifetime,
-  ): Promise<Conversation | null> {
-    const sql = `SELECT ${conversationColumns}
-         FROM bff_conversation
-        WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
-          AND (
-            project_ref IS NULL
-            OR EXISTS (
-              SELECT 1 FROM bff_project AS project
-               WHERE project.deleted_at IS NULL AND project.tenant_id = bff_conversation.tenant_id
-                 AND project.owner_id = bff_conversation.owner_id
-                 AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
-            )
-          )
-          AND ($4::text IS NULL OR project_ref = $4)
-        LIMIT 1`
-    const values = [tenantId, subjectId, conversationId, projectRef ?? null]
-    const result =
-      lifetime === undefined
-        ? await this.database.pool.query<ConversationRow>(sql, values)
-        : await withMessageReadClient(this.database.pool, lifetime, (client) => client.query<ConversationRow>(sql, values))
-    const row = result.rows[0]
-    return row === undefined ? null : conversationFromRow(row)
-  }
-
   public async readSnapshot(
     tenantId: string,
     subjectId: string,
@@ -224,10 +195,6 @@ export class PostgresChatRepository implements ChatRepository {
     context?: PrivateMessageReadContext,
   ): Promise<ChatSnapshot | null> {
     return this.readSnapshotState(tenantId, subjectId, conversationId, projectRef, true, context ?? { ...messageReadLifetime(), scope: "all" })
-  }
-
-  public readRunFinalAnswer(query: RunFinalAnswerQuery): Promise<RunFinalAnswer | null> {
-    return readRunFinalAnswer(this.database.pool, query)
   }
 
   public readMessageParts(query: MessagePartsQuery): Promise<MessagePartsPage | null> {

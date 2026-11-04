@@ -10,7 +10,8 @@ import {
   AGUI_PROJECTOR,
   BFF_CONFIG,
   BFF_DATABASE,
-  CHAT_SERVICE,
+  CHAT_CONVERSATION_LOOKUP,
+  RUN_FINAL_ANSWER_LOOKUP,
   SESSION_ADMISSION,
 } from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
@@ -74,12 +75,10 @@ async function fixture(t) {
             : { tenantId: q.tenantId, userId: "subject", runId: q.runId, conversationId: "session" }
           : null,
   }
-  const chat = {
-    findConversation: async () => (visible ? { session_id: "session" } : null),
-    readRunFinalAnswer: async (q) => {
-      finalReads.push(q)
-      return typeof finalProof === "function" ? finalProof(q) : finalProof
-    },
+  const findConversation = async () => (visible ? { id: "session" } : null)
+  const readRunFinalAnswer = async (q) => {
+    finalReads.push(q)
+    return typeof finalProof === "function" ? finalProof(q) : finalProof
   }
   const unexpected = () => assert.fail("Run display fixture must not reach PostgreSQL")
   const builder = Test.createTestingModule({ imports: [AgentRunsModule] })
@@ -91,8 +90,10 @@ async function fixture(t) {
     .useValue(admission)
     .overrideProvider(AGENT_RUNS_READER)
     .useValue(reader)
-    .overrideProvider(CHAT_SERVICE)
-    .useValue(chat)
+    .overrideProvider(CHAT_CONVERSATION_LOOKUP)
+    .useValue(findConversation)
+    .overrideProvider(RUN_FINAL_ANSWER_LOOKUP)
+    .useValue(readRunFinalAnswer)
   for (const worker of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) builder.overrideProvider(worker).useValue(null)
   const module = await builder.compile()
   const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })

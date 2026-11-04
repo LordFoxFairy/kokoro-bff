@@ -4,7 +4,8 @@ import type { RequestContext } from "../../domain/request-context.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { AgentRunsReader } from "../../infrastructure/postgres/project-execution-binding.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
+import type { RunFinalAnswerLookup } from "../../infrastructure/postgres/run-final-answer-read.js"
 import { messageFeedbackId } from "../../application/chat/message-feedback-input.js"
 import { readAgentRunDisplay } from "../../infrastructure/clients/agent/run-display.js"
 import { failure } from "../../contracts/index.js"
@@ -20,7 +21,11 @@ export class RunDisplayAdmissionError extends Error {
   }
 }
 
-export type RunDisplayProvider = Readonly<{ submittedAgentRuns: Pick<AgentRunsReader, "readSubmittedAgentRun">; chat: ChatApplicationService }>
+export type RunDisplayProvider = Readonly<{
+  submittedAgentRuns: Pick<AgentRunsReader, "readSubmittedAgentRun">
+  findConversation: ChatConversationLookup
+  readRunFinalAnswer: RunFinalAnswerLookup
+}>
 
 export async function runDisplayRoute(
   request: IncomingMessage,
@@ -99,7 +104,7 @@ export async function runDisplayRoute(
       )
         throw Error("run_display_not_found")
       const owned = await within(() =>
-        checkedStore.chat.findConversation(context.identity.namespace, context.identity.userId, sessionId, undefined, {
+        checkedStore.findConversation(context.identity.namespace, context.identity.userId, sessionId, undefined, {
           signal: controller.signal,
           deadlineAt,
         }),
@@ -110,7 +115,7 @@ export async function runDisplayRoute(
     const { final_message_id, ...facts } = await within(() => readAgentRunDisplay(config, context, runId, controller.signal))
     const finalAnswer = final_message_id
       ? await within(() =>
-          checkedStore.chat.readRunFinalAnswer({
+          checkedStore.readRunFinalAnswer({
             tenantId: context.identity.namespace,
             subjectId: context.identity.userId,
             conversationId: sessionId,

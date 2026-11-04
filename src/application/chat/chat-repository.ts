@@ -40,16 +40,6 @@ export type MessagePartsQuery = MessageReadLifetime &
     limit: number
   }>
 
-export type RunFinalAnswerQuery = MessageReadLifetime &
-  Readonly<{
-    tenantId: string
-    subjectId: string
-    conversationId: string
-    runId: string
-    finalMessageId: string
-  }>
-export type RunFinalAnswer = Readonly<{ segment_id: string; revision: string }>
-
 export type ChatSnapshot = {
   composerSelection?: ChatComposerSelection
   conversation: Conversation
@@ -141,7 +131,6 @@ export type ChatRepository = {
     projectRef: string | undefined,
     context?: PrivateMessageReadContext,
   ): Promise<ChatSnapshot | null>
-  readRunFinalAnswer(query: RunFinalAnswerQuery): Promise<RunFinalAnswer | null>
   readMessageParts(query: MessagePartsQuery): Promise<MessagePartsPage | null>
   readRunProcessPage(
     tenantId: string,

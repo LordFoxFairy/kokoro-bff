@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { EventEmitter } from "node:events"
 import { test } from "node:test"
-import { PostgresChatRepository } from "../src/infrastructure/postgres/chat-repository.js"
+import { createChatConversationLookup } from "../src/infrastructure/postgres/chat-conversation-lookup.js"
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((r) => (resolve = r))
@@ -20,9 +20,9 @@ test("display bounded finder abort destroys a held query instead of leaving pool
     return { rows: [] }
   }
   const client = Object.assign(new EventEmitter(), { query, release: (broken?: unknown) => releases.push(broken) })
-  const repository = new PostgresChatRepository({ pool: { query, connect: async () => client } } as never),
+  const findConversation = createChatConversationLookup({ query, connect: async () => client } as never),
     controller = new AbortController()
-  const pending = repository.findConversation("tenant", "owner", "session", undefined, lifetime(controller))
+  const pending = findConversation("tenant", "owner", "session", undefined, lifetime(controller))
   await entered.promise
   controller.abort()
   try {
@@ -53,16 +53,14 @@ test("display bounded finder releases a late checkout without SQL after actor li
     },
     release: (broken?: unknown) => releases.push(broken),
   })
-  const repository = new PostgresChatRepository({
-      pool: {
-        connect: () => checkout.promise,
-        query: async () => {
-          throw Error("unbounded finder")
-        },
+  const findConversation = createChatConversationLookup({
+      connect: () => checkout.promise,
+      query: async () => {
+        throw Error("unbounded finder")
       },
     } as never),
     controller = new AbortController()
-  const pending = repository.findConversation("tenant", "owner", "session", undefined, lifetime(controller))
+  const pending = findConversation("tenant", "owner", "session", undefined, lifetime(controller))
   controller.abort()
   await assert.rejects(pending)
   checkout.resolve(client as never)

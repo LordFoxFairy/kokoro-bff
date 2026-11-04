@@ -14,6 +14,7 @@ import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgre
 import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
 import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
 import { decodeMessagePartsCursor } from "../dist/infrastructure/postgres/message-parts-read.js"
+import { readRunFinalAnswer } from "../dist/infrastructure/postgres/run-final-answer-read.js"
 import { PostgresPublicShareRepository } from "../dist/infrastructure/postgres/public-share-repository.js"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
@@ -196,16 +197,16 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       const input = (extra = {}) => ({ ...lifetime(), tenantId:c.tenantId, subjectId:c.subjectId, conversationId:c.conversationId, runId:c.runId, finalMessageId:"public-b", ...extra })
       const before = (await pool.query("SELECT row_to_json(m) AS value FROM bff_message m WHERE tenant_id=$1 ORDER BY message_id",[c.tenantId])).rows
       const expectedRevision = before.find(row => row.value.message_id === c.messageId).value.parts_public_sequence
-      assert.deepEqual(await reader.readRunFinalAnswer(input()), {segment_id:"public-b",revision:String(expectedRevision)})
+      assert.deepEqual(await readRunFinalAnswer(pool, input()), {segment_id:"public-b",revision:String(expectedRevision)})
       for (const extra of [{tenantId:"foreign"},{subjectId:"foreign"},{conversationId:"foreign"},{runId:"foreign"},{finalMessageId:"missing"}])
-        assert.equal(await reader.readRunFinalAnswer(input(extra)),null)
+        assert.equal(await readRunFinalAnswer(pool, input(extra)),null)
       assert.deepEqual((await pool.query("SELECT row_to_json(m) AS value FROM bff_message m WHERE tenant_id=$1 ORDER BY message_id",[c.tenantId])).rows,before)
       await pool.query("UPDATE bff_agent_dispatch_outbox SET execution_context_retired_at=now() WHERE run_id=$1",[c.runId])
-      assert.equal(await reader.readRunFinalAnswer(input()),null)
+      assert.equal(await readRunFinalAnswer(pool, input()),null)
       const explicit = await create({twoSegments:true,finalSegmentId:"public-a"})
-      assert.equal(await reader.readRunFinalAnswer(input({tenantId:explicit.tenantId,subjectId:explicit.subjectId,conversationId:explicit.conversationId,runId:explicit.runId})),null)
+      assert.equal(await readRunFinalAnswer(pool, input({tenantId:explicit.tenantId,subjectId:explicit.subjectId,conversationId:explicit.conversationId,runId:explicit.runId})),null)
       const legacy = await create({legacy:true})
-      assert.equal(await reader.readRunFinalAnswer(input({tenantId:legacy.tenantId,subjectId:legacy.subjectId,conversationId:legacy.conversationId,runId:legacy.runId,finalMessageId:"public-a"})),null)
+      assert.equal(await readRunFinalAnswer(pool, input({tenantId:legacy.tenantId,subjectId:legacy.subjectId,conversationId:legacy.conversationId,runId:legacy.runId,finalMessageId:"public-a"})),null)
     })
 
     const raw = async (c) =>

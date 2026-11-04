@@ -1,7 +1,19 @@
 import type { Pool } from "pg"
-import type { RunFinalAnswerQuery, RunFinalAnswer } from "../../application/chat/chat-repository.js"
+import type { MessageReadLifetime } from "../../application/chat/chat-repository.js"
 import { withMessageReadClient } from "./message-parts-read.js"
 import { parseMessageParts } from "./message-parts.js"
+
+export type RunFinalAnswerQuery = MessageReadLifetime &
+  Readonly<{
+    tenantId: string
+    subjectId: string
+    conversationId: string
+    runId: string
+    finalMessageId: string
+  }>
+export type RunFinalAnswer = Readonly<{ segment_id: string; revision: string }>
+
+export type RunFinalAnswerLookup = (query: RunFinalAnswerQuery) => Promise<RunFinalAnswer | null>
 
 type FinalRow = { parts_format_version: unknown; revision: unknown; final_segment_id: unknown; candidates: unknown }
 
