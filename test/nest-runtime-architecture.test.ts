@@ -98,6 +98,7 @@ test("unmatched Product routes keep the BFF error envelope without calling any o
     SCHEDULED_TASK_DISPATCHER,
     SCHEDULED_AGENT_DISPATCHER,
     SCHEDULED_AGENT_TERMINAL_CONSUMER,
+    SKILL_AUTHORIZATION,
   } = await import("../dist/common/tokens.js")
   let ownerCalls = 0
   const owner = createServer((_request, response) => {
@@ -115,6 +116,7 @@ test("unmatched Product routes keep the BFF error envelope without calling any o
     KOKORO_INTERNAL_SECRET_BFF: "fixture-internal-secret",
     KOKORO_BILLING_BFF_SERVICE_TOKEN: "fixture-billing-token",
     KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
+    KOKORO_TENANT_ID: "test-tenant",
     KOKORO_BFF_POSTGRES_URL: "postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=kokoro_bff",
     KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:1/8",
     KOKORO_AGENT_ENABLED: "true",
@@ -125,6 +127,7 @@ test("unmatched Product routes keep the BFF error envelope without calling any o
     KOKORO_BFF_STORAGE_SECRET: "fixture-storage-secret",
   })
   const admission = new SessionAdmissionDouble({ "unknown-product-session": { namespace: "test-tenant", userId: "test-user" } })
+  const skillActions: string[] = []
   let storageCalls = 0
   const unexpected = (): never => {
     storageCalls++
@@ -137,6 +140,13 @@ test("unmatched Product routes keep the BFF error envelope without calling any o
     .useValue({ pool: { query: unexpected, connect: unexpected } })
     .overrideProvider(SESSION_ADMISSION)
     .useValue(admission)
+    .overrideProvider(SKILL_AUTHORIZATION)
+    .useValue({
+      check: async ({ action }: { action: string }) => {
+        skillActions.push(action)
+        return { ok: true }
+      },
+    })
   for (const token of [
     AGENT_CANCELLATION_DISPATCHER,
     AGENT_DISPATCH_DISPATCHER,
@@ -192,6 +202,29 @@ test("unmatched Product routes keep the BFF error envelope without calling any o
   assert.equal(admission.calls.length, 0)
   assert.equal(storageCalls, 0)
   assert.equal(ownerCalls, 0)
+
+  await t.test("System fallback never intercepts a current Skills command", async () => {
+    const draft = await fetch(`${base}/v1/skills/drafts`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "draft-owner-boundary" },
+      body: JSON.stringify({ display_name: "Draft owner boundary", summary: "", tags: [] }),
+    })
+    assert.equal(draft.status, 503)
+    assert.equal((await draft.json()).error.code, "skill_dependency_unavailable")
+    assert.deepEqual(skillActions, ["create_draft"])
+
+    for (const [route, error] of [
+      ["system/unknown", "system_projection_not_configured"],
+      ["skills/quota", "platform_operation_not_available"],
+    ]) {
+      const response = await fetch(`${base}/v1/${route}`, { headers })
+      assert.equal(response.status, 503, route)
+      assert.equal((await response.json()).error.code, error, route)
+    }
+    assert.deepEqual(skillActions, ["create_draft"])
+    assert.equal(ownerCalls, 0)
+    assert.equal(storageCalls, 0)
+  })
 })
 
 test("HealthModule preserves the probe response when readiness is blocked", async (t) => {

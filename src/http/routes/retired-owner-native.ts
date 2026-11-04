@@ -8,22 +8,22 @@ import { authorizeUserRequest } from "../../auth/user-admission.js"
 
 type RetiredOwner = "system" | "skills"
 
-function retiredOwnerForRequest(request: IncomingMessage): RetiredOwner | null {
+function isRetiredOwnerRequest(request: IncomingMessage, owner: RetiredOwner): boolean {
   let path: string[]
   try {
     path = pathOf(request)
   } catch {
-    return null
+    return false
   }
-  const owner = path[1] === "system" ? "system" : path[1] === "skills" ? "skills" : null
-  if (owner !== "skills" || path[0] !== "v1") return owner
+  if (path[1] !== owner) return false
+  if (owner !== "skills" || path[0] !== "v1") return true
 
   // R357 removed these REST reads. Neither runtime should admit or forward them.
   const method = request.method ?? "GET"
   const removedSkillRead =
     method === "GET" &&
     (path.length === 2 || (path.length === 3 && !["quota", "drafts", "github"].includes(path[2] ?? "")) || (path.length === 4 && path[3] === "download"))
-  return removedSkillRead ? null : owner
+  return !removedSkillRead
 }
 
 export async function handleRetiredOwnerRequest(
@@ -31,9 +31,9 @@ export async function handleRetiredOwnerRequest(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
+  owner: RetiredOwner,
 ): Promise<boolean> {
-  const owner = retiredOwnerForRequest(request)
-  if (owner === null) return false
+  if (!isRetiredOwnerRequest(request, owner)) return false
   const id = requestId(request)
   const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000), response)
   if (!admitted.ok) {

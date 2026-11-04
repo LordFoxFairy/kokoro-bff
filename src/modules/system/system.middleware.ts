@@ -17,7 +17,7 @@ export class SystemMiddleware implements NestMiddleware {
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleSystemAdminRequest(request, response, this.config, this.admission)
       .then((handled) => handled || handleSystemNativeRequest(request, response, this.config))
-      .then((handled) => handled || handleRetiredOwnerRequest(request, response, this.config, this.admission))
+      .then((handled) => handled || handleRetiredOwnerRequest(request, response, this.config, this.admission, "system"))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

@@ -95,7 +95,7 @@ export class SkillsMiddleware implements NestMiddleware {
       .then((handled) => handled || handleSkillLocalImportRequest(request, response, this.config, this.admission, this.skillAuthorization, this.localImportClient))
       .then((handled) => handled || handlePersonalSkillLifecycleRequest(request, response, this.config, this.admission, this.skillAuthorization, this.draftClient))
       .then((handled) => handled || handleSkillUsageRequest(request, response, this.config, this.admission, this.usageReader))
-      .then((handled) => handled || handleRetiredOwnerRequest(request, response, this.config, this.admission))
+      .then((handled) => handled || handleRetiredOwnerRequest(request, response, this.config, this.admission, "skills"))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })
