@@ -3,10 +3,18 @@ import { randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 import { Pool } from "pg"
-import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
-import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
-import { decodeMessagePartsCursor } from "../dist/infrastructure/postgres/message-parts-read.js"
+import { AgUiProjectionService } from "../dist/application/agui/project-session-events.js"
+import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
+import { PublicShareApplicationService } from "../dist/application/public-share-service.js"
 import { agentEventPage, mapAgentEvent } from "../dist/infrastructure/clients/agent/projection.js"
+import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
+import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
+import { PostgresAgUiConsumerRepository } from "../dist/infrastructure/postgres/agui-consumer-repository.js"
+import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgres/agui-projection-repository.js"
+import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
+import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
+import { decodeMessagePartsCursor } from "../dist/infrastructure/postgres/message-parts-read.js"
+import { PostgresPublicShareRepository } from "../dist/infrastructure/postgres/public-share-repository.js"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const redisUrl = process.env.KOKORO_TEST_REDIS_URL
@@ -25,13 +33,18 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
   // Root supplies and reclaims this exact temporary database. Never reset a preview or normal owner schema.
   assert.match(new URL(postgresUrl).pathname, /^\/kokoro_bff_parts_[0-9a-f]{32}$/u)
   const pool = new Pool({ connectionString: postgresUrl, max: 5, options: "-c search_path=kokoro_bff -c timezone=UTC", statement_timeout: 10000 })
-  let store
+  let database
   try {
     assert.equal((await pool.query("SELECT to_regclass('kokoro_bff.bff_message') AS installed")).rows[0].installed, null, "requires a fresh owned database")
     await pool.query("CREATE SCHEMA kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    database = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(database))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(database)
+    const publicShareService = new PublicShareApplicationService(new PostgresPublicShareRepository(database))
+    await database.ready()
     const reader = new PostgresChatRepository({ pool })
     async function create({
       legacy = false,
@@ -57,7 +70,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
         tenantId,
         subjectId,
       ])
-      const receipt = await store.chatTurnService.submit({
+      const receipt = await chatTurnService.submit({
         tenantId,
         conversationId,
         subjectId,
@@ -68,10 +81,10 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       })
       assert.ok(receipt)
       const claim = (
-        await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: `worker_${suffix}`, limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+        await agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: `worker_${suffix}`, limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
       )[0]
       assert.equal(claim.runId, receipt.run_id)
-      assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+      assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
       const messageId = receipt.assistant_message_id,
         runId = receipt.run_id
       if (legacy)
@@ -157,7 +170,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
         }))
       }
       if (deferTerminal) { events = events.slice(0, -1); sequence -= 1 }
-      await store.agUi.ingest(tenantId, conversationId, events)
+      await agUi.ingest(tenantId, conversationId, events)
       const query = (cursor = null, extra = {}) => ({
         ...lifetime(),
         tenantId,
@@ -174,7 +187,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
         finish: (finalId) => {
           const terminal = source("run.completed", {status:"completed",final_segment_id:finalId})
           sequence -= 1 // Invalid input is never committed; the next attempt reuses the pending source position.
-          return store.agUi.ingest(tenantId, conversationId, [terminal])
+          return agUi.ingest(tenantId, conversationId, [terminal])
         } }
     }
     const assistant = (snapshot) => snapshot.messages.find((message) => message.role === "assistant")
@@ -234,10 +247,10 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       const c = await create({twoSegments:true,deferTerminal:true})
       const old = assistant(await c.snapshot()).rendering
       const before = await raw(c)
-      const ledgerBefore = await store.agUi.status(c.tenantId,c.conversationId)
+      const ledgerBefore = await agUi.status(c.tenantId,c.conversationId)
       await assert.rejects(c.finish("not-in-this-run"), /AGUI_MESSAGE_PARTS_INVALID/u)
       assert.deepEqual(await raw(c),before)
-      assert.deepEqual(await store.agUi.status(c.tenantId,c.conversationId),ledgerBefore)
+      assert.deepEqual(await agUi.status(c.tenantId,c.conversationId),ledgerBefore)
       await c.finish("public-b")
       await assert.rejects(reader.readMessageParts(c.query(old.parts_cursor)), /MESSAGE_PARTS_CHANGED/u)
       const after = assistant(await c.snapshot()).rendering
@@ -250,9 +263,9 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
         const c = await create({twoSegments:true,deferTerminal:true})
         if (retired === "message") await pool.query("UPDATE bff_message SET status='completed' WHERE message_id=$1",[c.messageId])
         else await pool.query("UPDATE bff_agui_stream SET expected_run_id='other-run' WHERE tenant_id=$1 AND session_id=$2",[c.tenantId,c.conversationId])
-        const before = await store.agUi.status(c.tenantId,c.conversationId)
+        const before = await agUi.status(c.tenantId,c.conversationId)
         await assert.rejects(c.finish("public-b"), /AGUI_FINAL_ANSWER_BINDING_MISSING/u)
-        assert.deepEqual(await store.agUi.status(c.tenantId,c.conversationId),before)
+        assert.deepEqual(await agUi.status(c.tenantId,c.conversationId),before)
         assert.equal((await pool.query("SELECT final_segment_id FROM bff_message WHERE message_id=$1",[c.messageId])).rows[0].final_segment_id,null)
       }
     })
@@ -261,10 +274,10 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       for (const [original,incoming] of [["public-b","public-a"],["public-b",undefined],[undefined,"public-b"]]) {
         const c = await create({twoSegments:true,finalSegmentId:original})
         const before = await raw(c)
-        const ledger = await store.agUi.status(c.tenantId,c.conversationId)
+        const ledger = await agUi.status(c.tenantId,c.conversationId)
         await assert.rejects(c.finish(incoming))
         assert.deepEqual(await raw(c),before)
-        assert.deepEqual(await store.agUi.status(c.tenantId,c.conversationId),ledger)
+        assert.deepEqual(await agUi.status(c.tenantId,c.conversationId),ledger)
       }
     })
 
@@ -280,7 +293,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       assert.deepEqual(part.activity, detail)
       assert.ok(BigInt(part.first_sequence) < BigInt(part.latest_sequence))
       const share = await freshReader.createShare(c.tenantId, c.subjectId, c.conversationId)
-      const { messages: publicMessages } = await store.publicShareService.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
+      const { messages: publicMessages } = await publicShareService.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
       assert.equal(publicMessages.find((item) => item.role === "assistant").content, "AB")
       assert.equal(JSON.stringify(publicMessages).includes("public_lookup"), false)
       assert.equal(
@@ -319,7 +332,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       const listed = await reader.listMessages(c.tenantId, c.subjectId, c.conversationId, 100, null)
       assert.deepEqual(assistant(listed).rendering, selected.rendering)
       const share = await reader.createShare(c.tenantId, c.subjectId, c.conversationId)
-      const shared = await store.publicShareService.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
+      const shared = await publicShareService.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
       assert.equal(shared.messages.find((message) => message.role === "assistant").content, "AB")
       assert.equal(
         Object.hasOwn(
@@ -591,7 +604,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
         const c = await create({ terminalStatus: "cancelled", noText: content === "", long: content })
         const before = await raw(c)
         assert.equal((await c.snapshot()).messages.find((message) => message.messageId === c.messageId).terminal_status, "cancelled")
-        const next = await store.chatTurnService.submit({
+        const next = await chatTurnService.submit({
           tenantId: c.tenantId,
           conversationId: c.conversationId,
           subjectId: c.subjectId,
@@ -601,7 +614,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
           content: "next fixture turn",
         })
         const claim = (
-          await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+          await agentDispatchOutbox.claimAgentDispatchOutbox({
             workerId: randomUUID(),
             limit: 1,
             leaseDurationMs: 5000,
@@ -609,7 +622,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
           })
         )[0]
         assert.equal(claim.runId, next.run_id)
-        assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+        assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
         let seq = Number((await pool.query("SELECT source_high_watermark FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",[c.tenantId,c.conversationId])).rows[0].source_high_watermark)
         const events = [["run.created",{run_id:next.run_id}],["run.completed",{status:"completed"}]].map(([kind,payload]) => {
           seq++; const id=randomUUID(), occurredAt=new Date(seq*1000).toISOString()
@@ -617,12 +630,12 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
             sourcePayload:{chat_event_id:id,session_id:c.conversationId,run_id:next.run_id,seq,created_at:seq*1000,payload},
             event:{event_id:id,seq,session_id:c.conversationId,run_id:next.run_id,kind,timestamp:occurredAt,payload} }
         })
-        await store.agUi.ingest(c.tenantId, c.conversationId, events)
+        await agUi.ingest(c.tenantId, c.conversationId, events)
         await pool.query(
           "UPDATE bff_agui_event SET recorded_at=CURRENT_TIMESTAMP(3)-INTERVAL '2 days' WHERE tenant_id=$1 AND session_id=$2 AND event_payload #>> '{metadata,kokoro,run_id}'=$3",
           [c.tenantId, c.conversationId, c.runId],
         )
-        const collected = await store.agUiConsumers.collectGarbage({
+        const collected = await agUiConsumers.collectGarbage({
           now: new Date().toISOString(),
           retentionMs: 86400000,
           tombstoneRetentionMs: 86400000,
@@ -693,7 +706,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
         aborted.abort()
         await assert.rejects(c.snapshot({ ...lifetime(), signal: aborted.signal }), /MESSAGE_PARTS_UNAVAILABLE/u)
         const share = await reader.createShare(c.tenantId, c.subjectId, c.conversationId)
-        const shared = await store.publicShareService.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
+        const shared = await publicShareService.listMessages(share.shareId, c.tenantId, c.conversationId, 100)
         assert.equal(
           shared.messages.some((message) => Object.hasOwn(message, "terminal_status")),
           false,
@@ -703,7 +716,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
     // CANCELLED-PRIVATE-READ-END
   } finally {
     try {
-      if (store) await store.close()
+      if (database) await database.close()
     } finally {
       await pool.end()
     }
