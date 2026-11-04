@@ -2,9 +2,14 @@ import assert from "node:assert/strict"
 import { createServer, type Server } from "node:http"
 import { afterEach, describe, it } from "node:test"
 
+import "reflect-metadata"
+import type { INestApplication } from "@nestjs/common"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION } from "../dist/common/tokens.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { MusicModule } from "../dist/modules/music/music.module.js"
 import type { BffConfig } from "../src/config/runtime.ts"
-import { createLiveTestBffServer } from "./doubles/server.ts"
 import { musicOwnerRoute, projectMoriResponse, projectMoriEventStream } from "../dist/infrastructure/clients/mori/owner-route.js"
 import { MusicMiddleware } from "../dist/modules/music/music.middleware.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
@@ -21,6 +26,7 @@ function featureServer(configuration: BffConfig, admission: SessionAdmission, en
 }
 
 const servers: Server[] = []
+const applications: INestApplication[] = []
 
 async function listen(server: Server): Promise<string> {
   servers.push(server)
@@ -31,6 +37,26 @@ async function listen(server: Server): Promise<string> {
   const address = server.address()
   if (address === null || typeof address === "string") throw new Error("server did not bind")
   return `http://127.0.0.1:${address.port}`
+}
+
+async function listenMusic(configuration: BffConfig): Promise<string> {
+  const module = await Test.createTestingModule({ imports: [MusicModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(configuration)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: Object.freeze({}) })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(
+      new SessionAdmissionDouble({
+        "test-session": { namespace: "ns_test", userId: "user_test" },
+        "control-session": { namespace: "tenant_control", userId: "user_control" },
+      }),
+    )
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  applications.push(app)
+  await app.listen(0, "127.0.0.1")
+  return app.getUrl()
 }
 
 function config(overrides: Partial<BffConfig> = {}): BffConfig {
@@ -76,7 +102,10 @@ function authHeaders(): Record<string, string> {
 }
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
+  await Promise.all([
+    ...applications.splice(0).map((app) => app.close()),
+    ...servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))),
+  ])
 })
 
 describe("Mori Music owner adapter", () => {
@@ -290,7 +319,7 @@ describe("Mori Music owner adapter", () => {
       )
     })
     const ownerBase = await listen(owner)
-    const bff = await listen(createLiveTestBffServer(config({ upstreams: { ...config().upstreams, music: ownerBase } })))
+    const bff = await listenMusic(config({ upstreams: { ...config().upstreams, music: ownerBase } }))
 
     const response = await fetch(`${bff}/v1/mori/projects/project_123?provider=secret`, {
       headers: authHeaders(),
@@ -326,7 +355,7 @@ describe("Mori Music owner adapter", () => {
       )
     })
     const ownerBase = await listen(owner)
-    const bff = await listen(createLiveTestBffServer(config({ upstreams: { ...config().upstreams, music: ownerBase } })))
+    const bff = await listenMusic(config({ upstreams: { ...config().upstreams, music: ownerBase } }))
     const response = await fetch(`${bff}/v1/mori/generations/generation_1/events`, { headers: authHeaders() })
     const text = await response.text()
 

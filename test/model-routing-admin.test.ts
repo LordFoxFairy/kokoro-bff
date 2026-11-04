@@ -1,8 +1,12 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
 import { createServer, request as nodeRequest, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import { afterEach, test } from "node:test"
 
-import { createBffServer } from "../dist/bootstrap/server.js"
+import type { INestApplication } from "@nestjs/common"
+import { Test } from "@nestjs/testing"
+
+import { BFF_CONFIG, SESSION_ADMISSION } from "../dist/common/tokens.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import {
   zListModelLabelResponse,
@@ -10,9 +14,12 @@ import {
   zListRoutingPolicyResponse,
   zPutRoutingPolicyResponse,
 } from "../dist/generated/system-http/zod.gen.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { SystemModule } from "../dist/modules/system/system.module.js"
 import type { BffConfig } from "../src/config/runtime.ts"
 
 const servers: Server[] = []
+const apps: INestApplication<Server>[] = []
 const tenantId = "tenant-admin"
 const actorId = "user-admin"
 const labelId = "11111111-1111-4111-8111-111111111111"
@@ -31,15 +38,19 @@ async function listen(server: Server): Promise<string> {
 }
 
 afterEach(async () => {
-  await Promise.all(
-    servers.splice(0).map(
+  await Promise.all([
+    ...apps.splice(0).map((app) => {
+      app.getHttpServer().closeAllConnections()
+      return app.close()
+    }),
+    ...servers.splice(0).map(
       (server) =>
         new Promise<void>((resolve) => {
           server.closeAllConnections()
           server.close(() => resolve())
         }),
     ),
-  )
+  ])
 })
 
 function config(systemBaseUrl: string, timeoutMs = 1000): BffConfig {
@@ -171,15 +182,27 @@ async function ownerFixture(responder?: (request: IncomingMessage) => Promise<{ 
   return { origin, calls }
 }
 
+async function createSystemTestApp(config: BffConfig, sessionAdmission: Pick<ReturnType<typeof admission>, "verify">) {
+  const module = await Test.createTestingModule({ imports: [SystemModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+    .compile()
+  const app = module.createNestApplication<INestApplication<Server>>({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  apps.push(app)
+  return app
+}
+
+async function startSystemTestApp(config: BffConfig, sessionAdmission: Pick<ReturnType<typeof admission>, "verify">): Promise<string> {
+  const app = await createSystemTestApp(config, sessionAdmission)
+  await app.listen(0, "127.0.0.1")
+  return app.getUrl()
+}
+
 async function bffFixture(systemBaseUrl: string, platformAdmin = true, timeoutMs = 1000) {
   const sessionAdmission = admission(platformAdmin)
-  const origin = await listen(
-    createBffServer(config(systemBaseUrl, timeoutMs), {
-      businessStore: null,
-      readiness: async () => undefined,
-      sessionAdmission,
-    }),
-  )
+  const origin = await startSystemTestApp(config(systemBaseUrl, timeoutMs), sessionAdmission)
   return { origin, admissionCalls: sessionAdmission.calls }
 }
 
@@ -509,17 +532,14 @@ test("disconnect after admission starts but before it resolves never dispatches 
   let entered!: () => void
   const admitted = new Promise<void>((resolve) => (release = resolve))
   const started = new Promise<void>((resolve) => (entered = resolve))
-  const bffServer = createBffServer(config(owner.origin), {
-    businessStore: null,
-    readiness: async () => undefined,
-    sessionAdmission: {
-      verify: async () => {
-        entered()
-        await admitted
-        return { ok: true as const, identity: { namespace: tenantId, userId: actorId }, platformAdmin: true }
-      },
+  const app = await createSystemTestApp(config(owner.origin), {
+    verify: async () => {
+      entered()
+      await admitted
+      return { ok: true as const, identity: { namespace: tenantId, userId: actorId }, platformAdmin: true }
     },
   })
+  const bffServer = app.getHttpServer()
   let observedClose!: () => void
   const responseClosed = new Promise<void>((resolve) => (observedClose = resolve))
   const onRequest = (incoming: IncomingMessage, response: ServerResponse): void => {
@@ -527,7 +547,8 @@ test("disconnect after admission starts but before it resolves never dispatches 
   }
   bffServer.on("request", onRequest)
   try {
-    const bff = await listen(bffServer)
+    await app.listen(0, "127.0.0.1")
+    const bff = await app.getUrl()
     const target = new URL("/v1/admin/model-routing", bff)
     const request = nodeRequest({ hostname: target.hostname, port: target.port, path: target.pathname, headers: browserHeaders() })
     request.on("error", () => undefined)
@@ -678,12 +699,7 @@ test("administrator creates a write-only model connection and recovers its ident
     }),
   )
   const verified = admission(true)
-  const bff = await listen(
-    createBffServer(
-      { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
-      { businessStore: null, readiness: async () => undefined, sessionAdmission: verified },
-    ),
-  )
+  const bff = await startSystemTestApp({ ...config(owner), systemModelManagementToken: "model-management-fixture-token" }, verified)
   const created = await fetch(`${bff}/v1/admin/model-providers`, {
     method: "POST",
     headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "model-create-one" }),
@@ -713,21 +729,11 @@ test("model configuration rejects missing credentials, non-admins and invalid se
     [false, "model-management-fixture-token", 403],
     [true, null, 503],
   ] as const) {
-    const bff = await listen(
-      createBffServer(
-        { ...config(owner), systemModelManagementToken: token },
-        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(allowed) },
-      ),
-    )
+    const bff = await startSystemTestApp({ ...config(owner), systemModelManagementToken: token }, admission(allowed))
     const response = await fetch(`${bff}/v1/admin/model-providers?limit=50`, { headers: browserHeaders() })
     assert.equal(response.status, expected)
   }
-  const bff = await listen(
-    createBffServer(
-      { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
-      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
-    ),
-  )
+  const bff = await startSystemTestApp({ ...config(owner), systemModelManagementToken: "model-management-fixture-token" }, admission(true))
   for (const [path, method, body, extra, status] of [
     ["model-providers", "POST", { api_key: "fixture-secret-key", tenant_id: "forged" }, {}, 400],
     [`model-revisions/${revisionId}/publish`, "POST", undefined, {}, 428],
@@ -767,12 +773,7 @@ test("sensitive creation lookup preserves unconfirmed status and never retries w
       )
     }),
   )
-  const bff = await listen(
-    createBffServer(
-      { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
-      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
-    ),
-  )
+  const bff = await startSystemTestApp({ ...config(owner), systemModelManagementToken: "model-management-fixture-token" }, admission(true))
   const input = {
     provider: "fixture",
     provider_key: "unknown-key",
@@ -845,12 +846,7 @@ test("configuration acknowledgements bind owner defaults without changing origin
         response.end(JSON.stringify({ data: entry.reply }))
       }),
     )
-    const bff = await listen(
-      createBffServer(
-        { ...config(owner), systemModelManagementToken: "model-management-fixture-token" },
-        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
-      ),
-    )
+    const bff = await startSystemTestApp({ ...config(owner), systemModelManagementToken: "model-management-fixture-token" }, admission(true))
     const result = await fetch(`${bff}/v1/admin/${entry.path}`, {
       method: "POST",
       headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "default-protected-command" }),
@@ -905,11 +901,9 @@ test("upstream provider candidates use the explicit management read with trusted
   const candidate = { provider_id: revisionId, items: [{ id: "vendor/model" }] }
   const owner = await ownerFixture(() => ({ status: 200, body: { data: candidate } }))
   const verified = admission(true)
-  const origin = await listen(
-    createBffServer(
-      { ...config(owner.origin), adminWebSharedSecret: "admin-browser-secret", systemModelManagementToken: "model-management-fixture-token" },
-      { businessStore: null, readiness: async () => undefined, sessionAdmission: verified },
-    ),
+  const origin = await startSystemTestApp(
+    { ...config(owner.origin), adminWebSharedSecret: "admin-browser-secret", systemModelManagementToken: "model-management-fixture-token" },
+    verified,
   )
   const response = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, {
     headers: browserHeaders({
@@ -943,12 +937,7 @@ test("upstream provider candidates reject non-admins and missing management cred
     [false, "manager-fixture", 403],
     [true, null, 503],
   ] as const) {
-    const origin = await listen(
-      createBffServer(
-        { ...config(owner.origin), systemModelManagementToken: key },
-        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(platformAdmin) },
-      ),
-    )
+    const origin = await startSystemTestApp({ ...config(owner.origin), systemModelManagementToken: key }, admission(platformAdmin))
     const result = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, {
       headers: browserHeaders({ "x-kokoro-platform-admin": "true", "x-kokoro-tenant-id": "forged" }),
     })
@@ -959,12 +948,7 @@ test("upstream provider candidates reject non-admins and missing management cred
 
 test("upstream provider candidates reject all query, body framing and command headers before owner I/O", async () => {
   const owner = await ownerFixture()
-  const origin = await listen(
-    createBffServer(
-      { ...config(owner.origin), systemModelManagementToken: "manager-fixture" },
-      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
-    ),
-  )
+  const origin = await startSystemTestApp({ ...config(owner.origin), systemModelManagementToken: "manager-fixture" }, admission(true))
   const path = `/v1/admin/model-providers/${revisionId}/upstream-models`
   const normal = Object.entries(browserHeaders())
   for (const [name, value] of [
@@ -991,12 +975,7 @@ test("upstream provider candidates bind the exact provider and strictly reject c
     { provider_id: revisionId, items: [{ id: "" }] },
   ]) {
     const owner = await ownerFixture(() => ({ status: 200, body: { data } }))
-    const origin = await listen(
-      createBffServer(
-        { ...config(owner.origin), systemModelManagementToken: "manager-fixture" },
-        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
-      ),
-    )
+    const origin = await startSystemTestApp({ ...config(owner.origin), systemModelManagementToken: "manager-fixture" }, admission(true))
     const response = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders() })
     assert.equal(response.status, 502)
     assert.equal((await response.text()).includes("fixture-secret"), false)
@@ -1014,12 +993,7 @@ test("upstream provider candidate owner failures are stable, sanitized and never
     [503, "unknown_supplier_error", true, 502],
   ] as const) {
     const owner = await ownerFixture(() => ({ status, body: { error: { code, message: "fixture-secret", retryable } } }))
-    const origin = await listen(
-      createBffServer(
-        { ...config(owner.origin), systemModelManagementToken: "manager-fixture" },
-        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
-      ),
-    )
+    const origin = await startSystemTestApp({ ...config(owner.origin), systemModelManagementToken: "manager-fixture" }, admission(true))
     const response = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders() })
     assert.equal(response.status, expected, code)
     assert.equal((await response.text()).includes("fixture-secret"), false)
@@ -1041,12 +1015,7 @@ test("upstream provider candidate deadline cancels the actual upstream response 
       response.write('{"data":')
     }),
   )
-  const origin = await listen(
-    createBffServer(
-      { ...config(owner, 50), systemModelManagementToken: "manager-fixture" },
-      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
-    ),
-  )
+  const origin = await startSystemTestApp({ ...config(owner, 50), systemModelManagementToken: "manager-fixture" }, admission(true))
   const response = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders() })
   assert.equal(response.status, 503)
   await done
@@ -1065,12 +1034,7 @@ test("upstream provider candidate deadline includes fresh admission without rest
         return { ok: true, identity: { namespace: tenantId, userId: actorId }, platformAdmin: true } as const
       },
     }
-    const origin = await listen(
-      createBffServer(
-        { ...config(owner.origin, 10_000), systemModelManagementToken: "manager-fixture" },
-        { businessStore: null, readiness: async () => undefined, sessionAdmission: source },
-      ),
-    )
+    const origin = await startSystemTestApp({ ...config(owner.origin, 10_000), systemModelManagementToken: "manager-fixture" }, source)
     const result = await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders() })
     assert.equal(result.status, 503)
     assert.equal(owner.calls.length, 0)
@@ -1138,12 +1102,7 @@ test("upstream provider candidate caller cancellation closes the owner socket wi
       started()
     }),
   )
-  const origin = await listen(
-    createBffServer(
-      { ...config(owner), systemModelManagementToken: "manager-fixture" },
-      { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
-    ),
-  )
+  const origin = await startSystemTestApp({ ...config(owner), systemModelManagementToken: "manager-fixture" }, admission(true))
   const abort = new AbortController(),
     pending = fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders(), signal: abort.signal })
   await seen
@@ -1167,12 +1126,7 @@ test("upstream provider candidate reads require owner no-store and the complete 
         response.end(body)
       }),
     )
-    const origin = await listen(
-      createBffServer(
-        { ...config(owner), systemModelManagementToken: "manager-fixture" },
-        { businessStore: null, readiness: async () => undefined, sessionAdmission: admission(true) },
-      ),
-    )
+    const origin = await startSystemTestApp({ ...config(owner), systemModelManagementToken: "manager-fixture" }, admission(true))
     assert.equal((await fetch(`${origin}/v1/admin/model-providers/${revisionId}/upstream-models`, { headers: browserHeaders() })).status, 502)
     assert.equal(sends, 1)
   }

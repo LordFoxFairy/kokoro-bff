@@ -1,7 +1,20 @@
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { test } from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
+import {
+  AGENT_CANCELLATION_DISPATCHER,
+  AGENT_DISPATCH_DISPATCHER,
+  AGENT_RUNS_READER,
+  AGUI_PROJECTOR,
+  BFF_CONFIG,
+  BFF_DATABASE,
+  CHAT_SERVICE,
+  SESSION_ADMISSION,
+} from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { AgentRunsModule } from "../dist/modules/agent-runs/agent-runs.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 const activityId = `act_${"a".repeat(64)}`
@@ -25,6 +38,10 @@ async function fixture(t) {
     res.setHeader("content-type", "application/json")
     res.end(JSON.stringify(ownerBody))
   })
+  t.after(async () => {
+    owner.closeAllConnections()
+    await new Promise((r) => owner.close(r))
+  })
   await new Promise((r) => owner.listen(0, "127.0.0.1", r))
   const config = {
     host: "127.0.0.1",
@@ -47,38 +64,46 @@ async function fixture(t) {
     upstreams: { agents: `http://127.0.0.1:${owner.address().port}` },
   }
   const admission = new SessionAdmissionDouble({ "display-session": { namespace: "tenant", userId: "subject" } })
-  const server = createBffServer(config, {
-    businessStore: {
-      submittedAgentRuns: {
-        readSubmittedAgentRun: async (q) =>
-          typeof submitted === "function"
-            ? submitted(q)
-            : submitted
-              ? typeof submitted === "object"
-                ? submitted
-                : { tenantId: q.tenantId, userId: "subject", runId: q.runId, conversationId: "session" }
-              : null,
-      },
+  const reader = {
+    readSubmittedAgentRun: async (q) =>
+      typeof submitted === "function"
+        ? submitted(q)
+        : submitted
+          ? typeof submitted === "object"
+            ? submitted
+            : { tenantId: q.tenantId, userId: "subject", runId: q.runId, conversationId: "session" }
+          : null,
+  }
+  const chat = {
+    findConversation: async () => (visible ? { session_id: "session" } : null),
+    readRunFinalAnswer: async (q) => {
+      finalReads.push(q)
+      return typeof finalProof === "function" ? finalProof(q) : finalProof
     },
-    chatService: {
-      findConversation: async () => (visible ? { session_id: "session" } : null),
-      readRunFinalAnswer: async (q) => {
-        finalReads.push(q)
-        return typeof finalProof === "function" ? finalProof(q) : finalProof
-      },
-    },
-    readiness: async () => undefined,
-    sessionAdmission: admission,
-  })
-  await new Promise((r) => server.listen(0, "127.0.0.1", r))
+  }
+  const unexpected = () => assert.fail("Run display fixture must not reach PostgreSQL")
+  const builder = Test.createTestingModule({ imports: [AgentRunsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected }, ready: unexpected })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+    .overrideProvider(AGENT_RUNS_READER)
+    .useValue(reader)
+    .overrideProvider(CHAT_SERVICE)
+    .useValue(chat)
+  for (const worker of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) builder.overrideProvider(worker).useValue(null)
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
   t.after(async () => {
-    for (const s of [server, owner]) {
-      s.closeAllConnections()
-      await new Promise((r) => s.close(r))
-    }
+    app.getHttpServer().closeAllConnections()
+    await app.close()
   })
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
   const request = async (path = "/v1/sessions/session/runs/run/display", headers = {}, signal) => {
-    const r = await fetch(`http://127.0.0.1:${server.address().port}${path}`, {
+    const r = await fetch(`${base}${path}`, {
       signal,
       headers: {
         "x-kokoro-service": "web-bff",
