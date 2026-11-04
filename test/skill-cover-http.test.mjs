@@ -90,10 +90,8 @@ test("Cover decoder rejects a header-only PNG before returning any object bytes"
   )
 })
 
-import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
-import { createServer } from "node:http"
-import { EventEmitter, once } from "node:events"
+import { EventEmitter } from "node:events"
 import { Code, ConnectError } from "@connectrpc/connect"
 const correctionConfig = {
   host: "127.0.0.1",
@@ -181,8 +179,7 @@ for (const [ownerCode, status, errorCode] of [
 
 test("Cover real HTTP rejects owner MIME schema as502 without transferring bytes", async () => {
   let calls = 0
-  const server = createBffServer(correctionConfig, {
-    businessStore: null,
+  const dependencies = {
     sessionAdmission: {
       verify: async () => ({
         ok: true,
@@ -208,19 +205,40 @@ test("Cover real HTTP rejects owner MIME schema as502 without transferring bytes
         }
       },
     },
-  })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
+  }
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { SkillsModule } = await import("../dist/modules/skills/skills.module.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, SKILL_AUTHORIZATION, SKILL_PRODUCT_CLIENT } = await import("../dist/common/tokens.js")
+  const unexpectedStorage = () => {
+    throw new Error("Skill HTTP fixture must not touch BFF storage")
+  }
+  const module = await Test.createTestingModule({ imports: [SkillsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(correctionConfig)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpectedStorage, connect: unexpectedStorage }, redis: {}, ready: unexpectedStorage })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(dependencies.sessionAdmission)
+    .overrideProvider(SKILL_AUTHORIZATION)
+    .useValue(dependencies.skillAuthorization)
+    .overrideProvider(SKILL_PRODUCT_CLIENT)
+    .useValue(dependencies.skillProductClient)
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
   try {
+    await app.listen(0, "127.0.0.1")
+    const base = await app.getUrl()
     const headers = { ...correctionHeaders }
     delete headers["idempotency-key"]
     delete headers["content-type"]
-    const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/skills/s/cover-upload`, { headers })
+    const response = await fetch(`${base}/v1/skills/s/cover-upload`, { headers })
     assert.equal(response.status, 502)
     assert.equal((await response.json()).error.code, "skill_response_invalid")
     assert.equal(calls, 1)
   } finally {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
+    app.getHttpServer().closeAllConnections()
+    await app.close()
   }
 })

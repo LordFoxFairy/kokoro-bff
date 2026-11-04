@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { Code, ConnectError } from "@connectrpc/connect"
 
-import { createLiveTestBffServer } from "./doubles/server.ts"
+import { startSkillDraftTestApp } from "./doubles/skill-draft-app.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
@@ -39,17 +39,15 @@ const headers = {
 }
 
 async function withServer(client, run, admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "user" } })) {
-  const server = createLiveTestBffServer(config, {
+  const { base, close } = await startSkillDraftTestApp(config, {
     skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: admission,
     skillDraftClient: client,
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
   try {
-    await run(`http://127.0.0.1:${server.address().port}`)
+    await run(base)
   } finally {
-    await new Promise((resolve) => server.close(resolve))
+    await close()
   }
 }
 

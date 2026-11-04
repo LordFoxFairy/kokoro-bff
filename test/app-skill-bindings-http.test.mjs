@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { Code, ConnectError } from "@connectrpc/connect"
-import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 const fact = {
   binding_id: "binding",
@@ -38,8 +37,7 @@ async function fixture({ admin = false, operator = true, failure } = {}) {
     agUi: DEFAULT_AGUI_CONFIG,
     upstreams: { system: null, capability: null, scheduler: null, agents: null, billing: null, music: null },
   }
-  const server = createBffServer(config, {
-    businessStore: null,
+  const dependencies = {
     sessionAdmission: {
       verify: async () => {
         calls.push({ kind: "session" })
@@ -69,12 +67,34 @@ async function fixture({ admin = false, operator = true, failure } = {}) {
         }
       },
     },
-  })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+  }
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { SkillsModule } = await import("../dist/modules/skills/skills.module.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, OPEN_APP_MANAGEMENT_ADMISSION, APP_SKILL_BINDING_CLIENT } = await import("../dist/common/tokens.js")
+  const unexpectedStorage = () => {
+    throw new Error("Skill HTTP fixture must not touch BFF storage")
+  }
+  const module = await Test.createTestingModule({ imports: [SkillsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpectedStorage, connect: unexpectedStorage }, redis: {}, ready: unexpectedStorage })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(dependencies.sessionAdmission)
+    .overrideProvider(OPEN_APP_MANAGEMENT_ADMISSION)
+    .useValue(dependencies.openAppManagementAdmission)
+    .overrideProvider(APP_SKILL_BINDING_CLIENT)
+    .useValue(dependencies.appSkillBindingClient)
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
   return {
     calls,
     async request(method = "GET", body, suffix = "", service = "web-bff") {
-      const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/open-apps/app/skill-bindings${suffix}`, {
+      const response = await fetch(`${base}/v1/admin/open-apps/app/skill-bindings${suffix}`, {
         method,
         headers: {
           "x-kokoro-service": service,
@@ -89,8 +109,8 @@ async function fixture({ admin = false, operator = true, failure } = {}) {
       return { status: response.status, body: await response.json() }
     },
     async close() {
-      server.closeAllConnections()
-      await server.shutdown()
+      app.getHttpServer().closeAllConnections()
+      await app.close()
     },
   }
 }

@@ -3,7 +3,7 @@ import { once } from "node:events"
 import test from "node:test"
 import { Code, ConnectError } from "@connectrpc/connect"
 
-import { createLiveTestBffServer } from "./doubles/server.ts"
+import { startSkillDraftTestApp } from "./doubles/skill-draft-app.ts"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
 const config = {
@@ -52,16 +52,14 @@ const result = () => ({
   },
 })
 async function withServer(client, run, admission = { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" } }) }, override = {}) {
-  const server = createLiveTestBffServer(
+  const { base, close } = await startSkillDraftTestApp(
     { ...config, ...override },
     { skillAuthorization: { check: async () => ({ ok: true }) }, sessionAdmission: admission, skillDraftClient: client },
   )
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
   try {
-    await run(`http://127.0.0.1:${server.address().port}`)
+    await run(base)
   } finally {
-    await new Promise((resolve) => server.close(resolve))
+    await close()
   }
 }
 const post = (base, body = input, other = {}) =>
