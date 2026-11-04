@@ -2,12 +2,15 @@ import { Inject, Injectable, MiddlewareConsumer, Module, NestModule, OnApplicati
 import { BffConfigModule } from "../../config/config.module.js"
 import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
+import { ProjectAccessModule } from "../projects/project-access.module.js"
+import type { ProjectService } from "../../application/project-service.js"
 import {
   APP_SKILL_BINDING_CLIENT,
   BFF_CONFIG,
   BFF_DATABASE,
   BFF_POOL,
   OPEN_APP_MANAGEMENT_ADMISSION,
+  PROJECT_SERVICE,
   SKILL_ADMIN_CLIENT,
   SKILL_AUTHORIZATION,
   SKILL_DOWNLOAD_HANDLES,
@@ -69,7 +72,7 @@ class SkillsRuntime implements OnApplicationShutdown {
 }
 
 @Module({
-  imports: [AuthenticationModule, ChatModule, DatabaseModule, IamRelayModule, BffConfigModule, SkillInstallationAccessModule],
+  imports: [AuthenticationModule, ChatModule, DatabaseModule, IamRelayModule, BffConfigModule, ProjectAccessModule, SkillInstallationAccessModule],
   providers: [
     SkillsMiddleware,
     SkillsRuntime,
@@ -319,12 +322,14 @@ class SkillsRuntime implements OnApplicationShutdown {
     },
     {
       provide: SKILL_SPECIFICATION_SOURCE,
-      inject: [BFF_CONFIG, SKILL_PRODUCT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_USAGE_READER],
+      inject: [BFF_CONFIG, SKILL_PRODUCT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_USAGE_READER, PROJECT_SERVICE, APP_SKILL_BINDING_CLIENT],
       useFactory: (
         config: BffConfig,
         product: SkillProductConnectClient | null,
         installations: SkillInstallationConnectClient | null,
         usage: (tenant: string, refs: readonly string[]) => Promise<Map<string, SkillUsageResult>>,
+        projects: ProjectService,
+        appBindings: AppSkillBindingConnectClient | null,
       ): SkillSpecificationSource | null => {
         if (!product || !installations || !config.platformProjection?.baseUrl || !config.platformProjection.credentialFile || !config.iamBaseUrl) return null
         const projection = new PlatformProjectionHttpClient(
@@ -336,6 +341,8 @@ class SkillsRuntime implements OnApplicationShutdown {
           owner: new PlatformSkillSpecificationFacade({ product, installations, projection }),
           profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs, config.iamUserContextServiceCredentialFile ?? null),
           usage,
+          projects,
+          ...(appBindings === null ? {} : { appBindings }),
           objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
         })
       },
