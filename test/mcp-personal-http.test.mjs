@@ -289,6 +289,35 @@ test("unissued personal methods and provider writes remain blocked without owner
     await f.close()
   }
 })
+test("anonymous browser MCP reads use the typed error envelope before any owner I/O", async () => {
+  let admissionCalls = 0
+  let ownerCalls = 0
+  const f = await fixture(true, {
+    verify: async () => {
+      admissionCalls++
+      return { ok: false, status: 401, code: "session_invalid" }
+    },
+    mcpPersonalClient: { read: async () => { ownerCalls++; return { items: [], next_cursor: null } } },
+  })
+  try {
+    const { cookie, ...browserHeaders } = headers
+    for (const [requestHeaders, code] of [
+      [browserHeaders, "session_authentication_required"],
+      [{ ...browserHeaders, cookie }, "session_invalid"],
+    ]) {
+      const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers: requestHeaders })
+      assert.equal(response.status, 401)
+      assert.equal(response.headers.get("x-request-id"), headers["x-request-id"])
+      assert.equal(response.headers.get("cache-control"), "no-store")
+      assert.deepEqual(await response.json(), { error: { code, message: "Personal MCP request failed", retryable: false } })
+    }
+    assert.equal(admissionCalls, 1)
+    assert.equal(ownerCalls, 0)
+    assert.deepEqual(f.seen, [])
+  } finally {
+    await f.close()
+  }
+})
 test("returns unavailable for missing personal composition while keeping active projection separate", async () => {
   const f = await fixture(true)
   try {

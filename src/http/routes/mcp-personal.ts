@@ -39,7 +39,6 @@ import { parseMcpPersonalJsonImport } from "../mcp-personal-json-import-input.js
 import { mcpRequestRemaining, startMcpRequestBudget } from "../mcp-request-budget.js"
 import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
-import { failure } from "../../contracts/index.js"
 
 export type McpPersonalClient = Pick<McpPersonalConnectClient, "read"> &
   Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson" | "icon" | "prepareReceipt">>
@@ -59,7 +58,12 @@ export function isMcpPersonalRequest(request: IncomingMessage): boolean {
   }
 }
 
-/** Raw compatibility entrypoint for the feature-owned Personal MCP adapter. */
+function sendMcpPersonalFailure(response: ServerResponse, status: number, code: string, retryable = false, retryAfter?: string): void {
+  if (!response.destroyed && !response.writableEnded)
+    send(response, status, { error: { code, message: "Personal MCP request failed", retryable } }, retryAfter)
+}
+
+/** Personal MCP browser transport and initial session admission. */
 export async function handleMcpPersonalRequest(
   request: IncomingMessage,
   response: ServerResponse,
@@ -76,7 +80,7 @@ export async function handleMcpPersonalRequest(
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000), response)
     if (!admitted.ok) {
-      send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+      sendMcpPersonalFailure(response, admitted.status, admitted.code, admitted.status === 429 || admitted.status === 503, admitted.retryAfter)
       return true
     }
     const path = pathOf(request).slice(2)
@@ -93,7 +97,7 @@ export async function handleMcpPersonalRequest(
     return true
   } catch {
     if (!response.headersSent && !response.writableEnded && !response.destroyed)
-      send(response, 503, failure("mcp_personal_dependency_unavailable", "Personal MCP is unavailable", id))
+      sendMcpPersonalFailure(response, 503, "mcp_personal_dependency_unavailable", true)
     return true
   }
 }
@@ -183,10 +187,8 @@ export async function mcpPersonalRoute(
       "deleteServer",
       "importJson",
     ].includes(operation)
-  const fail = (status: number, code: string, retryable = false, retryAfter?: string): void => {
-    if (!response.destroyed && !response.writableEnded)
-      send(response, status, { error: { code, message: "Personal MCP request failed", retryable } }, retryAfter)
-  }
+  const fail = (status: number, code: string, retryable = false, retryAfter?: string): void =>
+    sendMcpPersonalFailure(response, status, code, retryable, retryAfter)
   const input: McpPersonalInput = {
     requestId: context.requestId,
     tenant: context.identity.namespace,
