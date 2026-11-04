@@ -4,16 +4,18 @@ import { createServer, type Server } from "node:http"
 import { afterEach, test } from "node:test"
 import { Test } from "@nestjs/testing"
 
-import type { ChatApplicationService } from "../dist/application/chat-service.js"
+import type { ChatConversationLookup } from "../dist/infrastructure/postgres/chat-conversation-lookup.js"
+import type { AgUiRunControlReader } from "../dist/infrastructure/postgres/agui-run-state-read.js"
 import type { IdempotencyRepository } from "../dist/application/ports/idempotency-repository.js"
 import {
   AGENT_CANCELLATION_DISPATCHER,
   AGENT_CONTROL_IDEMPOTENCY,
   AGENT_DISPATCH_DISPATCHER,
   AGUI_PROJECTOR,
+  AGUI_RUN_CONTROL_READER,
   BFF_CONFIG,
   BFF_DATABASE,
-  CHAT_SERVICE,
+  CHAT_CONVERSATION_LOOKUP,
   PROJECT_SERVICE,
   PROJECT_SKILL_SELECTION_PROVIDER,
   SESSION_ADMISSION,
@@ -86,28 +88,30 @@ function authHeaders(commandId: string): Record<string, string> {
   }
 }
 
-type ControlChat = Partial<Pick<ChatApplicationService, "findConversation" | "readRunControlState">>
+type ControlReaders = { findConversation?: ChatConversationLookup; readControl?: AgUiRunControlReader }
 
 async function startAgentControlApp(
   configValue: BffConfig,
   authorized = true,
-  chat: ControlChat | null = null,
+  readers: ControlReaders = {},
   receipts: IdempotencyRepository | null = null,
 ): Promise<string> {
   const admission = new SessionAdmissionDouble({ "control-session": { namespace: "tenant_control", userId: "user_control" } })
-  const chatService = {
-    async findConversation(tenantId: string, subjectId: string, sessionId: string) {
+  const findConversation: ChatConversationLookup =
+    readers.findConversation ?? (async (tenantId, subjectId, sessionId) => {
       if (!authorized || tenantId !== "tenant_control" || subjectId !== "user_control") return null
       return {
-        session_id: sessionId,
+        conversationId: sessionId,
+        tenantId,
         title: "Agent control",
-        owner_id: subjectId,
-        created_at: "2026-01-01T00:00:00.000Z",
-        updated_at: "2026-01-01T00:00:00.000Z",
+        ownerId: subjectId,
+        projectRef: null,
+        status: "active",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        deletedAt: null,
       }
-    },
-    ...chat,
-  }
+    })
   const builder = Test.createTestingModule({ imports: [AgentRunsModule] })
     .overrideProvider(BFF_CONFIG)
     .useValue(configValue)
@@ -115,8 +119,10 @@ async function startAgentControlApp(
     .useValue({ pool: Object.freeze({}), redis: Object.freeze({}) })
     .overrideProvider(SESSION_ADMISSION)
     .useValue(admission)
-    .overrideProvider(CHAT_SERVICE)
-    .useValue(chatService)
+    .overrideProvider(CHAT_CONVERSATION_LOOKUP)
+    .useValue(findConversation)
+    .overrideProvider(AGUI_RUN_CONTROL_READER)
+    .useValue(readers.readControl ?? (() => assert.fail("The control route must not read the execution head in this fixture")))
     .overrideProvider(PROJECT_SERVICE)
     .useValue({ find: async () => null })
     .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
@@ -173,18 +179,22 @@ test("routes Agent control through the AgentRunsModule owner", async () => {
       receipts.delete(scope)
     },
   }
-  const chat = {
+  const readers: ControlReaders = {
     async findConversation() {
       return {
-        session_id: "session_control",
+        conversationId: "session_control",
+        tenantId: "tenant_control",
         title: "Raw",
-        owner_id: "user_control",
-        created_at: "2026-01-01T00:00:00.000Z",
-        updated_at: "2026-01-01T00:00:00.000Z",
+        ownerId: "user_control",
+        projectRef: null,
+        status: "active",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        deletedAt: null,
       }
     },
   }
-  const base = await startAgentControlApp(config(agentBase), true, chat, controlReceipts)
+  const base = await startAgentControlApp(config(agentBase), true, readers, controlReceipts)
   const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
     method: "POST",
     headers: authHeaders("command_raw"),
@@ -530,16 +540,16 @@ test("immediate stop reaches the real Agent cancel path after its exact durable 
   })
   const base = await listen(agent)
   let reads = 0
-  const chat = {
-    readRunControlState: async (tenant: string, subject: string, session: string) => {
+  const readers: ControlReaders = {
+    readControl: async (tenant: string, subject: string, session: string) => {
       assert.equal(tenant, "tenant_control")
       assert.equal(subject, "user_control")
       assert.equal(session, "session_1")
       reads++
       return { executionHead: { runId: "run_startup", state: reads === 1 ? "queued" : "active", pendingPauses: [] } }
     },
-  } as unknown as ControlChat
-  const bff = await startAgentControlApp(config(base), true, chat)
+  }
+  const bff = await startAgentControlApp(config(base), true, readers)
   const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
     method: "POST",
     headers: authHeaders("startup-stop"),
@@ -580,13 +590,13 @@ for (const [name, firstHead, nextHead, ownerCode] of [
       response.end(JSON.stringify({ error: { code: ownerCode, message: "Not found" } }))
     })
     const base = await listen(agent)
-    const chat = {
-      readRunControlState: async () => {
+    const readers: ControlReaders = {
+      readControl: async () => {
         const head = reads++ === 0 ? firstHead : nextHead
-        return head === "unreadable" ? null : { executionHead: head }
+        return head === "unreadable" ? null : { executionHead: head && { ...head, pendingPauses: [] } }
       },
-    } as unknown as ControlChat
-    const bff = await startAgentControlApp(config(base), true, chat)
+    }
+    const bff = await startAgentControlApp(config(base), true, readers)
     const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
       method: "POST",
       headers: authHeaders(`reject-${name}`),
@@ -606,13 +616,13 @@ test("startup cancel stops waiting on caller abort without delivering a second c
     response.end(JSON.stringify({ error: { code: "run_not_found", message: "Run was not found" } }))
   })
   const base = await listen(agent)
-  const chat = {
-    readRunControlState: async () => {
+  const readers: ControlReaders = {
+    readControl: async () => {
       setTimeout(() => controller.abort(), 5)
       return { executionHead: { runId: "run_startup", state: "queued", pendingPauses: [] } }
     },
-  } as unknown as ControlChat
-  const bff = await startAgentControlApp(config(base), true, chat)
+  }
+  const bff = await startAgentControlApp(config(base), true, readers)
   await assert.rejects(
     fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
       method: "POST",
@@ -633,8 +643,8 @@ test("startup cancel never renews its absolute request budget or invents a recei
     response.end(JSON.stringify({ error: { code: "run_not_found", message: "Run was not found" } }))
   })
   const base = await listen(agent)
-  const chat = { readRunControlState: async () => ({ executionHead: { runId: "run_startup", state: "queued", pendingPauses: [] } }) } as unknown as ControlChat
-  const bff = await startAgentControlApp({ ...config(base), upstreamTimeoutMs: 25 }, true, chat)
+  const readers: ControlReaders = { readControl: async () => ({ executionHead: { runId: "run_startup", state: "queued", pendingPauses: [] } }) }
+  const bff = await startAgentControlApp({ ...config(base), upstreamTimeoutMs: 25 }, true, readers)
   const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
     method: "POST",
     headers: authHeaders("deadline-startup"),

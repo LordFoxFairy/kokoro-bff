@@ -4,7 +4,6 @@ import { parseMessageCreateRequest } from "../../application/chat/message-create
 import type { ConversationCollectionFilter } from "../../application/chat/chat-repository.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { queryOf } from "../request.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
 import type { ProjectService } from "../../application/project-service.js"
 
 export type ChatAuthorization =
@@ -49,7 +48,7 @@ export async function authorizeChatRequest(
   request: IncomingMessage,
   context: RequestContext,
   businessPath: readonly string[],
-  chat: Pick<ChatApplicationService, "findConversation">,
+  chat: Readonly<{ findConversation(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<object | null> }>,
   projects: Pick<ProjectService, "find">,
   signal?: AbortSignal,
 ): Promise<ChatAuthorization | null> {

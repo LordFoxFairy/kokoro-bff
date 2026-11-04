@@ -348,10 +348,7 @@ test("ProjectsModule owns project-scope release worker lifecycle", async () => {
 })
 
 test("ScheduledTask consumers use distinct feature-owned capabilities", async () => {
-  for (const file of [
-    "src/application/scheduled/scheduled-task-outbox-repository.ts",
-    "src/application/scheduled/scheduled-task-outbox-delivery.ts",
-  ])
+  for (const file of ["src/application/scheduled/scheduled-task-outbox-repository.ts", "src/application/scheduled/scheduled-task-outbox-delivery.ts"])
     assert.equal(await fileExists(file), true, `${file} must exist`)
   for (const file of [
     "src/application/ports/scheduled-task-repository.ts",
@@ -463,7 +460,8 @@ test("AgentRunsModule owns internal admission and execution-binding adapters", a
   assert.match(middleware, /handleAgentControlRequest/u)
   assert.match(nativeRoute, /agentModelAdmissionRoute/u)
   assert.match(nativeRoute, /projectExecutionBindingRoute/u)
-  assert.match(controlRoute, /liveAgentSession/u)
+  assert.match(controlRoute, /runAgentControl/u)
+  assert.doesNotMatch(middleware, /CHAT_SERVICE/u)
 })
 
 test("AgentRunsModule owns the run-display adapter and provider seam", async () => {

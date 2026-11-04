@@ -30,6 +30,7 @@ import { ChatModule } from "../dist/modules/chat/chat.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
+const unexpectedProcess = () => assert.fail("Non-process Chat reads must not use the AG-UI process reader")
 const unexpectedProjects = { find: () => assert.fail("Unscoped Chat reads must not access the Project owner") }
 const servers = []
 const config = {
@@ -67,7 +68,7 @@ test("Chat business read middleware owns direct collection reads without Project
     },
   }
   const server = createServer((request, response) => {
-    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedProjects).then((handled) => {
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedProjects, unexpectedProcess).then((handled) => {
       if (!handled) {
         response.writeHead(404)
         response.end()
@@ -109,7 +110,7 @@ test("Chat business read middleware owns project-scoped collection reads with th
     },
   }
   const server = createServer((request, response) => {
-    void handleChatBusinessReadRequest(request, response, config, admission, chat, projects).then((handled) => {
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, projects, unexpectedProcess).then((handled) => {
       if (!handled) {
         response.writeHead(404)
         response.end()
@@ -151,7 +152,7 @@ test("Chat business read middleware rechecks the session owner before serving a 
     },
   }
   const server = createServer((request, response) => {
-    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedProjects).then((handled) => {
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedProjects, unexpectedProcess).then((handled) => {
       if (!handled) {
         response.writeHead(404)
         response.end()

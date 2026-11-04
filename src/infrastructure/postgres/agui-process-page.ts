@@ -1,7 +1,7 @@
-import type { PoolClient } from "pg"
+import type { Pool, PoolClient } from "pg"
 import { createHash } from "node:crypto"
 
-import type { RunProcessPage } from "../../application/chat/chat-repository.js"
+import type { RunProcessPage } from "../../application/agui/run-read.js"
 
 const CURSOR = /^agui_[0-9a-f]{32}$/u
 const MAX_PAGE_BYTES = 1024 * 1024
@@ -505,3 +505,44 @@ export async function readRunProcessPage(
   if (Buffer.byteLength(JSON.stringify(page), "utf8") > MAX_PAGE_BYTES) throw new ProcessProjectionUnavailableError()
   return page
 }
+
+export function createOwnedRunProcessReader(pool: Pick<Pool, "connect">) {
+  return async function readOwnedRunProcessPage(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    runId: string,
+    projectRef: string | undefined,
+    watermark: string,
+    cursor: string | null,
+    limit: number,
+  ): Promise<RunProcessPage | null> {
+    const client = await pool.connect()
+    try {
+      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+      const authorized = await client.query(
+        `SELECT 1 FROM bff_conversation
+          WHERE tenant_id=$1 AND owner_id=$2 AND conversation_id=$3 AND status='active'
+            AND (project_ref IS NULL OR EXISTS (SELECT 1 FROM bff_project AS project
+              WHERE project.deleted_at IS NULL AND project.tenant_id=bff_conversation.tenant_id AND project.owner_id=bff_conversation.owner_id
+                AND (project.project_id=bff_conversation.project_ref OR project.slug=bff_conversation.project_ref)))
+            AND ($4::text IS NULL OR project_ref=$4)`,
+        [tenantId, subjectId, conversationId, projectRef ?? null],
+      )
+      if (authorized.rows[0] === undefined) {
+        await client.query("COMMIT")
+        return null
+      }
+      const page = await readRunProcessPage(client, { tenantId, subjectId, sessionId: conversationId, runId, watermark, cursor, limit })
+      await client.query("COMMIT")
+      return page
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
+  }
+}
+
+export type AgUiRunProcessReader = ReturnType<typeof createOwnedRunProcessReader>

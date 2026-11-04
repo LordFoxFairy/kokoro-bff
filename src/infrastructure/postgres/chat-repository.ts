@@ -1,12 +1,11 @@
 import { readChatComposerSelection } from "./chat-composer-selection.js"
-import { createChatConversationLookup, type ChatConversationLookup } from "./chat-conversation-lookup.js"
+import { createChatConversationLookup, readOwnedConversationSnapshotRow, type ChatConversationLookup } from "./chat-conversation-lookup.js"
 import { readMessageFeedback, setMessageFeedback } from "./message-feedback.js"
 import type { MessageFeedbackQuery, SetMessageFeedback } from "../../application/chat/message-feedback-input.js"
 import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "../../application/chat/chat-repository.js"
 import { listOwnedArchivedTasks, readArchiveState, changeArchiveState } from "./archived-tasks.js"
 import { listOwnedSharedTasks } from "./shared-tasks.js"
 import type { SharedTasksPosition, SharedTasksRead } from "../../application/chat/chat-repository.js"
-import { readRunInteraction } from "./agui-interaction-projection.js"
 import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
 import type { MessagePartsPage } from "../../contracts/chat.js"
@@ -14,7 +13,6 @@ import type { MessagePartsQuery, PrivateMessageReadContext, PrivateMessagePage }
 import { withMessageReadClient, messageReadLifetime, privateMessagesFromRows, readMessageParts, type PrivateMessageRow } from "./message-parts-read.js"
 
 import type {
-  ChatExecutionHead,
   ChatArtifactDelivery,
   ChatRepository,
   ChatSnapshot,
@@ -22,7 +20,6 @@ import type {
   ConversationPage,
   MoveConversationCommand,
   MoveConversationResult,
-  RunProcessPage,
 } from "../../application/chat/chat-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Share } from "../../domain/chat/share.js"
@@ -39,7 +36,7 @@ import {
   type ConversationRow,
   type ShareRow,
 } from "./chat-repository-mappers.js"
-import { readRunProcessPage } from "./agui-process-page.js"
+import { readAgUiSnapshotState } from "./agui-run-state-read.js"
 import { moveConversation } from "./conversation-move.js"
 
 type ArtifactDeliveryRow = {
@@ -52,41 +49,6 @@ type ArtifactDeliveryRow = {
   source_size_bytes: string
   run_id: string
   delivered_at: Date | string
-}
-
-type ActiveRunRow = {
-  consumer_subject_id: unknown
-  expected_run_id: unknown
-  latest_run_id: unknown
-  terminal_run_id: unknown
-  latest_run_start_sequence: string | null
-  source_high_watermark: string
-}
-
-type ExecutionHeadRow = { run_id: string; subject_id: string }
-
-function executionHeadFromRows(head: ExecutionHeadRow | undefined, stream: ActiveRunRow | undefined, subjectId: string): ChatExecutionHead | undefined {
-  if (
-    stream !== undefined &&
-    [stream.expected_run_id, stream.latest_run_id, stream.terminal_run_id].some((value) => value !== null && (typeof value !== "string" || value.trim() === ""))
-  )
-    throw new Error("CHAT_ACTIVE_RUN_STATE_INVALID")
-  if (head === undefined) {
-    if (stream?.expected_run_id !== null && stream?.expected_run_id !== undefined) throw new Error("CHAT_ACTIVE_RUN_STATE_INVALID")
-    return undefined
-  }
-  if (head.run_id.trim() === "" || head.subject_id !== subjectId || stream === undefined || stream.consumer_subject_id !== subjectId) {
-    throw new Error("CHAT_EXECUTION_HEAD_IDENTITY_INVALID")
-  }
-  if (stream.expected_run_id !== null && stream.expected_run_id !== head.run_id) {
-    throw new Error("CHAT_EXECUTION_HEAD_STATE_INVALID")
-  }
-  if (stream.terminal_run_id === head.run_id) throw new Error("CHAT_EXECUTION_HEAD_STATE_INVALID")
-  if (stream.latest_run_id === head.run_id) {
-    if (stream.expected_run_id !== head.run_id) throw new Error("CHAT_EXECUTION_HEAD_STATE_INVALID")
-    return { runId: head.run_id, state: "active", pendingPauses: [] }
-  }
-  return { runId: head.run_id, state: "queued", pendingPauses: [] }
 }
 
 function artifactDeliveryFromRow(row: ArtifactDeliveryRow): ChatArtifactDelivery {
@@ -194,59 +156,17 @@ export class PostgresChatRepository implements ChatRepository {
     projectRef: string | undefined,
     context?: PrivateMessageReadContext,
   ): Promise<ChatSnapshot | null> {
-    return this.readSnapshotState(tenantId, subjectId, conversationId, projectRef, true, context ?? { ...messageReadLifetime(), scope: "all" })
-  }
-
-  public readMessageParts(query: MessagePartsQuery): Promise<MessagePartsPage | null> {
-    return readMessageParts(this.database.pool, query)
-  }
-
-  public async readRunControlState(
-    tenantId: string,
-    subjectId: string,
-    conversationId: string,
-    projectRef: string | undefined,
-  ): Promise<import("../../application/chat/chat-repository.js").ChatRunControlState | null> {
-    const state = await this.readSnapshotState(tenantId, subjectId, conversationId, projectRef, false)
-    return state === null ? null : state.executionHead === undefined ? {} : { executionHead: state.executionHead }
-  }
-
-  private async readSnapshotState(
-    tenantId: string,
-    subjectId: string,
-    conversationId: string,
-    projectRef: string | undefined,
-    includeHistory: boolean,
-    context?: PrivateMessageReadContext,
-  ): Promise<ChatSnapshot | null> {
-    if (context?.scope === "direct" && projectRef !== undefined) throw new Error("MESSAGE_PARTS_SCOPE_INVALID")
+    context ??= { ...messageReadLifetime(), scope: "all" }
+    const scope = context.scope
+    if (scope === "direct" && projectRef !== undefined) throw new Error("MESSAGE_PARTS_SCOPE_INVALID")
     const read = async (client: PoolClient): Promise<ChatSnapshot | null> => {
-      const conversation = await client.query<ConversationRow>(
-        `SELECT ${conversationColumns}
-           FROM bff_conversation
-          WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
-            AND (
-              project_ref IS NULL
-              OR EXISTS (
-                SELECT 1 FROM bff_project AS project
-                 WHERE project.deleted_at IS NULL AND project.tenant_id = bff_conversation.tenant_id
-                   AND project.owner_id = bff_conversation.owner_id
-                   AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
-              )
-            )
-            AND ($4::text IS NULL OR project_ref = $4)
-            AND ($5::boolean=FALSE OR project_ref IS NULL)
-          LIMIT 1`,
-        [tenantId, subjectId, conversationId, projectRef ?? null, context?.scope === "direct"],
-      )
-      const row = conversation.rows[0]
+      const row = await readOwnedConversationSnapshotRow(client, tenantId, subjectId, conversationId, projectRef, scope === "direct")
       if (row === undefined) {
         return null
       }
-      const composerSelection = includeHistory ? await readChatComposerSelection(client, tenantId, subjectId, conversationId) : undefined
-      const messages = includeHistory
-        ? await client.query<PrivateMessageRow>(
-            `SELECT latest.origin,latest.regenerated_from_message_id,latest.regeneration_user_message_id,latest.message_id, latest.tenant_id, latest.conversation_id, latest.run_id,
+      const composerSelection = await readChatComposerSelection(client, tenantId, subjectId, conversationId)
+      const messages = await client.query<PrivateMessageRow>(
+        `SELECT latest.origin,latest.regenerated_from_message_id,latest.regeneration_user_message_id,latest.message_id, latest.tenant_id, latest.conversation_id, latest.run_id,
                 latest.role, latest.selected_skill_source_refs, latest.content, latest.parts_format_version, latest.parts_public_sequence, latest.final_segment_id, latest.parts_count, latest.status, latest.agent_failure_code, latest.agent_failure_retryable, latest.message_seq,
                 latest.created_at, latest.updated_at
            FROM (
@@ -260,78 +180,25 @@ export class PostgresChatRepository implements ChatRepository {
               LIMIT 100
            ) AS latest
           ORDER BY latest.message_seq ASC, latest.message_id ASC`,
-            [tenantId, conversationId],
-          )
-        : { rows: [] }
-      const deliveries = includeHistory
-        ? await client.query<ArtifactDeliveryRow>(
-            `SELECT conversation_id, artifact_id, source_asset_id, source_artifact_kind,
+        [tenantId, conversationId],
+      )
+      const deliveries = await client.query<ArtifactDeliveryRow>(
+        `SELECT conversation_id, artifact_id, source_asset_id, source_artifact_kind,
                 source_title, source_mime, source_size_bytes, run_id, delivered_at
            FROM bff_conversation_artifact
           WHERE tenant_id = $1 AND conversation_id = $2
           ORDER BY delivered_at DESC, artifact_id ASC
           LIMIT 101`,
-            [tenantId, conversationId],
-          )
-        : { rows: [] }
-      const cursor = await client.query<{ cursor: string; public_sequence: string }>(
-        `SELECT cursor, public_sequence FROM bff_agui_event
-          WHERE tenant_id = $1 AND session_id = $2
-          ORDER BY public_sequence DESC LIMIT 1`,
         [tenantId, conversationId],
       )
-      const activeRunResult = await client.query<ActiveRunRow>(
-        `SELECT consumer_subject_id, expected_run_id, latest_run_id, terminal_run_id, latest_run_start_sequence, source_high_watermark
-           FROM bff_agui_stream
-          WHERE tenant_id = $1 AND session_id = $2
-          LIMIT 1`,
-        [tenantId, conversationId],
-      )
-      const watermark = cursor.rows[0]?.cursor ?? null
-      const processPage =
-        includeHistory && watermark !== null
-          ? await readRunProcessPage(client, {
-              tenantId,
-              sessionId: conversationId,
-              subjectId,
-              watermark,
-              cursor: null,
-              limit: 100,
-            })
-          : null
-      const heads = await client.query<ExecutionHeadRow>(
-        [
-          "SELECT run_id,subject_id FROM bff_agent_dispatch_outbox",
-          "WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted')",
-          "ORDER BY conversation_dispatch_seq,outbox_id LIMIT 1",
-        ].join("\n"),
-        [tenantId, conversationId],
-      )
-      let executionHead = executionHeadFromRows(heads.rows[0], activeRunResult.rows[0], subjectId)
-      if (executionHead !== undefined && executionHead.state === "active") {
-        const stream = activeRunResult.rows[0]
-        const start = Number(stream?.latest_run_start_sequence),
-          watermark = Number(cursor.rows[0]?.public_sequence)
-        const sourceWatermark = Number(stream?.source_high_watermark)
-        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(watermark) || !Number.isSafeInteger(sourceWatermark))
-          throw new Error("CHAT_EXECUTION_HEAD_WATERMARK_INVALID")
-        const state = await readRunInteraction(client, tenantId, conversationId, executionHead.runId, subjectId, start, watermark, sourceWatermark)
-        if (state?.phase === "waiting" || state?.phase === "resuming")
-          executionHead = { runId: executionHead.runId, state: state.phase, pendingPauses: [state] }
-      } else if (executionHead !== undefined) {
-        const publicWatermark = Number(cursor.rows[0]?.public_sequence ?? 0),
-          sourceWatermark = Number(activeRunResult.rows[0]?.source_high_watermark)
-        if (!Number.isSafeInteger(publicWatermark) || !Number.isSafeInteger(sourceWatermark)) throw new Error("CHAT_EXECUTION_HEAD_WATERMARK_INVALID")
-        // A strict initial terminal is a non-actionable prelude, not an active process.
-        await readRunInteraction(client, tenantId, conversationId, executionHead.runId, subjectId, null, publicWatermark, sourceWatermark)
-      }
+      const { watermark, processPage, executionHead } = await readAgUiSnapshotState(client, tenantId, subjectId, conversationId, true)
       return {
         conversation: conversationFromRow(row),
         ...(composerSelection === undefined ? {} : { composerSelection }),
         messages: await privateMessagesFromRows(
           client,
           messages.rows,
-          { tenantId, subjectId, conversationId, projectRef: row.project_ref, requestedProjectRef: projectRef ?? null, scope: context?.scope ?? "all" },
+          { tenantId, subjectId, conversationId, projectRef: row.project_ref, requestedProjectRef: projectRef ?? null, scope },
           watermark,
           processPage?.run_id ?? null,
           [...messages.rows].reverse().find((message) => message.role === "assistant")?.message_id ?? null,
@@ -351,56 +218,11 @@ export class PostgresChatRepository implements ChatRepository {
         ...(executionHead === undefined ? {} : { executionHead }),
       }
     }
-    if (context) return withMessageReadClient(this.database.pool, messageReadLifetime(context), read)
-    const client = await this.database.pool.connect()
-    try {
-      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-      const result = await read(client)
-      await client.query("COMMIT")
-      return result
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined)
-      throw error
-    } finally {
-      client.release()
-    }
+    return withMessageReadClient(this.database.pool, messageReadLifetime(context), read)
   }
 
-  public async readRunProcessPage(
-    tenantId: string,
-    subjectId: string,
-    conversationId: string,
-    runId: string,
-    projectRef: string | undefined,
-    watermark: string,
-    cursor: string | null,
-    limit: number,
-  ): Promise<RunProcessPage | null> {
-    const client = await this.database.pool.connect()
-    try {
-      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-      const authorized = await client.query(
-        `SELECT 1 FROM bff_conversation
-          WHERE tenant_id=$1 AND owner_id=$2 AND conversation_id=$3 AND status='active'
-            AND (project_ref IS NULL OR EXISTS (SELECT 1 FROM bff_project AS project
-              WHERE project.deleted_at IS NULL AND project.tenant_id=bff_conversation.tenant_id AND project.owner_id=bff_conversation.owner_id
-                AND (project.project_id=bff_conversation.project_ref OR project.slug=bff_conversation.project_ref)))
-            AND ($4::text IS NULL OR project_ref=$4)`,
-        [tenantId, subjectId, conversationId, projectRef ?? null],
-      )
-      if (authorized.rows[0] === undefined) {
-        await client.query("COMMIT")
-        return null
-      }
-      const page = await readRunProcessPage(client, { tenantId, subjectId, sessionId: conversationId, runId, watermark, cursor, limit })
-      await client.query("COMMIT")
-      return page
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined)
-      throw error
-    } finally {
-      client.release()
-    }
+  public readMessageParts(query: MessagePartsQuery): Promise<MessagePartsPage | null> {
+    return readMessageParts(this.database.pool, query)
   }
 
   public async listMessages(

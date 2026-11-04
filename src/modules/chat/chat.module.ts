@@ -58,7 +58,7 @@ import type { Pool } from "pg"
       },
     },
   ],
-  exports: [CHAT_SERVICE, CHAT_CONVERSATION_LOOKUP, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION],
+  exports: [CHAT_CONVERSATION_LOOKUP, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION],
 })
 export class ChatModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

@@ -8,6 +8,8 @@ import { failure } from "../../contracts/index.js"
 import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
+import type { AgUiRunProcessReader } from "../../infrastructure/postgres/agui-process-page.js"
+import { sendAgUiRunProcess } from "./agui-process.js"
 import { liveChatBusiness } from "./chat.js"
 
 export function isChatBusinessReadRequest(request: IncomingMessage): boolean {
@@ -32,6 +34,7 @@ export async function handleChatBusinessReadRequest(
   admission: SessionAdmission,
   chat: ChatApplicationService,
   projects: Pick<ProjectService, "find">,
+  readProcess: AgUiRunProcessReader,
 ): Promise<boolean> {
   if (!isChatBusinessReadRequest(request)) return false
   const id = requestId(request)
@@ -56,6 +59,10 @@ export async function handleChatBusinessReadRequest(
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))
+      return true
+    }
+    if (businessPath.length === 5 && businessPath[2] === "runs" && businessPath[4] === "process") {
+      await sendAgUiRunProcess(request, response, admitted.context, businessPath[1] ?? "", businessPath[3] ?? "", authorization.projectRef, readProcess)
       return true
     }
     await liveChatBusiness(request, response, admitted.context, businessPath, {}, null, new Map(), chat, authorization)

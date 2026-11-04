@@ -1,28 +1,22 @@
 import { setTimeout as sleep } from "node:timers/promises"
 import { isRecord } from "../../domain/json.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { AgUiRunControlReader } from "../../infrastructure/postgres/agui-run-state-read.js"
 import { resumeControlFailure } from "../../application/chat-run-control.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import {
-  agentControlRequestDigest,
-  agentIdentityHeaders,
-  buildAgentControl,
-  parseAgentControlReceipt,
-} from "../../infrastructure/clients/agent/index.js"
+import { agentControlRequestDigest, agentIdentityHeaders, buildAgentControl, parseAgentControlReceipt } from "../../infrastructure/clients/agent/index.js"
 import { agentSessionAssertion, dataOf } from "../../application/projections.js"
 import { reply, send } from "../response.js"
 import { normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
 import { headerString, incomingHeaders, idempotencyKey } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
-import { AgUiSseWriter, runAgUiHttpTransport } from "../../interfaces/http/agui/sse.js"
+import { AgUiSseWriter } from "../../interfaces/http/agui/sse.js"
 import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
-import type { AuthorizedChatRequest } from "./chat-authorization.js"
 
 export async function callAgent(
   config: BffConfig,
@@ -229,112 +223,117 @@ export async function liveAgentSessionEvents(
   }
 }
 
-export async function liveAgentSession(
+export async function runAgentControl(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
   context: RequestContext,
-  businessPath: string[],
+  sessionId: string,
+  runId: string,
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,
-  agUiProjection: AgUiProjectionService | null,
-  agUiRuntime: AgUiSessionRuntime,
-  sourceProjectionActive: boolean,
-  authorization: AuthorizedChatRequest | null,
-  chat: ChatApplicationService | null = null,
-): Promise<boolean> {
+  projectRef: string | undefined,
+  readControl: AgUiRunControlReader,
+): Promise<void> {
   const baseUrl = config.upstreams.agents ?? null
-  const method = request.method || "GET"
-  const sessionId = businessPath[1] || ""
   const assertion = agentSessionAssertion(context, sessionId)
-
-  if (authorization === null) {
-    reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
-    return true
-  }
-
-  if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
-    await runAgUiHttpTransport(request, response, agUiRuntime, (signal) =>
-      liveAgentSessionEvents(request, response, config, context, sessionId, agUiProjection, sourceProjectionActive, agUiRuntime, signal),
-    )
-    return true
-  }
 
   if (!config.agentEnabled || baseUrl === null) {
     reply(response, 503, failure("agent_not_configured", "Agent execution is disabled or not configured", context.requestId), context, idempotency, mutation)
-    return true
+    return
   }
 
-  if (businessPath.length === 5 && businessPath[2] === "runs" && businessPath[4] === "control" && method === "POST") {
-    const control = buildAgentControl(sessionId, json)
-    if (control === null) {
-      reply(response, 400, failure("invalid_run_control", "Control request does not match the v1 contract", context.requestId), context, idempotency, mutation)
-      return true
-    }
-    const runId = businessPath[3] || ""
-    const commandId = idempotencyKey(request)
-    if (commandId === null) {
-      reply(response, 400, failure("idempotency_key_required", "Control requests require Idempotency-Key", context.requestId), context, idempotency, mutation)
-      return true
-    }
-    if (control.kind === "run.resume") {
-      if (chat === null) {
-        reply(response, 503, failure("business_store_not_configured", "BFF chat fact storage is not configured", context.requestId), context, idempotency, mutation)
-        return true
-      }
-      try {
-        const snapshot = await chat.readRunControlState(context.identity.namespace, context.identity.userId, sessionId, authorization.projectRef)
-        if (snapshot === null) {
-          reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
-          return true
-        }
-        const rejected = resumeControlFailure(snapshot.executionHead, runId, commandId, control)
-        if (rejected !== null) {
-          reply(response, rejected.status, failure(rejected.code, "Control does not match the current complete pause", context.requestId), context, idempotency, mutation)
-          return true
-        }
-      } catch {
-        reply(response, 503, failure("chat_projection_unavailable", "The durable chat projection is unavailable", context.requestId), context, idempotency, mutation)
-        return true
-      }
-    }
-    // A durable BFF queued head can precede Agent run creation. Only its
-    // explicit pre-admission run_not_found may use this bounded startup bridge.
-    // Every delivery keeps the original command and only an actual Agent ACK
-    // is accepted; no local cancellation terminal or receipt is invented.
-    const cancelWindow = new AbortController()
-    const deadlineAt = performance.now() + config.upstreamTimeoutMs
-    const cancel = () => {
-      if (!response.writableEnded) cancelWindow.abort(new Error("control_caller_cancelled"))
-    }
-    const timer = control.kind === "run.cancel" ? setTimeout(() => cancelWindow.abort(new Error("control_deadline")), config.upstreamTimeoutMs) : undefined
-    if (control.kind === "run.cancel") {
-      request.once("aborted", cancel)
-      response.once("close", cancel)
-      if (request.aborted || response.destroyed) cancel()
-    }
-    const currentHead = async (requireQueued: boolean): Promise<boolean> => {
-      if (chat === null || cancelWindow.signal.aborted) return false
-      const readWindow = new AbortController()
-      try {
-        const state = await Promise.race([
-          chat.readRunControlState(context.identity.namespace, context.identity.userId, sessionId, authorization.projectRef),
-          sleep(Math.max(1, Math.ceil(deadlineAt - performance.now())), undefined, { signal: AbortSignal.any([cancelWindow.signal, readWindow.signal]) }).then(
-            () => {
-              throw new Error("control_deadline")
-            },
-          ),
-        ])
-        cancelWindow.signal.throwIfAborted()
-        return state?.executionHead?.runId === runId && (!requireQueued || state.executionHead.state === "queued")
-      } finally {
-        readWindow.abort()
-      }
-    }
+  const control = buildAgentControl(sessionId, json)
+  if (control === null) {
+    reply(response, 400, failure("invalid_run_control", "Control request does not match the v1 contract", context.requestId), context, idempotency, mutation)
+    return
+  }
+  const commandId = idempotencyKey(request)
+  if (commandId === null) {
+    reply(response, 400, failure("idempotency_key_required", "Control requests require Idempotency-Key", context.requestId), context, idempotency, mutation)
+    return
+  }
+  if (control.kind === "run.resume") {
     try {
-      const body = Buffer.from(JSON.stringify(control))
-      let result = await callAgent(
+      const snapshot = await readControl(context.identity.namespace, context.identity.userId, sessionId, projectRef)
+      if (snapshot === null) {
+        reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
+        return
+      }
+      const rejected = resumeControlFailure(snapshot.executionHead, runId, commandId, control)
+      if (rejected !== null) {
+        reply(
+          response,
+          rejected.status,
+          failure(rejected.code, "Control does not match the current complete pause", context.requestId),
+          context,
+          idempotency,
+          mutation,
+        )
+        return
+      }
+    } catch {
+      reply(
+        response,
+        503,
+        failure("chat_projection_unavailable", "The durable chat projection is unavailable", context.requestId),
+        context,
+        idempotency,
+        mutation,
+      )
+      return
+    }
+  }
+  // A durable BFF queued head can precede Agent run creation. Only its
+  // explicit pre-admission run_not_found may use this bounded startup bridge.
+  // Every delivery keeps the original command and only an actual Agent ACK
+  // is accepted; no local cancellation terminal or receipt is invented.
+  const cancelWindow = new AbortController()
+  const deadlineAt = performance.now() + config.upstreamTimeoutMs
+  const cancel = () => {
+    if (!response.writableEnded) cancelWindow.abort(new Error("control_caller_cancelled"))
+  }
+  const timer = control.kind === "run.cancel" ? setTimeout(() => cancelWindow.abort(new Error("control_deadline")), config.upstreamTimeoutMs) : undefined
+  if (control.kind === "run.cancel") {
+    request.once("aborted", cancel)
+    response.once("close", cancel)
+    if (request.aborted || response.destroyed) cancel()
+  }
+  const currentHead = async (requireQueued: boolean): Promise<boolean> => {
+    if (cancelWindow.signal.aborted) return false
+    const readWindow = new AbortController()
+    try {
+      const state = await Promise.race([
+        readControl(context.identity.namespace, context.identity.userId, sessionId, projectRef),
+        sleep(Math.max(1, Math.ceil(deadlineAt - performance.now())), undefined, { signal: AbortSignal.any([cancelWindow.signal, readWindow.signal]) }).then(
+          () => {
+            throw new Error("control_deadline")
+          },
+        ),
+      ])
+      cancelWindow.signal.throwIfAborted()
+      return state?.executionHead?.runId === runId && (!requireQueued || state.executionHead.state === "queued")
+    } finally {
+      readWindow.abort()
+    }
+  }
+  try {
+    const body = Buffer.from(JSON.stringify(control))
+    let result = await callAgent(config, baseUrl, `/v1/runs/${encodeURIComponent(runId)}/control`, "POST", context.requestId, request, body, context, assertion)
+    let startupQualified = false
+    for (let attempt = 1; control.kind === "run.cancel" && attempt < 8; attempt++) {
+      if (result.status !== 404 || !isRecord(result.body) || !isRecord(result.body.error) || result.body.error.code !== "run_not_found") break
+      cancelWindow.signal.throwIfAborted()
+      if (!(await currentHead(!startupQualified))) break
+      startupQualified = true
+      const delay = Math.min(50 * 2 ** (attempt - 1), 500)
+      if (deadlineAt - performance.now() <= delay) break
+      await sleep(delay, undefined, { signal: cancelWindow.signal })
+      if (!(await currentHead(false))) break
+      const remaining = Math.floor(deadlineAt - performance.now())
+      if (remaining < 1) break
+      result = await callAgent(
         config,
         baseUrl,
         `/v1/runs/${encodeURIComponent(runId)}/control`,
@@ -344,66 +343,33 @@ export async function liveAgentSession(
         body,
         context,
         assertion,
+        remaining,
       )
-      let startupQualified = false
-      for (let attempt = 1; control.kind === "run.cancel" && attempt < 8; attempt++) {
-        if (result.status !== 404 || !isRecord(result.body) || !isRecord(result.body.error) || result.body.error.code !== "run_not_found" || chat === null)
-          break
-        cancelWindow.signal.throwIfAborted()
-        if (!(await currentHead(!startupQualified))) break
-        startupQualified = true
-        const delay = Math.min(50 * 2 ** (attempt - 1), 500)
-        if (deadlineAt - performance.now() <= delay) break
-        await sleep(delay, undefined, { signal: cancelWindow.signal })
-        if (!(await currentHead(false))) break
-        const remaining = Math.floor(deadlineAt - performance.now())
-        if (remaining < 1) break
-        result = await callAgent(
-          config,
-          baseUrl,
-          `/v1/runs/${encodeURIComponent(runId)}/control`,
-          "POST",
-          context.requestId,
-          request,
-          body,
-          context,
-          assertion,
-          remaining,
-        )
-      }
-      if (control.kind === "run.cancel") cancelWindow.signal.throwIfAborted()
-      if (result.status >= 400) {
-        await sendAgentFailure(response, result, context, idempotency, mutation)
-        return true
-      }
-      const receipt = parseAgentControlReceipt(dataOf(result.body))
-      const requestDigest = agentControlRequestDigest(runId, control)
-      if (
-        result.status !== 202
-        || receipt === null
-        || receipt.command_id !== commandId
-        || receipt.request_digest !== requestDigest
-      ) {
-        await sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent control receipt did not match the requested command", context.requestId) }, context, idempotency, mutation)
-        return true
-      }
-      reply(response, 202, ok({ run_id: runId, ...receipt }, context.requestId), context, idempotency, mutation)
-    } catch {
-      if (!request.aborted && !response.destroyed && !response.writableEnded)
-        reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
-    } finally {
-      clearTimeout(timer)
-      request.removeListener("aborted", cancel)
-      response.removeListener("close", cancel)
     }
-    return true
+    if (control.kind === "run.cancel") cancelWindow.signal.throwIfAborted()
+    if (result.status >= 400) {
+      await sendAgentFailure(response, result, context, idempotency, mutation)
+      return
+    }
+    const receipt = parseAgentControlReceipt(dataOf(result.body))
+    const requestDigest = agentControlRequestDigest(runId, control)
+    if (result.status !== 202 || receipt === null || receipt.command_id !== commandId || receipt.request_digest !== requestDigest) {
+      await sendAgentFailure(
+        response,
+        { status: 502, body: failure("upstream_response_invalid", "Agent control receipt did not match the requested command", context.requestId) },
+        context,
+        idempotency,
+        mutation,
+      )
+      return
+    }
+    reply(response, 202, ok({ run_id: runId, ...receipt }, context.requestId), context, idempotency, mutation)
+  } catch {
+    if (!request.aborted && !response.destroyed && !response.writableEnded)
+      reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
+  } finally {
+    clearTimeout(timer)
+    request.removeListener("aborted", cancel)
+    response.removeListener("close", cancel)
   }
-
-  if (businessPath.length === 2 && method === "GET" && agUiProjection === null) {
-    reply(response, 503, failure("business_store_not_configured", "BFF chat fact storage is not configured", context.requestId), context, idempotency, mutation)
-    return true
-  }
-
-  reply(response, 503, failure("chat_projection_not_configured", "This Chat operation is not exposed by the Agent v1 adapter", context.requestId), context, idempotency, mutation)
-  return true
 }

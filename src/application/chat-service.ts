@@ -116,28 +116,6 @@ export class ChatApplicationService {
     }
   }
 
-  public readRunProcessPage(
-    tenantId: string,
-    subjectId: string,
-    conversationId: string,
-    runId: string,
-    projectRef: string | undefined,
-    watermark: string,
-    cursor: string | null,
-    limit: number,
-  ): ReturnType<ChatRepository["readRunProcessPage"]> {
-    return this.repository.readRunProcessPage(tenantId, subjectId, conversationId, runId, projectRef, watermark, cursor, limit)
-  }
-
-  public readRunControlState(
-    tenantId: string,
-    subjectId: string,
-    conversationId: string,
-    projectRef: string | undefined,
-  ): ReturnType<ChatRepository["readRunControlState"]> {
-    return this.repository.readRunControlState(tenantId, subjectId, conversationId, projectRef)
-  }
-
   public async listMessages(
     tenantId: string,
     subjectId: string,

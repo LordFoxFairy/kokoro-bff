@@ -1074,6 +1074,7 @@ import { ProjectScopeReleaseOutboxDispatcher } from "../dist/application/project
 import { StorageScopeReleaseClient } from "../dist/infrastructure/clients/storage/scope-release-client.js"
 import { ScheduledTaskService } from "../dist/application/scheduled-task-service.js"
 import { PostgresProjectRepository } from "../dist/infrastructure/postgres/project-repository.js"
+import { createOwnedRunProcessReader } from "../dist/infrastructure/postgres/agui-process-page.js"
 import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
 import { PostgresScheduledTaskRepository } from "../dist/infrastructure/postgres/scheduled-task-repository.js"
 import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
@@ -1637,7 +1638,7 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
         const before = await f.facts()
         let result
         if (method === "readRunProcessPage")
-          result = await repository.readRunProcessPage(f.tenant, f.owner, id, "r237-run", undefined, "invalid-on-purpose", null, 20)
+          result = await createOwnedRunProcessReader(f.pool)(f.tenant, f.owner, id, "r237-run", undefined, "invalid-on-purpose", null, 20)
         else if (method === "listMessages") result = await repository.listMessages(f.tenant, f.owner, id, 20, null)
         else if (method === "renameConversation") result = await repository.renameConversation(f.tenant, f.owner, id, "Denied")
         else if (method === "deleteConversation") result = await repository.deleteConversation(f.tenant, f.owner, id, "r237-request")

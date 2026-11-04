@@ -1,5 +1,6 @@
 import type { MessageFeedbackQuery, SetMessageFeedback, MessageFeedbackState } from "../chat/message-feedback-input.js"
-import type { ChatComposerSelection, InteractionState, MessagePartsPage, OrderedMessageRendering } from "../../contracts/chat.js"
+import type { ChatComposerSelection, MessagePartsPage, OrderedMessageRendering } from "../../contracts/chat.js"
+import type { ChatExecutionHead, RunExecutionProcess } from "../agui/run-read.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Message } from "../../domain/chat/message.js"
 import type { Share } from "../../domain/chat/share.js"
@@ -50,18 +51,6 @@ export type ChatSnapshot = {
   executionProcess: RunExecutionProcess | null
   executionHead?: ChatExecutionHead
 }
-
-export type RunExecutionProcess = {
-  run_id: string
-  todos: unknown[] | null
-  activities: Array<Record<string, unknown>>
-  next_cursor: string | null
-}
-
-export type RunProcessPage = RunExecutionProcess & { event_watermark: string }
-
-export type ChatExecutionHead = { runId: string; state: "queued" | "active" | "waiting" | "resuming"; pendingPauses: InteractionState[] }
-export type ChatRunControlState = { executionHead?: ChatExecutionHead }
 
 export type ChatArtifactDelivery = {
   conversationId: string
@@ -132,17 +121,6 @@ export type ChatRepository = {
     context?: PrivateMessageReadContext,
   ): Promise<ChatSnapshot | null>
   readMessageParts(query: MessagePartsQuery): Promise<MessagePartsPage | null>
-  readRunProcessPage(
-    tenantId: string,
-    subjectId: string,
-    conversationId: string,
-    runId: string,
-    projectRef: string | undefined,
-    watermark: string,
-    cursor: string | null,
-    limit: number,
-  ): Promise<RunProcessPage | null>
-  readRunControlState(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatRunControlState | null>
   listMessages(
     tenantId: string,
     subjectId: string,

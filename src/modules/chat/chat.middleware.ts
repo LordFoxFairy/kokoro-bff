@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import {
   AGUI_PROJECTION,
   AGUI_PROJECTION_CONSUMERS,
+  AGUI_RUN_PROCESS_READER,
   AGUI_RUNTIME,
   AGUI_SOURCE_PROJECTION_ACTIVE,
   BFF_CONFIG,
@@ -14,6 +15,7 @@ import {
   SESSION_ADMISSION,
   SKILL_INSTALLATION_CLIENT,
 } from "../../common/tokens.js"
+import type { AgUiRunProcessReader } from "../../infrastructure/postgres/agui-process-page.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
@@ -51,6 +53,7 @@ export class ChatMiddleware implements NestMiddleware {
     @Inject(CHAT_IDEMPOTENCY) private readonly chatIdempotency: IdempotencyRepository,
     @Inject(AGUI_PROJECTION) private readonly agUiProjection: AgUiProjectionService,
     @Inject(AGUI_PROJECTION_CONSUMERS) private readonly agUiConsumers: AgUiProjectionConsumerRepository,
+    @Inject(AGUI_RUN_PROCESS_READER) private readonly readProcess: AgUiRunProcessReader,
     @Inject(AGUI_RUNTIME) private readonly agUiRuntime: AgUiSessionRuntime,
     @Inject(AGUI_SOURCE_PROJECTION_ACTIVE) private readonly sourceProjectionActive: boolean,
   ) {}
@@ -58,7 +61,7 @@ export class ChatMiddleware implements NestMiddleware {
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleSharedPublicRequest(request, response, this.config, this.publicShare)
       .then((handled) => handled || handleChatNativeRequest(request, response, this.config, this.admission, this.chat))
-      .then((handled) => handled || handleChatBusinessReadRequest(request, response, this.config, this.admission, this.chat, this.projects))
+      .then((handled) => handled || handleChatBusinessReadRequest(request, response, this.config, this.admission, this.chat, this.projects, this.readProcess))
       .then((handled) => handled || handleMessageFeedbackRequest(request, response, this.config, this.admission, this.chat))
       .then((handled) => handled || handleMessageRegenerationRequest(request, response, this.config, this.admission, this.chatTurns))
       .then((handled) => handled || handleMoveSessionRequest(request, response, this.config, this.admission, this.chat))

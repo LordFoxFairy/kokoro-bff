@@ -3,9 +3,9 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import {
   AGENT_CONTROL_IDEMPOTENCY,
   AGENT_RUNS_READER,
-  AGUI_RUNTIME,
+  AGUI_RUN_CONTROL_READER,
   BFF_CONFIG,
-  CHAT_SERVICE,
+  CHAT_CONVERSATION_LOOKUP,
   PROJECT_SERVICE,
   RUN_DISPLAY_PROVIDER,
   SESSION_ADMISSION,
@@ -13,11 +13,11 @@ import {
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { AgentRunsReader } from "../../infrastructure/postgres/project-execution-binding.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
 import type { ProjectService } from "../../application/project-service.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
-import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
+import type { AgUiRunControlReader } from "../../infrastructure/postgres/agui-run-state-read.js"
 import { handleAgentRunsInternalRequest } from "../../http/routes/agent-runs-native.js"
 import { handleRunDisplayRequest, type RunDisplayProvider } from "../../http/routes/run-display.js"
 import { handleAgentControlRequest } from "../../http/routes/agent-control-native.js"
@@ -32,9 +32,9 @@ export class AgentRunsMiddleware implements NestMiddleware {
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(AGENT_RUNS_READER) private readonly reader: AgentRunsReader,
     @Inject(RUN_DISPLAY_PROVIDER) private readonly runDisplay: RunDisplayProvider,
-    @Inject(CHAT_SERVICE) private readonly chat: ChatApplicationService,
+    @Inject(CHAT_CONVERSATION_LOOKUP) private readonly findConversation: ChatConversationLookup,
     @Inject(PROJECT_SERVICE) private readonly projects: ProjectService,
-    @Inject(AGUI_RUNTIME) private readonly agUiRuntime: AgUiSessionRuntime,
+    @Inject(AGUI_RUN_CONTROL_READER) private readonly readControl: AgUiRunControlReader,
     @Inject(AGENT_CONTROL_IDEMPOTENCY) private readonly controlIdempotency: IdempotencyRepository,
   ) {}
 
@@ -50,9 +50,9 @@ export class AgentRunsMiddleware implements NestMiddleware {
             response,
             this.config,
             this.admission,
-            this.chat,
+            this.findConversation,
             this.projects,
-            this.agUiRuntime,
+            this.readControl,
             this.idempotency,
             this.controlIdempotency,
           ),

@@ -15,6 +15,8 @@ test("the compiled production AppModule resolves its real provider graph without
   const {
     AGENT_DISPATCH_OUTBOX,
     AGENT_RUNS_READER,
+    AGUI_RUN_CONTROL_READER,
+    AGUI_RUN_PROCESS_READER,
     BFF_CONFIG,
     BFF_DATABASE,
     BFF_POOL,
@@ -29,6 +31,7 @@ test("the compiled production AppModule resolves its real provider graph without
     SKILL_INSTALLATION_CLIENT,
   } = await import("../dist/common/tokens.js")
   const { PERSONALIZATION_PROVIDER } = await import("../dist/modules/account/personalization.provider.js")
+  const { AguiModule } = await import("../dist/modules/agui/agui.module.js")
   const { AgentDispatchModule } = await import("../dist/modules/agent-dispatch/agent-dispatch.module.js")
   const { AgentRunsModule } = await import("../dist/modules/agent-runs/agent-runs.module.js")
   const { ChatModule } = await import("../dist/modules/chat/chat.module.js")
@@ -68,6 +71,8 @@ test("the compiled production AppModule resolves its real provider graph without
     for (const [owner, token] of [
       [AgentDispatchModule, CHAT_TURN_SERVICE],
       [AgentRunsModule, AGENT_RUNS_READER],
+      [AguiModule, AGUI_RUN_PROCESS_READER],
+      [AguiModule, AGUI_RUN_CONTROL_READER],
       [ChatModule, CHAT_SERVICE],
       [ChatModule, CHAT_CONVERSATION_LOOKUP],
       [AgentRunsModule, RUN_FINAL_ANSWER_LOOKUP],

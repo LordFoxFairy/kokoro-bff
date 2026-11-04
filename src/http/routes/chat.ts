@@ -6,7 +6,7 @@ import type { RequestContext } from "../../domain/request-context.js"
 import { queryOf } from "../request.js"
 import { reply } from "../response.js"
 import type { AuthorizedChatRequest } from "./chat-authorization.js"
-import { parseChatProcessPageInput } from "../chat-process-page-input.js"
+import { processReadError } from "./agui-process.js"
 import { parseChatMessagePartsInput } from "../chat-message-parts-input.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
 import type { PrivateMessageReadContext } from "../../application/chat/chat-repository.js"
@@ -68,33 +68,15 @@ async function sendChatError(
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
 ): Promise<void> {
-  const processInvalid = error instanceof Error && error.message === "PROCESS_CURSOR_INVALID"
-  const processExpired = error instanceof Error && error.message === "PROCESS_CURSOR_EXPIRED"
-  const processUnavailable = error instanceof Error && error.message === "PROCESS_PROJECTION_UNAVAILABLE"
+  const process = processReadError(error)
   const invalidCursor = isInvalidCursor(error)
   const known = chatError(error)
   await reply(
     response,
-    processInvalid ? 400 : processExpired ? 410 : processUnavailable ? 503 : invalidCursor ? 400 : (known?.status ?? 503),
+    process?.status ?? (invalidCursor ? 400 : (known?.status ?? 503)),
     failure(
-      processInvalid
-        ? "invalid_process_cursor"
-        : processExpired
-          ? "process_cursor_expired"
-          : processUnavailable
-            ? "process_projection_unavailable"
-            : invalidCursor
-              ? "invalid_cursor"
-              : (known?.code ?? "business_store_unavailable"),
-      processInvalid
-        ? "process cursor is invalid"
-        : processExpired
-          ? "process cursor has expired"
-          : processUnavailable
-            ? "process projection is unavailable"
-            : invalidCursor
-              ? "cursor is invalid"
-              : (known?.message ?? "The BFF business store is unavailable"),
+      process?.code ?? (invalidCursor ? "invalid_cursor" : (known?.code ?? "business_store_unavailable")),
+      process?.message ?? (invalidCursor ? "cursor is invalid" : (known?.message ?? "The BFF business store is unavailable")),
       context.requestId,
     ),
     context,
@@ -147,29 +129,6 @@ export async function liveChatBusiness(
         const body = ok(page, context.requestId)
         if (Buffer.byteLength(JSON.stringify(body)) > 1048576) throw new Error("MESSAGE_PARTS_BUDGET_EXCEEDED")
         await reply(response, 200, body, context, idempotency, mutation)
-      }
-      return true
-    }
-    if (businessPath.length === 5 && businessPath[2] === "runs" && businessPath[4] === "process" && method === "GET") {
-      const input = parseChatProcessPageInput(request)
-      if (input === null) {
-        await reply(response, 400, failure("invalid_process_cursor", "process page query is invalid", context.requestId), context, idempotency, mutation)
-        return true
-      }
-      const page = await chat.readRunProcessPage(
-        tenantId,
-        subjectId,
-        conversationId,
-        businessPath[3] ?? "",
-        projectRef,
-        input.watermark,
-        input.cursor,
-        input.limit,
-      )
-      if (page === null) {
-        await reply(response, 404, failure("session_not_found", "Session or Run was not found", context.requestId), context, idempotency, mutation)
-      } else {
-        await reply(response, 200, ok(page, context.requestId), context, idempotency, mutation)
       }
       return true
     }

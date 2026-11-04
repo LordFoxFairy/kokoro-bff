@@ -1,16 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
 import type { ProjectService } from "../../application/project-service.js"
-import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
+import type { AgUiRunControlReader } from "../../infrastructure/postgres/agui-run-state-read.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { failure } from "../../contracts/index.js"
 import { mutationTicket } from "../../application/idempotency.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
-import { liveAgentSession } from "./agent.js"
+import { runAgentControl } from "./agent.js"
 import { idempotencyKey, mutationFingerprint, pathOf, readBody, requestBodyJson, requestId } from "../request.js"
 import { send } from "../response.js"
 
@@ -33,9 +33,9 @@ export async function handleAgentControlRequest(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
-  chat: ChatApplicationService,
+  findConversation: ChatConversationLookup,
   projects: ProjectService,
-  runtime: AgUiSessionRuntime,
+  readControl: AgUiRunControlReader,
   idempotency: Map<string, IdempotencyEntry>,
   persistent: IdempotencyRepository | null,
 ): Promise<boolean> {
@@ -58,7 +58,7 @@ export async function handleAgentControlRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, chat, projects)
+    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, { findConversation }, projects)
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))
@@ -90,20 +90,18 @@ export async function handleAgentControlRequest(
       send(response, 409, failure("idempotency_in_progress", "An identical mutation is already in progress", id))
       return true
     }
-    await liveAgentSession(
+    await runAgentControl(
       request,
       response,
       config,
       admitted.context,
-      businessPath,
+      businessPath[1] ?? "",
+      businessPath[3] ?? "",
       json,
       ticket.ticket,
       idempotency,
-      null,
-      runtime,
-      false,
-      authorization,
-      chat,
+      authorization.projectRef,
+      readControl,
     )
     return true
   } catch {
