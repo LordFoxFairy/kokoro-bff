@@ -1,3 +1,5 @@
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { create } from "@bufbuild/protobuf"
@@ -12,7 +14,21 @@ import { test, afterEach } from "node:test"
 import { handleChatBusinessReadRequest } from "../src/http/routes/chat-business-native.ts"
 import { handleChatMutationRequest } from "../dist/http/routes/chat-mutation-native.js"
 import { handleMoveSessionRequest } from "../dist/http/routes/move-session-native.js"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import {
+  AGENT_CANCELLATION_DISPATCHER,
+  AGENT_DISPATCH_DISPATCHER,
+  AGUI_PROJECTOR,
+  BFF_CONFIG,
+  BFF_DATABASE,
+  CHAT_IDEMPOTENCY,
+  CHAT_SERVICE,
+  CHAT_TURN_SERVICE,
+  PROJECT_SERVICE,
+  PROJECT_SKILL_SELECTION_PROVIDER,
+  SESSION_ADMISSION,
+} from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { ChatModule } from "../dist/modules/chat/chat.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
@@ -265,9 +281,7 @@ async function messageBoundaryFixture(t) {
     genericCalls = [],
     receipts = new Map()
   let active = true
-  const store = {
-    ready: async () => undefined,
-    close: async () => undefined,
+  const chatIdempotency = {
     getReceipt: async (scope) => receipts.get(scope) ?? null,
     claimReceipt: async (scope, fingerprint) => {
       genericCalls.push("claim")
@@ -293,23 +307,31 @@ async function messageBoundaryFixture(t) {
       return { run_id: "canonical-run", user_message_id: "canonical-user", assistant_message_id: "canonical-assistant" }
     },
   }
-  const server = createBffServer(
-    { ...config, agUi: DEFAULT_AGUI_CONFIG, agentEnabled: true, upstreams: { agents: "http://agent.invalid" } },
-    {
-      businessStore: store,
-      sessionAdmission: admission,
-      chatTurnService: chatTurns,
-      chatService: { findConversation: async () => null },
-      projectService: { find: async () => null },
-      readiness: async () => undefined,
-    },
-  )
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
-  t.after(async () => {
-    server.closeAllConnections()
-    await server.shutdown()
-  })
+  const builder = Test.createTestingModule({ imports: [ChatModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue({ ...config, agUi: DEFAULT_AGUI_CONFIG, agentEnabled: true, upstreams: { agents: "http://agent.invalid" } })
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: Object.freeze({}), redis: Object.freeze({}) })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+    .overrideProvider(CHAT_SERVICE)
+    .useValue({ findConversation: async () => null })
+    .overrideProvider(PROJECT_SERVICE)
+    .useValue({ find: async () => null })
+    .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
+    .useValue(null)
+    .overrideProvider(CHAT_TURN_SERVICE)
+    .useValue(chatTurns)
+    .overrideProvider(CHAT_IDEMPOTENCY)
+    .useValue(chatIdempotency)
+  for (const token of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) {
+    builder.overrideProvider(token).useValue(null)
+  }
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+  t.after(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
   return {
     admission,
     submissions,
@@ -319,7 +341,7 @@ async function messageBoundaryFixture(t) {
       active = value
     },
     async post(raw, id, key = "same-intent") {
-      const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/sessions/conv_message/messages`, {
+      const response = await fetch(`${base}/v1/sessions/conv_message/messages`, {
         method: "POST",
         headers: { ...nativeHeaders, "x-request-id": id, ...(key ? { "idempotency-key": key } : {}) },
         body: raw,

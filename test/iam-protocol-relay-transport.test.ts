@@ -2,10 +2,17 @@ import assert from "node:assert/strict"
 import { createServer, type Server } from "node:http"
 import { afterEach, test } from "node:test"
 
+import "reflect-metadata"
+import type { INestApplication } from "@nestjs/common"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG } from "../dist/common/tokens.js"
+import { BffConfigModule } from "../dist/config/config.module.js"
 import { loadConfig } from "../dist/config/runtime.js"
-import { createLiveTestBffServer } from "./doubles/server.ts"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { IamRelayModule } from "../dist/modules/iam-relay/iam-relay.module.js"
 
 const servers: Server[] = []
+const applications: INestApplication[] = []
 const webOrigin = "http://web.example.test"
 const webServiceHeaders = {
   "x-kokoro-service": "web-bff",
@@ -23,30 +30,37 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`
 }
 
-function bff(iamBaseUrl: string, tenantId?: string, publicOrigin = webOrigin): Server {
-  return createLiveTestBffServer(
-    loadConfig({
-      KOKORO_BFF_SHARED_SECRET: "test-secret",
-      KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused_bff_relay_fixture?schema=kokoro_bff",
-      KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
-      KOKORO_IAM_BASE_URL: iamBaseUrl,
-      KOKORO_IAM_WEB_ORIGIN: publicOrigin,
-      NODE_ENV: "test",
-      ...(tenantId === undefined ? {} : { KOKORO_TENANT_ID: tenantId }),
-    }),
-  )
+async function listenBff(iamBaseUrl: string, tenantId?: string, publicOrigin = webOrigin): Promise<string> {
+  const config = loadConfig({
+    KOKORO_BFF_SHARED_SECRET: "test-secret",
+    KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused_bff_relay_fixture?schema=kokoro_bff",
+    KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
+    KOKORO_IAM_BASE_URL: iamBaseUrl,
+    KOKORO_IAM_WEB_ORIGIN: publicOrigin,
+    NODE_ENV: "test",
+    ...(tenantId === undefined ? {} : { KOKORO_TENANT_ID: tenantId }),
+  })
+  const module = await Test.createTestingModule({ imports: [BffConfigModule, IamRelayModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false, forceCloseConnections: true })
+  applications.push(app)
+  await app.listen(0, "127.0.0.1")
+  return app.getUrl()
 }
 
 afterEach(async () => {
-  await Promise.all(
-    servers.splice(0).map(
+  await Promise.all([
+    ...applications.splice(0).map((app) => app.close()),
+    ...servers.splice(0).map(
       (server) =>
         new Promise<void>((resolve) => {
           server.closeAllConnections()
           server.close(() => resolve())
         }),
     ),
-  )
+  ])
 })
 
 test("native relay filters issuer credentials for permitted authentication interactions and closes raw Session reads", async () => {
@@ -58,7 +72,7 @@ test("native relay filters issuer credentials for permitted authentication inter
       response.end(JSON.stringify({ user: { email: "owner@example.test" } }))
     }),
   )
-  const base = await listen(bff(iam))
+  const base = await listenBff(iam)
 
   assert.equal((await fetch(`${base}/iam/oauth2/authorize`, { headers: webServiceHeaders })).status, 404)
   assert.equal((await fetch(`${base}/iam/get-session?disableCookieCache=true`, { headers: webServiceHeaders })).status, 404)
@@ -82,7 +96,7 @@ test("native set-active accepts only the fixed organization id body", async () =
       })
     }),
   )
-  const base = await listen(bff(iam, "tenant-fixed"))
+  const base = await listenBff(iam, "tenant-fixed")
   const headers = { ...webServiceHeaders, origin: webOrigin, cookie: "kokoro-issuer.session_token=issuer-session", "content-type": "application/json" }
 
   assert.equal(
@@ -110,7 +124,7 @@ test("native relay rejects browser authorization headers before IAM I/O", async 
       response.end("{}")
     }),
   )
-  const base = await listen(bff(iam))
+  const base = await listenBff(iam)
   const response = await fetch(`${base}/iam/verify-email?token=verification`, { headers: { ...webServiceHeaders, authorization: "Bearer forged" } })
   assert.equal(response.status, 403)
   assert.equal(calls, 0)
@@ -128,7 +142,7 @@ test("signup accepts the same required read-only User projection for normal and 
       response.end(JSON.stringify(body))
     }),
   )
-  const base = await listen(bff(iam))
+  const base = await listenBff(iam)
   const signup = {
     callbackURL: `${webOrigin}/iam/interactions/invitation?id=11111111-1111-4111-8111-111111111111`,
     email: "person@example.test",
@@ -197,7 +211,7 @@ test("native relay uses one public-origin Cookie mode for issuance and bodyless 
         response.end("{}")
       }),
     )
-    const base = await listen(bff(iam, undefined, publicOrigin))
+    const base = await listenBff(iam, undefined, publicOrigin)
     const signIn = await fetch(base + "/iam/sign-in/email", {
       method: "POST",
       headers: { ...webServiceHeaders, origin: publicOrigin, "content-type": "application/json" },
