@@ -286,8 +286,33 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(invalid.status, 400)
   })
 
-  it("keeps live Agent setup explicit and fail-closed when the owner is disabled", async () => {
-    const base = await listen(liveServer(config()))
+  async function startAgentSetupApp(t: import("node:test").TestContext, configValue: BffConfig) {
+    await import("reflect-metadata")
+    const { Test } = await import("@nestjs/testing")
+    const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+    const { BffExpressAdapter } = await import("../dist/infrastructure/http/bff-express-adapter.js")
+    const { AgentRunsModule } = await import("../dist/modules/agent-runs/agent-runs.module.js")
+    const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR } =
+      await import("../dist/common/tokens.js")
+    const admission = new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } })
+    const unexpected = (): never => assert.fail("Agent setup must not access BFF storage")
+    const builder = Test.createTestingModule({ imports: [AgentRunsModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(configValue)
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(admission)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({ pool: { query: unexpected, connect: unexpected } })
+    for (const token of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) builder.overrideProvider(token).useValue(null)
+    const module = await builder.compile()
+    const app = module.createNestApplication(new BffExpressAdapter(), { ...BFF_NEST_APPLICATION_OPTIONS, logger: false, abortOnError: false })
+    t.after(() => app.close())
+    await app.listen(0, "127.0.0.1")
+    return { base: await app.getUrl(), admission }
+  }
+
+  it("keeps live Agent setup explicit and fail-closed when the owner is disabled", async (t) => {
+    const { base, admission } = await startAgentSetupApp(t, config())
     const invalid = await fetch(`${base}/v1/agents/connections/setup?platform=irc`, { headers: authHeaders() })
     assert.equal(invalid.status, 400)
     assert.equal(((await invalid.json()) as { error: { code: string } }).error.code, "invalid_agent_platform")
@@ -295,12 +320,24 @@ describe("kokoro-bff v1 mock contract", () => {
     const disabled = await fetch(`${base}/v1/agents/connections/setup?platform=telegram`, { headers: authHeaders() })
     assert.equal(disabled.status, 503)
     assert.equal(((await disabled.json()) as { error: { code: string } }).error.code, "agent_not_configured")
+    assert.equal(admission.calls.length, 1)
   })
 
-  it("projects an enabled Agent setup response through the explicit owner adapter", async () => {
+  it("projects an enabled Agent setup response through the explicit owner adapter", async (t) => {
+    let ownerCalls = 0
+    let malformed = false
     const agent = createServer((request, response) => {
+      ownerCalls++
+      assert.equal(request.method, "GET")
       assert.equal(request.url, "/v1/agents/connections/setup?platform=telegram")
       assert.equal(request.headers["x-kokoro-subject-ref"], "user_test")
+      assert.equal(request.headers["x-kokoro-actor-ref"], "user_test")
+      assert.equal(request.headers["x-kokoro-tenant-ref"], "ns_test")
+      assert.equal(request.headers["x-kokoro-identity-assertion-ref"], "bff:agent-connection-setup:agent-setup")
+      assert.equal(request.headers["x-kokoro-service"], "kokoro-bff")
+      assert.equal(request.headers.authorization, "Bearer bff-upstream-secret")
+      assert.equal(request.headers.cookie, undefined)
+      assert.equal(request.headers.origin, undefined)
       response.setHeader("content-type", "application/json")
       response.end(
         JSON.stringify({
@@ -310,14 +347,24 @@ describe("kokoro-bff v1 mock contract", () => {
             qr_value: "kokoro://connect/telegram/fixture",
             continue_url: "https://dev.kokoro.localhost/app/agents?platform=telegram",
             expires_at: "2026-11-01T00:15:00.000Z",
+            ...(malformed ? { private_owner_field: "owner-private-canary" } : {}),
           },
           meta: { request_id: "agent-owner-request" },
         }),
       )
     })
     const agentBase = await listen(agent)
-    const base = await listen(liveServer(config({ agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } })))
-    const response = await fetch(`${base}/v1/agents/connections/setup?platform=telegram`, { headers: authHeaders() })
+    const { base, admission } = await startAgentSetupApp(t, config({ agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } }))
+    const setup = `${base}/v1/agents/connections/setup?platform=telegram`
+    const headers = {
+      ...authHeaders(),
+      "x-request-id": "agent-setup",
+      "x-kokoro-tenant-ref": "untrusted-tenant",
+      "x-kokoro-actor-ref": "untrusted-actor",
+      "x-kokoro-subject-ref": "untrusted-subject",
+      "x-kokoro-identity-assertion-ref": "untrusted-assertion",
+    }
+    const response = await fetch(setup, { headers })
     assert.equal(response.status, 200)
     assert.deepEqual((await response.json()) as { data: { status: string } }, {
       data: {
@@ -329,6 +376,48 @@ describe("kokoro-bff v1 mock contract", () => {
       },
       meta: { request_id: "agent-owner-request" },
     })
+    assert.equal(ownerCalls, 1)
+    assert.equal(admission.calls.length, 1)
+
+    const { request } = await import("node:http")
+    const withBody = await new Promise<{ status: number | undefined; code: string }>((resolve, reject) => {
+      const outgoing = request(setup, { headers: { ...headers, "content-length": "1" } }, (incoming) => {
+        let body = ""
+        incoming.setEncoding("utf8").on("data", (chunk: string) => (body += chunk))
+        incoming.on("error", reject)
+        incoming.on("end", () => {
+          try {
+            resolve({ status: incoming.statusCode, code: (JSON.parse(body) as { error: { code: string } }).error.code })
+          } catch (error) {
+            reject(error)
+          }
+        })
+      })
+      outgoing.on("error", reject)
+      outgoing.end("x")
+    })
+    assert.deepEqual(withBody, { status: 400, code: "invalid_agent_request" })
+    const duplicate = await fetch(`${setup}&platform=slack`, { headers })
+    assert.equal(duplicate.status, 400)
+    assert.equal(((await duplicate.json()) as { error: { code: string } }).error.code, "invalid_agent_platform")
+    const unknown = await fetch(`${base}/v1/agents/connections/unknown?platform=telegram`, { headers })
+    assert.equal(unknown.status, 404)
+    await unknown.arrayBuffer()
+    assert.equal(ownerCalls, 1)
+    assert.equal(admission.calls.length, 1)
+
+    const denied = await fetch(setup, { headers: { ...headers, cookie: "kokoro-issuer.session_token=unknown-session" } })
+    assert.equal(denied.status, 401)
+    assert.equal(((await denied.json()) as { error: { code: string } }).error.code, "session_invalid")
+    assert.equal(ownerCalls, 1)
+
+    malformed = true
+    const rejected = await fetch(setup, { headers })
+    assert.equal(rejected.status, 502)
+    const rejectedBody = (await rejected.json()) as { error: { code: string } }
+    assert.equal(rejectedBody.error.code, "upstream_response_invalid")
+    assert.doesNotMatch(JSON.stringify(rejectedBody), /owner-private-canary/u)
+    assert.equal(ownerCalls, 2)
   })
 
   it("supports scheduled task mutations through the same business contract", async () => {

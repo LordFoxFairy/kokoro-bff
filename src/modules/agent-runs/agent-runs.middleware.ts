@@ -22,6 +22,7 @@ import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.
 import { handleAgentRunsInternalRequest } from "../../http/routes/agent-runs-native.js"
 import { handleRunDisplayRequest, type RunDisplayProvider } from "../../http/routes/run-display.js"
 import { handleAgentControlRequest } from "../../http/routes/agent-control-native.js"
+import { handleAgentConnectionSetupRequest } from "../../http/routes/agent-connection-setup-native.js"
 
 type AgentRunsReader = SubmittedAgentRunReader & ProjectExecutionBindingReader
 
@@ -42,6 +43,7 @@ export class AgentRunsMiddleware implements NestMiddleware {
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleAgentRunsInternalRequest(request, response, this.config, this.reader, this.reader)
+      .then((handled) => handled || handleAgentConnectionSetupRequest(request, response, this.config, this.admission))
       .then((handled) => handled || handleRunDisplayRequest(request, response, this.config, this.admission, this.runDisplay))
       .then(
         (handled) =>
