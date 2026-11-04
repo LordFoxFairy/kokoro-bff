@@ -1,8 +1,14 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { loadConfig } from "../dist/config/runtime.js"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG } from "../dist/common/tokens.js"
+import { BffConfigModule } from "../dist/config/config.module.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { AuthenticationModule } from "../dist/modules/authentication/authentication.module.js"
+import { IamRelayModule } from "../dist/modules/iam-relay/iam-relay.module.js"
 
 const ownerBase = process.env.KOKORO_TEST_IAM_BASE_URL
 if (!ownerBase || !/^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/u.test(ownerBase)) {
@@ -28,15 +34,14 @@ test("BFF preserves native sign-in, safe session status and sign-out over real o
     KOKORO_BFF_IAM_USER_CONTEXT_SERVICE_CREDENTIAL_FILE: credentialFile,
     NODE_ENV: "test",
   })
-  const server = createBffServer(config, { businessStore: null, readiness: async () => undefined })
-  await new Promise((resolve, reject) => {
-    server.once("error", reject)
-    server.listen(0, "127.0.0.1", resolve)
-  })
-  const address = server.address()
-  if (address === null || typeof address === "string") throw new Error("BFF did not bind")
-  const base = `http://127.0.0.1:${address.port}`
+  const module = await Test.createTestingModule({ imports: [BffConfigModule, AuthenticationModule, IamRelayModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
   try {
+    await app.listen(0, "127.0.0.1")
+    const base = await app.getUrl()
     const signedIn = await fetch(`${base}/iam/sign-in/email`, {
       method: "POST",
       headers: { ...serviceHeaders, origin: webOrigin, "content-type": "application/json" },
@@ -86,7 +91,7 @@ test("BFF preserves native sign-in, safe session status and sign-out over real o
     assert.equal(revoked.headers.get("cache-control"), "no-store")
     assert.equal(revoked.headers.has("set-auth-jwt"), false)
   } finally {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
+    app.getHttpServer().closeAllConnections()
+    await app.close()
   }
 })
