@@ -3827,11 +3827,11 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
               ($3,$6,$7,$8,'Legacy slug source'),($4,$6,$5,NULL,'Foreign owner')`,
       [raceSameId, raceDifferentId, slugId, foreignId, `foreign_${suffix}`, tenant, subject, `source-${suffix}`],
     )
-    const { app, database, chatTurns } = await createMoveNestApp(tenant)
+    const { app, database, chatTurns } = await createMoveNestApp(tenant, { runControl: true })
     bff = app
     await database.ready()
-    const { AGENT_DISPATCH_OUTBOX } = await import("../dist/common/tokens.js")
-    const bindingReader = app.get(AGENT_DISPATCH_OUTBOX)
+    const { AGENT_RUNS_READER } = await import("../dist/common/tokens.js")
+    const bindingReader = app.get(AGENT_RUNS_READER)
     const admittedRun = await chatTurns.submit({
       tenantId: tenant,
       conversationId,
@@ -4806,11 +4806,11 @@ integrationTest(
       await pool.query(
         `CREATE TRIGGER ${fixtureName} BEFORE INSERT ON bff_idempotency_receipt FOR EACH ROW WHEN (NEW.scope = '${quotedScope}') EXECUTE FUNCTION ${fixtureName}()`,
       )
-      const { app, database, chatTurns } = await createMoveNestApp(tenant)
+      const { app, database, chatTurns } = await createMoveNestApp(tenant, { runControl: true })
       bff = app
       await database.ready()
-      const { AGENT_DISPATCH_OUTBOX } = await import("../dist/common/tokens.js")
-      const bindingReader = app.get(AGENT_DISPATCH_OUTBOX)
+      const { AGENT_RUNS_READER } = await import("../dist/common/tokens.js")
+      const bindingReader = app.get(AGENT_RUNS_READER)
       const originalRun = await chatTurns.submit({
         tenantId: tenant,
         conversationId,

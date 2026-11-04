@@ -13,6 +13,8 @@ test("the compiled production AppModule resolves its real provider graph without
   const { AppModule } = await import("../dist/app.module.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const {
+    AGENT_DISPATCH_OUTBOX,
+    AGENT_RUNS_READER,
     BFF_CONFIG,
     BFF_DATABASE,
     BFF_POOL,
@@ -21,10 +23,12 @@ test("the compiled production AppModule resolves its real provider graph without
     CHAT_TURN_SERVICE,
     PROJECT_SERVICE,
     PROJECT_SKILL_SELECTION_PROVIDER,
+    RUN_DISPLAY_PROVIDER,
     SKILL_INSTALLATION_CLIENT,
   } = await import("../dist/common/tokens.js")
   const { PERSONALIZATION_PROVIDER } = await import("../dist/modules/account/personalization.provider.js")
   const { AgentDispatchModule } = await import("../dist/modules/agent-dispatch/agent-dispatch.module.js")
+  const { AgentRunsModule } = await import("../dist/modules/agent-runs/agent-runs.module.js")
   const { ChatModule } = await import("../dist/modules/chat/chat.module.js")
   const { ProjectAccessModule } = await import("../dist/modules/projects/project-access.module.js")
   const { SkillInstallationAccessModule } = await import("../dist/modules/skills/skill-installation-access.module.js")
@@ -61,6 +65,7 @@ test("the compiled production AppModule resolves its real provider graph without
     assert.equal(module.get(BFF_REDIS), database.redis)
     for (const [owner, token] of [
       [AgentDispatchModule, CHAT_TURN_SERVICE],
+      [AgentRunsModule, AGENT_RUNS_READER],
       [ChatModule, CHAT_SERVICE],
       [AccountModule, PERSONALIZATION_PROVIDER],
       [ProjectAccessModule, PROJECT_SERVICE],
@@ -72,6 +77,11 @@ test("the compiled production AppModule resolves its real provider graph without
       assert.equal(instances.length, 1, `${String(token)} must have one provider registration`)
       assert.equal(instances[0], module.select(owner).get(token, { strict: true }))
     }
+    const reader = module.select(AgentRunsModule).get(AGENT_RUNS_READER, { strict: true })
+    assert.notEqual(reader, module.select(AgentDispatchModule).get(AGENT_DISPATCH_OUTBOX, { strict: true }))
+    assert.equal(typeof reader.readProjectExecutionBinding, "function")
+    assert.equal(typeof reader.readSubmittedAgentRun, "function")
+    assert.equal(module.select(AgentRunsModule).get(RUN_DISPLAY_PROVIDER, { strict: true }).submittedAgentRuns, reader)
   } finally {
     await module.close()
   }

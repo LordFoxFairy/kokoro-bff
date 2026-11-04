@@ -1,10 +1,41 @@
 import { createHash } from "node:crypto"
 import type { PoolClient, QueryConfig, QueryResult, QueryResultRow } from "pg"
 
-import type { ProjectExecutionBinding, ProjectExecutionBindingInput } from "../../application/agent-runs/project-execution-binding-reader.js"
 import { parseAgentDispatchPayload } from "../../domain/chat/agent-dispatch.js"
 import { parseSkillSourceSelection } from "../../domain/chat/skill-source-selection.js"
 import type { PostgresBffDatabase } from "./client.js"
+
+/** Stable intent identifiers supplied by the authenticated execution verifier. */
+type ProjectExecutionBindingInput = Readonly<{
+  tenantId: string
+  subjectId: string
+  actorId: string
+  runId: string
+  sessionId: string
+  identityAssertionRef: string
+  projectId: string | null
+  selectionDigest: string
+  signal?: AbortSignal
+}>
+
+type ProjectExecutionBinding = Readonly<{
+  projectId: string | null
+  selectedSkillSourceRefs: readonly string[]
+  selectionDigest: string
+}>
+
+/** Immutable Chat submission source, not current execution or consumption permission. */
+type SubmittedAgentRun = Readonly<{ tenantId: string; userId: string; runId: string; conversationId: string }>
+type SubmittedAgentRunInput = Readonly<{ tenantId: string; runId: string; signal?: AbortSignal }>
+
+export function createAgentRunsReader(database: PostgresBffDatabase) {
+  return {
+    readProjectExecutionBinding: (input: ProjectExecutionBindingInput) => readProjectExecutionBinding(database, input),
+    readSubmittedAgentRun: (input: SubmittedAgentRunInput) => readSubmittedAgentRun(database, input),
+  }
+}
+
+export type AgentRunsReader = ReturnType<typeof createAgentRunsReader>
 
 /** A single read owns its connection until completion; cancellation destroys that exact backend. */
 function bindingQuery<Row extends QueryResultRow>(database: PostgresBffDatabase, query: QueryConfig, parent?: AbortSignal): Promise<QueryResult<Row>> {
@@ -52,7 +83,7 @@ function bindingQuery<Row extends QueryResultRow>(database: PostgresBffDatabase,
 }
 
 /** One statement observes the current parents and immutable intent together. */
-export async function readProjectExecutionBinding(database: PostgresBffDatabase, input: ProjectExecutionBindingInput): Promise<ProjectExecutionBinding | null> {
+async function readProjectExecutionBinding(database: PostgresBffDatabase, input: ProjectExecutionBindingInput): Promise<ProjectExecutionBinding | null> {
   input.signal?.throwIfAborted()
   if (input.actorId !== input.subjectId || !/^[0-9a-f]{64}$/u.test(input.selectionDigest)) return null
   const result = await bindingQuery<{
@@ -116,10 +147,7 @@ export async function readProjectExecutionBinding(database: PostgresBffDatabase,
 }
 
 /** Durable submitter lookup also serves recovery after a soft deletion, move or terminal Run. */
-export async function readSubmittedAgentRun(
-  database: PostgresBffDatabase,
-  input: import("../../application/agent-runs/submitted-agent-run-reader.js").SubmittedAgentRunInput,
-): Promise<import("../../application/agent-runs/submitted-agent-run-reader.js").SubmittedAgentRun | null> {
+async function readSubmittedAgentRun(database: PostgresBffDatabase, input: SubmittedAgentRunInput): Promise<SubmittedAgentRun | null> {
   input.signal?.throwIfAborted()
   const result = await bindingQuery<{
     subject_id: string

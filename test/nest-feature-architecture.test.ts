@@ -441,23 +441,10 @@ test("Scheduler dispatch shares the feature-owned entrypoint with the raw compat
   assert.match(middleware, /schedulerDispatch\(request, response, this\.config/u)
 })
 
-test("AgentRuns execution-binding and submitted-run reader ports are feature-local", async () => {
-  assert.equal(await fileExists("src/application/agent-runs/project-execution-binding-reader.ts"), true)
-  assert.equal(await fileExists("src/application/agent-runs/submitted-agent-run-reader.ts"), true)
-  assert.equal(await fileExists("src/application/ports/project-execution-binding-reader.ts"), false)
-  assert.equal(await fileExists("src/application/ports/submitted-agent-run-reader.ts"), false)
-  const [moduleSource, middleware, admissionRoute, displayRoute, repository] = await Promise.all([
-    readFile(path.join(root, "src/modules/agent-runs/agent-runs.module.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/agent-runs/agent-runs.middleware.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/agent-runs-native.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/run-display.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/project-execution-binding.ts"), "utf8"),
-  ])
-  assert.match(moduleSource, /application\/agent-runs\/submitted-agent-run-reader\.js/u)
-  assert.match(middleware, /application\/agent-runs\/(?:project-execution-binding|submitted-agent-run)-reader\.js/u)
-  assert.match(admissionRoute, /application\/agent-runs\/(?:project-execution-binding|submitted-agent-run)-reader\.js/u)
-  assert.match(displayRoute, /application\/agent-runs\/submitted-agent-run-reader\.js/u)
-  assert.match(repository, /application\/agent-runs\/(?:project-execution-binding|submitted-agent-run)-reader\.js/u)
+test("AgentRuns does not retain standalone execution-binding or submitted-run ports", async () => {
+  for (const directory of ["agent-runs", "ports"])
+    for (const reader of ["project-execution-binding-reader", "submitted-agent-run-reader"])
+      assert.equal(await fileExists(`src/application/${directory}/${reader}.ts`), false, `${reader} must be consolidated`)
 })
 
 test("AgentRunsModule owns internal admission and execution-binding adapters", async () => {

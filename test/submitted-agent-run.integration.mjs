@@ -7,7 +7,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { agentModelAdmissionRoute } from "../dist/http/routes/model-admission.js"
 import { Pool } from "pg"
-import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
+import { createAgentRunsReader } from "../dist/infrastructure/postgres/project-execution-binding.js"
 import { buildAgentDispatchPayload } from "../dist/domain/chat/agent-dispatch.js"
 
 // Real BFF repository + HTTP route; the named Billing peer is a wire fixture, not a money/model execution claim.
@@ -153,7 +153,7 @@ integration("submitted Run source survives retirement, but rejects foreign and i
     },
     { runId: ids.run, userMessageId: ids.userMessage },
   )
-  const repository = new PostgresAgentDispatchOutboxRepository({ pool })
+  const repository = createAgentRunsReader({ pool })
   const input = { tenantId: tenant, runId: ids.run }
   try {
     await pool.query("INSERT INTO bff_conversation(conversation_id,tenant_id,owner_id,project_ref,title) VALUES($1,$2,$3,$4,'budget source')", [

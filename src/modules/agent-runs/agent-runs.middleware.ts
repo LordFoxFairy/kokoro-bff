@@ -12,8 +12,7 @@ import {
 } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { SubmittedAgentRunReader } from "../../application/agent-runs/submitted-agent-run-reader.js"
-import type { ProjectExecutionBindingReader } from "../../application/agent-runs/project-execution-binding-reader.js"
+import type { AgentRunsReader } from "../../infrastructure/postgres/project-execution-binding.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
 import type { ProjectService } from "../../application/project-service.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
@@ -23,8 +22,6 @@ import { handleAgentRunsInternalRequest } from "../../http/routes/agent-runs-nat
 import { handleRunDisplayRequest, type RunDisplayProvider } from "../../http/routes/run-display.js"
 import { handleAgentControlRequest } from "../../http/routes/agent-control-native.js"
 import { handleAgentConnectionSetupRequest } from "../../http/routes/agent-connection-setup-native.js"
-
-type AgentRunsReader = SubmittedAgentRunReader & ProjectExecutionBindingReader
 
 @Injectable()
 export class AgentRunsMiddleware implements NestMiddleware {

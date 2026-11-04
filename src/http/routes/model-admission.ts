@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
-import type { SubmittedAgentRunReader } from "../../application/agent-runs/submitted-agent-run-reader.js"
+import type { AgentRunsReader } from "../../infrastructure/postgres/project-execution-binding.js"
 import { agentModelAdmissionCredentialTenant } from "../../auth/agent-model-admission-credential.js"
 import { requestBillingModelSettlement } from "../../infrastructure/clients/owner/billing-model-settlement.js"
 import { recoverBillingModelAdmission } from "../../infrastructure/clients/owner/billing-model-admission-recovery.js"
@@ -15,7 +15,7 @@ export async function agentModelAdmissionRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  source: SubmittedAgentRunReader | null,
+  source: Pick<AgentRunsReader, "readSubmittedAgentRun"> | null,
 ): Promise<void> {
   const settlementId = /^\/internal\/v1\/model-admissions\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/settle$(?![\s\S])/u.exec(
     request.url ?? "",
