@@ -353,6 +353,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
   let puts = 0,
     creates = 0,
     completes = 0,
+    storageReads = 0,
     allowed = true
   try {
     const objects = await listen(
@@ -390,6 +391,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
                 }
               },
               getUploadStatus() {
+                storageReads++
                 return {
                   uploadId: "upload-1",
                   state: completes ? UploadState.COMPLETED : UploadState.PENDING,
@@ -404,6 +406,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
                 return { uploadId: "upload-1", assetId: "asset-1", scanState: ScanState.CLEAN }
               },
               getAsset() {
+                storageReads++
                 return {
                   assetId: "asset-1",
                   contentSha256: f.input.sha256,
@@ -447,9 +450,9 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
     }
     // The real upload middleware constructs its repository directly. Keep this
     // test's original receipt double at that boundary instead of simulating SQL.
-    for (const operation of ["getReceipt", "claimReceipt", "putReceipt", "compareAndSetReceipt", "releaseReceipt"]) {
-      t.mock.method(PostgresIdempotencyRepository.prototype, operation, (...args) => store[operation](...args))
-    }
+    const receiptCalls = ["getReceipt", "claimReceipt", "putReceipt", "compareAndSetReceipt", "releaseReceipt"].map((operation) =>
+      t.mock.method(PostgresIdempotencyRepository.prototype, operation, (...args) => store[operation](...args)),
+    )
     const admission = {
       async verify() {
         return { ok: true, identity: { namespace: "tenant-1", userId: "subject-1" } }
@@ -475,7 +478,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
     app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
     await app.listen(0, "127.0.0.1")
     const bff = await app.getUrl()
-    const upload = async (files = 1) => {
+    const upload = async (files = 1, key = "key-1") => {
       const form = new FormData()
       for (let i = 0; i < files; i++) form.append("files", new File([f.input.bytes], "fox.txt", { type: "text/plain" }))
       return fetch(`${bff}/v1/projects/slug/resources`, {
@@ -485,21 +488,28 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
           origin: "https://web.example.test",
           "x-kokoro-service": "web-bff",
           "x-kokoro-internal-secret": "web-secret",
-          "idempotency-key": "key-1",
+          ...(key === null ? {} : { "idempotency-key": key }),
           "x-kokoro-tenant-id": "forged",
         },
         body: form,
       })
     }
+    const missingKey = await upload(1, null)
+    assert.equal(missingKey.status, 400)
+    assert.equal((await missingKey.json()).error.code, "invalid_idempotency_key")
+    assert.deepEqual({ creates, puts, completes, storageReads }, { creates: 0, puts: 0, completes: 0, storageReads: 0 })
+    assert.ok(receiptCalls.every((receipt) => receipt.mock.callCount() === 0))
+
     let response = await upload()
     assert.equal(response.status, 503)
     await response.arrayBuffer()
     response = await upload()
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    assert.equal((await response.json()).data.resources[0].asset_id, "asset-1")
+    const completed = await response.json()
+    assert.equal(completed.data.resources[0].asset_id, "asset-1")
     response = await upload()
     assert.equal(response.status, 200)
-    await response.arrayBuffer()
+    assert.deepEqual(await response.json(), completed)
     assert.equal(puts, 1)
     assert.equal(completes, 1)
     assert.equal(creates, 2)

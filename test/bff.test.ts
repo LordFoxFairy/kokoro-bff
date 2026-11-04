@@ -245,34 +245,6 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.ok(revisionsBody.meta.request_id.length > 0)
   })
 
-  it("accepts project resource multipart mocks and replays the canonical success", async () => {
-    const base = await listen(testServer(config()))
-    const path = "/v1/projects/project_kokoro/resources"
-    const missingKeyBody = new FormData()
-    missingKeyBody.append("files", new Blob(["fixture bytes"], { type: "text/plain" }), "fixture.txt")
-    const missingKey = await fetch(`${base}${path}`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: missingKeyBody,
-    })
-    assert.equal(missingKey.status, 400)
-    assert.equal(((await missingKey.json()) as { error: { code: string } }).error.code, "idempotency_key_required")
-
-    const makeBody = () => {
-      const form = new FormData()
-      form.append("files", new Blob(["fixture bytes"], { type: "text/plain" }), "fixture.txt")
-      return form
-    }
-    const init = { method: "POST", headers: { ...authHeaders(), "idempotency-key": "project-resource-flow" }, body: makeBody() }
-    const first = await fetch(`${base}${path}`, init)
-    const second = await fetch(`${base}${path}`, init)
-    const firstBody = (await first.json()) as { data: { ok: boolean } }
-    const secondBody = (await second.json()) as { data: { ok: boolean } }
-    assert.equal(first.status, 200)
-    assert.deepEqual(firstBody, secondBody)
-    assert.deepEqual(firstBody.data, { ok: true })
-  })
-
   it("persists project skill state and creates scheduled tasks from snake_case Web input", async () => {
     const { createBffServer } = await import("../dist/bootstrap/server.js")
     const { MockBffStore } = await import("./doubles/bff-store.ts")
