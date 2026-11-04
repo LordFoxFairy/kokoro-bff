@@ -4,6 +4,7 @@ import { NestFactory } from "@nestjs/core"
 import { AppModule } from "./app.module.js"
 import { loadConfig, type BffConfig } from "./config/runtime.js"
 import { BffExpressAdapter } from "./http/bff-express-adapter.js"
+import { configureBffProtobufTextEncoding } from "./infrastructure/protobuf-text-encoding.js"
 
 const SHUTDOWN_GRACE_PERIOD_MS = 30_000
 const SHUTDOWN_HARD_DEADLINE_MS = 31_000
@@ -62,6 +63,7 @@ export async function startBffApplication(
 
 export async function bootstrapNest(): Promise<void> {
   const config = loadConfig()
+  configureBffProtobufTextEncoding()
   // Flush framework startup logs only on success; Factory/worker causes can contain private configuration.
   const options = { ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, autoFlushLogs: false }
   const app = await NestFactory.create(AppModule, new BffExpressAdapter(), options).catch(() => {
