@@ -2,7 +2,6 @@ import assert from "node:assert/strict"
 import { createServer, type IncomingMessage, type Server } from "node:http"
 import test from "node:test"
 import { loadConfig } from "../dist/config/runtime.js"
-import { createBffServer } from "../dist/bootstrap/server.js"
 import { nativeSessionCookie } from "../dist/auth/user-admission.js"
 import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
 
@@ -80,27 +79,43 @@ async function fixture(
       response.end(JSON.stringify({ data: { allowed: true, tenant_id: tenant, subject_id: "subject", decision_source: "current_membership" } }))
     }
   })
-  const owner = await listen(peer)
-  const config = {
-    ...loadConfig({
-      KOKORO_IAM_BASE_URL: owner,
-      KOKORO_IAM_WEB_ORIGIN: origin,
-      KOKORO_TENANT_ID: tenant,
-      KOKORO_BFF_SHARED_SECRET: "browser-fixture",
-      KOKORO_BFF_POSTGRES_URL: "postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=kokoro_bff",
-      KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:1/8",
-    }),
-    ...(await fixtureIamCredentials(tenant)),
-  }
-  const bff = createBffServer(config, { businessStore: null, readiness: async () => undefined })
-  const base = await listen(bff)
   try {
-    await run(base, requests, (value) => {
-      state = value
-    })
+    const owner = await listen(peer)
+    const config = {
+      ...loadConfig({
+        KOKORO_IAM_BASE_URL: owner,
+        KOKORO_IAM_WEB_ORIGIN: origin,
+        KOKORO_TENANT_ID: tenant,
+        KOKORO_BFF_SHARED_SECRET: "browser-fixture",
+        KOKORO_BFF_POSTGRES_URL: "postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=kokoro_bff",
+        KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:1/8",
+      }),
+      ...(await fixtureIamCredentials(tenant)),
+    }
+    await import("reflect-metadata")
+    const { Test } = await import("@nestjs/testing")
+    const { AccountModule } = await import("../dist/modules/account/account.module.js")
+    const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+    const { BFF_CONFIG, BFF_DATABASE } = await import("../dist/common/tokens.js")
+    const unexpected = () => assert.fail("native session HTTP must not access the BFF database")
+    const moduleRef = await Test.createTestingModule({ imports: [AccountModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({ pool: { query: unexpected, connect: unexpected }, ready: unexpected })
+      .compile()
+    const app = moduleRef.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+    try {
+      await app.listen(0, "127.0.0.1")
+      const base = await app.getUrl()
+      await run(base, requests, (value) => {
+        state = value
+      })
+    } finally {
+      await app.close()
+    }
   } finally {
-    await close(bff)
-    await close(peer)
+    if (peer.listening) await close(peer)
   }
 }
 

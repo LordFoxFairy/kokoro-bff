@@ -29,7 +29,11 @@ test("production Skills factories use independent direct catalog/admin credentia
   const { once } = await import("node:events")
   const { Code, ConnectError } = await import("@connectrpc/connect")
   const { loadConfig } = await import("../dist/config/runtime.js")
-  const { createBffComposition } = await import("../dist/bootstrap/runtime.js")
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { SkillsModule } = await import("../dist/modules/skills/skills.module.js")
+  const { BFF_CONFIG, BFF_DATABASE, SKILL_DRAFT_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_LOCAL_IMPORT_CLIENT, SKILL_ADMIN_CLIENT } =
+    await import("../dist/common/tokens.js")
   const requests = []
   const peer = createServer((request, response) => {
     requests.push({ path: request.url, credential: request.headers.authorization })
@@ -53,8 +57,20 @@ test("production Skills factories use independent direct catalog/admin credentia
     KOKORO_BFF_PLATFORM_SKILLS_ADMIN_SERVICE_CREDENTIAL_FILE: await fixture({ version: 1, entries: [admin] }),
     KOKORO_PLATFORM_PROJECTION_CREDENTIAL_FILE: await fixture({ version: 1, entries: [entry()] }),
   })
-  const runtime = createBffComposition(config, { businessStore: null })
-  t.after(() => runtime.close())
+  const moduleRef = await Test.createTestingModule({ imports: [SkillsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: {}, redis: {} })
+    .compile()
+  t.after(() => moduleRef.close())
+  const runtime = {
+    skillDraftClient: moduleRef.get(SKILL_DRAFT_CLIENT),
+    skillProductClient: moduleRef.get(SKILL_PRODUCT_CLIENT),
+    installationClient: moduleRef.get(SKILL_INSTALLATION_CLIENT),
+    localSkillImportClient: moduleRef.get(SKILL_LOCAL_IMPORT_CLIENT),
+    skillAdminClient: moduleRef.get(SKILL_ADMIN_CLIENT),
+  }
   assert.ok(runtime.skillDraftClient, "catalog factory is configured without OAuth")
   assert.ok(runtime.skillProductClient)
   assert.ok(runtime.installationClient)
