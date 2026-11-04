@@ -1,4 +1,3 @@
-import { PostgresPersonalizationRepository } from "../dist/infrastructure/postgres/personalization-repository.js"
 import { ProjectService } from "../dist/application/project-service.js"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
@@ -8,7 +7,6 @@ import { test } from "node:test"
 import { Pool } from "pg"
 import { createClient } from "redis"
 
-import { createBffServer } from "../dist/bootstrap/server.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
@@ -124,15 +122,29 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
   const crossTenant = `${tenant}_cross`
   const ownerA = "privacy_owner_a"
   const ownerB = "privacy_owner_b"
-  let bff
+  let app
   try {
     await pool.query(
       "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
-    bff = createBffServer(bffConfig({ tenantId: tenant }), { sessionAdmission })
-    const base = await listen(bff)
+    await import("reflect-metadata")
+    const { Test } = await import("@nestjs/testing")
+    const { BFF_CONFIG, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+    const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+    const { BffExpressAdapter } = await import("../dist/infrastructure/http/bff-express-adapter.js")
+    const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
+    // ScheduledTasksModule imports the real ProjectsModule; keep its real repositories and workers.
+    const module = await Test.createTestingModule({ imports: [ScheduledTasksModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(bffConfig({ tenantId: tenant }))
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(sessionAdmission)
+      .compile()
+    app = module.createNestApplication(new BffExpressAdapter(), { ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    await app.listen(0, "127.0.0.1")
+    const base = await app.getUrl()
 
     const createProject = async (owner, key) =>
       fetch(`${base}/v1/projects`, {
@@ -251,9 +263,12 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
     assert.equal(afterDeniedOutbox.rows[0].count, beforeDeniedOutbox.rows[0].count)
     assert.equal(afterDeniedTaskReceipts.rows[0].count, beforeDeniedTaskReceipts.rows[0].count)
   } finally {
-    if (bff) await close(bff)
-    await redis.quit().catch(() => undefined)
-    await pool.end()
+    try {
+      await app?.close()
+    } finally {
+      await redis.quit().catch(() => undefined)
+      await pool.end()
+    }
   }
 })
 
@@ -266,7 +281,23 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
   const agentCalls = []
   let schedulerBase
   let agentBase
-  let bff
+  let app
+  async function start(config) {
+    await import("reflect-metadata")
+    const { Test } = await import("@nestjs/testing")
+    const { BFF_CONFIG, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+    const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+    const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
+    const module = await Test.createTestingModule({ imports: [ScheduledTasksModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(sessionAdmission)
+      .compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    await app.listen(0, "127.0.0.1")
+    return app.getUrl()
+  }
   try {
     await schemaPool.query(
       "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project CASCADE",
@@ -362,8 +393,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     agentBase = await listen(agent)
 
     const targetUrl = "http://kokoro-bff:4300/internal/bff/scheduled-tasks/dispatch"
-    bff = createBffServer(bffConfig({ tenantId: namespace, schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }), { sessionAdmission })
-    const base = await listen(bff)
+    const base = await start(bffConfig({ tenantId: namespace, schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }))
 
     const createHeaders = { ...auth(namespace), "content-type": "application/json", "idempotency-key": "schedule-create-integration" }
     const createPayload = {
@@ -519,9 +549,9 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     )
     assert.ok(outboxLineage.rows.every((row) => Number(row.fence) >= 1))
 
-    await close(bff)
-    bff = createBffServer(bffConfig({ tenantId: namespace, schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }), { sessionAdmission })
-    const restartedBase = await listen(bff)
+    await app.close()
+    app = undefined
+    const restartedBase = await start(bffConfig({ tenantId: namespace, schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }))
     await new Promise((resolve) => setTimeout(resolve, 100))
     const listed = await fetch(`${restartedBase}/v1/scheduled-tasks`, { headers: auth(namespace) })
     const currentTasks = (await listed.json()).data.tasks
@@ -545,7 +575,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     const afterDelete = await fetch(`${restartedBase}/v1/scheduled-tasks`, { headers: auth(namespace) })
     assert.deepEqual((await afterDelete.json()).data.tasks, [])
   } finally {
-    if (bff) await close(bff)
+    await app?.close()
     for (const server of servers.splice(0)) {
       if (!server.listening) continue
       await close(server)
@@ -1038,38 +1068,40 @@ async function r74CreateWithRawQuery(fixture, key, payload, query) {
 // R237 stage 2. Root installs the stage-1 schema first; missing columns are not HTTP RED.
 // These are BFF HTTP / real PostgreSQL tests. IAM admission is the existing boundary double.
 import { randomUUID } from "node:crypto"
-import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
+import { PostgresIdempotencyRepository } from "../dist/infrastructure/postgres/idempotency-repository.js"
+import { PostgresProjectScopeReleaseOutboxRepository } from "../dist/infrastructure/postgres/project-scope-release-outbox-repository.js"
+import { ProjectScopeReleaseOutboxDispatcher } from "../dist/application/project-scope-release-outbox-dispatcher.js"
+import { StorageScopeReleaseClient } from "../dist/infrastructure/clients/storage/scope-release-client.js"
+import { ScheduledTaskService } from "../dist/application/scheduled-task-service.js"
 import { PostgresProjectRepository } from "../dist/infrastructure/postgres/project-repository.js"
 import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
 import { PostgresScheduledTaskRepository } from "../dist/infrastructure/postgres/scheduled-task-repository.js"
+import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
+import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
+import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
+import { ChatApplicationService } from "../dist/application/chat-service.js"
+import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
 
 const r237IdleWorker = { start() {}, async stop() {} }
 const r237Tombstone = "2026-09-01T00:00:00.000Z"
 
-async function r237Fixture(t, { projectMatrix = false } = {}) {
+async function r237Fixture(t, lane) {
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `r237_${randomUUID().replaceAll("-", "")}`
   const owner = "r237_owner"
-  let store
-  let bff
-  let app
+  let stop
   const tables = []
   t.after(async () => {
     try {
-      if (app) await app.close()
-      if (bff) await close(bff)
+      await stop?.()
     } finally {
       try {
-        await store?.close()
-      } finally {
-        try {
-          for (const table of tables) {
-            if (table === "bff_idempotency_receipt") await pool.query(`DELETE FROM ${table} WHERE position($1 in scope)>0`, [tenant])
-            else await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1 OR tenant_id=$2`, [tenant, `${tenant}_other`])
-          }
-        } finally {
-          await pool.end()
+        for (const table of tables) {
+          if (table === "bff_idempotency_receipt") await pool.query(`DELETE FROM ${table} WHERE position($1 in scope)>0`, [tenant])
+          else await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1 OR tenant_id=$2`, [tenant, `${tenant}_other`])
         }
+      } finally {
+        await pool.end()
       }
     }
   })
@@ -1090,12 +1122,13 @@ async function r237Fixture(t, { projectMatrix = false } = {}) {
   )
   tables.push(...catalog.rows.map((row) => row.table_name))
   assert.ok(tables.every((name) => /^bff_[a-z_]+$/u.test(name)))
+  let base
+  let artifactLibrary
+  if (lane === "project-matrix") {
   const config = {
     ...bffConfig({ tenantId: tenant, agentEnabled: true, agentBase: "http://127.0.0.1:9" }),
     storage: { baseUrl: "http://127.0.0.1:9", secret: "r237-no-storage-service", objectOrigin: "http://127.0.0.1:9" },
   }
-  let base
-  if (projectMatrix) {
     await import("reflect-metadata")
     const { Test } = await import("@nestjs/testing")
     const {
@@ -1130,26 +1163,55 @@ async function r237Fixture(t, { projectMatrix = false } = {}) {
       builder.overrideProvider(token).useValue(r237IdleWorker)
     }
     const module = await builder.compile()
-    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    stop = () => app.close()
     await app.get(BFF_DATABASE).ready()
     await app.listen(0, "127.0.0.1")
     base = await app.getUrl()
-  } else {
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    bff = createBffServer(config, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: r237IdleWorker,
-      agentCancellationDispatcher: r237IdleWorker,
-      agUiProjector: r237IdleWorker,
-      scheduledTaskDispatcher: r237IdleWorker,
-      scheduledAgentDispatcher: r237IdleWorker,
-      scheduledAgentTerminalConsumer: r237IdleWorker,
-    })
-    base = await listen(bff)
+  } else if (lane !== "postgres") {
+    await import("reflect-metadata")
+    const { Test } = await import("@nestjs/testing")
+    const {
+      AGENT_CANCELLATION_DISPATCHER,
+      AGENT_DISPATCH_DISPATCHER,
+      AGUI_PROJECTOR,
+      BFF_CONFIG,
+      BFF_DATABASE,
+      LIBRARY_ARTIFACT_REPOSITORY,
+      SESSION_ADMISSION,
+    } = await import("../dist/common/tokens.js")
+    const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+    const chat = lane === "chat"
+    const feature = chat
+      ? (await import("../dist/modules/chat/chat.module.js")).ChatModule
+      : (await import("../dist/modules/account/account.module.js")).AccountModule
+    const builder = Test.createTestingModule({ imports: [feature] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue({
+        ...bffConfig({ tenantId: tenant, agentEnabled: chat, agentBase: chat ? "http://127.0.0.1:9" : undefined }),
+        ...(chat ? {} : { storage: { baseUrl: "http://127.0.0.1:9", secret: "r237-no-storage-service", objectOrigin: "http://127.0.0.1:9" } }),
+      })
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(sessionAdmission)
+    if (chat) {
+      builder
+        .overrideProvider(AGENT_DISPATCH_DISPATCHER)
+        .useValue(r237IdleWorker)
+        .overrideProvider(AGENT_CANCELLATION_DISPATCHER)
+        .useValue(r237IdleWorker)
+        .overrideProvider(AGUI_PROJECTOR)
+        .useValue(r237IdleWorker)
+    }
+    const module = await builder.compile()
+    const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    stop = () => app.close()
+    await app.get(BFF_DATABASE).ready()
+    await app.listen(0, "127.0.0.1")
+    base = await app.getUrl()
+    if (!chat) artifactLibrary = app.get(LIBRARY_ARTIFACT_REPOSITORY)
   }
   const request = async (path, method = "GET", body, options = {}) => {
+    if (base === undefined) throw new Error("R237 repository fixture has no HTTP listener")
     const response = await fetch(`${base}/v1/${path}`, {
       method,
       signal: AbortSignal.timeout(6000),
@@ -1205,7 +1267,7 @@ async function r237Fixture(t, { projectMatrix = false } = {}) {
     assert.deepEqual(await facts(), before, "rejected request changed BFF facts or receipt")
     return result
   }
-  return { pool, tenant, owner, store, request, facts, project, conversation, deny, scope: { tenantId: tenant, subjectId: owner } }
+  return { pool, tenant, owner, artifactLibrary, request, facts, project, conversation, deny, scope: { tenantId: tenant, subjectId: owner } }
 }
 
 function r237Schedule(projectId) {
@@ -1224,7 +1286,7 @@ function r237Schedule(projectId) {
 integrationTest("R237 HTTP Project active and denied ID-slug matrix leaves complete facts unchanged", async (t) => {
   for (const kind of ["deleted", "owner", "tenant"])
     await t.test(kind, async (t) => {
-      const f = await r237Fixture(t, { projectMatrix: true })
+      const f = await r237Fixture(t, "project-matrix")
       const active = await f.project()
       const hidden = await f.project(kind)
       const list = await f.request("projects")
@@ -1293,7 +1355,7 @@ integrationTest("R237 HTTP Conversation collections and private operations exclu
   for (const kind of ["deleted", "owner", "tenant"])
     for (const selector of ["id", "slug"])
       await t.test(`${kind} ${selector}`, async (t) => {
-        const f = await r237Fixture(t)
+        const f = await r237Fixture(t, "chat")
         const active = await f.project()
         const hidden = await f.project(kind)
         const direct = await f.conversation()
@@ -1338,7 +1400,7 @@ integrationTest("R237 HTTP Conversation collections and private operations exclu
 })
 
 integrationTest("R237 HTTP Move and Message reject inactive sources targets and stale receipts", async (t) => {
-  const f = await r237Fixture(t)
+  const f = await r237Fixture(t, "chat")
   const active = await f.project()
   const deleted = await f.project("deleted")
   const foreign = await f.project("owner")
@@ -1399,7 +1461,7 @@ function r237AfterQueryDatabase(pool, onQuery) {
 
 integrationTest("R237 real PG inner Project and Conversation predicates are not masked by HTTP preauthorization", async (t) => {
   await t.test("instruction UPDATE and Skill parent lock", async (t) => {
-    const f = await r237Fixture(t)
+    const f = await r237Fixture(t, "postgres")
     const project = await f.project("deleted")
     const repository = new PostgresProjectRepository({ pool: f.pool })
     const before = await f.facts()
@@ -1413,7 +1475,7 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
   })
   for (const operation of ["revisions", "tasks", "messages"])
     await t.test(`read-to-read committed tombstone ${operation}`, async (t) => {
-      const f = await r237Fixture(t)
+      const f = await r237Fixture(t, "postgres")
       const project = await f.project()
       const conversation = await f.conversation(project.slug)
       await f.pool.query(
@@ -1466,7 +1528,7 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
     })
   for (const method of ["readSnapshot", "readRunProcessPage", "listMessages", "renameConversation", "deleteConversation", "createShare", "revokeShare"])
     await t.test(method, async (t) => {
-      const f = await r237Fixture(t)
+      const f = await r237Fixture(t, "postgres")
       const project = await f.project("deleted")
       const repository = new PostgresChatRepository({ pool: f.pool })
       for (const ref of [project.id, project.slug]) {
@@ -1484,7 +1546,7 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
       }
     })
   await t.test("ScheduledTask FOR SHARE rejects tombstone without task or outbox", async (t) => {
-    const f = await r237Fixture(t)
+    const f = await r237Fixture(t, "postgres")
     const project = await f.project("deleted")
     const repository = new PostgresScheduledTaskRepository({ pool: f.pool })
     for (const ref of [project.id, project.slug]) {
@@ -1525,7 +1587,7 @@ async function r237Artifact(f, conversation) {
 }
 
 integrationTest("R237 Artifact relationship list and detail enforce Project eligibility before Storage", async (t) => {
-  const f = await r237Fixture(t)
+  const f = await r237Fixture(t, "library")
   const direct = await f.conversation()
   const active = await f.project()
   const permitted = await f.conversation(active.id)
@@ -1540,17 +1602,17 @@ integrationTest("R237 Artifact relationship list and detail enforce Project elig
     }
   }
   const before = await f.facts()
-  const candidates = await f.store.artifactLibrary.listCandidates(f.tenant, f.owner, null, 100)
+  const candidates = await f.artifactLibrary.listCandidates(f.tenant, f.owner, null, 100)
   assert.deepEqual(candidates.map((item) => item.artifactId).sort(), [directArtifact, activeArtifact].sort())
   for (const [id, artifact] of hidden) {
-    assert.equal(await f.store.artifactLibrary.findCandidate(f.tenant, f.owner, id, artifact), null)
+    assert.equal(await f.artifactLibrary.findCandidate(f.tenant, f.owner, id, artifact), null)
     await f.deny(() => f.request(`library/artifacts/${id}/${artifact}`), 404, "library_artifact_not_found")
   }
   for (const [id, artifact] of [
     [direct, directArtifact],
     [permitted, activeArtifact],
   ])
-    assert.equal((await f.store.artifactLibrary.findCandidate(f.tenant, f.owner, id, artifact)).artifactId, artifact)
+    assert.equal((await f.artifactLibrary.findCandidate(f.tenant, f.owner, id, artifact)).artifactId, artifact)
   assert.deepEqual(await f.facts(), before)
   // Remove only this fixture's two allowed associations: empty HTTP library must not contact Storage.
   await f.pool.query("DELETE FROM bff_conversation_artifact WHERE tenant_id=$1 AND artifact_id=ANY($2::text[])", [f.tenant, [directArtifact, activeArtifact]])
@@ -1562,7 +1624,7 @@ integrationTest("R237 Artifact relationship list and detail enforce Project elig
 })
 
 integrationTest("R237 Move source resolution rechecks after winner lookup without changing facts", async (t) => {
-  const f = await r237Fixture(t)
+  const f = await r237Fixture(t, "postgres")
   const project = await f.project()
   const id = await f.conversation(project.slug)
   let changed = false
@@ -1591,7 +1653,7 @@ integrationTest("R237 Move source resolution rechecks after winner lookup withou
 integrationTest("R237 real Project row-lock races revalidate active before Message Move Skill and Task facts", async (t) => {
   for (const operation of ["first-message", "existing-message", "move-target", "move-source", "skill", "scheduled-task"])
     await t.test(operation, async (t) => {
-      const f = await r237Fixture(t)
+      const f = await r237Fixture(t, operation === "skill" || operation === "scheduled-task" ? "postgres" : "chat")
       const project = await f.project()
       const id = operation === "first-message" ? `conv_${randomUUID()}` : await f.conversation(operation === "move-target" ? null : project.slug)
       const expected = await f.facts()
@@ -1664,7 +1726,7 @@ integrationTest("R237 real Project row-lock races revalidate active before Messa
 })
 
 integrationTest("R237 Message existing active and Direct positive controls and tombstone receipt replay", async (t) => {
-  const f = await r237Fixture(t)
+  const f = await r237Fixture(t, "chat")
   const project = await f.project()
   let projectConversation
   for (const ref of [null, project.id, project.slug]) {
@@ -1694,7 +1756,14 @@ integrationTest("R237 Message existing active and Direct positive controls and t
 })
 // R241: real HTTP / owner PostgreSQL rename acceptance. IAM alone is the boundary double.
 // Root supplies the already-installed isolated database; no schema mutation or fake store here.
-async function r241Fixture(t, observeDeletionSignal) {
+async function r241Fixture(t, { observeDeletionSignal, withScheduledTasks = false } = {}) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, PROJECT_SERVICE, SCHEDULED_TASK_DISPATCHER, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const feature = withScheduledTasks
+    ? (await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")).ScheduledTasksModule
+    : (await import("../dist/modules/projects/projects.module.js")).ProjectsModule
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `r241_${randomUUID().replaceAll("-", "")}`
   const owner = "r241_owner"
@@ -1707,19 +1776,13 @@ async function r241Fixture(t, observeDeletionSignal) {
     cookie: `kokoro-issuer.session_token=${token}`,
     origin: "https://web.example.test",
   }
-  let store
-  let server
+  let app
   let base
   let tables = []
   const stop = async () => {
-    if (server) {
-      await server.shutdown(1000)
-      server = undefined
-    }
-    if (store) {
-      await store.close()
-      store = undefined
-    }
+    const current = app
+    app = undefined
+    await current?.close()
   }
   t.after(async () => {
     try {
@@ -1743,27 +1806,25 @@ async function r241Fixture(t, observeDeletionSignal) {
   assert.ok(tables.includes("bff_project") && tables.includes("bff_idempotency_receipt"), "Root must install the existing canonical schema")
   assert.ok(tables.every((name) => /^bff_[a-z_]+$/u.test(name)))
   const start = async (configTenant = tenant) => {
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    const builder = Test.createTestingModule({ imports: [feature] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(bffConfig({ tenantId: configTenant }))
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(admission)
+    if (withScheduledTasks) builder.overrideProvider(SCHEDULED_TASK_DISPATCHER).useValue(r237IdleWorker)
+    const module = await builder.compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    await app.get(BFF_DATABASE).ready()
     if (observeDeletionSignal !== undefined) {
-      const readDeletion = store.projectService.deletion.bind(store.projectService)
-      store.projectService.deletion = (scope, projectId, signal) => {
+      const projectService = app.get(PROJECT_SERVICE)
+      const readDeletion = projectService.deletion.bind(projectService)
+      projectService.deletion = (scope, projectId, signal) => {
         observeDeletionSignal(signal)
         return readDeletion(scope, projectId, signal)
       }
     }
-    server = createBffServer(bffConfig({ tenantId: configTenant }), {
-      businessStore: store,
-      sessionAdmission: admission,
-      personalizationProvider: new PostgresPersonalizationRepository(store.database),
-      agentDispatchDispatcher: r237IdleWorker,
-      agentCancellationDispatcher: r237IdleWorker,
-      agUiProjector: r237IdleWorker,
-      scheduledTaskDispatcher: r237IdleWorker,
-      scheduledAgentDispatcher: r237IdleWorker,
-      scheduledAgentTerminalConsumer: r237IdleWorker,
-    })
-    base = await listen(server)
+    await app.listen(0, "127.0.0.1")
+    base = await app.getUrl()
   }
   await start()
   const request = async (path, method = "GET", payload, extra = {}, signal) => {
@@ -1844,7 +1905,10 @@ async function r241Fixture(t, observeDeletionSignal) {
   }
   return {
     get ownerPool() {
-      return store.database.pool
+      return app.get(BFF_DATABASE).pool
+    },
+    get server() {
+      return app.getHttpServer()
     },
     pool,
     tenant,
@@ -2700,11 +2764,100 @@ integrationTest("R241 lifecycle L6 HTTP abort during real Project lock or receip
     })
 })
 
+async function r257PersonalizationFixture(t) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { AccountModule } = await import("../dist/modules/account/account.module.js")
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const tenant = `r241_${randomUUID().replaceAll("-", "")}`
+  const owner = "r241_owner"
+  const admission = new SessionAdmissionDouble()
+  const token = `r241-${randomUUID()}`
+  admission.allow(token, { namespace: tenant, userId: owner })
+  const headers = {
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": "web-secret",
+    cookie: `kokoro-issuer.session_token=${token}`,
+    origin: "https://web.example.test",
+  }
+  let app
+  let base
+  let tables = []
+  const stop = async () => {
+    const current = app
+    app = undefined
+    await current?.close()
+  }
+  t.after(async () => {
+    try {
+      await stop()
+    } finally {
+      try {
+        for (const table of tables) {
+          if (table === "bff_idempotency_receipt") await pool.query(`DELETE FROM ${table} WHERE position($1 in scope)>0`, [tenant])
+          else await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1 OR tenant_id=$2`, [tenant, `${tenant}_other`])
+        }
+      } finally {
+        await pool.end()
+      }
+    }
+  })
+  tables = (
+    await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema='kokoro_bff' AND table_type='BASE TABLE'
+    AND (table_name='bff_idempotency_receipt' OR table_name IN
+      (SELECT table_name FROM information_schema.columns WHERE table_schema='kokoro_bff' AND column_name='tenant_id')) ORDER BY table_name`)
+  ).rows.map((row) => row.table_name)
+  assert.ok(tables.includes("bff_project") && tables.includes("bff_idempotency_receipt"), "Root must install the existing canonical schema")
+  assert.ok(tables.every((name) => /^bff_[a-z_]+$/u.test(name)))
+  const start = async () => {
+    const module = await Test.createTestingModule({ imports: [AccountModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(bffConfig({ tenantId: tenant }))
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(admission)
+      .compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    await app.get(BFF_DATABASE).ready()
+    await app.listen(0, "127.0.0.1")
+    base = await app.getUrl()
+  }
+  await start()
+  const request = async (path, method = "GET", payload, extra = {}, signal) => {
+    const response = await fetch(`${base}/v1/${path}`, {
+      method,
+      headers: { ...headers, "content-type": "application/json", ...extra },
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+      signal: signal ?? AbortSignal.timeout(6000),
+    })
+    return { status: response.status, body: await response.json(), headers: response.headers }
+  }
+  return {
+    get ownerPool() {
+      return app.get(BFF_DATABASE).pool
+    },
+    get server() {
+      return app.getHttpServer()
+    },
+    pool,
+    tenant,
+    owner,
+    token,
+    admission,
+    request,
+    restart: async () => {
+      await stop()
+      await start()
+    },
+  }
+}
+
 // R257: real BFF HTTP / owner PostgreSQL; IAM admission remains the existing boundary double.
 // Root installs the current canonical schema in its isolated fixture before running this case.
 // Reuse the owned-tenant lifecycle; do not add schema DDL, global deletion, or a fake store.
 integrationTest("R257 personalization ordinary Session reads absent saves four fields and reads committed snapshot", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r257PersonalizationFixture(t)
   const currentUser = await f.request("me")
   assert.equal(currentUser.status, 200, "existing ordinary Session admission must succeed before personalization RED")
   assert.deepEqual(currentUser.body.data, { user_id: f.owner, tenant_id: f.tenant, platform_admin: false })
@@ -2745,7 +2898,7 @@ function r257PersonalizationError(result, status, code) {
 }
 
 integrationTest("R257 personalization absent read is read-only and current owner survives restart and clear", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r257PersonalizationFixture(t)
   const path = "preferences/personalization"
   assert.deepEqual((await f.request(path)).body, { data: { personalization: null, revision: 0 } })
   assert.equal((await f.pool.query("SELECT count(*)::int AS n FROM bff_personalization WHERE tenant_id=$1", [f.tenant])).rows[0].n, 0)
@@ -2785,7 +2938,7 @@ integrationTest("R257 personalization absent read is read-only and current owner
 })
 
 integrationTest("R257 personalization first and subsequent concurrent CAS each have one winner without lost update", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r257PersonalizationFixture(t)
   const path = "preferences/personalization"
   for (const expected of [0, 1]) {
     const inputs = ["A", "B"].map((label) => ({ expected_revision: expected, ...r257PersonalizationFields(`${expected}-${label}`) }))
@@ -2804,7 +2957,7 @@ integrationTest("R257 personalization first and subsequent concurrent CAS each h
 })
 
 integrationTest("R257 personalization rejects malformed requests without inserting private facts or receipts", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r257PersonalizationFixture(t)
   const path = "preferences/personalization"
   const valid = { expected_revision: 0, ...r257PersonalizationFields() }
   for (const body of [
@@ -2838,7 +2991,7 @@ integrationTest("R257 personalization rejects malformed requests without inserti
 })
 
 integrationTest("R257 personalization real row lock times out without commit and later CAS recovers", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r257PersonalizationFixture(t)
   const path = "preferences/personalization"
   const original = r257PersonalizationFields("A")
   assert.equal((await f.request(path, "PUT", { expected_revision: 0, ...original })).status, 200)
@@ -2868,7 +3021,7 @@ integrationTest("R257 personalization real row lock times out without commit and
 })
 
 integrationTest("R257 personalization pool saturation exhausts one deadline and retires late acquisition before SQL", { timeout: 14000 }, async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r257PersonalizationFixture(t)
   const held = []
   let observer
   let pending
@@ -2898,7 +3051,7 @@ integrationTest("R257 personalization pool saturation exhausts one deadline and 
 })
 
 integrationTest("R257 personalization real committed SQL with observed ACK rejection reconciles without overwriting later save", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r257PersonalizationFixture(t)
   const path = "preferences/personalization"
   let brokenPid
   const observer = r241ObservePool(f.ownerPool, async (lease, event) => {
@@ -2936,7 +3089,7 @@ integrationTest("R257 personalization real committed SQL with observed ACK rejec
 })
 
 integrationTest("R257 personalization HTTP cancellation during real PG lock retires exact client without a late write", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r257PersonalizationFixture(t)
   const path = "preferences/personalization"
   const original = r257PersonalizationFields("A")
   assert.equal((await f.request(path, "PUT", { expected_revision: 0, ...original })).status, 200)
@@ -2970,7 +3123,7 @@ integrationTest("R257 personalization HTTP cancellation during real PG lock reti
 
 async function r257RawPersonalization(f, { method = "PUT", suffix = "", raw = "", headers = [], incomplete = false } = {}) {
   const { request: httpRequest } = await import("node:http")
-  const address = servers.at(-1).address()
+  const address = f.server.address()
   assert.ok(address && typeof address !== "string", "the current owned fixture server must be listening")
   return new Promise((resolve, reject) => {
     const outgoing = httpRequest(
@@ -3022,7 +3175,7 @@ async function r257RawPersonalization(f, { method = "PUT", suffix = "", raw = ""
 }
 
 integrationTest("R257 personalization real raw HTTP rejects ambiguous JSON headers query and GET bodies", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r257PersonalizationFixture(t)
   const raw = JSON.stringify({ expected_revision: 0, ...r257PersonalizationFields() })
   for (const options of [
     { raw: raw.replace('"expected_revision":0', '"expected_revision":0,"expected_revision":0') },
@@ -3035,6 +3188,11 @@ integrationTest("R257 personalization real raw HTTP rejects ambiguous JSON heade
 })
 
 integrationTest("R257 terminal Scheduler rejection is projected by authoritative ScheduledTask HTTP reads", async () => {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
   const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
   const tenant = `schedule_failure_http_${suffix}`
   const subject = `schedule_failure_user_${suffix}`
@@ -3073,8 +3231,15 @@ integrationTest("R257 terminal Scheduler rejection is projected by authoritative
     })
     const schedulerBase = await listen(scheduler)
     const targetUrl = "http://bff.test/internal/bff/scheduled-tasks/dispatch"
-    bff = createBffServer(bffConfig({ tenantId: tenant, schedulerBase, schedulerTargetUrl: targetUrl }), { sessionAdmission })
-    const base = await listen(bff)
+    const module = await Test.createTestingModule({ imports: [ScheduledTasksModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(bffConfig({ tenantId: tenant, schedulerBase, schedulerTargetUrl: targetUrl }))
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(sessionAdmission)
+      .compile()
+    bff = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const response = await fetch(`${base}/v1/scheduled-tasks`, {
       method: "POST",
       headers: {
@@ -3149,7 +3314,7 @@ integrationTest("R257 terminal Scheduler rejection is projected by authoritative
     assert.equal(persisted.rows[0].lease_token, null)
     assert.equal(persisted.rows[0].lease_until, null)
   } finally {
-    if (bff) await close(bff)
+    if (bff) await bff.close()
     if (scheduler?.listening) await close(scheduler)
     await pool.query("DELETE FROM bff_scheduled_task_outbox WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id=$1", [tenant]).catch(() => undefined)
@@ -3160,7 +3325,7 @@ integrationTest("R257 terminal Scheduler rejection is projected by authoritative
 })
 
 integrationTest("R257 personalization an unfinished request body spends the route deadline before any SQL checkout", { timeout: 10000 }, async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r257PersonalizationFixture(t)
   const observer = r241ObservePool(f.ownerPool)
   try {
     const started = performance.now()
@@ -3175,7 +3340,7 @@ integrationTest("R257 personalization an unfinished request body spends the rout
 })
 
 integrationTest("R257 personalization real catalog and terminal revision preserve singleton invariants", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r257PersonalizationFixture(t)
   const columns = await f.pool.query(
     "SELECT column_name,data_type,is_nullable,datetime_precision FROM information_schema.columns WHERE table_schema='kokoro_bff' AND table_name='bff_personalization' ORDER BY ordinal_position",
   )
@@ -3205,6 +3370,79 @@ integrationTest("R257 personalization real catalog and terminal revision preserv
   )
   assert.deepEqual((await f.request("preferences/personalization")).body, { data: { personalization: fields, revision: Number.MAX_SAFE_INTEGER } })
 })
+
+async function r278Fixture(t) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, SCHEDULED_TASK_DISPATCHER, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const tenant = `r278_${randomUUID().replaceAll("-", "")}`
+  const owner = "r278_owner"
+  const admission = new SessionAdmissionDouble()
+  const token = `r278-${randomUUID()}`
+  admission.allow(token, { namespace: tenant, userId: owner })
+  const headers = {
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": "web-secret",
+    cookie: `kokoro-issuer.session_token=${token}`,
+    origin: "https://web.example.test",
+  }
+  let app
+  let tables = []
+  t.after(async () => {
+    try {
+      await app?.close()
+    } finally {
+      try {
+        for (const table of tables) {
+          if (table === "bff_idempotency_receipt") await pool.query(`DELETE FROM ${table} WHERE position($1 in scope)>0`, [tenant])
+          else await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1 OR tenant_id=$2`, [tenant, `${tenant}_other`])
+        }
+      } finally {
+        await pool.end()
+      }
+    }
+  })
+  tables = (
+    await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema='kokoro_bff' AND table_type='BASE TABLE'
+    AND (table_name='bff_idempotency_receipt' OR table_name IN
+      (SELECT table_name FROM information_schema.columns WHERE table_schema='kokoro_bff' AND column_name='tenant_id')) ORDER BY table_name`)
+  ).rows.map((row) => row.table_name)
+  assert.ok(tables.includes("bff_project") && tables.includes("bff_idempotency_receipt"), "Root must install the existing canonical schema")
+  assert.ok(tables.every((name) => /^bff_[a-z_]+$/u.test(name)))
+  const module = await Test.createTestingModule({ imports: [ScheduledTasksModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(bffConfig({ tenantId: tenant }))
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+    // Keep delivery idle so the real task/outbox/receipt and lock assertions see only the tested mutations.
+    .overrideProvider(SCHEDULED_TASK_DISPATCHER)
+    .useValue(r237IdleWorker)
+    .compile()
+  app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  await app.get(BFF_DATABASE).ready()
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
+  const request = async (path, method = "GET", payload, extra = {}) => {
+    const response = await fetch(`${base}/v1/${path}`, {
+      method,
+      headers: { ...headers, "content-type": "application/json", ...extra },
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+      signal: AbortSignal.timeout(6000),
+    })
+    return { status: response.status, body: await response.json(), headers: response.headers }
+  }
+  const project = async (name) => {
+    const result = await request("projects", "POST", { name }, { "idempotency-key": `create-${randomUUID()}` })
+    assert.equal(result.status, 200, JSON.stringify(result.body))
+    const value = result.body.data.project
+    assert.match(value.id, /^project_[0-9a-f-]{36}$/u)
+    return value
+  }
+  return { pool, tenant, owner, request, project }
+}
 
 async function r278CreateScheduledTask(f, projectId, label) {
   const created = await f.request("scheduled-tasks", "POST", r73CreatePayload(projectId === null ? {} : { project_id: projectId }), {
@@ -3427,7 +3665,7 @@ integrationTest("ScheduledTask DELETE hides foreign or absent tasks without rece
 })
 
 integrationTest("R278 tombstoned Project rejects new ScheduledTask enable and retry intent without durable writes", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r278Fixture(t)
   for (const operation of ["enable", "retry"]) {
     await t.test(operation, async () => {
       const project = await f.project(`R278 ${operation}`)
@@ -3457,7 +3695,7 @@ integrationTest("R278 tombstoned Project rejects new ScheduledTask enable and re
 })
 
 integrationTest("R278 independent and active-Project ScheduledTasks retain legal update behavior", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r278Fixture(t)
   const project = await f.project("R278 active control")
   for (const [label, projectId] of [
     ["independent", null],
@@ -3477,7 +3715,7 @@ integrationTest("R278 independent and active-Project ScheduledTasks retain legal
 })
 
 integrationTest("R278 completed HTTP receipt replays its original ACK after Project tombstone without restoring the task", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r278Fixture(t)
   const project = await f.project("R278 completed receipt")
   const task = await r278CreateScheduledTask(f, project.id, "completed-receipt")
   const key = `r278-complete-${randomUUID()}`
@@ -3501,7 +3739,7 @@ integrationTest("R278 completed HTTP receipt replays its original ACK after Proj
 })
 
 integrationTest("R278 committed replace outbox recovers before Project active check when the HTTP receipt is absent", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r278Fixture(t)
   const project = await f.project("R278 repository recovery")
   const task = await r278CreateScheduledTask(f, project.id, "repository-recovery")
   const repository = new PostgresScheduledTaskRepository({ pool: f.pool })
@@ -3525,7 +3763,7 @@ integrationTest("R278 committed replace outbox recovers before Project active ch
 
 integrationTest("R278 Project then ScheduledTask lock order makes deletion and update races deterministic", async (t) => {
   await t.test("deletion lock wins before a new enable intent", async (t) => {
-    const f = await r241Fixture(t)
+    const f = await r278Fixture(t)
     const project = await f.project("R278 deletion wins")
     const task = await r278CreateScheduledTask(f, project.id, "delete-wins")
     const blocker = await f.pool.connect()
@@ -3570,7 +3808,7 @@ integrationTest("R278 Project then ScheduledTask lock order makes deletion and u
   })
 
   await t.test("update holding the Project fence completes before a later tombstone", async (t) => {
-    const f = await r241Fixture(t)
+    const f = await r278Fixture(t)
     const project = await f.project("R278 update wins")
     const task = await r278CreateScheduledTask(f, project.id, "update-wins")
     const taskBlocker = await f.pool.connect()
@@ -3655,9 +3893,9 @@ async function r279DeleteProject(f, projectId, key) {
   return f.request(`projects/${projectId}`, "DELETE", undefined, { "idempotency-key": key })
 }
 
-async function r279CreateConversation(f, repositories, projectId, label) {
+async function r279CreateConversation(f, chatTurns, projectId, label) {
   const conversationId = `conv_${randomUUID()}`
-  const receipt = await repositories.chatTurnService.submit({
+  const receipt = await chatTurns.submit({
     tenantId: f.tenant,
     conversationId,
     projectRef: projectId,
@@ -3722,21 +3960,20 @@ integrationTest("R279 DELETE and status expose pending logical release for an em
 })
 
 integrationTest("R279 aggregate deletion freezes active and deleted members and pauses associated ScheduledTasks", async (t) => {
-  const f = await r241Fixture(t)
+  const f = await r241Fixture(t, { withScheduledTasks: true })
   const project = await f.project("R279 aggregate Project")
-  const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-  await repositories.ready()
+  const seedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+  const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(seedDatabase), new Sha256StableIdGenerator())
+  const chat = new ChatApplicationService(new PostgresChatRepository(seedDatabase))
   let activeConversation
   let deletedConversation
   try {
-    activeConversation = await r279CreateConversation(f, repositories, project.id, "active-conversation")
-    deletedConversation = await r279CreateConversation(f, repositories, project.id, "deleted-conversation")
-    assert.equal(
-      await repositories.chatService.deleteConversation(f.tenant, f.owner, deletedConversation, `r279-delete-member-${randomUUID()}`, project.id),
-      true,
-    )
+    await seedDatabase.ready()
+    activeConversation = await r279CreateConversation(f, chatTurns, project.id, "active-conversation")
+    deletedConversation = await r279CreateConversation(f, chatTurns, project.id, "deleted-conversation")
+    assert.equal(await chat.deleteConversation(f.tenant, f.owner, deletedConversation, `r279-delete-member-${randomUUID()}`, project.id), true)
   } finally {
-    await repositories.close()
+    await seedDatabase.close()
   }
   const task = await r278CreateScheduledTask(f, project.id, "aggregate")
   const beforeTask = (await f.pool.query("SELECT to_jsonb(row) AS value FROM bff_scheduled_task AS row WHERE tenant_id=$1 AND task_id=$2", [f.tenant, task.id]))
@@ -3902,16 +4139,17 @@ async function r279InstallFault(f, label, projectId, secondConversationId) {
 
 for (const fault of ["second-conversation", "last-scope", "receipt"]) {
   integrationTest(`R279 ${fault} failure rolls back every tenant fact and same-key retry commits once`, async (t) => {
-    const f = await r241Fixture(t)
+    const f = await r241Fixture(t, { withScheduledTasks: true })
     const project = await f.project(`R279 rollback ${fault}`)
-    const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await repositories.ready()
+    const seedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(seedDatabase), new Sha256StableIdGenerator())
     let secondConversationId
     try {
-      await r279CreateConversation(f, repositories, project.id, `${fault}-first`)
-      secondConversationId = await r279CreateConversation(f, repositories, project.id, `${fault}-second`)
+      await seedDatabase.ready()
+      await r279CreateConversation(f, chatTurns, project.id, `${fault}-first`)
+      secondConversationId = await r279CreateConversation(f, chatTurns, project.id, `${fault}-second`)
     } finally {
-      await repositories.close()
+      await seedDatabase.close()
     }
     await r278CreateScheduledTask(f, project.id, `${fault}-task`)
     const key = `r279-${fault}-${randomUUID()}`
@@ -3936,7 +4174,7 @@ for (const fault of ["second-conversation", "last-scope", "receipt"]) {
 
 async function r279RawHttp(f, method, path, rawHeaders = [], body = "") {
   const { request } = await import("node:http")
-  const server = servers.at(-1)
+  const server = f.server
   const address = server?.address()
   if (!address || typeof address === "string") throw new Error("R279 HTTP fixture is not listening")
   const url = new URL(`http://127.0.0.1:${address.port}`)
@@ -4024,15 +4262,16 @@ integrationTest("R279 raw DELETE and status ingress is closed without inventing 
 integrationTest("R279 Project deletion preserves admitted-unknown recovery and fails only never-attempted dispatch", async (t) => {
   const f = await r241Fixture(t)
   const project = await f.project("R279 dispatch recovery")
-  const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-  await repositories.ready()
+  const seedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+  const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(seedDatabase), new Sha256StableIdGenerator())
   let unknownConversation
   let pendingConversation
   try {
-    unknownConversation = await r279CreateConversation(f, repositories, project.id, "unknown-dispatch")
-    pendingConversation = await r279CreateConversation(f, repositories, project.id, "pending-dispatch")
+    await seedDatabase.ready()
+    unknownConversation = await r279CreateConversation(f, chatTurns, project.id, "unknown-dispatch")
+    pendingConversation = await r279CreateConversation(f, chatTurns, project.id, "pending-dispatch")
   } finally {
-    await repositories.close()
+    await seedDatabase.close()
   }
   await f.pool.query(
     `UPDATE bff_agent_dispatch_outbox SET status='retryable',attempt_count=1,admission_unknown_seen=TRUE,last_error_code='transport_unknown',last_error_at=CURRENT_TIMESTAMP(3)
@@ -4095,13 +4334,14 @@ for (const corruption of ["missing-member", "zero-scope", "wrong-project-scope"]
   integrationTest(`R279 status fails closed for ${corruption} release-set corruption`, async (t) => {
     const f = await r241Fixture(t)
     const project = await f.project(`R279 integrity ${corruption}`)
-    const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await repositories.ready()
+    const seedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(seedDatabase), new Sha256StableIdGenerator())
     let conversationId
     try {
-      conversationId = await r279CreateConversation(f, repositories, project.id, `${corruption}-member`)
+      await seedDatabase.ready()
+      conversationId = await r279CreateConversation(f, chatTurns, project.id, `${corruption}-member`)
     } finally {
-      await repositories.close()
+      await seedDatabase.close()
     }
     r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r279-integrity-${randomUUID()}`), project.id, 202)
     if (corruption !== "wrong-project-scope")
@@ -4187,15 +4427,16 @@ integrationTest("R280 equal-count substituted Conversation scope fails closed", 
   const f = await r241Fixture(t)
   const project = await f.project("R280 substituted scope")
   const otherProject = await f.project("R280 other owned scope")
-  const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-  await repositories.ready()
+  const seedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+  const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(seedDatabase), new Sha256StableIdGenerator())
   let conversationId
   let otherConversationId
   try {
-    conversationId = await r279CreateConversation(f, repositories, project.id, "substituted-scope")
-    otherConversationId = await r279CreateConversation(f, repositories, otherProject.id, "other-valid-scope")
+    await seedDatabase.ready()
+    conversationId = await r279CreateConversation(f, chatTurns, project.id, "substituted-scope")
+    otherConversationId = await r279CreateConversation(f, chatTurns, otherProject.id, "other-valid-scope")
   } finally {
-    await repositories.close()
+    await seedDatabase.close()
   }
   r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r280-substitute-${randomUUID()}`), project.id, 202)
   await f.pool.query("UPDATE bff_project_scope_release_outbox SET state='released',released_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND project_id=$2", [
@@ -4216,7 +4457,7 @@ integrationTest("R280 equal-count substituted Conversation scope fails closed", 
 
 integrationTest("R280 cancellation after status SELECT ACK cannot leave cleanup waiting for a ROLLBACK ACK", async (t) => {
   let observeSignal = () => {}
-  const f = await r241Fixture(t, (signal) => observeSignal(signal))
+  const f = await r241Fixture(t, { observeDeletionSignal: (signal) => observeSignal(signal) })
   for (const phase of ["before-rollback", "during-rollback"]) {
     const project = await f.project(`R280 post-ACK cancellation ${phase}`)
     r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r280-ack-${randomUUID()}`), project.id, 202)
@@ -4388,6 +4629,11 @@ integrationTest("R281 Project deletion tables enforce closed receipt, identity, 
 })
 
 async function r285ReleaseFixture(t, release) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
   const { ConnectError, Code } = await import("@connectrpc/connect")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
@@ -4441,47 +4687,30 @@ async function r285ReleaseFixture(t, release) {
     cookie: `kokoro-issuer.session_token=${token}`,
     origin: "https://web.example.test",
   }
-  let store
   let bff
   let base
   let tables = []
   const stop = async () => {
-    const errors = []
-    try {
-      if (bff) await bff.shutdown(1500)
-    } catch (error) {
-      errors.push(error)
-    } finally {
-      bff = undefined
-    }
-    try {
-      if (store) await store.close()
-    } catch (error) {
-      errors.push(error)
-    } finally {
-      store = undefined
-    }
-    if (errors.length > 0) throw errors[0]
+    const app = bff
+    bff = undefined
+    await app?.close()
   }
   const start = async () => {
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
     const config = {
       ...bffConfig({ tenantId: tenant }),
       storage: { baseUrl: storageBase, secret: "r285-storage-secret", objectOrigin: storageBase },
       storageObjectOrigin: storageBase,
     }
-    bff = createBffServer(config, {
-      businessStore: store,
-      sessionAdmission: admission,
-      agentDispatchDispatcher: r237IdleWorker,
-      agentCancellationDispatcher: r237IdleWorker,
-      agUiProjector: r237IdleWorker,
-      scheduledTaskDispatcher: r237IdleWorker,
-      scheduledAgentDispatcher: r237IdleWorker,
-      scheduledAgentTerminalConsumer: r237IdleWorker,
-    })
-    base = await listen(bff)
+    const module = await Test.createTestingModule({ imports: [ProjectsModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(admission)
+      .compile()
+    bff = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    await bff.get(BFF_DATABASE).ready()
+    await bff.listen(0, "127.0.0.1")
+    base = await bff.getUrl()
   }
   t.after(async () => {
     const errors = []
@@ -4535,9 +4764,6 @@ async function r285ReleaseFixture(t, release) {
     return result.body.data.project
   }
   return {
-    get ownerPool() {
-      return store.database.pool
-    },
     pool,
     tenant,
     owner,
@@ -4572,19 +4798,18 @@ integrationTest(
   async (t) => {
     const f = await r285ReleaseFixture(t, async () => ({ replayed: false }))
     const project = await f.project("R285 release all frozen scopes")
-    const repositories = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await repositories.ready()
+    const seedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(seedDatabase), new Sha256StableIdGenerator())
+    const chat = new ChatApplicationService(new PostgresChatRepository(seedDatabase))
     let activeConversation
     let deletedConversation
     try {
-      activeConversation = await r279CreateConversation(f, repositories, project.id, "release-active")
-      deletedConversation = await r279CreateConversation(f, repositories, project.id, "release-deleted")
-      assert.equal(
-        await repositories.chatService.deleteConversation(f.tenant, f.owner, deletedConversation, `r285-single-delete-${randomUUID()}`, project.id),
-        true,
-      )
+      await seedDatabase.ready()
+      activeConversation = await r279CreateConversation(f, chatTurns, project.id, "release-active")
+      deletedConversation = await r279CreateConversation(f, chatTurns, project.id, "release-deleted")
+      assert.equal(await chat.deleteConversation(f.tenant, f.owner, deletedConversation, `r285-single-delete-${randomUUID()}`, project.id), true)
     } finally {
-      await repositories.close()
+      await seedDatabase.close()
     }
     const key = `r285-release-${randomUUID()}`
     const original = await r279DeleteProject(f, project.id, key)
@@ -5375,6 +5600,11 @@ integrationTest(
 )
 
 integrationTest("current scheduled HTTP reads authoritative next, rechecks admission, and never writes receipts", async () => {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, SCHEDULED_TASK_DISPATCHER, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
   const { PostgresScheduledTaskRepository } = await import("../dist/infrastructure/postgres/scheduled-task-repository.js")
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff", max: 3 })
   const suffix = `live_current_${Date.now()}_${Math.random().toString(16).slice(2)}`
@@ -5440,11 +5670,17 @@ integrationTest("current scheduled HTTP reads authoritative next, rechecks admis
       })
     })
     const schedulerBase = await listen(owner)
-    bff = createBffServer(
-      { ...bffConfig({ tenantId: suffix, schedulerBase, schedulerTargetUrl: target }), upstreamTimeoutMs: 150 },
-      { sessionAdmission, scheduledTaskDispatcher: { start() {}, async stop() {} } },
-    )
-    const base = await listen(bff)
+    const module = await Test.createTestingModule({ imports: [ScheduledTasksModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue({ ...bffConfig({ tenantId: suffix, schedulerBase, schedulerTargetUrl: target }), upstreamTimeoutMs: 150 })
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(sessionAdmission)
+      .overrideProvider(SCHEDULED_TASK_DISPATCHER)
+      .useValue({ start() {}, async stop() {} })
+      .compile()
+    bff = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const createBody = { title: "Current", prompt: "No execution", frequency: "daily", time: "08:15", timezone: "UTC", auto_approve: false }
     const mutationHeaders = { ...headers, "content-type": "application/json", "idempotency-key": "current-create" }
     const created = await fetch(`${base}/v1/scheduled-tasks`, { method: "POST", headers: mutationHeaders, body: JSON.stringify(createBody) })
@@ -5583,7 +5819,7 @@ integrationTest("current scheduled HTTP reads authoritative next, rechecks admis
     definition = consumedDefinition
   } finally {
     try {
-      if (bff) await bff.shutdown()
+      if (bff) await bff.close()
       if (owner) {
         owner.closeAllConnections()
         await close(owner)
