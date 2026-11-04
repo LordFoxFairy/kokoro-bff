@@ -6,11 +6,17 @@ import { test } from "node:test"
 import { Pool } from "pg"
 import { createClient } from "redis"
 
-import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
 import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgres/agui-projection-repository.js"
 import { PostgresAgUiConsumerRepository } from "../dist/infrastructure/postgres/agui-consumer-repository.js"
 import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
+import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
+import { PostgresConversationArtifactLibrary } from "../dist/infrastructure/postgres/conversation-artifact-library.js"
+import { PostgresPublicShareRepository } from "../dist/infrastructure/postgres/public-share-repository.js"
+import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
+import { ChatApplicationService } from "../dist/application/chat-service.js"
+import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
+import { PublicShareApplicationService } from "../dist/application/public-share-service.js"
 import { projectRunProcessFrame } from "../dist/infrastructure/postgres/agui-process-projection.js"
 import { AgUiProjectionService } from "../dist/application/agui/project-session-events.js"
 import { AgUiProjectorRunner } from "../dist/application/agui/projector.js"
@@ -122,13 +128,13 @@ function agentSource({ id, sequence, kind, payload, sessionId = "session_shared"
   }
 }
 
-async function submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix, dispatchState = "admitted" }) {
+async function submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, { tenantId, sessionId, ownerId, suffix, dispatchState = "admitted" }) {
   await pool.query(
     `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
      VALUES ($1, $2, $3, 'Projection fixture') ON CONFLICT (conversation_id) DO NOTHING`,
     [sessionId, tenantId, ownerId],
   )
-  const turn = await store.chatTurnService.submit({
+  const turn = await chatTurnService.submit({
     tenantId,
     conversationId: sessionId,
     subjectId: ownerId,
@@ -139,15 +145,15 @@ async function submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffi
   })
   assert.ok(turn)
   if (dispatchState === "pending") return turn.run_id
-  const [claim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+  const [claim] = await agentDispatchOutbox.claimAgentDispatchOutbox({
     workerId: `worker_${suffix}`,
     limit: 1,
     leaseDurationMs: 5000,
     maxAttempts: 8,
   })
   assert.equal(claim.runId, turn.run_id)
-  if (dispatchState === "admitted") assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
-  else if (dispatchState === "retryable") assert.equal(await store.agentDispatchOutbox.markAgentDispatchUnknown(claim, 1000, "fixture_unknown"), true)
+  if (dispatchState === "admitted") assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+  else if (dispatchState === "retryable") assert.equal(await agentDispatchOutbox.markAgentDispatchUnknown(claim, 1000, "fixture_unknown"), true)
   else assert.equal(dispatchState, "leased")
   return turn.run_id
 }
@@ -157,13 +163,18 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    const artifactLibrary = new PostgresConversationArtifactLibrary(ownerDatabase)
+    await ownerDatabase.ready()
     const tenantId = "tenant_artifact_projection"
     const sessionId = "session_artifact_projection"
     const ownerId = "owner_artifact_projection"
@@ -173,7 +184,7 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
       ownerId,
     ])
     const submit = (number) =>
-      store.chatTurnService.submit({
+      chatTurnService.submit({
         tenantId,
         conversationId: sessionId,
         subjectId: ownerId,
@@ -185,14 +196,14 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     const firstRun = await submit(1)
     const secondRun = await submit(2)
     assert.ok(firstRun && secondRun)
-    const [firstClaim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [firstClaim] = await agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_artifact_first",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(firstClaim.runId, firstRun.run_id)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(firstClaim), true)
+    assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(firstClaim), true)
     const payload = (artifactId, hash = "a".repeat(64)) => ({
       tool_call_id: "tool_artifact",
       artifact_id: artifactId,
@@ -215,7 +226,7 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
       })
     const first = source(1, "artifact_first")
     // expected_run_id now points at turn 2, but the immutable first dispatch still admits its late delivery.
-    assert.equal((await store.agUi.ingest(tenantId, sessionId, [first])).insertedSources, 1)
+    assert.equal((await agUi.ingest(tenantId, sessionId, [first])).insertedSources, 1)
     const linked = async () =>
       (
         await pool.query(
@@ -235,7 +246,7 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
         source_size_bytes: "12",
       },
     ])
-    const snapshot = await store.chatService.snapshot(tenantId, ownerId, sessionId, undefined)
+    const snapshot = await chatService.snapshot(tenantId, ownerId, sessionId, undefined)
     assert.deepEqual(snapshot.deliveries, [
       {
         conversation_id: sessionId,
@@ -250,8 +261,8 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
       },
     ])
     assert.equal(snapshot.deliveries_has_more, false)
-    assert.equal(snapshot.event_watermark, (await store.agUi.status(tenantId, sessionId)).currentCursor)
-    assert.equal(await store.chatService.snapshot(tenantId, "other_member", sessionId, undefined), null)
+    assert.equal(snapshot.event_watermark, (await agUi.status(tenantId, sessionId)).currentCursor)
+    assert.equal(await chatService.snapshot(tenantId, "other_member", sessionId, undefined), null)
     const secondConversation = "session_artifact_second"
     await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, 'Second conversation')", [
       secondConversation,
@@ -267,7 +278,7 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
                'Second report', 'text/markdown', 12, $4)`,
       [tenantId, secondConversation, "b".repeat(64), new Date(1000)],
     )
-    const candidates = await store.artifactLibrary.listCandidates(tenantId, ownerId, null, 2)
+    const candidates = await artifactLibrary.listCandidates(tenantId, ownerId, null, 2)
     assert.deepEqual(
       candidates.map(({ conversationId, artifactId }) => [conversationId, artifactId]),
       [
@@ -277,7 +288,7 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     )
     assert.deepEqual(
       (
-        await store.artifactLibrary.listCandidates(
+        await artifactLibrary.listCandidates(
           tenantId,
           ownerId,
           {
@@ -290,20 +301,20 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
       ).map(({ artifactId }) => artifactId),
       ["artifact_second"],
     )
-    assert.equal((await store.artifactLibrary.listCandidates(tenantId, "other_member", null, 2)).length, 0)
-    assert.equal(await store.artifactLibrary.findCandidate(tenantId, "other_member", sessionId, "artifact_first"), null)
-    assert.equal(await store.artifactLibrary.findCandidate("other_tenant", ownerId, sessionId, "artifact_first"), null)
-    assert.equal(await store.artifactLibrary.findCandidate(tenantId, ownerId, secondConversation, "artifact_first"), null)
+    assert.equal((await artifactLibrary.listCandidates(tenantId, "other_member", null, 2)).length, 0)
+    assert.equal(await artifactLibrary.findCandidate(tenantId, "other_member", sessionId, "artifact_first"), null)
+    assert.equal(await artifactLibrary.findCandidate("other_tenant", ownerId, sessionId, "artifact_first"), null)
+    assert.equal(await artifactLibrary.findCandidate(tenantId, ownerId, secondConversation, "artifact_first"), null)
     await pool.query("UPDATE bff_conversation SET project_ref = 'missing_project' WHERE conversation_id = $1", [secondConversation])
-    assert.equal(await store.artifactLibrary.findCandidate(tenantId, ownerId, secondConversation, "artifact_second"), null)
+    assert.equal(await artifactLibrary.findCandidate(tenantId, ownerId, secondConversation, "artifact_second"), null)
     assert.deepEqual(
-      (await store.artifactLibrary.listCandidates(tenantId, ownerId, null, 2)).map(({ artifactId }) => artifactId),
+      (await artifactLibrary.listCandidates(tenantId, ownerId, null, 2)).map(({ artifactId }) => artifactId),
       ["artifact_first"],
     )
-    assert.equal((await store.agUi.ingest(tenantId, sessionId, [first])).insertedSources, 0)
-    await assert.rejects(store.agUi.ingest(tenantId, sessionId, [source(1, "artifact_changed")]), /source identity conflict/u)
+    assert.equal((await agUi.ingest(tenantId, sessionId, [first])).insertedSources, 0)
+    await assert.rejects(agUi.ingest(tenantId, sessionId, [source(1, "artifact_changed")]), /source identity conflict/u)
     await assert.rejects(
-      store.agUi.ingest(tenantId, sessionId, [
+      agUi.ingest(tenantId, sessionId, [
         agentSource({
           id: "artifact_source_1_renamed",
           sequence: 1,
@@ -322,10 +333,10 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     // The first source/frame/link in this page must roll back when the second
     // source reuses an already associated Artifact identity.
     await assert.rejects(
-      store.agUi.ingest(tenantId, sessionId, [source(2, "artifact_provisional", secondRun.run_id), source(3, "artifact_first", secondRun.run_id)]),
+      agUi.ingest(tenantId, sessionId, [source(2, "artifact_provisional", secondRun.run_id), source(3, "artifact_first", secondRun.run_id)]),
       /source identity conflict/u,
     )
-    assert.equal((await store.agUi.status(tenantId, sessionId)).sourceHighWatermark, 1)
+    assert.equal((await agUi.status(tenantId, sessionId)).sourceHighWatermark, 1)
     assert.equal(
       (await pool.query("SELECT 1 FROM bff_agui_source_event WHERE tenant_id = $1 AND session_id = $2 AND source_sequence >= 2", [tenantId, sessionId]))
         .rowCount,
@@ -344,8 +355,8 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
       if (label === "wrong_subject") {
         await pool.query("UPDATE bff_agent_dispatch_outbox SET subject_id = 'other_member' WHERE tenant_id = $1 AND run_id = $2", [tenantId, runId])
       }
-      await assert.rejects(store.agUi.ingest(tenantId, sessionId, [source(2, `artifact_${label}`, runId)]), /AGUI_ARTIFACT_BINDING_MISSING/u)
-      assert.equal((await store.agUi.status(tenantId, sessionId)).sourceHighWatermark, 1)
+      await assert.rejects(agUi.ingest(tenantId, sessionId, [source(2, `artifact_${label}`, runId)]), /AGUI_ARTIFACT_BINDING_MISSING/u)
+      assert.equal((await agUi.status(tenantId, sessionId)).sourceHighWatermark, 1)
       assert.equal(
         (await pool.query("SELECT 1 FROM bff_agui_source_event WHERE tenant_id = $1 AND session_id = $2 AND source_sequence = 2", [tenantId, sessionId]))
           .rowCount,
@@ -355,20 +366,20 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
         await pool.query("UPDATE bff_agent_dispatch_outbox SET subject_id = $3 WHERE tenant_id = $1 AND run_id = $2", [tenantId, runId, ownerId])
       }
     }
-    await assert.rejects(store.agUi.ingest(tenantId, sessionId, [source(2, "artifact_first", secondRun.run_id)]), /source identity conflict/u)
-    assert.equal((await store.agUi.status(tenantId, sessionId)).sourceHighWatermark, 1)
-    await store.agUi.ingest(tenantId, sessionId, [source(2, "artifact_second", secondRun.run_id)])
+    await assert.rejects(agUi.ingest(tenantId, sessionId, [source(2, "artifact_first", secondRun.run_id)]), /source identity conflict/u)
+    assert.equal((await agUi.status(tenantId, sessionId)).sourceHighWatermark, 1)
+    await agUi.ingest(tenantId, sessionId, [source(2, "artifact_second", secondRun.run_id)])
     assert.equal((await linked()).length, 2)
     assert.deepEqual(
-      (await store.chatService.snapshot(tenantId, ownerId, sessionId, undefined)).deliveries.map(({ artifact_id }) => artifact_id),
+      (await chatService.snapshot(tenantId, ownerId, sessionId, undefined)).deliveries.map(({ artifact_id }) => artifact_id),
       ["artifact_second", "artifact_first"],
     )
-    assert.equal(await store.chatService.deleteConversation(tenantId, ownerId, sessionId, "delete-artifact-projection"), true)
+    assert.equal(await chatService.deleteConversation(tenantId, ownerId, sessionId, "delete-artifact-projection"), true)
     assert.deepEqual(await linked(), [])
-    await assert.rejects(store.agUi.ingest(tenantId, sessionId, [source(3, "artifact_late", secondRun.run_id)]), /AGUI_ARTIFACT_BINDING_MISSING/u)
+    await assert.rejects(agUi.ingest(tenantId, sessionId, [source(3, "artifact_late", secondRun.run_id)]), /AGUI_ARTIFACT_BINDING_MISSING/u)
     assert.deepEqual(await linked(), [])
   } finally {
-    if (store !== null) await store.close()
+    if (ownerDatabase !== null) await ownerDatabase.close()
     await pool.end()
   }
 })
@@ -378,13 +389,17 @@ integrationTest("bounds Chat deliveries independently of Messages and reapplies 
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    await ownerDatabase.ready()
     const tenantId = "tenant_snapshot_limit"
     const sessionId = "session_snapshot_limit"
     const ownerId = "owner_snapshot_limit"
@@ -425,7 +440,7 @@ integrationTest("bounds Chat deliveries independently of Messages and reapplies 
         WHERE tenant_id = $1 AND conversation_id = $2 AND artifact_id = 'artifact_100'`,
       [tenantId, sessionId],
     )
-    const snapshot = await store.chatService.snapshot(tenantId, ownerId, sessionId, undefined)
+    const snapshot = await chatService.snapshot(tenantId, ownerId, sessionId, undefined)
     assert.equal(snapshot.deliveries.length, 100)
     assert.equal(snapshot.deliveries_has_more, true)
     assert.equal(snapshot.deliveries[0].artifact_id, "artifact_100")
@@ -433,13 +448,13 @@ integrationTest("bounds Chat deliveries independently of Messages and reapplies 
     assert.equal(snapshot.deliveries.at(-1).artifact_id, "artifact_002")
     assert.equal(snapshot.deliveries[0].conversation_id, sessionId)
     assert.equal(snapshot.deliveries[0].size, 100)
-    const visibleRun = await submitAndAdmit(store, pool, {
+    const visibleRun = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
       tenantId,
       sessionId,
       ownerId,
       suffix: "snapshot_limit_visible",
     })
-    await store.agUi.ingest(tenantId, sessionId, [
+    await agUi.ingest(tenantId, sessionId, [
       agentSource({
         id: "source_snapshot_limit_visible_start",
         sequence: 1,
@@ -449,25 +464,25 @@ integrationTest("bounds Chat deliveries independently of Messages and reapplies 
         runId: visibleRun,
       }),
     ])
-    assert.deepEqual((await store.chatService.snapshot(tenantId, ownerId, sessionId, undefined)).execution_head, {
+    assert.deepEqual((await chatService.snapshot(tenantId, ownerId, sessionId, undefined)).execution_head, {
       run_id: visibleRun,
       state: "active",
       pending_pauses: [],
     })
-    assert.equal(await store.chatService.snapshot(tenantId, "other_member", sessionId, undefined), null)
+    assert.equal(await chatService.snapshot(tenantId, "other_member", sessionId, undefined), null)
     await pool.query("UPDATE bff_conversation SET project_ref = 'missing_project' WHERE conversation_id = $1", [sessionId])
-    assert.equal(await store.chatService.snapshot(tenantId, ownerId, sessionId, undefined), null)
+    assert.equal(await chatService.snapshot(tenantId, ownerId, sessionId, undefined), null)
     await pool.query(
       "INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug, description) VALUES ('project_snapshot', $1, $2, 'Snapshot', 'snapshot', '')",
       [tenantId, ownerId],
     )
     await pool.query("UPDATE bff_conversation SET project_ref = 'project_snapshot' WHERE conversation_id = $1", [sessionId])
-    assert.equal((await store.chatService.snapshot(tenantId, ownerId, sessionId, "project_snapshot")).deliveries.length, 100)
-    assert.equal(await store.chatService.snapshot(tenantId, ownerId, sessionId, "wrong_project"), null)
-    assert.equal(await store.chatService.deleteConversation(tenantId, ownerId, sessionId, "delete-snapshot-limit", "project_snapshot"), true)
-    assert.equal(await store.chatService.snapshot(tenantId, ownerId, sessionId, undefined), null)
+    assert.equal((await chatService.snapshot(tenantId, ownerId, sessionId, "project_snapshot")).deliveries.length, 100)
+    assert.equal(await chatService.snapshot(tenantId, ownerId, sessionId, "wrong_project"), null)
+    assert.equal(await chatService.deleteConversation(tenantId, ownerId, sessionId, "delete-snapshot-limit", "project_snapshot"), true)
+    assert.equal(await chatService.snapshot(tenantId, ownerId, sessionId, undefined), null)
   } finally {
-    if (store !== null) await store.close()
+    if (ownerDatabase !== null) await ownerDatabase.close()
     await pool.end()
   }
 })
@@ -714,13 +729,17 @@ for (const failure of [
       connectionString: postgresUrl,
       options: "-c search_path=kokoro_bff -c timezone=UTC",
     })
-    let store = null
+    let ownerDatabase = null
     try {
       await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
       await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
       await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
+      ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+      let agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+      let agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+      let chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+      let chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+      await ownerDatabase.ready()
       const sessionId = "session_assistant_reconcile"
       await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)", [
         sessionId,
@@ -728,7 +747,7 @@ for (const failure of [
         "owner_reconcile",
         "Reconcile assistant",
       ])
-      const receipt = await store.chatTurnService.submit({
+      const receipt = await chatTurnService.submit({
         tenantId: "tenant_reconcile",
         conversationId: sessionId,
         subjectId: "owner_reconcile",
@@ -766,14 +785,14 @@ for (const failure of [
         ])
         return result.rows[0]
       }
-      const [leasedBeforeAck] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      const [leasedBeforeAck] = await agentDispatchOutbox.claimAgentDispatchOutbox({
         workerId: "worker_reconcile_first",
         limit: 1,
         leaseDurationMs: 5000,
         maxAttempts: 8,
       })
       assert.equal(leasedBeforeAck.runId, receipt.run_id)
-      await store.agUi.ingest("tenant_reconcile", sessionId, [
+      await agUi.ingest("tenant_reconcile", sessionId, [
         source(1, "run.created", { run_id: receipt.run_id }),
         source(2, "message.delta", {
           segment_id: "agent_seg_a",
@@ -788,7 +807,7 @@ for (const failure of [
         content: "Draft final",
         status: "streaming",
       })
-      const beforeMalformed = await store.agUi.status("tenant_reconcile", sessionId)
+      const beforeMalformed = await agUi.status("tenant_reconcile", sessionId)
       for (const [eventType, payload] of [
         ["assistant.delta", { delta: 42 }],
         ["assistant.completed", { content: 42 }],
@@ -812,9 +831,9 @@ for (const failure of [
         content: "Draft final",
         status: "streaming",
       })
-      assert.deepEqual(await store.agUi.status("tenant_reconcile", sessionId), beforeMalformed)
+      assert.deepEqual(await agUi.status("tenant_reconcile", sessionId), beforeMalformed)
 
-      await store.agUi.ingest("tenant_reconcile", sessionId, [
+      await agUi.ingest("tenant_reconcile", sessionId, [
         source(4, "activity.updated", {
           activity: "tool",
           activity_id: "act_" + "4".repeat(64),
@@ -863,7 +882,7 @@ for (const failure of [
       assert.equal(retainedParts[0].text, "Draft final")
       assert.equal(retainedParts[2].segment_id, "agent_seg_b")
       assert.equal(retainedParts[2].text, "Final answer.")
-      await store.agUi.ingest("tenant_reconcile", sessionId, [source(9, "run.completed", { status: "completed" })])
+      await agUi.ingest("tenant_reconcile", sessionId, [source(9, "run.completed", { status: "completed" })])
       assert.deepEqual(await assistant(), {
         content: retainedBody,
         status: "completed",
@@ -887,10 +906,10 @@ for (const failure of [
         content: "foreign content",
         status: "pending",
       })
-      const current = await store.agUi.status("tenant_reconcile", sessionId)
+      const current = await agUi.status("tenant_reconcile", sessionId)
       assert.equal(current.sourceHighWatermark, 9)
       assert.match(current.currentCursor, /^agui_/u)
-      const snapshot = await store.chatService.snapshot("tenant_reconcile", "owner_reconcile", sessionId, undefined)
+      const snapshot = await chatService.snapshot("tenant_reconcile", "owner_reconcile", sessionId, undefined)
       assert.equal(snapshot.event_watermark, current.currentCursor)
       assert.deepEqual(
         snapshot.messages.map(({ role, content, status }) => ({
@@ -904,7 +923,7 @@ for (const failure of [
         ],
       )
       await assertOrderedReadBody(
-        store.chatService,
+        chatService,
         "tenant_reconcile",
         "owner_reconcile",
         sessionId,
@@ -913,8 +932,8 @@ for (const failure of [
         current.currentCursor,
         retainedBody,
       )
-      assert.equal(await store.chatService.snapshot("tenant_reconcile", "foreign_owner", sessionId, undefined), null)
-      const duplicate = await store.agUi.ingest("tenant_reconcile", sessionId, [
+      assert.equal(await chatService.snapshot("tenant_reconcile", "foreign_owner", sessionId, undefined), null)
+      const duplicate = await agUi.ingest("tenant_reconcile", sessionId, [
         source(7, "message.delta", {
           segment_id: "agent_seg_b",
           delta: "answer",
@@ -926,7 +945,7 @@ for (const failure of [
         status: "completed",
       })
 
-      const failedTurn = await store.chatTurnService.submit({
+      const failedTurn = await chatTurnService.submit({
         tenantId: "tenant_reconcile",
         conversationId: sessionId,
         subjectId: "owner_reconcile",
@@ -942,7 +961,7 @@ for (const failure of [
         null,
       )
       await assert.rejects(
-        store.agUi.ingest("tenant_reconcile", sessionId, [
+        agUi.ingest("tenant_reconcile", sessionId, [
           source(10, "message.delta", {
             segment_id: "late_old",
             delta: "late",
@@ -950,7 +969,7 @@ for (const failure of [
         ]),
         /AGUI_POST_TERMINAL_SOURCE/u,
       )
-      assert.equal((await store.agUi.status("tenant_reconcile", sessionId)).sourceHighWatermark, 9)
+      assert.equal((await agUi.status("tenant_reconcile", sessionId)).sourceHighWatermark, 9)
       assert.deepEqual(await assistant(), {
         content: retainedBody,
         status: "completed",
@@ -963,15 +982,15 @@ for (const failure of [
         content: "",
         status: "pending",
       })
-      const [failedClaim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      const [failedClaim] = await agentDispatchOutbox.claimAgentDispatchOutbox({
         workerId: "worker_reconcile_failed",
         limit: 1,
         leaseDurationMs: 5000,
         maxAttempts: 8,
       })
       assert.equal(failedClaim.runId, failedTurn.run_id)
-      assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(failedClaim), true)
-      await store.agUi.ingest("tenant_reconcile", sessionId, [
+      assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(failedClaim), true)
+      await agUi.ingest("tenant_reconcile", sessionId, [
         source(10, "message.delta", { segment_id: "failed_seg", delta: "Partial" }, failedTurn.run_id),
         source(
           11,
@@ -1014,39 +1033,34 @@ for (const failure of [
           agent_failure_retryable: failure.retryable,
         },
       )
-      const failedSnapshot = await store.chatService.snapshot("tenant_reconcile", "owner_reconcile", sessionId, undefined)
+      const failedSnapshot = await chatService.snapshot("tenant_reconcile", "owner_reconcile", sessionId, undefined)
       const failedMessage = failedSnapshot.messages.find(({ message_id }) => message_id === failedTurn.assistant_message_id)
-      await assertOrderedReadBody(
-        store.chatService,
-        "tenant_reconcile",
-        "owner_reconcile",
-        sessionId,
-        failedMessage,
-        "16",
-        failedSnapshot.event_watermark,
-        "Partial",
-      )
+      await assertOrderedReadBody(chatService, "tenant_reconcile", "owner_reconcile", sessionId, failedMessage, "16", failedSnapshot.event_watermark, "Partial")
       assert.equal(failedMessage.status, "failed")
       assert.deepEqual(failedMessage.failure, { source: "agent", ...failure })
-      const failedReplay = await store.agUi.replay("tenant_reconcile", sessionId, null, 100)
+      const failedReplay = await agUi.replay("tenant_reconcile", sessionId, null, 100)
       assert.equal(failedReplay.kind, "page")
       const failedFrame = failedReplay.frames.find(({ payload }) => payload.type === "RUN_ERROR" && payload.runId === failedTurn.run_id)
       assert.deepEqual(failedFrame.payload.metadata.kokoro.failure, { source: "agent", ...failure })
       assert.equal(failedFrame.payload.code, failure.code)
-      const beforeReplay = await store.agUi.status("tenant_reconcile", sessionId)
-      const duplicateFailure = await store.agUi.ingest("tenant_reconcile", sessionId, [
+      const beforeReplay = await agUi.status("tenant_reconcile", sessionId)
+      const duplicateFailure = await agUi.ingest("tenant_reconcile", sessionId, [
         source(11, "run.failed", { failure: { source: "agent", ...failure }, message: "Agent run failed" }, failedTurn.run_id),
       ])
       assert.equal(duplicateFailure.insertedSources, 0)
       assert.equal(duplicateFailure.insertedFrames, 0)
-      assert.deepEqual(await store.agUi.status("tenant_reconcile", sessionId), beforeReplay)
-      await store.close()
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
-      assert.deepEqual(await store.agUi.replay("tenant_reconcile", sessionId, null, 100), failedReplay)
-      assert.deepEqual(await store.chatService.snapshot("tenant_reconcile", "owner_reconcile", sessionId, undefined), failedSnapshot)
+      assert.deepEqual(await agUi.status("tenant_reconcile", sessionId), beforeReplay)
+      await ownerDatabase.close()
+      ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+      agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+      agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+      chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+      chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+      await ownerDatabase.ready()
+      assert.deepEqual(await agUi.replay("tenant_reconcile", sessionId, null, 100), failedReplay)
+      assert.deepEqual(await chatService.snapshot("tenant_reconcile", "owner_reconcile", sessionId, undefined), failedSnapshot)
       await assert.rejects(
-        store.agUi.ingest("tenant_reconcile", sessionId, [source(12, "message.delta", { segment_id: "late_failed", delta: "wrong" }, failedTurn.run_id)]),
+        agUi.ingest("tenant_reconcile", sessionId, [source(12, "message.delta", { segment_id: "late_failed", delta: "wrong" }, failedTurn.run_id)]),
         /AGUI_POST_TERMINAL_SOURCE/u,
       )
       assert.deepEqual(await failedAssistant(), {
@@ -1054,7 +1068,7 @@ for (const failure of [
         status: "failed",
       })
 
-      const cancelledTurn = await store.chatTurnService.submit({
+      const cancelledTurn = await chatTurnService.submit({
         tenantId: "tenant_reconcile",
         conversationId: sessionId,
         subjectId: "owner_reconcile",
@@ -1064,15 +1078,15 @@ for (const failure of [
         content: "Cancel this",
       })
       assert.ok(cancelledTurn)
-      const [cancelledClaim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      const [cancelledClaim] = await agentDispatchOutbox.claimAgentDispatchOutbox({
         workerId: "worker_reconcile_cancelled",
         limit: 1,
         leaseDurationMs: 5000,
         maxAttempts: 8,
       })
       assert.equal(cancelledClaim.runId, cancelledTurn.run_id)
-      assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(cancelledClaim), true)
-      await store.agUi.ingest("tenant_reconcile", sessionId, [
+      assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(cancelledClaim), true)
+      await agUi.ingest("tenant_reconcile", sessionId, [
         source(12, "message.delta", { segment_id: "cancel_seg", delta: "Partial cancel" }, cancelledTurn.run_id),
         source(13, "run.completed", { status: "cancelled" }, cancelledTurn.run_id),
       ])
@@ -1087,7 +1101,7 @@ for (const failure of [
         agent_failure_retryable: null,
       })
 
-      const dispatchFailedTurn = await store.chatTurnService.submit({
+      const dispatchFailedTurn = await chatTurnService.submit({
         tenantId: "tenant_reconcile",
         conversationId: sessionId,
         subjectId: "owner_reconcile",
@@ -1103,7 +1117,7 @@ for (const failure of [
       ])
       await pool.query("UPDATE bff_message SET status = 'failed' WHERE message_id = $1", [dispatchFailedTurn.assistant_message_id])
       await assert.rejects(
-        store.agUi.ingest("tenant_reconcile", sessionId, [
+        agUi.ingest("tenant_reconcile", sessionId, [
           agentSource({
             id: "zero_frame_after_dispatch_failure",
             sequence: 14,
@@ -1116,7 +1130,7 @@ for (const failure of [
         /AGUI_POST_TERMINAL_SOURCE/u,
       )
       await assert.rejects(
-        store.agUi.ingest("tenant_reconcile", sessionId, [
+        agUi.ingest("tenant_reconcile", sessionId, [
           source(14, "message.delta", { segment_id: "after_dispatch_failure", delta: "wrong" }, dispatchFailedTurn.run_id),
           source(15, "run.completed", { status: "completed" }, dispatchFailedTurn.run_id),
         ]),
@@ -1133,7 +1147,7 @@ for (const failure of [
         agent_failure_retryable: null,
       })
 
-      const rollbackTurn = await store.chatTurnService.submit({
+      const rollbackTurn = await chatTurnService.submit({
         tenantId: "tenant_reconcile",
         conversationId: sessionId,
         subjectId: "owner_reconcile",
@@ -1143,18 +1157,18 @@ for (const failure of [
         content: "Rollback on frame failure",
       })
       assert.ok(rollbackTurn)
-      const [rollbackClaim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      const [rollbackClaim] = await agentDispatchOutbox.claimAgentDispatchOutbox({
         workerId: "worker_reconcile_rollback",
         limit: 1,
         leaseDurationMs: 5000,
         maxAttempts: 8,
       })
       assert.equal(rollbackClaim.runId, rollbackTurn.run_id)
-      assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(rollbackClaim), true)
+      assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(rollbackClaim), true)
       await pool.query("ALTER TABLE bff_agui_event ADD CONSTRAINT ck_test_reject_projection_frame CHECK (event_type <> 'RUN_ERROR') NOT VALID")
       try {
         await assert.rejects(
-          store.agUi.ingest("tenant_reconcile", sessionId, [
+          agUi.ingest("tenant_reconcile", sessionId, [
             source(
               14,
               "run.failed",
@@ -1181,7 +1195,7 @@ for (const failure of [
           agent_failure_code: null,
           agent_failure_retryable: null,
         })
-        assert.equal((await store.agUi.status("tenant_reconcile", sessionId)).sourceHighWatermark, 13)
+        assert.equal((await agUi.status("tenant_reconcile", sessionId)).sourceHighWatermark, 13)
         const missingSource = await pool.query("SELECT 1 FROM bff_agui_source_event WHERE tenant_id = $1 AND session_id = $2 AND source_sequence = 14", [
           "tenant_reconcile",
           sessionId,
@@ -1196,7 +1210,7 @@ for (const failure of [
         await pool.query("ALTER TABLE bff_agui_event DROP CONSTRAINT ck_test_reject_projection_frame")
       }
     } finally {
-      if (store !== null) await store.close()
+      if (ownerDatabase !== null) await ownerDatabase.close()
       await pool.end()
     }
   })
@@ -1207,13 +1221,16 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
-  let reopened = null
+  let ownerDatabase = null
+  let reopenedDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    await ownerDatabase.ready()
     const tenantId = "tenant_empty_final"
     const subjectId = "owner_empty_final"
     const sessionId = "session_empty_final"
@@ -1222,7 +1239,7 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
       tenantId,
       subjectId,
     ])
-    const turn = await store.chatTurnService.submit({
+    const turn = await chatTurnService.submit({
       tenantId,
       conversationId: sessionId,
       subjectId,
@@ -1241,14 +1258,14 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
       { role: "assistant", ordered_parts: [], parts_format_version: 1, parts_public_sequence: "0" },
     ])
     await assert.rejects(pool.query("UPDATE bff_message SET parts_format_version=NULL WHERE message_id=$1", [turn.assistant_message_id]), { code: "23514" })
-    const [claim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [claim] = await agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_empty_final",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(claim.runId, turn.run_id)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+    assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
     const wire = (seq, eventType, payload, chatMessageId = null) => ({
       chat_event_id: `empty_source_${seq}`,
       session_id: sessionId,
@@ -1307,12 +1324,12 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
       const result = await pool.query("SELECT content, status FROM bff_message WHERE message_id = $1", [turn.assistant_message_id])
       return result.rows[0]
     }
-    await store.agUi.ingest(tenantId, sessionId, sources.slice(0, 3))
+    await agUi.ingest(tenantId, sessionId, sources.slice(0, 3))
     assert.deepEqual(await assistant(), {
       content: "draft",
       status: "streaming",
     })
-    await store.agUi.ingest(tenantId, sessionId, sources.slice(3, 6))
+    await agUi.ingest(tenantId, sessionId, sources.slice(3, 6))
     assert.deepEqual(await assistant(), { content: "draft", status: "streaming" })
     const beforeRejected = await pool.query("SELECT ordered_parts,parts_public_sequence FROM bff_message WHERE message_id=$1", [turn.assistant_message_id])
     const forbidden = [
@@ -1326,7 +1343,7 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
       sourcePayload: event,
       event: mapAgentEvent(event),
     }))
-    await assert.rejects(store.agUi.ingest(tenantId, sessionId, forbidden), /AGUI_MESSAGE_PARTS_INVALID/u)
+    await assert.rejects(agUi.ingest(tenantId, sessionId, forbidden), /AGUI_MESSAGE_PARTS_INVALID/u)
     assert.deepEqual(
       (await pool.query("SELECT ordered_parts,parts_public_sequence FROM bff_message WHERE message_id=$1", [turn.assistant_message_id])).rows,
       beforeRejected.rows,
@@ -1340,14 +1357,16 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
       ).rows[0].count,
       0,
     )
-    await store.agUi.ingest(tenantId, sessionId, sources.slice(6))
+    await agUi.ingest(tenantId, sessionId, sources.slice(6))
     assert.deepEqual(await assistant(), { content: "draft", status: "completed" })
 
-    await store.close()
-    store = null
-    reopened = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await reopened.ready()
-    const replay = await reopened.agUi.replay(tenantId, sessionId, null, 100)
+    await ownerDatabase.close()
+    ownerDatabase = null
+    reopenedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const reopenedAgUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(reopenedDatabase))
+    const reopenedChatService = new ChatApplicationService(new PostgresChatRepository(reopenedDatabase))
+    await reopenedDatabase.ready()
+    const replay = await reopenedAgUi.replay(tenantId, sessionId, null, 100)
     assert.equal(replay.kind, "page")
     assert.deepEqual(
       replay.frames.map((frame) => frame.eventType),
@@ -1363,7 +1382,7 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
       Array.from({ length: 9 }, (_, index) => index + 1),
     )
     const watermark = replay.frames.at(-1).cursor
-    const snapshot = await reopened.chatService.snapshot(tenantId, subjectId, sessionId, undefined)
+    const snapshot = await reopenedChatService.snapshot(tenantId, subjectId, sessionId, undefined)
     assert.equal(snapshot.event_watermark, watermark)
     assert.deepEqual(snapshot.messages.at(-1), {
       message_id: turn.assistant_message_id,
@@ -1374,7 +1393,7 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
       run_id: turn.run_id,
       rendering: snapshot.messages.at(-1).rendering,
     })
-    const readParts = await assertOrderedReadBody(reopened.chatService, tenantId, subjectId, sessionId, snapshot.messages.at(-1), "9", watermark, "draft")
+    const readParts = await assertOrderedReadBody(reopenedChatService, tenantId, subjectId, sessionId, snapshot.messages.at(-1), "9", watermark, "draft")
     assert.deepEqual(
       readParts.items.filter((part) => part.kind === "text").map((part) => [part.segment_id, part.text]),
       [
@@ -1399,17 +1418,17 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
     assert.equal(persisted.rows[0].ordered_parts[0].text, "draft")
     assert.equal(persisted.rows[0].ordered_parts[1].activity.status, "completed")
     assert.equal(persisted.rows[0].ordered_parts[2].text, "")
-    const duplicate = await reopened.agUi.ingest(tenantId, sessionId, sources)
+    const duplicate = await reopenedAgUi.ingest(tenantId, sessionId, sources)
     assert.equal(duplicate.insertedSources, 0)
     assert.equal(
       (await pool.query("SELECT xmin::text AS xmin FROM bff_message WHERE message_id=$1", [turn.assistant_message_id])).rows[0].xmin,
       persisted.rows[0].xmin,
     )
     assert.deepEqual(await assistant(), { content: "draft", status: "completed" })
-    assert.equal((await reopened.chatService.snapshot(tenantId, subjectId, sessionId, undefined)).event_watermark, watermark)
+    assert.equal((await reopenedChatService.snapshot(tenantId, subjectId, sessionId, undefined)).event_watermark, watermark)
   } finally {
-    if (store !== null) await store.close()
-    if (reopened !== null) await reopened.close()
+    if (ownerDatabase !== null) await ownerDatabase.close()
+    if (reopenedDatabase !== null) await reopenedDatabase.close()
     await pool.end()
   }
 })
@@ -1419,12 +1438,15 @@ integrationTest("rejects a current-run source when its active Conversation lacks
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    await ownerDatabase.ready()
     for (const damage of ["missing_message", "missing_outbox", "wrong_subject", "wrong_message_run"]) {
       const sessionId = `session_binding_${damage}`
       await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, 'Binding test')", [
@@ -1432,7 +1454,7 @@ integrationTest("rejects a current-run source when its active Conversation lacks
         "tenant_binding",
         "owner_binding",
       ])
-      const receipt = await store.chatTurnService.submit({
+      const receipt = await chatTurnService.submit({
         tenantId: "tenant_binding",
         conversationId: sessionId,
         subjectId: "owner_binding",
@@ -1442,14 +1464,14 @@ integrationTest("rejects a current-run source when its active Conversation lacks
         content: "Check binding",
       })
       assert.ok(receipt)
-      const [claim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      const [claim] = await agentDispatchOutbox.claimAgentDispatchOutbox({
         workerId: `worker_${damage}`,
         limit: 1,
         leaseDurationMs: 5000,
         maxAttempts: 8,
       })
       assert.equal(claim.runId, receipt.run_id)
-      assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+      assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
       if (damage === "missing_message") {
         await pool.query("DELETE FROM bff_message WHERE message_id = $1", [receipt.assistant_message_id])
       } else if (damage === "missing_outbox") {
@@ -1463,7 +1485,7 @@ integrationTest("rejects a current-run source when its active Conversation lacks
         await pool.query("UPDATE bff_message SET run_id = 'unrelated_run' WHERE message_id = $1", [receipt.assistant_message_id])
       }
       await assert.rejects(
-        store.agUi.ingest("tenant_binding", sessionId, [
+        agUi.ingest("tenant_binding", sessionId, [
           agentSource({
             id: `source_${damage}`,
             sequence: 1,
@@ -1478,12 +1500,12 @@ integrationTest("rejects a current-run source when its active Conversation lacks
         ]),
         /AGUI_ASSISTANT_BINDING_MISSING/u,
       )
-      assert.equal((await store.agUi.status("tenant_binding", sessionId)).sourceHighWatermark, 0)
+      assert.equal((await agUi.status("tenant_binding", sessionId)).sourceHighWatermark, 0)
       const source = await pool.query("SELECT 1 FROM bff_agui_source_event WHERE tenant_id = $1 AND session_id = $2", ["tenant_binding", sessionId])
       assert.equal(source.rowCount, 0)
     }
   } finally {
-    if (store !== null) await store.close()
+    if (ownerDatabase !== null) await ownerDatabase.close()
     await pool.end()
   }
 })
@@ -1493,12 +1515,15 @@ integrationTest("loads the latest 100 Message facts in stable chronological orde
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    await ownerDatabase.ready()
     const sessionId = "session_latest_messages"
     await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, 'Long chat')", [
       sessionId,
@@ -1514,8 +1539,8 @@ integrationTest("loads the latest 100 Message facts in stable chronological orde
          FROM generate_series(1, 121) AS seq`,
       [sessionId],
     )
-    await store.agUiConsumers.registerConsumer("tenant_latest", sessionId, "owner_latest")
-    await store.agUi.ingest("tenant_latest", sessionId, [
+    await agUiConsumers.registerConsumer("tenant_latest", sessionId, "owner_latest")
+    await agUi.ingest("tenant_latest", sessionId, [
       agentSource({
         id: "latest_run",
         sequence: 1,
@@ -1525,8 +1550,8 @@ integrationTest("loads the latest 100 Message facts in stable chronological orde
         runId: "run_latest",
       }),
     ])
-    const head = await store.agUi.status("tenant_latest", sessionId)
-    const snapshot = await store.chatService.snapshot("tenant_latest", "owner_latest", sessionId, undefined)
+    const head = await agUi.status("tenant_latest", sessionId)
+    const snapshot = await chatService.snapshot("tenant_latest", "owner_latest", sessionId, undefined)
     assert.ok(snapshot)
     assert.equal(snapshot.messages.length, 100)
     assert.equal(snapshot.messages[0].message_id, "message_22")
@@ -1536,7 +1561,7 @@ integrationTest("loads the latest 100 Message facts in stable chronological orde
     assert.equal(snapshot.messages.at(-1).status, "completed")
     assert.equal(snapshot.event_watermark, head.currentCursor)
   } finally {
-    if (store !== null) await store.close()
+    if (ownerDatabase !== null) await ownerDatabase.close()
     await pool.end()
   }
 })
@@ -1574,16 +1599,17 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
   const redis = createClient({ url: redisUrl })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
 
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    let agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    await ownerDatabase.ready()
 
-    const first = await store.agUi.ingest("tenant_a", "session_shared", [
+    const first = await agUi.ingest("tenant_a", "session_shared", [
       agentSource({
         id: "agent_event_1",
         sequence: 1,
@@ -1597,7 +1623,7 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
       sourceHighWatermark: 1,
     })
 
-    const initial = await store.agUi.replay("tenant_a", "session_shared", null, 100)
+    const initial = await agUi.replay("tenant_a", "session_shared", null, 100)
     assert.equal(initial.kind, "page")
     assert.deepEqual(
       initial.frames.map((frame) => frame.publicSequence),
@@ -1610,14 +1636,14 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
     assert.equal(new Set(initial.frames.map((frame) => frame.cursor)).size, 2)
     assert.ok(initial.frames.every((frame) => /^agui_[0-9a-f]{32}$/u.test(frame.cursor)))
 
-    const afterExpandedStart = await store.agUi.replay("tenant_a", "session_shared", initial.frames[0].cursor, 100)
+    const afterExpandedStart = await agUi.replay("tenant_a", "session_shared", initial.frames[0].cursor, 100)
     assert.equal(afterExpandedStart.kind, "page")
     assert.deepEqual(
       afterExpandedStart.frames.map((frame) => frame.eventType),
       ["TEXT_MESSAGE_CONTENT"],
     )
 
-    const second = await store.agUi.ingest("tenant_a", "session_shared", [
+    const second = await agUi.ingest("tenant_a", "session_shared", [
       agentSource({
         id: "agent_event_2",
         sequence: 2,
@@ -1630,11 +1656,11 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
       insertedFrames: 1,
       sourceHighWatermark: 2,
     })
-    const afterSecond = await store.agUi.replay("tenant_a", "session_shared", null, 100)
+    const afterSecond = await agUi.replay("tenant_a", "session_shared", null, 100)
     assert.equal(afterSecond.kind, "page")
     const currentCursor = afterSecond.frames.at(-1).cursor
 
-    const duplicate = await store.agUi.ingest("tenant_a", "session_shared", [
+    const duplicate = await agUi.ingest("tenant_a", "session_shared", [
       agentSource({
         id: "agent_event_2",
         sequence: 2,
@@ -1649,7 +1675,7 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
     })
 
     await assert.rejects(
-      store.agUi.ingest("tenant_a", "session_shared", [
+      agUi.ingest("tenant_a", "session_shared", [
         agentSource({
           id: "agent_event_2",
           sequence: 2,
@@ -1661,7 +1687,7 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
     )
 
     await assert.rejects(
-      store.agUi.ingest("tenant_a", "session_shared", [
+      agUi.ingest("tenant_a", "session_shared", [
         agentSource({
           id: "agent_event_other",
           sequence: 2,
@@ -1673,7 +1699,7 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
     )
 
     await assert.rejects(
-      store.agUi.ingest("tenant_a", "session_shared", [
+      agUi.ingest("tenant_a", "session_shared", [
         agentSource({
           id: "agent_event_2",
           sequence: 3,
@@ -1684,7 +1710,7 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
       /AG-UI source identity conflict/u,
     )
 
-    const unknown = await store.agUi.ingest("tenant_a", "session_shared", [
+    const unknown = await agUi.ingest("tenant_a", "session_shared", [
       agentSource({
         id: "agent_event_3",
         sequence: 3,
@@ -1698,12 +1724,12 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
       sourceHighWatermark: 3,
     })
 
-    const isolatedTenant = await store.agUi.replay("tenant_b", "session_shared", null, 100)
+    const isolatedTenant = await agUi.replay("tenant_b", "session_shared", null, 100)
     assert.equal(isolatedTenant.kind, "page")
     assert.deepEqual(isolatedTenant.frames, [])
-    const foreignTenantCursor = await store.agUi.replay("tenant_b", "session_shared", initial.frames[0].cursor, 100)
+    const foreignTenantCursor = await agUi.replay("tenant_b", "session_shared", initial.frames[0].cursor, 100)
     assert.deepEqual(foreignTenantCursor, { kind: "invalid_cursor" })
-    const foreignSessionCursor = await store.agUi.replay("tenant_a", "session_other", initial.frames[0].cursor, 100)
+    const foreignSessionCursor = await agUi.replay("tenant_a", "session_other", initial.frames[0].cursor, 100)
     assert.deepEqual(foreignSessionCursor, { kind: "invalid_cursor" })
 
     const concurrentSource = agentSource({
@@ -1714,21 +1740,21 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
       sessionId: "session_concurrent",
     })
     const concurrent = await Promise.all([
-      store.agUi.ingest("tenant_a", "session_concurrent", [concurrentSource]),
-      store.agUi.ingest("tenant_a", "session_concurrent", [concurrentSource]),
+      agUi.ingest("tenant_a", "session_concurrent", [concurrentSource]),
+      agUi.ingest("tenant_a", "session_concurrent", [concurrentSource]),
     ])
     assert.equal(
       concurrent.reduce((count, result) => count + result.insertedSources, 0),
       1,
     )
-    const concurrentReplay = await store.agUi.replay("tenant_a", "session_concurrent", null, 100)
+    const concurrentReplay = await agUi.replay("tenant_a", "session_concurrent", null, 100)
     assert.equal(concurrentReplay.kind, "page")
     assert.deepEqual(
       concurrentReplay.frames.map((frame) => frame.publicSequence),
       [1, 2],
     )
 
-    const status = await store.agUi.status("tenant_a", "session_shared")
+    const status = await agUi.status("tenant_a", "session_shared")
     assert.equal(status.sourceHighWatermark, 3)
     assert.equal(status.currentCursor, currentCursor)
 
@@ -1752,9 +1778,10 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
       redisKeys.push(...keys)
     assert.deepEqual(redisKeys, [])
 
-    await store.close()
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const afterRestart = await store.agUi.replay("tenant_a", "session_shared", initial.frames[0].cursor, 100)
+    await ownerDatabase.close()
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const afterRestart = await agUi.replay("tenant_a", "session_shared", initial.frames[0].cursor, 100)
     assert.equal(afterRestart.kind, "page")
     assert.deepEqual(
       afterRestart.frames.map((frame) => frame.publicSequence),
@@ -1765,7 +1792,7 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
       ["TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_CONTENT"],
     )
 
-    const resumedProjection = await store.agUi.ingest("tenant_a", "session_shared", [
+    const resumedProjection = await agUi.ingest("tenant_a", "session_shared", [
       agentSource({
         id: "agent_event_4",
         sequence: 4,
@@ -1778,7 +1805,7 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
       insertedFrames: 1,
       sourceHighWatermark: 4,
     })
-    const resumedFrames = await store.agUi.replay("tenant_a", "session_shared", currentCursor, 100)
+    const resumedFrames = await agUi.replay("tenant_a", "session_shared", currentCursor, 100)
     assert.equal(resumedFrames.kind, "page")
     assert.deepEqual(
       resumedFrames.frames.map((frame) => frame.eventType),
@@ -1789,7 +1816,7 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
       [4],
     )
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     if (redis.isOpen) await redis.quit().catch(() => undefined)
     await pool.end()
   }
@@ -1800,19 +1827,22 @@ integrationTest("keeps replay page boundaries and terminal state tied to the lat
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const firstRun = await submitAndAdmit(store, pool, {
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    const firstRun = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
       tenantId: "tenant_a",
       sessionId: "session_runs",
       ownerId: "owner_runs",
       suffix: "page_first",
     })
 
-    await store.agUi.ingest("tenant_a", "session_runs", [
+    await agUi.ingest("tenant_a", "session_runs", [
       agentSource({
         id: "run_1_started",
         sequence: 1,
@@ -1830,13 +1860,13 @@ integrationTest("keeps replay page boundaries and terminal state tied to the lat
         runId: firstRun,
       }),
     ])
-    const secondRun = await submitAndAdmit(store, pool, {
+    const secondRun = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
       tenantId: "tenant_a",
       sessionId: "session_runs",
       ownerId: "owner_runs",
       suffix: "page_second",
     })
-    await store.agUi.ingest("tenant_a", "session_runs", [
+    await agUi.ingest("tenant_a", "session_runs", [
       agentSource({
         id: "run_2_started",
         sequence: 3,
@@ -1847,7 +1877,7 @@ integrationTest("keeps replay page boundaries and terminal state tied to the lat
       }),
     ])
 
-    const pageAtOldTerminal = await store.agUi.replay("tenant_a", "session_runs", null, 3)
+    const pageAtOldTerminal = await agUi.replay("tenant_a", "session_runs", null, 3)
     assert.equal(pageAtOldTerminal.kind, "page")
     assert.deepEqual(
       pageAtOldTerminal.frames.map((frame) => frame.eventType),
@@ -1865,7 +1895,7 @@ integrationTest("keeps replay page boundaries and terminal state tied to the lat
     assert.equal(pageAtOldTerminal.atHead, false)
     assert.equal(pageAtOldTerminal.terminalRunId, null)
 
-    const activeHead = await store.agUi.replay("tenant_a", "session_runs", pageAtOldTerminal.frames.at(-1).cursor, 2)
+    const activeHead = await agUi.replay("tenant_a", "session_runs", pageAtOldTerminal.frames.at(-1).cursor, 2)
     assert.equal(activeHead.kind, "page")
     assert.deepEqual(
       activeHead.frames.map((frame) => frame.eventType),
@@ -1883,7 +1913,7 @@ integrationTest("keeps replay page boundaries and terminal state tied to the lat
     assert.equal(activeHead.atHead, true)
     assert.equal(activeHead.terminalRunId, null)
 
-    await store.agUi.ingest("tenant_a", "session_runs", [
+    await agUi.ingest("tenant_a", "session_runs", [
       agentSource({
         id: "run_2_finished",
         sequence: 4,
@@ -1893,17 +1923,17 @@ integrationTest("keeps replay page boundaries and terminal state tied to the lat
         runId: secondRun,
       }),
     ])
-    const terminalHead = await store.agUi.replay("tenant_a", "session_runs", activeHead.frames.at(-1).cursor, 1)
+    const terminalHead = await agUi.replay("tenant_a", "session_runs", activeHead.frames.at(-1).cursor, 1)
     assert.equal(terminalHead.kind, "page")
     assert.equal(terminalHead.atHead, true)
     assert.equal(terminalHead.terminalRunId, secondRun)
 
-    const byteBounded = await store.agUi.replay("tenant_a", "session_runs", null, 100, 1)
+    const byteBounded = await agUi.replay("tenant_a", "session_runs", null, 100, 1)
     assert.equal(byteBounded.kind, "page")
     assert.equal(byteBounded.frames.length, 1)
     assert.equal(byteBounded.atHead, false)
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -1913,18 +1943,21 @@ integrationTest("returns a self-consistent replay snapshot while a new run is ap
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const oldRun = await submitAndAdmit(store, pool, {
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    const oldRun = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
       tenantId: "tenant_a",
       sessionId: "session_append",
       ownerId: "owner_append",
       suffix: "append_old",
     })
-    await store.agUi.ingest("tenant_a", "session_append", [
+    await agUi.ingest("tenant_a", "session_append", [
       agentSource({
         id: "old_started",
         sequence: 1,
@@ -1942,15 +1975,15 @@ integrationTest("returns a self-consistent replay snapshot while a new run is ap
         runId: oldRun,
       }),
     ])
-    const newRun = await submitAndAdmit(store, pool, {
+    const newRun = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
       tenantId: "tenant_a",
       sessionId: "session_append",
       ownerId: "owner_append",
       suffix: "append_new",
     })
     const [page] = await Promise.all([
-      store.agUi.replay("tenant_a", "session_append", null, 100),
-      store.agUi.ingest("tenant_a", "session_append", [
+      agUi.replay("tenant_a", "session_append", null, 100),
+      agUi.ingest("tenant_a", "session_append", [
         agentSource({
           id: "started_new",
           sequence: 3,
@@ -1965,7 +1998,7 @@ integrationTest("returns a self-consistent replay snapshot while a new run is ap
     const visibleRunIds = page.frames.filter((frame) => frame.eventType === "RUN_STARTED").map((frame) => frame.payload.metadata.kokoro.run_id)
     if (page.atHead && visibleRunIds.at(-1) === newRun) assert.equal(page.terminalRunId, null)
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -2065,7 +2098,7 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
@@ -2074,9 +2107,13 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
        VALUES ($1, $2, $3, $4)`,
       ["session_fenced", "tenant_a", "user_a", "Fenced projection"],
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const turn = await store.chatTurnService.submit({
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    await ownerDatabase.ready()
+    const turn = await chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_fenced",
       subjectId: "user_a",
@@ -2086,18 +2123,18 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
       content: "start",
     })
     assert.ok(turn)
-    const [dispatch] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [dispatch] = await agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_fenced_dispatch",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(dispatch.runId, turn.run_id)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(dispatch), true)
-    assert.equal(await store.agUiConsumers.seedConsumers(10), 0)
+    assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(dispatch), true)
+    assert.equal(await agUiConsumers.seedConsumers(10), 0)
     const now = new Date()
     const leaseUntil = new Date(now.getTime() + 60_000).toISOString()
-    const firstClaims = await store.agUiConsumers.claimConsumers({
+    const firstClaims = await agUiConsumers.claimConsumers({
       workerId: "worker_a",
       now: now.toISOString(),
       leaseUntil,
@@ -2106,7 +2143,7 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
     assert.equal(firstClaims.length, 1)
     assert.equal(firstClaims[0].failureCount, 0)
     assert.deepEqual(
-      await store.agUiConsumers.claimConsumers({
+      await agUiConsumers.claimConsumers({
         workerId: "worker_b",
         now: now.toISOString(),
         leaseUntil,
@@ -2115,7 +2152,7 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
       [],
     )
     const firstLease = firstClaims[0]
-    await store.agUi.ingest(
+    await agUi.ingest(
       "tenant_a",
       "session_fenced",
       [
@@ -2130,9 +2167,9 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
       ],
       firstLease,
     )
-    assert.equal(await store.agUiConsumers.markConsumerRetryable(firstLease, now.toISOString(), "source_gap", now.toISOString()), true)
+    assert.equal(await agUiConsumers.markConsumerRetryable(firstLease, now.toISOString(), "source_gap", now.toISOString()), true)
 
-    const secondClaims = await store.agUiConsumers.claimConsumers({
+    const secondClaims = await agUiConsumers.claimConsumers({
       workerId: "worker_b",
       now: new Date(now.getTime() + 1).toISOString(),
       leaseUntil: new Date(now.getTime() + 60_001).toISOString(),
@@ -2142,7 +2179,7 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
     assert.ok(secondClaims[0].fence > firstLease.fence)
     assert.equal(secondClaims[0].failureCount, 1)
     await assert.rejects(
-      store.agUi.ingest(
+      agUi.ingest(
         "tenant_a",
         "session_fenced",
         [
@@ -2175,7 +2212,7 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
         agent_failure_retryable: null,
       },
     )
-    const committed = await store.agUi.ingest(
+    const committed = await agUi.ingest(
       "tenant_a",
       "session_fenced",
       [
@@ -2208,8 +2245,8 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
       },
     )
     const settledAt = new Date(now.getTime() + 2)
-    assert.equal(await store.agUiConsumers.markConsumerProgress(secondClaims[0], settledAt.toISOString(), settledAt.toISOString()), true)
-    const recovered = await store.agUiConsumers.claimConsumers({
+    assert.equal(await agUiConsumers.markConsumerProgress(secondClaims[0], settledAt.toISOString(), settledAt.toISOString()), true)
+    const recovered = await agUiConsumers.claimConsumers({
       workerId: "worker_c",
       now: new Date(now.getTime() + 3).toISOString(),
       leaseUntil: new Date(now.getTime() + 60_003).toISOString(),
@@ -2218,7 +2255,7 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
     assert.equal(recovered.length, 1)
     assert.equal(recovered[0].failureCount, 0)
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -2228,13 +2265,19 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    const publicShareService = new PublicShareApplicationService(new PostgresPublicShareRepository(ownerDatabase))
     await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ('session_gc', 'tenant_a', 'owner_gc', 'GC snapshot')")
-    const latestRun = await submitAndAdmit(store, pool, {
+    const latestRun = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
       tenantId: "tenant_a",
       sessionId: "session_gc",
       ownerId: "owner_gc",
@@ -2250,7 +2293,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
                1, repeat('a', 64), 'asset_gc', 'document', repeat('b', 64),
                'GC report', 'text/plain', 8, '2026-09-28T00:00:00Z')`,
     )
-    await store.agUi.ingest("tenant_a", "session_gc", [
+    await agUi.ingest("tenant_a", "session_gc", [
       agentSource({
         id: "gc_1",
         sequence: 1,
@@ -2315,9 +2358,9 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
        VALUES ('message_failure_gc', 'tenant_a', 'session_gc', 'run_1', 'assistant', 'partial', 'failed', 1,
                'dependency_unavailable', TRUE)`,
     )
-    const share = await store.chatService.createShare("tenant_a", "owner_gc", "session_gc")
+    const share = await chatService.createShare("tenant_a", "owner_gc", "session_gc")
     assert.ok(share)
-    const before = await store.agUi.replay("tenant_a", "session_gc", null, 100)
+    const before = await agUi.replay("tenant_a", "session_gc", null, 100)
     assert.equal(before.kind, "page")
     assert.equal(before.frames.length, 8)
     assert.deepEqual(
@@ -2344,7 +2387,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
       ["tenant_a", "session_gc"],
     )
 
-    const collected = await store.agUiConsumers.collectGarbage({
+    const collected = await agUiConsumers.collectGarbage({
       now: new Date().toISOString(),
       retentionMs: 1,
       tombstoneRetentionMs: 24 * 60 * 60 * 1000,
@@ -2352,8 +2395,8 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
     })
     assert.equal(collected.framesDeleted, 3)
     assert.equal(collected.tombstonesInserted, 3)
-    assert.deepEqual(await store.agUi.replay("tenant_a", "session_gc", expiredCursor, 100), { kind: "expired_cursor" })
-    const refreshed = await store.chatService.snapshot("tenant_a", "owner_gc", "session_gc", undefined)
+    assert.deepEqual(await agUi.replay("tenant_a", "session_gc", expiredCursor, 100), { kind: "expired_cursor" })
+    const refreshed = await chatService.snapshot("tenant_a", "owner_gc", "session_gc", undefined)
     assert.deepEqual(
       refreshed.deliveries.map(({ conversation_id, artifact_id }) => [conversation_id, artifact_id]),
       [["session_gc", "artifact_gc"]],
@@ -2362,7 +2405,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
       refreshed.messages.map(({ failure }) => failure),
       [{ source: "agent", code: "dependency_unavailable", retryable: true }],
     )
-    const listed = await store.chatService.listMessages("tenant_a", "owner_gc", "session_gc", 100, null)
+    const listed = await chatService.listMessages("tenant_a", "owner_gc", "session_gc", 100, null)
     assert.ok(listed)
     assert.deepEqual(
       listed.messages.map(({ run_id, status, failure }) => ({
@@ -2382,7 +2425,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
         },
       ],
     )
-    const shared = await store.publicShareService.listMessages(share.shareId, "tenant_a", "session_gc", 100)
+    const shared = await publicShareService.listMessages(share.shareId, "tenant_a", "session_gc", 100)
     assert.ok(shared)
     assert.deepEqual(
       shared.messages.map(({ run_id, status, failure }) => ({
@@ -2416,7 +2459,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
         terminal_run_id: latestRun,
       },
     ])
-    const retained = await store.agUi.replay("tenant_a", "session_gc", null, 100)
+    const retained = await agUi.replay("tenant_a", "session_gc", null, 100)
     assert.equal(retained.kind, "page")
     assert.deepEqual(
       retained.frames.map((frame) => frame.eventType),
@@ -2427,17 +2470,17 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
       false,
     )
     assert.equal(retained.frames.at(-1).cursor, headCursor)
-    assert.equal((await store.agUi.status("tenant_a", "session_gc")).retentionFloorSequence, 3)
+    assert.equal((await agUi.status("tenant_a", "session_gc")).retentionFloorSequence, 3)
 
-    await store.agUiConsumers.collectGarbage({
+    await agUiConsumers.collectGarbage({
       now: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
       retentionMs: 1,
       tombstoneRetentionMs: 24 * 60 * 60 * 1000,
       batchSize: 100,
     })
-    assert.deepEqual(await store.agUi.replay("tenant_a", "session_gc", expiredCursor, 100), { kind: "invalid_cursor" })
+    assert.deepEqual(await agUi.replay("tenant_a", "session_gc", expiredCursor, 100), { kind: "invalid_cursor" })
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -2447,18 +2490,22 @@ integrationTest("skips GC when interleaved runs would leave an event without its
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const runB = await submitAndAdmit(store, pool, {
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    const runB = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
       tenantId: "tenant_a",
       sessionId: "session_interleaved_gc",
       ownerId: "owner_interleaved_gc",
       suffix: "interleaved_gc_b",
     })
-    await store.agUi.ingest("tenant_a", "session_interleaved_gc", [
+    await agUi.ingest("tenant_a", "session_interleaved_gc", [
       agentSource({
         id: "run_a_started",
         sequence: 1,
@@ -2499,7 +2546,7 @@ integrationTest("skips GC when interleaved runs would leave an event without its
       ["tenant_a", "session_interleaved_gc"],
     )
 
-    const collected = await store.agUiConsumers.collectGarbage({
+    const collected = await agUiConsumers.collectGarbage({
       now: new Date().toISOString(),
       retentionMs: 1,
       tombstoneRetentionMs: 24 * 60 * 60 * 1000,
@@ -2507,7 +2554,7 @@ integrationTest("skips GC when interleaved runs would leave an event without its
     })
 
     assert.equal(collected.framesDeleted, 0)
-    const retained = await store.agUi.replay("tenant_a", "session_interleaved_gc", null, 100)
+    const retained = await agUi.replay("tenant_a", "session_interleaved_gc", null, 100)
     assert.equal(retained.kind, "page")
     assert.equal(retained.frames[0].payload.name, "kokoro.run.queued")
     assert.deepEqual(retained.frames[0].payload.value, {
@@ -2519,7 +2566,7 @@ integrationTest("skips GC when interleaved runs would leave an event without its
       ["CUSTOM", "RUN_STARTED", "RUN_STARTED", "RUN_FINISHED", "RUN_FINISHED"],
     )
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -2529,7 +2576,7 @@ integrationTest("garbage collection skips ineligible streams instead of starving
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
@@ -2541,9 +2588,11 @@ integrationTest("garbage collection skips ineligible streams instead of starving
     await pool.query(
       "INSERT INTO bff_conversation (tenant_id,conversation_id,owner_id,title) VALUES ('tenant_a','session_gc_later','user_gc_later','GC eligible parent')",
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.agUiConsumers.registerConsumer("tenant_a", "session_gc_later", "user_gc_later")
-    await store.agUi.ingest("tenant_a", "session_gc_later", [
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    await agUiConsumers.registerConsumer("tenant_a", "session_gc_later", "user_gc_later")
+    await agUi.ingest("tenant_a", "session_gc_later", [
       agentSource({
         id: "gc_later_1",
         sequence: 1,
@@ -2576,7 +2625,7 @@ integrationTest("garbage collection skips ineligible streams instead of starving
       ["tenant_a", "session_gc_later"],
     )
 
-    const collected = await store.agUiConsumers.collectGarbage({
+    const collected = await agUiConsumers.collectGarbage({
       now: new Date().toISOString(),
       retentionMs: 1,
       tombstoneRetentionMs: 24 * 60 * 60 * 1000,
@@ -2586,7 +2635,7 @@ integrationTest("garbage collection skips ineligible streams instead of starving
     assert.equal(collected.streamsScanned, 1)
     assert.equal(collected.framesDeleted, 2)
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -2596,7 +2645,7 @@ integrationTest("consumer claims stop when the owning BFF conversation is delete
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
@@ -2604,19 +2653,22 @@ integrationTest("consumer claims stop when the owning BFF conversation is delete
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_deleted', 'tenant_a', 'user_a', 'Deleted conversation')`,
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.agUiConsumers.registerConsumer("tenant_a", "session_deleted", "user_a")
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    await agUiConsumers.registerConsumer("tenant_a", "session_deleted", "user_a")
     const now = new Date()
-    const activeClaims = await store.agUiConsumers.claimConsumers({
+    const activeClaims = await agUiConsumers.claimConsumers({
       workerId: "worker_before_delete",
       now: now.toISOString(),
       leaseUntil: new Date(now.getTime() + 60_000).toISOString(),
       limit: 10,
     })
     assert.equal(activeClaims.length, 1)
-    assert.equal(await store.chatService.deleteConversation("tenant_a", "user_a", "session_deleted", "delete-conversation-integration"), true)
+    assert.equal(await chatService.deleteConversation("tenant_a", "user_a", "session_deleted", "delete-conversation-integration"), true)
     await assert.rejects(
-      store.agUi.ingest(
+      agUi.ingest(
         "tenant_a",
         "session_deleted",
         [
@@ -2633,7 +2685,7 @@ integrationTest("consumer claims stop when the owning BFF conversation is delete
       ),
       /consumer lease was lost/u,
     )
-    const claims = await store.agUiConsumers.claimConsumers({
+    const claims = await agUiConsumers.claimConsumers({
       workerId: "worker_deleted",
       now: new Date(now.getTime() + 1).toISOString(),
       leaseUntil: new Date(now.getTime() + 60_001).toISOString(),
@@ -2642,7 +2694,7 @@ integrationTest("consumer claims stop when the owning BFF conversation is delete
 
     assert.deepEqual(claims, [])
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -2652,7 +2704,7 @@ integrationTest("registering a newer run clears the prior terminal before source
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
@@ -2660,8 +2712,12 @@ integrationTest("registering a newer run clears the prior terminal before source
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_next_run', 'tenant_a', 'user_a', 'Next run')`,
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const oldTurn = await store.chatTurnService.submit({
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    const oldTurn = await chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_next_run",
       subjectId: "user_a",
@@ -2671,15 +2727,15 @@ integrationTest("registering a newer run clears the prior terminal before source
       content: "Finish the old run",
     })
     assert.ok(oldTurn)
-    const [oldClaim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [oldClaim] = await agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_old_run",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(oldClaim.runId, oldTurn.run_id)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(oldClaim), true)
-    await store.agUi.ingest("tenant_a", "session_next_run", [
+    assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(oldClaim), true)
+    await agUi.ingest("tenant_a", "session_next_run", [
       agentSource({
         id: "old_run_started",
         sequence: 1,
@@ -2697,11 +2753,11 @@ integrationTest("registering a newer run clears the prior terminal before source
         runId: oldTurn.run_id,
       }),
     ])
-    const before = await store.agUi.replay("tenant_a", "session_next_run", null, 100)
+    const before = await agUi.replay("tenant_a", "session_next_run", null, 100)
     assert.equal(before.kind, "page")
     assert.equal(before.terminalRunId, oldTurn.run_id)
 
-    const admitted = await store.chatTurnService.submit({
+    const admitted = await chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_next_run",
       subjectId: "user_a",
@@ -2713,7 +2769,7 @@ integrationTest("registering a newer run clears the prior terminal before source
     assert.ok(admitted)
     const newRunId = admitted.run_id
 
-    const awaitingSource = await store.agUi.replay("tenant_a", "session_next_run", before.frames.at(-1).cursor, 100)
+    const awaitingSource = await agUi.replay("tenant_a", "session_next_run", before.frames.at(-1).cursor, 100)
     assert.equal(awaitingSource.kind, "page")
     assert.equal(awaitingSource.terminalRunId, null)
     assert.deepEqual(
@@ -2729,24 +2785,24 @@ integrationTest("registering a newer run clears the prior terminal before source
       (await pool.query("SELECT terminal_run_id FROM bff_agui_stream WHERE tenant_id='tenant_a' AND session_id='session_next_run'")).rows[0].terminal_run_id,
       oldTurn.run_id,
     )
-    assert.deepEqual((await store.chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)).execution_head, {
+    assert.deepEqual((await chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)).execution_head, {
       run_id: newRunId,
       state: "queued",
       pending_pauses: [],
     })
-    const queuedSnapshot = await store.chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)
+    const queuedSnapshot = await chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)
     assert.equal(queuedSnapshot.active_run, undefined)
     assert.equal(queuedSnapshot.execution_process.run_id, oldTurn.run_id)
-    const [newClaim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [newClaim] = await agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_new_run",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(newClaim.runId, newRunId)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(newClaim), true)
-    assert.equal((await store.agUi.replay("tenant_a", "session_next_run", before.frames.at(-1).cursor, 100)).terminalRunId, null)
-    await store.agUi.ingest("tenant_a", "session_next_run", [
+    assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(newClaim), true)
+    assert.equal((await agUi.replay("tenant_a", "session_next_run", before.frames.at(-1).cursor, 100)).terminalRunId, null)
+    await agUi.ingest("tenant_a", "session_next_run", [
       agentSource({
         id: "new_run_started",
         sequence: 3,
@@ -2756,14 +2812,14 @@ integrationTest("registering a newer run clears the prior terminal before source
         runId: newRunId,
       }),
     ])
-    assert.deepEqual((await store.chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)).execution_head, {
+    assert.deepEqual((await chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)).execution_head, {
       run_id: newRunId,
       state: "active",
       pending_pauses: [],
     })
-    assert.equal((await store.chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)).execution_process.run_id, newRunId)
+    assert.equal((await chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)).execution_process.run_id, newRunId)
     await assert.rejects(
-      store.agUi.ingest("tenant_a", "session_next_run", [
+      agUi.ingest("tenant_a", "session_next_run", [
         agentSource({
           id: "late_old_started_while_active",
           sequence: 4,
@@ -2775,7 +2831,7 @@ integrationTest("registering a newer run clears the prior terminal before source
       ]),
       /AGUI_POST_TERMINAL_SOURCE/u,
     )
-    assert.deepEqual((await store.chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)).execution_head, {
+    assert.deepEqual((await chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)).execution_head, {
       run_id: newRunId,
       state: "active",
       pending_pauses: [],
@@ -2791,7 +2847,7 @@ integrationTest("registering a newer run clears the prior terminal before source
       (SELECT to_jsonb(row) FROM bff_agui_stream AS row WHERE tenant_id='tenant_a' AND session_id='session_next_run') AS stream`
     const beforeConflict = (await pool.query(conflictFactsQuery)).rows
     await assert.rejects(
-      store.agUi.ingest("tenant_a", "session_next_run", [
+      agUi.ingest("tenant_a", "session_next_run", [
         agentSource({
           id: "new_run_reobserved",
           sequence: 4,
@@ -2804,7 +2860,7 @@ integrationTest("registering a newer run clears the prior terminal before source
       /AGUI_PROCESS_START_IDENTITY_CONFLICT/u,
     )
     assert.deepEqual((await pool.query(conflictFactsQuery)).rows, beforeConflict)
-    await store.agUi.ingest("tenant_a", "session_next_run", [
+    await agUi.ingest("tenant_a", "session_next_run", [
       agentSource({
         id: "new_run_finished",
         sequence: 4,
@@ -2815,7 +2871,7 @@ integrationTest("registering a newer run clears the prior terminal before source
       }),
     ])
     await assert.rejects(
-      store.agUi.ingest("tenant_a", "session_next_run", [
+      agUi.ingest("tenant_a", "session_next_run", [
         agentSource({
           id: "late_old_started_after_terminal",
           sequence: 5,
@@ -2827,9 +2883,9 @@ integrationTest("registering a newer run clears the prior terminal before source
       ]),
       /AGUI_POST_TERMINAL_SOURCE/u,
     )
-    assert.equal((await store.chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)).active_run, undefined)
+    assert.equal((await chatService.snapshot("tenant_a", "user_a", "session_next_run", undefined)).active_run, undefined)
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -2839,7 +2895,7 @@ integrationTest("rejects blank markers and a foreign terminal without rejecting 
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
@@ -2849,22 +2905,23 @@ integrationTest("rejects blank markers and a foreign terminal without rejecting 
     await pool.query(
       `INSERT INTO bff_agui_stream (tenant_id, session_id, consumer_subject_id, expected_run_id, latest_run_id, terminal_run_id) VALUES ('tenant_a', 'session_invalid_markers', 'user_a', 'run_expected', '', NULL)`,
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await assert.rejects(store.chatService.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    await assert.rejects(chatService.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
     await pool.query(
       `UPDATE bff_agui_stream SET latest_run_id = 'run_expected', terminal_run_id = ' ' WHERE tenant_id = 'tenant_a' AND session_id = 'session_invalid_markers'`,
     )
-    await assert.rejects(store.chatService.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
+    await assert.rejects(chatService.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
     await pool.query(
       `UPDATE bff_agui_stream SET latest_run_id = 'run_expected', terminal_run_id = 'run_foreign' WHERE tenant_id = 'tenant_a' AND session_id = 'session_invalid_markers'`,
     )
-    await assert.rejects(store.chatService.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
+    await assert.rejects(chatService.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
     await pool.query(
       `UPDATE bff_agui_stream SET expected_run_id = NULL, latest_run_id = 'run_history', terminal_run_id = 'run_history' WHERE tenant_id = 'tenant_a' AND session_id = 'session_invalid_markers'`,
     )
-    assert.equal((await store.chatService.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined)).active_run, undefined)
+    assert.equal((await chatService.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined)).active_run, undefined)
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -2874,7 +2931,7 @@ integrationTest("registering a newer run fences a stale projector commit", async
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   let database = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -2883,17 +2940,21 @@ integrationTest("registering a newer run fences a stale projector commit", async
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_run_fence', 'tenant_a', 'user_a', 'Run fence')`,
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
     database = new PostgresBffDatabase(postgresUrl, redisUrl)
     const projection = new PostgresAgUiProjectionRepository(database)
-    const oldRun = await submitAndAdmit(store, pool, {
+    const oldRun = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
       tenantId: "tenant_a",
       sessionId: "session_run_fence",
       ownerId: "user_a",
       suffix: "stale_old",
     })
     const now = new Date()
-    const [lease] = await store.agUiConsumers.claimConsumers({
+    const [lease] = await agUiConsumers.claimConsumers({
       workerId: "worker_stale_run",
       now: now.toISOString(),
       leaseUntil: new Date(now.getTime() + 60_000).toISOString(),
@@ -2901,7 +2962,7 @@ integrationTest("registering a newer run fences a stale projector commit", async
     })
     assert.ok(lease)
     const stale = await projection.readStream("tenant_a", "session_run_fence")
-    await store.agUi.ingest("tenant_a", "session_run_fence", [
+    await agUi.ingest("tenant_a", "session_run_fence", [
       agentSource({
         id: "old_started_before_fence",
         sequence: 1,
@@ -2919,7 +2980,7 @@ integrationTest("registering a newer run fences a stale projector commit", async
         runId: oldRun,
       }),
     ])
-    const newRun = await submitAndAdmit(store, pool, {
+    const newRun = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
       tenantId: "tenant_a",
       sessionId: "session_run_fence",
       ownerId: "user_a",
@@ -2967,7 +3028,7 @@ integrationTest("registering a newer run fences a stale projector commit", async
     assert.equal(current.expectedRunId, newRun)
     assert.equal(current.latestRunId, oldRun)
     assert.equal(current.terminalRunId, null)
-    const replay = await store.agUi.replay("tenant_a", "session_run_fence", null, 100)
+    const replay = await agUi.replay("tenant_a", "session_run_fence", null, 100)
     assert.equal(replay.kind, "page")
     assert.deepEqual(
       replay.frames.map((frame) => frame.eventType),
@@ -2984,7 +3045,7 @@ integrationTest("registering a newer run fences a stale projector commit", async
       dispatch_sequence: "3",
     })
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     if (database !== null) await database.close().catch(() => undefined)
     await pool.end()
   }
@@ -2995,7 +3056,7 @@ integrationTest("consumer claims use the PostgreSQL clock instead of a skewed wo
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
@@ -3003,10 +3064,11 @@ integrationTest("consumer claims use the PostgreSQL clock instead of a skewed wo
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_clock_fence', 'tenant_a', 'user_a', 'Clock fence')`,
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.agUiConsumers.registerConsumer("tenant_a", "session_clock_fence", "user_a")
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    await agUiConsumers.registerConsumer("tenant_a", "session_clock_fence", "user_a")
     const now = new Date()
-    const first = await store.agUiConsumers.claimConsumers({
+    const first = await agUiConsumers.claimConsumers({
       workerId: "worker_clock_a",
       now: now.toISOString(),
       leaseUntil: new Date(now.getTime() + 60_000).toISOString(),
@@ -3015,7 +3077,7 @@ integrationTest("consumer claims use the PostgreSQL clock instead of a skewed wo
     assert.equal(first.length, 1)
 
     const skewed = new Date(now.getTime() + 24 * 60 * 60 * 1000)
-    const second = await store.agUiConsumers.claimConsumers({
+    const second = await agUiConsumers.claimConsumers({
       workerId: "worker_clock_b",
       now: skewed.toISOString(),
       leaseUntil: new Date(skewed.getTime() + 60_000).toISOString(),
@@ -3023,7 +3085,7 @@ integrationTest("consumer claims use the PostgreSQL clock instead of a skewed wo
     })
     assert.deepEqual(second, [])
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -3033,7 +3095,7 @@ integrationTest("a new lease cannot publish an old run terminal over the expecte
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
@@ -3041,8 +3103,12 @@ integrationTest("a new lease cannot publish an old run terminal over the expecte
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_expected_run', 'tenant_a', 'user_a', 'Expected run')`,
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const turn = await store.chatTurnService.submit({
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    const turn = await chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_expected_run",
       subjectId: "user_a",
@@ -3052,16 +3118,16 @@ integrationTest("a new lease cannot publish an old run terminal over the expecte
       content: "Finish the current run",
     })
     assert.ok(turn)
-    const [dispatch] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [dispatch] = await agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_expected_run_dispatch",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(dispatch.runId, turn.run_id)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(dispatch), true)
+    assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(dispatch), true)
     const now = new Date()
-    const [lease] = await store.agUiConsumers.claimConsumers({
+    const [lease] = await agUiConsumers.claimConsumers({
       workerId: "worker_expected_run",
       now: now.toISOString(),
       leaseUntil: new Date(now.getTime() + 60_000).toISOString(),
@@ -3069,7 +3135,7 @@ integrationTest("a new lease cannot publish an old run terminal over the expecte
     })
     assert.ok(lease)
 
-    await store.agUi.ingest(
+    await agUi.ingest(
       "tenant_a",
       "session_expected_run",
       [
@@ -3092,11 +3158,11 @@ integrationTest("a new lease cannot publish an old run terminal over the expecte
       ],
       lease,
     )
-    const oldCatchup = await store.agUi.replay("tenant_a", "session_expected_run", null, 100)
+    const oldCatchup = await agUi.replay("tenant_a", "session_expected_run", null, 100)
     assert.equal(oldCatchup.kind, "page")
     assert.equal(oldCatchup.terminalRunId, null)
 
-    await store.agUi.ingest(
+    await agUi.ingest(
       "tenant_a",
       "session_expected_run",
       [
@@ -3119,11 +3185,11 @@ integrationTest("a new lease cannot publish an old run terminal over the expecte
       ],
       lease,
     )
-    const expected = await store.agUi.replay("tenant_a", "session_expected_run", null, 100)
+    const expected = await agUi.replay("tenant_a", "session_expected_run", null, 100)
     assert.equal(expected.kind, "page")
     assert.equal(expected.terminalRunId, turn.run_id)
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -3133,7 +3199,7 @@ integrationTest("the expected run can finish while source runs are interleaved",
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
@@ -3141,8 +3207,12 @@ integrationTest("the expected run can finish while source runs are interleaved",
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_expected_interleaved', 'tenant_a', 'user_a', 'Expected interleaved run')`,
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const turn = await store.chatTurnService.submit({
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    const turn = await chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_expected_interleaved",
       subjectId: "user_a",
@@ -3152,16 +3222,16 @@ integrationTest("the expected run can finish while source runs are interleaved",
       content: "Finish interleaved run",
     })
     assert.ok(turn)
-    const [dispatch] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [dispatch] = await agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_expected_interleaved_dispatch",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(dispatch.runId, turn.run_id)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(dispatch), true)
+    assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(dispatch), true)
     const now = new Date()
-    const [lease] = await store.agUiConsumers.claimConsumers({
+    const [lease] = await agUiConsumers.claimConsumers({
       workerId: "worker_expected_interleaved",
       now: now.toISOString(),
       leaseUntil: new Date(now.getTime() + 60_000).toISOString(),
@@ -3196,7 +3266,7 @@ integrationTest("the expected run can finish while source runs are interleaved",
       ])
     ).rows[0]
     await assert.rejects(
-      store.agUi.ingest(
+      agUi.ingest(
         "tenant_a",
         "session_expected_interleaved",
         [
@@ -3224,7 +3294,7 @@ integrationTest("the expected run can finish while source runs are interleaved",
       ),
       /AG-UI Agent source response did not match its contract/u,
     )
-    const afterInvalid = await store.agUi.status("tenant_a", "session_expected_interleaved")
+    const afterInvalid = await agUi.status("tenant_a", "session_expected_interleaved")
     assert.equal(afterInvalid.sourceHighWatermark, 0)
     assert.deepEqual(
       (
@@ -3249,7 +3319,7 @@ integrationTest("the expected run can finish while source runs are interleaved",
     )
 
     assert.deepEqual(await facts(), factsBeforeInvalid)
-    await store.agUi.ingest(
+    await agUi.ingest(
       "tenant_a",
       "session_expected_interleaved",
       [
@@ -3280,7 +3350,7 @@ integrationTest("the expected run can finish while source runs are interleaved",
       ],
       lease,
     )
-    const interleaved = await store.agUi.status("tenant_a", "session_expected_interleaved")
+    const interleaved = await agUi.status("tenant_a", "session_expected_interleaved")
     assert.equal(interleaved.sourceHighWatermark, 3)
     assert.deepEqual(
       (
@@ -3298,7 +3368,7 @@ integrationTest("the expected run can finish while source runs are interleaved",
         },
       ],
     )
-    await store.agUi.ingest(
+    await agUi.ingest(
       "tenant_a",
       "session_expected_interleaved",
       [
@@ -3314,7 +3384,7 @@ integrationTest("the expected run can finish while source runs are interleaved",
       lease,
     )
 
-    const replay = await store.agUi.replay("tenant_a", "session_expected_interleaved", null, 100)
+    const replay = await agUi.replay("tenant_a", "session_expected_interleaved", null, 100)
     assert.equal(replay.kind, "page")
     assert.equal(replay.terminalRunId, turn.run_id)
     assert.deepEqual(
@@ -3333,7 +3403,7 @@ integrationTest("the expected run can finish while source runs are interleaved",
       ],
     )
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -3343,7 +3413,7 @@ integrationTest("a skewed worker can read and settle a database-clock lease", as
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
@@ -3351,13 +3421,15 @@ integrationTest("a skewed worker can read and settle a database-clock lease", as
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_clock_completion', 'tenant_a', 'user_a', 'Clock completion')`,
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.agUiConsumers.registerConsumer("tenant_a", "session_clock_completion", "user_a")
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    await agUiConsumers.registerConsumer("tenant_a", "session_clock_completion", "user_a")
     let sourceReads = 0
     const skewedNow = new Date(Date.now() + 24 * 60 * 60 * 1000)
     const runner = new AgUiProjectorRunner(
-      store.agUi,
-      store.agUiConsumers,
+      agUi,
+      agUiConsumers,
       {
         read: async () => {
           sourceReads += 1
@@ -3382,7 +3454,7 @@ integrationTest("a skewed worker can read and settle a database-clock lease", as
     assert.equal(sourceReads, 1)
     assert.equal(result.consumersSucceeded, 1)
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -3392,7 +3464,7 @@ integrationTest("a skewed worker releases a lease back to the PostgreSQL clock",
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
@@ -3400,10 +3472,11 @@ integrationTest("a skewed worker releases a lease back to the PostgreSQL clock",
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
        VALUES ('session_clock_release', 'tenant_a', 'user_a', 'Clock release')`,
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.agUiConsumers.registerConsumer("tenant_a", "session_clock_release", "user_a")
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    await agUiConsumers.registerConsumer("tenant_a", "session_clock_release", "user_a")
     const now = new Date()
-    const [lease] = await store.agUiConsumers.claimConsumers({
+    const [lease] = await agUiConsumers.claimConsumers({
       workerId: "worker_clock_release_a",
       now: now.toISOString(),
       leaseUntil: new Date(now.getTime() + 60_000).toISOString(),
@@ -3412,9 +3485,9 @@ integrationTest("a skewed worker releases a lease back to the PostgreSQL clock",
     assert.ok(lease)
 
     const skewedNow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
-    assert.equal(await store.agUiConsumers.releaseConsumer(lease, skewedNow), true)
+    assert.equal(await agUiConsumers.releaseConsumer(lease, skewedNow), true)
 
-    const reclaimed = await store.agUiConsumers.claimConsumers({
+    const reclaimed = await agUiConsumers.claimConsumers({
       workerId: "worker_clock_release_b",
       now: now.toISOString(),
       leaseUntil: new Date(now.getTime() + 60_000).toISOString(),
@@ -3423,7 +3496,7 @@ integrationTest("a skewed worker releases a lease back to the PostgreSQL clock",
     assert.equal(reclaimed.length, 1)
     assert.equal(reclaimed[0]?.leaseOwner, "worker_clock_release_b")
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -3442,7 +3515,7 @@ integrationTest(
     const tenantId = "r43_rr_" + suffix
     const sessionId = "conv_" + randomUUID()
     const ownerId = "r43_rr_owner"
-    let store = null
+    let ownerDatabase = null
     let reader = null
     let readerReleased = false
     let pending = null
@@ -3470,10 +3543,14 @@ integrationTest(
     try {
       await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
       await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
+      ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+      const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+      const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+      const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+      const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+      await ownerDatabase.ready()
       const submit = (name) =>
-        store.chatTurnService.submit({
+        chatTurnService.submit({
           tenantId,
           conversationId: sessionId,
           subjectId: ownerId,
@@ -3486,15 +3563,15 @@ integrationTest(
       const b = await submit("B")
       assert.ok(a)
       assert.ok(b)
-      const claims = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      const claims = await agentDispatchOutbox.claimAgentDispatchOutbox({
         workerId: "r43_rr_worker_" + suffix,
         limit: 1,
         leaseDurationMs: 5000,
         maxAttempts: 8,
       })
       assert.equal(claims[0]?.runId, a.run_id, "isolated fixture must claim A through the production repository")
-      assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claims[0]), true)
-      await store.agUi.ingest(tenantId, sessionId, [
+      assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(claims[0]), true)
+      await agUi.ingest(tenantId, sessionId, [
         agentSource({
           id: "r43_rr_started_" + suffix,
           sequence: 1,
@@ -3504,7 +3581,7 @@ integrationTest(
           payload: { run_id: a.run_id },
         }),
       ])
-      const before = await store.chatService.snapshot(tenantId, ownerId, sessionId, undefined)
+      const before = await chatService.snapshot(tenantId, ownerId, sessionId, undefined)
       assert.ok(before)
       assert.match(before.event_watermark, /^agui_[0-9a-f]{32}$/u)
       reader = await pool.connect()
@@ -3545,7 +3622,7 @@ integrationTest(
       )
       // The real reader's RR transaction stays open; a separate production connection commits.
       await bounded(
-        store.agUi.ingest(tenantId, sessionId, [
+        agUi.ingest(tenantId, sessionId, [
           agentSource({
             id: "r43_rr_terminal_" + suffix,
             sequence: 2,
@@ -3557,7 +3634,7 @@ integrationTest(
         ]),
         "independent production terminal writer timed out",
       )
-      const fresh = await store.chatService.snapshot(tenantId, ownerId, sessionId, undefined)
+      const fresh = await chatService.snapshot(tenantId, ownerId, sessionId, undefined)
       const dispatches = await pool.query(
         "SELECT run_id,status FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 ORDER BY conversation_dispatch_seq,outbox_id",
         [tenantId, sessionId],
@@ -3586,7 +3663,7 @@ integrationTest(
       const freshAssistant = fresh.messages?.find((message) => message.message_id === a.assistant_message_id)
       assert.ok(freshAssistant, "new snapshot must retain A's terminal assistant identity")
       assert.equal(freshAssistant.status, "completed")
-      const replay = await store.agUi.replay(tenantId, sessionId, before.event_watermark, 100)
+      const replay = await agUi.replay(tenantId, sessionId, before.event_watermark, 100)
       assert.equal(replay.kind, "page")
       assert.deepEqual(
         replay.frames.map(({ eventType }) => eventType),
@@ -3600,7 +3677,7 @@ integrationTest(
       })
       assert.equal(replay.frames.at(-1).cursor, fresh.event_watermark)
       assert.equal(new Set(replay.frames.map(({ cursor }) => cursor)).size, 2)
-      const duplicate = await store.agUi.ingest(tenantId, sessionId, [
+      const duplicate = await agUi.ingest(tenantId, sessionId, [
         agentSource({
           id: "r43_rr_terminal_" + suffix,
           sequence: 2,
@@ -3611,12 +3688,12 @@ integrationTest(
         }),
       ])
       assert.equal(duplicate.insertedFrames, 0)
-      assert.equal((await store.chatService.snapshot(tenantId, ownerId, sessionId, undefined)).event_watermark, fresh.event_watermark)
+      assert.equal((await chatService.snapshot(tenantId, ownerId, sessionId, undefined)).event_watermark, fresh.event_watermark)
     } finally {
       releaseRead()
       if (pending !== null) await pending.catch(() => undefined)
       if (reader !== null && !readerReleased) reader.release()
-      if (store !== null) await store.close()
+      if (ownerDatabase !== null) await ownerDatabase.close()
       for (const [table, column] of [
         ["bff_agui_event", "session_id"],
         ["bff_agui_source_event", "session_id"],
@@ -3633,13 +3710,13 @@ integrationTest(
 )
 
 // R46 scoped authority regressions: Root runs these against its owned PostgreSQL/Redis fixture.
-function r46AuthorityCleanup(context, pool, currentStore, scopes) {
+function r46AuthorityCleanup(context, pool, currentDatabase, scopes) {
   context.after(async () => {
     const failures = []
-    const store = currentStore()
-    if (store !== null) {
+    const ownerDatabase = currentDatabase()
+    if (ownerDatabase !== null) {
       try {
-        await store.close()
+        await ownerDatabase.close()
       } catch (error) {
         failures.push(error)
       }
@@ -3690,8 +3767,8 @@ for (const parentCase of ["missing", "wrong tenant", "wrong subject"]) {
       options: "-c search_path=kokoro_bff -c timezone=UTC",
       statement_timeout: 5000,
     })
-    let store = null
-    r46AuthorityCleanup(context, pool, () => store, [
+    let ownerDatabase = null
+    r46AuthorityCleanup(context, pool, () => ownerDatabase, [
       { tenant_id: tenantId, session_id: sessionId },
       { tenant_id: foreignTenantId, session_id: sessionId },
     ])
@@ -3723,12 +3800,13 @@ for (const parentCase of ["missing", "wrong tenant", "wrong subject"]) {
         [tenantId, foreignTenantId],
       ])
     assert.deepEqual((await streams()).rows, [])
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    assert.equal(typeof store.agUiConsumers.registerConsumer, "function", "production direct-register method must exist")
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    await ownerDatabase.ready()
+    assert.equal(typeof agUiConsumers.registerConsumer, "function", "production direct-register method must exist")
     let failure
     try {
-      await store.agUiConsumers.registerConsumer(tenantId, sessionId, callerSubjectId)
+      await agUiConsumers.registerConsumer(tenantId, sessionId, callerSubjectId)
     } catch (error) {
       failure = error
     }
@@ -3763,8 +3841,8 @@ integrationTest(
       options: "-c search_path=kokoro_bff -c timezone=UTC",
       statement_timeout: 5000,
     })
-    let store = null
-    r46AuthorityCleanup(context, pool, () => store, [
+    let ownerDatabase = null
+    r46AuthorityCleanup(context, pool, () => ownerDatabase, [
       { tenant_id: tenantId, session_id: orphanSessionId },
       { tenant_id: tenantId, session_id: controlSessionId },
     ])
@@ -3861,10 +3939,11 @@ integrationTest(
     )
     assert.equal(before.bff_agui_source_event.length, 3)
     assert.deepEqual(before.bff_agui_cursor_tombstone, [])
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    assert.equal(typeof store.agUiConsumers.collectGarbage, "function", "production GC method must exist")
-    const collected = await store.agUiConsumers.collectGarbage({
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    await ownerDatabase.ready()
+    assert.equal(typeof agUiConsumers.collectGarbage, "function", "production GC method must exist")
+    const collected = await agUiConsumers.collectGarbage({
       now: new Date().toISOString(),
       retentionMs: 1,
       tombstoneRetentionMs: 24 * 60 * 60 * 1000,
@@ -3909,12 +3988,12 @@ integrationTest(
       options: "-c search_path=kokoro_bff -c timezone=UTC",
       statement_timeout: 5000,
     })
-    let store = null
+    let ownerDatabase = null
     context.after(async () => {
       const failures = []
-      if (store !== null) {
+      if (ownerDatabase !== null) {
         try {
-          await store.close()
+          await ownerDatabase.close()
         } catch (error) {
           failures.push(error)
         }
@@ -3965,10 +4044,14 @@ integrationTest(
         status: "active",
       })),
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    await ownerDatabase.ready()
     const submitAndClaim = async (sessionId, name) => {
-      const turn = await store.chatTurnService.submit({
+      const turn = await chatTurnService.submit({
         tenantId,
         conversationId: sessionId,
         subjectId: ownerId,
@@ -3978,7 +4061,7 @@ integrationTest(
         content: "R52 GC fairness " + name,
       })
       assert.ok(turn, "a real authorized production Chat submit must create the turn")
-      const claims = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      const claims = await agentDispatchOutbox.claimAgentDispatchOutbox({
         workerId: "r52_worker_" + name + suffix,
         limit: 1,
         leaseDurationMs: 5000,
@@ -3986,11 +4069,11 @@ integrationTest(
       })
       assert.equal(claims.length, 1)
       assert.equal(claims[0].runId, turn.run_id, "production claim must select this fixture's pending head")
-      assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claims[0]), true)
+      assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(claims[0]), true)
       return turn
     }
     const a = await submitAndClaim(aSessionId, "A")
-    await store.agUi.ingest(tenantId, aSessionId, [
+    await agUi.ingest(tenantId, aSessionId, [
       agentSource({
         id: "r52_a_started_" + suffix,
         sequence: 1,
@@ -4001,7 +4084,7 @@ integrationTest(
       }),
     ])
     const bOld = await submitAndClaim(bSessionId, "B_old")
-    await store.agUi.ingest(tenantId, bSessionId, [
+    await agUi.ingest(tenantId, bSessionId, [
       agentSource({
         id: "r52_b_old_started_" + suffix,
         sequence: 1,
@@ -4020,7 +4103,7 @@ integrationTest(
       }),
     ])
     const b = await submitAndClaim(bSessionId, "B_current")
-    await store.agUi.ingest(tenantId, bSessionId, [
+    await agUi.ingest(tenantId, bSessionId, [
       agentSource({
         id: "r52_b_started_" + suffix,
         sequence: 3,
@@ -4121,7 +4204,7 @@ integrationTest(
     assert.ok([...beforeA.bff_agui_event, ...beforeB.bff_agui_event].every(({ recorded_at }) => Date.parse(recorded_at) < cutoff))
     // A sorts before B and meets old START-only discovery, but its live pin at 1 permits no prefix deletion.
     assert.ok(aSessionId < bSessionId)
-    const collected = await store.agUiConsumers.collectGarbage({
+    const collected = await agUiConsumers.collectGarbage({
       now,
       retentionMs: 1000,
       tombstoneRetentionMs: 24 * 60 * 60 * 1000,
@@ -4315,12 +4398,12 @@ async function r57ProjectionContext(context, { started = true, dispatchState = "
     options: "-c search_path=kokoro_bff -c timezone=UTC",
     statement_timeout: 5000,
   })
-  let store = null
+  let ownerDatabase = null
   context.after(async () => {
     const failures = []
-    if (store !== null) {
+    if (ownerDatabase !== null) {
       try {
-        await store.close()
+        await ownerDatabase.close()
       } catch (error) {
         failures.push(error)
       }
@@ -4368,9 +4451,14 @@ async function r57ProjectionContext(context, { started = true, dispatchState = "
   })
   await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
   await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-  store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-  await store.ready()
-  const runId = await submitAndAdmit(store, pool, {
+  ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+  const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+  const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+  const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+  const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+  const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+  await ownerDatabase.ready()
+  const runId = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
     tenantId,
     sessionId,
     ownerId,
@@ -4407,8 +4495,8 @@ async function r57ProjectionContext(context, { started = true, dispatchState = "
       },
     }
   }
-  const ingest = (sources) => store.agUi.ingest(tenantId, sessionId, sources)
-  const snapshot = () => store.chatService.snapshot(tenantId, ownerId, sessionId, undefined)
+  const ingest = (sources) => agUi.ingest(tenantId, sessionId, sources)
+  const snapshot = () => chatService.snapshot(tenantId, ownerId, sessionId, undefined)
   const fingerprint = async () => {
     const facts = {}
     for (const [table, column, order] of [
@@ -4437,7 +4525,11 @@ async function r57ProjectionContext(context, { started = true, dispatchState = "
   if (started) await ingest([source(1, { run_id: runId }, "run.created")])
   return {
     pool,
-    store,
+    agUi,
+    agUiConsumers,
+    chatService,
+    chatTurnService,
+    agentDispatchOutbox,
     tenantId,
     sessionId,
     ownerId,
@@ -4463,7 +4555,7 @@ integrationTest(
   async (context) => {
     const c = await r57ProjectionContext(context)
     const activeBefore = await c.snapshot()
-    const queued = await c.store.chatTurnService.submit({
+    const queued = await c.chatTurnService.submit({
       tenantId: c.tenantId,
       conversationId: c.sessionId,
       subjectId: c.ownerId,
@@ -4483,7 +4575,7 @@ integrationTest(
       assert.equal(Object.hasOwn(current, "pending_pauses"), false)
       assert.match(current.event_watermark, /^agui_[0-9a-f]{32}$/u)
       if (priorCursor !== undefined) assert.notEqual(current.event_watermark, priorCursor)
-      const replay = await c.store.agUi.replay(c.tenantId, c.sessionId, priorCursor ?? activeBefore.event_watermark, 100)
+      const replay = await c.agUi.replay(c.tenantId, c.sessionId, priorCursor ?? activeBefore.event_watermark, 100)
       assert.equal(replay.kind, "page")
       assert.equal(replay.frames.at(-1).payload.name, "kokoro.interaction.state")
       assert.deepEqual(replay.frames.at(-1).payload.value, payload)
@@ -4580,7 +4672,7 @@ integrationTest(
     await c.ingest([c.source(10, { status: "completed" }, "run.completed")])
     const final = await c.snapshot()
     assert.deepEqual(final.execution_head, r57ExpectedHead(queued.run_id, "queued"))
-    const finalReplay = await c.store.agUi.replay(c.tenantId, c.sessionId, previous.event_watermark, 100)
+    const finalReplay = await c.agUi.replay(c.tenantId, c.sessionId, previous.event_watermark, 100)
     assert.equal(finalReplay.kind, "page")
     assert.deepEqual(
       finalReplay.frames.map((frame) => frame.eventType),
@@ -4764,7 +4856,7 @@ integrationTest(
     assert.deepEqual(await c.fingerprint(), before)
     await assert.rejects(c.ingest([c.source(4, newer)]))
     assert.deepEqual(await c.fingerprint(), before)
-    const [lease] = await c.store.agUiConsumers.claimConsumers({
+    const [lease] = await c.agUiConsumers.claimConsumers({
       workerId: "r57_lease_" + c.suffix,
       now: new Date().toISOString(),
       leaseUntil: new Date(Date.now() + 5000).toISOString(),
@@ -4774,18 +4866,18 @@ integrationTest(
     assert.equal(lease?.sessionId, c.sessionId)
     const leasedBefore = await c.fingerprint()
     await assert.rejects(
-      c.store.agUi.ingest(c.tenantId, c.sessionId, [c.source(3, newer)], {
+      c.agUi.ingest(c.tenantId, c.sessionId, [c.source(3, newer)], {
         ...lease,
         fence: lease.fence + 1,
       }),
     )
     assert.deepEqual(await c.fingerprint(), leasedBefore)
     assert.equal(
-      (await c.store.agUi.ingest(c.tenantId, c.sessionId, [c.source(3, newer)], lease)).insertedFrames,
+      (await c.agUi.ingest(c.tenantId, c.sessionId, [c.source(3, newer)], lease)).insertedFrames,
       1,
       "the genuine current lease and contiguous source must still commit",
     )
-    assert.equal(await c.store.agUiConsumers.releaseConsumer(lease, new Date().toISOString()), true)
+    assert.equal(await c.agUiConsumers.releaseConsumer(lease, new Date().toISOString()), true)
   },
 )
 
@@ -4875,7 +4967,7 @@ integrationTest(
         status: "streaming",
       },
     )
-    await assertOrderedReadBody(c.store.chatService, c.tenantId, c.ownerId, c.sessionId, beforeAssistant, "5", before.event_watermark, "R118 old partial")
+    await assertOrderedReadBody(c.chatService, c.tenantId, c.ownerId, c.sessionId, beforeAssistant, "5", before.event_watermark, "R118 old partial")
     assert.deepEqual(before.execution_head, r57ExpectedHead(c.runId, "waiting", waiting))
     assert.match(before.event_watermark, /^agui_[0-9a-f]{32}$/u)
 
@@ -4949,7 +5041,7 @@ integrationTest(
         },
         { insertedSources: 2, insertedFrames: 2, sourceHighWatermark: 5 },
       )
-      const committedStatus = await c.store.agUi.status(c.tenantId, c.sessionId)
+      const committedStatus = await c.agUi.status(c.tenantId, c.sessionId)
       const fresh = await c.snapshot()
       release()
       const old = await r57Bounded(pending, "R118 RR reader release timeout")
@@ -4994,9 +5086,9 @@ integrationTest(
       )
       assert.deepEqual(oldAssistant.rendering, beforeAssistant.rendering)
       assertOrderedReadReference(oldAssistant, "5", before.event_watermark)
-      await assert.rejects(c.store.chatService.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, oldAssistant)), /MESSAGE_PARTS_CHANGED/u)
+      await assert.rejects(c.chatService.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, oldAssistant)), /MESSAGE_PARTS_CHANGED/u)
       await assertOrderedReadBody(
-        c.store.chatService,
+        c.chatService,
         c.tenantId,
         c.ownerId,
         c.sessionId,
@@ -5008,7 +5100,7 @@ integrationTest(
       assert.match(fresh.event_watermark, /^agui_[0-9a-f]{32}$/u)
       assert.notEqual(fresh.event_watermark, before.event_watermark)
 
-      const replay = await c.store.agUi.replay(c.tenantId, c.sessionId, before.event_watermark, 100)
+      const replay = await c.agUi.replay(c.tenantId, c.sessionId, before.event_watermark, 100)
       assert.equal(replay.kind, "page")
       assert.deepEqual(
         replay.frames.map(({ eventType, payload }) => ({ eventType, payload })),
@@ -5091,7 +5183,7 @@ integrationTest("R124 successor registration preserves terminal A process until 
     display_code: "tool.execution",
   }
   await c.ingest([c.source(2, { todos: [] }, "todo.updated"), c.source(3, activity, "activity.updated"), c.source(4, { status: "completed" }, "run.completed")])
-  const queued = await c.store.chatTurnService.submit({
+  const queued = await c.chatTurnService.submit({
     tenantId: c.tenantId,
     conversationId: c.sessionId,
     subjectId: c.ownerId,
@@ -5112,14 +5204,14 @@ integrationTest("R124 successor registration preserves terminal A process until 
   assert.equal(beforeStart.execution_process.run_id, c.runId)
   assert.deepEqual(beforeStart.execution_process.todos, [])
   assert.deepEqual(beforeStart.execution_process.activities, [activity])
-  const [claim] = await c.store.agentDispatchOutbox.claimAgentDispatchOutbox({
+  const [claim] = await c.agentDispatchOutbox.claimAgentDispatchOutbox({
     workerId: "r124_successor_" + c.suffix,
     limit: 1,
     leaseDurationMs: 5000,
     maxAttempts: 8,
   })
   assert.equal(claim.runId, queued.run_id)
-  assert.equal(await c.store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+  assert.equal(await c.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
   await c.ingest([c.source(5, { run_id: queued.run_id }, "run.created", queued.run_id)])
   const afterStart = await c.snapshot()
   assert.equal(Object.hasOwn(afterStart, "execution_process"), true)
@@ -5160,7 +5252,7 @@ integrationTest("R124 one authorized RR snapshot binds Message head process HITL
   ])
   const before = await c.snapshot()
   const beforeAssistant = before.messages.find((message) => message.role === "assistant" && message.run_id === c.runId)
-  await assertOrderedReadBody(c.store.chatService, c.tenantId, c.ownerId, c.sessionId, beforeAssistant, "8", before.event_watermark, "old")
+  await assertOrderedReadBody(c.chatService, c.tenantId, c.ownerId, c.sessionId, beforeAssistant, "8", before.event_watermark, "old")
   assert.equal(Object.hasOwn(before, "execution_process"), true)
   assert.notEqual(before.execution_process, null)
   let markAuthorized, releaseRead
@@ -5251,10 +5343,10 @@ integrationTest("R124 one authorized RR snapshot binds Message head process HITL
     const freshAssistant = fresh.messages.find((message) => message.message_id === beforeAssistant.message_id)
     assert.deepEqual(oldAssistant.rendering, beforeAssistant.rendering)
     assertOrderedReadReference(oldAssistant, "8", before.event_watermark)
-    await assert.rejects(c.store.chatService.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, oldAssistant)), /MESSAGE_PARTS_CHANGED/u)
-    await assertOrderedReadBody(c.store.chatService, c.tenantId, c.ownerId, c.sessionId, freshAssistant, "13", fresh.event_watermark, "old-new")
+    await assert.rejects(c.chatService.readMessageParts(orderedPartsQuery(c.tenantId, c.ownerId, c.sessionId, oldAssistant)), /MESSAGE_PARTS_CHANGED/u)
+    await assertOrderedReadBody(c.chatService, c.tenantId, c.ownerId, c.sessionId, freshAssistant, "13", fresh.event_watermark, "old-new")
     assert.deepEqual(fresh.deliveries.map(({ artifact_id }) => artifact_id).sort(), ["artifact_r124_a", "artifact_r124_b"])
-    const replay = await c.store.agUi.replay(c.tenantId, c.sessionId, before.event_watermark, 100)
+    const replay = await c.agUi.replay(c.tenantId, c.sessionId, before.event_watermark, 100)
     assert.equal(replay.kind, "page")
     assert.equal(replay.frames.at(-1).cursor, fresh.event_watermark)
   } finally {
@@ -5320,7 +5412,7 @@ integrationTest("R124 GC locked requery protects selected process and can collec
   const c = await r57ProjectionContext(context)
   assert.equal((await c.pool.query("SELECT to_regclass('kokoro_bff.bff_agui_run_process') AS name")).rows[0].name, "bff_agui_run_process")
   await c.ingest([c.source(2, { todos: [{ content: "old", status: "completed" }] }, "todo.updated"), c.source(3, { status: "completed" }, "run.completed")])
-  const next = await c.store.chatTurnService.submit({
+  const next = await c.chatTurnService.submit({
     tenantId: c.tenantId,
     conversationId: c.sessionId,
     subjectId: c.ownerId,
@@ -5330,14 +5422,14 @@ integrationTest("R124 GC locked requery protects selected process and can collec
     content: "next",
   })
   assert.ok(next)
-  const [claim] = await c.store.agentDispatchOutbox.claimAgentDispatchOutbox({
+  const [claim] = await c.agentDispatchOutbox.claimAgentDispatchOutbox({
     workerId: "r124_gc_" + c.suffix,
     limit: 1,
     leaseDurationMs: 5000,
     maxAttempts: 8,
   })
   assert.equal(claim.runId, next.run_id)
-  assert.equal(await c.store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+  assert.equal(await c.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
   await c.ingest([
     c.source(4, { run_id: next.run_id }, "run.created", next.run_id),
     c.source(5, { todos: [{ content: "live", status: "in_progress" }] }, "todo.updated", next.run_id),
@@ -5496,7 +5588,7 @@ integrationTest("R124 corrupt or missing process provenance is unavailable inste
 integrationTest("R353 terminal-first late Skill ready is bookkeeping-only across real projection commits", { timeout: 30_000 }, async () => {
   const { randomUUID } = await import("node:crypto")
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
+  let ownerDatabase = null
   const suffix = randomUUID().replaceAll("-", "")
   const tenantId = `tenant_r353_${suffix}`,
     sessionId = `session_r353_${suffix}`,
@@ -5504,11 +5596,14 @@ integrationTest("R353 terminal-first late Skill ready is bookkeeping-only across
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const runId = await submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix })
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    await ownerDatabase.ready()
+    const runId = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, { tenantId, sessionId, ownerId, suffix })
     const terminal = agentSource({ id: `r353_terminal_${suffix}`, sequence: 1, kind: "run.completed", payload: { status: "completed" }, sessionId, runId })
-    assert.equal((await store.agUi.ingest(tenantId, sessionId, [terminal])).insertedSources, 1)
+    assert.equal((await agUi.ingest(tenantId, sessionId, [terminal])).insertedSources, 1)
     const frameCount = (await pool.query("SELECT count(*)::int AS count FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2", [tenantId, sessionId]))
       .rows[0].count
     const ready = agentSource({
@@ -5519,7 +5614,7 @@ integrationTest("R353 terminal-first late Skill ready is bookkeeping-only across
       sessionId,
       runId,
     })
-    const lateReady = await store.agUi.ingest(tenantId, sessionId, [ready])
+    const lateReady = await agUi.ingest(tenantId, sessionId, [ready])
     assert.equal(lateReady.insertedSources, 1)
     assert.equal(lateReady.insertedFrames, 0)
     assert.equal(
@@ -5549,7 +5644,7 @@ integrationTest("R353 terminal-first late Skill ready is bookkeeping-only across
       sessionId,
       runId,
     })
-    const duplicateReadyResult = await store.agUi.ingest(tenantId, sessionId, [duplicateReady])
+    const duplicateReadyResult = await agUi.ingest(tenantId, sessionId, [duplicateReady])
     assert.equal(duplicateReadyResult.insertedSources, 1)
     assert.equal(duplicateReadyResult.insertedFrames, 0)
     const duplicateTerminal = agentSource({
@@ -5560,10 +5655,10 @@ integrationTest("R353 terminal-first late Skill ready is bookkeeping-only across
       sessionId,
       runId,
     })
-    const duplicateTerminalResult = await store.agUi.ingest(tenantId, sessionId, [duplicateTerminal])
+    const duplicateTerminalResult = await agUi.ingest(tenantId, sessionId, [duplicateTerminal])
     assert.equal(duplicateTerminalResult.insertedSources, 1)
     assert.equal(duplicateTerminalResult.insertedFrames, 0)
-    const queued = await store.chatTurnService.submit({
+    const queued = await chatTurnService.submit({
       tenantId,
       conversationId: sessionId,
       subjectId: ownerId,
@@ -5585,7 +5680,7 @@ integrationTest("R353 terminal-first late Skill ready is bookkeeping-only across
       return result.rows[0]
     }
     const queuedBefore = await headSnapshot()
-    const queuedLate = await store.agUi.ingest(tenantId, sessionId, [
+    const queuedLate = await agUi.ingest(tenantId, sessionId, [
       agentSource({
         id: `r353_ready_queued_${suffix}`,
         sequence: 5,
@@ -5597,29 +5692,29 @@ integrationTest("R353 terminal-first late Skill ready is bookkeeping-only across
     ])
     assert.equal(queuedLate.insertedFrames, 0)
     assert.deepEqual(await headSnapshot(), queuedBefore)
-    const [claim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [claim] = await agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: `worker_next_${suffix}`,
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(claim.runId, queued.run_id)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+    assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
     const admittedBefore = await headSnapshot()
-    const admittedLate = await store.agUi.ingest(tenantId, sessionId, [
+    const admittedLate = await agUi.ingest(tenantId, sessionId, [
       agentSource({ id: `r353_terminal_admitted_${suffix}`, sequence: 6, kind: "run.completed", payload: { status: "completed" }, sessionId, runId }),
     ])
     assert.equal(admittedLate.insertedFrames, 0)
     assert.deepEqual(await headSnapshot(), admittedBefore)
     await assert.rejects(
       () =>
-        store.agUi.ingest(tenantId, sessionId, [
+        agUi.ingest(tenantId, sessionId, [
           agentSource({ id: `r353_message_${suffix}`, sequence: 7, kind: "message.delta", payload: { delta: "late" }, sessionId, runId }),
         ]),
       /AGUI_POST_TERMINAL_SOURCE/u,
     )
   } finally {
-    await store?.close()
+    await ownerDatabase?.close()
     await pool.query("DELETE FROM bff_skill_usage_observation WHERE tenant_id=$1", [tenantId]).catch(() => undefined)
     await pool.query("DELETE FROM bff_skill_usage_run_terminal WHERE tenant_id=$1", [tenantId]).catch(() => undefined)
     await pool.query("DELETE FROM bff_skill_usage_coverage WHERE tenant_id=$1", [tenantId]).catch(() => undefined)
@@ -5630,20 +5725,23 @@ integrationTest("R353 terminal-first late Skill ready is bookkeeping-only across
 integrationTest("R353 same-batch terminal fences late Skill bookkeeping and rejects late messages atomically", { timeout: 30_000 }, async () => {
   const { randomUUID } = await import("node:crypto")
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  const stores = []
+  const ownerDatabases = []
   const setup = async (label) => {
     const suffix = `${label}_${randomUUID().replaceAll("-", "")}`
     const tenantId = `tenant_${suffix}`,
       sessionId = `session_${suffix}`,
       ownerId = `owner_${suffix}`
-    const store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    stores.push(store)
-    await store.ready()
-    const runId = await submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix })
-    await store.agUi.ingest(tenantId, sessionId, [
+    const ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    ownerDatabases.push(ownerDatabase)
+    await ownerDatabase.ready()
+    const runId = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, { tenantId, sessionId, ownerId, suffix })
+    await agUi.ingest(tenantId, sessionId, [
       agentSource({ id: `start_${suffix}`, sequence: 1, kind: "run.created", payload: { run_id: runId }, sessionId, runId }),
     ])
-    return { store, suffix, tenantId, sessionId, ownerId, runId }
+    return { agUi, suffix, tenantId, sessionId, ownerId, runId }
   }
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
@@ -5684,7 +5782,7 @@ integrationTest("R353 same-batch terminal fences late Skill bookkeeping and reje
             sessionId: c.sessionId,
             runId: c.runId,
           })
-      const result = await c.store.agUi.ingest(c.tenantId, c.sessionId, [terminal, late])
+      const result = await c.agUi.ingest(c.tenantId, c.sessionId, [terminal, late])
       const frames = await pool.query(
         `SELECT source_event_id,count(*)::int AS count FROM bff_agui_event
           WHERE tenant_id=$1 AND session_id=$2 GROUP BY source_event_id ORDER BY source_event_id`,
@@ -5721,7 +5819,7 @@ integrationTest("R353 same-batch terminal fences late Skill bookkeeping and reje
     ).rows[0]
     await assert.rejects(
       () =>
-        rejected.store.agUi.ingest(rejected.tenantId, rejected.sessionId, [
+        rejected.agUi.ingest(rejected.tenantId, rejected.sessionId, [
           agentSource({
             id: `terminal_${rejected.suffix}`,
             sequence: 2,
@@ -5772,7 +5870,7 @@ integrationTest("R353 same-batch terminal fences late Skill bookkeeping and reje
       0,
     )
   } finally {
-    await Promise.all(stores.map((store) => store.close()))
+    await Promise.all(ownerDatabases.map((database) => database.close()))
     await pool.end()
   }
 })
@@ -5839,13 +5937,12 @@ integrationTest(
       c.tenantId,
       c.sessionId,
     ])
-    const collect = () =>
-      c.store.agUiConsumers.collectGarbage({ now: new Date().toISOString(), retentionMs: 1, tombstoneRetentionMs: 86400000, batchSize: 100 })
+    const collect = () => c.agUiConsumers.collectGarbage({ now: new Date().toISOString(), retentionMs: 1, tombstoneRetentionMs: 86400000, batchSize: 100 })
     await collect()
     const retained = await c.fingerprint()
     assert.ok(retained.bff_agui_event.some((row) => row.cursor === before.bff_agui_run_activity[0].first_public_cursor))
     assert.deepEqual((await c.snapshot()).execution_process, completed.execution_process)
-    const nextRun = await submitAndAdmit(c.store, c.pool, {
+    const nextRun = await submitAndAdmit(c.chatTurnService, c.agentDispatchOutbox, c.pool, {
       tenantId: c.tenantId,
       sessionId: c.sessionId,
       ownerId: c.ownerId,
@@ -5857,7 +5954,7 @@ integrationTest(
     assert.equal(after.bff_agui_run_activity.filter((row) => row.run_id === c.runId).length, 0)
     assert.equal(after.bff_agui_run_process.filter((row) => row.run_id === c.runId).length, 0)
     assert.equal((await c.snapshot()).execution_process.run_id, nextRun)
-    assert.equal((await c.store.agUi.replay(c.tenantId, c.sessionId, before.bff_agui_run_activity[0].first_public_cursor, 100)).kind, "expired_cursor")
+    assert.equal((await c.agUi.replay(c.tenantId, c.sessionId, before.bff_agui_run_activity[0].first_public_cursor, 100)).kind, "expired_cursor")
   },
 )
 
@@ -5872,16 +5969,18 @@ integrationTest("preflight-first initial terminal survives a page and restart wi
     before.bff_agui_event.some((row) => row.event_type === "RUN_STARTED"),
     false,
   )
-  const restarted = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+  const restartedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+  const restartedAgUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(restartedDatabase))
+  const restartedChatService = new ChatApplicationService(new PostgresChatRepository(restartedDatabase))
   try {
-    await restarted.ready()
-    const snapshot = await restarted.chatService.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+    await restartedDatabase.ready()
+    const snapshot = await restartedChatService.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
     assert.deepEqual(snapshot.execution_head, r57ExpectedHead(c.runId, "queued"))
     assert.equal(snapshot.execution_process, null)
-    assert.equal((await restarted.agUi.ingest(c.tenantId, c.sessionId, [c.source(3, initialTerminal())])).insertedFrames, 0)
-    await restarted.agUi.ingest(c.tenantId, c.sessionId, [failedSource(c, 4)])
+    assert.equal((await restartedAgUi.ingest(c.tenantId, c.sessionId, [c.source(3, initialTerminal())])).insertedFrames, 0)
+    await restartedAgUi.ingest(c.tenantId, c.sessionId, [failedSource(c, 4)])
   } finally {
-    await restarted.close()
+    await restartedDatabase.close()
   }
   const settled = await c.fingerprint()
   assert.equal(settled.bff_agent_dispatch_outbox[0].status, "terminal")
@@ -5897,7 +5996,7 @@ integrationTest(
   { timeout: 30_000 },
   async (context) => {
     const c = await r57ProjectionContext(context, { started: false })
-    const next = await c.store.chatTurnService.submit({
+    const next = await c.chatTurnService.submit({
       tenantId: c.tenantId,
       conversationId: c.sessionId,
       subjectId: c.ownerId,
@@ -5914,14 +6013,14 @@ integrationTest(
     const facts = await c.fingerprint()
     assert.equal(facts.bff_agui_event.filter((row) => row.event_type === "RUN_STARTED").length, 0)
     assert.equal(facts.bff_agui_stream[0].expected_run_id, null, "the old expected Run is cleared before the next claim")
-    const [claim] = await c.store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [claim] = await c.agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "preflight_fifo_" + c.suffix,
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(claim.runId, next.run_id)
-    assert.equal(await c.store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+    assert.equal(await c.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
     await c.ingest([preflightSource(c, 3, "resolving", next.run_id)])
     assert.equal((await c.fingerprint()).bff_agui_stream[0].expected_run_id, next.run_id)
     assert.deepEqual((await c.snapshot()).execution_head, r57ExpectedHead(next.run_id, "queued"))
@@ -6025,7 +6124,7 @@ integrationTest(
     const c = await r57ProjectionContext(context)
     await c.ingest([preflightSource(c, 2, "ready"), c.source(3, { status: "completed" }, "run.completed")])
     const selected = (await c.snapshot()).execution_process
-    const nextRun = await submitAndAdmit(c.store, c.pool, {
+    const nextRun = await submitAndAdmit(c.chatTurnService, c.agentDispatchOutbox, c.pool, {
       tenantId: c.tenantId,
       sessionId: c.sessionId,
       ownerId: c.ownerId,
@@ -6033,15 +6132,17 @@ integrationTest(
     })
     await c.ingest([c.source(4, initialTerminal(), "interaction.state", nextRun)])
     const before = await c.fingerprint()
-    const restarted = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+    const restartedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const restartedAgUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(restartedDatabase))
+    const restartedChatService = new ChatApplicationService(new PostgresChatRepository(restartedDatabase))
     try {
-      await restarted.ready()
+      await restartedDatabase.ready()
       const stream = await new PostgresAgUiProjectionRepository({ pool: c.pool }).readStream(c.tenantId, c.sessionId)
       assert.equal(stream.interaction.runId, nextRun)
-      const snapshot = await restarted.chatService.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+      const snapshot = await restartedChatService.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
       assert.deepEqual(snapshot.execution_head, r57ExpectedHead(nextRun, "queued"))
       assert.deepEqual(snapshot.execution_process, selected)
-      const repeated = await restarted.agUi.ingest(c.tenantId, c.sessionId, [c.source(5, initialTerminal(), "interaction.state", nextRun)])
+      const repeated = await restartedAgUi.ingest(c.tenantId, c.sessionId, [c.source(5, initialTerminal(), "interaction.state", nextRun)])
       assert.equal(repeated.sourceHighWatermark, 5)
       assert.equal(repeated.insertedSources, 1)
       assert.equal(repeated.insertedFrames, 0)
@@ -6049,20 +6150,20 @@ integrationTest(
       assert.deepEqual(repeatedFacts.bff_agui_run_interaction, before.bff_agui_run_interaction)
       assert.deepEqual(repeatedFacts.bff_agui_event, before.bff_agui_event)
       await assert.rejects(
-        restarted.agUi.ingest(c.tenantId, c.sessionId, [c.source(6, { ...initialTerminal(), phase: "active" }, "interaction.state", nextRun)]),
+        restartedAgUi.ingest(c.tenantId, c.sessionId, [c.source(6, { ...initialTerminal(), phase: "active" }, "interaction.state", nextRun)]),
       )
-      await assert.rejects(restarted.agUi.ingest(c.tenantId, c.sessionId, [c.source(6, { run_id: nextRun }, "run.created", nextRun)]))
+      await assert.rejects(restartedAgUi.ingest(c.tenantId, c.sessionId, [c.source(6, { run_id: nextRun }, "run.created", nextRun)]))
       assert.deepEqual(await c.fingerprint(), repeatedFacts)
-      await restarted.agUi.ingest(c.tenantId, c.sessionId, [failedSource(c, 6, nextRun)])
+      await restartedAgUi.ingest(c.tenantId, c.sessionId, [failedSource(c, 6, nextRun)])
     } finally {
-      await restarted.close()
+      await restartedDatabase.close()
     }
     assert.deepEqual((await c.snapshot()).execution_process, selected)
     await c.pool.query("UPDATE bff_agui_event SET recorded_at=CURRENT_TIMESTAMP(3)-INTERVAL '40 days' WHERE tenant_id=$1 AND session_id=$2", [
       c.tenantId,
       c.sessionId,
     ])
-    await c.store.agUiConsumers.collectGarbage({ now: new Date().toISOString(), retentionMs: 1, tombstoneRetentionMs: 86400000, batchSize: 100 })
+    await c.agUiConsumers.collectGarbage({ now: new Date().toISOString(), retentionMs: 1, tombstoneRetentionMs: 86400000, batchSize: 100 })
     assert.deepEqual((await c.snapshot()).execution_process, selected)
     assert.equal((await c.fingerprint()).bff_agui_run_process.length, 1)
   },
@@ -6070,16 +6171,19 @@ integrationTest(
 
 integrationTest("CHAT-ORDER leaves unproven legacy Message parts NULL and does not rewrite it for activity-only frames", async () => {
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
+  let ownerDatabase = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    await ownerDatabase.ready()
     const tenantId = "tenant_ordered_legacy",
       sessionId = "session_ordered_legacy",
       ownerId = "owner_ordered_legacy"
-    const runId = await submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix: "ordered_legacy" })
+    const runId = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, { tenantId, sessionId, ownerId, suffix: "ordered_legacy" })
     await pool.query(
       "UPDATE bff_message SET ordered_parts=NULL,parts_format_version=NULL,parts_public_sequence=NULL WHERE tenant_id=$1 AND run_id=$2 AND role='assistant'",
       [tenantId, runId],
@@ -6093,7 +6197,7 @@ integrationTest("CHAT-ORDER leaves unproven legacy Message parts NULL and does n
       ).rows[0]
     const before = await read()
     const source = (sequence, kind, payload) => agentSource({ id: `legacy_ordered_${sequence}`, sequence, kind, payload, sessionId, runId })
-    await store.agUi.ingest(tenantId, sessionId, [
+    await agUi.ingest(tenantId, sessionId, [
       source(1, "run.created", { run_id: runId }),
       source(2, "activity.updated", {
         activity: "tool",
@@ -6104,7 +6208,7 @@ integrationTest("CHAT-ORDER leaves unproven legacy Message parts NULL and does n
       }),
     ])
     assert.deepEqual(await read(), before)
-    await store.agUi.ingest(tenantId, sessionId, [
+    await agUi.ingest(tenantId, sessionId, [
       source(3, "message.delta", { segment_id: "legacy_text", delta: "legacy public" }),
       source(4, "message.completed", { segment_id: "legacy_text", content: "legacy corrected" }),
     ])
@@ -6114,7 +6218,7 @@ integrationTest("CHAT-ORDER leaves unproven legacy Message parts NULL and does n
     assert.equal(after.parts_format_version, null)
     assert.equal(after.parts_public_sequence, null)
   } finally {
-    await store?.close()
+    await ownerDatabase?.close()
     await pool.end()
   }
 })
@@ -6289,7 +6393,7 @@ integrationTest("exhausted terminal consumers idle without losing late facts or 
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
+  let ownerDatabase = null
   const suffix = randomUUID().replaceAll("-", "")
   const tenantId = `tenant_idle_${suffix}`,
     sessionId = `session_idle_${suffix}`,
@@ -6298,15 +6402,19 @@ integrationTest("exhausted terminal consumers idle without losing late facts or 
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const runId = await submitAndAdmit(store, pool, {
+    ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
+    const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
+    const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
+    const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
+    await ownerDatabase.ready()
+    const runId = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
       tenantId,
       sessionId,
       ownerId,
       suffix,
     })
-    await store.agUi.ingest(tenantId, sessionId, [
+    await agUi.ingest(tenantId, sessionId, [
       agentSource({
         id: `idle_terminal_${suffix}`,
         sequence: 1,
@@ -6317,14 +6425,14 @@ integrationTest("exhausted terminal consumers idle without losing late facts or 
       }),
     ])
     const initialNow = new Date()
-    const [undrained] = await store.agUiConsumers.claimConsumers({
+    const [undrained] = await agUiConsumers.claimConsumers({
       workerId: `undrained_${suffix}`,
       now: initialNow.toISOString(),
       leaseUntil: new Date(initialNow.getTime() + 60_000).toISOString(),
       limit: 1,
     })
     assert.ok(undrained)
-    assert.equal(await store.agUiConsumers.markConsumerProgress(undrained, initialNow.toISOString(), initialNow.toISOString(), false), true)
+    assert.equal(await agUiConsumers.markConsumerProgress(undrained, initialNow.toISOString(), initialNow.toISOString(), false), true)
     const undrainedDelay = (
       await pool.query(
         "SELECT EXTRACT(EPOCH FROM (consumer_next_poll_at-clock_timestamp())) AS delay FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",
@@ -6335,8 +6443,8 @@ integrationTest("exhausted terminal consumers idle without losing late facts or 
     let reads = 0
     let late = null
     const runner = new AgUiProjectorRunner(
-      store.agUi,
-      store.agUiConsumers,
+      agUi,
+      agUiConsumers,
       {
         read: async (_scope, after) => {
           reads += 1
@@ -6390,7 +6498,7 @@ integrationTest("exhausted terminal consumers idle without losing late facts or 
       ).rows[0].count,
       1,
     )
-    const nextRun = await submitAndAdmit(store, pool, {
+    const nextRun = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
       tenantId,
       sessionId,
       ownerId,
@@ -6399,7 +6507,7 @@ integrationTest("exhausted terminal consumers idle without losing late facts or 
     })
     const now = new Date()
     const claimNext = () =>
-      store.agUiConsumers.claimConsumers({
+      agUiConsumers.claimConsumers({
         workerId: `next_${suffix}`,
         now: now.toISOString(),
         leaseUntil: new Date(now.getTime() + 60_000).toISOString(),
@@ -6407,7 +6515,7 @@ integrationTest("exhausted terminal consumers idle without losing late facts or 
       })
     const [pendingClaim] = await claimNext()
     assert.ok(pendingClaim, "pending submit wakes a previously idle consumer before Agent admission")
-    assert.equal(await store.agUiConsumers.markConsumerProgress(pendingClaim, new Date(now.getTime() + 1000).toISOString(), now.toISOString(), true), true)
+    assert.equal(await agUiConsumers.markConsumerProgress(pendingClaim, new Date(now.getTime() + 1000).toISOString(), now.toISOString(), true), true)
     const pending = (
       await pool.query(
         "SELECT expected_run_id, EXTRACT(EPOCH FROM (consumer_next_poll_at-clock_timestamp())) AS delay FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",
@@ -6418,7 +6526,7 @@ integrationTest("exhausted terminal consumers idle without losing late facts or 
     assert.ok(Number(pending.delay) <= 1, "pending FIFO prevents idle settlement even without expected_run_id")
     await pool.query("UPDATE bff_agui_stream SET consumer_next_poll_at=clock_timestamp() WHERE tenant_id=$1 AND session_id=$2", [tenantId, sessionId])
     const [staleClaim] = await claimNext()
-    const [dispatch] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [dispatch] = await agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: `dispatch_${suffix}`,
       limit: 1,
       leaseDurationMs: 5000,
@@ -6426,15 +6534,15 @@ integrationTest("exhausted terminal consumers idle without losing late facts or 
     })
     assert.equal(dispatch.runId, nextRun)
     assert.equal(
-      await store.agUiConsumers.markConsumerProgress(staleClaim, now.toISOString(), now.toISOString(), true),
+      await agUiConsumers.markConsumerProgress(staleClaim, now.toISOString(), now.toISOString(), true),
       false,
       "new expected registration fences a late idle settlement",
     )
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(dispatch), true)
+    assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(dispatch), true)
     const [claim] = await claimNext()
     assert.ok(claim)
     assert.equal(claim.sessionId, sessionId)
-    assert.equal(await store.agUiConsumers.markConsumerProgress(claim, new Date(now.getTime() + 1000).toISOString(), now.toISOString(), true), true)
+    assert.equal(await agUiConsumers.markConsumerProgress(claim, new Date(now.getTime() + 1000).toISOString(), now.toISOString(), true), true)
     const active = (
       await pool.query(
         "SELECT expected_run_id, EXTRACT(EPOCH FROM (consumer_next_poll_at-clock_timestamp())) AS delay FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",
@@ -6444,7 +6552,7 @@ integrationTest("exhausted terminal consumers idle without losing late facts or 
     assert.equal(active.expected_run_id, nextRun)
     assert.ok(Number(active.delay) <= 1, "an unfinished Run keeps its normal polling interval")
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (ownerDatabase !== null) await ownerDatabase.close().catch(() => undefined)
     for (const table of TABLES) await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenantId]).catch(() => undefined)
     await pool.end()
   }

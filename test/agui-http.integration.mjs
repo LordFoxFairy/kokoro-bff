@@ -6,9 +6,24 @@ import { test } from "node:test"
 import { EventSchemas } from "@ag-ui/core"
 import { Pool } from "pg"
 
-import { createBffServer } from "../dist/bootstrap/server.js"
-import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
-import { AgUiSessionRuntime } from "../dist/application/agui/session-runtime.js"
+import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
+import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
+import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
+import { PostgresAgUiConsumerRepository } from "../dist/infrastructure/postgres/agui-consumer-repository.js"
+import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
+import {
+  AGENT_DISPATCH_DISPATCHER,
+  AGENT_DISPATCH_OUTBOX,
+  AGUI_PROJECTOR,
+  AGUI_PROJECTION,
+  AGUI_PROJECTION_CONSUMERS,
+  AGUI_RUNTIME,
+  BFF_CONFIG,
+  BFF_DATABASE,
+  CHAT_SERVICE,
+  CHAT_TURN_SERVICE,
+  SESSION_ADMISSION,
+} from "../dist/common/tokens.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
@@ -132,6 +147,20 @@ function bffConfig({ agentEnabled, agentBase, agUi }) {
   }
 }
 
+async function createAgUiChatTestApp(config) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { ChatModule } = await import("../dist/modules/chat/chat.module.js")
+  const moduleRef = await Test.createTestingModule({ imports: [ChatModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+    .compile()
+  return moduleRef.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+}
+
 function parseSse(body) {
   return body.split(/\n\n/u).flatMap((block) => {
     const lines = block.split("\n")
@@ -149,7 +178,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
   })
   let bff = null
   let agent = null
-  let admissionStore = null
+  let admissionDatabase = null
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -214,9 +243,11 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
                'assertion_run_1', '{}'::jsonb, 'admitted', CURRENT_TIMESTAMP(3))`,
       ["a".repeat(64)],
     )
-    admissionStore = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await admissionStore.ready()
-    await admissionStore.agUiConsumers.registerConsumer("tenant_a", "session_live", "user_integration", "run_1")
+    admissionDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
+    await admissionDatabase.ready()
+    const consumers = new PostgresAgUiConsumerRepository(admissionDatabase)
+    const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(admissionDatabase), new Sha256StableIdGenerator())
+    await consumers.registerConsumer("tenant_a", "session_live", "user_integration", "run_1")
     const eventRequests = []
     const launchRequests = []
     agent = createServer((request, response) => {
@@ -298,10 +329,9 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
       )
     })
     const agentBase = await listen(agent)
-    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase }), {
-      sessionAdmission,
-    })
-    const base = await listen(bff)
+    bff = await createAgUiChatTestApp(bffConfig({ agentEnabled: true, agentBase }))
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
 
     const streamed = await fetch(`${base}/v1/sessions/session_live/events`, {
       headers: auth("tenant_a"),
@@ -340,7 +370,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
       originalFrames.map((frame) => frame.id),
     )
 
-    const secondTurn = await admissionStore.chatTurnService.submit({
+    const secondTurn = await chatTurns.submit({
       tenantId: "tenant_a",
       conversationId: "session_live",
       subjectId: "user_integration",
@@ -440,13 +470,14 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
       },
     ])
 
-    await close(bff)
+    await bff.close()
     bff = null
     await close(agent)
     agent = null
 
-    bff = createBffServer(bffConfig({ agentEnabled: false, agentBase: null }), { sessionAdmission })
-    const restartedBase = await listen(bff)
+    bff = await createAgUiChatTestApp(bffConfig({ agentEnabled: false, agentBase: null }))
+    await bff.listen(0, "127.0.0.1")
+    const restartedBase = await bff.getUrl()
     const replayed = await fetch(`${restartedBase}/v1/sessions/session_live/events`, {
       headers: {
         ...auth("tenant_a"),
@@ -484,13 +515,22 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     assert.equal(sameTenantOtherSubject.status, 404)
     assert.equal((await sameTenantOtherSubject.json()).error.code, "session_not_found")
   } finally {
-    if (bff !== null) await close(bff)
-    if (agent !== null) await close(agent)
-    for (const server of servers.splice(0)) {
-      if (server.listening) await close(server)
+    try {
+      await bff?.close()
+    } finally {
+      try {
+        if (agent !== null) await close(agent)
+        for (const server of servers.splice(0)) {
+          if (server.listening) await close(server)
+        }
+      } finally {
+        try {
+          await admissionDatabase?.close()
+        } finally {
+          await pool.end()
+        }
+      }
     }
-    if (admissionStore !== null) await admissionStore.close()
-    await pool.end()
   }
 })
 
@@ -501,14 +541,34 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
   })
   let bff = null
   let agent = null
-  let admissionStore = null
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await insertConversation(pool, "session_boundary", "Boundary Chat")
-    admissionStore = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const turn = await admissionStore.chatTurnService.submit({
+    const requestedAfter = []
+    agent = createServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://agent.local")
+      const afterSequence = Number(url.searchParams.get("after_seq") ?? "0")
+      requestedAfter.push(afterSequence)
+      const page = events.filter((candidate) => candidate.seq > afterSequence).slice(0, 1)
+      response.setHeader("content-type", "application/json")
+      response.end(
+        JSON.stringify({
+          data: {
+            events: page,
+            next_seq: page.at(-1)?.seq ?? afterSequence,
+            watermark: 2,
+          },
+          meta: { request_id: "agent" },
+        }),
+      )
+    })
+    const agentBase = await listen(agent)
+    bff = await createAgUiChatTestApp(bffConfig({ agentEnabled: true, agentBase }))
+    const chatTurns = bff.get(CHAT_TURN_SERVICE)
+    const dispatchOutbox = bff.get(AGENT_DISPATCH_OUTBOX)
+    const turn = await chatTurns.submit({
       tenantId: "tenant_a",
       conversationId: "session_boundary",
       subjectId: "user_integration",
@@ -518,14 +578,14 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
       content: "Boundary",
     })
     assert.ok(turn)
-    const [claim] = await admissionStore.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [claim] = await dispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_boundary",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(claim.runId, turn.run_id)
-    assert.equal(await admissionStore.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+    assert.equal(await dispatchOutbox.markAgentDispatchAdmitted(claim), true)
     const events = [
       {
         chat_event_id: "run_started",
@@ -548,29 +608,8 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
         created_at: 2000,
       },
     ]
-    const requestedAfter = []
-    agent = createServer((request, response) => {
-      const url = new URL(request.url ?? "/", "http://agent.local")
-      const afterSequence = Number(url.searchParams.get("after_seq") ?? "0")
-      requestedAfter.push(afterSequence)
-      const page = events.filter((candidate) => candidate.seq > afterSequence).slice(0, 1)
-      response.setHeader("content-type", "application/json")
-      response.end(
-        JSON.stringify({
-          data: {
-            events: page,
-            next_seq: page.at(-1)?.seq ?? afterSequence,
-            watermark: 2,
-          },
-          meta: { request_id: "agent" },
-        }),
-      )
-    })
-    const agentBase = await listen(agent)
-    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase }), {
-      sessionAdmission,
-    })
-    const base = await listen(bff)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
 
     const streamed = await fetch(`${base}/v1/sessions/session_boundary/events`, { headers: auth("tenant_a") })
     assert.equal(streamed.status, 200)
@@ -598,13 +637,18 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
     assert.deepEqual(requestedAfter.slice(0, 2), [0, 1])
     assert.ok(requestedAfter.slice(2).every((sequence) => sequence === 2))
   } finally {
-    if (admissionStore !== null) await admissionStore.close().catch(() => undefined)
-    if (bff !== null) await close(bff)
-    if (agent !== null) await close(agent)
-    for (const server of servers.splice(0)) {
-      if (server.listening) await close(server)
+    try {
+      await bff?.close()
+    } finally {
+      try {
+        if (agent !== null) await close(agent)
+        for (const server of servers.splice(0)) {
+          if (server.listening) await close(server)
+        }
+      } finally {
+        await pool.end()
+      }
     }
-    await pool.end()
   }
 })
 
@@ -655,10 +699,9 @@ integrationTest("fails loudly when Agent event pagination metadata disagrees wit
       )
     })
     const agentBase = await listen(agent)
-    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase }), {
-      sessionAdmission,
-    })
-    const base = await listen(bff)
+    bff = await createAgUiChatTestApp(bffConfig({ agentEnabled: true, agentBase }))
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
 
     const streamed = await fetch(`${base}/v1/sessions/session_invalid_page/events`, { headers: auth("tenant_a") })
     assert.equal(streamed.status, 200)
@@ -679,12 +722,18 @@ integrationTest("fails loudly when Agent event pagination metadata disagrees wit
     ])
     assert.equal(sourceCount.rows[0].count, 0)
   } finally {
-    if (bff !== null) await close(bff)
-    if (agent !== null) await close(agent)
-    for (const server of servers.splice(0)) {
-      if (server.listening) await close(server)
+    try {
+      await bff?.close()
+    } finally {
+      try {
+        if (agent !== null) await close(agent)
+        for (const server of servers.splice(0)) {
+          if (server.listening) await close(server)
+        }
+      } finally {
+        await pool.end()
+      }
     }
-    await pool.end()
   }
 })
 
@@ -695,14 +744,65 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
   })
   let bff = null
   let agent = null
-  let admissionStore = null
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await insertConversation(pool, "session_budget", "Budget Chat")
-    admissionStore = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const currentTurn = await admissionStore.chatTurnService.submit({
+    agent = createServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://agent.local")
+      const afterSequence = Number(url.searchParams.get("after_seq") ?? "0")
+      const page = events.filter((candidate) => candidate.seq > afterSequence)
+      response.setHeader("content-type", "application/json")
+      response.end(
+        JSON.stringify({
+          data: {
+            events: page,
+            next_seq: page.at(-1)?.seq ?? afterSequence,
+            watermark: 4,
+          },
+          meta: { request_id: "agent" },
+        }),
+      )
+    })
+    const agentBase = await listen(agent)
+    bff = await createAgUiChatTestApp(
+      bffConfig({
+        agentEnabled: true,
+        agentBase,
+        agUi: {
+          replayPageFrames: 128,
+          replayPageBytes: 1024 * 1024,
+          streamMaxFrames: 2,
+          streamMaxBytes: 1024 * 1024,
+          streamMaxDurationMs: 30_000,
+          maxConnectionsGlobal: 256,
+          maxConnectionsPerTenant: 64,
+          maxConnectionsPerSession: 8,
+          ledgerPollBaseDelayMs: 1000,
+          ledgerPollMaxDelayMs: 8000,
+          ledgerPollJitterPercent: 20,
+          replayCacheTtlMs: 25,
+          projectorMaxConsumersPerCycle: 32,
+          projectorSourcePageSize: 256,
+          projectorMaxPagesPerConsumer: 8,
+          projectorSourceMaxAttempts: 3,
+          projectorLeaseDurationMs: 15_000,
+          projectorLeaseSettlementReserveMs: 500,
+          projectorPollIntervalMs: 1000,
+          projectorErrorBackoffMs: 5000,
+          projectorErrorBackoffMaxMs: 5 * 60 * 1000,
+          projectorErrorBackoffJitterPercent: 20,
+          retentionMs: 7 * 24 * 60 * 60 * 1000,
+          gcIntervalMs: 15 * 60 * 1000,
+          gcBatchSize: 100,
+          cursorTombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
+        },
+      }),
+    )
+    const chatTurns = bff.get(CHAT_TURN_SERVICE)
+    const dispatchOutbox = bff.get(AGENT_DISPATCH_OUTBOX)
+    const currentTurn = await chatTurns.submit({
       tenantId: "tenant_a",
       conversationId: "session_budget",
       subjectId: "user_integration",
@@ -712,14 +812,14 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
       content: "Budget current run",
     })
     assert.ok(currentTurn)
-    const [currentClaim] = await admissionStore.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [currentClaim] = await dispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_budget",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(currentClaim.runId, currentTurn.run_id)
-    assert.equal(await admissionStore.agentDispatchOutbox.markAgentDispatchAdmitted(currentClaim), true)
+    assert.equal(await dispatchOutbox.markAgentDispatchAdmitted(currentClaim), true)
     const events = [
       {
         chat_event_id: "budget_history_started",
@@ -762,59 +862,8 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
         created_at: 4000,
       },
     ]
-    agent = createServer((request, response) => {
-      const url = new URL(request.url ?? "/", "http://agent.local")
-      const afterSequence = Number(url.searchParams.get("after_seq") ?? "0")
-      const page = events.filter((candidate) => candidate.seq > afterSequence)
-      response.setHeader("content-type", "application/json")
-      response.end(
-        JSON.stringify({
-          data: {
-            events: page,
-            next_seq: page.at(-1)?.seq ?? afterSequence,
-            watermark: 4,
-          },
-          meta: { request_id: "agent" },
-        }),
-      )
-    })
-    const agentBase = await listen(agent)
-    bff = createBffServer(
-      bffConfig({
-        agentEnabled: true,
-        agentBase,
-        agUi: {
-          replayPageFrames: 128,
-          replayPageBytes: 1024 * 1024,
-          streamMaxFrames: 2,
-          streamMaxBytes: 1024 * 1024,
-          streamMaxDurationMs: 30_000,
-          maxConnectionsGlobal: 256,
-          maxConnectionsPerTenant: 64,
-          maxConnectionsPerSession: 8,
-          ledgerPollBaseDelayMs: 1000,
-          ledgerPollMaxDelayMs: 8000,
-          ledgerPollJitterPercent: 20,
-          replayCacheTtlMs: 25,
-          projectorMaxConsumersPerCycle: 32,
-          projectorSourcePageSize: 256,
-          projectorMaxPagesPerConsumer: 8,
-          projectorSourceMaxAttempts: 3,
-          projectorLeaseDurationMs: 15_000,
-          projectorLeaseSettlementReserveMs: 500,
-          projectorPollIntervalMs: 1000,
-          projectorErrorBackoffMs: 5000,
-          projectorErrorBackoffMaxMs: 5 * 60 * 1000,
-          projectorErrorBackoffJitterPercent: 20,
-          retentionMs: 7 * 24 * 60 * 60 * 1000,
-          gcIntervalMs: 15 * 60 * 1000,
-          gcBatchSize: 100,
-          cursorTombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
-        },
-      }),
-      { sessionAdmission },
-    )
-    const base = await listen(bff)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
 
     const first = await fetch(`${base}/v1/sessions/session_budget/events`, {
       headers: auth("tenant_a"),
@@ -895,13 +944,18 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
       ],
     )
   } finally {
-    if (admissionStore !== null) await admissionStore.close().catch(() => undefined)
-    if (bff !== null) await close(bff)
-    if (agent !== null) await close(agent)
-    for (const server of servers.splice(0)) {
-      if (server.listening) await close(server)
+    try {
+      await bff?.close()
+    } finally {
+      try {
+        if (agent !== null) await close(agent)
+        for (const server of servers.splice(0)) {
+          if (server.listening) await close(server)
+        }
+      } finally {
+        await pool.end()
+      }
     }
-    await pool.end()
   }
 })
 
@@ -974,13 +1028,10 @@ integrationTest("bounds same-session connections and coalesces their Agent and P
       gcBatchSize: 100,
       cursorTombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
     }
-    const runtime = new AgUiSessionRuntime({
-      connections: { global: 4, perTenant: 4, perSession: 4 },
-      ledgerWait: { baseDelayMs: 40, maxDelayMs: 160, jitterRatio: 0 },
-      replayCacheTtlMs: 25,
-    })
-    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase, agUi }), { agUiRuntime: runtime, sessionAdmission })
-    const base = await listen(bff)
+    bff = await createAgUiChatTestApp(bffConfig({ agentEnabled: true, agentBase, agUi }))
+    const runtime = bff.get(AGUI_RUNTIME)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
 
     const clients = await Promise.all(
       Array.from({ length: 4 }, () =>
@@ -1002,12 +1053,18 @@ integrationTest("bounds same-session connections and coalesces their Agent and P
     assert.ok(metrics.replays.loads <= 6, `expected at most 6 shared PostgreSQL replay loads, received ${metrics.replays.loads}`)
     assert.equal(metrics.connections.global, 0)
   } finally {
-    if (bff !== null) await close(bff)
-    if (agent !== null) await close(agent)
-    for (const server of servers.splice(0)) {
-      if (server.listening) await close(server)
+    try {
+      await bff?.close()
+    } finally {
+      try {
+        if (agent !== null) await close(agent)
+        for (const server of servers.splice(0)) {
+          if (server.listening) await close(server)
+        }
+      } finally {
+        await pool.end()
+      }
     }
-    await pool.end()
   }
 })
 
@@ -1016,8 +1073,7 @@ integrationTest(
   { timeout: 30_000 },
   async () => {
     const { randomUUID } = await import("node:crypto")
-    const { AgentDispatchOutboxDispatcher } = await import("../dist/application/agent-dispatch-outbox-dispatcher.js")
-    const { AgentOutboxDelivery } = await import("../dist/infrastructure/clients/agent/outbox-delivery.js")
+    const { setTimeout: delay } = await import("node:timers/promises")
     const pool = new Pool({
       connectionString: postgresUrl,
       options: "-c search_path=kokoro_bff -c timezone=UTC",
@@ -1028,18 +1084,12 @@ integrationTest(
     const ownerId = "r43_restart_owner"
     const controller = new AbortController()
     const requestDeadline = setTimeout(() => controller.abort(new Error("R43 bounded SSE deadline")), 15_000)
-    let store = null
     let bff = null
     let agent = null
-    let dispatcher = null
     let textPromise = null
     let resolveLaunch
     const launched = new Promise((resolve) => {
       resolveLaunch = resolve
-    })
-    let resolveWaiting
-    const waiting = new Promise((resolve) => {
-      resolveWaiting = resolve
     })
     const bounded = async (promise, label) => {
       let timer
@@ -1054,13 +1104,32 @@ integrationTest(
         clearTimeout(timer)
       }
     }
+    const observe = async (check, label, competing = null) => {
+      const stop = new AbortController()
+      const observation = (async () => {
+        for (;;) {
+          stop.signal.throwIfAborted()
+          const result = await check()
+          if (result !== undefined) return result
+          await delay(10, undefined, { signal: stop.signal })
+        }
+      })()
+      try {
+        return await bounded(competing === null ? observation : Promise.race([observation, competing]), label)
+      } finally {
+        stop.abort()
+        await observation.catch(() => undefined)
+      }
+    }
     try {
       await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
       await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
+      bff = await createAgUiChatTestApp({ ...bffConfig({ agentEnabled: false, agentBase: null }), tenantId })
+      await bff.get(BFF_DATABASE).ready()
+      const chatTurns = bff.get(CHAT_TURN_SERVICE)
+      const outbox = bff.get(AGENT_DISPATCH_OUTBOX)
       const submit = (name) =>
-        store.chatTurnService.submit({
+        chatTurns.submit({
           tenantId,
           conversationId: sessionId,
           subjectId: ownerId,
@@ -1072,15 +1141,23 @@ integrationTest(
       const a = await submit("A")
       const b = await submit("B")
       assert.ok(a && b)
-      const claims = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      const runScope = [tenantId, sessionId, b.run_id]
+      // Hold only B's due time, not a DB lock or an application worker. A remains claimable.
+      const held = await pool.query(
+        `UPDATE bff_agent_dispatch_outbox SET available_at='infinity'::timestamptz
+         WHERE tenant_id=$1 AND conversation_id=$2 AND run_id=$3 AND status='pending' AND attempt_count=0 AND lease_token IS NULL`,
+        runScope,
+      )
+      assert.equal(held.rowCount, 1)
+      const claims = await outbox.claimAgentDispatchOutbox({
         workerId: "r43_restart_A_" + suffix,
         limit: 1,
         leaseDurationMs: 5000,
         maxAttempts: 8,
       })
       assert.equal(claims[0]?.runId, a.run_id)
-      assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claims[0]), true)
-      await store.agUi.ingest(
+      assert.equal(await outbox.markAgentDispatchAdmitted(claims[0]), true)
+      await bff.get(AGUI_PROJECTION).ingest(
         tenantId,
         sessionId,
         [1, 2].map((seq) => {
@@ -1105,17 +1182,14 @@ integrationTest(
           }
         }),
       )
-      bff = createBffServer({ ...bffConfig({ agentEnabled: false, agentBase: null }), tenantId }, { businessStore: store, sessionAdmission })
-      const originalBase = await listen(bff)
+      await bff.listen(0, "127.0.0.1")
+      const originalBase = await bff.getUrl()
       const originalDetail = await fetch(originalBase + "/v1/sessions/" + sessionId, { headers: auth(tenantId, ownerId), signal: controller.signal })
       assert.equal(originalDetail.status, 200)
       const originalSnapshot = (await originalDetail.json()).data
       assert.match(originalSnapshot.event_watermark, /^agui_[0-9a-f]{32}$/u)
-      await bff.shutdown(1000)
+      await bff.close()
       bff = null
-      await store.close()
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
 
       const launchRequests = []
       const eventRequests = []
@@ -1197,36 +1271,11 @@ integrationTest(
         ...bffConfig({ agentEnabled: true, agentBase }),
         tenantId,
       }
-      const runtime = new AgUiSessionRuntime({
-        connections: {
-          global: runtimeConfig.agUi.maxConnectionsGlobal,
-          perTenant: runtimeConfig.agUi.maxConnectionsPerTenant,
-          perSession: runtimeConfig.agUi.maxConnectionsPerSession,
-        },
-        ledgerWait: {
-          baseDelayMs: runtimeConfig.agUi.ledgerPollBaseDelayMs,
-          maxDelayMs: runtimeConfig.agUi.ledgerPollMaxDelayMs,
-          jitterRatio: runtimeConfig.agUi.ledgerPollJitterPercent / 100,
-        },
-        replayCacheTtlMs: runtimeConfig.agUi.replayCacheTtlMs,
-      })
-      const actualWait = runtime.ledgerWaits.wait.bind(runtime.ledgerWaits)
-      runtime.ledgerWaits.wait = (tenant, session) => {
-        const result = actualWait(tenant, session)
-        if (tenant === tenantId && session === sessionId) resolveWaiting("waiting")
-        return result
-      }
-      dispatcher = new AgentDispatchOutboxDispatcher(store.agentDispatchOutbox, new AgentOutboxDelivery(runtimeConfig), {
-        workerId: "r43_restart_B_" + suffix,
-      })
-      bff = createBffServer(runtimeConfig, {
-        businessStore: store,
-        sessionAdmission,
-        agUiRuntime: runtime,
-        // Gate only the genuine runner's start; its SQL, claims, receipts and network results stay real.
-        agentDispatchDispatcher: { start() {}, stop: () => dispatcher.stop() },
-      })
-      const restartedBase = await listen(bff)
+      bff = await createAgUiChatTestApp(runtimeConfig)
+      await bff.get(BFF_DATABASE).ready()
+      const runtime = bff.get(AGUI_RUNTIME)
+      await bff.listen(0, "127.0.0.1")
+      const restartedBase = await bff.getUrl()
       const restartedDetail = await fetch(restartedBase + "/v1/sessions/" + sessionId, { headers: auth(tenantId, ownerId), signal: controller.signal })
       assert.equal(restartedDetail.status, 200)
       const restartedSnapshot = (await restartedDetail.json()).data
@@ -1241,7 +1290,14 @@ integrationTest(
       assert.equal(stream.status, 200)
       textPromise = stream.text()
       void textPromise.catch(() => undefined)
-      const boundary = await bounded(Promise.race([waiting, textPromise.then(() => "eof")]), "SSE neither waited nor ended")
+      const boundary = await observe(
+        () => {
+          const { connections, ledgerWaits } = runtime.snapshot()
+          if (connections.tenants[tenantId] === 1 && ledgerWaits.entries === 1 && ledgerWaits.waits > 0) return "waiting"
+        },
+        "SSE neither waited nor ended",
+        textPromise.then(() => "eof"),
+      )
       assert.equal(boundary, "waiting", "historical A terminal must not cause EOF while B is durable queued and unclaimed")
       assert.equal(launchRequests.length, 0)
       assert.deepEqual(originalSnapshot.execution_head, {
@@ -1258,8 +1314,22 @@ integrationTest(
         [a.run_id, b.run_id],
       )
       assert.equal(queuedBefore.rows.at(-1).cursor, originalSnapshot.event_watermark)
-      dispatcher.start()
-      const command = await bounded(launched, "production dispatcher did not launch B")
+      const released = await pool.query(
+        `UPDATE bff_agent_dispatch_outbox SET available_at=CURRENT_TIMESTAMP(3)
+         WHERE tenant_id=$1 AND conversation_id=$2 AND run_id=$3 AND status='pending' AND attempt_count=0
+           AND lease_token IS NULL AND available_at='infinity'::timestamptz`,
+        runScope,
+      )
+      assert.equal(released.rowCount, 1)
+      const command = await observe(async () => {
+        if (launchRequests.length === 0) return
+        const result = await pool.query(
+          `SELECT status='admitted' AND admitted_at IS NOT NULL AND attempt_count=1 AND lease_token IS NULL AS acknowledged
+           FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND run_id=$3`,
+          runScope,
+        )
+        if (result.rows[0]?.acknowledged === true) return launched
+      }, "production dispatcher did not durably admit B")
       assert.equal(command.run_id, b.run_id)
       assert.equal(command.session_id, sessionId)
       assert.equal(launchRequests[0].tenant, tenantId)
@@ -1279,10 +1349,10 @@ integrationTest(
       for (const { event } of frames) assert.doesNotThrow(() => EventSchemas.parse(event))
       assert.equal(launchRequests.length, 1)
       assert.ok(eventRequests.some(({ publishB: released, launchCount }) => released && launchCount === 1))
-      const finalSnapshot = await store.chatService.snapshot(tenantId, ownerId, sessionId, undefined)
+      const finalSnapshot = await bff.get(CHAT_SERVICE).snapshot(tenantId, ownerId, sessionId, undefined)
       assert.equal(finalSnapshot.execution_head, undefined)
       assert.equal(finalSnapshot.event_watermark, frames.at(-1).id)
-      const replay = await store.agUi.replay(tenantId, sessionId, originalSnapshot.event_watermark, 100)
+      const replay = await bff.get(AGUI_PROJECTION).replay(tenantId, sessionId, originalSnapshot.event_watermark, 100)
       assert.equal(replay.kind, "page")
       assert.deepEqual(
         replay.frames.map(({ cursor }) => cursor),
@@ -1304,22 +1374,27 @@ integrationTest(
       clearTimeout(requestDeadline)
       controller.abort()
       if (textPromise !== null) await textPromise.catch(() => undefined)
-      if (dispatcher !== null) await dispatcher.stop()
-      if (bff !== null) await bff.shutdown(1000)
-      if (agent !== null && agent.listening) await close(agent)
-      if (store !== null) await store.close()
-      for (const [table, column] of [
-        ["bff_agui_event", "session_id"],
-        ["bff_agui_source_event", "session_id"],
-        ["bff_agui_run_interaction", "session_id"],
-        ["bff_agui_stream", "session_id"],
-        ["bff_agent_dispatch_outbox", "conversation_id"],
-        ["bff_message", "conversation_id"],
-        ["bff_conversation", "conversation_id"],
-      ]) {
-        await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1 AND " + column + "=$2", [tenantId, sessionId])
+      try {
+        await bff?.close()
+        if (agent !== null && agent.listening) await close(agent)
+        for (const [table, column] of [
+          ["bff_agui_event", "session_id"],
+          ["bff_agui_source_event", "session_id"],
+          ["bff_agui_run_interaction", "session_id"],
+          ["bff_agui_stream", "session_id"],
+          ["bff_agent_dispatch_outbox", "conversation_id"],
+          ["bff_message", "conversation_id"],
+          ["bff_conversation", "conversation_id"],
+        ]) {
+          await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1 AND " + column + "=$2", [tenantId, sessionId])
+        }
+      } finally {
+        try {
+          if (agent !== null && agent.listening) await close(agent)
+        } finally {
+          await pool.end()
+        }
       }
-      await pool.end()
     }
   },
 )
@@ -1485,10 +1560,10 @@ async function r57OwnerReceiptDigest(runId, body) {
 }
 async function r57HttpContext(context) {
   const { randomUUID } = await import("node:crypto")
-  const { AgentDispatchOutboxDispatcher } = await import("../dist/application/agent-dispatch-outbox-dispatcher.js")
-  const { AgentOutboxDelivery } = await import("../dist/infrastructure/clients/agent/outbox-delivery.js")
-  const { AgUiProjectorRunner } = await import("../dist/application/agui/projector.js")
-  const { AgentAgUiSourceReader } = await import("../dist/infrastructure/clients/agent/projector-source.js")
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { AgentRunsModule } = await import("../dist/modules/agent-runs/agent-runs.module.js")
   const suffix = randomUUID().replaceAll("-", ""),
     tenantId = "r57_http_" + suffix
   const sessionId = "r57_http_session_" + suffix,
@@ -1498,18 +1573,19 @@ async function r57HttpContext(context) {
     options: "-c search_path=kokoro_bff -c timezone=UTC",
     statement_timeout: 5000,
   })
-  let store = null,
-    bff = null,
+  let bff = null,
     agent = null
   const requests = [],
     streams = new Set()
   context.after(async () => {
     const failures = []
     for (const controller of streams) controller.abort()
+    let applicationClosed = true
     if (bff !== null) {
       try {
-        await bff.shutdown(1000)
+        await bff.close()
       } catch (error) {
+        applicationClosed = false
         failures.push(error)
       }
     }
@@ -1520,43 +1596,38 @@ async function r57HttpContext(context) {
         failures.push(error)
       }
     }
-    if (store !== null) {
+    if (applicationClosed) {
+      for (const [table, column] of [
+        ["bff_agui_run_activity", "session_id"],
+        ["bff_agui_run_process", "session_id"],
+        ["bff_agui_run_interaction", "session_id"],
+        ["bff_agui_cursor_tombstone", "session_id"],
+        ["bff_agui_event", "session_id"],
+        ["bff_conversation_artifact", "conversation_id"],
+        ["bff_agui_source_event", "session_id"],
+        ["bff_agui_stream", "session_id"],
+        ["bff_agent_cancellation_outbox", "conversation_id"],
+        ["bff_agent_dispatch_outbox", "conversation_id"],
+        ["bff_share", "conversation_id"],
+        ["bff_message", "conversation_id"],
+        ["bff_conversation", "conversation_id"],
+      ]) {
+        try {
+          if (
+            ["bff_agui_run_activity", "bff_agui_run_process", "bff_agui_run_interaction"].includes(table) &&
+            (await pool.query("SELECT to_regclass($1) AS name", ["kokoro_bff." + table])).rows[0].name === null
+          )
+            continue
+          await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1 AND " + column + "=$2", [tenantId, sessionId])
+        } catch (error) {
+          failures.push(error)
+        }
+      }
       try {
-        await store.close()
+        await pool.query("DELETE FROM bff_idempotency_receipt WHERE left(scope,length($1))=$1", [JSON.stringify([tenantId, ownerId]).slice(0, -1) + ","])
       } catch (error) {
         failures.push(error)
       }
-    }
-    for (const [table, column] of [
-      ["bff_agui_run_activity", "session_id"],
-      ["bff_agui_run_process", "session_id"],
-      ["bff_agui_run_interaction", "session_id"],
-      ["bff_agui_cursor_tombstone", "session_id"],
-      ["bff_agui_event", "session_id"],
-      ["bff_conversation_artifact", "conversation_id"],
-      ["bff_agui_source_event", "session_id"],
-      ["bff_agui_stream", "session_id"],
-      ["bff_agent_cancellation_outbox", "conversation_id"],
-      ["bff_agent_dispatch_outbox", "conversation_id"],
-      ["bff_share", "conversation_id"],
-      ["bff_message", "conversation_id"],
-      ["bff_conversation", "conversation_id"],
-    ]) {
-      try {
-        if (
-          ["bff_agui_run_activity", "bff_agui_run_process", "bff_agui_run_interaction"].includes(table) &&
-          (await pool.query("SELECT to_regclass($1) AS name", ["kokoro_bff." + table])).rows[0].name === null
-        )
-          continue
-        await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1 AND " + column + "=$2", [tenantId, sessionId])
-      } catch (error) {
-        failures.push(error)
-      }
-    }
-    try {
-      await pool.query("DELETE FROM bff_idempotency_receipt WHERE left(scope,length($1))=$1", [JSON.stringify([tenantId, ownerId]).slice(0, -1) + ","])
-    } catch (error) {
-      failures.push(error)
     }
     try {
       await pool.end()
@@ -1567,58 +1638,6 @@ async function r57HttpContext(context) {
   })
   await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
   await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-  store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-  await store.ready()
-  await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,title) VALUES ($1,$2,$3,'R57 control')", [sessionId, tenantId, ownerId])
-  const turn = await store.chatTurnService.submit({
-    tenantId,
-    conversationId: sessionId,
-    subjectId: ownerId,
-    actorId: ownerId,
-    requestId: "r57_http_turn_" + suffix,
-    idempotencyKey: "r57_http_turn_key_" + suffix,
-    content: "R57 decision collection",
-  })
-  assert.ok(turn)
-  const [claim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
-    workerId: "r57_http_worker_" + suffix,
-    limit: 1,
-    leaseDurationMs: 5000,
-    maxAttempts: 8,
-  })
-  assert.equal(claim?.runId, turn.run_id)
-  assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
-  const runId = turn.run_id
-  const source = (sequence, payload, kind = "interaction.state", sourceRunId = runId) => {
-    const id = "r57_http_source_" + suffix + "_" + sequence,
-      timestamp = new Date(sequence * 1000).toISOString()
-    return {
-      sourceRunId,
-      sourceEventId: id,
-      sourceSequence: sequence,
-      sourceOccurredAt: timestamp,
-      sourcePayload: {
-        chat_event_id: id,
-        session_id: sessionId,
-        run_id: sourceRunId,
-        source_index: sequence - 1,
-        event_type: kind === "run.created" ? "run.started" : kind,
-        payload_json: JSON.stringify(payload),
-        seq: sequence,
-        created_at: sequence * 1000,
-      },
-      event: {
-        event_id: id,
-        seq: sequence,
-        session_id: sessionId,
-        run_id: sourceRunId,
-        timestamp,
-        kind,
-        payload,
-      },
-    }
-  }
-  await store.agUi.ingest(tenantId, sessionId, [source(1, { run_id: runId }, "run.created"), source(2, r57Waiting())])
   agent = createServer((request, response) => {
     const chunks = []
     request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
@@ -1657,23 +1676,78 @@ async function r57HttpContext(context) {
   })
   const agentBase = await listen(agent)
   const config = { ...bffConfig({ agentEnabled: true, agentBase }), tenantId }
-  const start = async () => {
-    const dispatcher = new AgentDispatchOutboxDispatcher(store.agentDispatchOutbox, new AgentOutboxDelivery(config), {
-      workerId: "r57_http_dispatch_" + suffix,
-    })
-    const projector = new AgUiProjectorRunner(store.agUi, store.agUiConsumers, new AgentAgUiSourceReader(config, agentBase), {
-      workerId: "r57_http_projector_" + suffix,
-    })
-    // Existing timer-start seam only: real production SQL/HTTP methods are never replaced.
-    // No background source poll may race the explicitly committed owner revisions in this test.
-    bff = createBffServer(config, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: { start() {}, stop: () => dispatcher.stop() },
-      agUiProjector: { start() {}, stop: () => projector.stop() },
-    })
-    return listen(bff)
+  const prepare = async () => {
+    const moduleRef = await Test.createTestingModule({ imports: [AgentRunsModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(sessionAdmission)
+      // Manual claims and projection replace only the two timers that were never started.
+      .overrideProvider(AGENT_DISPATCH_DISPATCHER)
+      .useValue(null)
+      .overrideProvider(AGUI_PROJECTOR)
+      .useValue(null)
+      .compile()
+    bff = moduleRef.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+    await bff.get(BFF_DATABASE).ready()
   }
+  const start = async () => {
+    await bff.listen(0, "127.0.0.1")
+    return bff.getUrl()
+  }
+  await prepare()
+  const chatTurns = bff.get(CHAT_TURN_SERVICE)
+  const outbox = bff.get(AGENT_DISPATCH_OUTBOX)
+  await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,title) VALUES ($1,$2,$3,'R57 control')", [sessionId, tenantId, ownerId])
+  const turn = await chatTurns.submit({
+    tenantId,
+    conversationId: sessionId,
+    subjectId: ownerId,
+    actorId: ownerId,
+    requestId: "r57_http_turn_" + suffix,
+    idempotencyKey: "r57_http_turn_key_" + suffix,
+    content: "R57 decision collection",
+  })
+  assert.ok(turn)
+  const [claim] = await outbox.claimAgentDispatchOutbox({
+    workerId: "r57_http_worker_" + suffix,
+    limit: 1,
+    leaseDurationMs: 5000,
+    maxAttempts: 8,
+  })
+  assert.equal(claim?.runId, turn.run_id)
+  assert.equal(await outbox.markAgentDispatchAdmitted(claim), true)
+  const runId = turn.run_id
+  const source = (sequence, payload, kind = "interaction.state", sourceRunId = runId) => {
+    const id = "r57_http_source_" + suffix + "_" + sequence,
+      timestamp = new Date(sequence * 1000).toISOString()
+    return {
+      sourceRunId,
+      sourceEventId: id,
+      sourceSequence: sequence,
+      sourceOccurredAt: timestamp,
+      sourcePayload: {
+        chat_event_id: id,
+        session_id: sessionId,
+        run_id: sourceRunId,
+        source_index: sequence - 1,
+        event_type: kind === "run.created" ? "run.started" : kind,
+        payload_json: JSON.stringify(payload),
+        seq: sequence,
+        created_at: sequence * 1000,
+      },
+      event: {
+        event_id: id,
+        seq: sequence,
+        session_id: sessionId,
+        run_id: sourceRunId,
+        timestamp,
+        kind,
+        payload,
+      },
+    }
+  }
+  await bff.get(AGUI_PROJECTION).ingest(tenantId, sessionId, [source(1, { run_id: runId }, "run.created"), source(2, r57Waiting())])
   let base = await start()
   const detailResponse = async () => {
     const response = await fetch(base + "/v1/sessions/" + sessionId, {
@@ -1745,9 +1819,10 @@ async function r57HttpContext(context) {
       return { status: response.status, body: await response.json() }
     },
     facts,
-    ingest: (sequence, payload, kind, sourceRunId) => store.agUi.ingest(tenantId, sessionId, [source(sequence, payload, kind, sourceRunId)]),
+    ingest: (sequence, payload, kind, sourceRunId) => bff.get(AGUI_PROJECTION).ingest(tenantId, sessionId, [source(sequence, payload, kind, sourceRunId)]),
     submitAndStartSuccessor: async (sequence) => {
-      const next = await store.chatTurnService.submit({
+      const outbox = bff.get(AGENT_DISPATCH_OUTBOX)
+      const next = await bff.get(CHAT_TURN_SERVICE).submit({
         tenantId,
         conversationId: sessionId,
         subjectId: ownerId,
@@ -1757,15 +1832,15 @@ async function r57HttpContext(context) {
         content: "next",
       })
       assert.ok(next)
-      const [nextClaim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      const [nextClaim] = await outbox.claimAgentDispatchOutbox({
         workerId: "r124_http_next_" + suffix,
         limit: 1,
         leaseDurationMs: 5000,
         maxAttempts: 8,
       })
       assert.equal(nextClaim.runId, next.run_id)
-      assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(nextClaim), true)
-      await store.agUi.ingest(tenantId, sessionId, [source(sequence, { run_id: next.run_id }, "run.created", next.run_id)])
+      assert.equal(await outbox.markAgentDispatchAdmitted(nextClaim), true)
+      await bff.get(AGUI_PROJECTION).ingest(tenantId, sessionId, [source(sequence, { run_id: next.run_id }, "run.created", next.run_id)])
       return next.run_id
     },
     ageLedgerThrough: (cursor) =>
@@ -1774,18 +1849,17 @@ async function r57HttpContext(context) {
         [tenantId, sessionId, cursor],
       ),
     collectGarbage: (batchSize = 100) =>
-      store.agUiConsumers.collectGarbage({
+      bff.get(AGUI_PROJECTION_CONSUMERS).collectGarbage({
         now: new Date().toISOString(),
         retentionMs: 1,
         tombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
         batchSize,
       }),
-    replay: (cursor) => store.agUi.replay(tenantId, sessionId, cursor, 100),
+    replay: (cursor) => bff.get(AGUI_PROJECTION).replay(tenantId, sessionId, cursor, 100),
     restart: async () => {
-      await bff.shutdown(1000)
-      await store.close()
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
+      await bff.close()
+      bff = null
+      await prepare()
       base = await start()
     },
     stream: async (cursor, controller) => {

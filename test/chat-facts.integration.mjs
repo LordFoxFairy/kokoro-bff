@@ -8,16 +8,24 @@ import { test } from "node:test"
 import { Pool } from "pg"
 import { createClient } from "redis"
 
-import { createBffServer } from "../dist/bootstrap/server.js"
-import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
+import { AgUiProjectionService } from "../dist/application/agui/project-session-events.js"
+import { ChatApplicationService } from "../dist/application/chat-service.js"
+import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
+import { ProjectService } from "../dist/application/project-service.js"
+import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
+import { PostgresAgentCancellationOutboxRepository } from "../dist/infrastructure/postgres/agent-cancellation-outbox-repository.js"
+import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
+import { PostgresAgUiConsumerRepository } from "../dist/infrastructure/postgres/agui-consumer-repository.js"
+import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgres/agui-projection-repository.js"
+import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
+import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
+import { PostgresProjectRepository } from "../dist/infrastructure/postgres/project-repository.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const redisUrl = process.env.KOKORO_TEST_REDIS_URL
 const integrationTest = postgresUrl && redisUrl ? test : test.skip
 const sessionAdmission = new SessionAdmissionDouble()
-
-const idleWorker = { start() {}, async stop() {} }
 
 function auth(namespace, principal = "chat_integration_user") {
   const token = `session-${namespace}-${principal}`
@@ -264,8 +272,10 @@ integrationTest("paginates Conversation ties completely through the production H
         otherTenant,
       ],
     )
-    bff = createBffServer(config(tenant), { sessionAdmission })
-    const base = await listen(bff)
+    const { app } = await createMoveNestApp(tenant)
+    bff = app
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
 
     for (const limit of [1, 2]) {
       const seen = []
@@ -357,10 +367,13 @@ integrationTest("paginates Conversation ties completely through the production H
       conflict: { status: 400, code: "invalid_scope" },
     })
   } finally {
-    if (bff) await close(bff)
-    await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_project WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.end()
+    try {
+      await bff?.close()
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_project WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    } finally {
+      await pool.end()
+    }
   }
 })
 
@@ -374,7 +387,6 @@ integrationTest("R207 Message admission bounds a Project lock wait and leaves ze
   const blockedKey = `r207-blocked-${suffix}`
   const healthyKey = `r207-healthy-${suffix}`
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
   let bff = null
   let blocker = null
   let safetyTimer = null
@@ -409,20 +421,11 @@ integrationTest("R207 Message admission bounds a Project lock wait and leaves ze
       [blockedConversation, healthyConversation, tenant, subject, projectId],
     )
 
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const runtimeConfig = config(tenant)
-    runtimeConfig.agentEnabled = true
-    runtimeConfig.upstreams.agents = "http://127.0.0.1:9"
-    bff = createBffServer(runtimeConfig, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-    })
-    const base = await listen(bff)
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    bff = app
+    await database.ready()
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const identity = auth(tenant, subject)
     const sendMessage = async (conversationId, key, content) => {
       const response = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
@@ -525,8 +528,7 @@ integrationTest("R207 Message admission bounds a Project lock wait and leaves ze
     if (safetyError !== null) cleanupErrors.push(safetyError)
     const settled = await Promise.allSettled(pending)
     cleanupErrors.push(...settled.filter(({ status, reason }) => status === "rejected" && reason !== testError).map(({ reason }) => reason))
-    if (bff !== null) await cleanup(() => close(bff))
-    if (store !== null) await cleanup(() => store.close())
+    if (bff !== null) await cleanup(() => bff.close())
     await cleanup(() => pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]))
     for (const table of ["bff_agent_cancellation_outbox", "bff_share", "bff_agui_event", "bff_agui_stream", "bff_agent_dispatch_outbox", "bff_message"]) {
       await cleanup(() => pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]))
@@ -561,7 +563,6 @@ integrationTest("R209 Message cumulative SQL shares one absolute admission deadl
   const outboxMarker = `r209:${sqlSuffix}:outbox`
   const messageMarker = `r209:${sqlSuffix}:message`
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
   let bff = null
   let testError = null
   let phase = "setup"
@@ -613,22 +614,11 @@ integrationTest("R209 Message cumulative SQL shares one absolute admission deadl
        FOR EACH ROW EXECUTE FUNCTION ${messageFunction}()`,
     )
 
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const runtimeConfig = config(tenant)
-    runtimeConfig.agentEnabled = true
-    runtimeConfig.upstreams.agents = "http://127.0.0.1:9"
-    bff = createBffServer(runtimeConfig, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-      scheduledAgentDispatcher: idleWorker,
-      scheduledAgentTerminalConsumer: idleWorker,
-    })
-    const base = await listen(bff)
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    bff = app
+    await database.ready()
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const identity = auth(tenant, subject)
     const warmup = await fetch(`${base}/v1/sessions?scope=direct`, { headers: identity })
     assert.equal(warmup.status, 200)
@@ -678,7 +668,7 @@ integrationTest("R209 Message cumulative SQL shares one absolute admission deadl
         return result.rows.length === 0
       })
     const repositoryPoolCounts = () => {
-      const repositoryPool = store.database.pool
+      const repositoryPool = database.pool
       return { totalCount: repositoryPool.totalCount, idleCount: repositoryPool.idleCount, waitingCount: repositoryPool.waitingCount }
     }
     await waitFor(() => {
@@ -766,8 +756,7 @@ integrationTest("R209 Message cumulative SQL shares one absolute admission deadl
     }
     const settled = await Promise.allSettled(pending)
     cleanupErrors.push(...settled.filter(({ status, reason }) => status === "rejected" && reason !== testError).map(({ reason }) => reason))
-    if (bff !== null) await cleanup(() => close(bff))
-    if (store !== null) await cleanup(() => store.close())
+    if (bff !== null) await cleanup(() => bff.close())
     await cleanup(() => pool.query(`DROP TRIGGER IF EXISTS ${outboxTrigger} ON bff_agent_dispatch_outbox`))
     await cleanup(() => pool.query(`DROP FUNCTION IF EXISTS ${outboxFunction}()`))
     await cleanup(() => pool.query(`DROP TRIGGER IF EXISTS ${messageTrigger} ON bff_message`))
@@ -797,7 +786,6 @@ integrationTest("R211 Message HTTP pool saturation keeps one absolute deadline a
   const content = "R211 bounded pool admission"
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const held = []
-  let store = null
   let bff = null
   let pendingRequest = null
   let releaseOne = null
@@ -822,28 +810,17 @@ integrationTest("R211 Message HTTP pool saturation keeps one absolute deadline a
       projectId,
     ])
 
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const runtimeConfig = config(tenant)
-    runtimeConfig.agentEnabled = true
-    runtimeConfig.upstreams.agents = "http://127.0.0.1:9"
-    bff = createBffServer(runtimeConfig, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-      scheduledAgentDispatcher: idleWorker,
-      scheduledAgentTerminalConsumer: idleWorker,
-    })
-    const base = await listen(bff)
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    bff = app
+    await database.ready()
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const identity = auth(tenant, subject)
     const warmup = await fetch(`${base}/v1/sessions?scope=direct`, { headers: identity })
     assert.equal(warmup.status, 200)
     await warmup.json()
 
-    const ownerPool = store.database.pool
+    const ownerPool = database.pool
     assert.equal(ownerPool.options.max, 10, "this case saturates the real BFF owner Pool")
     for (let index = 0; index < ownerPool.options.max; index += 1) held.push(await ownerPool.connect())
     for (const client of held.splice(0)) client.release()
@@ -975,8 +952,7 @@ integrationTest("R211 Message HTTP pool saturation keeps one absolute deadline a
     for (const client of held.splice(0)) client.release()
     if (releaseOne !== null) await releaseOne
     if (pendingRequest !== null) await pendingRequest.catch((error) => cleanupErrors.push(error))
-    if (bff !== null) await cleanup(() => close(bff))
-    if (store !== null) await cleanup(() => store.close())
+    if (bff !== null) await cleanup(() => bff.close())
     await cleanup(() => pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]))
     for (const table of ["bff_agent_cancellation_outbox", "bff_share", "bff_agui_event", "bff_agui_stream", "bff_agent_dispatch_outbox", "bff_message"]) {
       await cleanup(() => pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]))
@@ -1011,7 +987,6 @@ integrationTest("R215 Message rolls back real mid-transaction SQL faults and a t
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
   let bff = null
   let restoreClientObserver = () => {}
   let testError = null
@@ -1039,22 +1014,11 @@ integrationTest("R215 Message rolls back real mid-transaction SQL faults and a t
     )
     await pool.query(`CREATE TRIGGER ${sqlTrigger} BEFORE INSERT ON bff_message FOR EACH ROW EXECUTE FUNCTION ${sqlFunction}()`)
 
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const runtimeConfig = config(tenant)
-    runtimeConfig.agentEnabled = true
-    runtimeConfig.upstreams.agents = "http://127.0.0.1:9"
-    bff = createBffServer(runtimeConfig, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-      scheduledAgentDispatcher: idleWorker,
-      scheduledAgentTerminalConsumer: idleWorker,
-    })
-    const base = await listen(bff)
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    bff = app
+    await database.ready()
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const identity = auth(tenant, subject)
     const warmup = await fetch(`${base}/v1/sessions?scope=direct`, {
       headers: identity,
@@ -1124,7 +1088,7 @@ integrationTest("R215 Message rolls back real mid-transaction SQL faults and a t
       `CREATE FUNCTION ${disconnectFunction}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.conversation_id='${disconnectConversation}' AND NEW.role='user' THEN PERFORM set_config('application_name','${disconnectMarker}',true); PERFORM pg_sleep(10); END IF; RETURN NEW; END $$`,
     )
     await pool.query(`CREATE TRIGGER ${disconnectTrigger} BEFORE INSERT ON bff_message FOR EACH ROW EXECUTE FUNCTION ${disconnectFunction}()`)
-    const ownerPool = store.database.pool
+    const ownerPool = database.pool
     const originalConnect = ownerPool.connect
     const observedClients = new Map()
     ownerPool.connect = function (...args) {
@@ -1200,8 +1164,7 @@ integrationTest("R215 Message rolls back real mid-transaction SQL faults and a t
       }
     }
     restoreClientObserver()
-    if (bff !== null) await cleanup(() => close(bff))
-    if (store !== null) await cleanup(() => store.close())
+    if (bff !== null) await cleanup(() => bff.close())
     await cleanup(() => pool.query(`DROP TRIGGER IF EXISTS ${sqlTrigger} ON bff_message`))
     await cleanup(() => pool.query(`DROP FUNCTION IF EXISTS ${sqlFunction}()`))
     await cleanup(() => pool.query(`DROP TRIGGER IF EXISTS ${disconnectTrigger} ON bff_message`))
@@ -1231,7 +1194,6 @@ integrationTest("R215 Message destroys the exact client after a real COMMIT ACK 
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
   let bff = null
   let restoreFixture = () => {}
   let testError = null
@@ -1254,9 +1216,10 @@ integrationTest("R215 Message destroys the exact client after a real COMMIT ACK 
       subject,
       projectId,
     ])
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const ownerPool = store.database.pool
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    bff = app
+    await database.ready()
+    const ownerPool = database.pool
     const originalConnect = ownerPool.connect
     const patched = new Map()
     let insertedDispatch = false
@@ -1304,20 +1267,8 @@ integrationTest("R215 Message destroys the exact client after a real COMMIT ACK 
         if (state.error !== null) client.removeListener("error", state.error)
       }
     }
-    const runtimeConfig = config(tenant)
-    runtimeConfig.agentEnabled = true
-    runtimeConfig.upstreams.agents = "http://127.0.0.1:9"
-    bff = createBffServer(runtimeConfig, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-      scheduledAgentDispatcher: idleWorker,
-      scheduledAgentTerminalConsumer: idleWorker,
-    })
-    const base = await listen(bff)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const identity = auth(tenant, subject)
     const tenantFacts = async (table) =>
       (await pool.query(`SELECT to_jsonb(owned) AS fact FROM ${table} AS owned WHERE tenant_id=$1 ORDER BY to_jsonb(owned)::text`, [tenant])).rows.map(
@@ -1401,8 +1352,7 @@ integrationTest("R215 Message destroys the exact client after a real COMMIT ACK 
       }
     }
     restoreFixture()
-    if (bff !== null) await cleanup(() => close(bff))
-    if (store !== null) await cleanup(() => store.close())
+    if (bff !== null) await cleanup(() => bff.close())
     await cleanup(() => pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]))
     for (const table of ["bff_agent_cancellation_outbox", "bff_share", "bff_agui_event", "bff_agui_stream", "bff_agent_dispatch_outbox", "bff_message"])
       await cleanup(() => pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]))
@@ -1429,7 +1379,6 @@ integrationTest("R215 Message scope churn shares one deadline across four real a
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
   let coordinator = null
-  let store = null
   let bff = null
   let restoreFixture = () => {}
   let testError = null
@@ -1458,9 +1407,10 @@ integrationTest("R215 Message scope churn shares one deadline across four real a
       projectP,
     ])
     coordinator = await pool.connect()
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const ownerPool = store.database.pool
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    bff = app
+    await database.ready()
+    const ownerPool = database.pool
     const originalConnect = ownerPool.connect
     const patched = new Map()
     ownerPool.connect = function (...args) {
@@ -1506,20 +1456,8 @@ integrationTest("R215 Message scope churn shares one deadline across four real a
       ownerPool.connect = originalConnect
       for (const [client, query] of patched) client.query = query
     }
-    const runtimeConfig = config(tenant)
-    runtimeConfig.agentEnabled = true
-    runtimeConfig.upstreams.agents = "http://127.0.0.1:9"
-    bff = createBffServer(runtimeConfig, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-      scheduledAgentDispatcher: idleWorker,
-      scheduledAgentTerminalConsumer: idleWorker,
-    })
-    const base = await listen(bff)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const identity = auth(tenant, subject)
     const tenantFacts = async (table) =>
       (await pool.query(`SELECT to_jsonb(owned) AS fact FROM ${table} AS owned WHERE tenant_id=$1 ORDER BY to_jsonb(owned)::text`, [tenant])).rows.map(
@@ -1609,8 +1547,7 @@ integrationTest("R215 Message scope churn shares one deadline across four real a
     await Promise.allSettled(lateChurns)
     restoreFixture()
     if (coordinator !== null) coordinator.release()
-    if (bff !== null) await cleanup(() => close(bff))
-    if (store !== null) await cleanup(() => store.close())
+    if (bff !== null) await cleanup(() => bff.close())
     await cleanup(() => pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]))
     for (const table of ["bff_agent_cancellation_outbox", "bff_share", "bff_agui_event", "bff_agui_stream", "bff_agent_dispatch_outbox", "bff_message"])
       await cleanup(() => pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]))
@@ -1635,7 +1572,6 @@ integrationTest("R215 Message notification faults never reverse a committed cano
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store = null
   let bff = null
   let restoreNotify = () => {}
   let testError = null
@@ -1654,12 +1590,13 @@ integrationTest("R215 Message notification faults never reverse a committed cano
       "INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title) VALUES ($1,$3,$4,$5,'R215 throw'),($2,$3,$4,$5,'R215 late')",
       [throwConversation, lateConversation, tenant, subject, projectId],
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const originalNotify = store.database.notifyAgUiProjection.bind(store.database)
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    bff = app
+    await database.ready()
+    const originalNotify = database.notifyAgUiProjection.bind(database)
     let mode = "throw"
     let notified = 0
-    store.database.notifyAgUiProjection = async (...args) => {
+    database.notifyAgUiProjection = async (...args) => {
       await originalNotify(...args)
       notified += 1
       if (mode === "throw") throw new Error("R215_NOTIFY_ACK_LOST")
@@ -1668,22 +1605,10 @@ integrationTest("R215 Message notification faults never reverse a committed cano
       await late
     }
     restoreNotify = () => {
-      store.database.notifyAgUiProjection = originalNotify
+      database.notifyAgUiProjection = originalNotify
     }
-    const runtimeConfig = config(tenant)
-    runtimeConfig.agentEnabled = true
-    runtimeConfig.upstreams.agents = "http://127.0.0.1:9"
-    bff = createBffServer(runtimeConfig, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-      scheduledAgentDispatcher: idleWorker,
-      scheduledAgentTerminalConsumer: idleWorker,
-    })
-    const base = await listen(bff)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const identity = auth(tenant, subject)
     const tenantFacts = async (table) =>
       (await pool.query(`SELECT to_jsonb(owned) AS fact FROM ${table} AS owned WHERE tenant_id=$1 ORDER BY to_jsonb(owned)::text`, [tenant])).rows.map(
@@ -1768,8 +1693,7 @@ integrationTest("R215 Message notification faults never reverse a committed cano
     }
     await Promise.allSettled(lateOperations)
     restoreNotify()
-    if (bff !== null) await cleanup(() => close(bff))
-    if (store !== null) await cleanup(() => store.close())
+    if (bff !== null) await cleanup(() => bff.close())
     await cleanup(() => pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]))
     for (const table of ["bff_agent_cancellation_outbox", "bff_share", "bff_agui_event", "bff_agui_stream", "bff_agent_dispatch_outbox", "bff_message"])
       await cleanup(() => pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]))
@@ -1788,27 +1712,17 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
   const tenant = `chat_first_${Date.now()}`
   const conversationId = `conv_${randomUUID()}`
   const titleSource = "  🌟 First message creates a private conversation with a useful title  "
-  let store
   let bff
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const runtimeConfig = {
-      ...config(tenant),
-      agentEnabled: true,
-      upstreams: { ...config(tenant).upstreams, agents: "http://127.0.0.1:9" },
-    }
-    bff = createBffServer(runtimeConfig, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-    })
-    const base = await listen(bff)
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    bff = app
+    await database.ready()
+    const { AGENT_DISPATCH_OUTBOX } = await import("../dist/common/tokens.js")
+    const dispatchOutbox = app.get(AGENT_DISPATCH_OUTBOX)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const send = (key, content, id = conversationId, body = {}) =>
       fetch(`${base}/v1/sessions/${id}/messages`, {
         method: "POST",
@@ -2027,7 +1941,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     const rollbackId = `conv_${randomUUID()}`
     const rollbackRunId = `run_${randomUUID()}`
     await assert.rejects(
-      store.agentDispatchOutbox.commitChatTurn({
+      dispatchOutbox.commitChatTurn({
         outboxId: `rollback_${randomUUID()}`,
         tenantId: tenant,
         conversationId: rollbackId,
@@ -2072,15 +1986,17 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     const existing = await pool.query("SELECT title FROM bff_conversation WHERE conversation_id = $1", [existingId])
     assert.equal(existing.rows[0].title, "Existing")
   } finally {
-    if (bff) await close(bff)
-    if (store) await store.close()
-    await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, `${tenant}_foreign`]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_project WHERE tenant_id IN ($1, $2)", [tenant, `${tenant}_foreign`]).catch(() => undefined)
-    await pool.end()
+    try {
+      await bff?.close()
+      await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, `${tenant}_foreign`]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_project WHERE tenant_id IN ($1, $2)", [tenant, `${tenant}_foreign`]).catch(() => undefined)
+    } finally {
+      await pool.end()
+    }
   }
 })
 
@@ -2097,16 +2013,33 @@ test("does not return Share metadata when it is revoked between lookup and messa
     },
   }
   const publicShareService = { findActiveShare: async () => shared, listMessages: async () => null }
-  const bff = createBffServer(config(), { businessStore: null, publicShareService, readiness: async () => undefined })
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { ChatModule } = await import("../dist/modules/chat/chat.module.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { BFF_CONFIG, BFF_DATABASE, PUBLIC_SHARE_SERVICE } = await import("../dist/common/tokens.js")
+  const unexpected = () => {
+    throw new Error("public Share race fixture must not touch BFF storage")
+  }
+  const module = await Test.createTestingModule({ imports: [ChatModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config())
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected }, redis: {}, ready: unexpected })
+    .overrideProvider(PUBLIC_SHARE_SERVICE)
+    .useValue(publicShareService)
+    .compile()
+  const bff = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
   try {
-    const base = await listen(bff)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const response = await fetch(`${base}/v1/shared/share_raced`, {
       headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret" },
     })
     assert.equal(response.status, 404)
     assert.equal((await response.json()).error.code, "share_not_found")
   } finally {
-    await close(bff)
+    await bff.close()
   }
 })
 
@@ -2144,8 +2077,10 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
       [`message_${Date.now()}_second`, tenant, conversationId, "run_opaque", "Second high sequence", "9223372036854775807"],
     )
     await redis.connect()
-    bff = createBffServer(config(tenant), { sessionAdmission })
-    const base = await listen(bff)
+    const { app } = await createMoveNestApp(tenant, { runControl: true })
+    bff = app
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
 
     const listed = await fetch(`${base}/v1/sessions`, { headers: auth(tenant, "chat_user") })
     assert.equal(listed.status, 200)
@@ -2347,13 +2282,19 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     const retainedReplacement = await pool.query("SELECT revoked_at FROM bff_share WHERE share_id = $1", [replacementId])
     assert.ok(retainedReplacement.rows[0].revoked_at)
   } finally {
-    if (bff) await close(bff)
-    await pool.query("DELETE FROM bff_share WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_message WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_project WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
-    await redis.quit().catch(() => undefined)
-    await pool.end()
+    try {
+      await bff?.close()
+      await pool.query("DELETE FROM bff_share WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_message WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_project WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
+    } finally {
+      try {
+        await redis.quit().catch(() => undefined)
+      } finally {
+        await pool.end()
+      }
+    }
   }
 })
 
@@ -2400,11 +2341,10 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
       )
     })
     const agentBase = await listen(agent)
-    const runtimeConfig = config(tenant)
-    runtimeConfig.agentEnabled = true
-    runtimeConfig.upstreams.agents = agentBase
-    bff = createBffServer(runtimeConfig, { sessionAdmission })
-    const base = await listen(bff)
+    const { app } = await createMoveNestApp(tenant, { agentBase })
+    bff = app
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
 
     const mismatchedProjectRef = await fetch(`${base}/v1/sessions/${conversationId}/messages?project_ref=query_project`, {
       method: "POST",
@@ -2526,11 +2466,12 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
     assert.equal(retryable.attempt_count, 1)
     assert.equal(retryable.last_error_code, "agent_unavailable")
 
-    await close(bff)
+    await bff.close()
     bff = undefined
     agentAvailable = true
-    bff = createBffServer(runtimeConfig, { sessionAdmission })
-    await listen(bff)
+    const { app: restarted } = await createMoveNestApp(tenant, { agentBase })
+    bff = restarted
+    await bff.listen(0, "127.0.0.1")
     const admitted = await waitFor(async () => {
       const result = await pool.query(
         `SELECT status, attempt_count, completed_at
@@ -2544,14 +2485,21 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
     assert.equal(admitted.completed_at, null)
     assert.ok(launchAttempts >= 2)
   } finally {
-    if (bff) await close(bff)
-    if (agent) await close(agent)
-    await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.end()
+    try {
+      await bff?.close()
+      if (agent) await close(agent)
+      await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    } finally {
+      try {
+        if (agent?.listening) await close(agent)
+      } finally {
+        await pool.end()
+      }
+    }
   }
 })
 
@@ -2559,7 +2507,7 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `chat_fence_${Date.now()}`
   const conversationId = `conversation_fence_${Date.now()}`
-  let store
+  let database
   try {
     await pool.query(
       "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
@@ -2570,9 +2518,11 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
        VALUES ($1, $2, $3, $4)`,
       [conversationId, tenant, "chat_user", "Lease fencing"],
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const receipt = await store.chatTurnService.submit({
+    database = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const dispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
+    const chatTurns = new ChatTurnApplicationService(dispatchOutbox, new Sha256StableIdGenerator())
+    await database.ready()
+    const receipt = await chatTurns.submit({
       tenantId: tenant,
       conversationId,
       subjectId: "chat_user",
@@ -2583,7 +2533,7 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
     })
     assert.ok(receipt)
 
-    const first = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const first = await dispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_a",
       limit: 1,
       leaseDurationMs: 5,
@@ -2591,7 +2541,7 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
     })
     assert.equal(first.length, 1)
     await new Promise((resolve) => setTimeout(resolve, 20))
-    const second = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const second = await dispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_b",
       limit: 1,
       leaseDurationMs: 5000,
@@ -2602,7 +2552,7 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
     assert.ok(second[0].leaseRemainingMs > 0 && second[0].leaseRemainingMs <= 5000)
 
     assert.equal(
-      await store.agentDispatchOutbox.markAgentDispatchAdmitted({
+      await dispatchOutbox.markAgentDispatchAdmitted({
         tenantId: `${tenant}_other`,
         outboxId: second[0].outboxId,
         leaseOwner: second[0].leaseOwner,
@@ -2612,7 +2562,7 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
       false,
     )
     assert.equal(
-      await store.agentDispatchOutbox.markAgentDispatchAdmitted({
+      await dispatchOutbox.markAgentDispatchAdmitted({
         tenantId: first[0].tenantId,
         outboxId: first[0].outboxId,
         leaseOwner: first[0].leaseOwner,
@@ -2622,7 +2572,7 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
       false,
     )
     assert.equal(
-      await store.agentDispatchOutbox.markAgentDispatchAdmitted({
+      await dispatchOutbox.markAgentDispatchAdmitted({
         tenantId: second[0].tenantId,
         outboxId: second[0].outboxId,
         leaseOwner: second[0].leaseOwner,
@@ -2640,7 +2590,7 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
     )
     assert.deepEqual(state.rows, [{ status: "admitted", attempt_count: 2, fence: "2", admission_unknown_seen: true }])
   } finally {
-    if (store) await store.close()
+    if (database) await database.close()
     await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
@@ -2654,7 +2604,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `chat_fifo_${Date.now()}`
   const conversationId = `conversation_fifo_${Date.now()}`
-  let store
+  let database
   try {
     await pool.query(
       "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
@@ -2665,11 +2615,16 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
        VALUES ($1, $2, $3, $4)`,
       [conversationId, tenant, "chat_user", "Strict dispatch FIFO"],
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    database = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const dispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
+    const chatTurns = new ChatTurnApplicationService(dispatchOutbox, new Sha256StableIdGenerator())
+    const chat = new ChatApplicationService(new PostgresChatRepository(database))
+    const projection = new AgUiProjectionService(new PostgresAgUiProjectionRepository(database))
+    const consumers = new PostgresAgUiConsumerRepository(database)
+    await database.ready()
     for (const suffix of ["first", "second", "third"]) {
       assert.ok(
-        await store.chatTurnService.submit({
+        await chatTurns.submit({
           tenantId: tenant,
           conversationId,
           subjectId: "chat_user",
@@ -2681,7 +2636,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
       )
     }
 
-    const queuedSnapshot = await store.chatService.snapshot(tenant, "chat_user", conversationId, undefined)
+    const queuedSnapshot = await chat.snapshot(tenant, "chat_user", conversationId, undefined)
     const queuedRows = await pool.query(
       `SELECT run_id, conversation_dispatch_seq
          FROM bff_agent_dispatch_outbox
@@ -2694,7 +2649,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
       state: "queued",
       pending_pauses: [],
     })
-    const queuedReplay = await store.agUi.replay(tenant, conversationId, null, 100)
+    const queuedReplay = await projection.replay(tenant, conversationId, null, 100)
     assert.equal(queuedReplay.kind, "page")
     assert.deepEqual(
       queuedReplay.frames.map(({ eventType, payload }) => ({ eventType, value: payload.value })),
@@ -2707,7 +2662,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
     )
     const queuedWatermark = queuedSnapshot.event_watermark
 
-    const replayedFirst = await store.chatTurnService.submit({
+    const replayedFirst = await chatTurns.submit({
       tenantId: tenant,
       conversationId,
       subjectId: "chat_user",
@@ -2717,12 +2672,12 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
       content: "Dispatch first",
     })
     assert.equal(replayedFirst.run_id, queuedRows.rows[0].run_id)
-    assert.equal((await store.chatService.snapshot(tenant, "chat_user", conversationId, undefined)).event_watermark, queuedWatermark)
+    assert.equal((await chat.snapshot(tenant, "chat_user", conversationId, undefined)).event_watermark, queuedWatermark)
 
     const beforeClaim = await pool.query("SELECT expected_run_id FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2", [tenant, conversationId])
     assert.equal(beforeClaim.rows[0].expected_run_id, null)
 
-    const first = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const first = await dispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_fifo",
       limit: 10,
       leaseDurationMs: 5000,
@@ -2735,13 +2690,13 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
         .expected_run_id,
       first[0].runId,
     )
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(first[0]), true)
-    assert.deepEqual((await store.chatService.snapshot(tenant, "chat_user", conversationId, undefined)).execution_head, {
+    assert.equal(await dispatchOutbox.markAgentDispatchAdmitted(first[0]), true)
+    assert.deepEqual((await chat.snapshot(tenant, "chat_user", conversationId, undefined)).execution_head, {
       run_id: first[0].runId,
       state: "queued",
       pending_pauses: [],
     })
-    const blocked = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const blocked = await dispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_fifo",
       limit: 10,
       leaseDurationMs: 5000,
@@ -2770,7 +2725,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
     assert.equal(pendingAssistant.rows[0].status, "pending")
 
     const terminalAt = new Date().toISOString()
-    await store.agUi.ingest(tenant, conversationId, [
+    await projection.ingest(tenant, conversationId, [
       {
         sourceRunId: first[0].runId,
         sourceEventId: "fifo_first_started",
@@ -2804,13 +2759,13 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
         },
       },
     ])
-    const handedOff = await store.chatService.snapshot(tenant, "chat_user", conversationId, undefined)
+    const handedOff = await chat.snapshot(tenant, "chat_user", conversationId, undefined)
     assert.deepEqual(handedOff.execution_head, {
       run_id: queuedRows.rows[1].run_id,
       state: "queued",
       pending_pauses: [],
     })
-    const afterHandoff = await store.agUi.replay(tenant, conversationId, null, 100)
+    const afterHandoff = await projection.replay(tenant, conversationId, null, 100)
     assert.equal(afterHandoff.kind, "page")
     const queuedFrames = afterHandoff.frames.filter(({ eventType }) => eventType === "CUSTOM")
     assert.deepEqual(
@@ -2822,20 +2777,20 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
       tenant,
       conversationId,
     ])
-    await store.agUiConsumers.collectGarbage({
+    await consumers.collectGarbage({
       now: new Date().toISOString(),
       retentionMs: 1,
       tombstoneRetentionMs: 24 * 60 * 60 * 1000,
       batchSize: 100,
     })
-    const retainedHead = await store.agUi.replay(tenant, conversationId, null, 100)
+    const retainedHead = await projection.replay(tenant, conversationId, null, 100)
     assert.equal(retainedHead.kind, "page")
     assert.equal(
       retainedHead.frames.some(({ eventType, payload }) => eventType === "CUSTOM" && payload.value.run_id === queuedRows.rows[1].run_id),
       true,
     )
   } finally {
-    if (store) await store.close()
+    if (database) await database.close()
     await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
@@ -2849,7 +2804,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `chat_failure_${Date.now()}`
   const conversationId = `conversation_failure_${Date.now()}`
-  let store
+  let database
   let bff
   let agent
   let agentRequests = 0
@@ -2863,9 +2818,12 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
        VALUES ($1, $2, $3, $4)`,
       [conversationId, tenant, "chat_user", "Dispatch failure ledger"],
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const firstReceipt = await store.chatTurnService.submit({
+    database = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const dispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
+    const chatTurns = new ChatTurnApplicationService(dispatchOutbox, new Sha256StableIdGenerator())
+    const chat = new ChatApplicationService(new PostgresChatRepository(database))
+    await database.ready()
+    const firstReceipt = await chatTurns.submit({
       tenantId: tenant,
       conversationId,
       subjectId: "chat_user",
@@ -2875,14 +2833,14 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
       content: "First failing launch",
     })
     assert.ok(firstReceipt)
-    const [first] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [first] = await dispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_failure",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.ok(first)
-    const secondReceipt = await store.chatTurnService.submit({
+    const secondReceipt = await chatTurns.submit({
       tenantId: tenant,
       conversationId,
       subjectId: "chat_user",
@@ -2893,7 +2851,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
     })
     assert.ok(secondReceipt)
 
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchNotAdmitted(first, 500, "agent_receipt_invalid"), true)
+    assert.equal(await dispatchOutbox.markAgentDispatchNotAdmitted(first, 500, "agent_receipt_invalid"), true)
     let stream = await pool.query(
       `SELECT expected_run_id, terminal_run_id, consumer_state
          FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2`,
@@ -2907,15 +2865,15 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
       },
     ])
 
-    const [second] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [second] = await dispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_failure",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.ok(second)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchNotAdmitted(second, 500, "agent_http_400"), true)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchNotAdmitted(second, 500, "stale_duplicate"), false)
+    assert.equal(await dispatchOutbox.markAgentDispatchNotAdmitted(second, 500, "agent_http_400"), true)
+    assert.equal(await dispatchOutbox.markAgentDispatchNotAdmitted(second, 500, "stale_duplicate"), false)
 
     stream = await pool.query(
       `SELECT expected_run_id, terminal_run_id, consumer_state, consumer_fence
@@ -2964,39 +2922,49 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
       { run_id: firstReceipt.run_id, status: "failed", agent_failure_code: null, agent_failure_retryable: null },
       { run_id: secondReceipt.run_id, status: "failed", agent_failure_code: null, agent_failure_retryable: null },
     ])
-    assert.equal((await store.chatService.snapshot(tenant, "chat_user", conversationId, undefined)).active_run, undefined)
+    assert.equal((await chat.snapshot(tenant, "chat_user", conversationId, undefined)).active_run, undefined)
 
-    await store.close()
-    store = undefined
+    await database.close()
+    database = undefined
     agent = createServer((_request, response) => {
       agentRequests += 1
       response.writeHead(500, { "content-type": "application/json" })
       response.end(JSON.stringify({ error: { code: "unexpected", message: "must not poll" } }))
     })
     const agentBase = await listen(agent)
-    const runtimeConfig = config(tenant)
-    runtimeConfig.agentEnabled = true
-    runtimeConfig.upstreams.agents = agentBase
-    bff = createBffServer(runtimeConfig, { sessionAdmission })
-    const base = await listen(bff)
+    const { app } = await createMoveNestApp(tenant, { agentBase })
+    bff = app
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const replay = await fetch(`${base}/v1/sessions/${conversationId}/events`, { headers: auth(tenant, "chat_user") })
     assert.equal(replay.status, 200)
     const body = await replay.text()
     assert.match(body, /"type":"RUN_ERROR"/u)
     assert.equal(agentRequests, 0)
   } finally {
-    if (bff) await close(bff)
-    if (agent) await close(agent)
-    if (store) await store.close()
-    await pool.query("DELETE FROM bff_agent_cancellation_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_agui_event WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_agui_source_event WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.end()
+    try {
+      await bff?.close()
+      if (agent) await close(agent)
+      await database?.close()
+      await pool.query("DELETE FROM bff_agent_cancellation_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_agui_event WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_agui_source_event WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    } finally {
+      try {
+        if (agent?.listening) await close(agent)
+      } finally {
+        try {
+          await database?.close()
+        } finally {
+          await pool.end()
+        }
+      }
+    }
   }
 })
 
@@ -3004,7 +2972,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `chat_delete_${Date.now()}`
   const conversationId = `conversation_delete_${Date.now()}`
-  let store
+  let database
   try {
     await pool.query(
       "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
@@ -3015,11 +2983,15 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
        VALUES ($1, $2, $3, $4)`,
       [conversationId, tenant, "chat_user", "Delete compensation"],
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    database = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const dispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
+    const cancellationOutbox = new PostgresAgentCancellationOutboxRepository(database)
+    const chatTurns = new ChatTurnApplicationService(dispatchOutbox, new Sha256StableIdGenerator())
+    const chat = new ChatApplicationService(new PostgresChatRepository(database))
+    await database.ready()
     for (const suffix of ["admitted", "inflight", "local_only"]) {
       assert.ok(
-        await store.chatTurnService.submit({
+        await chatTurns.submit({
           tenantId: tenant,
           conversationId,
           subjectId: "chat_user",
@@ -3030,19 +3002,16 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
         }),
       )
     }
-    const [admitted] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+    const [admitted] = await dispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_delete",
       limit: 1,
       leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.ok(admitted)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(admitted), true)
-    assert.equal(await store.chatService.deleteConversation(tenant, "chat_user", conversationId, "request_delete_conversation"), true)
-    assert.deepEqual(
-      await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_after_delete", limit: 10, leaseDurationMs: 5000, maxAttempts: 8 }),
-      [],
-    )
+    assert.equal(await dispatchOutbox.markAgentDispatchAdmitted(admitted), true)
+    assert.equal(await chat.deleteConversation(tenant, "chat_user", conversationId, "request_delete_conversation"), true)
+    assert.deepEqual(await dispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_after_delete", limit: 10, leaseDurationMs: 5000, maxAttempts: 8 }), [])
 
     const dispatch = await pool.query(
       `SELECT conversation_dispatch_seq, status, fence FROM bff_agent_dispatch_outbox
@@ -3072,7 +3041,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     assert.ok(cancellations.rows.every((row) => row.request_id === "request_delete_conversation"))
     assert.ok(cancellations.rows.every((row) => row.payload.kind === "run.cancel" && row.payload.session_id === conversationId))
 
-    const firstCancel = await store.agentCancellationOutbox.claimAgentCancellationOutbox({
+    const firstCancel = await cancellationOutbox.claimAgentCancellationOutbox({
       workerId: "worker_cancel",
       limit: 10,
       leaseDurationMs: 5000,
@@ -3081,17 +3050,14 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     assert.equal(firstCancel.length, 1)
     assert.equal(firstCancel[0].conversationDispatchSeq, "1")
     assert.equal(
-      await store.agentCancellationOutbox.markAgentCancellationSucceeded({
+      await cancellationOutbox.markAgentCancellationSucceeded({
         ...firstCancel[0],
         tenantId: `${tenant}_other`,
       }),
       false,
     )
-    assert.equal(await store.agentCancellationOutbox.markAgentCancellationSucceeded(firstCancel[0]), true)
-    assert.deepEqual(
-      await store.agentCancellationOutbox.claimAgentCancellationOutbox({ workerId: "worker_cancel", limit: 10, leaseDurationMs: 5000, maxAttempts: 8 }),
-      [],
-    )
+    assert.equal(await cancellationOutbox.markAgentCancellationSucceeded(firstCancel[0]), true)
+    assert.deepEqual(await cancellationOutbox.claimAgentCancellationOutbox({ workerId: "worker_cancel", limit: 10, leaseDurationMs: 5000, maxAttempts: 8 }), [])
 
     const conversation = await pool.query("SELECT status FROM bff_conversation WHERE tenant_id = $1 AND conversation_id = $2", [tenant, conversationId])
     const assistants = await pool.query(
@@ -3115,7 +3081,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
       },
     ])
   } finally {
-    if (store) await store.close()
+    if (database) await database.close()
     await pool.query("DELETE FROM bff_agent_cancellation_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
@@ -3131,7 +3097,9 @@ integrationTest(
   { timeout: 30_000 },
   async () => {
     const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-    let store
+    let database
+    let chatTurns
+    let consumers
     const tenant = `chat_barrier_${Date.now()}`
     const owner = "barrier_user"
     const submit = async (conversationId, suffix) => {
@@ -3141,7 +3109,7 @@ integrationTest(
         owner,
         suffix,
       ])
-      return store.chatTurnService.submit({
+      return chatTurns.submit({
         tenantId: tenant,
         conversationId,
         subjectId: owner,
@@ -3196,7 +3164,7 @@ integrationTest(
     const claimTargetConsumer = async (conversationId, workerId, durationMs = 40) => {
       await pool.query("UPDATE bff_agui_stream SET consumer_state='stopped' WHERE tenant_id=$1 AND session_id<>$2", [tenant, conversationId])
       const now = new Date()
-      const [lease] = await store.agUiConsumers.claimConsumers({
+      const [lease] = await consumers.claimConsumers({
         workerId,
         now: now.toISOString(),
         leaseUntil: new Date(now.getTime() + durationMs).toISOString(),
@@ -3210,22 +3178,27 @@ integrationTest(
         "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
       )
       await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
+      database = new PostgresBffDatabase(postgresUrl, redisUrl)
+      const dispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
+      chatTurns = new ChatTurnApplicationService(dispatchOutbox, new Sha256StableIdGenerator())
+      const chat = new ChatApplicationService(new PostgresChatRepository(database))
+      const projection = new AgUiProjectionService(new PostgresAgUiProjectionRepository(database))
+      consumers = new PostgresAgUiConsumerRepository(database)
+      await database.ready()
 
       const terminalConversation = `${tenant}_terminal`
       const terminalTurn = await submit(terminalConversation, "terminal_claim")
       const terminalLock = await lockStream(terminalConversation)
       const terminalClaimPromise = track(
-        store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_terminal_claim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
+        dispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_terminal_claim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
       )
       await waitForBlockedStream(terminalLock)
       await releaseLocker(terminalLock)
       const [terminalClaim] = await terminalClaimPromise
       assert.equal(terminalClaim.runId, terminalTurn.run_id)
-      assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(terminalClaim), true)
+      assert.equal(await dispatchOutbox.markAgentDispatchAdmitted(terminalClaim), true)
       const terminalOccurredAt = new Date().toISOString()
-      await store.agUi.ingest(tenant, terminalConversation, [
+      await projection.ingest(tenant, terminalConversation, [
         {
           sourceRunId: terminalTurn.run_id,
           sourceEventId: "barrier_terminal",
@@ -3243,42 +3216,36 @@ integrationTest(
           },
         },
       ])
-      assert.deepEqual(
-        await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "after_terminal", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
-        [],
-      )
+      assert.deepEqual(await dispatchOutbox.claimAgentDispatchOutbox({ workerId: "after_terminal", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }), [])
 
       const deleteConversation = `${tenant}_delete`
       await submit(deleteConversation, "delete_claim")
       const deleteLock = await lockStream(deleteConversation)
       const deleteClaimPromise = track(
-        store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_delete_claim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
+        dispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_delete_claim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
       )
       await waitForBlockedStream(deleteLock)
-      const deletePromise = track(store.chatService.deleteConversation(tenant, owner, deleteConversation, "barrier_delete"))
+      const deletePromise = track(chat.deleteConversation(tenant, owner, deleteConversation, "barrier_delete"))
       await releaseLocker(deleteLock)
       await Promise.all([deleteClaimPromise, deletePromise])
-      assert.deepEqual(
-        await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "after_delete", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
-        [],
-      )
+      assert.deepEqual(await dispatchOutbox.claimAgentDispatchOutbox({ workerId: "after_delete", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }), [])
 
       const failureConversation = `${tenant}_failure`
       const failureTurn = await submit(failureConversation, "failure_terminal")
-      const [failureClaim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      const [failureClaim] = await dispatchOutbox.claimAgentDispatchOutbox({
         workerId: "barrier_failure",
         limit: 1,
         leaseDurationMs: 40,
         maxAttempts: 8,
       })
       const failureLock = await lockStream(failureConversation)
-      const failurePromise = track(store.agentDispatchOutbox.markAgentDispatchNotAdmitted(failureClaim, 100, "definite_reject"))
+      const failurePromise = track(dispatchOutbox.markAgentDispatchNotAdmitted(failureClaim, 100, "definite_reject"))
       await waitForBlockedStream(failureLock)
       await pool.query("SELECT pg_sleep(0.06)")
       await releaseLocker(failureLock)
       assert.equal(await failurePromise, false)
       const lateTerminalOccurredAt = new Date().toISOString()
-      await store.agUi.ingest(tenant, failureConversation, [
+      await projection.ingest(tenant, failureConversation, [
         {
           sourceRunId: failureTurn.run_id,
           sourceEventId: "late_terminal",
@@ -3300,7 +3267,7 @@ integrationTest(
       for (const outcome of ["admitted", "unknown"]) {
         const conversationId = `${tenant}_${outcome}`
         await submit(conversationId, `expiry_${outcome}`)
-        const [claim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+        const [claim] = await dispatchOutbox.claimAgentDispatchOutbox({
           workerId: `expiry_${outcome}`,
           limit: 1,
           leaseDurationMs: 40,
@@ -3308,9 +3275,7 @@ integrationTest(
         })
         const locker = await lockDispatch(claim.outboxId)
         const settlement = track(
-          outcome === "admitted"
-            ? store.agentDispatchOutbox.markAgentDispatchAdmitted(claim)
-            : store.agentDispatchOutbox.markAgentDispatchUnknown(claim, 100, "unknown"),
+          outcome === "admitted" ? dispatchOutbox.markAgentDispatchAdmitted(claim) : dispatchOutbox.markAgentDispatchUnknown(claim, 100, "unknown"),
         )
         await waitForBlockedStream(locker)
         await pool.query("SELECT pg_sleep(0.06)")
@@ -3322,7 +3287,7 @@ integrationTest(
       await submit(consumerConversation, "consumer_expiry")
       const { lease: consumerLease, now } = await claimTargetConsumer(consumerConversation, "consumer_expiry")
       const consumerLock = await lockStream(consumerConversation)
-      const renewal = track(store.agUiConsumers.renewConsumerLease(consumerLease, now.toISOString(), new Date(now.getTime() + 5000).toISOString()))
+      const renewal = track(consumers.renewConsumerLease(consumerLease, now.toISOString(), new Date(now.getTime() + 5000).toISOString()))
       await waitForBlockedStream(consumerLock)
       await pool.query("SELECT pg_sleep(0.06)")
       await releaseLocker(consumerLock)
@@ -3335,8 +3300,8 @@ integrationTest(
         const locker = await lockStream(conversationId)
         const operation =
           mode === "settle"
-            ? store.agUiConsumers.markConsumerProgress(lease, started.toISOString(), started.toISOString())
-            : store.agUi.ingest(
+            ? consumers.markConsumerProgress(lease, started.toISOString(), started.toISOString())
+            : projection.ingest(
                 tenant,
                 conversationId,
                 [
@@ -3382,12 +3347,12 @@ integrationTest(
         [tenant, exhaustedX],
       )
       const exhaustedLock = await lockStream(exhaustedX)
-      const firstCycle = store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_x", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+      const firstCycle = dispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_x", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
       await waitForBlockedStream(exhaustedLock)
-      const secondCycle = store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_a", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+      const secondCycle = dispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_a", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
       await releaseLocker(exhaustedLock)
       const [firstClaims, secondClaims] = await Promise.all([firstCycle, secondCycle])
-      const remainingClaims = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      const remainingClaims = await dispatchOutbox.claimAgentDispatchOutbox({
         workerId: "barrier_remaining",
         limit: 10,
         leaseDurationMs: 5000,
@@ -3452,7 +3417,7 @@ integrationTest(
         ).rows,
         [],
       )
-      const exhaustedSnapshot = await store.chatService.snapshot(tenant, owner, exhaustedX, undefined)
+      const exhaustedSnapshot = await chat.snapshot(tenant, owner, exhaustedX, undefined)
       assert.equal(exhaustedSnapshot.execution_head, undefined)
     } finally {
       for (const locker of lockers) {
@@ -3461,7 +3426,7 @@ integrationTest(
       }
       lockers.clear()
       await Promise.allSettled([...pendingOperations])
-      if (store) await store.close().catch(() => undefined)
+      if (database) await database.close().catch(() => undefined)
       await pool.end()
     }
   },
@@ -3469,9 +3434,8 @@ integrationTest(
 
 integrationTest("does not return dispatch or consumer leases exhausted by the real commit boundary", async () => {
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store
-  const delayClaimCommitAfterFinalBudget = (repositoryStore, seconds, remainingSqlFragment) => {
-    const targetPool = repositoryStore.database.pool
+  let database
+  const delayClaimCommitAfterFinalBudget = (targetPool, seconds, remainingSqlFragment) => {
     const originalConnect = targetPool.connect
     const patchedClients = new Map()
     const observation = { matchingQueries: 0, delayedCommits: 0, observedRemainingMs: null }
@@ -3516,13 +3480,16 @@ integrationTest("does not return dispatch or consumer leases exhausted by the re
       "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    database = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const dispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
+    const chatTurns = new ChatTurnApplicationService(dispatchOutbox, new Sha256StableIdGenerator())
+    const consumers = new PostgresAgUiConsumerRepository(database)
+    await database.ready()
     const tenant = `commit_budget_${Date.now()}`
     const owner = "commit_budget_user"
     const createTurn = async (conversationId, suffix) => {
       await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,title) VALUES ($1,$2,$3,$4)", [conversationId, tenant, owner, suffix])
-      return store.chatTurnService.submit({
+      return chatTurns.submit({
         tenantId: tenant,
         conversationId,
         subjectId: owner,
@@ -3535,12 +3502,9 @@ integrationTest("does not return dispatch or consumer leases exhausted by the re
 
     const dispatchConversation = `${tenant}_dispatch`
     await createTurn(dispatchConversation, "dispatch")
-    let delay = delayClaimCommitAfterFinalBudget(store, 0.06, "FROM bff_agent_dispatch_outbox WHERE outbox_id = ANY")
+    let delay = delayClaimCommitAfterFinalBudget(database.pool, 0.06, "FROM bff_agent_dispatch_outbox WHERE outbox_id = ANY")
     try {
-      assert.deepEqual(
-        await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "commit_dispatch", limit: 1, leaseDurationMs: 20, maxAttempts: 8 }),
-        [],
-      )
+      assert.deepEqual(await dispatchOutbox.claimAgentDispatchOutbox({ workerId: "commit_dispatch", limit: 1, leaseDurationMs: 20, maxAttempts: 8 }), [])
       assert.equal(delay.observation.matchingQueries, 1)
       assert.equal(delay.observation.delayedCommits, 1)
       assert.ok(delay.observation.observedRemainingMs > 0)
@@ -3558,8 +3522,7 @@ integrationTest("does not return dispatch or consumer leases exhausted by the re
     )
     await pool.query("SELECT pg_sleep(0.03)")
     assert.equal(
-      (await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "commit_dispatch_reclaim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }))
-        .length,
+      (await dispatchOutbox.claimAgentDispatchOutbox({ workerId: "commit_dispatch_reclaim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })).length,
       1,
     )
 
@@ -3567,10 +3530,10 @@ integrationTest("does not return dispatch or consumer leases exhausted by the re
     await createTurn(consumerConversation, "consumer")
     await pool.query("UPDATE bff_agui_stream SET consumer_state='stopped' WHERE tenant_id=$1 AND session_id<>$2", [tenant, consumerConversation])
     const now = new Date()
-    delay = delayClaimCommitAfterFinalBudget(store, 0.06, "FROM bff_agui_stream WHERE (tenant_id ||")
+    delay = delayClaimCommitAfterFinalBudget(database.pool, 0.06, "FROM bff_agui_stream WHERE (tenant_id ||")
     try {
       assert.deepEqual(
-        await store.agUiConsumers.claimConsumers({
+        await consumers.claimConsumers({
           workerId: "commit_consumer",
           now: now.toISOString(),
           leaseUntil: new Date(now.getTime() + 20).toISOString(),
@@ -3596,7 +3559,7 @@ integrationTest("does not return dispatch or consumer leases exhausted by the re
     await pool.query("SELECT pg_sleep(0.03)")
     assert.equal(
       (
-        await store.agUiConsumers.claimConsumers({
+        await consumers.claimConsumers({
           workerId: "commit_consumer_reclaim",
           now: new Date().toISOString(),
           leaseUntil: new Date(Date.now() + 5000).toISOString(),
@@ -3606,7 +3569,7 @@ integrationTest("does not return dispatch or consumer leases exhausted by the re
       1,
     )
   } finally {
-    if (store) await store.close().catch(() => undefined)
+    if (database) await database.close().catch(() => undefined)
     await pool.end()
   }
 })
@@ -3639,7 +3602,7 @@ integrationTest(
       idempotencyKey: "r43_queued_key_" + suffix,
       content: "One atomic first turn",
     }
-    let store = null
+    let database = null
     let functionInstalled = false
     let triggerInstalled = false
     const fingerprint = async () => {
@@ -3670,8 +3633,10 @@ integrationTest(
     try {
       await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
       await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
+      database = new PostgresBffDatabase(postgresUrl, redisUrl)
+      let chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(database), new Sha256StableIdGenerator())
+      const chat = new ChatApplicationService(new PostgresChatRepository(database))
+      await database.ready()
       const before = await fingerprint()
       assert.ok(Object.values(before.facts).every((rows) => rows.length === 0))
       assert.equal(before.cursor, null)
@@ -3699,7 +3664,7 @@ integrationTest(
       triggerInstalled = true
       let failure
       try {
-        await store.chatTurnService.submit(input)
+        await chatTurns.submit(input)
       } catch (error) {
         failure = error
       }
@@ -3709,7 +3674,7 @@ integrationTest(
       assert.deepEqual(afterFailure, before, "Conversation/Message/outbox/stream/source/public ledger and cursor must all roll back")
 
       await removeFault()
-      const accepted = await store.chatTurnService.submit(input)
+      const accepted = await chatTurns.submit(input)
       assert.ok(accepted)
       const committed = await fingerprint()
       assert.equal(committed.facts.bff_conversation.length, 1)
@@ -3729,18 +3694,19 @@ integrationTest(
         dispatch_sequence: String(outbox.conversation_dispatch_seq),
       })
       assert.match(committed.cursor, /^agui_[0-9a-f]{32}$/u)
-      const snapshot = await store.chatService.snapshot(tenantId, subjectId, conversationId, undefined)
+      const snapshot = await chat.snapshot(tenantId, subjectId, conversationId, undefined)
       assert.deepEqual(snapshot.execution_head, { run_id: accepted.run_id, state: "queued", pending_pauses: [] })
       assert.equal(snapshot.event_watermark, committed.cursor)
-      await store.close()
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
-      assert.deepEqual(await store.chatTurnService.submit(input), accepted)
-      assert.deepEqual(await store.chatTurnService.submit(input), accepted)
+      await database.close()
+      database = new PostgresBffDatabase(postgresUrl, redisUrl)
+      chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(database), new Sha256StableIdGenerator())
+      await database.ready()
+      assert.deepEqual(await chatTurns.submit(input), accepted)
+      assert.deepEqual(await chatTurns.submit(input), accepted)
       assert.deepEqual(await fingerprint(), committed, "same key after reconnect must not add facts, alter markers or advance cursor")
     } finally {
       await removeFault()
-      if (store !== null) await store.close()
+      if (database !== null) await database.close()
       for (const [table, column] of [...scopedTables].reverse()) {
         await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1 AND " + column + "=$2", [tenantId, conversationId])
       }
@@ -3756,12 +3722,13 @@ integrationTest("R124 Conversation deletion removes owned compact process rows w
   const ownerId = "r124_owner_" + suffix
   const runId = "r124_run_" + suffix
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", statement_timeout: 5000 })
-  let store = null
+  let database = null
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    database = new PostgresBffDatabase(postgresUrl, redisUrl)
+    const chat = new ChatApplicationService(new PostgresChatRepository(database))
+    await database.ready()
     assert.equal(
       (await pool.query("SELECT to_regclass('kokoro_bff.bff_agui_run_process') AS process, to_regclass('kokoro_bff.bff_agui_run_activity') AS activity"))
         .rows[0].process,
@@ -3800,7 +3767,7 @@ integrationTest("R124 Conversation deletion removes owned compact process rows w
         "agui_" + "d".repeat(32),
       ],
     )
-    assert.equal(await store.chatService.deleteConversation(tenantId, ownerId, conversationId, "r124_delete_request_" + suffix), true)
+    assert.equal(await chat.deleteConversation(tenantId, ownerId, conversationId, "r124_delete_request_" + suffix), true)
     assert.equal(
       (await pool.query("SELECT count(*)::int AS count FROM bff_agui_run_process WHERE tenant_id=$1 AND session_id=$2", [tenantId, conversationId])).rows[0]
         .count,
@@ -3812,7 +3779,7 @@ integrationTest("R124 Conversation deletion removes owned compact process rows w
       0,
     )
   } finally {
-    if (store !== null) await store.close().catch(() => undefined)
+    if (database !== null) await database.close().catch(() => undefined)
     for (const table of ["bff_agui_run_activity", "bff_agui_run_process", "bff_conversation"]) {
       await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1", [tenantId]).catch(() => undefined)
     }
@@ -3833,7 +3800,6 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
   const slugId = `conv_${randomUUID()}`
   const foreignId = `conv_${randomUUID()}`
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", statement_timeout: 5000 })
-  let store = null
   let bff = null
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
@@ -3854,9 +3820,12 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
               ($3,$6,$7,$8,'Legacy slug source'),($4,$6,$5,NULL,'Foreign owner')`,
       [raceSameId, raceDifferentId, slugId, foreignId, `foreign_${suffix}`, tenant, subject, `source-${suffix}`],
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const admittedRun = await store.chatTurnService.submit({
+    const { app, database, chatTurns } = await createMoveNestApp(tenant)
+    bff = app
+    await database.ready()
+    const { AGENT_DISPATCH_OUTBOX } = await import("../dist/common/tokens.js")
+    const bindingReader = app.get(AGENT_DISPATCH_OUTBOX)
+    const admittedRun = await chatTurns.submit({
       tenantId: tenant,
       conversationId,
       projectRef: projectA,
@@ -3891,7 +3860,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
         .update(JSON.stringify(["skill:exact-b", "skill:exact-a"]))
         .digest("hex"),
     }
-    const liveBinding = await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput)
+    const liveBinding = await bindingReader.readProjectExecutionBinding(bindingInput)
     assert.deepEqual(liveBinding, {
       projectId: projectA,
       selectedSkillSourceRefs: ["skill:exact-b", "skill:exact-a"],
@@ -3899,7 +3868,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     })
     for (const field of ["tenantId", "subjectId", "actorId", "runId", "sessionId", "identityAssertionRef", "projectId", "selectionDigest"]) {
       assert.equal(
-        await store.projectExecutionBindings.readProjectExecutionBinding({
+        await bindingReader.readProjectExecutionBinding({
           ...bindingInput,
           [field]: field === "selectionDigest" ? "0".repeat(64) : "wrong-binding",
         }),
@@ -3909,7 +3878,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     }
     const corruptionAllowed = {}
     await pool.query("UPDATE bff_project SET slug=$3 WHERE tenant_id=$1 AND project_id=$2", [tenant, projectB, projectA])
-    corruptionAllowed.ambiguousProject = (await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput)) !== null
+    corruptionAllowed.ambiguousProject = (await bindingReader.readProjectExecutionBinding(bindingInput)) !== null
     await pool.query("UPDATE bff_project SET slug=$3 WHERE tenant_id=$1 AND project_id=$2", [tenant, projectB, `target-${suffix}`])
     const originalPayload = (await pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, admittedRun.run_id]))
       .rows[0].payload
@@ -3918,7 +3887,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
         "UPDATE bff_agent_dispatch_outbox SET payload=jsonb_set(payload,ARRAY['launch',$3::text],$4::jsonb,false) WHERE tenant_id=$1 AND run_id=$2",
         [tenant, admittedRun.run_id, field, JSON.stringify("wrong-lineage")],
       )
-      corruptionAllowed[field] = (await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput)) !== null
+      corruptionAllowed[field] = (await bindingReader.readProjectExecutionBinding(bindingInput)) !== null
       await pool.query("UPDATE bff_agent_dispatch_outbox SET payload=$3::jsonb WHERE tenant_id=$1 AND run_id=$2", [
         tenant,
         admittedRun.run_id,
@@ -3931,29 +3900,29 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
       "ambiguous scope and corrupt dispatch lineage never grant a binding",
     )
     await pool.query("UPDATE bff_project SET deleted_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND project_id=$2", [tenant, projectA])
-    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), null, "deleted project is not current authority")
+    assert.equal(await bindingReader.readProjectExecutionBinding(bindingInput), null, "deleted project is not current authority")
     await pool.query("UPDATE bff_project SET deleted_at=NULL WHERE tenant_id=$1 AND project_id=$2", [tenant, projectA])
     await pool.query("UPDATE bff_conversation SET status='deleted',deleted_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND conversation_id=$2", [
       tenant,
       conversationId,
     ])
-    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), null, "deleted conversation is not current authority")
+    assert.equal(await bindingReader.readProjectExecutionBinding(bindingInput), null, "deleted conversation is not current authority")
     await pool.query("UPDATE bff_conversation SET status='active',deleted_at=NULL WHERE tenant_id=$1 AND conversation_id=$2", [tenant, conversationId])
     await pool.query("UPDATE bff_message SET selected_skill_source_refs=$3::jsonb WHERE tenant_id=$1 AND message_id=$2", [
       tenant,
       admittedRun.user_message_id,
       JSON.stringify(["skill:tampered"]),
     ])
-    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), null, "Message and dispatch must agree on exact ordered refs")
+    assert.equal(await bindingReader.readProjectExecutionBinding(bindingInput), null, "Message and dispatch must agree on exact ordered refs")
     await pool.query("UPDATE bff_message SET selected_skill_source_refs=$3::jsonb WHERE tenant_id=$1 AND message_id=$2", [
       tenant,
       admittedRun.user_message_id,
       JSON.stringify(["skill:exact-b", "skill:exact-a"]),
     ])
-    assert.deepEqual(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), liveBinding)
+    assert.deepEqual(await bindingReader.readProjectExecutionBinding(bindingInput), liveBinding)
     const aborted = new AbortController()
     aborted.abort()
-    await assert.rejects(store.projectExecutionBindings.readProjectExecutionBinding({ ...bindingInput, signal: aborted.signal }), { name: "AbortError" })
+    await assert.rejects(bindingReader.readProjectExecutionBinding({ ...bindingInput, signal: aborted.signal }), { name: "AbortError" })
     await pool.query("INSERT INTO bff_share (share_id,tenant_id,conversation_id,url) VALUES ($1,$2,$3,$4)", [
       `share_${suffix}`,
       tenant,
@@ -3991,15 +3960,8 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
       return rows
     }
     const beforeMoveFacts = await preservedRows()
-    bff = createBffServer(config(tenant), {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-    })
-    const base = await listen(bff)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const headers = auth(tenant, subject)
     const sendMove = async (id, key, target) => {
       const response = await fetch(`${base}/v1/sessions/${id}/move`, {
@@ -4028,7 +3990,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     const retired = await bindingRow()
     assert.equal(retired.execution_project_ref, projectA, "Move preserves the original exact scope")
     assert.ok(retired.retired_at, "Move permanently retires old execution authority")
-    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), null, "retired binding is no longer an allow")
+    assert.equal(await bindingReader.readProjectExecutionBinding(bindingInput), null, "retired binding is no longer an allow")
     assert.deepEqual(await preservedRows(), beforeMoveFacts, "Move must not alter an admitted Run, Message, Share, AG-UI, Artifact or cancel outbox")
 
     const replay = await sendMove(conversationId, "r146-move-out", null)
@@ -4058,7 +4020,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     assert.deepEqual(noOp.body, movedInto.body)
     assert.equal((await pool.query("SELECT updated_at::text AS value FROM bff_conversation WHERE conversation_id=$1", [directId])).rows[0].value, timestamp)
 
-    const slugRun = await store.chatTurnService.submit({
+    const slugRun = await chatTurns.submit({
       tenantId: tenant,
       conversationId: slugId,
       projectRef: projectA,
@@ -4080,13 +4042,13 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
       identityAssertionRef: slugAssertion,
       selectionDigest: createHash("sha256").update("[]").digest("hex"),
     }
-    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(slugBinding))
+    assert.ok(await bindingReader.readProjectExecutionBinding(slugBinding))
     const convergedSlug = await sendMove(slugId, "r146-move-slug", projectA)
     assert.equal(convergedSlug.response.status, 200, JSON.stringify(convergedSlug.body))
     assert.equal(await projectRef(slugId), projectA, "a touched legacy slug converges to canonical Project ID")
-    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(slugBinding), "slug normalization is not a scope change")
+    assert.ok(await bindingReader.readProjectExecutionBinding(slugBinding), "slug normalization is not a scope change")
     assert.equal((await sendMove(slugId, "r146-same-canonical", projectA)).response.status, 200)
-    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(slugBinding), "same-project no-op does not retire the binding")
+    assert.ok(await bindingReader.readProjectExecutionBinding(slugBinding), "same-project no-op does not retire the binding")
     for (const [id, target] of [
       [foreignId, projectA],
       [conversationId, `project_${randomUUID()}`],
@@ -4113,7 +4075,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
     assert.equal(await projectRef(raceDifferentId), winner.body.data.project_ref)
     assert.deepEqual(await preservedRows(), beforeMoveFacts, "concurrent Move must leave historical facts unchanged")
     assert.deepEqual(await bindingRow(), retired, "Move replay and later unrelated Moves do not rewrite the original retirement")
-    const directRun = await store.chatTurnService.submit({
+    const directRun = await chatTurns.submit({
       tenantId: tenant,
       conversationId,
       subjectId: subject,
@@ -4134,19 +4096,19 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
       projectId: null,
       selectionDigest: createHash("sha256").update("[]").digest("hex"),
     }
-    assert.deepEqual(await store.projectExecutionBindings.readProjectExecutionBinding(directBinding), {
+    assert.deepEqual(await bindingReader.readProjectExecutionBinding(directBinding), {
       projectId: null,
       selectedSkillSourceRefs: [],
       selectionDigest: directBinding.selectionDigest,
     })
     assert.equal((await sendMove(conversationId, "r146-move-out", null)).response.status, 200)
-    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(directBinding), "old Move receipt replay must not retire a later Run")
+    assert.ok(await bindingReader.readProjectExecutionBinding(directBinding), "old Move receipt replay must not retire a later Run")
     const movedBack = await sendMove(conversationId, "r146-move-back", projectA)
     assert.equal(movedBack.response.status, 200)
     assert.deepEqual(await bindingRow(), retired, "P→direct→P never revives the old execution binding")
-    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(bindingInput), null, "ABA does not revive the old authorization")
-    assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(directBinding), null, "moving into Project retires the preceding direct Run")
-    const freshProjectRun = await store.chatTurnService.submit({
+    assert.equal(await bindingReader.readProjectExecutionBinding(bindingInput), null, "ABA does not revive the old authorization")
+    assert.equal(await bindingReader.readProjectExecutionBinding(directBinding), null, "moving into Project retires the preceding direct Run")
+    const freshProjectRun = await chatTurns.submit({
       tenantId: tenant,
       conversationId,
       projectRef: projectA,
@@ -4162,13 +4124,13 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
       await pool.query("SELECT identity_assertion_ref FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, freshProjectRun.run_id])
     ).rows[0].identity_assertion_ref
     const freshBinding = { ...directBinding, runId: freshProjectRun.run_id, identityAssertionRef: freshAssertion, projectId: projectA }
-    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(freshBinding))
+    assert.ok(await bindingReader.readProjectExecutionBinding(freshBinding))
     assert.equal((await sendMove(conversationId, "r146-move-out", null)).response.status, 200)
     assert.equal(await projectRef(conversationId), projectA, "old receipt replay never moves the Conversation again")
-    assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(freshBinding), "old receipt replay never revokes a later Project Run")
-    const heldClients = await Promise.all(Array.from({ length: 10 }, () => store.database.pool.connect()))
+    assert.ok(await bindingReader.readProjectExecutionBinding(freshBinding), "old receipt replay never revokes a later Project Run")
+    const heldClients = await Promise.all(Array.from({ length: 10 }, () => database.pool.connect()))
     try {
-      const read = store.projectExecutionBindings.readProjectExecutionBinding({ ...freshBinding, signal: AbortSignal.timeout(25) })
+      const read = bindingReader.readProjectExecutionBinding({ ...freshBinding, signal: AbortSignal.timeout(25) })
       const state = await Promise.race([
         read.then(
           () => "resolved",
@@ -4189,7 +4151,7 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
         await blocker.query("LOCK TABLE bff_agent_dispatch_outbox IN ACCESS EXCLUSIVE MODE")
         const blockerPid = (await blocker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
         const cancel = new AbortController()
-        const pendingRead = store.projectExecutionBindings.readProjectExecutionBinding({ ...freshBinding, signal: cancel.signal }).then(
+        const pendingRead = bindingReader.readProjectExecutionBinding({ ...freshBinding, signal: cancel.signal }).then(
           () => "resolved",
           () => "rejected",
         )
@@ -4201,25 +4163,27 @@ integrationTest("R146 Move changes only the canonical Conversation Project in a 
         await blocker.query("ROLLBACK")
         blocker.release()
       }
-      assert.equal((await store.database.pool.query("SELECT 1 AS ready")).rows[0].ready, 1, "the owner pool survives the discarded backend")
+      assert.equal((await database.pool.query("SELECT 1 AS ready")).rows[0].ready, 1, "the owner pool survives the discarded backend")
     }
   } finally {
-    if (bff !== null) await close(bff)
-    if (store !== null) await store.close().catch(() => undefined)
-    await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope) > 0", [tenant]).catch(() => undefined)
-    for (const table of [
-      "bff_agent_cancellation_outbox",
-      "bff_conversation_artifact",
-      "bff_share",
-      "bff_agent_dispatch_outbox",
-      "bff_agui_stream",
-      "bff_message",
-    ]) {
-      await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]).catch(() => undefined)
+    try {
+      if (bff !== null) await bff.close()
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope) > 0", [tenant]).catch(() => undefined)
+      for (const table of [
+        "bff_agent_cancellation_outbox",
+        "bff_conversation_artifact",
+        "bff_share",
+        "bff_agent_dispatch_outbox",
+        "bff_agui_stream",
+        "bff_message",
+      ]) {
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]).catch(() => undefined)
+      }
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    } finally {
+      await pool.end()
     }
-    await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-    await pool.end()
   }
 })
 
@@ -4230,7 +4194,6 @@ integrationTest("R146 Move target Project lock wait has a bounded typed HTTP fai
   const projectId = `project_${randomUUID()}`
   const conversationId = `conv_${randomUUID()}`
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
   let bff = null
   let blocker = null
   let pendingMove = null
@@ -4249,17 +4212,11 @@ integrationTest("R146 Move target Project lock wait has a bounded typed HTTP fai
       tenant,
       subject,
     ])
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    bff = createBffServer(config(tenant), {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-    })
-    const base = await listen(bff)
+    const { app, database } = await createMoveNestApp(tenant)
+    bff = app
+    await database.ready()
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const headers = auth(tenant, subject)
     blocker = await pool.connect()
     await blocker.query("BEGIN")
@@ -4303,12 +4260,14 @@ integrationTest("R146 Move target Project lock wait has a bounded typed HTTP fai
       blocker.release()
     }
     if (pendingMove !== null) await pendingMove.catch(() => undefined)
-    if (bff !== null) await close(bff)
-    if (store !== null) await store.close().catch(() => undefined)
-    await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-    await pool.end()
+    try {
+      if (bff !== null) await bff.close()
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    } finally {
+      await pool.end()
+    }
   }
 })
 
@@ -4319,7 +4278,6 @@ integrationTest("R146 Move pool acquire timeout discards the late real Client an
   const projectId = `project_${randomUUID()}`
   const conversationId = `conv_${randomUUID()}`
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
   let bff = null
   let pendingMove = null
   const held = []
@@ -4338,21 +4296,15 @@ integrationTest("R146 Move pool acquire timeout discards the late real Client an
       tenant,
       subject,
     ])
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const ownerPool = store.database.pool
+    const { app, database } = await createMoveNestApp(tenant)
+    bff = app
+    await database.ready()
+    const ownerPool = database.pool
     assert.equal(ownerPool.options.max, 10, "this case saturates the real BFF owner Pool rather than a fake repository")
     for (let index = 0; index < ownerPool.options.max; index += 1) held.push(await ownerPool.connect())
     assert.equal(ownerPool.totalCount, ownerPool.options.max)
-    bff = createBffServer(config(tenant), {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-    })
-    const base = await listen(bff)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const startedAt = Date.now()
     pendingMove = fetch(`${base}/v1/sessions/${conversationId}/move`, {
       method: "POST",
@@ -4381,14 +4333,50 @@ integrationTest("R146 Move pool acquire timeout discards the late real Client an
     controller.abort()
     for (const client of held) client.release()
     if (pendingMove !== null) await pendingMove.catch(() => undefined)
-    if (bff !== null) await close(bff)
-    if (store !== null) await store.close().catch(() => undefined)
-    await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-    await pool.end()
+    try {
+      if (bff !== null) await bff.close()
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    } finally {
+      await pool.end()
+    }
   }
 })
+
+async function createMoveNestApp(tenant, { messageAdmission = false, agentBase = null, runControl = false } = {}) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { DatabaseModule } = await import("../dist/common/database/database.module.js")
+  const { BFF_CONFIG, BFF_DATABASE, CHAT_TURN_SERVICE, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { AgentDispatchModule } = await import("../dist/modules/agent-dispatch/agent-dispatch.module.js")
+  const { ChatModule } = await import("../dist/modules/chat/chat.module.js")
+  const runtimeConfig = config(tenant)
+  if (messageAdmission || agentBase !== null) {
+    runtimeConfig.agentEnabled = true
+    runtimeConfig.upstreams.agents = agentBase ?? "http://127.0.0.1:9"
+  }
+  const ownerModule = runControl ? (await import("../dist/modules/agent-runs/agent-runs.module.js")).AgentRunsModule : ChatModule
+  const builder = Test.createTestingModule({ imports: [ownerModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(runtimeConfig)
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+  if (messageAdmission) {
+    const { AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR } = await import("../dist/common/tokens.js")
+    // These cases exercise durable admission and Move, not background delivery.
+    builder.overrideProvider(AGENT_DISPATCH_DISPATCHER).useValue(null)
+    builder.overrideProvider(AGENT_CANCELLATION_DISPATCHER).useValue(null)
+    builder.overrideProvider(AGUI_PROJECTOR).useValue(null)
+  }
+  const module = await builder.compile()
+  return {
+    app: module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false }),
+    database: module.select(DatabaseModule).get(BFF_DATABASE, { strict: true }),
+    chatTurns: module.select(AgentDispatchModule).get(CHAT_TURN_SERVICE, { strict: true }),
+  }
+}
 
 integrationTest("R146 Move client abort destroys the exact blocked backend and preserves the owner Pool", { timeout: 10_000 }, async () => {
   const suffix = randomUUID()
@@ -4397,7 +4385,6 @@ integrationTest("R146 Move client abort destroys the exact blocked backend and p
   const projectId = `project_${randomUUID()}`
   const conversationId = `conv_${randomUUID()}`
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
   let bff = null
   let blocker = null
   let pendingMove = null
@@ -4416,17 +4403,11 @@ integrationTest("R146 Move client abort destroys the exact blocked backend and p
       tenant,
       subject,
     ])
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    bff = createBffServer(config(tenant), {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-    })
-    const base = await listen(bff)
+    const { app, database } = await createMoveNestApp(tenant)
+    bff = app
+    await database.ready()
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     blocker = await pool.connect()
     await blocker.query("BEGIN")
     await blocker.query("SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 FOR UPDATE", [tenant, subject, projectId])
@@ -4458,7 +4439,7 @@ integrationTest("R146 Move client abort destroys the exact blocked backend and p
       return result.rows[0].count === 0
     }, 2500)
     assert.equal(
-      (await store.database.pool.query("SELECT 1::int AS value")).rows[0].value,
+      (await database.pool.query("SELECT 1::int AS value")).rows[0].value,
       1,
       "the BFF owner Pool must serve a new real query before blocker release",
     )
@@ -4471,8 +4452,7 @@ integrationTest("R146 Move client abort destroys the exact blocked backend and p
       blocker.release()
     }
     if (pendingMove !== null) await pendingMove.catch(() => undefined)
-    if (bff !== null) await close(bff)
-    if (store !== null) await store.close().catch(() => undefined)
+    if (bff !== null) await bff.close()
     await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
@@ -4492,7 +4472,6 @@ integrationTest(
     const key = `r148-ack-${suffix}`
     const scope = JSON.stringify([tenant, subject, "POST", `/sessions/${conversationId}/move`, key])
     const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-    let store = null
     let bff = null
     let restoreAckFixture = () => {}
     try {
@@ -4509,12 +4488,13 @@ integrationTest(
         tenant,
         subject,
       ])
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
+      const { app, database } = await createMoveNestApp(tenant)
+      bff = app
+      await database.ready()
 
       // This fixture forwards every SQL query to the real PostgreSQL client. Only after the
       // final COMMIT has actually succeeded does it discard the client-side acknowledgement.
-      const ownerPool = store.database.pool
+      const ownerPool = database.pool
       const originalConnect = ownerPool.connect
       const patchedClients = new Map()
       let insertedReceipt = false
@@ -4544,15 +4524,8 @@ integrationTest(
         for (const [client, originalQuery] of patchedClients) client.query = originalQuery
       }
 
-      bff = createBffServer(config(tenant), {
-        businessStore: store,
-        sessionAdmission,
-        agentDispatchDispatcher: idleWorker,
-        agentCancellationDispatcher: idleWorker,
-        agUiProjector: idleWorker,
-        scheduledTaskDispatcher: idleWorker,
-      })
-      const base = await listen(bff)
+      await bff.listen(0, "127.0.0.1")
+      const base = await bff.getUrl()
       const headers = { ...auth(tenant, subject), "idempotency-key": key, "content-type": "application/json" }
       const token = headers.cookie.slice("kokoro-issuer.session_token=".length)
       const admissionsBefore = sessionAdmission.calls.filter((call) => call.cookie === `kokoro-issuer.session_token=${token}`).length
@@ -4602,12 +4575,14 @@ integrationTest(
       assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt WHERE scope=$1", [scope])).rows[0].count, 1)
     } finally {
       restoreAckFixture()
-      if (bff !== null) await close(bff)
-      if (store !== null) await store.close().catch(() => undefined)
-      await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
-      await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-      await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-      await pool.end()
+      try {
+        if (bff !== null) await bff.close()
+        await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
+        await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+        await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      } finally {
+        await pool.end()
+      }
     }
   },
 )
@@ -4621,7 +4596,6 @@ integrationTest("R150 Move discards a broken client after an unknown real COMMIT
   const key = `r150-commit-${suffix}`
   const scope = JSON.stringify([tenant, subject, "POST", `/sessions/${conversationId}/move`, key])
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
   let bff = null
   let restoreCommitFixture = () => {}
   try {
@@ -4638,12 +4612,13 @@ integrationTest("R150 Move discards a broken client after an unknown real COMMIT
       tenant,
       subject,
     ])
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
+    const { app, database } = await createMoveNestApp(tenant)
+    bff = app
+    await database.ready()
 
     // All SQL, including the final COMMIT, executes against real PostgreSQL. The
     // fixture only removes the transport and its acknowledgement after COMMIT.
-    const ownerPool = store.database.pool
+    const ownerPool = database.pool
     const originalConnect = ownerPool.connect
     const patchedClients = new Map()
     let insertedReceipt = false
@@ -4712,15 +4687,8 @@ integrationTest("R150 Move discards a broken client after an unknown real COMMIT
       }
     }
 
-    bff = createBffServer(config(tenant), {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-    })
-    const base = await listen(bff)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const headers = { ...auth(tenant, subject), "idempotency-key": key, "content-type": "application/json" }
     const token = headers.cookie.slice("kokoro-issuer.session_token=".length)
     const admissionsBefore = sessionAdmission.calls.filter((call) => call.cookie === `kokoro-issuer.session_token=${token}`).length
@@ -4782,12 +4750,14 @@ integrationTest("R150 Move discards a broken client after an unknown real COMMIT
     assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt WHERE scope=$1", [scope])).rows[0].count, 1)
   } finally {
     restoreCommitFixture()
-    if (bff !== null) await close(bff)
-    if (store !== null) await store.close().catch(() => undefined)
-    await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-    await pool.end()
+    try {
+      if (bff !== null) await bff.close()
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    } finally {
+      await pool.end()
+    }
   }
 })
 
@@ -4805,7 +4775,6 @@ integrationTest(
     const fixtureName = `r148_fault_${suffix.replaceAll("-", "")}`
     const quotedScope = scope.replaceAll("'", "''")
     const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-    let store = null
     let bff = null
     let restoreFaultObserver = () => {}
     try {
@@ -4830,9 +4799,12 @@ integrationTest(
       await pool.query(
         `CREATE TRIGGER ${fixtureName} BEFORE INSERT ON bff_idempotency_receipt FOR EACH ROW WHEN (NEW.scope = '${quotedScope}') EXECUTE FUNCTION ${fixtureName}()`,
       )
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
-      const originalRun = await store.chatTurnService.submit({
+      const { app, database, chatTurns } = await createMoveNestApp(tenant)
+      bff = app
+      await database.ready()
+      const { AGENT_DISPATCH_OUTBOX } = await import("../dist/common/tokens.js")
+      const bindingReader = app.get(AGENT_DISPATCH_OUTBOX)
+      const originalRun = await chatTurns.submit({
         tenantId: tenant,
         conversationId,
         subjectId: subject,
@@ -4856,8 +4828,8 @@ integrationTest(
         projectId: null,
         selectionDigest: createHash("sha256").update("[]").digest("hex"),
       }
-      assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(originalBinding))
-      const ownerPool = store.database.pool
+      assert.ok(await bindingReader.readProjectExecutionBinding(originalBinding))
+      const ownerPool = database.pool
       const originalConnect = ownerPool.connect
       const patchedClients = new Map()
       let observedRealFault = false
@@ -4881,15 +4853,8 @@ integrationTest(
         ownerPool.connect = originalConnect
         for (const [client, originalQuery] of patchedClients) client.query = originalQuery
       }
-      bff = createBffServer(config(tenant), {
-        businessStore: store,
-        sessionAdmission,
-        agentDispatchDispatcher: idleWorker,
-        agentCancellationDispatcher: idleWorker,
-        agUiProjector: idleWorker,
-        scheduledTaskDispatcher: idleWorker,
-      })
-      const base = await listen(bff)
+      await bff.listen(0, "127.0.0.1")
+      const base = await bff.getUrl()
       const headers = { ...auth(tenant, subject), "idempotency-key": key, "content-type": "application/json" }
       const token = headers.cookie.slice("kokoro-issuer.session_token=".length)
       const admissionsBefore = sessionAdmission.calls.filter((call) => call.cookie === `kokoro-issuer.session_token=${token}`).length
@@ -4922,7 +4887,7 @@ integrationTest(
 
       // Restore the scoped connect observer before Pool.query uses its callback overload.
       restoreFaultObserver()
-      assert.ok(await store.projectExecutionBindings.readProjectExecutionBinding(originalBinding), "receipt failure must roll back execution retirement too")
+      assert.ok(await bindingReader.readProjectExecutionBinding(originalBinding), "receipt failure must roll back execution retirement too")
       assert.equal(
         (await pool.query("SELECT execution_context_retired_at FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, originalRun.run_id]))
           .rows[0].execution_context_retired_at,
@@ -4945,24 +4910,26 @@ integrationTest(
         projectId,
       )
       assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt WHERE scope=$1", [scope])).rows[0].count, 1)
-      assert.equal(await store.projectExecutionBindings.readProjectExecutionBinding(originalBinding), null, "successful retry retires the original binding")
+      assert.equal(await bindingReader.readProjectExecutionBinding(originalBinding), null, "successful retry retires the original binding")
       assert.ok(
         (await pool.query("SELECT execution_context_retired_at FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenant, originalRun.run_id]))
           .rows[0].execution_context_retired_at,
       )
     } finally {
       restoreFaultObserver()
-      if (bff !== null) await close(bff)
-      if (store !== null) await store.close().catch(() => undefined)
-      await pool.query(`DROP TRIGGER IF EXISTS ${fixtureName} ON bff_idempotency_receipt`).catch(() => undefined)
-      await pool.query(`DROP FUNCTION IF EXISTS ${fixtureName}()`).catch(() => undefined)
-      await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
-      for (const table of ["bff_agent_dispatch_outbox", "bff_agui_stream", "bff_message"]) {
-        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]).catch(() => undefined)
+      try {
+        if (bff !== null) await bff.close()
+        await pool.query(`DROP TRIGGER IF EXISTS ${fixtureName} ON bff_idempotency_receipt`).catch(() => undefined)
+        await pool.query(`DROP FUNCTION IF EXISTS ${fixtureName}()`).catch(() => undefined)
+        await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
+        for (const table of ["bff_agent_dispatch_outbox", "bff_agui_stream", "bff_message"]) {
+          await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]).catch(() => undefined)
+        }
+        await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+        await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      } finally {
+        await pool.end()
       }
-      await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-      await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-      await pool.end()
     }
   },
 )
@@ -4978,7 +4945,6 @@ integrationTest(
     const messageFirstId = `conv_${randomUUID()}`
     const moveFirstId = `conv_${randomUUID()}`
     const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-    let store = null
     let bff = null
     let conversationBlocker = null
     let targetBlocker = null
@@ -5002,20 +4968,11 @@ integrationTest(
         messageFirstId,
         `https://share.kokoro.invalid/${suffix}`,
       ])
-      store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-      await store.ready()
-      const runtimeConfig = config(tenant)
-      runtimeConfig.agentEnabled = true
-      runtimeConfig.upstreams.agents = "http://127.0.0.1:9"
-      bff = createBffServer(runtimeConfig, {
-        businessStore: store,
-        sessionAdmission,
-        agentDispatchDispatcher: idleWorker,
-        agentCancellationDispatcher: idleWorker,
-        agUiProjector: idleWorker,
-        scheduledTaskDispatcher: idleWorker,
-      })
-      const base = await listen(bff)
+      const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+      bff = app
+      await database.ready()
+      await bff.listen(0, "127.0.0.1")
+      const base = await bff.getUrl()
       const identity = auth(tenant, subject)
       const sendMessage = async (conversationId, key, projectRef) => {
         const response = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
@@ -5157,23 +5114,25 @@ integrationTest(
         targetBlocker.release()
       }
       await Promise.allSettled(pending)
-      if (bff !== null) await close(bff)
-      if (store !== null) await store.close().catch(() => undefined)
-      await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]).catch(() => undefined)
-      for (const table of [
-        "bff_agent_cancellation_outbox",
-        "bff_conversation_artifact",
-        "bff_share",
-        "bff_agui_event",
-        "bff_agui_stream",
-        "bff_agent_dispatch_outbox",
-        "bff_message",
-      ]) {
-        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]).catch(() => undefined)
+      try {
+        if (bff !== null) await bff.close()
+        await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]).catch(() => undefined)
+        for (const table of [
+          "bff_agent_cancellation_outbox",
+          "bff_conversation_artifact",
+          "bff_share",
+          "bff_agui_event",
+          "bff_agui_stream",
+          "bff_agent_dispatch_outbox",
+          "bff_message",
+        ]) {
+          await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]).catch(() => undefined)
+        }
+        await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+        await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      } finally {
+        await pool.end()
       }
-      await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-      await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
-      await pool.end()
     }
   },
 )
@@ -5187,7 +5146,6 @@ integrationTest("R149 identical concurrent Move keys read one real PostgreSQL wi
   const key = `r149-same-${suffix}`
   const scope = JSON.stringify([tenant, subject, "POST", `/sessions/${conversationId}/move`, key])
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
   let bff = null
   let blocker = null
   const pending = []
@@ -5205,9 +5163,10 @@ integrationTest("R149 identical concurrent Move keys read one real PostgreSQL wi
       tenant,
       subject,
     ])
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const existingRun = await store.chatTurnService.submit({
+    const { app, database, chatTurns } = await createMoveNestApp(tenant)
+    bff = app
+    await database.ready()
+    const existingRun = await chatTurns.submit({
       tenantId: tenant,
       conversationId,
       subjectId: subject,
@@ -5236,15 +5195,8 @@ integrationTest("R149 identical concurrent Move keys read one real PostgreSQL wi
     assert.equal(historical.bff_message.length, 2)
     assert.ok(historical.bff_agui_event.length > 0, "the existing Run must have a durable AG-UI event")
     assert.equal(historical.bff_share.length, 1)
-    bff = createBffServer(config(tenant), {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-    })
-    const base = await listen(bff)
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const headers = { ...auth(tenant, subject), "idempotency-key": key, "content-type": "application/json" }
     const token = headers.cookie.slice("kokoro-issuer.session_token=".length)
     const admissionsBefore = sessionAdmission.calls.filter((call) => call.cookie === `kokoro-issuer.session_token=${token}`).length
@@ -5313,8 +5265,7 @@ integrationTest("R149 identical concurrent Move keys read one real PostgreSQL wi
       blocker.release()
     }
     await Promise.allSettled(pending)
-    if (bff !== null) await close(bff)
-    if (store !== null) await store.close().catch(() => undefined)
+    if (bff !== null) await bff.close()
     await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
     for (const table of ["bff_agent_cancellation_outbox", "bff_share", "bff_agui_event", "bff_agui_stream", "bff_agent_dispatch_outbox", "bff_message"]) {
       await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]).catch(() => undefined)
@@ -5335,7 +5286,6 @@ integrationTest("R189 Message freezes the locked canonical Project while caller 
   const directConversation = `conv_${randomUUID()}`
   const replayConversation = `conv_${randomUUID()}`
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
   let bff = null
   let testError = null
   try {
@@ -5352,20 +5302,11 @@ integrationTest("R189 Message freezes the locked canonical Project while caller 
       [projectConversation, directConversation, replayConversation, tenant, subject, projectP],
     )
 
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const runtimeConfig = config(tenant)
-    runtimeConfig.agentEnabled = true
-    runtimeConfig.upstreams.agents = "http://127.0.0.1:9"
-    bff = createBffServer(runtimeConfig, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-    })
-    const base = await listen(bff)
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    bff = app
+    await database.ready()
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const identity = auth(tenant, subject)
     const sendMessage = async (conversationId, key, content, projectRef) => {
       const body = { content, model: "r189-model" }
@@ -5477,8 +5418,7 @@ integrationTest("R189 Message freezes the locked canonical Project while caller 
         cleanupErrors.push(error)
       }
     }
-    if (bff !== null) await cleanup(() => close(bff))
-    if (store !== null) await cleanup(() => store.close())
+    if (bff !== null) await cleanup(() => bff.close())
     await cleanup(() => pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]))
     for (const table of ["bff_agent_cancellation_outbox", "bff_share", "bff_agui_event", "bff_agui_stream", "bff_agent_dispatch_outbox", "bff_message"]) {
       await cleanup(() => pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]))
@@ -5507,7 +5447,6 @@ integrationTest("R190 omitted Message scope serializes with Move and client-crea
   const triggerFunction = `r190_client_barrier_fn_${suffix}`
   const advisoryKey = `r190-client-${suffix}`
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
   let bff = null
   let conversationBlocker = null
   let advisoryBlocker = null
@@ -5527,20 +5466,11 @@ integrationTest("R190 omitted Message scope serializes with Move and client-crea
        VALUES ($1,$3,$4,$5,'Move first'),($2,$3,$4,$5,'Message first')`,
       [moveFirstConversation, messageFirstConversation, tenant, subject, projectP],
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const runtimeConfig = config(tenant)
-    runtimeConfig.agentEnabled = true
-    runtimeConfig.upstreams.agents = "http://127.0.0.1:9"
-    bff = createBffServer(runtimeConfig, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-    })
-    const base = await listen(bff)
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    bff = app
+    await database.ready()
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
     const identity = auth(tenant, subject)
     const sendMessage = async (conversationId, key, content) => {
       const response = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
@@ -5705,8 +5635,7 @@ integrationTest("R190 omitted Message scope serializes with Move and client-crea
     }
     const settled = await Promise.allSettled(pending)
     cleanupErrors.push(...settled.filter(({ status, reason }) => status === "rejected" && reason !== testError).map(({ reason }) => reason))
-    if (bff !== null) await cleanup(() => close(bff))
-    if (store !== null) await cleanup(() => store.close())
+    if (bff !== null) await cleanup(() => bff.close())
     await cleanup(() => pool.query(`DROP TRIGGER IF EXISTS ${triggerName} ON bff_conversation`))
     await cleanup(() => pool.query(`DROP FUNCTION IF EXISTS ${triggerFunction}()`))
     await cleanup(() => pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]))
@@ -5726,7 +5655,10 @@ integrationTest("R190 omitted Message scope serializes with Move and client-crea
 
 integrationTest("project Skill defaults freeze exact message refs, reject concurrent changes and do not replay tombstones", { timeout: 20000 }, async () => {
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  const store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+  const database = new PostgresBffDatabase(postgresUrl, redisUrl)
+  const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(database), new Sha256StableIdGenerator())
+  const chat = new ChatApplicationService(new PostgresChatRepository(database))
+  const projects = new ProjectService(new PostgresProjectRepository(database))
   const tenant = `selection_${randomUUID()}`,
     subject = "selection-owner",
     scope = { tenantId: tenant, subjectId: subject },
@@ -5734,15 +5666,15 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    const project = await store.projectService.create(scope, "Selection test", "")
-    const other = await store.projectService.create(scope, "Other project", "")
-    const save = (ids, key) => store.projectService.replaceSkillSelection(scope, project.id, ids, key, signal)
+    const project = await projects.create(scope, "Selection test", "")
+    const other = await projects.create(scope, "Other project", "")
+    const save = (ids, key) => projects.replaceSkillSelection(scope, project.id, ids, key, signal)
     assert.equal((await save(["installation_a"], "first-default")).kind, "replaced")
     assert.equal((await save(["installation_b"], "second-default")).kind, "replaced")
     assert.deepEqual((await save(["installation_a"], "first-default")).receipt.data.installation_ids, ["installation_a"])
-    assert.deepEqual((await store.projectService.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
+    assert.deepEqual((await projects.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
     assert.equal((await save(["installation_c"], "first-default")).kind, "conflict")
-    assert.equal(await store.projectService.skillSelection({ ...scope, subjectId: "other-owner" }, project.id), null)
+    assert.equal(await projects.skillSelection({ ...scope, subjectId: "other-owner" }, project.id), null)
     const fault = `selection_fault_${randomUUID().replaceAll("-", "")}`
     const faultScope = JSON.stringify([tenant, subject, "project.skill-selection:v1", project.id, "rollback-default"])
     await pool.query(`CREATE FUNCTION ${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
@@ -5751,7 +5683,7 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
     try {
       await pool.query(`CREATE TRIGGER ${fault} BEFORE INSERT ON bff_idempotency_receipt FOR EACH ROW EXECUTE FUNCTION ${fault}()`)
       await assert.rejects(save(["installation_failed"], "rollback-default"), /selection_receipt_failure/)
-      assert.deepEqual((await store.projectService.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
+      assert.deepEqual((await projects.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
       assert.equal((await pool.query("SELECT 1 FROM bff_idempotency_receipt WHERE scope=$1", [faultScope])).rowCount, 0)
     } finally {
       await pool.query(`DROP TRIGGER IF EXISTS ${fault} ON bff_idempotency_receipt`)
@@ -5774,7 +5706,7 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
       assert.deepEqual(ids, ["installation_b"])
       return ["skill:version_b"]
     }
-    const receipt = await store.chatTurnService.submit(input, resolver)
+    const receipt = await chatTurns.submit(input, resolver)
     assert.ok(receipt)
     const frozen = await pool.query("SELECT selected_skill_source_refs FROM bff_message WHERE message_id=$1", [receipt.user_message_id])
     assert.deepEqual(frozen.rows[0].selected_skill_source_refs, ["skill:version_b"])
@@ -5785,14 +5717,14 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
     assert.deepEqual(dispatched.rows[0].payload.launch.selected_skill_source_refs, ["skill:version_b"])
     await save(["installation_c"], "changed-default")
     assert.deepEqual(
-      await store.chatTurnService.submit(input, async () => {
+      await chatTurns.submit(input, async () => {
         throw Error("replay must not resolve current defaults")
       }),
       receipt,
     )
     assert.equal(resolutions, 1)
-    await assert.rejects(store.chatTurnService.submit({ ...input, selectedSkillSourceRefs: [] }), /CHAT_TURN_IDEMPOTENCY_CONFLICT/)
-    const empty = await store.chatTurnService.submit({ ...input, idempotencyKey: "explicit-empty", selectedSkillSourceRefs: [] }, async () => {
+    await assert.rejects(chatTurns.submit({ ...input, selectedSkillSourceRefs: [] }), /CHAT_TURN_IDEMPOTENCY_CONFLICT/)
+    const empty = await chatTurns.submit({ ...input, idempotencyKey: "explicit-empty", selectedSkillSourceRefs: [] }, async () => {
       throw Error("explicit empty must not inherit")
     })
     assert.deepEqual(
@@ -5801,7 +5733,7 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
     )
     const raced = { ...input, conversationId: `conv_${randomUUID()}`, idempotencyKey: "defaults-race" }
     await assert.rejects(
-      store.chatTurnService.submit(raced, async () => {
+      chatTurns.submit(raced, async () => {
         await save([], "clear-during-resolve")
         return ["skill:version_c"]
       }),
@@ -5817,8 +5749,8 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
       project.id,
     ])
     await assert.rejects(
-      store.chatTurnService.submit({ ...input, conversationId: movedId, idempotencyKey: "move-race" }, async () => {
-        const moved = await store.chatService.moveConversation(
+      chatTurns.submit({ ...input, conversationId: movedId, idempotencyKey: "move-race" }, async () => {
+        const moved = await chat.moveConversation(
           { requestId: "selection-move", identity: { namespace: tenant, userId: subject } },
           movedId,
           other.id,
@@ -5831,17 +5763,17 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
       /CHAT_SKILL_SELECTION_CHANGED/,
     )
     assert.equal((await pool.query("SELECT 1 FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2", [tenant, movedId])).rowCount, 0)
-    assert.equal(await store.chatService.deleteConversation(tenant, subject, input.conversationId, "delete-selection", project.id), true)
+    assert.equal(await chat.deleteConversation(tenant, subject, input.conversationId, "delete-selection", project.id), true)
     const before = (await pool.query("SELECT count(*)::int AS n FROM bff_message WHERE tenant_id=$1", [tenant])).rows[0].n
     assert.equal(
-      await store.chatTurnService.submit(input, async () => {
+      await chatTurns.submit(input, async () => {
         throw Error("deleted conversation must not resolve")
       }),
       null,
     )
     assert.equal((await pool.query("SELECT count(*)::int AS n FROM bff_message WHERE tenant_id=$1", [tenant])).rows[0].n, before)
   } finally {
-    await store.close()
+    await database.close()
     await pool.end()
   }
 })
@@ -5851,25 +5783,13 @@ integrationTest("SET21 real HTTP creates own turns and shares, pages safe facts 
   const tenant = `set21_${suffix}`
   const subject = `set21_owner_${suffix}`
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
   let server = null
   try {
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    await store.ready()
-    const cfg = config(tenant)
-    cfg.agentEnabled = true
-    cfg.upstreams.agents = "http://127.0.0.1:9"
-    server = createBffServer(cfg, {
-      businessStore: store,
-      sessionAdmission,
-      agentDispatchDispatcher: idleWorker,
-      agentCancellationDispatcher: idleWorker,
-      agUiProjector: idleWorker,
-      scheduledTaskDispatcher: idleWorker,
-      scheduledAgentDispatcher: idleWorker,
-      scheduledAgentTerminalConsumer: idleWorker,
-    })
-    const base = await listen(server)
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    server = app
+    await database.ready()
+    await server.listen(0, "127.0.0.1")
+    const base = await server.getUrl()
     const ids = []
     const capabilities = []
     for (let i = 0; i < 3; i += 1) {
@@ -5962,19 +5882,21 @@ integrationTest("SET21 real HTTP creates own turns and shares, pages safe facts 
     const unavailableParents = await fetch(`${base}/v1/account/shared-tasks`, { headers: auth(tenant, subject) })
     assert.deepEqual((await unavailableParents.json()).data, { items: [], next_cursor: null })
   } finally {
-    if (server) await close(server)
-    if (store) await store.close()
-    await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant])
-    for (const table of [
-      "bff_agent_cancellation_outbox",
-      "bff_share",
-      "bff_agui_event",
-      "bff_agui_stream",
-      "bff_agent_dispatch_outbox",
-      "bff_message",
-      "bff_conversation",
-    ])
-      await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant])
-    await pool.end()
+    try {
+      await server?.close()
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant])
+      for (const table of [
+        "bff_agent_cancellation_outbox",
+        "bff_share",
+        "bff_agui_event",
+        "bff_agui_stream",
+        "bff_agent_dispatch_outbox",
+        "bff_message",
+        "bff_conversation",
+      ])
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant])
+    } finally {
+      await pool.end()
+    }
   }
 })
