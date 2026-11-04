@@ -3,7 +3,15 @@ import { fixtureNativeSession } from "./doubles/iam-native-session.ts"
 import "reflect-metadata"
 import assert from "node:assert/strict"
 import { Test } from "@nestjs/testing"
-import { BFF_CONFIG, BFF_DATABASE, PROJECT_IDEMPOTENCY, PROJECT_SERVICE, PUBLIC_SHARE_SERVICE, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import {
+  BFF_CONFIG,
+  BFF_DATABASE,
+  PROJECT_IDEMPOTENCY,
+  PROJECT_SERVICE,
+  PUBLIC_SHARE_SERVICE,
+  SESSION_ADMISSION,
+  SKILL_AUTHORIZATION,
+} from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
 import { AccountModule } from "../dist/modules/account/account.module.js"
 import { ChatModule } from "../dist/modules/chat/chat.module.js"
@@ -21,7 +29,7 @@ import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { AppModule } from "../dist/app.module.js"
 import type { BffConfig } from "../src/config/runtime.ts"
 import { startAccountTestApp } from "./doubles/account-app.ts"
-import { createLiveTestBffServer } from "./doubles/server.ts"
+import { BffExpressAdapter } from "../dist/http/bff-express-adapter.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 import { startSkillDraftTestApp } from "./doubles/skill-draft-app.ts"
 
@@ -325,18 +333,34 @@ test("service and Cookie rejection happen before IAM and route work", async (t) 
   assert.equal(secretlessProjectReads.mock.callCount(), 0)
 })
 
-test("Admin Web credential reaches only current identity and exact named admin routes", async () => {
-  const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-server", userId: "admin-user" } })
-  let routeCalls = 0
-  const server = createLiveTestBffServer({ ...config(), adminWebSharedSecret: "admin-test-secret" } as BffConfig, {
-    sessionAdmission: admission,
-    skillAuthorization: { check: async () => ({ ok: true as const }) },
-    routeHandler: async ({ response }): Promise<void> => {
-      routeCalls += 1
-      response.writeHead(204).end()
-    },
-  })
-  const base = await listen(server)
+test("Admin Web credential reaches only current identity and exact named admin routes", async (t) => {
+  const verify = t.mock.fn(async ({ cookie }: Parameters<SessionAdmission["verify"]>[0]) =>
+    cookie === "kokoro-issuer.session_token=token"
+      ? {
+          ok: true as const,
+          identity: { namespace: "tenant-server", userId: "admin-user" },
+          platformAdmin: true,
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          setCookies: [],
+        }
+      : { ok: false as const, status: 401 as const, code: "session_invalid" },
+  )
+  const noDb = (): never => assert.fail("Admin service scope test must not use BFF storage")
+  const module = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue({ ...config(), adminWebSharedSecret: "admin-test-secret" })
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: noDb, connect: noDb } })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue({ verify } satisfies SessionAdmission)
+    .overrideProvider(SKILL_AUTHORIZATION)
+    .useValue({ check: async () => ({ ok: true }) })
+    .compile()
+  const projectReads = t.mock.method(module.get<ProjectService>(PROJECT_SERVICE), "list", async () => [])
+  const app = module.createNestApplication(new BffExpressAdapter(), { ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  nestClosers.push(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
   const admin = {
     "x-kokoro-service": "admin-web-bff",
     "x-kokoro-internal-secret": "admin-test-secret",
@@ -359,8 +383,10 @@ test("Admin Web credential reaches only current identity and exact named admin r
       "admin-web-bff",
       "x-kokoro-internal-secret",
       "admin-test-secret",
-      "authorization",
-      "Bearer token",
+      "cookie",
+      "kokoro-issuer.session_token=token",
+      "origin",
+      "https://web.example.test",
     ],
     [
       "x-kokoro-service",
@@ -369,8 +395,10 @@ test("Admin Web credential reaches only current identity and exact named admin r
       "admin-test-secret",
       "x-kokoro-internal-secret",
       "admin-test-secret",
-      "authorization",
-      "Bearer token",
+      "cookie",
+      "kokoro-issuer.session_token=token",
+      "origin",
+      "https://web.example.test",
     ],
   ]) {
     const status = await new Promise<number>((resolve, reject) => {
@@ -383,21 +411,21 @@ test("Admin Web credential reaches only current identity and exact named admin r
     })
     assert.ok(status === 400 || status === 403)
   }
-  assert.equal(admission.calls.length, 0)
+  assert.equal(verify.mock.callCount(), 0)
 
   assert.equal((await fetch(`${base}/v1/me`, { headers: admin })).status, 200)
   const skills = await fetch(`${base}/v1/admin/skills`, { headers: admin })
   assert.equal(skills.status, 503)
   assert.equal(((await skills.json()) as { error: { code: string } }).error.code, "skill_dependency_unavailable")
-  assert.equal((await fetch(`${base}/v1/admin/model-routing`, { headers: admin })).status, 204)
-  assert.equal(routeCalls, 1)
-  assert.equal(admission.calls.length, 3)
+  const models = await fetch(`${base}/v1/admin/model-routing`, { headers: admin })
+  assert.equal(models.status, 503)
+  assert.equal(((await models.json()) as { error: { code: string } }).error.code, "admin_model_routing_unavailable")
+  assert.equal(verify.mock.callCount(), 3)
 
   for (const [path, headers] of [
     ["/v1/projects", admin],
     ["/v1/team/members", admin],
     ["/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=admin-web", admin],
-    ["/v1/admin/not-a-real-operation", admin],
     ["/v1/admin/skills", { ...admin, "x-kokoro-internal-secret": "wrong" }],
     ["/v1/admin/skills", { ...admin, "x-kokoro-internal-secret": "test-secret" }],
     ["/v1/admin/skills", { ...admin, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "admin-test-secret", origin: "https://web.example.test" }],
@@ -406,10 +434,13 @@ test("Admin Web credential reaches only current identity and exact named admin r
     assert.equal(response.status, 403, path)
     assert.equal(((await response.json()) as { error: { code: string } }).error.code, "service_auth_failed")
   }
-  assert.equal(routeCalls, 1)
-  assert.equal(admission.calls.length, 3)
+  const unknown = await fetch(`${base}/v1/admin/not-a-real-operation`, { headers: admin })
+  assert.equal(unknown.status, 404)
+  assert.equal(((await unknown.json()) as { error: { code: string } }).error.code, "bff_route_not_found")
+  assert.equal(projectReads.mock.callCount(), 0)
+  assert.equal(verify.mock.callCount(), 3)
 
-  const legacy = await fetch(`${base}/v1/projects`, {
+  const userProjects = await fetch(`${base}/v1/projects`, {
     headers: {
       "x-kokoro-service": "web-bff",
       "x-kokoro-internal-secret": "test-secret",
@@ -417,9 +448,11 @@ test("Admin Web credential reaches only current identity and exact named admin r
       origin: "https://web.example.test",
     },
   })
-  assert.equal(legacy.status, 204)
-  assert.equal(routeCalls, 2)
-  assert.equal(admission.calls.length, 4)
+  assert.equal(userProjects.status, 200)
+  assert.deepEqual(((await userProjects.json()) as { data: unknown }).data, { projects: [] })
+  assert.equal(projectReads.mock.callCount(), 1)
+  assert.deepEqual(projectReads.mock.calls[0]?.arguments, [{ tenantId: "tenant-server", subjectId: "admin-user" }])
+  assert.equal(verify.mock.callCount(), 4)
 })
 
 test("missing fixed Product tenant fails before IAM and business work without changing service-only or issuer paths", async (t) => {
@@ -1091,21 +1124,65 @@ test("Admin package HTTP admission preserves fresh human identity, tenant and or
   assert.equal(checks.length, 6)
 })
 
-for (const source of ["business-store", "fallback"] as const) {
-  test(`anonymous Share ${source} exposes only the original public message projection with a null process`, async (t) => {
-    const admission = new SessionAdmissionDouble()
-    const canary = "PRIVATE_TOOL_DETAIL_CANARY"
-    const createdAt = "2026-10-27T00:00:00.000Z"
-    const messages = [
-      {
-        message_id: "user-public",
-        role: "user",
-        content: "question",
-        status: "completed",
-        created_at: createdAt,
-        selected_skill_source_refs: ["skill:one"],
-        private_value: canary,
+test("anonymous Share business-store exposes only the original public message projection with a null process", async (t) => {
+  const admission = new SessionAdmissionDouble()
+  const canary = "PRIVATE_TOOL_DETAIL_CANARY"
+  const createdAt = "2026-10-27T00:00:00.000Z"
+  const messages = [
+    {
+      message_id: "user-public",
+      role: "user",
+      content: "question",
+      status: "completed",
+      created_at: createdAt,
+      selected_skill_source_refs: ["skill:one"],
+      private_value: canary,
+    },
+    {
+      message_id: "answer-public",
+      role: "assistant",
+      content: "original answer",
+      status: "failed",
+      created_at: createdAt,
+      run_id: "run-public",
+      failure: { source: "agent", code: "model_unavailable", retryable: true, private_value: canary },
+      rendering: { parts_cursor: canary },
+      ordered_parts: [{ display_detail: { kind: "file", name: canary } }],
+      private_value: canary,
+    },
+  ]
+  const session = {
+    session_id: "session-public",
+    title: "Public title",
+    owner_id: "owner-public",
+    created_at: createdAt,
+    updated_at: createdAt,
+    private_value: canary,
+  }
+  const publicShares = {
+    findActiveShare: t.mock.fn(async () => ({
+      share: { shareId: "share-public" },
+      conversation: {
+        tenantId: "tenant-public",
+        conversationId: session.session_id,
+        title: session.title,
+        ownerId: session.owner_id,
+        createdAt: new Date(createdAt),
+        updatedAt: new Date(createdAt),
       },
+    })),
+    listMessages: t.mock.fn(async () => ({ messages })),
+  }
+  const base = await listenNativePublicShare(admission, publicShares)
+  const response = await fetch(`${base}/v1/shared/share-public`, {
+    headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", origin: "https://web.example.test" },
+  })
+  assert.equal(response.status, 200)
+  const body = (await response.json()) as { data: unknown }
+  assert.deepEqual(body.data, {
+    session: { session_id: session.session_id, title: session.title, owner_id: session.owner_id, created_at: createdAt, updated_at: createdAt },
+    messages: [
+      { message_id: "user-public", role: "user", content: "question", status: "completed", created_at: createdAt, selected_skill_source_refs: ["skill:one"] },
       {
         message_id: "answer-public",
         role: "assistant",
@@ -1113,102 +1190,26 @@ for (const source of ["business-store", "fallback"] as const) {
         status: "failed",
         created_at: createdAt,
         run_id: "run-public",
-        failure: { source: "agent", code: "model_unavailable", retryable: true, private_value: canary },
-        rendering: { parts_cursor: canary },
-        ordered_parts: [{ display_detail: { kind: "file", name: canary } }],
-        private_value: canary,
+        failure: { source: "agent", code: "model_unavailable", retryable: true },
       },
-    ]
-    const session = {
-      session_id: "session-public",
-      title: "Public title",
-      owner_id: "owner-public",
-      created_at: createdAt,
-      updated_at: createdAt,
-      private_value: canary,
-    }
-    const publicShares =
-      source === "business-store"
-        ? {
-            findActiveShare: t.mock.fn(async () => ({
-              share: { shareId: "share-public" },
-              conversation: {
-                tenantId: "tenant-public",
-                conversationId: session.session_id,
-                title: session.title,
-                ownerId: session.owner_id,
-                createdAt: new Date(createdAt),
-                updatedAt: new Date(createdAt),
-              },
-            })),
-            listMessages: t.mock.fn(async () => ({ messages })),
-          }
-        : null
-    let base: string
-    if (publicShares !== null) {
-      base = await listenNativePublicShare(admission, publicShares)
-    } else {
-      const detail = {
-        session,
-        messages,
-        execution_process: { activities: [{ display_detail: { kind: "file", name: canary } }] },
-        execution_head: { pending_pauses: [{ input_schema: canary }] },
-        files: [{ path: canary }],
-        deliveries: [{ title: canary }],
-        deliveries_has_more: true,
-        event_watermark: canary,
-        private_value: canary,
-      }
-      // The raw sharedSessionReader compatibility path has no Nest producer.
-      const { createBffServer: createSourceBffServer } = await import("../src/bootstrap/server.ts")
-      base = await listen(
-        createSourceBffServer(config(), {
-          businessStore: null,
-          sharedSessionReader: { findSharedSession: () => ({ session_id: session.session_id }), readSession: () => detail },
-          sessionAdmission: admission,
-          readiness: async () => undefined,
-        }),
-      )
-    }
-    const response = await fetch(`${base}/v1/shared/share-public`, {
-      headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", origin: "https://web.example.test" },
-    })
-    assert.equal(response.status, 200)
-    const body = (await response.json()) as { data: unknown }
-    assert.deepEqual(body.data, {
-      session: { session_id: session.session_id, title: session.title, owner_id: session.owner_id, created_at: createdAt, updated_at: createdAt },
-      messages: [
-        { message_id: "user-public", role: "user", content: "question", status: "completed", created_at: createdAt, selected_skill_source_refs: ["skill:one"] },
-        {
-          message_id: "answer-public",
-          role: "assistant",
-          content: "original answer",
-          status: "failed",
-          created_at: createdAt,
-          run_id: "run-public",
-          failure: { source: "agent", code: "model_unavailable", retryable: true },
-        },
-      ],
-      files: [],
-      deliveries: [],
-      deliveries_has_more: false,
-      event_watermark: null,
-      execution_process: null,
-    })
-    assert.equal(JSON.stringify(body).includes(canary), false)
-    assert.equal(admission.calls.length, 0)
-    if (source === "business-store") {
-      assert.deepEqual(
-        publicShares.findActiveShare.mock.calls.map((call) => call.arguments),
-        [["share-public", undefined, undefined]],
-      )
-      assert.deepEqual(
-        publicShares.listMessages.mock.calls.map((call) => call.arguments),
-        [["share-public", "tenant-public", session.session_id, 100]],
-      )
-    }
+    ],
+    files: [],
+    deliveries: [],
+    deliveries_has_more: false,
+    event_watermark: null,
+    execution_process: null,
   })
-}
+  assert.equal(JSON.stringify(body).includes(canary), false)
+  assert.equal(admission.calls.length, 0)
+  assert.deepEqual(
+    publicShares.findActiveShare.mock.calls.map((call) => call.arguments),
+    [["share-public", undefined, undefined]],
+  )
+  assert.deepEqual(
+    publicShares.listMessages.mock.calls.map((call) => call.arguments),
+    [["share-public", "tenant-public", session.session_id, 100]],
+  )
+})
 
 test("anonymous Share refuses a private ordered message instead of emitting a null success body", async (t) => {
   const at = new Date("2026-10-27T00:00:00.000Z")
