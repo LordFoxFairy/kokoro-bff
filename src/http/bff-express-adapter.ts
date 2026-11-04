@@ -7,18 +7,20 @@ import { send } from "./response.js"
 
 const MAX_HTTP_HEADER_BYTES = 32 * 1024
 
-/** Keeps the BFF's bounded header parser and Product error envelope on the Nest transport. */
+/** Keeps the BFF's bounded header parser and versioned error envelopes on the Nest transport. */
 export class BffExpressAdapter extends ExpressAdapter {
   public override setNotFoundHandler(handler: (request: IncomingMessage, response: ServerResponse, next: () => void) => void, prefix?: string): void {
     super.setNotFoundHandler((request: IncomingMessage, response: ServerResponse, next: () => void) => {
       const path = this.getRequestUrl(request).split(/[?#]/u, 1)[0]
-      if (path !== "/v1" && !path?.startsWith("/v1/")) {
+      const product = path === "/v1" || path?.startsWith("/v1/")
+      const browser = path === "/browser/v1" || path?.startsWith("/browser/v1/")
+      if (!product && !browser) {
         return handler(request, response, next)
       }
       // Nest reaches this only after every registered handler declined the request.
       const id = requestId(request)
       response.setHeader("x-request-id", id)
-      send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
+      send(response, 404, product ? failure("bff_route_not_found", "Business route was not found", id) : failure("route_not_found", "Route was not found", id))
     }, prefix)
   }
 

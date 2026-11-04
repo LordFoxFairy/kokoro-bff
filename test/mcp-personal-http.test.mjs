@@ -1,10 +1,15 @@
+import "reflect-metadata"
 import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
 import { fixtureNativeSession } from "./doubles/iam-native-session.ts"
 import { startMcpRequestBudget } from "../dist/http/mcp-request-budget.js"
 import assert from "node:assert/strict"
 import { createServer, request as nodeRequest } from "node:http"
 import test from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { BffExpressAdapter } from "../dist/http/bff-express-adapter.js"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { McpModule } from "../dist/modules/mcp/mcp.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
 const headers = {
@@ -27,7 +32,6 @@ async function fixture(
   {
     realSession = false,
     check,
-    routeHandler,
     mcpPersonalClient,
     verify,
     deadlineMs,
@@ -85,45 +89,46 @@ async function fixture(
       music: null,
     },
   }
-  const app = createBffServer(config, {
-    businessStore: null,
-    readiness: async () => undefined,
-    ...(realSession
-      ? {}
-      : {
-          sessionAdmission: {
-            verify:
-              verify ??
-              (async () => {
-                if (sessionDelayMs) await new Promise((resolve) => setTimeout(resolve, sessionDelayMs))
-                return {
-                  ok: true,
-                  identity: { namespace: "tenant-server", userId: "human-one" },
-                  platformAdmin: false,
-                }
-              }),
-          },
-        }),
-    ...(check ? { mcpAuthorization: { check } } : {}),
-    ...(routeHandler ? { routeHandler } : {}),
-    ...(mcpPersonalClient ? { mcpPersonalClient } : {}),
-  })
-  if (deadlineMs !== undefined) {
-    const handler = app.listeners("request")[0]
-    app.removeAllListeners("request")
-    app.on("request", (request, response) => {
-      startMcpRequestBudget(request, deadlineMs)
-      handler(request, response)
-    })
+  const sessionAdmission = realSession
+    ? undefined
+    : {
+        verify:
+          verify ??
+          (async () => {
+            if (sessionDelayMs) await new Promise((resolve) => setTimeout(resolve, sessionDelayMs))
+            return {
+              ok: true,
+              identity: { namespace: "tenant-server", userId: "human-one" },
+              platformAdmin: false,
+            }
+          }),
+      }
+  const databaseCall = () => {
+    throw new Error("MCP HTTP fixture must not query PostgreSQL")
   }
-  await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve))
+  const builder = Test.createTestingModule({ imports: [McpModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: databaseCall, connect: databaseCall } })
+  if (sessionAdmission) builder.overrideProvider(SESSION_ADMISSION).useValue(sessionAdmission)
+  if (check) builder.overrideProvider(MCP_AUTHORIZATION).useValue({ check })
+  if (mcpPersonalClient) builder.overrideProvider(MCP_PERSONAL_CLIENT).useValue(mcpPersonalClient)
+  const module = await builder.compile()
+  const app = module.createNestApplication(new BffExpressAdapter(), { ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  const server = app.getHttpServer()
+  if (deadlineMs !== undefined) server.prependListener("request", (request) => startMcpRequestBudget(request, deadlineMs))
+  await app.listen(0, "127.0.0.1")
   return {
     seen,
-    origin: `http://127.0.0.1:${app.address().port}`,
+    origin: await app.getUrl(),
     close: async () => {
-      for (const server of [app, iam]) {
+      try {
         server.closeAllConnections()
-        await new Promise((resolve) => server.close(resolve))
+        await app.close()
+      } finally {
+        iam.closeAllConnections()
+        await new Promise((resolve) => iam.close(resolve))
       }
     },
   }
@@ -244,7 +249,17 @@ for (const key of ["content-length", "idempotency-key"])
   })
 test("unissued personal methods and provider writes remain blocked without owner IO", async () => {
   let reads = 0
+  let admissionCalls = 0
+  let authorizationCalls = 0
   const f = await fixture(true, {
+    verify: async () => {
+      admissionCalls++
+      assert.fail("an unissued method must not run admission")
+    },
+    check: async () => {
+      authorizationCalls++
+      assert.fail("an unissued method must not check permissions")
+    },
     mcpPersonalClient: {
       read: async () => {
         reads++
@@ -259,9 +274,17 @@ test("unissued personal methods and provider writes remain blocked without owner
     ]) {
       const result = await fetch(f.origin + path, { method, headers })
       assert.equal(result.status, 404)
-      assert.equal((await result.json()).error.code, "route_not_found")
+      assert.equal(result.headers.get("x-request-id"), "mcp-http-1")
+      assert.equal(result.headers.get("cache-control"), "no-store")
+      assert.deepEqual(await result.json(), {
+        error: { code: "route_not_found", message: "Route was not found" },
+        meta: { request_id: "mcp-http-1" },
+      })
     }
     assert.equal(reads, 0)
+    assert.equal(admissionCalls, 0)
+    assert.equal(authorizationCalls, 0)
+    assert.deepEqual(f.seen, [])
   } finally {
     await f.close()
   }
