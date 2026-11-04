@@ -274,7 +274,6 @@ test("GitHub URL resolution rejects private repository and malformed default com
   }
 })
 
-import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { createServer } from "node:http"
 import { once } from "node:events"
@@ -363,12 +362,14 @@ test("GitHub real HTTP final source block fences import and preview with current
           }
           return original(url, options)
         }
-        const server = createBffServer(
-          {
+        const controller = new AbortController()
+        let app
+        try {
+          const config = {
             ...correctionConfig,
             storage: { objectOrigin: sourceUrl.replace("/archive", "") },
-          },
-          {
+          }
+          const dependencies = {
             sessionAdmission: {
               verify: async () => {
                 admissions++
@@ -390,7 +391,7 @@ test("GitHub real HTTP final source block fences import and preview with current
               },
             },
             skillAuthorization: { check: async () => ({ ok: true }) },
-            businessStore: {
+            receipts: {
               getReceipt: async () => {
                 receiptReads++
                 if (receiptReads === 1) return null // Initial read-only preflight; original postfetch effect oracle remains below.
@@ -410,15 +411,36 @@ test("GitHub real HTTP final source block fences import and preview with current
                 throw Error("test stop before owner write")
               },
             },
-          },
-        )
-        server.listen(0, "127.0.0.1")
-        await once(server, "listening")
-        const controller = new AbortController()
-        try {
+          }
+          await import("reflect-metadata")
+          const { Test } = await import("@nestjs/testing")
+          const { SkillsModule } = await import("../dist/modules/skills/skills.module.js")
+          const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+          const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, SKILL_AUTHORIZATION, SKILL_IMPORT_RECEIPTS, SKILL_PRODUCT_CLIENT } =
+            await import("../dist/common/tokens.js")
+          const unexpectedStorage = () => {
+            throw new Error("Skill HTTP fixture must not touch BFF storage")
+          }
+          const module = await Test.createTestingModule({ imports: [SkillsModule] })
+            .overrideProvider(BFF_CONFIG)
+            .useValue(config)
+            .overrideProvider(BFF_DATABASE)
+            .useValue({ pool: { query: unexpectedStorage, connect: unexpectedStorage }, redis: {}, ready: unexpectedStorage })
+            .overrideProvider(SESSION_ADMISSION)
+            .useValue(dependencies.sessionAdmission)
+            .overrideProvider(SKILL_AUTHORIZATION)
+            .useValue(dependencies.skillAuthorization)
+            .overrideProvider(SKILL_IMPORT_RECEIPTS)
+            .useValue(dependencies.receipts)
+            .overrideProvider(SKILL_PRODUCT_CLIENT)
+            .useValue(dependencies.skillProductClient)
+            .compile()
+          app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+          await app.listen(0, "127.0.0.1")
+          const base = await app.getUrl()
           const headers = { ...correctionHeaders }
           if (operation === "preview") delete headers["idempotency-key"]
-          const pending = original(`http://127.0.0.1:${server.address().port}/v1/skills/github/${operation}`, {
+          const pending = original(`${base}/v1/skills/github/${operation}`, {
             method: "POST",
             headers,
             signal: controller.signal,
@@ -453,9 +475,9 @@ test("GitHub real HTTP final source block fences import and preview with current
         } finally {
           release()
           globalThis.fetch = original
-          server.closeAllConnections()
+          app?.getHttpServer().closeAllConnections()
           source.closeAllConnections()
-          await Promise.all([new Promise((resolve) => server.close(resolve)), new Promise((resolve) => source.close(resolve))])
+          await Promise.all([app?.close(), new Promise((resolve) => source.close(resolve))])
         }
       })
 })

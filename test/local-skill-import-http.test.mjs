@@ -29,9 +29,7 @@ import {
   projectLocalImportFinalize,
   projectLocalImportGet,
 } from "../dist/infrastructure/clients/platform/local-skill-import-response.js"
-import { createLiveTestBffServer } from "./doubles/server.ts"
-import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
-import { createBffComposition } from "../dist/bootstrap/runtime.js"
+import { SessionAdmissionDouble, TEST_WEB_ORIGIN } from "./doubles/session-admission.ts"
 
 const config = {
   host: "127.0.0.1",
@@ -120,15 +118,60 @@ const headers = {
   "idempotency-key": "local-import-begin-1",
 }
 
+async function compileLocalImportSkills(serverConfig, options = {}) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, SKILL_AUTHORIZATION, SKILL_LOCAL_IMPORT_CLIENT } = await import("../dist/common/tokens.js")
+  const { SkillsModule } = await import("../dist/modules/skills/skills.module.js")
+  const unexpectedIo = () => assert.fail("Local Skill import fixture must not access BFF database or Redis")
+  const database = {
+    pool: { query: unexpectedIo, connect: unexpectedIo, end: unexpectedIo },
+    redis: { connect: unexpectedIo, ping: unexpectedIo, close: unexpectedIo, destroy: unexpectedIo },
+    ready: unexpectedIo,
+    close: unexpectedIo,
+  }
+  const builder = Test.createTestingModule({ imports: [SkillsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(serverConfig)
+    .overrideProvider(BFF_DATABASE)
+    .useValue(database)
+  for (const [token, value] of [
+    [SESSION_ADMISSION, options.sessionAdmission],
+    [SKILL_AUTHORIZATION, options.skillAuthorization ?? undefined],
+    [SKILL_LOCAL_IMPORT_CLIENT, options.localSkillImportClient],
+  ]) {
+    if (value !== undefined) builder.overrideProvider(token).useValue(value)
+  }
+  return builder.compile()
+}
+
 async function withServer(options, run, serverConfig = config) {
-  const server = createLiveTestBffServer(serverConfig, options)
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const module = await compileLocalImportSkills(
+    {
+      ...serverConfig,
+      iamWebOrigin: serverConfig.iamWebOrigin === undefined ? (serverConfig.iamRelay?.webOrigin ?? TEST_WEB_ORIGIN) : serverConfig.iamWebOrigin,
+    },
+    {
+      ...options,
+      sessionAdmission:
+        options.sessionAdmission ??
+        new SessionAdmissionDouble({
+          "test-session": { namespace: "ns_test", userId: "user_test" },
+          "control-session": { namespace: "tenant_control", userId: "user_control" },
+        }),
+    },
+  )
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
   try {
-    await run(`http://127.0.0.1:${server.address().port}`)
+    await app.listen(0, "127.0.0.1")
+    await run(await app.getUrl())
   } finally {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
+    try {
+      app.getHttpServer().closeAllConnections()
+    } finally {
+      await app.close()
+    }
   }
 }
 
@@ -280,6 +323,10 @@ test("all four browser-private routes preserve exact method, body and fresh read
 })
 
 test("production composition registers all four local-import owner methods only with the complete Platform credential set", async () => {
+  const { SKILL_LOCAL_IMPORT_CLIENT } = await import("../dist/common/tokens.js")
+  const { SkillsModule } = await import("../dist/modules/skills/skills.module.js")
+  const localImportClient = (module) => module.select(SkillsModule).get(SKILL_LOCAL_IMPORT_CLIENT, { strict: true })
+
   const complete = {
     ...config,
     iamBaseUrl: null,
@@ -296,28 +343,29 @@ test("production composition registers all four local-import owner methods only 
       timeoutMs: 100,
     },
   }
-  const options = {
-    businessStore: null,
-    readiness: async () => undefined,
-    sessionAdmission: new SessionAdmissionDouble(),
-    skillAuthorization: { check: async () => ({ ok: true }) },
+  const active = await compileLocalImportSkills(complete)
+  try {
+    const client = localImportClient(active)
+    assert.ok(client)
+    assert.deepEqual(
+      ["begin", "complete", "finalize", "get"].map((method) => typeof client[method]),
+      ["function", "function", "function", "function"],
+    )
+  } finally {
+    await active.close()
   }
-  const active = createBffComposition(complete, options)
-  assert.ok(active.localSkillImportClient)
-  assert.deepEqual(
-    ["begin", "complete", "finalize", "get"].map((method) => typeof active.localSkillImportClient[method]),
-    ["function", "function", "function", "function"],
-  )
-  await active.close()
 
   for (const [name, candidate] of [
     ["platform base URL", { ...complete, skillDraft: { ...complete.skillDraft, platformBaseUrl: null } }],
     ["catalog credential", { ...complete, skillDraft: { ...complete.skillDraft, credentialFile: null } }],
     ["projection credential", { ...complete, platformProjection: { ...complete.platformProjection, credentialFile: null } }],
   ]) {
-    const inactive = createBffComposition(candidate, options)
-    assert.equal(inactive.localSkillImportClient, undefined, name)
-    await inactive.close()
+    const inactive = await compileLocalImportSkills(candidate)
+    try {
+      assert.equal(localImportClient(inactive), undefined, name)
+    } finally {
+      await inactive.close()
+    }
     await withServer(
       {
         sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),

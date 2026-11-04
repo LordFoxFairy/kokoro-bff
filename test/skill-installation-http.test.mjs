@@ -6,7 +6,11 @@ import { request as httpRequest } from "node:http"
 import test from "node:test"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
-import { createLiveTestBffServer } from "./doubles/server.ts"
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, SKILL_AUTHORIZATION, SKILL_INSTALLATION_CLIENT } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { SkillsModule } from "../dist/modules/skills/skills.module.js"
 import { SkillInstallationChange } from "../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { projectInstallation, projectInstallationAck, projectInstallationList } from "../dist/infrastructure/clients/platform/skill-installation-response.js"
 import { installSkillDigest, removeSkillDigest, setSkillEnabledDigest } from "../dist/infrastructure/clients/platform/skill-installation-projector.js"
@@ -68,7 +72,7 @@ const headers = {
   "x-kokoro-internal-secret": "secret",
 }
 async function withServer(client, run, overrides = {}) {
-  const server = createLiveTestBffServer(config, {
+  const { sessionAdmission, skillAuthorization, installationClient } = {
     skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: {
       verify: async () => ({
@@ -78,14 +82,25 @@ async function withServer(client, run, overrides = {}) {
     },
     installationClient: client,
     ...overrides,
-  })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
+  }
+  const builder = Test.createTestingModule({ imports: [SkillsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: Object.freeze({}) })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+    .overrideProvider(SKILL_AUTHORIZATION)
+    .useValue(skillAuthorization)
+  if (installationClient !== undefined) builder.overrideProvider(SKILL_INSTALLATION_CLIENT).useValue(installationClient)
+
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false, forceCloseConnections: true })
   try {
-    await run(`http://127.0.0.1:${server.address().port}`)
+    await app.listen(0, "127.0.0.1")
+    await run(await app.getUrl())
   } finally {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
+    await app.close()
   }
 }
 const requestWithBody = (url, method, body, idempotency = false) =>
@@ -190,15 +205,18 @@ test("R345 installation rejects protobuf Timestamp seconds outside the canonical
 })
 test("routes reject forbidden query/body/header shapes before the owner", async () => {
   let calls = 0
-  const client = new Proxy(
-    {},
-    {
-      get: () => async () => {
-        calls++
-        return {}
-      },
-    },
-  )
+  const unexpectedOwnerCall = async () => {
+    calls++
+    return {}
+  }
+  const client = {
+    install: unexpectedOwnerCall,
+    list: unexpectedOwnerCall,
+    get: unexpectedOwnerCall,
+    remove: unexpectedOwnerCall,
+    update: unexpectedOwnerCall,
+    setEnabled: unexpectedOwnerCall,
+  }
   await withServer(client, async (base) => {
     const cases = [
       fetch(`${base}/v1/skill-installations?x=1`, {
@@ -239,15 +257,18 @@ test("routes reject forbidden query/body/header shapes before the owner", async 
 })
 test("every installation operation returns dedicated 413 for its reachable body limit", async () => {
   let calls = 0
-  const client = new Proxy(
-    {},
-    {
-      get: () => async () => {
-        calls++
-        return {}
-      },
-    },
-  )
+  const unexpectedOwnerCall = async () => {
+    calls++
+    return {}
+  }
+  const client = {
+    install: unexpectedOwnerCall,
+    list: unexpectedOwnerCall,
+    get: unexpectedOwnerCall,
+    remove: unexpectedOwnerCall,
+    update: unexpectedOwnerCall,
+    setEnabled: unexpectedOwnerCall,
+  }
   await withServer(client, async (base) => {
     const cases = [
       fetch(`${base}/v1/skill-installations`, {
@@ -779,7 +800,9 @@ test("update body stalled after a partial chunk expires the original request bud
 })
 
 test("Project installation six routes use the current owned project, distinct command binding and exit rechecks", async () => {
-  const { createBffServer } = await import("../dist/bootstrap/server.js")
+  const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
+  const { AGENT_CANCELLATION_DISPATCHER, AGENT_DISPATCH_DISPATCHER, AGUI_PROJECTOR, CHAT_TURN_SERVICE, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER } =
+    await import("../dist/common/tokens.js")
   let selection = [],
     writes = 0,
     commits = 0,
@@ -816,77 +839,60 @@ test("Project installation six routes use the current owned project, distinct co
     ]),
   )
   const idle = { start() {}, async stop() {} }
-  const server = createBffServer(
-    { ...config, agentEnabled: true, upstreams: { ...config.upstreams, agents: "http://127.0.0.1:9" } },
-    {
-      agentDispatchDispatcher: idle,
-      agentCancellationDispatcher: idle,
-      agUiProjector: idle,
-      scheduledTaskDispatcher: idle,
-      scheduledAgentDispatcher: idle,
-      scheduledAgentTerminalConsumer: idle,
-      sessionAdmission: {
-        verify: async () =>
-          admitted
-            ? { ok: true, identity: { namespace: "tenant", userId: "user-session" } }
-            : { ok: false, status: 403, code: "permission_denied", message: "Denied" },
-      },
-      skillAuthorization: { check: async () => ({ ok: true }) },
-      installationClient: client,
-      businessStore: {
-        ready: async () => {},
-        close: async () => {},
-        getReceipt: async (scope) => receipts.get(scope) ?? null,
-        claimReceipt: async (scope, fingerprint) => {
-          const prior = receipts.get(scope)
-          if (prior) return { claimed: false, receipt: prior }
-          const receipt = { fingerprint, status: 102, body: {} }
-          receipts.set(scope, receipt)
-          return { claimed: true, receipt }
-        },
-        putReceipt: async (scope, receipt) => {
-          receipts.set(scope, receipt)
-        },
-        compareAndSetReceipt: async (scope, fingerprint, expected, replacement) => {
-          const current = receipts.get(scope)
-          if (!current || current.fingerprint !== fingerprint || JSON.stringify(current) !== JSON.stringify(expected))
-            return { updated: false, receipt: current ?? null }
-          receipts.set(scope, replacement)
-          return { updated: true, receipt: replacement }
-        },
-        releaseReceipt: async (scope, fingerprint) => {
-          const current = receipts.get(scope)
-          if (current?.fingerprint === fingerprint) receipts.delete(scope)
-        },
-      },
-      chatTurnService: {
-        submit: async (_input, resolve, lifetime) => {
-          await resolve(project.id, ["i"], lifetime)
-          commits++
-          throw Error("unexpected commit")
-        },
-      },
-      chatService: {},
-      projectService: {
-        skillSelection: async () => ({ project_id: project.id, installation_ids: [...selection] }),
-        replaceSkillSelection: async (_scope, id, ids) => {
-          assert.equal(id, project.id)
-          writes++
-          selection = [...ids]
-          return { kind: "replaced", receipt: { data: { project_id: id, installation_ids: [...ids] } } }
-        },
-        find: async (scope, ref) => {
-          assert.deepEqual(scope, { tenantId: "tenant", subjectId: "user-session" })
-          return visible && ["project-alias", project.id].includes(ref) ? project : null
-        },
-      },
-      readiness: async () => {},
+  const projectService = {
+    skillSelection: async () => ({ project_id: project.id, installation_ids: [...selection] }),
+    replaceSkillSelection: async (_scope, id, ids) => {
+      assert.equal(id, project.id)
+      writes++
+      selection = [...ids]
+      return { kind: "replaced", receipt: { data: { project_id: id, installation_ids: [...ids] } } }
     },
-  )
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
-  const base = `http://127.0.0.1:${server.address().port}/v1/projects/project-alias/skill-installations`
+    find: async (scope, ref) => {
+      assert.deepEqual(scope, { tenantId: "tenant", subjectId: "user-session" })
+      return visible && ["project-alias", project.id].includes(ref) ? project : null
+    },
+  }
+  const sessionAdmission = {
+    verify: async () =>
+      admitted
+        ? { ok: true, identity: { namespace: "tenant", userId: "user-session" } }
+        : { ok: false, status: 403, code: "permission_denied", message: "Denied" },
+  }
+  const chatTurnService = {
+    submit: async (_input, resolve, lifetime) => {
+      await resolve(project.id, ["i"], lifetime)
+      commits++
+      throw Error("unexpected commit")
+    },
+  }
+  const module = await Test.createTestingModule({ imports: [ProjectsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue({ ...config, agentEnabled: true, upstreams: { ...config.upstreams, agents: "http://127.0.0.1:9" } })
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: Object.freeze({}) })
+    .overrideProvider(AGENT_DISPATCH_DISPATCHER)
+    .useValue(idle)
+    .overrideProvider(AGENT_CANCELLATION_DISPATCHER)
+    .useValue(idle)
+    .overrideProvider(AGUI_PROJECTOR)
+    .useValue(idle)
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+    .overrideProvider(SKILL_AUTHORIZATION)
+    .useValue({ check: async () => ({ ok: true }) })
+    .overrideProvider(SKILL_INSTALLATION_CLIENT)
+    .useValue(client)
+    .overrideProvider(CHAT_TURN_SERVICE)
+    .useValue(chatTurnService)
+    .overrideProvider(PROJECT_SERVICE)
+    .useValue(projectService)
+    .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
+    .useValue({ ...projectService, getReceipt: async (scope) => receipts.get(scope) ?? null })
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false, forceCloseConnections: true })
   try {
+    await app.listen(0, "127.0.0.1")
+    const base = `${await app.getUrl()}/v1/projects/project-alias/skill-installations`
     for (const [method, suffix, body, expected] of [
       ["POST", "", { source_ref: "skill:a" }, "install"],
       ["GET", "", undefined, "list"],
@@ -1012,8 +1018,7 @@ test("Project installation six routes use the current owned project, distinct co
     const revoked = await fetch(base, { headers })
     assert.equal(revoked.status, 404)
   } finally {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
+    await app.close()
   }
 })
 
