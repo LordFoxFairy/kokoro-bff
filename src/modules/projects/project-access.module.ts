@@ -1,17 +1,18 @@
 import { Module } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
-import { BFF_DATABASE, BFF_POOL, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER } from "../../common/tokens.js"
+import { BFF_DATABASE, BFF_POOL, PROJECT_LOOKUP, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER } from "../../common/tokens.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import type { Pool } from "pg"
-import { PostgresProjectRepository } from "../../infrastructure/postgres/project-repository.js"
+import { createProjectLookup, PostgresProjectRepository } from "../../infrastructure/postgres/project-repository.js"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
 import { ProjectService } from "../../application/project-service.js"
 import type { ProjectSkillSelectionProvider } from "../../http/routes/project-skill-selection.js"
 
-/** Shared Project owner provider used by Project and Chat feature adapters. */
+/** Project owner capabilities for same-repository feature consumers. */
 @Module({
   imports: [DatabaseModule],
   providers: [
+    { provide: PROJECT_LOOKUP, inject: [BFF_POOL], useFactory: createProjectLookup },
     {
       provide: PROJECT_SERVICE,
       inject: [BFF_DATABASE],
@@ -31,6 +32,6 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
       },
     },
   ],
-  exports: [PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER],
+  exports: [PROJECT_LOOKUP, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER],
 })
 export class ProjectAccessModule {}

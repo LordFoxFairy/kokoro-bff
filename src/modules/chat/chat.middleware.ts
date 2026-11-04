@@ -16,7 +16,7 @@ import {
   CHAT_MESSAGE_FEEDBACK,
   CHAT_MOVE,
   CHAT_TURN_SERVICE,
-  PROJECT_SERVICE,
+  PROJECT_LOOKUP,
   PUBLIC_SHARE_SERVICE,
   SESSION_ADMISSION,
   SKILL_INSTALLATION_CLIENT,
@@ -46,7 +46,7 @@ import { handleChatEventsRequest } from "../../http/routes/chat-events-native.js
 import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import type { AgUiProjectionConsumerRepository } from "../../application/agui/ports/agui-projection-repository.js"
 import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import { handleChatMessageRequest } from "../../http/routes/chat-message-native.js"
 
@@ -64,7 +64,7 @@ export class ChatMiddleware implements NestMiddleware {
     @Inject(CHAT_SHARED_TASKS) private readonly shared: SharedTasksReader,
     @Inject(CHAT_MESSAGE_FEEDBACK) private readonly feedback: MessageFeedbackProvider,
     @Inject(CHAT_MOVE) private readonly move: ChatMove,
-    @Inject(PROJECT_SERVICE) private readonly projects: ProjectService,
+    @Inject(PROJECT_LOOKUP) private readonly projects: ProjectLookup,
     @Inject(SKILL_INSTALLATION_CLIENT) private readonly installations: SkillInstallationConnectClient | null,
     @Inject(CHAT_TURN_SERVICE) private readonly chatTurns: ChatTurnApplicationService,
     @Inject(PUBLIC_SHARE_SERVICE) private readonly publicShare: PublicShareApplicationService,

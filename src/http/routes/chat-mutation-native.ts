@@ -3,7 +3,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ChatSessionMutations } from "../../infrastructure/postgres/chat-session-store.js"
 import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
 import { mutationTicket } from "../../application/idempotency.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
@@ -47,7 +47,7 @@ export async function handleChatMutationRequest(
   admission: SessionAdmission,
   mutations: ChatSessionMutations,
   findConversation: ChatConversationLookup,
-  projects: ProjectService,
+  projects: ProjectLookup,
   idempotency: Map<string, IdempotencyEntry>,
   persistent: IdempotencyRepository | null,
 ): Promise<boolean> {

@@ -7,6 +7,9 @@ export type ProjectOwnerScope = Readonly<{
   subjectId: string
 }>
 
+/** Current Project ownership by canonical ID or slug; no write capabilities. */
+export type ProjectLookup = Readonly<{ find(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null> }>
+
 export type RenameProjectCommand = ProjectOwnerScope &
   Readonly<{
     projectId: string

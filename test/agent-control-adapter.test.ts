@@ -16,8 +16,7 @@ import {
   BFF_CONFIG,
   BFF_DATABASE,
   CHAT_CONVERSATION_LOOKUP,
-  PROJECT_SERVICE,
-  PROJECT_SKILL_SELECTION_PROVIDER,
+  PROJECT_LOOKUP,
   SESSION_ADMISSION,
 } from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
@@ -123,10 +122,8 @@ async function startAgentControlApp(
     .useValue(findConversation)
     .overrideProvider(AGUI_RUN_CONTROL_READER)
     .useValue(readers.readControl ?? (() => assert.fail("The control route must not read the execution head in this fixture")))
-    .overrideProvider(PROJECT_SERVICE)
+    .overrideProvider(PROJECT_LOOKUP)
     .useValue({ find: async () => null })
-    .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
-    .useValue(null)
     .overrideProvider(AGENT_CONTROL_IDEMPOTENCY)
     .useValue(receipts)
   for (const token of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) {

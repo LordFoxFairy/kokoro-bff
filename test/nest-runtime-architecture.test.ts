@@ -29,6 +29,7 @@ test("the compiled production AppModule resolves its real provider graph without
     CHAT_MESSAGE_FEEDBACK,
     CHAT_MOVE,
     CHAT_TURN_SERVICE,
+    PROJECT_LOOKUP,
     PROJECT_SERVICE,
     PROJECT_SKILL_SELECTION_PROVIDER,
     RUN_DISPLAY_PROVIDER,
@@ -87,6 +88,7 @@ test("the compiled production AppModule resolves its real provider graph without
       [ChatModule, CHAT_CONVERSATION_LOOKUP],
       [AgentRunsModule, RUN_FINAL_ANSWER_LOOKUP],
       [AccountModule, PERSONALIZATION_PROVIDER],
+      [ProjectAccessModule, PROJECT_LOOKUP],
       [ProjectAccessModule, PROJECT_SERVICE],
       [ProjectAccessModule, PROJECT_SKILL_SELECTION_PROVIDER],
       [SkillInstallationAccessModule, SKILL_INSTALLATION_CLIENT],
@@ -96,6 +98,11 @@ test("the compiled production AppModule resolves its real provider graph without
       assert.equal(instances.length, 1, `${String(token)} must have one provider registration`)
       assert.equal(instances[0], module.select(owner).get(token, { strict: true }))
     }
+    const projectAccess = module.select(ProjectAccessModule)
+    const lookup = projectAccess.get(PROJECT_LOOKUP, { strict: true })
+    assert.deepEqual(Reflect.ownKeys(lookup), ["find"], "lookup must not expose Project mutations or another capability")
+    assert.equal(typeof lookup.find, "function")
+    assert.notEqual(lookup, projectAccess.get(PROJECT_SERVICE, { strict: true }))
     const reader = module.select(AgentRunsModule).get(AGENT_RUNS_READER, { strict: true })
     assert.notEqual(reader, module.select(AgentDispatchModule).get(AGENT_DISPATCH_OUTBOX, { strict: true }))
     assert.equal(typeof reader.readProjectExecutionBinding, "function")
@@ -681,8 +688,6 @@ test("production Nest retires AG-UI transports before worker drain while retaini
           await atPhase("project")
           return { id: "project_agui_close" }
         },
-        skillSelection: () => unexpectedIo("Project.skillSelection"),
-        replaceSkillSelection: () => unexpectedIo("Project.replaceSkillSelection"),
       }
       const consumers = {
         registerConsumer: async () => {
@@ -716,7 +721,7 @@ test("production Nest retires AG-UI transports before worker drain while retaini
         [tokens.BFF_DATABASE, database],
         [tokens.SESSION_ADMISSION, admission],
         [tokens.CHAT_CONVERSATION_LOOKUP, findConversation],
-        [tokens.PROJECT_SERVICE, projects],
+        [tokens.PROJECT_LOOKUP, projects],
         [tokens.AGUI_PROJECTION_CONSUMERS, consumers],
         [tokens.AGUI_PROJECTION, projection],
         [tokens.AGUI_SOURCE_PROJECTION_ACTIVE, true],

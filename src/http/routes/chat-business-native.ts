@@ -4,7 +4,7 @@ import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { ChatSessionReads } from "../../application/chat/session-reads.js"
 import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import { failure } from "../../contracts/index.js"
 import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
@@ -35,7 +35,7 @@ export async function handleChatBusinessReadRequest(
   admission: SessionAdmission,
   reads: ChatSessionReads,
   findConversation: ChatConversationLookup,
-  projects: Pick<ProjectService, "find">,
+  projects: ProjectLookup,
   readProcess: AgUiRunProcessReader,
 ): Promise<boolean> {
   if (!isChatBusinessReadRequest(request)) return false

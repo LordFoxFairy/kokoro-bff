@@ -6,7 +6,7 @@ import {
   AGUI_RUN_CONTROL_READER,
   BFF_CONFIG,
   CHAT_CONVERSATION_LOOKUP,
-  PROJECT_SERVICE,
+  PROJECT_LOOKUP,
   RUN_DISPLAY_PROVIDER,
   SESSION_ADMISSION,
 } from "../../common/tokens.js"
@@ -14,7 +14,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { AgentRunsReader } from "../../infrastructure/postgres/project-execution-binding.js"
 import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
 import type { AgUiRunControlReader } from "../../infrastructure/postgres/agui-run-state-read.js"
@@ -33,7 +33,7 @@ export class AgentRunsMiddleware implements NestMiddleware {
     @Inject(AGENT_RUNS_READER) private readonly reader: AgentRunsReader,
     @Inject(RUN_DISPLAY_PROVIDER) private readonly runDisplay: RunDisplayProvider,
     @Inject(CHAT_CONVERSATION_LOOKUP) private readonly findConversation: ChatConversationLookup,
-    @Inject(PROJECT_SERVICE) private readonly projects: ProjectService,
+    @Inject(PROJECT_LOOKUP) private readonly projects: ProjectLookup,
     @Inject(AGUI_RUN_CONTROL_READER) private readonly readControl: AgUiRunControlReader,
     @Inject(AGENT_CONTROL_IDEMPOTENCY) private readonly controlIdempotency: IdempotencyRepository,
   ) {}

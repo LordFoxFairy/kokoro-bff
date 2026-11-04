@@ -6,7 +6,7 @@ import {
   APP_SKILL_BINDING_CLIENT,
   BFF_CONFIG,
   BFF_DATABASE,
-  PROJECT_SERVICE,
+  PROJECT_LOOKUP,
   SESSION_ADMISSION,
   SKILL_INSTALLATION_CLIENT,
   SKILL_LIST_ADMISSION,
@@ -329,14 +329,12 @@ async function ownerFixture(t, principal, fresh = { ok: true, principal }) {
     config,
     (builder) =>
       builder
-        .overrideProvider(PROJECT_SERVICE)
+        .overrideProvider(PROJECT_LOOKUP)
         .useValue({
           find: async (scope, id) => {
             calls.push(["project", scope.tenantId, scope.subjectId, id])
             return ["project-slug", "project-id"].includes(id) ? { id: "project-id" } : null
           },
-          skillSelection: unexpected,
-          replaceSkillSelection: unexpected,
         })
         .overrideProvider(APP_SKILL_BINDING_CLIENT)
         .useValue({

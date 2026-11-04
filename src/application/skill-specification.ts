@@ -3,7 +3,7 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import type { RequestContext } from "../domain/request-context.js"
 import type { PublicSkillListContext } from "./skill-specification.types.js"
 import type { ProjectOwnerScope } from "./projects/project-repository.js"
-import type { ProjectService } from "./project-service.js"
+import type { ProjectLookup } from "./projects/project-repository.js"
 import type { SkillUsageReader } from "./agui/skill-usage.js"
 import type { SkillDownloadBinding } from "./skill-download-handles.js"
 import type {
@@ -81,7 +81,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
         ): Promise<Map<string, SkillPublisherProfileFact>>
       }>
       usage?: SkillUsageReader
-      projects?: Pick<ProjectService, "find">
+      projects?: ProjectLookup
       objectOrigin: string | null
     },
   ) {}

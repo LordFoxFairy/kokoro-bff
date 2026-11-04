@@ -5,7 +5,7 @@ import type { ConversationCollectionFilter } from "../../application/chat/types.
 import type { RequestContext } from "../../domain/request-context.js"
 import { queryOf } from "../request.js"
 import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 
 export type ChatAuthorization =
   | Readonly<{ ok: true; projectRef?: string; collectionFilter?: ConversationCollectionFilter }>
@@ -50,7 +50,7 @@ export async function authorizeChatRequest(
   context: RequestContext,
   businessPath: readonly string[],
   findConversation: ChatConversationLookup,
-  projects: Pick<ProjectService, "find">,
+  projects: ProjectLookup,
   signal?: AbortSignal,
 ): Promise<ChatAuthorization | null> {
   signal?.throwIfAborted()

@@ -2,7 +2,7 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { requestId } from "../request.js"
 import { skillPackageInspectionRoute, type SkillPackageInspectionProvider } from "./skill-package-inspection.js"
@@ -15,7 +15,7 @@ export async function handleSkillPackageInspectionRequest(
   config: BffConfig,
   admission: SessionAdmission,
   provider: SkillPackageInspectionProvider,
-  project: Pick<ProjectService, "find"> | null,
+  project: ProjectLookup | null,
 ): Promise<boolean> {
   const url = new URL(request.url ?? "/", "http://bff.local")
   if (request.method !== "GET" || !PATH.test(url.pathname)) return false

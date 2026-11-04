@@ -5,6 +5,7 @@ import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations } 
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
 import { renameProject, replaceProjectSkillSelection } from "./project-rename.js"
 import { deleteProjectAggregate, readProjectDeletion } from "./project-delete.js"
+import type { Pool } from "pg"
 import { randomUUID } from "node:crypto"
 
 import type { Project, ProjectInstructionRevision, Task } from "../../contracts/index.js"
@@ -12,6 +13,7 @@ import type { PostgresBffDatabase } from "./client.js"
 import type {
   DeleteProjectResult,
   ProjectDeletionResource,
+  ProjectLookup,
   ProjectOwnerScope,
   ProjectRepository,
   RenameProjectCommand,
@@ -86,6 +88,21 @@ function revisionFromRow(row: RevisionRow): ProjectInstructionRevision {
   }
 }
 
+async function findOwnedProject(pool: Pick<Pool, "query">, scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null> {
+  const result = await pool.query<ProjectRow>(
+    `SELECT project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at
+         FROM bff_project
+        WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL AND (project_id = $3 OR slug = $3)
+         LIMIT 1`,
+    [scope.tenantId, scope.subjectId, idOrSlug],
+  )
+  return result.rows[0] === undefined ? null : projectFromRow(result.rows[0])
+}
+
+export function createProjectLookup(pool: Pick<Pool, "query">): ProjectLookup {
+  return { find: (scope, idOrSlug) => findOwnedProject(pool, scope, idOrSlug) }
+}
+
 export class PostgresProjectRepository implements ProjectRepository {
   public constructor(private readonly database: PostgresBffDatabase) {}
 
@@ -118,15 +135,8 @@ export class PostgresProjectRepository implements ProjectRepository {
     return result.rows.map(projectFromRow)
   }
 
-  public async findProject(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null> {
-    const result = await this.database.pool.query<ProjectRow>(
-      `SELECT project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at
-         FROM bff_project
-        WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL AND (project_id = $3 OR slug = $3)
-         LIMIT 1`,
-      [scope.tenantId, scope.subjectId, idOrSlug],
-    )
-    return result.rows[0] === undefined ? null : projectFromRow(result.rows[0])
+  public findProject(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null> {
+    return findOwnedProject(this.database.pool, scope, idOrSlug)
   }
 
   public async createProject(scope: ProjectOwnerScope, name: string, description: string): Promise<Project> {

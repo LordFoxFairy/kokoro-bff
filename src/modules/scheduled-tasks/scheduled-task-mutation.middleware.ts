@@ -1,9 +1,9 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, PROJECT_SERVICE, SCHEDULED_TASK_IDEMPOTENCY, SCHEDULED_TASK_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
+import { BFF_CONFIG, PROJECT_LOOKUP, SCHEDULED_TASK_IDEMPOTENCY, SCHEDULED_TASK_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import type { ScheduledTaskService } from "../../application/scheduled-task-service.js"
 import { scheduledCreateInput } from "../../application/scheduled/input.js"
 import type { ScheduledTaskCreateInput } from "../../application/scheduled/task-facts.js"
@@ -29,7 +29,7 @@ export class ScheduledTaskMutationMiddleware implements NestMiddleware {
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(SCHEDULED_TASK_SERVICE) private readonly tasks: ScheduledTaskService,
-    @Inject(PROJECT_SERVICE) private readonly projects: ProjectService,
+    @Inject(PROJECT_LOOKUP) private readonly projects: ProjectLookup,
     @Inject(SCHEDULED_TASK_IDEMPOTENCY) private readonly persistent: IdempotencyRepository,
   ) {}
 

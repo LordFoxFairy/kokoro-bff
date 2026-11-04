@@ -220,7 +220,7 @@ async function withProjectContent(run) {
     const {
       BFF_CONFIG,
       BFF_DATABASE,
-      PROJECT_SERVICE,
+      PROJECT_LOOKUP,
       SKILL_SHARE_REPOSITORY,
       SKILL_INSTALLATION_CLIENT,
       SKILL_PRODUCT_CLIENT,
@@ -236,12 +236,8 @@ async function withProjectContent(run) {
       .useValue(config)
       .overrideProvider(BFF_DATABASE)
       .useValue({ pool: { query: unexpectedStorage, connect: unexpectedStorage }, redis: {}, ready: unexpectedStorage })
-      .overrideProvider(PROJECT_SERVICE)
-      .useValue({
-        ...dependencies.projectService,
-        skillSelection: unexpectedStorage,
-        replaceSkillSelection: unexpectedStorage,
-      })
+      .overrideProvider(PROJECT_LOOKUP)
+      .useValue({ find: dependencies.projectService.find })
       .overrideProvider(SKILL_SHARE_REPOSITORY)
       .useValue(dependencies.skillShareRepository)
       .overrideProvider(SKILL_INSTALLATION_CLIENT)

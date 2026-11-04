@@ -21,8 +21,7 @@ import {
   CHAT_IDEMPOTENCY,
   CHAT_CONVERSATION_LOOKUP,
   CHAT_TURN_SERVICE,
-  PROJECT_SERVICE,
-  PROJECT_SKILL_SELECTION_PROVIDER,
+  PROJECT_LOOKUP,
   SESSION_ADMISSION,
 } from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
@@ -315,10 +314,8 @@ async function messageBoundaryFixture(t) {
     .useValue(admission)
     .overrideProvider(CHAT_CONVERSATION_LOOKUP)
     .useValue(() => assert.fail("Canonical Message admission must not query an unlocked Conversation"))
-    .overrideProvider(PROJECT_SERVICE)
+    .overrideProvider(PROJECT_LOOKUP)
     .useValue({ find: async () => null })
-    .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
-    .useValue(null)
     .overrideProvider(CHAT_TURN_SERVICE)
     .useValue(chatTurns)
     .overrideProvider(CHAT_IDEMPOTENCY)

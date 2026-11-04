@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
 import type { AgUiProjectionConsumerRepository } from "../../application/agui/ports/agui-projection-repository.js"
@@ -35,7 +35,7 @@ export async function handleChatEventsRequest(
   config: BffConfig,
   admission: SessionAdmission,
   findConversation: ChatConversationLookup,
-  projects: ProjectService,
+  projects: ProjectLookup,
   projection: AgUiProjectionService,
   consumers: AgUiProjectionConsumerRepository,
   runtime: AgUiSessionRuntime,

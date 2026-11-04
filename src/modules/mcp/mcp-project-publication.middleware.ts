@@ -1,11 +1,11 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, MCP_AUTHORIZATION, MCP_PROJECT_PUBLICATION_CLIENT, PROJECT_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
+import { BFF_CONFIG, MCP_AUTHORIZATION, MCP_PROJECT_PUBLICATION_CLIENT, PROJECT_LOOKUP, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
 import type { McpProjectPublicationConnectClient } from "../../infrastructure/clients/platform/mcp-project-publication-connect.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import { handleMcpProjectPublicationRequest } from "../../http/routes/mcp-project-publication-native.js"
 
 @Injectable()
@@ -14,7 +14,7 @@ export class McpProjectPublicationMiddleware implements NestMiddleware {
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(MCP_AUTHORIZATION) private readonly authorization: Pick<McpAuthorizationClient, "check">,
-    @Inject(PROJECT_SERVICE) private readonly project: Pick<ProjectService, "find">,
+    @Inject(PROJECT_LOOKUP) private readonly project: ProjectLookup,
     @Inject(MCP_PROJECT_PUBLICATION_CLIENT) private readonly client: McpProjectPublicationConnectClient | null,
   ) {}
 

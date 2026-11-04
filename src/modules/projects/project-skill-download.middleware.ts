@@ -4,7 +4,7 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import {
   BFF_CONFIG,
   PROJECT_EXACT_DOWNLOAD_SOURCE,
-  PROJECT_SERVICE,
+  PROJECT_LOOKUP,
   SESSION_ADMISSION,
   SKILL_DOWNLOAD_HANDLES,
   SKILL_EXACT_DOWNLOAD_SOURCE,
@@ -12,7 +12,7 @@ import {
 } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import type { ExactSkillDownloadSource } from "../../application/exact-skill-download.js"
 import type { SkillDownloadHandles } from "../../application/skill-download-handles.js"
 import type { SkillSpecificationSource } from "../../application/skill-specification.types.js"
@@ -38,7 +38,7 @@ export class ProjectSkillDownloadMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(PROJECT_SERVICE) private readonly project: Pick<ProjectService, "find">,
+    @Inject(PROJECT_LOOKUP) private readonly project: ProjectLookup,
     @Inject(PROJECT_EXACT_DOWNLOAD_SOURCE) private readonly exact: ExactSkillDownloadSource | null,
     @Inject(SKILL_EXACT_DOWNLOAD_SOURCE) private readonly personalExact: ExactSkillDownloadSource | null,
     @Inject(SKILL_SPECIFICATION_SOURCE) private readonly specification: SkillSpecificationSource | null,

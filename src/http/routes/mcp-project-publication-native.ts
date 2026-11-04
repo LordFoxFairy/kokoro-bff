@@ -4,7 +4,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
 import { authorizeMcpAction, authorizeUserRequest } from "../../auth/user-admission.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import type { McpProjectPublicationClient } from "../../infrastructure/clients/platform/mcp-project-publication.js"
 import { pathOf, requestId } from "../request.js"
 import { mcpProjectPublicationOperation, mcpProjectPublicationRoute } from "./mcp-project-publication.js"
@@ -13,7 +13,7 @@ import { startMcpRequestBudget } from "../mcp-request-budget.js"
 export type McpProjectPublicationProvider = Readonly<{
   sessionAdmission: SessionAdmission
   mcpAuthorization: Pick<McpAuthorizationClient, "check">
-  project: Pick<ProjectService, "find"> | null
+  project: ProjectLookup | null
   client: Pick<McpProjectPublicationClient, "execute"> | null
 }>
 

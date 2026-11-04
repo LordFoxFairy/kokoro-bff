@@ -4,7 +4,7 @@ import test from "node:test"
 import { readFile } from "node:fs/promises"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { Test } from "@nestjs/testing"
-import { BFF_CONFIG, BFF_DATABASE, MCP_AUTHORIZATION, MCP_PROJECT_PUBLICATION_CLIENT, PROJECT_SERVICE, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_CONFIG, BFF_DATABASE, MCP_AUTHORIZATION, MCP_PROJECT_PUBLICATION_CLIENT, PROJECT_LOOKUP, SESSION_ADMISSION } from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
 import { McpModule } from "../dist/modules/mcp/mcp.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
@@ -82,15 +82,8 @@ async function fixture({ execute = async () => publication(), find, verify, chec
           return { ok: true }
         }),
     })
-    .overrideProvider(PROJECT_SERVICE)
+    .overrideProvider(PROJECT_LOOKUP)
     .useValue({
-      // ProjectAccess binds these during Nest compile; publication must use only find.
-      skillSelection: () => {
-        throw new Error("MCP publication must not read Project skill selection")
-      },
-      replaceSkillSelection: () => {
-        throw new Error("MCP publication must not replace Project skill selection")
-      },
       find: async (scope, id) => {
         assert.deepEqual(scope, { tenantId: "tenant", subjectId: "reader" })
         events.push(`project:${id}`)

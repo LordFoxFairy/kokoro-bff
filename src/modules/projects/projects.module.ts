@@ -8,14 +8,14 @@ import {
   PROJECT_EXACT_DOWNLOAD_SOURCE,
   PROJECT_SCOPE_RELEASE_DISPATCHER,
   PROJECT_SCOPE_RELEASE_OUTBOX,
-  PROJECT_SERVICE,
+  PROJECT_LOOKUP,
   SKILL_DOWNLOAD_HANDLES,
   SKILL_INSTALLATION_CLIENT,
   SKILL_PACKAGE_INSPECTION_CLIENT,
 } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
-import { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { ChatModule } from "../chat/chat.module.js"
 import { ProjectPinMiddleware } from "./project-pin.middleware.js"
@@ -66,10 +66,10 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, BeforeApplicat
     ProjectSkillDownloadMiddleware,
     {
       provide: PROJECT_EXACT_DOWNLOAD_SOURCE,
-      inject: [BFF_CONFIG, PROJECT_SERVICE, SKILL_INSTALLATION_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_DOWNLOAD_HANDLES],
+      inject: [BFF_CONFIG, PROJECT_LOOKUP, SKILL_INSTALLATION_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_DOWNLOAD_HANDLES],
       useFactory: (
         config: BffConfig,
-        projectService: ProjectService,
+        projectService: ProjectLookup,
         installations: SkillInstallationConnectClient | null,
         packageInspection: SkillPackageInspectionConnectClient | null,
         handles: SkillDownloadHandles,

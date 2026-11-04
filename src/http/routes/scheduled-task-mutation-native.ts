@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { ScheduledTaskCreateInput, ScheduledTaskMutationLineage } from "../../application/scheduled/task-facts.js"
 import type { ScheduledTaskService } from "../../application/scheduled-task-service.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { failure, ok } from "../../contracts/index.js"
 import { idempotencyKey, pathOf } from "../request.js"
@@ -25,7 +25,7 @@ export type ScheduledTaskAuthorization =
   | Readonly<{ ok: false; status: 404; code: "project_not_found" | "scheduled_task_not_found"; message: string }>
 
 export type ScheduledTaskMutationOwners = Readonly<{
-  projects: Pick<ProjectService, "find">
+  projects: ProjectLookup
   scheduledTasks: Pick<ScheduledTaskService, "find">
 }>
 
@@ -97,7 +97,7 @@ export async function handleScheduledTaskMutationBusiness(
   response: ServerResponse,
   context: RequestContext,
   tasks: ScheduledTaskService,
-  projects: ProjectService,
+  projects: ProjectLookup,
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,

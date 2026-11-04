@@ -3,7 +3,7 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ChatTurnApplicationService } from "../../application/chat-turn-service.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { failure } from "../../contracts/index.js"
@@ -32,7 +32,7 @@ export async function handleChatMessageRequest(
   config: BffConfig,
   admission: SessionAdmission,
   chatTurns: ChatTurnApplicationService,
-  projects: ProjectService,
+  projects: ProjectLookup,
   installations: SkillInstallationConnectClient | null,
 ): Promise<boolean> {
   if (!chatMessagePath(request)) return false

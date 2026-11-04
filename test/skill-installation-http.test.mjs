@@ -801,8 +801,15 @@ test("update body stalled after a partial chunk expires the original request bud
 
 test("Project installation six routes use the current owned project, distinct command binding and exit rechecks", async () => {
   const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
-  const { AGENT_CANCELLATION_DISPATCHER, AGENT_DISPATCH_DISPATCHER, AGUI_PROJECTOR, CHAT_TURN_SERVICE, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER } =
-    await import("../dist/common/tokens.js")
+  const {
+    AGENT_CANCELLATION_DISPATCHER,
+    AGENT_DISPATCH_DISPATCHER,
+    AGUI_PROJECTOR,
+    CHAT_TURN_SERVICE,
+    PROJECT_LOOKUP,
+    PROJECT_SERVICE,
+    PROJECT_SKILL_SELECTION_PROVIDER,
+  } = await import("../dist/common/tokens.js")
   let selection = [],
     writes = 0,
     commits = 0,
@@ -886,6 +893,8 @@ test("Project installation six routes use the current owned project, distinct co
     .useValue(chatTurnService)
     .overrideProvider(PROJECT_SERVICE)
     .useValue(projectService)
+    .overrideProvider(PROJECT_LOOKUP)
+    .useValue({ find: projectService.find })
     .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
     .useValue({ ...projectService, getReceipt: async (scope) => receipts.get(scope) ?? null })
     .compile()
