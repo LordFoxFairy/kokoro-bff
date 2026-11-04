@@ -59,8 +59,7 @@ export function isMcpPersonalRequest(request: IncomingMessage): boolean {
 }
 
 function sendMcpPersonalFailure(response: ServerResponse, status: number, code: string, retryable = false, retryAfter?: string): void {
-  if (!response.destroyed && !response.writableEnded)
-    send(response, status, { error: { code, message: "Personal MCP request failed", retryable } }, retryAfter)
+  if (!response.destroyed && !response.writableEnded) send(response, status, { error: { code, message: "Personal MCP request failed", retryable } }, retryAfter)
 }
 
 /** Personal MCP browser transport and initial session admission. */
