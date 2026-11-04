@@ -1,13 +1,11 @@
 import { createHash } from "node:crypto"
 
-import type { StableIdGenerator } from "../../application/scheduled/stable-id-generator.js"
 import {
   scheduledTaskOutboxIdentityMaterial,
   type ScheduledTaskOutboxOperation,
 } from "../../domain/scheduled-task/outbox.js"
 
-/** Infrastructure implementation of the stable ID port. */
-export class Sha256StableIdGenerator implements StableIdGenerator {
+export class Sha256StableIdGenerator {
   public generate(material: string): string {
     return createHash("sha256").update(material).digest("hex")
   }
@@ -20,7 +18,6 @@ export function scheduledTaskOutboxId(
   taskId: string,
   operation: ScheduledTaskOutboxOperation,
   idempotencyKey: string,
-  stableIdGenerator: StableIdGenerator = defaultStableIdGenerator,
 ): string {
-  return `scheduled_outbox_${stableIdGenerator.generate(scheduledTaskOutboxIdentityMaterial(tenantId, taskId, operation, idempotencyKey)).slice(0, 32)}`
+  return `scheduled_outbox_${defaultStableIdGenerator.generate(scheduledTaskOutboxIdentityMaterial(tenantId, taskId, operation, idempotencyKey)).slice(0, 32)}`
 }

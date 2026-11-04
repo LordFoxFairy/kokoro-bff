@@ -379,7 +379,6 @@ test("Scheduled Agent and Scheduler receipt ports are feature-local", async () =
     "src/application/scheduled/scheduled-agent-dispatch-delivery.ts",
     "src/application/scheduled/scheduled-agent-dispatch-repository.ts",
     "src/application/scheduled/scheduler-dispatch-receipt-repository.ts",
-    "src/application/scheduled/stable-id-generator.ts",
   ])
     assert.equal(await fileExists(file), true, `${file} must exist`)
   for (const file of [
@@ -387,22 +386,23 @@ test("Scheduled Agent and Scheduler receipt ports are feature-local", async () =
     "src/application/ports/scheduled-agent-dispatch-repository.ts",
     "src/application/ports/scheduler-dispatch-receipt-repository.ts",
     "src/application/ports/stable-id-generator.ts",
+    "src/application/scheduled/stable-id-generator.ts",
   ])
     assert.equal(await fileExists(file), false, `${file} must stay deleted`)
-  const [moduleSource, dispatcher, terminal, schedulerRoute, delivery, id] = await Promise.all([
+  const [moduleSource, dispatcher, terminal, schedulerRoute, delivery, chatTurn] = await Promise.all([
     readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled-agent-dispatcher.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled-agent-terminal-consumer.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/scheduler.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/clients/agent/scheduled-dispatch-delivery.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/identifiers/scheduled-task-outbox-id.ts"), "utf8"),
+    readFile(path.join(root, "src/application/chat-turn-service.ts"), "utf8"),
   ])
   assert.match(moduleSource, /application\/scheduled\/(?:scheduled-agent-dispatch|scheduler-dispatch-receipt)-repository\.js/u)
   assert.match(dispatcher, /scheduled\/scheduled-agent-dispatch-(?:delivery|repository)\.js/u)
   assert.match(terminal, /scheduled\/scheduled-agent-dispatch-repository\.js/u)
   assert.match(schedulerRoute, /application\/scheduled\/(?:scheduled-agent-dispatch|scheduler-dispatch-receipt)-repository\.js/u)
   assert.match(delivery, /application\/scheduled\/scheduled-agent-dispatch-delivery\.js/u)
-  assert.match(id, /application\/scheduled\/stable-id-generator\.js/u)
+  assert.doesNotMatch(chatTurn, /from\s+["']\.\/scheduled\//u, "ChatTurn must not depend on ScheduledTask application ports")
 })
 
 test("ScheduledTasksModule owns the current-state read adapter and provider", async () => {

@@ -9,14 +9,13 @@ import {
 } from "../domain/chat/agent-dispatch.js"
 import type { CommitChatTurn } from "./agent-dispatch/agent-dispatch-outbox-repository.js"
 import type { AgentDispatchOutboxRepository } from "./agent-dispatch/agent-dispatch-outbox-repository.js"
-import type { StableIdGenerator } from "./scheduled/stable-id-generator.js"
 
 export const CHAT_TURN_TOTAL_BUDGET_MS = 4500
 
 export class ChatTurnApplicationService {
   public constructor(
     private readonly repository: AgentDispatchOutboxRepository,
-    private readonly stableIdGenerator: StableIdGenerator,
+    private readonly stableIdGenerator: Readonly<{ generate(material: string): string }>,
   ) {}
 
   public async regenerate(input: RegenerateMessageInput): Promise<RegenerationReceipt | null> {

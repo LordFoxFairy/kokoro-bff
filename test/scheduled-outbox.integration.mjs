@@ -19,7 +19,7 @@ integrationTest("explicit calendars persist exact selections, frozen once instan
   const suffix = `calendar_${Date.now()}_${Math.random().toString(16).slice(2)}`
   const scope = ownerScope(suffix, suffix)
   let now = new Date("2029-01-01T00:00:00Z")
-  const repository = new Repository({ pool }, undefined, () => now)
+  const repository = new Repository({ pool }, () => now)
   try {
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     const monthly = await repository.createScheduledTask(

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
 import { EventEmitter } from "node:events"
-import { createHash } from "node:crypto"
 import { describe, it } from "node:test"
 
 import { AgentDispatchOutboxDispatcher } from "../dist/application/agent-dispatch-outbox-dispatcher.js"
@@ -12,14 +11,8 @@ import type {
   AgentDispatchOutboxRepository,
   CommitChatTurn,
 } from "../dist/application/agent-dispatch/agent-dispatch-outbox-repository.js"
-import type { StableIdGenerator } from "../dist/application/scheduled/stable-id-generator.js"
+import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
 import type { AgentDispatchCommand, AgentDispatchLease, AgentDispatchReceipt } from "../dist/domain/chat/agent-dispatch.js"
-
-class Sha256TestIdGenerator implements StableIdGenerator {
-  public generate(material: string): string {
-    return createHash("sha256").update(material).digest("hex")
-  }
-}
 
 class RecordingRepository implements AgentDispatchOutboxRepository {
   public readonly commits: CommitChatTurn[] = []
@@ -110,7 +103,7 @@ function command(attemptCount = 1, suffix = "fixture", leaseRemainingMs = 30_000
 describe("durable Chat turn admission", () => {
   it("derives stable execution identities separately from the request digest", async () => {
     const repository = new RecordingRepository()
-    const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+    const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
     const input = {
       tenantId: "tenant_fixture",
       conversationId: "conversation_fixture",
@@ -142,7 +135,7 @@ it("inherits exact project defaults only for omitted selection and freezes the o
     preparations.push(input)
     return { kind: "new", projectId: "project_fixture", installationIds: ["installation_a"] }
   }
-  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
   const input = {
     tenantId: "tenant_fixture",
     conversationId: "conversation_fixture",
@@ -430,7 +423,7 @@ it("freezes exact MCP choice in launch rather than trace; empty choice retains t
 
 it("retains the original selected MCP IDs across a retry after unknown Agent admission", async () => {
   const repository = new RecordingRepository()
-  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
   const ids = ["connection-1"]
   const input = {
     tenantId: "tenant",
@@ -483,7 +476,7 @@ it("snapshots MCP intent before awaiting project Skill defaults so the digest an
     await blocked
     return { kind: "new", projectId: null, installationIds: [] }
   }
-  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
   const input = {
     tenantId: "tenant",
     conversationId: "conversation",
@@ -547,7 +540,7 @@ it("snapshots Custom API objects before awaited defaults so mutation cannot spli
     await blocked
     return { kind: "new", projectId: null, installationIds: [] }
   }
-  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
   const input = {
     tenantId: "tenant",
     conversationId: "conversation",
@@ -574,7 +567,7 @@ it("one ChatTurn lifetime binds omitted-selection prepare, Skills resolver and c
     prepared = input.lifetime
     return { kind: "new", projectId: "project", installationIds: ["installation"] }
   }
-  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
   await service.submit(
     { tenantId: "tenant", conversationId: "conv", subjectId: "subject", actorId: "subject", requestId: "request", idempotencyKey: "key", content: "hello" },
     async (_project, _ids, lifetime) => {
@@ -658,7 +651,7 @@ it("caller abort retires a suspended prepare or resolver without any late canoni
       }
       return { kind: "new", projectId: "project", installationIds: ["installation"] }
     }
-    const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+    const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
     const pending = service.submit(
       { tenantId: "tenant", conversationId: "conv", subjectId: "subject", actorId: "subject", requestId: "request", idempotencyKey: "key", content: "hello" },
       async (_project, _ids, lifetime) => {
@@ -690,7 +683,7 @@ it("resolver exhausts the original admission deadline and cannot restart a commi
     release = resolve
   })
   repository.prepareChatTurnSelection = async () => ({ kind: "new", projectId: "project", installationIds: ["installation"] })
-  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
   const deadlineAt = performance.now() + 80
   const pending = service.submit(
     { tenantId: "tenant", conversationId: "conv", subjectId: "subject", actorId: "subject", requestId: "request", idempotencyKey: "key", content: "hello" },
@@ -721,7 +714,7 @@ it("canonical COMMIT unknown is never retried automatically and explicit recover
     if (unknown) throw new Error("CHAT_TURN_COMMIT_UNKNOWN")
     return { run_id: command.runId, user_message_id: command.userMessageId, assistant_message_id: command.assistantMessageId }
   }
-  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
   const input = {
     tenantId: "tenant",
     conversationId: "conv",
@@ -797,7 +790,7 @@ it("canonical owner COMMIT-unknown classification survives caller retirement wit
       command.lifetime.signal.addEventListener("abort", () => queueMicrotask(() => reject(new Error("CHAT_TURN_COMMIT_UNKNOWN"))), { once: true })
       entered()
     })
-  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
   const pending = service.submit(
     {
       tenantId: "tenant",
