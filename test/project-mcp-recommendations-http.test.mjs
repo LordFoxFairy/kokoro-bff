@@ -1,3 +1,17 @@
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
+import {
+  BFF_CONFIG,
+  BFF_DATABASE,
+  CUSTOM_API_CLIENT,
+  MCP_AUTHORIZATION,
+  MCP_PERSONAL_CLIENT,
+  PROJECT_SERVICE,
+  PROJECT_SKILL_SELECTION_PROVIDER,
+  SESSION_ADMISSION,
+} from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { McpModule } from "../dist/modules/mcp/mcp.module.js"
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { test } from "node:test"
@@ -166,110 +180,120 @@ test("current admission 401/429 retains the stable tuple rather than becoming fo
 })
 
 async function bootstrapFixture(t, { denyMcp = false } = {}) {
-  const { createBffServer } = await import("../src/bootstrap/server.ts")
-  const { DEFAULT_AGUI_CONFIG } = await import("../src/config/runtime.ts")
+  const { DEFAULT_AGUI_CONFIG } = await import("../dist/config/runtime.js")
   const calls = { owner: [], mcp: 0, writes: 0, projects: 0 }
   let state = { project_id: "project", recommendations: [], state_version: "1" }
-  const app = createBffServer(
-    {
-      host: "127.0.0.1",
-      port: 0,
-      mode: "live",
-      domain: "test.localhost",
-      tenantId: "tenant",
-      sharedSecret: "test-secret",
-      upstreamSecret: "owner-secret",
-      upstreamTimeoutMs: 1000,
-      upstreamMaxResponseBytes: 1048576,
-      iamBaseUrl: null,
-      iamWebOrigin: "https://web.example.test",
-      schedulerServiceToken: null,
-      schedulerTargetUrl: null,
-      agentEnabled: false,
-      postgresUrl: null,
-      redisUrl: null,
-      agUi: DEFAULT_AGUI_CONFIG,
-      upstreams: { system: null, capability: null, scheduler: null, agents: null, billing: null, music: null },
+  const config = {
+    host: "127.0.0.1",
+    port: 0,
+    mode: "live",
+    domain: "test.localhost",
+    tenantId: "tenant",
+    sharedSecret: "test-secret",
+    upstreamSecret: "owner-secret",
+    upstreamTimeoutMs: 1000,
+    upstreamMaxResponseBytes: 1048576,
+    iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
+    schedulerServiceToken: null,
+    schedulerTargetUrl: null,
+    agentEnabled: false,
+    postgresUrl: null,
+    redisUrl: null,
+    agUi: DEFAULT_AGUI_CONFIG,
+    upstreams: { system: null, capability: null, scheduler: null, agents: null, billing: null, music: null },
+  }
+  const sessionAdmission = { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "subject" }, platformAdmin: false }) }
+  const mcpAuthorization = {
+    check: async (input) => {
+      calls.mcp++
+      assert.equal(input.action, "read")
+      return denyMcp ? { ok: false, status: 403, code: "session_forbidden" } : { ok: true }
     },
-    {
-      readiness: async () => {},
-      sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "subject" }, platformAdmin: false }) },
-      mcpAuthorization: {
-        check: async (input) => {
-          calls.mcp++
-          assert.equal(input.action, "read")
-          return denyMcp ? { ok: false, status: 403, code: "session_forbidden" } : { ok: true }
-        },
-      },
-      businessStore: {
-        ready: async () => {},
-        close: async () => {},
-        projectService: {
-          find: async (scope, id) => {
-            assert.fail("recommendation bootstrap must not fall back to the unbounded legacy Project finder")
-          },
-          mcpRecommendations: async () => structuredClone(state),
-          replaceMcpRecommendations: async (q) => {
-            calls.writes++
-            assert.equal(q.tenantId, "tenant")
-            assert.equal(q.subjectId, "subject")
-            if (q.expectedStateVersion !== state.state_version) return { kind: "precondition_failed" }
-            state = { project_id: "project", recommendations: q.recommendations, state_version: String(Number(state.state_version) + 1) }
-            return { kind: "replaced", data: structuredClone(state) }
-          },
-        },
-      },
-      mcpPersonalClient: {
-        read: async (op, q) => {
-          calls.owner.push([op, q])
-          return op === "provider"
-            ? {
-                provider: {
-                  provider_key: q.id,
-                  display_name: "P",
-                  directory_type: "app",
-                  category_keys: [],
-                  example_prompts: [],
-                  enabled: true,
-                  state_version: "1",
-                },
-              }
-            : {
-                connector: {
-                  connector_id: q.id,
-                  connector_type: "mcp",
-                  provider_key: "private-c",
-                  status: "active",
-                  approved_scopes: [],
-                  enabled: true,
-                  state_version: "1",
-                  availability: "available",
-                },
-              }
-        },
-      },
-      customApiClient: {
-        execute: async (op, q) => {
-          calls.owner.push([op, q])
-          return {
-            custom_api: {
-              profile_id: q.profileId,
-              name: "API",
+  }
+  const mcpPersonalClient = {
+    read: async (op, q) => {
+      calls.owner.push([op, q])
+      return op === "provider"
+        ? {
+            provider: {
+              provider_key: q.id,
+              display_name: "P",
+              directory_type: "app",
+              category_keys: [],
+              example_prompts: [],
+              enabled: true,
               state_version: "1",
-              environment: [],
-              created_at: "2026-10-27T00:00:00Z",
-              updated_at: "2026-10-27T00:00:00Z",
             },
           }
-        },
-      },
+        : {
+            connector: {
+              connector_id: q.id,
+              connector_type: "mcp",
+              provider_key: "private-c",
+              status: "active",
+              approved_scopes: [],
+              enabled: true,
+              state_version: "1",
+              availability: "available",
+            },
+          }
     },
-  )
-  await new Promise((r) => app.listen(0, "127.0.0.1", r))
-  t.after(async () => {
-    app.closeAllConnections()
-    await new Promise((r) => app.close(r))
-  })
+  }
+  const customApiClient = {
+    execute: async (op, q) => {
+      calls.owner.push([op, q])
+      return {
+        custom_api: {
+          profile_id: q.profileId,
+          name: "API",
+          state_version: "1",
+          environment: [],
+          created_at: "2026-10-27T00:00:00Z",
+          updated_at: "2026-10-27T00:00:00Z",
+        },
+      }
+    },
+  }
+  const projectService = {
+    find: async (scope, id) => {
+      assert.fail("recommendation bootstrap must not fall back to the unbounded legacy Project finder")
+    },
+    mcpRecommendations: async () => structuredClone(state),
+    replaceMcpRecommendations: async (q) => {
+      calls.writes++
+      assert.equal(q.tenantId, "tenant")
+      assert.equal(q.subjectId, "subject")
+      if (q.expectedStateVersion !== state.state_version) return { kind: "precondition_failed" }
+      state = { project_id: "project", recommendations: q.recommendations, state_version: String(Number(state.state_version) + 1) }
+      return { kind: "replaced", data: structuredClone(state) }
+    },
+  }
+  const module = await Test.createTestingModule({ imports: [McpModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({
+      pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
+      redis: Object.freeze({}),
+    })
+    .overrideProvider(PROJECT_SERVICE)
+    .useValue(projectService)
+    .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
+    .useValue(null)
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+    .overrideProvider(MCP_AUTHORIZATION)
+    .useValue(mcpAuthorization)
+    .overrideProvider(MCP_PERSONAL_CLIENT)
+    .useValue(mcpPersonalClient)
+    .overrideProvider(CUSTOM_API_CLIENT)
+    .useValue(customApiClient)
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+  t.after(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
   const headers = {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
@@ -279,7 +303,7 @@ async function bootstrapFixture(t, { denyMcp = false } = {}) {
   }
   const request = (body, path = "/v1/projects/project/mcp-recommendations") =>
     fetch(
-      `http://127.0.0.1:${app.address().port}${path}`,
+      `${base}${path}`,
       body === undefined ? { headers } : { method: "PUT", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify(body) },
     )
   return { request, calls }

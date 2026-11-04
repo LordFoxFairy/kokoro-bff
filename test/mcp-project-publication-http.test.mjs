@@ -1,10 +1,13 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
-import { once } from "node:events"
 import test from "node:test"
 import { readFile } from "node:fs/promises"
 import { Code, ConnectError } from "@connectrpc/connect"
-import { createBffServer } from "../src/bootstrap/server.ts"
-import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, MCP_AUTHORIZATION, MCP_PROJECT_PUBLICATION_CLIENT, PROJECT_SERVICE, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { McpModule } from "../dist/modules/mcp/mcp.module.js"
+import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
 const headers = {
   "x-kokoro-service": "web-bff",
@@ -40,68 +43,79 @@ const publication = () => ({ revision, pins: [pin("project-a"), pin("project-b")
 async function fixture({ execute = async () => publication(), find, verify, check, timeout = 3000, tenantId = "tenant" } = {}) {
   const events = [],
     calls = []
-  const app = createBffServer(
-    {
-      host: "127.0.0.1",
-      port: 0,
-      mode: "live",
-      domain: "test.localhost",
-      tenantId,
-      sharedSecret: "test-secret",
-      upstreamSecret: "test-upstream",
-      upstreamTimeoutMs: timeout,
-      upstreamMaxResponseBytes: 1048576,
-      iamBaseUrl: null,
-      iamWebOrigin: "https://web.example.test",
-      schedulerServiceToken: null,
-      schedulerTargetUrl: null,
-      agentEnabled: false,
-      postgresUrl: null,
-      redisUrl: null,
-      agUi: DEFAULT_AGUI_CONFIG,
-      upstreams: { system: null, capability: null, scheduler: null, agents: null, billing: null, music: null },
-    },
-    {
-      readiness: async () => {},
-      sessionAdmission: { verify: verify ?? (async () => ({ ok: true, identity: { namespace: "tenant", userId: "reader" }, platformAdmin: false })) },
-      mcpAuthorization: {
-        check:
-          check ??
-          (async (input) => {
-            events.push(`action:${input.action}`)
-            return { ok: true }
-          }),
+  const config = {
+    host: "127.0.0.1",
+    port: 0,
+    mode: "live",
+    domain: "test.localhost",
+    tenantId,
+    sharedSecret: "test-secret",
+    upstreamSecret: "test-upstream",
+    upstreamTimeoutMs: timeout,
+    upstreamMaxResponseBytes: 1048576,
+    iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
+    schedulerServiceToken: null,
+    schedulerTargetUrl: null,
+    agentEnabled: false,
+    postgresUrl: null,
+    redisUrl: null,
+    agUi: DEFAULT_AGUI_CONFIG,
+    upstreams: { system: null, capability: null, scheduler: null, agents: null, billing: null, music: null },
+  }
+  const databaseCall = () => {
+    throw new Error("MCP HTTP fixture must not query PostgreSQL")
+  }
+  const builder = Test.createTestingModule({ imports: [McpModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: databaseCall, connect: databaseCall } })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue({ verify: verify ?? (async () => ({ ok: true, identity: { namespace: "tenant", userId: "reader" }, platformAdmin: false })) })
+    .overrideProvider(MCP_AUTHORIZATION)
+    .useValue({
+      check:
+        check ??
+        (async (input) => {
+          events.push(`action:${input.action}`)
+          return { ok: true }
+        }),
+    })
+    .overrideProvider(PROJECT_SERVICE)
+    .useValue({
+      // ProjectAccess binds these during Nest compile; publication must use only find.
+      skillSelection: () => {
+        throw new Error("MCP publication must not read Project skill selection")
       },
-      businessStore: {
-        ready: async () => {},
-        close: async () => {},
-        getReceipt: async () => null,
+      replaceSkillSelection: () => {
+        throw new Error("MCP publication must not replace Project skill selection")
       },
-      projectService: {
-        find: async (scope, id) => {
-          assert.deepEqual(scope, { tenantId: "tenant", subjectId: "reader" })
-          events.push(`project:${id}`)
-          return find ? find(id) : { id }
-        },
+      find: async (scope, id) => {
+        assert.deepEqual(scope, { tenantId: "tenant", subjectId: "reader" })
+        events.push(`project:${id}`)
+        return find ? find(id) : { id }
       },
-      mcpProjectPublicationClient: {
-        execute: async (identity, input, signal, deadline) => {
-          events.push("owner")
-          calls.push(structuredClone({ identity, input }))
-          return execute(identity, input, signal, deadline)
-        },
+    })
+    .overrideProvider(MCP_PROJECT_PUBLICATION_CLIENT)
+    .useValue({
+      execute: async (identity, input, signal, deadline) => {
+        events.push("owner")
+        calls.push(structuredClone({ identity, input }))
+        return execute(identity, input, signal, deadline)
       },
-    },
-  )
-  app.listen(0, "127.0.0.1")
-  await once(app, "listening")
+    })
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  await app.listen(0, "127.0.0.1")
+  const origin = await app.getUrl()
   return {
     events,
     calls,
-    request: (path, init = {}) => fetch(`http://127.0.0.1:${app.address().port}${path}`, { ...init, headers: { ...headers, ...init.headers } }),
+    request: (path, init = {}) => fetch(`${origin}${path}`, { ...init, headers: { ...headers, ...init.headers } }),
     close: async () => {
-      app.closeAllConnections()
-      await new Promise((resolve) => app.close(resolve))
+      app.getHttpServer().closeAllConnections()
+      await app.close()
     },
   }
 }

@@ -3,7 +3,11 @@ import test from "node:test"
 import { createHash } from "node:crypto"
 import { create } from "@bufbuild/protobuf"
 import { timestampFromDate } from "@bufbuild/protobuf/wkt"
-import { createBffServer } from "../src/bootstrap/server.js"
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, CUSTOM_API_CLIENT, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { McpModule } from "../dist/modules/mcp/mcp.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.js"
 import { bindCustomApiCommand } from "../src/infrastructure/clients/platform/custom-api-binding.js"
 import { projectCustomApiResponse } from "../src/infrastructure/clients/platform/custom-api-response.js"
@@ -71,29 +75,32 @@ async function customApiFixture(execute: (operation: string, input: Record<strin
       music: null,
     },
   }
-  const app = createBffServer(config, {
-    businessStore: null,
-    readiness: async () => undefined,
-    sessionAdmission: {
+  const unexpected = (): never => assert.fail("Custom API fixture must not access PostgreSQL")
+  const module = await Test.createTestingModule({ imports: [McpModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected }, ready: unexpected })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue({
       verify: async () => ({
         ok: true as const,
         identity: { namespace: "tenant-server", userId: "human-one" },
         platformAdmin: false,
       }),
-    },
-    customApiClient: {
-      execute: async (operation, input) => execute(operation, input as unknown as Record<string, unknown>),
-    },
-  })
-  await new Promise<void>((resolve) => app.listen(0, "127.0.0.1", resolve))
-  const address = app.address()
-  assert.ok(address && typeof address === "object")
-  return {
-    origin: `http://127.0.0.1:${address.port}`,
-    close: async () => {
-      app.closeAllConnections()
-      await new Promise<void>((resolve) => app.close(() => resolve()))
-    },
+    })
+    .overrideProvider(CUSTOM_API_CLIENT)
+    .useValue({
+      execute: async (operation: string, input: unknown) => execute(operation, input as Record<string, unknown>),
+    })
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  try {
+    await app.listen(0, "127.0.0.1")
+    return { origin: await app.getUrl(), close: () => app.close() }
+  } catch (error) {
+    await app.close()
+    throw error
   }
 }
 

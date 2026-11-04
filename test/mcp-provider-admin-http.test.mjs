@@ -1,9 +1,13 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
 import test from "node:test"
 
 import { Code, ConnectError } from "@connectrpc/connect"
 
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, MCP_AUTHORIZATION, MCP_PROVIDER_ADMIN_CLIENT, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { McpModule } from "../dist/modules/mcp/mcp.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
 const headers = {
@@ -27,46 +31,52 @@ const provider = {
   state_version: "1",
 }
 async function fixture({ allowed = true, client = null } = {}) {
-  const app = createBffServer(
-    {
-      host: "127.0.0.1",
-      port: 0,
-      mode: "live",
-      domain: "dev.kokoro.localhost",
-      tenantId: "tenant-one",
-      iamBaseUrl: null,
-      iamWebOrigin: "https://web.example.test",
-      sharedSecret: "test-secret",
-      adminWebSharedSecret: "admin-test-secret",
-      upstreamSecret: "upstream-secret",
-      upstreamTimeoutMs: 5_000,
-      upstreamMaxResponseBytes: 1_048_576,
-      schedulerServiceToken: null,
-      schedulerTargetUrl: null,
-      agentEnabled: false,
-      postgresUrl: null,
-      redisUrl: null,
-      agUi: DEFAULT_AGUI_CONFIG,
-      upstreams: { system: null, platform: null, scheduler: null, agents: null, billing: null, music: null },
-      platformProjection: { baseUrl: null, credentialFile: null, timeoutMs: 5_000 },
-      skillDraft: { platformBaseUrl: null, credentialFile: null, timeoutMs: 5_000 },
-    },
-    {
-      businessStore: null,
-      readiness: async () => undefined,
-      sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant-one", userId: "admin-one" }, platformAdmin: true }) },
-      mcpAuthorization: {
-        check: async (input) => ({ ok: allowed && input.resource === "mcp_catalog" && input.action === "manage", status: 403, code: "session_forbidden" }),
-      },
-      ...(client === null ? {} : { mcpProviderAdminClient: client }),
-    },
-  )
-  await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve))
+  const config = {
+    host: "127.0.0.1",
+    port: 0,
+    mode: "live",
+    domain: "dev.kokoro.localhost",
+    tenantId: "tenant-one",
+    iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
+    sharedSecret: "test-secret",
+    adminWebSharedSecret: "admin-test-secret",
+    upstreamSecret: "upstream-secret",
+    upstreamTimeoutMs: 5_000,
+    upstreamMaxResponseBytes: 1_048_576,
+    schedulerServiceToken: null,
+    schedulerTargetUrl: null,
+    agentEnabled: false,
+    postgresUrl: null,
+    redisUrl: null,
+    agUi: DEFAULT_AGUI_CONFIG,
+    upstreams: { system: null, platform: null, scheduler: null, agents: null, billing: null, music: null },
+    platformProjection: { baseUrl: null, credentialFile: null, timeoutMs: 5_000 },
+    skillDraft: { platformBaseUrl: null, credentialFile: null, timeoutMs: 5_000 },
+  }
+  const databaseCall = () => {
+    throw new Error("MCP HTTP fixture must not query PostgreSQL")
+  }
+  const builder = Test.createTestingModule({ imports: [McpModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: databaseCall, connect: databaseCall } })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue({ verify: async () => ({ ok: true, identity: { namespace: "tenant-one", userId: "admin-one" }, platformAdmin: true }) })
+    .overrideProvider(MCP_AUTHORIZATION)
+    .useValue({
+      check: async (input) => ({ ok: allowed && input.resource === "mcp_catalog" && input.action === "manage", status: 403, code: "session_forbidden" }),
+    })
+  if (client !== null) builder.overrideProvider(MCP_PROVIDER_ADMIN_CLIENT).useValue({ ...client, close() {} })
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  await app.listen(0, "127.0.0.1")
   return {
-    origin: `http://127.0.0.1:${app.address().port}`,
+    origin: await app.getUrl(),
     async close() {
-      app.closeAllConnections()
-      await new Promise((resolve) => app.close(resolve))
+      app.getHttpServer().closeAllConnections()
+      await app.close()
     },
   }
 }

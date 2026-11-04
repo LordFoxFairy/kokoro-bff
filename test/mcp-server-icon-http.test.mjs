@@ -1,8 +1,12 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { createServer, request as nodeRequest } from "node:http"
 import test from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { McpModule } from "../dist/modules/mcp/mcp.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { startMcpRequestBudget } from "../dist/http/mcp-request-budget.js"
 
@@ -43,78 +47,82 @@ async function fixture(options = {}) {
     ...options.icon,
   }
   if (options.reference) icon.preview_reference = options.reference(icon.preview_reference)
-  const server = createBffServer(
-    {
-      host: "127.0.0.1",
-      port: 0,
-      mode: "live",
-      domain: "dev.kokoro.localhost",
-      tenantId: "tenant-one",
-      iamBaseUrl: "http://127.0.0.1:1",
-      iamWebOrigin: "https://web.example.test",
-      sharedSecret: "test-secret",
-      upstreamSecret: "owner-secret",
-      upstreamTimeoutMs: 5000,
-      upstreamMaxResponseBytes: 1048576,
-      schedulerServiceToken: null,
-      schedulerTargetUrl: null,
-      agentEnabled: false,
-      postgresUrl: null,
-      redisUrl: null,
-      agUi: DEFAULT_AGUI_CONFIG,
-      storageObjectOrigin: options.noOrigin ? null : objectOrigin,
-      upstreams: { system: null, capability: null, scheduler: null, agents: null, billing: null, music: null },
-    },
-    {
-      businessStore: null,
-      readiness: async () => undefined,
-      sessionAdmission: {
-        verify: async () => {
-          seen.sessions++
-          return options.session?.(seen.sessions) ?? { ok: true, identity: { namespace: "tenant-one", userId: "human-one" }, platformAdmin: false }
-        },
-      },
-      mcpAuthorization: {
-        check: async (input) => {
-          seen.actions++
-          assert.equal(input.resource, "mcp_personal")
-          assert.equal(input.action, "read")
-          return options.action?.(seen.actions) ?? { ok: true }
-        },
-      },
-      mcpPersonalClient: {
-        read: async (operation) => {
-          assert.equal(operation, "connectors")
-          return { items: [], next_cursor: null }
-        },
-        server: async (operation, input, signal, deadline) => {
-          seen.owner.push({ operation, input, signal, deadline })
-          assert.equal(operation, "server")
-          assert.equal(input.id, "server-one")
-          assert.equal(input.tenant, "tenant-one")
-          assert.equal(input.subject, "human-one")
-          return options.owner?.(seen.owner.length, icon, signal) ?? { server: { server_id: "server-one", icon } }
-        },
-      },
-    },
-  )
-  if (options.deadlineMs !== undefined) {
-    const handler = server.listeners("request")[0]
-    server.removeAllListeners("request")
-    server.on("request", (request, response) => {
-      startMcpRequestBudget(request, options.deadlineMs)
-      handler(request, response)
-    })
+  const config = {
+    host: "127.0.0.1",
+    port: 0,
+    mode: "live",
+    domain: "dev.kokoro.localhost",
+    tenantId: "tenant-one",
+    iamBaseUrl: "http://127.0.0.1:1",
+    iamWebOrigin: "https://web.example.test",
+    sharedSecret: "test-secret",
+    upstreamSecret: "owner-secret",
+    upstreamTimeoutMs: 5000,
+    upstreamMaxResponseBytes: 1048576,
+    schedulerServiceToken: null,
+    schedulerTargetUrl: null,
+    agentEnabled: false,
+    postgresUrl: null,
+    redisUrl: null,
+    agUi: DEFAULT_AGUI_CONFIG,
+    storageObjectOrigin: options.noOrigin ? null : objectOrigin,
+    upstreams: { system: null, capability: null, scheduler: null, agents: null, billing: null, music: null },
   }
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const databaseCall = () => {
+    throw new Error("MCP HTTP fixture must not query PostgreSQL")
+  }
+  const builder = Test.createTestingModule({ imports: [McpModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: databaseCall, connect: databaseCall } })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue({
+      verify: async () => {
+        seen.sessions++
+        return options.session?.(seen.sessions) ?? { ok: true, identity: { namespace: "tenant-one", userId: "human-one" }, platformAdmin: false }
+      },
+    })
+    .overrideProvider(MCP_AUTHORIZATION)
+    .useValue({
+      check: async (input) => {
+        seen.actions++
+        assert.equal(input.resource, "mcp_personal")
+        assert.equal(input.action, "read")
+        return options.action?.(seen.actions) ?? { ok: true }
+      },
+    })
+    .overrideProvider(MCP_PERSONAL_CLIENT)
+    .useValue({
+      read: async (operation) => {
+        assert.equal(operation, "connectors")
+        return { items: [], next_cursor: null }
+      },
+      server: async (operation, input, signal, deadline) => {
+        seen.owner.push({ operation, input, signal, deadline })
+        assert.equal(operation, "server")
+        assert.equal(input.id, "server-one")
+        assert.equal(input.tenant, "tenant-one")
+        assert.equal(input.subject, "human-one")
+        return options.owner?.(seen.owner.length, icon, signal) ?? { server: { server_id: "server-one", icon } }
+      },
+    })
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  const server = app.getHttpServer()
+  if (options.deadlineMs !== undefined) server.prependListener("request", (request) => startMcpRequestBudget(request, options.deadlineMs))
+  await app.listen(0, "127.0.0.1")
   return {
     seen,
     icon,
-    origin: `http://127.0.0.1:${server.address().port}`,
+    origin: await app.getUrl(),
     close: async () => {
-      for (const value of [server, storage]) {
-        value.closeAllConnections()
-        await new Promise((resolve) => value.close(resolve))
+      try {
+        app.getHttpServer().closeAllConnections()
+        await app.close()
+      } finally {
+        storage.closeAllConnections()
+        await new Promise((resolve) => storage.close(resolve))
       }
     },
   }

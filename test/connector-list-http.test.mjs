@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import test from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { McpModule } from "../dist/modules/mcp/mcp.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
 const headers = {
@@ -61,24 +65,36 @@ async function fixture({ client, permitted = true } = {}) {
     agUi: DEFAULT_AGUI_CONFIG,
     upstreams: { system: null, capability: null, scheduler: null, agents: null, billing: null, music: null },
   }
-  const app = createBffServer(config, {
-    businessStore: null,
-    readiness: async () => undefined,
-    sessionAdmission: {
-      verify: async () => ({ ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }),
-    },
-    mcpAuthorization: { check: async () => ({ ok: permitted, status: permitted ? 200 : 403, code: "session_forbidden" }) },
-    ...(client ? { mcpPersonalClient: client } : {}),
-  })
-  await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve))
-  return {
-    origin: `http://127.0.0.1:${app.address().port}`,
-    async close() {
-      for (const server of [app, iam]) {
-        server.closeAllConnections()
-        await new Promise((resolve) => server.close(resolve))
-      }
-    },
+  let app
+  const close = async () => {
+    try {
+      await app?.close()
+    } finally {
+      iam.closeAllConnections()
+      await new Promise((resolve) => iam.close(resolve))
+    }
+  }
+  try {
+    const unexpected = () => assert.fail("Connector List fixture must not access PostgreSQL")
+    const builder = Test.createTestingModule({ imports: [McpModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({ pool: { query: unexpected, connect: unexpected }, ready: unexpected })
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue({
+        verify: async () => ({ ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }),
+      })
+      .overrideProvider(MCP_AUTHORIZATION)
+      .useValue({ check: async () => ({ ok: permitted, status: permitted ? 200 : 403, code: "session_forbidden" }) })
+    if (client) builder.overrideProvider(MCP_PERSONAL_CLIENT).useValue(client)
+    const module = await builder.compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    await app.listen(0, "127.0.0.1")
+    return { origin: await app.getUrl(), close }
+  } catch (error) {
+    await close()
+    throw error
   }
 }
 
