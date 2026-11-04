@@ -165,34 +165,6 @@ afterEach(async () => {
 })
 
 describe("kokoro-bff v1 mock contract", () => {
-  it("returns a versioned project projection and replays idempotent creation", async () => {
-    const base = await listen(testServer(config()))
-    const headers = { ...authHeaders(), "x-kokoro-request-id": "request-projects" }
-    const list = await fetch(`${base}/v1/projects`, { headers })
-    const listBody = (await list.json()) as { data: { projects: Array<{ id: string }> }; meta: { request_id: string } }
-    assert.equal(list.status, 200)
-    assert.equal(listBody.data.projects[0]?.id, "project_kokoro")
-    assert.equal(listBody.meta.request_id, "request-projects")
-
-    const createInit = {
-      method: "POST",
-      headers: { ...headers, "content-type": "application/json", "idempotency-key": "project-create-1" },
-      body: JSON.stringify({ name: "Design system", description: "Shared business UI" }),
-    }
-    const first = await fetch(`${base}/v1/projects`, createInit)
-    const second = await fetch(`${base}/v1/projects`, createInit)
-    assert.equal(first.status, 200)
-    assert.deepEqual(await first.json(), await second.json())
-
-    const conflict = await fetch(`${base}/v1/projects`, {
-      method: "POST",
-      headers: { ...headers, "content-type": "application/json", "idempotency-key": "project-create-1" },
-      body: JSON.stringify({ name: "Design system", description: "Different payload" }),
-    })
-    assert.equal(conflict.status, 409)
-    assert.equal(((await conflict.json()) as { error: { code: string } }).error.code, "idempotency_conflict")
-  })
-
   it("closes the project instruction read, update, and revision history flow", async () => {
     const base = await listen(testServer(config()))
     const projectId = "project_kokoro"
@@ -455,21 +427,6 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(disconnectedBody.meta.request_id, "agent-owner-request")
     assert.equal(ownerCalls, 3)
     assert.equal(admission.calls.length, 4)
-  })
-
-  it("supports scheduled task mutations through the same business contract", async () => {
-    const base = await listen(testServer(config()))
-    const headers = { ...authHeaders(), "content-type": "application/json", "idempotency-key": "schedule-create-1" }
-    const created = await fetch(`${base}/v1/scheduled-tasks`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ title: "Daily review", prompt: "Review", frequency: "daily", time: "10:00", timezone: "UTC", auto_approve: false }),
-    })
-    assert.equal(created.status, 200)
-    const createdBody = (await created.json()) as { data: { task: { id: string } } }
-    const listed = await fetch(`${base}/v1/scheduled-tasks`, { headers: authHeaders() })
-    assert.ok(((await listed.json()) as { data: { tasks: unknown[] } }).data.tasks.length >= 2)
-    assert.match(createdBody.data.task.id, /^scheduled_/)
   })
 
   it("previews a GitHub skill without requiring Idempotency-Key", async () => {

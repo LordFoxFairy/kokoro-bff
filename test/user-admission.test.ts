@@ -570,6 +570,7 @@ test("a revoked session is denied before an existing idempotency result can repl
   const scope = JSON.stringify(["tenant-a", "user-a", "POST", "/projects", "same-key"])
   let receipt: PersistentReceipt | null = null
   let receiptClaims = 0
+  let receiptWrites = 0
   let claimedFingerprint: string | null = null
   const { base, projects } = await listenNativeProjectAdmission({ ...config(), tenantId: "tenant-a" }, admission, {
     async claimReceipt(key, fingerprint) {
@@ -580,6 +581,7 @@ test("a revoked session is denied before an existing idempotency result can repl
     },
     async putReceipt(key, value) {
       assert.equal(key, scope)
+      receiptWrites++
       receipt = value
     },
     async releaseReceipt() {
@@ -595,16 +597,16 @@ test("a revoked session is denied before an existing idempotency result can repl
     updated_at: "2026-10-27T00:00:00.000Z",
   }
   const projectCreates = t.mock.method(projects, "create", async () => project)
+  const projectReads = t.mock.method(projects, "list", async () => [project])
+  const headers = {
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": "test-secret",
+    cookie: "kokoro-issuer.session_token=token",
+    origin: "https://web.example.test",
+  }
   const init = {
     method: "POST",
-    headers: {
-      "x-kokoro-service": "web-bff",
-      "x-kokoro-internal-secret": "test-secret",
-      cookie: "kokoro-issuer.session_token=token",
-      origin: "https://web.example.test",
-      "content-type": "application/json",
-      "idempotency-key": "same-key",
-    },
+    headers: { ...headers, "content-type": "application/json", "idempotency-key": "same-key" },
     body: JSON.stringify({ name: project.name }),
   }
 
@@ -618,14 +620,37 @@ test("a revoked session is denied before an existing idempotency result can repl
   assert.equal(committed.fingerprint, claimedFingerprint)
   assert.equal(committed.status, 200)
   assert.deepEqual(committed.body, createdBody)
+
+  const replay = await fetch(`${base}/v1/projects`, init)
+  assert.equal(replay.status, 200)
+  assert.deepEqual(await replay.json(), createdBody)
+  assert.equal(claimedFingerprint, committed.fingerprint)
+
+  const conflict = await fetch(`${base}/v1/projects`, { ...init, body: JSON.stringify({ name: project.name, description: "Different payload" }) })
+  assert.equal(conflict.status, 409)
+  assert.equal(((await conflict.json()) as { error: { code: string } }).error.code, "idempotency_conflict")
+  assert.notEqual(claimedFingerprint, committed.fingerprint)
+  assert.equal(receipt, committed)
+
+  const list = await fetch(`${base}/v1/projects`, { headers: { ...headers, "x-kokoro-request-id": "request-projects" } })
+  assert.equal(list.status, 200)
+  assert.equal(list.headers.get("x-request-id"), "request-projects")
+  assert.deepEqual(await list.json(), { data: { projects: [project] }, meta: { request_id: "request-projects" } })
+  assert.deepEqual(
+    projectReads.mock.calls.map((call) => call.arguments),
+    [[{ tenantId: "tenant-a", subjectId: "user-a" }]],
+  )
+
+  assert.equal(receiptClaims, 3)
   admission.deny("token", { ok: false, status: 401, code: "session_invalid" })
   const denied = await fetch(`${base}/v1/projects`, init)
 
   assert.equal(denied.status, 401)
   assert.equal(((await denied.json()) as { error: { code: string } }).error.code, "session_invalid")
-  assert.equal(admission.calls.length, 2)
+  assert.equal(admission.calls.length, 5)
   assert.equal(projectCreates.mock.callCount(), 1)
-  assert.equal(receiptClaims, 1)
+  assert.equal(receiptClaims, 3)
+  assert.equal(receiptWrites, 1)
 })
 
 test("duplicate raw Cookie headers are rejected before IAM", async () => {
