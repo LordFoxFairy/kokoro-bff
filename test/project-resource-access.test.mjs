@@ -4,8 +4,7 @@ import {
   BFF_CONFIG,
   BFF_DATABASE,
   PROJECT_SCOPE_RELEASE_DISPATCHER,
-  PROJECT_SERVICE,
-  PROJECT_SKILL_SELECTION_PROVIDER,
+  PROJECT_LOOKUP,
   SESSION_ADMISSION,
 } from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
@@ -475,10 +474,8 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
         pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
         redis: Object.freeze({}),
       })
-      .overrideProvider(PROJECT_SERVICE)
+      .overrideProvider(PROJECT_LOOKUP)
       .useValue(store.projectService)
-      .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
-      .useValue(null)
       .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
       .useValue(null)
       .overrideProvider(SESSION_ADMISSION)

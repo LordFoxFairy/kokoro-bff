@@ -985,7 +985,7 @@ describe("kokoro-bff versioned HTTP contracts", () => {
       AGUI_PROJECTOR,
       BFF_CONFIG,
       BFF_DATABASE,
-      PROJECT_SERVICE,
+      PROJECT_READS,
       SCHEDULED_TASK_DISPATCHER,
       SESSION_ADMISSION,
     } = await import("../dist/common/tokens.js")
@@ -1008,7 +1008,8 @@ describe("kokoro-bff versioned HTTP contracts", () => {
       return []
     }
     // Keep the Scheduler client configured. Only the BFF-owned definition facts are substituted.
-    const builder = Test.createTestingModule({ imports: [ScheduledTasksModule, SystemModule] })
+    const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
+    const builder = Test.createTestingModule({ imports: [ProjectsModule, ScheduledTasksModule, SystemModule] })
       .overrideProvider(BFF_CONFIG)
       .useValue(
         config({
@@ -1021,8 +1022,8 @@ describe("kokoro-bff versioned HTTP contracts", () => {
       .useValue({ pool: { query: unexpected, connect: unexpected } })
       .overrideProvider(SESSION_ADMISSION)
       .useValue(new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } }))
-      .overrideProvider(PROJECT_SERVICE)
-      .useValue({ list: readLocalDefinitions, find: unexpected, skillSelection: unexpected, replaceSkillSelection: unexpected })
+      .overrideProvider(PROJECT_READS)
+      .useValue({ list: readLocalDefinitions })
       .overrideProvider(SCHEDULED_TASK_SNAPSHOTS)
       .useValue({ snapshots: readLocalDefinitions })
     for (const token of [AGENT_CANCELLATION_DISPATCHER, AGENT_DISPATCH_DISPATCHER, AGUI_PROJECTOR, SCHEDULED_TASK_DISPATCHER]) {

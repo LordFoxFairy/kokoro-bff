@@ -14,7 +14,6 @@ import { createProjectSkillSelectionOperations } from "../dist/infrastructure/po
 import { moveConversation } from "../dist/infrastructure/postgres/conversation-move.js"
 import { createChatSessionReads } from "../dist/application/chat/session-reads.js"
 import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
-import { ProjectService } from "../dist/application/project-service.js"
 import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
 import { PostgresAgentCancellationOutboxRepository } from "../dist/infrastructure/postgres/agent-cancellation-outbox-repository.js"
 import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
@@ -22,7 +21,7 @@ import { PostgresAgUiConsumerRepository } from "../dist/infrastructure/postgres/
 import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgres/agui-projection-repository.js"
 import { PostgresChatSessionStore } from "../dist/infrastructure/postgres/chat-session-store.js"
 import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
-import { PostgresProjectRepository } from "../dist/infrastructure/postgres/project-repository.js"
+import { createProjectMutationStore } from "../dist/infrastructure/postgres/project-store.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
@@ -5670,7 +5669,7 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
   const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(database), new Sha256StableIdGenerator())
   const sessionStore = new PostgresChatSessionStore(database)
   const move = createChatMove(moveConversation.bind(null, database))
-  const projects = new ProjectService(new PostgresProjectRepository(database))
+  const projects = createProjectMutationStore(database.pool)
   const selection = createProjectSkillSelectionOperations(database)
   const tenant = `selection_${randomUUID()}`,
     subject = "selection-owner",

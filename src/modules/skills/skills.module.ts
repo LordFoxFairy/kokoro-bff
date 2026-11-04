@@ -3,7 +3,7 @@ import { BffConfigModule } from "../../config/config.module.js"
 import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
 import { ProjectAccessModule } from "../projects/project-access.module.js"
-import type { ProjectLookup } from "../../application/projects/project-repository.js"
+import type { ProjectLookup } from "../../application/projects/types.js"
 import {
   APP_SKILL_BINDING_CLIENT,
   BFF_CONFIG,

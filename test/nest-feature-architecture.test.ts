@@ -253,19 +253,11 @@ test("Account library artifact repository port is feature-local", async () => {
   assert.match(repository, /application\/account\/artifact-library-repository\.js/u)
 })
 
-test("Projects repository port is feature-local", async () => {
-  assert.equal(await fileExists("src/application/projects/project-repository.ts"), true)
-  assert.equal(await fileExists("src/application/ports/project-repository.ts"), false)
-  const [service, specification, route, repository] = await Promise.all([
-    readFile(path.join(root, "src/application/project-service.ts"), "utf8"),
-    readFile(path.join(root, "src/application/skill-specification.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/project-native.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/project-repository.ts"), "utf8"),
-  ])
-  assert.match(service, /projects\/project-repository\.js/u)
-  assert.match(specification, /projects\/project-repository\.js/u)
-  assert.match(route, /application\/projects\/project-repository\.js/u)
-  assert.match(repository, /application\/projects\/project-repository\.js/u)
+test("Projects no longer exposes the shared Project service or repository port", async () => {
+  for (const file of ["src/application/project-service.ts", "src/application/projects/project-repository.ts", "src/application/ports/project-repository.ts"])
+    assert.equal(await fileExists(file), false, `${file} must remain retired`)
+  const tokens = await readFile(path.join(root, "src/common/tokens.ts"), "utf8")
+  assert.doesNotMatch(tokens, /\bPROJECT_SERVICE\b/u)
 })
 
 test("Projects scope-release outbox port is feature-local", async () => {
@@ -292,7 +284,7 @@ test("ProjectsModule owns the project command/read adapters and provider", async
     readFile(path.join(root, "src/modules/projects/project-skill-download.middleware.ts"), "utf8"),
   ])
   assert.match(projectsModule, /ProjectAccessModule/u)
-  assert.match(accessModule, /provide: PROJECT_SERVICE/u)
+  assert.match(accessModule, /provide: PROJECT_LOOKUP/u)
   assert.match(projectsModule, /ProjectPinMiddleware/u)
   assert.match(projectsModule, /ProjectMutationMiddleware/u)
   assert.match(projectsModule, /PROJECT_IDEMPOTENCY/u)

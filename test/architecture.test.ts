@@ -128,7 +128,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/contracts/index.ts",
     "src/contracts/mori.ts",
     "src/application/idempotency.ts",
-    "src/application/project-service.ts",
+    "src/application/projects/commands.ts",
     "src/application/chat/session-reads.ts",
     "src/application/chat-turn-service.ts",
     "src/application/agent-dispatch-outbox-dispatcher.ts",
@@ -136,7 +136,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/scheduled-task-service.ts",
     "src/application/ports/idempotency-repository.ts",
     "src/application/account/artifact-library-repository.ts",
-    "src/application/projects/project-repository.ts",
+    "src/application/projects/types.ts",
     "src/application/chat/types.ts",
     "src/application/agent-dispatch/agent-dispatch-outbox-repository.ts",
     "src/application/agent-dispatch/agent-dispatch-delivery.ts",
@@ -155,7 +155,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/postgres/client.ts",
     "src/infrastructure/postgres/idempotency-repository.ts",
     "src/infrastructure/postgres/agui-projection-repository.ts",
-    "src/infrastructure/postgres/project-repository.ts",
+    "src/infrastructure/postgres/project-store.ts",
     "src/infrastructure/postgres/chat-session-store.ts",
     "src/infrastructure/postgres/conversation-move.ts",
     "src/infrastructure/postgres/conversation-move-lease.ts",
@@ -622,8 +622,8 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
 
 test("private BFF resources use named owner scopes before receipts and keep service capabilities separate", async () => {
   const [projectPort, projectRepository, scheduledPort, scheduledRepository, chatAuthorization, client, openapi, schema] = await Promise.all([
-    readFile(path.join(root, "src/application/projects/project-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/project-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/projects/types.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/project-store.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled/task-facts.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-authorization.ts"), "utf8"),

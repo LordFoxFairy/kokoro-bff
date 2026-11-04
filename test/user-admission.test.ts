@@ -7,7 +7,8 @@ import {
   BFF_CONFIG,
   BFF_DATABASE,
   PROJECT_IDEMPOTENCY,
-  PROJECT_SERVICE,
+  PROJECT_READS,
+  PROJECT_MUTATIONS,
   PUBLIC_SHARE_SERVICE,
   SESSION_ADMISSION,
   SKILL_AUTHORIZATION,
@@ -16,7 +17,7 @@ import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
 import { AccountModule } from "../dist/modules/account/account.module.js"
 import { ChatModule } from "../dist/modules/chat/chat.module.js"
 import { ProjectsModule } from "../dist/modules/projects/projects.module.js"
-import type { ProjectService } from "../src/application/project-service.ts"
+import type { ProjectReadStore, ProjectMutationStore } from "../src/infrastructure/postgres/project-store.ts"
 import type { IdempotencyRepository, PersistentReceipt } from "../src/application/ports/idempotency-repository.ts"
 import type { SessionAdmission } from "../src/auth/session-admission.types.ts"
 import { createServer, request as httpRequest, type Server, type IncomingMessage } from "node:http"
@@ -99,7 +100,7 @@ async function listenNativeProjectAdmission(
   admission?: SessionAdmission,
   receipts?: Pick<IdempotencyRepository, "claimReceipt" | "putReceipt" | "releaseReceipt">,
   includeTeam = false,
-): Promise<{ base: string; projects: ProjectService }> {
+): Promise<{ base: string; reads: ProjectReadStore; mutations: ProjectMutationStore }> {
   const unexpected = (): never => assert.fail("admission fixture must not access Project storage")
   const builder = Test.createTestingModule({ imports: includeTeam ? [ProjectsModule, AccountModule] : [ProjectsModule] })
     .overrideProvider(BFF_CONFIG)
@@ -109,11 +110,12 @@ async function listenNativeProjectAdmission(
   if (admission !== undefined) builder.overrideProvider(SESSION_ADMISSION).useValue(admission)
   if (receipts !== undefined) builder.overrideProvider(PROJECT_IDEMPOTENCY).useValue(receipts)
   const module = await builder.compile()
-  const projects = module.get<ProjectService>(PROJECT_SERVICE)
+  const reads = module.get<ProjectReadStore>(PROJECT_READS)
+  const mutations = module.get<ProjectMutationStore>(PROJECT_MUTATIONS)
   const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
   nestClosers.push(() => app.close())
   await app.listen(0, "127.0.0.1")
-  return { base: await app.getUrl(), projects }
+  return { base: await app.getUrl(), reads, mutations }
 }
 
 async function listenNativePublicShare(
@@ -252,8 +254,8 @@ test("GET /v1/me preserves fixed-tenant and IAM denial semantics without busines
 })
 
 test("legacy identity headers cannot authorize a user request without a native Session Cookie", async (t) => {
-  const { base, projects } = await listenNativeProjectAdmission(config())
-  const projectReads = t.mock.method(projects, "list")
+  const { base, reads } = await listenNativeProjectAdmission(config())
+  const projectReads = t.mock.method(reads, "list")
 
   const response = await fetch(`${base}/v1/projects`, {
     headers: {
@@ -291,10 +293,10 @@ test("the default production composition fails user traffic and readiness closed
 
 test("service and Cookie rejection happen before IAM and route work", async (t) => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-a", userId: "user-a" } })
-  const { base, projects } = await listenNativeProjectAdmission(config(), admission)
-  const { base: secretlessBase, projects: secretlessProjects } = await listenNativeProjectAdmission({ ...config(), sharedSecret: null }, admission)
-  const projectReads = t.mock.method(projects, "list")
-  const secretlessProjectReads = t.mock.method(secretlessProjects, "list")
+  const { base, reads } = await listenNativeProjectAdmission(config(), admission)
+  const { base: secretlessBase, reads: secretlessReads } = await listenNativeProjectAdmission({ ...config(), sharedSecret: null }, admission)
+  const projectReads = t.mock.method(reads, "list")
+  const secretlessProjectReads = t.mock.method(secretlessReads, "list")
   const sessionHeaders = { cookie: "kokoro-issuer.session_token=token", origin: "https://web.example.test" }
   const serviceHeaders = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret" }
   const cases: Array<{ name: string; origin: string; headers: HeadersInit; status: number; code: string }> = [
@@ -356,7 +358,7 @@ test("Admin Web credential reaches only current identity and exact named admin r
     .overrideProvider(SKILL_AUTHORIZATION)
     .useValue({ check: async () => ({ ok: true }) })
     .compile()
-  const projectReads = t.mock.method(module.get<ProjectService>(PROJECT_SERVICE), "list", async () => [])
+  const projectReads = t.mock.method(module.get<ProjectReadStore>(PROJECT_READS), "list", async () => [])
   const app = module.createNestApplication(new BffExpressAdapter(), { ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
   nestClosers.push(() => app.close())
   await app.listen(0, "127.0.0.1")
@@ -483,7 +485,7 @@ test("missing fixed Product tenant fails before IAM and business work without ch
     .overrideProvider(PUBLIC_SHARE_SERVICE)
     .useValue(shareOwner)
     .compile()
-  const projectReads = t.mock.method(module.get<ProjectService>(PROJECT_SERVICE), "list")
+  const projectReads = t.mock.method(module.get<ProjectReadStore>(PROJECT_READS), "list")
   const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
   nestClosers.push(() => app.close())
   await app.listen(0, "127.0.0.1")
@@ -531,7 +533,7 @@ test("foreign IAM tenant is denied before body parsing, receipt claim, Team or o
     }),
   )
   const claimReceipt = t.mock.fn(async () => assert.fail("foreign admission must not claim a Project receipt"))
-  const { base, projects } = await listenNativeProjectAdmission(
+  const { base, mutations } = await listenNativeProjectAdmission(
     { ...config(), ...(await fixtureIamCredentials("tenant-fixed")), tenantId: "tenant-fixed", iamBaseUrl },
     admission,
     {
@@ -545,7 +547,7 @@ test("foreign IAM tenant is denied before body parsing, receipt claim, Team or o
     },
     true,
   )
-  const projectCreates = t.mock.method(projects, "create")
+  const projectCreates = t.mock.method(mutations, "create")
   const headers = {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
@@ -575,8 +577,8 @@ test("foreign IAM tenant is denied before body parsing, receipt claim, Team or o
 
 test("the IAM identity replaces malicious legacy identity headers", async (t) => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-iam", userId: "user-iam" } })
-  const { base, projects } = await listenNativeProjectAdmission({ ...config(), tenantId: "tenant-iam" }, admission)
-  const projectReads = t.mock.method(projects, "list", async () => [])
+  const { base, reads } = await listenNativeProjectAdmission({ ...config(), tenantId: "tenant-iam" }, admission)
+  const projectReads = t.mock.method(reads, "list", async () => [])
 
   const response = await fetch(`${base}/v1/projects`, {
     headers: {
@@ -605,7 +607,7 @@ test("a revoked session is denied before an existing idempotency result can repl
   let receiptClaims = 0
   let receiptWrites = 0
   let claimedFingerprint: string | null = null
-  const { base, projects } = await listenNativeProjectAdmission({ ...config(), tenantId: "tenant-a" }, admission, {
+  const { base, reads, mutations } = await listenNativeProjectAdmission({ ...config(), tenantId: "tenant-a" }, admission, {
     async claimReceipt(key, fingerprint) {
       assert.equal(key, scope)
       receiptClaims++
@@ -629,8 +631,8 @@ test("a revoked session is denied before an existing idempotency result can repl
     created_at: "2026-10-27T00:00:00.000Z",
     updated_at: "2026-10-27T00:00:00.000Z",
   }
-  const projectCreates = t.mock.method(projects, "create", async () => project)
-  const projectReads = t.mock.method(projects, "list", async () => [project])
+  const projectCreates = t.mock.method(mutations, "create", async () => project)
+  const projectReads = t.mock.method(reads, "list", async () => [project])
   const headers = {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
@@ -780,7 +782,7 @@ test("disconnecting during admission aborts IAM and prevents route work", { time
     },
   }
   const app = await listenNativeProjectAdmission(config(), admission)
-  const projectReads = t.mock.method(app.projects, "list")
+  const projectReads = t.mock.method(app.reads, "list")
   const base = new URL(app.base)
   const request = httpRequest({
     host: base.hostname,

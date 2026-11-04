@@ -12,7 +12,7 @@ import {
 } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { ProjectLookup } from "../../application/projects/project-repository.js"
+import type { ProjectLookup } from "../../application/projects/types.js"
 import type { ExactSkillDownloadSource } from "../../application/exact-skill-download.js"
 import type { SkillDownloadHandles } from "../../application/skill-download-handles.js"
 import type { SkillSpecificationSource } from "../../application/skill-specification.types.js"

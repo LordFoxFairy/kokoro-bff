@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectMutationStore } from "../../infrastructure/postgres/project-store.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { failure, ok } from "../../contracts/index.js"
 import { pathOf } from "../request.js"
@@ -27,7 +27,7 @@ export async function handleProjectMutationBusiness(
   request: IncomingMessage,
   response: ServerResponse,
   context: RequestContext,
-  projects: ProjectService,
+  projects: ProjectMutationStore,
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,

@@ -1,19 +1,8 @@
-import { renameProject } from "./project-rename.js"
-import { deleteProjectAggregate, readProjectDeletion } from "./project-delete.js"
 import type { Pool } from "pg"
 import { randomUUID } from "node:crypto"
 
 import type { Project, ProjectInstructionRevision, Task } from "../../contracts/index.js"
-import type { PostgresBffDatabase } from "./client.js"
-import type {
-  DeleteProjectResult,
-  ProjectDeletionResource,
-  ProjectLookup,
-  ProjectOwnerScope,
-  ProjectRepository,
-  RenameProjectCommand,
-  RenameProjectResult,
-} from "../../application/projects/project-repository.js"
+import type { ProjectLookup, ProjectOwnerScope } from "../../application/projects/types.js"
 
 type ProjectRow = {
   project_id: string
@@ -118,15 +107,9 @@ export function createProjectTaskReader(pool: Pick<Pool, "query">) {
 
 export type ProjectTaskReader = ReturnType<typeof createProjectTaskReader>
 
-export class PostgresProjectRepository implements ProjectRepository {
-  public constructor(private readonly database: PostgresBffDatabase) {}
-
-  public renameProject(command: RenameProjectCommand): Promise<RenameProjectResult> {
-    return renameProject(this.database, command)
-  }
-
-  public async listProjects(scope: ProjectOwnerScope): Promise<Project[]> {
-    const result = await this.database.pool.query<ProjectRow>(
+export function createProjectReadStore(pool: Pick<Pool, "query">) {
+  async function list(scope: ProjectOwnerScope): Promise<Project[]> {
+    const result = await pool.query<ProjectRow>(
       `SELECT project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at
          FROM bff_project
         WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL
@@ -136,11 +119,32 @@ export class PostgresProjectRepository implements ProjectRepository {
     return result.rows.map(projectFromRow)
   }
 
-  public findProject(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null> {
-    return findOwnedProject(this.database.pool, scope, idOrSlug)
+  async function revisions(scope: ProjectOwnerScope, idOrSlug: string): Promise<ProjectInstructionRevision[] | null> {
+    const project = await findOwnedProject(pool, scope, idOrSlug)
+    if (project === null) return null
+    const result = await pool.query<RevisionRow>(
+      `SELECT revision_id, instruction, updated_at, actor_id, current
+         FROM bff_project_instruction_revision
+        WHERE tenant_id = $1 AND project_id = $2
+          AND EXISTS (
+            SELECT 1 FROM bff_project
+             WHERE bff_project.tenant_id = bff_project_instruction_revision.tenant_id
+               AND bff_project.project_id = bff_project_instruction_revision.project_id
+               AND bff_project.owner_id = $3 AND bff_project.deleted_at IS NULL
+          )
+        ORDER BY updated_at DESC, revision_id DESC`,
+      [scope.tenantId, project.id, scope.subjectId],
+    )
+    return result.rows.map(revisionFromRow)
   }
 
-  public async createProject(scope: ProjectOwnerScope, name: string, description: string): Promise<Project> {
+  return { list, revisions }
+}
+
+export type ProjectReadStore = ReturnType<typeof createProjectReadStore>
+
+export function createProjectMutationStore(pool: Pick<Pool, "query" | "connect">) {
+  async function create(scope: ProjectOwnerScope, name: string, description: string): Promise<Project> {
     const projectId = `project_${randomUUID()}`
     const slug =
       name
@@ -148,7 +152,7 @@ export class PostgresProjectRepository implements ProjectRepository {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "") || "project"
     try {
-      const result = await this.database.pool.query<ProjectRow>(
+      const result = await pool.query<ProjectRow>(
         `INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug, description, instruction)
          VALUES ($1, $2, $3, $4, $5, $6, NULL)
          RETURNING project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at`,
@@ -163,8 +167,8 @@ export class PostgresProjectRepository implements ProjectRepository {
     }
   }
 
-  public async updateProjectInstruction(scope: ProjectOwnerScope, idOrSlug: string, instruction: string): Promise<Project | null> {
-    const client = await this.database.pool.connect()
+  async function updateInstruction(scope: ProjectOwnerScope, idOrSlug: string, instruction: string): Promise<Project | null> {
+    const client = await pool.connect()
     try {
       await client.query("BEGIN")
       const project = await client.query<ProjectRow>(
@@ -199,40 +203,10 @@ export class PostgresProjectRepository implements ProjectRepository {
     }
   }
 
-  public async instructionRevisions(scope: ProjectOwnerScope, idOrSlug: string): Promise<ProjectInstructionRevision[] | null> {
-    const project = await this.findProject(scope, idOrSlug)
-    if (project === null) return null
-    const result = await this.database.pool.query<RevisionRow>(
-      `SELECT revision_id, instruction, updated_at, actor_id, current
-         FROM bff_project_instruction_revision
-        WHERE tenant_id = $1 AND project_id = $2
-          AND EXISTS (
-            SELECT 1 FROM bff_project
-             WHERE bff_project.tenant_id = bff_project_instruction_revision.tenant_id
-               AND bff_project.project_id = bff_project_instruction_revision.project_id
-               AND bff_project.owner_id = $3 AND bff_project.deleted_at IS NULL
-          )
-        ORDER BY updated_at DESC, revision_id DESC`,
-      [scope.tenantId, project.id, scope.subjectId],
-    )
-    return result.rows.map(revisionFromRow)
-  }
-
-  public deleteProject(
-    scope: ProjectOwnerScope,
-    projectId: string,
-    key: string,
-    fingerprint: string,
-    requestId: string,
-    signal: AbortSignal,
-  ): Promise<DeleteProjectResult> {
-    return deleteProjectAggregate(this.database, scope, projectId, key, fingerprint, requestId, signal)
-  }
-
-  public projectDeletion(scope: ProjectOwnerScope, projectId: string, signal: AbortSignal): Promise<ProjectDeletionResource | null> {
-    return readProjectDeletion(this.database, scope, projectId, signal)
-  }
+  return { create, updateInstruction }
 }
+
+export type ProjectMutationStore = ReturnType<typeof createProjectMutationStore>
 
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "23505"

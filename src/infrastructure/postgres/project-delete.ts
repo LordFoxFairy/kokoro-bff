@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { performance } from "node:perf_hooks"
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 
-import type { ProjectDeletionResource, ProjectOwnerScope } from "../../application/projects/project-repository.js"
+import type { ProjectDeletionResource, ProjectOwnerScope } from "../../application/projects/types.js"
 import type { PostgresBffDatabase } from "./client.js"
 import { deleteLockedConversationFacts } from "./conversation-delete.js"
 import { pauseProjectScheduledTasks } from "./scheduled-task-repository.js"

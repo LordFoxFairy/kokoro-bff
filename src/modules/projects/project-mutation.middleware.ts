@@ -1,9 +1,10 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, PROJECT_IDEMPOTENCY, PROJECT_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
+import { BFF_CONFIG, PROJECT_IDEMPOTENCY, PROJECT_LOOKUP, PROJECT_MUTATIONS, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/types.js"
+import type { ProjectMutationStore } from "../../infrastructure/postgres/project-store.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
@@ -21,7 +22,8 @@ export class ProjectMutationMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(PROJECT_SERVICE) private readonly projects: ProjectService,
+    @Inject(PROJECT_LOOKUP) private readonly lookup: ProjectLookup,
+    @Inject(PROJECT_MUTATIONS) private readonly mutations: ProjectMutationStore,
     @Inject(PROJECT_IDEMPOTENCY) private readonly persistent: IdempotencyRepository,
   ) {}
 
@@ -71,7 +73,7 @@ export class ProjectMutationMiddleware implements NestMiddleware {
       if (route.kind === "instruction") {
         if (abort.signal.aborted) return
         const { namespace: tenantId, userId: subjectId } = admitted.context.identity
-        const project = await this.projects.find({ tenantId, subjectId }, route.projectId)
+        const project = await this.lookup.find({ tenantId, subjectId }, route.projectId)
         if (abort.signal.aborted) return
         if (project === null) {
           send(response, 404, failure("project_not_found", "Project was not found", id))
@@ -101,7 +103,7 @@ export class ProjectMutationMiddleware implements NestMiddleware {
         return
       }
       mutation = ticket.ticket
-      await handleProjectMutationBusiness(request, response, admitted.context, this.projects, json, mutation, this.idempotency)
+      await handleProjectMutationBusiness(request, response, admitted.context, this.mutations, json, mutation, this.idempotency)
     } catch (error) {
       if (!response.headersSent && !response.writableEnded && !response.destroyed) {
         send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", id))

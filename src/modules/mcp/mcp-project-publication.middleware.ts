@@ -5,7 +5,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
 import type { McpProjectPublicationConnectClient } from "../../infrastructure/clients/platform/mcp-project-publication-connect.js"
-import type { ProjectLookup } from "../../application/projects/project-repository.js"
+import type { ProjectLookup } from "../../application/projects/types.js"
 import { handleMcpProjectPublicationRequest } from "../../http/routes/mcp-project-publication-native.js"
 
 @Injectable()

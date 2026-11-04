@@ -7,18 +7,16 @@ import {
   PROJECT_MCP_RECOMMENDATIONS_STORE,
   PROJECT_PINS,
   PROJECT_TASK_READER,
-  PROJECT_SERVICE,
   PROJECT_SKILL_SELECTION_PROVIDER,
 } from "../../common/tokens.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import type { Pool } from "pg"
-import { createProjectLookup, createProjectTaskReader, PostgresProjectRepository } from "../../infrastructure/postgres/project-repository.js"
+import { createProjectLookup, createProjectTaskReader } from "../../infrastructure/postgres/project-store.js"
 import { createProjectPins } from "../../infrastructure/postgres/project-pin.js"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
 import { createProjectSkillSelectionOperations } from "../../infrastructure/postgres/project-skill-selection.js"
 import { createProjectMcpRecommendationsStore } from "../../infrastructure/postgres/project-mcp-recommendations.js"
-import type { ProjectLookup } from "../../application/projects/project-repository.js"
-import { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/types.js"
 import type { ProjectSkillSelectionProvider } from "../../http/routes/project-skill-selection.js"
 
 /** Project owner capabilities for same-repository feature consumers. */
@@ -29,11 +27,6 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
     { provide: PROJECT_TASK_READER, inject: [BFF_POOL], useFactory: createProjectTaskReader },
     { provide: PROJECT_LOOKUP, inject: [BFF_POOL], useFactory: createProjectLookup },
     { provide: PROJECT_MCP_RECOMMENDATIONS_STORE, inject: [BFF_DATABASE], useFactory: createProjectMcpRecommendationsStore },
-    {
-      provide: PROJECT_SERVICE,
-      inject: [BFF_DATABASE],
-      useFactory: (database: PostgresBffDatabase): ProjectService => new ProjectService(new PostgresProjectRepository(database)),
-    },
     {
       provide: PROJECT_SKILL_SELECTION_PROVIDER,
       inject: [PROJECT_LOOKUP, BFF_DATABASE, BFF_POOL],
@@ -47,6 +40,6 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
       },
     },
   ],
-  exports: [PROJECT_LOOKUP, PROJECT_MCP_RECOMMENDATIONS_STORE, PROJECT_PINS, PROJECT_TASK_READER, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER],
+  exports: [PROJECT_LOOKUP, PROJECT_MCP_RECOMMENDATIONS_STORE, PROJECT_PINS, PROJECT_TASK_READER, PROJECT_SKILL_SELECTION_PROVIDER],
 })
 export class ProjectAccessModule {}

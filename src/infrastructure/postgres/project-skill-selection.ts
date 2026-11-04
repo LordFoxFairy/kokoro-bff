@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import type { ProjectOwnerScope, ProjectSkillSelection } from "../../application/projects/project-repository.js"
+import type { ProjectOwnerScope, ProjectSkillSelection } from "../../application/projects/types.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
 import type { PostgresBffDatabase } from "./client.js"
 import { replaceProjectSkillSelection } from "./project-rename.js"

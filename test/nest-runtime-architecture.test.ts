@@ -34,7 +34,10 @@ test("the compiled production AppModule resolves its real provider graph without
     PROJECT_MCP_RECOMMENDATIONS_STORE,
     PROJECT_PINS,
     PROJECT_TASK_READER,
-    PROJECT_SERVICE,
+    PROJECT_READS,
+    PROJECT_MUTATIONS,
+    PROJECT_RENAME,
+    PROJECT_DELETION,
     PROJECT_SKILL_SELECTION_PROVIDER,
     RUN_DISPLAY_PROVIDER,
     RUN_FINAL_ANSWER_LOOKUP,
@@ -46,6 +49,7 @@ test("the compiled production AppModule resolves its real provider graph without
   const { AgentRunsModule } = await import("../dist/modules/agent-runs/agent-runs.module.js")
   const { ChatModule } = await import("../dist/modules/chat/chat.module.js")
   const { McpModule } = await import("../dist/modules/mcp/mcp.module.js")
+  const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
   const { ProjectAccessModule } = await import("../dist/modules/projects/project-access.module.js")
   const { SkillInstallationAccessModule } = await import("../dist/modules/skills/skill-installation-access.module.js")
   const config = loadConfig({
@@ -98,7 +102,10 @@ test("the compiled production AppModule resolves its real provider graph without
       [McpModule, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
       [ProjectAccessModule, PROJECT_PINS],
       [ProjectAccessModule, PROJECT_TASK_READER],
-      [ProjectAccessModule, PROJECT_SERVICE],
+      [ProjectsModule, PROJECT_READS],
+      [ProjectsModule, PROJECT_MUTATIONS],
+      [ProjectsModule, PROJECT_RENAME],
+      [ProjectsModule, PROJECT_DELETION],
       [ProjectAccessModule, PROJECT_SKILL_SELECTION_PROVIDER],
       [SkillInstallationAccessModule, SKILL_INSTALLATION_CLIENT],
     ] as const) {
@@ -117,7 +124,11 @@ test("the compiled production AppModule resolves its real provider graph without
     assert.equal(projectAccess.get(PROJECT_SKILL_SELECTION_PROVIDER, { strict: true }).find, lookup.find)
     assert.deepEqual(Reflect.ownKeys(projectAccess.get(PROJECT_PINS, { strict: true })), ["listPins", "setPin"])
     assert.equal(typeof projectAccess.get(PROJECT_TASK_READER, { strict: true }), "function")
-    assert.notEqual(lookup, projectAccess.get(PROJECT_SERVICE, { strict: true }))
+    const projects = module.select(ProjectsModule)
+    assert.deepEqual(Reflect.ownKeys(projects.get(PROJECT_READS, { strict: true })), ["list", "revisions"])
+    assert.deepEqual(Reflect.ownKeys(projects.get(PROJECT_MUTATIONS, { strict: true })), ["create", "updateInstruction"])
+    assert.equal(typeof projects.get(PROJECT_RENAME, { strict: true }), "function")
+    assert.deepEqual(Reflect.ownKeys(projects.get(PROJECT_DELETION, { strict: true })), ["delete", "deletion"])
     const reader = module.select(AgentRunsModule).get(AGENT_RUNS_READER, { strict: true })
     assert.notEqual(reader, module.select(AgentDispatchModule).get(AGENT_DISPATCH_OUTBOX, { strict: true }))
     assert.equal(typeof reader.readProjectExecutionBinding, "function")

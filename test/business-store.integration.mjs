@@ -135,8 +135,8 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
     const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
     const { BffExpressAdapter } = await import("../dist/http/bff-express-adapter.js")
     const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
-    // ScheduledTasksModule imports the real ProjectsModule; keep its real repositories and workers.
-    const module = await Test.createTestingModule({ imports: [ScheduledTasksModule] })
+    const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
+    const module = await Test.createTestingModule({ imports: [ProjectsModule, ScheduledTasksModule] })
       .overrideProvider(BFF_CONFIG)
       .useValue(bffConfig({ tenantId: tenant }))
       .overrideProvider(SESSION_ADMISSION)
@@ -627,7 +627,8 @@ async function r73CreateFixture(t) {
     }
   })
   const start = async (tenantId) => {
-    const module = await Test.createTestingModule({ imports: [HealthModule, ScheduledTasksModule] })
+    const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
+    const module = await Test.createTestingModule({ imports: [HealthModule, ProjectsModule, ScheduledTasksModule] })
       .overrideProvider(BFF_CONFIG)
       // Readiness checks IAM URL presence and real PG/Redis; admission still uses the original double.
       .useValue({ ...bffConfig({ tenantId }), iamBaseUrl: "http://127.0.0.1:1" })
@@ -1073,7 +1074,7 @@ import { PostgresProjectScopeReleaseOutboxRepository } from "../dist/infrastruct
 import { ProjectScopeReleaseOutboxDispatcher } from "../dist/application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../dist/infrastructure/clients/storage/scope-release-client.js"
 import { ScheduledTaskService } from "../dist/application/scheduled-task-service.js"
-import { createProjectTaskReader, PostgresProjectRepository } from "../dist/infrastructure/postgres/project-repository.js"
+import { createProjectTaskReader, createProjectMutationStore, createProjectReadStore } from "../dist/infrastructure/postgres/project-store.js"
 import { createOwnedRunProcessReader } from "../dist/infrastructure/postgres/agui-process-page.js"
 import { PostgresChatSessionStore } from "../dist/infrastructure/postgres/chat-session-store.js"
 import { PostgresScheduledTaskRepository } from "../dist/infrastructure/postgres/scheduled-task-repository.js"
@@ -1146,7 +1147,8 @@ async function r237Fixture(t, lane) {
     } = await import("../dist/common/tokens.js")
     const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
     const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
-    const builder = Test.createTestingModule({ imports: [ScheduledTasksModule] })
+    const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
+    const builder = Test.createTestingModule({ imports: [ProjectsModule, ScheduledTasksModule] })
       .overrideProvider(BFF_CONFIG)
       .useValue(config)
       .overrideProvider(SESSION_ADMISSION)
@@ -1580,10 +1582,10 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
   await t.test("instruction UPDATE and Skill parent lock", async (t) => {
     const f = await r237Fixture(t, "postgres")
     const project = await f.project("deleted")
-    const repository = new PostgresProjectRepository({ pool: f.pool })
+    const mutations = createProjectMutationStore(f.pool)
     const before = await f.facts()
     for (const ref of [project.id, project.slug]) {
-      assert.equal(await repository.updateProjectInstruction(f.scope, ref, "Denied"), null)
+      assert.equal(await mutations.updateInstruction(f.scope, ref, "Denied"), null)
       assert.deepEqual(
         await createProjectSkillSelectionOperations({ pool: f.pool }).replaceSkillSelection(
           f.scope,
@@ -1644,10 +1646,9 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
         assert.deepEqual(result, originalPage)
         assert.equal(await new PostgresChatSessionStore({ pool: f.pool }).listMessages(f.tenant, f.owner, conversation, 20, null), null)
       } else {
-        const repository = new PostgresProjectRepository(database)
         const result =
           operation === "revisions"
-            ? await repository.instructionRevisions(f.scope, project.id)
+            ? await createProjectReadStore(database.pool).revisions(f.scope, project.id)
             : await createProjectTaskReader(database.pool)(f.scope, project.slug)
         assert.deepEqual(result, [])
       }
@@ -1887,11 +1888,12 @@ integrationTest("R237 Message existing active and Direct positive controls and t
 async function r241Fixture(t, { observeDeletionSignal, withScheduledTasks = false } = {}) {
   await import("reflect-metadata")
   const { Test } = await import("@nestjs/testing")
-  const { BFF_CONFIG, BFF_DATABASE, PROJECT_SERVICE, SCHEDULED_TASK_DISPATCHER, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_CONFIG, BFF_DATABASE, PROJECT_DELETION, SCHEDULED_TASK_DISPATCHER, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
   const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
-  const feature = withScheduledTasks
-    ? (await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")).ScheduledTasksModule
-    : (await import("../dist/modules/projects/projects.module.js")).ProjectsModule
+  const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
+  const features = withScheduledTasks
+    ? [ProjectsModule, (await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")).ScheduledTasksModule]
+    : [ProjectsModule]
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `r241_${randomUUID().replaceAll("-", "")}`
   const owner = "r241_owner"
@@ -1934,7 +1936,7 @@ async function r241Fixture(t, { observeDeletionSignal, withScheduledTasks = fals
   assert.ok(tables.includes("bff_project") && tables.includes("bff_idempotency_receipt"), "Root must install the existing canonical schema")
   assert.ok(tables.every((name) => /^bff_[a-z_]+$/u.test(name)))
   const start = async (configTenant = tenant) => {
-    const builder = Test.createTestingModule({ imports: [feature] })
+    const builder = Test.createTestingModule({ imports: features })
       .overrideProvider(BFF_CONFIG)
       .useValue(bffConfig({ tenantId: configTenant }))
       .overrideProvider(SESSION_ADMISSION)
@@ -1944,9 +1946,9 @@ async function r241Fixture(t, { observeDeletionSignal, withScheduledTasks = fals
     app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
     await app.get(BFF_DATABASE).ready()
     if (observeDeletionSignal !== undefined) {
-      const projectService = app.get(PROJECT_SERVICE)
-      const readDeletion = projectService.deletion.bind(projectService)
-      projectService.deletion = (scope, projectId, signal) => {
+      const deletion = app.get(PROJECT_DELETION)
+      const readDeletion = deletion.deletion.bind(deletion)
+      deletion.deletion = (scope, projectId, signal) => {
         observeDeletionSignal(signal)
         return readDeletion(scope, projectId, signal)
       }
@@ -3505,6 +3507,7 @@ async function r278Fixture(t) {
   const { BFF_CONFIG, BFF_DATABASE, SCHEDULED_TASK_DISPATCHER, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
   const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
   const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
+  const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `r278_${randomUUID().replaceAll("-", "")}`
   const owner = "r278_owner"
@@ -3540,7 +3543,7 @@ async function r278Fixture(t) {
   ).rows.map((row) => row.table_name)
   assert.ok(tables.includes("bff_project") && tables.includes("bff_idempotency_receipt"), "Root must install the existing canonical schema")
   assert.ok(tables.every((name) => /^bff_[a-z_]+$/u.test(name)))
-  const module = await Test.createTestingModule({ imports: [ScheduledTasksModule] })
+  const module = await Test.createTestingModule({ imports: [ProjectsModule, ScheduledTasksModule] })
     .overrideProvider(BFF_CONFIG)
     .useValue(bffConfig({ tenantId: tenant }))
     .overrideProvider(SESSION_ADMISSION)

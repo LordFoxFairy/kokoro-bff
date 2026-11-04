@@ -1,6 +1,6 @@
 import { projectPinId, projectPinInstant, type ProjectPinPosition } from "../domain/project/pin.js"
 import { strictParseRawJson } from "../infrastructure/raw-json.js"
-import type { ProjectOwnerScope } from "../application/projects/project-repository.js"
+import type { ProjectOwnerScope } from "../application/projects/types.js"
 
 const invalid = (): never => {
   throw new Error("project_pin_request_invalid")

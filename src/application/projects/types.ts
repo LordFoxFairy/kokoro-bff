@@ -1,6 +1,6 @@
 import type { ProjectPinPosition } from "../../domain/project/pin.js"
 import type { ProjectMcpRecommendation, ProjectMcpRecommendations } from "../../domain/project/mcp-recommendations.js"
-import type { Project, ProjectInstructionRevision } from "../../contracts/index.js"
+import type { Project } from "../../contracts/index.js"
 
 export type ProjectOwnerScope = Readonly<{
   tenantId: string
@@ -35,28 +35,10 @@ export type ProjectDeletionResource = Readonly<{
 export type DeleteProjectResult =
   Readonly<{ kind: "accepted"; resource: ProjectDeletionResource; location: string }> | Readonly<{ kind: "not_found" | "conflict" | "in_progress" }>
 
-/** Port consumed by the BFF application layer. It contains no SQL or driver types. */
+/** Pin inputs used by the Project-owned persistence and HTTP adapter. */
 export type ProjectPinQuery = ProjectOwnerScope &
   Readonly<{ projectId: string | null; limit: number; position: ProjectPinPosition | null; signal: AbortSignal; deadlineAt: number }>
 export type SetProjectPin = ProjectOwnerScope & Readonly<{ projectId: string; isPinned: boolean; signal: AbortSignal; deadlineAt: number }>
-export interface ProjectRepository {
-  deleteProject(
-    scope: ProjectOwnerScope,
-    projectId: string,
-    key: string,
-    fingerprint: string,
-    requestId: string,
-    signal: AbortSignal,
-  ): Promise<DeleteProjectResult>
-  projectDeletion(scope: ProjectOwnerScope, projectId: string, signal: AbortSignal): Promise<ProjectDeletionResource | null>
-  renameProject(command: RenameProjectCommand): Promise<RenameProjectResult>
-  listProjects(scope: ProjectOwnerScope): Promise<Project[]>
-  findProject(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null>
-  createProject(scope: ProjectOwnerScope, name: string, description: string): Promise<Project>
-  updateProjectInstruction(scope: ProjectOwnerScope, idOrSlug: string, instruction: string): Promise<Project | null>
-  instructionRevisions(scope: ProjectOwnerScope, idOrSlug: string): Promise<ProjectInstructionRevision[] | null>
-}
-
 export type ProjectMcpRecommendationQuery = ProjectOwnerScope & Readonly<{ projectId: string; signal: AbortSignal; deadlineAt: number }>
 export type ReplaceProjectMcpRecommendations = ProjectMcpRecommendationQuery &
   Readonly<{ expectedStateVersion: string; recommendations: ProjectMcpRecommendation[] }>

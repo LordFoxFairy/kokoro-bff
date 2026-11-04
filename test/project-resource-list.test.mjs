@@ -1,13 +1,6 @@
 import "reflect-metadata"
 import { Test } from "@nestjs/testing"
-import {
-  BFF_CONFIG,
-  BFF_DATABASE,
-  PROJECT_SCOPE_RELEASE_DISPATCHER,
-  PROJECT_SERVICE,
-  PROJECT_SKILL_SELECTION_PROVIDER,
-  SESSION_ADMISSION,
-} from "../dist/common/tokens.js"
+import { BFF_CONFIG, BFF_DATABASE, PROJECT_SCOPE_RELEASE_DISPATCHER, PROJECT_LOOKUP, SESSION_ADMISSION } from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
 import { ProjectsModule } from "../dist/modules/projects/projects.module.js"
 import "./project-resource-access.test.mjs"
@@ -377,10 +370,8 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
         pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
         redis: Object.freeze({}),
       })
-      .overrideProvider(PROJECT_SERVICE)
+      .overrideProvider(PROJECT_LOOKUP)
       .useValue(projectService)
-      .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
-      .useValue(null)
       .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
       .useValue(null)
       .overrideProvider(SESSION_ADMISSION)

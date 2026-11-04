@@ -335,8 +335,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
   const { Test } = await import("@nestjs/testing")
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { BFF_CONFIG, BFF_DATABASE, PROJECT_SCOPE_RELEASE_DISPATCHER, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER, SESSION_ADMISSION } =
-    await import("../dist/common/tokens.js")
+  const { BFF_CONFIG, BFF_DATABASE, PROJECT_SCOPE_RELEASE_DISPATCHER, PROJECT_LOOKUP, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
   const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
   const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
   const { PostgresIdempotencyRepository } = await import("../dist/infrastructure/postgres/idempotency-repository.js")
@@ -466,10 +465,8 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
         pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
         redis: Object.freeze({}),
       })
-      .overrideProvider(PROJECT_SERVICE)
+      .overrideProvider(PROJECT_LOOKUP)
       .useValue(projectService)
-      .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
-      .useValue(null)
       .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
       .useValue(null)
       .overrideProvider(SESSION_ADMISSION)

@@ -1,5 +1,5 @@
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
-import type { ProjectPinQuery, SetProjectPin } from "../../application/projects/project-repository.js"
+import type { ProjectPinQuery, SetProjectPin } from "../../application/projects/types.js"
 import type { ProjectPin, ProjectPinList, ProjectPinState } from "../../domain/project/pin.js"
 import { projectPinId } from "../../domain/project/pin.js"
 import type { PostgresBffDatabase } from "./client.js"

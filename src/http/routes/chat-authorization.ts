@@ -5,7 +5,7 @@ import type { ConversationCollectionFilter } from "../../application/chat/types.
 import type { RequestContext } from "../../domain/request-context.js"
 import { queryOf } from "../request.js"
 import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
-import type { ProjectLookup } from "../../application/projects/project-repository.js"
+import type { ProjectLookup } from "../../application/projects/types.js"
 
 export type ChatAuthorization =
   | Readonly<{ ok: true; projectRef?: string; collectionFilter?: ConversationCollectionFilter }>

@@ -5,7 +5,10 @@ import {
   BFF_POOL,
   PROJECT_PINS,
   PROJECT_TASK_READER,
-  PROJECT_SERVICE,
+  PROJECT_LOOKUP,
+  PROJECT_READS,
+  PROJECT_RENAME,
+  PROJECT_DELETION,
   PROJECT_SKILL_SELECTION_PROVIDER,
   SKILL_AUTHORIZATION,
   SKILL_INSTALLATION_CLIENT,
@@ -15,8 +18,10 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { Pool } from "pg"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
+import type { ProjectLookup } from "../../application/projects/types.js"
+import type { ProjectDeletion, ProjectRenamer } from "../../application/projects/commands.js"
 import type { ProjectPinProvider } from "../../infrastructure/postgres/project-pin.js"
-import type { ProjectTaskReader } from "../../infrastructure/postgres/project-repository.js"
+import type { ProjectReadStore, ProjectTaskReader } from "../../infrastructure/postgres/project-store.js"
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import {
   handleProjectSkillSelectionRequest,
@@ -35,7 +40,6 @@ import {
   handleProjectResourceDeleteRequest,
   handleProjectResourceReadRequest,
   handleProjectResourceUploadRequest,
-  type ProjectCoreReadProvider,
 } from "../../http/routes/project-native.js"
 
 @Injectable()
@@ -46,7 +50,10 @@ export class ProjectPinMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(PROJECT_SERVICE) private readonly projectService: ProjectCoreReadProvider,
+    @Inject(PROJECT_LOOKUP) private readonly lookup: ProjectLookup,
+    @Inject(PROJECT_READS) private readonly reads: ProjectReadStore,
+    @Inject(PROJECT_RENAME) private readonly rename: ProjectRenamer,
+    @Inject(PROJECT_DELETION) private readonly deletion: ProjectDeletion,
     @Inject(PROJECT_PINS) private readonly pins: ProjectPinProvider,
     @Inject(PROJECT_TASK_READER) private readonly readTasks: ProjectTaskReader,
     @Inject(PROJECT_SKILL_SELECTION_PROVIDER) private readonly projectSkillSelection: ProjectSkillSelectionProvider,
@@ -60,35 +67,27 @@ export class ProjectPinMiddleware implements NestMiddleware {
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void (
       isProjectSkillInstallationRequest(request)
-        ? handleProjectSkillInstallationRequest(
-            request,
-            response,
-            this.config,
-            this.admission,
-            this.skillAuthorization,
-            this.projectService,
-            this.installationClient,
-          )
+        ? handleProjectSkillInstallationRequest(request, response, this.config, this.admission, this.skillAuthorization, this.lookup, this.installationClient)
         : isProjectSkillSelectionRequest(request)
           ? handleProjectSkillSelectionRequest(request, response, this.config, this.admission, this.projectSkillSelection, this.installationClient)
           : Promise.resolve(false)
     )
-      .then((handled) => handled || handleProjectRenameRequest(request, response, this.config, this.admission, this.projectService))
-      .then((handled) => handled || handleProjectDeleteRequest(request, response, this.config, this.admission, this.projectService))
-      .then((handled) => handled || handleProjectDeletionStatusRequest(request, response, this.config, this.admission, this.projectService))
-      .then((handled) => handled || handleProjectResourceDeleteRequest(request, response, this.config, this.admission, this.projectService))
+      .then((handled) => handled || handleProjectRenameRequest(request, response, this.config, this.admission, this.rename))
+      .then((handled) => handled || handleProjectDeleteRequest(request, response, this.config, this.admission, this.deletion))
+      .then((handled) => handled || handleProjectDeletionStatusRequest(request, response, this.config, this.admission, this.deletion))
+      .then((handled) => handled || handleProjectResourceDeleteRequest(request, response, this.config, this.admission, this.lookup))
       .then(
         (handled) =>
           handled ||
           handleProjectResourceUploadRequest(request, response, this.config, this.admission, {
-            find: this.projectService.find.bind(this.projectService),
+            find: this.lookup.find,
             receipts: this.projectResourceReceipts,
             idempotency: this.projectResourceIdempotency,
           }),
       )
-      .then((handled) => handled || handleProjectResourceReadRequest(request, response, this.config, this.admission, this.projectService))
-      .then((handled) => handled || handleProjectResourceListRequest(request, response, this.config, this.admission, this.projectService))
-      .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.projectService, this.readTasks))
+      .then((handled) => handled || handleProjectResourceReadRequest(request, response, this.config, this.admission, this.lookup))
+      .then((handled) => handled || handleProjectResourceListRequest(request, response, this.config, this.admission, this.lookup))
+      .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.reads, this.lookup, this.readTasks))
       .then((handled) => handled || handleProjectPinRequest(request, response, this.config, this.admission, this.pins))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()

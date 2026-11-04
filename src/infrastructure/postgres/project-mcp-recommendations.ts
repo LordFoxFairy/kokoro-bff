@@ -4,7 +4,7 @@ import type {
   ProjectMcpRecommendationQuery,
   ReplaceProjectMcpRecommendations,
   ReplaceProjectMcpRecommendationsResult,
-} from "../../application/projects/project-repository.js"
+} from "../../application/projects/types.js"
 import type { PostgresBffDatabase } from "./client.js"
 
 /** A single bounded Project configuration transaction. It never touches command receipts. */

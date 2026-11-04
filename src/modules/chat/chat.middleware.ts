@@ -46,7 +46,7 @@ import { handleChatEventsRequest } from "../../http/routes/chat-events-native.js
 import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import type { AgUiProjectionConsumerRepository } from "../../application/agui/ports/agui-projection-repository.js"
 import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
-import type { ProjectLookup } from "../../application/projects/project-repository.js"
+import type { ProjectLookup } from "../../application/projects/types.js"
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import { handleChatMessageRequest } from "../../http/routes/chat-message-native.js"
 

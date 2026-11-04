@@ -3,15 +3,14 @@ import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import pg from "pg"
 import { createProjectPins } from "../src/infrastructure/postgres/project-pin.ts"
-import { PostgresProjectRepository } from "../src/infrastructure/postgres/project-repository.ts"
+import { deleteProjectAggregate } from "../src/infrastructure/postgres/project-delete.ts"
 const databaseUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const integration = databaseUrl ? test : test.skip
 integration("real PG personal pins preserve metadata, handle keysets/noops/owner fences, and delete atomically", async () => {
   const url = new URL(databaseUrl)
   assert.match(url.pathname, /^\/kokoro_bff_project_pin_[0-9a-f]{32}$/u, "dedicated Project pin fixture database required")
   const pool = new pg.Pool({ connectionString: databaseUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 5 })
-  const repository = new PostgresProjectRepository({ pool }),
-    pins = createProjectPins({ pool }),
+  const pins = createProjectPins({ pool }),
     tenantId = `pin_${randomUUID()}`,
     subjectId = "owner",
     scope = { tenantId, subjectId }
@@ -19,7 +18,8 @@ integration("real PG personal pins preserve metadata, handle keysets/noops/owner
   const q = (id = ids[0]) => ({ ...scope, projectId: id, signal: new AbortController().signal, deadlineAt: performance.now() + 5000 })
   const page = (extra = {}) => pins.listPins({ ...q(), projectId: null, limit: 100, position: null, ...extra })
   const set = (id, value) => pins.setPin({ ...q(id), isPinned: value })
-  const del = (id, fingerprint = "a".repeat(64)) => repository.deleteProject(scope, id, `delete-${id}`, fingerprint, "pin-test", new AbortController().signal)
+  const del = (id, fingerprint = "a".repeat(64)) =>
+    deleteProjectAggregate({ pool }, scope, id, `delete-${id}`, fingerprint, "pin-test", new AbortController().signal)
   try {
     for (const id of ids)
       await pool.query("INSERT INTO bff_project(project_id,tenant_id,owner_id,name,slug) VALUES($1,$2,$3,'Pin fixture',$1)", [id, tenantId, subjectId])
