@@ -11,7 +11,7 @@ import { failure } from "../../contracts/index.js"
 import { mutationTicket } from "../../application/idempotency.js"
 import { idempotencyKey, mutationFingerprint, pathOf, readBody, requestBodyJson, requestId } from "../../http/request.js"
 import { send } from "../../http/response.js"
-import { handleProjectMutationBusiness, projectMutation } from "../../http/routes/project-mutation-native.js"
+import { handleProjectMutationBusiness, projectMutation, type ProjectMutation } from "../../http/routes/project-mutation-native.js"
 
 /** Projects-owned create/instruction commands; unrelated traffic continues to the next feature. */
 @Injectable()
@@ -31,13 +31,13 @@ export class ProjectMutationMiddleware implements NestMiddleware {
       next()
       return
     }
-    void this.handle(request, response).catch(() => {
+    void this.handle(request, response, route).catch(() => {
       if (!response.headersSent && !response.writableEnded && !response.destroyed)
         send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", requestId(request)))
     })
   }
 
-  private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  private async handle(request: IncomingMessage, response: ServerResponse, route: ProjectMutation): Promise<void> {
     const id = requestId(request)
     response.setHeader("x-request-id", id)
     const abort = new AbortController()
@@ -53,16 +53,30 @@ export class ProjectMutationMiddleware implements NestMiddleware {
         send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
         return
       }
+      const key = idempotencyKey(request)
+      if (route.kind === "instruction" && key === null) {
+        send(response, 400, failure("idempotency_key_required", "Mutations require Idempotency-Key", id))
+        return
+      }
       const body = await readBody(request)
       const json = requestBodyJson(request, body)
       if (json === null) {
         send(response, 400, failure("invalid_json", "Request body must be a JSON object", id))
         return
       }
-      const key = idempotencyKey(request)
       if (key === null) {
         send(response, 400, failure("idempotency_key_required", "Mutations require Idempotency-Key", id))
         return
+      }
+      if (route.kind === "instruction") {
+        if (abort.signal.aborted) return
+        const { namespace: tenantId, userId: subjectId } = admitted.context.identity
+        const project = await this.projects.find({ tenantId, subjectId }, route.projectId)
+        if (abort.signal.aborted) return
+        if (project === null) {
+          send(response, 404, failure("project_not_found", "Project was not found", id))
+          return
+        }
       }
       const businessPath = pathOf(request).slice(1)
       const ticket = await mutationTicket(

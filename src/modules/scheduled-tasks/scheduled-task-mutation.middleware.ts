@@ -62,7 +62,7 @@ export class ScheduledTaskMutationMiddleware implements NestMiddleware {
         return
       }
       const key = idempotencyKey(request)
-      if (route.kind === "create" && key === null) {
+      if ((route.kind === "create" || route.kind === "project_create") && key === null) {
         send(response, 400, failure("idempotency_key_required", "Mutations require Idempotency-Key", id))
         return
       }
@@ -89,14 +89,19 @@ export class ScheduledTaskMutationMiddleware implements NestMiddleware {
           send(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", id))
           return
         }
+        checkedCreate = input
+      }
+      if (route.kind === "create" || route.kind === "project_create") {
         if (abort.signal.aborted) return
-        const access = await authorizeScheduledTaskMutation("POST", admitted.context, path, input, { projects: this.projects, scheduledTasks: this.tasks })
+        const access = await authorizeScheduledTaskMutation("POST", admitted.context, path, checkedCreate ?? null, {
+          projects: this.projects,
+          scheduledTasks: this.tasks,
+        })
         if (abort.signal.aborted) return
         if (access !== null && !access.ok) {
           send(response, access.status, failure(access.code, access.message, id))
           return
         }
-        checkedCreate = input
       }
       const ticket = await mutationTicket(
         key,

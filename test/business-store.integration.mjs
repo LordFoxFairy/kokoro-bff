@@ -1046,15 +1046,17 @@ import { PostgresScheduledTaskRepository } from "../dist/infrastructure/postgres
 const r237IdleWorker = { start() {}, async stop() {} }
 const r237Tombstone = "2026-09-01T00:00:00.000Z"
 
-async function r237Fixture(t) {
+async function r237Fixture(t, { projectMatrix = false } = {}) {
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `r237_${randomUUID().replaceAll("-", "")}`
   const owner = "r237_owner"
   let store
   let bff
+  let app
   const tables = []
   t.after(async () => {
     try {
+      if (app) await app.close()
       if (bff) await close(bff)
     } finally {
       try {
@@ -1088,14 +1090,54 @@ async function r237Fixture(t) {
   )
   tables.push(...catalog.rows.map((row) => row.table_name))
   assert.ok(tables.every((name) => /^bff_[a-z_]+$/u.test(name)))
-  store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-  await store.ready()
-  bff = createBffServer(
-    {
-      ...bffConfig({ tenantId: tenant, agentEnabled: true, agentBase: "http://127.0.0.1:9" }),
-      storage: { baseUrl: "http://127.0.0.1:9", secret: "r237-no-storage-service", objectOrigin: "http://127.0.0.1:9" },
-    },
-    {
+  const config = {
+    ...bffConfig({ tenantId: tenant, agentEnabled: true, agentBase: "http://127.0.0.1:9" }),
+    storage: { baseUrl: "http://127.0.0.1:9", secret: "r237-no-storage-service", objectOrigin: "http://127.0.0.1:9" },
+  }
+  let base
+  if (projectMatrix) {
+    await import("reflect-metadata")
+    const { Test } = await import("@nestjs/testing")
+    const {
+      AGENT_CANCELLATION_DISPATCHER,
+      AGENT_DISPATCH_DISPATCHER,
+      AGUI_PROJECTOR,
+      BFF_CONFIG,
+      BFF_DATABASE,
+      PROJECT_SCOPE_RELEASE_DISPATCHER,
+      SCHEDULED_AGENT_DISPATCHER,
+      SCHEDULED_AGENT_TERMINAL_CONSUMER,
+      SCHEDULED_TASK_DISPATCHER,
+      SESSION_ADMISSION,
+    } = await import("../dist/common/tokens.js")
+    const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+    const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
+    const builder = Test.createTestingModule({ imports: [ScheduledTasksModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(sessionAdmission)
+    // The matrix inspects durable rows; delivery and cleanup workers are not under test.
+    for (const token of [
+      AGENT_CANCELLATION_DISPATCHER,
+      AGENT_DISPATCH_DISPATCHER,
+      AGUI_PROJECTOR,
+      PROJECT_SCOPE_RELEASE_DISPATCHER,
+      SCHEDULED_AGENT_DISPATCHER,
+      SCHEDULED_AGENT_TERMINAL_CONSUMER,
+      SCHEDULED_TASK_DISPATCHER,
+    ]) {
+      builder.overrideProvider(token).useValue(r237IdleWorker)
+    }
+    const module = await builder.compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    await app.get(BFF_DATABASE).ready()
+    await app.listen(0, "127.0.0.1")
+    base = await app.getUrl()
+  } else {
+    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+    await store.ready()
+    bff = createBffServer(config, {
       businessStore: store,
       sessionAdmission,
       agentDispatchDispatcher: r237IdleWorker,
@@ -1104,9 +1146,9 @@ async function r237Fixture(t) {
       scheduledTaskDispatcher: r237IdleWorker,
       scheduledAgentDispatcher: r237IdleWorker,
       scheduledAgentTerminalConsumer: r237IdleWorker,
-    },
-  )
-  const base = await listen(bff)
+    })
+    base = await listen(bff)
+  }
   const request = async (path, method = "GET", body, options = {}) => {
     const response = await fetch(`${base}/v1/${path}`, {
       method,
@@ -1182,7 +1224,7 @@ function r237Schedule(projectId) {
 integrationTest("R237 HTTP Project active and denied ID-slug matrix leaves complete facts unchanged", async (t) => {
   for (const kind of ["deleted", "owner", "tenant"])
     await t.test(kind, async (t) => {
-      const f = await r237Fixture(t)
+      const f = await r237Fixture(t, { projectMatrix: true })
       const active = await f.project()
       const hidden = await f.project(kind)
       const list = await f.request("projects")
@@ -1212,6 +1254,38 @@ integrationTest("R237 HTTP Project active and denied ID-slug matrix leaves compl
         assert.equal((await f.request("scheduled-tasks", "POST", r237Schedule(ref))).status, 200)
       }
       assert.equal((await f.pool.query("SELECT instruction FROM bff_project WHERE project_id=$1", [active.id])).rows[0].instruction, `Allowed ${active.slug}`)
+
+      if (kind === "deleted") {
+        const projectPath = `projects/${active.id}`
+        const nestedPath = `projects/${active.slug}/scheduled-tasks`
+        const patch = () => f.request(projectPath, "PATCH", { instruction: "Replay before deletion" }, { key: "r237-instruction-replay" })
+        const createNested = () => f.request(nestedPath, "POST", r237Schedule(), { key: "r237-nested-replay" })
+        const instruction = await patch()
+        const scheduled = await createNested()
+        assert.equal(instruction.status, 200)
+        assert.equal(scheduled.status, 200)
+        assert.equal(scheduled.body.data.task.project_id, active.id)
+        const beforeReplay = await f.facts()
+        const replayedInstruction = await patch()
+        const replayedTask = await createNested()
+        assert.equal(replayedInstruction.status, 200)
+        assert.equal(replayedTask.status, 200)
+        assert.deepEqual(replayedInstruction.body, instruction.body)
+        assert.deepEqual(replayedTask.body, scheduled.body)
+        assert.deepEqual(await f.facts(), beforeReplay)
+
+        const tombstone = await f.pool.query("UPDATE bff_project SET deleted_at=$1 WHERE project_id=$2 AND tenant_id=$3 AND owner_id=$4", [
+          r237Tombstone,
+          active.id,
+          f.tenant,
+          f.owner,
+        ])
+        assert.equal(tombstone.rowCount, 1)
+        await f.deny(patch, 404, "project_not_found")
+        await f.deny(createNested, 404, "project_not_found")
+        await f.deny(() => f.request(projectPath, "PATCH", {}), 404, "project_not_found")
+        await f.deny(() => f.request(nestedPath, "POST", {}), 404, "project_not_found")
+      }
     })
 })
 
