@@ -1,6 +1,16 @@
 import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
 import { fixtureNativeSession } from "./doubles/iam-native-session.ts"
+import "reflect-metadata"
 import assert from "node:assert/strict"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, PROJECT_IDEMPOTENCY, PROJECT_SERVICE, PUBLIC_SHARE_SERVICE, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { AccountModule } from "../dist/modules/account/account.module.js"
+import { ChatModule } from "../dist/modules/chat/chat.module.js"
+import { ProjectsModule } from "../dist/modules/projects/projects.module.js"
+import type { ProjectService } from "../src/application/project-service.ts"
+import type { IdempotencyRepository, PersistentReceipt } from "../src/application/ports/idempotency-repository.ts"
+import type { SessionAdmission } from "../src/auth/session-admission.types.ts"
 import { createServer, request as httpRequest, type Server, type IncomingMessage } from "node:http"
 import { afterEach, test } from "node:test"
 
@@ -8,10 +18,12 @@ import { admitBrowserService } from "../src/auth/browser-service-credential.poli
 import type { SkillAuthorizationInput } from "../src/auth/skill-authorization.types.ts"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { AppModule } from "../dist/app.module.js"
 import type { BffConfig } from "../src/config/runtime.ts"
+import { startAccountTestApp } from "./doubles/account-app.ts"
 import { createLiveTestBffServer } from "./doubles/server.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
+import { startSkillDraftTestApp } from "./doubles/skill-draft-app.ts"
 
 const servers: Server[] = []
 const iamCredentials = await fixtureIamCredentials("tenant-server")
@@ -58,8 +70,71 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`
 }
 
+const nestClosers: Array<() => Promise<void>> = []
+
+async function listenNativeAdmission(config: BffConfig, feature = AccountModule): Promise<string> {
+  const unexpected = (): never => assert.fail("session admission must not access account storage")
+  const module = await Test.createTestingModule({ imports: [feature] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected }, ready: unexpected })
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  nestClosers.push(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  return app.getUrl()
+}
+
+async function listenNativeProjectAdmission(
+  config: BffConfig,
+  admission?: SessionAdmission,
+  receipts?: Pick<IdempotencyRepository, "claimReceipt" | "putReceipt" | "releaseReceipt">,
+  includeTeam = false,
+): Promise<{ base: string; projects: ProjectService }> {
+  const unexpected = (): never => assert.fail("admission fixture must not access Project storage")
+  const builder = Test.createTestingModule({ imports: includeTeam ? [ProjectsModule, AccountModule] : [ProjectsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected }, redis: Object.freeze({}) })
+  if (admission !== undefined) builder.overrideProvider(SESSION_ADMISSION).useValue(admission)
+  if (receipts !== undefined) builder.overrideProvider(PROJECT_IDEMPOTENCY).useValue(receipts)
+  const module = await builder.compile()
+  const projects = module.get<ProjectService>(PROJECT_SERVICE)
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  nestClosers.push(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  return { base: await app.getUrl(), projects }
+}
+
+async function listenNativePublicShare(
+  admission: SessionAdmission,
+  owner: { findActiveShare: () => Promise<unknown>; listMessages: () => Promise<unknown> },
+): Promise<string> {
+  const unexpected = (): never => assert.fail("public Share fixture must not access BFF storage")
+  const module = await Test.createTestingModule({ imports: [ChatModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config())
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected }, redis: Object.freeze({}) })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+    .overrideProvider(PUBLIC_SHARE_SERVICE)
+    .useValue(owner)
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  nestClosers.push(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  return app.getUrl()
+}
+
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
+  try {
+    await Promise.all(nestClosers.splice(0).map((close) => close()))
+  } finally {
+    await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
+  }
 })
 
 test("GET /v1/me projects only the online IAM-admitted Product identity", async () => {
@@ -77,7 +152,7 @@ test("GET /v1/me projects only the online IAM-admitted Product identity", async 
       )
     }),
   )
-  const base = await listen(createBffServer({ ...config(), iamBaseUrl: iam }, { businessStore: null, readiness: async () => undefined }))
+  const base = await listenNativeAdmission({ ...config(), iamBaseUrl: iam })
   const headers = {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
@@ -131,7 +206,7 @@ test("GET /v1/me preserves fixed-tenant and IAM denial semantics without busines
       )
     }),
   )
-  const base = await listen(createBffServer({ ...config(), iamBaseUrl: iam }, { businessStore: null, readiness: async () => undefined }))
+  const base = await listenNativeAdmission({ ...config(), iamBaseUrl: iam })
   const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", origin: "https://web.example.test" }
   assert.equal(
     (await fetch(base + "/v1/me", { headers: { ...headers, "x-kokoro-internal-secret": "wrong", cookie: "kokoro-issuer.session_token=invalid" } })).status,
@@ -155,8 +230,8 @@ test("GET /v1/me preserves fixed-tenant and IAM denial semantics without busines
     calls,
     ["invalid", "foreign", "rate"].map((value) => `kokoro-issuer.session_token=${value}`),
   )
-  const missing = await listen(createBffServer({ ...config(), iamBaseUrl: iam, tenantId: null }, { businessStore: null, readiness: async () => undefined }))
-  const unavailable = await listen(createBffServer({ ...config(), iamBaseUrl: null }, { businessStore: null, readiness: async () => undefined }))
+  const missing = await listenNativeAdmission({ ...config(), iamBaseUrl: iam, tenantId: null })
+  const unavailable = await listenNativeAdmission({ ...config(), iamBaseUrl: null })
   for (const [url, code] of [
     [missing, "product_tenant_not_configured"],
     [unavailable, "iam_admission_unavailable"],
@@ -168,15 +243,9 @@ test("GET /v1/me preserves fixed-tenant and IAM denial semantics without busines
   assert.equal(calls.length, 3)
 })
 
-test("legacy identity headers cannot authorize a user request without a native Session Cookie", async () => {
-  let routeCalls = 0
-  const server = createLiveTestBffServer(config(), {
-    routeHandler: async ({ response }): Promise<void> => {
-      routeCalls += 1
-      response.writeHead(204).end()
-    },
-  })
-  const base = await listen(server)
+test("legacy identity headers cannot authorize a user request without a native Session Cookie", async (t) => {
+  const { base, projects } = await listenNativeProjectAdmission(config())
+  const projectReads = t.mock.method(projects, "list")
 
   const response = await fetch(`${base}/v1/projects`, {
     headers: {
@@ -190,15 +259,11 @@ test("legacy identity headers cannot authorize a user request without a native S
 
   assert.equal(response.status, 401)
   assert.equal(((await response.json()) as { error: { code: string } }).error.code, "session_authentication_required")
-  assert.equal(routeCalls, 0)
+  assert.equal(projectReads.mock.callCount(), 0)
 })
 
 test("the default production composition fails user traffic and readiness closed when IAM is not configured", async () => {
-  const server = createBffServer(config(), {
-    businessStore: null,
-    readiness: async (): Promise<void> => undefined,
-  })
-  const base = await listen(server)
+  const base = await listenNativeAdmission(config(), AppModule)
 
   const ready = await fetch(`${base}/readyz`)
   const user = await fetch(`${base}/v1/projects`, {
@@ -211,21 +276,15 @@ test("the default production composition fails user traffic and readiness closed
   })
 
   assert.equal(ready.status, 503)
+  assert.deepEqual(await ready.json(), { status: "ok", service: "kokoro-bff", mode: "live" })
   assert.equal(user.status, 503)
   assert.equal(((await user.json()) as { error: { code: string } }).error.code, "iam_admission_unavailable")
 })
 
-test("service and Cookie rejection happen before IAM and route work", async () => {
+test("service and Cookie rejection happen before IAM and route work", async (t) => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-a", userId: "user-a" } })
-  let routeCalls = 0
-  const server = createLiveTestBffServer(config(), {
-    sessionAdmission: admission,
-    routeHandler: async ({ response }): Promise<void> => {
-      routeCalls += 1
-      response.writeHead(204).end()
-    },
-  })
-  const base = await listen(server)
+  const { base, projects } = await listenNativeProjectAdmission(config(), admission)
+  const projectReads = t.mock.method(projects, "list")
 
   const badService = await fetch(`${base}/v1/projects`, {
     headers: {
@@ -244,7 +303,7 @@ test("service and Cookie rejection happen before IAM and route work", async () =
   assert.equal(missingBearer.status, 401)
   assert.equal(((await missingBearer.json()) as { error: { code: string } }).error.code, "session_authentication_required")
   assert.equal(admission.calls.length, 0)
-  assert.equal(routeCalls, 0)
+  assert.equal(projectReads.mock.callCount(), 0)
 })
 
 test("Admin Web credential reaches only current identity and exact named admin routes", async () => {
@@ -267,7 +326,8 @@ test("Admin Web credential reaches only current identity and exact named admin r
   }
 
   const unconfiguredAdmission = new SessionAdmissionDouble({ token: { namespace: "tenant-server", userId: "admin-user" } })
-  const unconfiguredBase = await listen(createLiveTestBffServer(config(), { sessionAdmission: unconfiguredAdmission }))
+  const { base: unconfiguredBase, close: closeUnconfigured } = await startAccountTestApp(config(), unconfiguredAdmission)
+  nestClosers.push(closeUnconfigured)
   const unconfigured = await fetch(`${unconfiguredBase}/v1/me`, { headers: admin })
   assert.equal(unconfigured.status, 403)
   assert.equal(unconfiguredAdmission.calls.length, 0)
@@ -343,32 +403,39 @@ test("Admin Web credential reaches only current identity and exact named admin r
   assert.equal(admission.calls.length, 4)
 })
 
-test("missing fixed Product tenant fails before IAM and business work without changing service-only or issuer paths", async () => {
+test("missing fixed Product tenant fails before IAM and business work without changing service-only or issuer paths", async (t) => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-a", userId: "user-a" } })
-  let routeCalls = 0
-  const server = createLiveTestBffServer(
-    { ...config(), tenantId: null },
-    {
-      sessionAdmission: admission,
-      routeHandler: async ({ response }): Promise<void> => {
-        routeCalls += 1
-        response.writeHead(204).end()
+  const { SystemModule } = await import("../dist/modules/system/system.module.js")
+  const unexpected = (): never => assert.fail("missing Product tenant fixture must not access BFF storage")
+  const shareOwner = {
+    findActiveShare: t.mock.fn(async () => ({
+      share: { shareId: "share-a" },
+      conversation: {
+        tenantId: "tenant-a",
+        conversationId: "session-share",
+        title: "Shared",
+        ownerId: "owner",
+        createdAt: new Date("2026-10-27T00:00:00.000Z"),
+        updatedAt: new Date("2026-10-27T00:00:00.000Z"),
       },
-      sharedSessionReader: {
-        findSharedSession: () => ({ session_id: "session-share" }),
-        readSession: () => ({
-          session: {
-            session_id: "session-share",
-            title: "Shared",
-            owner_id: "owner",
-            created_at: "2026-10-27T00:00:00.000Z",
-            updated_at: "2026-10-27T00:00:00.000Z",
-          },
-        }),
-      },
-    },
-  )
-  const base = await listen(server)
+    })),
+    listMessages: t.mock.fn(async () => ({ messages: [] })),
+  }
+  const module = await Test.createTestingModule({ imports: [ProjectsModule, SystemModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue({ ...config(), tenantId: null })
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected }, redis: Object.freeze({}) })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+    .overrideProvider(PUBLIC_SHARE_SERVICE)
+    .useValue(shareOwner)
+    .compile()
+  const projectReads = t.mock.method(module.get<ProjectService>(PROJECT_SERVICE), "list")
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  nestClosers.push(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
   const headers = {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
@@ -391,25 +458,42 @@ test("missing fixed Product tenant fails before IAM and business work without ch
   assert.equal(issuer.status, 503)
   assert.equal(((await issuer.json()) as { error: { code: string } }).error.code, "iam_relay_unavailable")
   assert.equal(admission.calls.length, 0)
-  assert.equal(routeCalls, 0)
+  assert.equal(projectReads.mock.callCount(), 0)
+  assert.deepEqual(
+    shareOwner.findActiveShare.mock.calls.map((call) => call.arguments),
+    [["share-a", undefined, undefined]],
+  )
+  assert.deepEqual(
+    shareOwner.listMessages.mock.calls.map((call) => call.arguments),
+    [["share-a", "tenant-a", "session-share", 100]],
+  )
 })
 
-test("foreign IAM tenant is denied before body parsing, receipt claim, Team or owner I/O despite forged tenant headers", async () => {
+test("foreign IAM tenant is denied before body parsing, receipt claim, Team or owner I/O despite forged tenant headers", async (t) => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-other", userId: "user-other" } })
-  const idempotency = new Map()
-  let routeCalls = 0
-  const server = createLiveTestBffServer(
-    { ...config(), tenantId: "tenant-fixed" },
+  let teamOwnerCalls = 0
+  const iamBaseUrl = await listen(
+    createServer((_request, response) => {
+      teamOwnerCalls++
+      response.writeHead(500).end()
+    }),
+  )
+  const claimReceipt = t.mock.fn(async () => assert.fail("foreign admission must not claim a Project receipt"))
+  const { base, projects } = await listenNativeProjectAdmission(
+    { ...config(), ...(await fixtureIamCredentials("tenant-fixed")), tenantId: "tenant-fixed", iamBaseUrl },
+    admission,
     {
-      sessionAdmission: admission,
-      idempotency,
-      routeHandler: async ({ response }): Promise<void> => {
-        routeCalls += 1
-        response.writeHead(204).end()
+      claimReceipt,
+      async putReceipt() {
+        assert.fail("foreign admission must not commit a Project receipt")
+      },
+      async releaseReceipt() {
+        assert.fail("foreign admission must not release a Project receipt")
       },
     },
+    true,
   )
-  const base = await listen(server)
+  const projectCreates = t.mock.method(projects, "create")
   const headers = {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
@@ -432,24 +516,15 @@ test("foreign IAM tenant is denied before body parsing, receipt claim, Team or o
     assert.equal(response.headers.get("cache-control"), "no-store")
   }
   assert.equal(admission.calls.length, 2)
-  assert.equal(idempotency.size, 0)
-  assert.equal(routeCalls, 0)
+  assert.equal(claimReceipt.mock.callCount(), 0)
+  assert.equal(projectCreates.mock.callCount(), 0)
+  assert.equal(teamOwnerCalls, 0)
 })
 
-test("the IAM identity replaces malicious legacy identity headers", async () => {
+test("the IAM identity replaces malicious legacy identity headers", async (t) => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-iam", userId: "user-iam" } })
-  let capturedIdentity: unknown
-  const server = createLiveTestBffServer(
-    { ...config(), tenantId: "tenant-iam" },
-    {
-      sessionAdmission: admission,
-      routeHandler: async ({ response, context }): Promise<void> => {
-        capturedIdentity = context.identity
-        response.writeHead(204).end()
-      },
-    },
-  )
-  const base = await listen(server)
+  const { base, projects } = await listenNativeProjectAdmission({ ...config(), tenantId: "tenant-iam" }, admission)
+  const projectReads = t.mock.method(projects, "list", async () => [])
 
   const response = await fetch(`${base}/v1/projects`, {
     headers: {
@@ -462,25 +537,45 @@ test("the IAM identity replaces malicious legacy identity headers", async () => 
     },
   })
 
-  assert.equal(response.status, 204)
-  assert.deepEqual(capturedIdentity, { namespace: "tenant-iam", userId: "user-iam" })
+  assert.equal(response.status, 200)
+  assert.deepEqual(((await response.json()) as { data: unknown }).data, { projects: [] })
+  assert.deepEqual(
+    projectReads.mock.calls.map((call) => call.arguments),
+    [[{ tenantId: "tenant-iam", subjectId: "user-iam" }]],
+  )
   assert.equal(admission.calls.length, 1)
 })
 
-test("a revoked session is denied before an existing idempotency result can replay", async () => {
+test("a revoked session is denied before an existing idempotency result can replay", async (t) => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-a", userId: "user-a" } })
-  let routeCalls = 0
-  const server = createLiveTestBffServer(
-    { ...config(), tenantId: "tenant-a" },
-    {
-      sessionAdmission: admission,
-      routeHandler: async ({ response }): Promise<void> => {
-        routeCalls += 1
-        response.writeHead(200, { "content-type": "application/json" }).end('{"data":{"ok":true}}')
-      },
+  const scope = JSON.stringify(["tenant-a", "user-a", "POST", "/projects", "same-key"])
+  let receipt: PersistentReceipt | null = null
+  let receiptClaims = 0
+  let claimedFingerprint: string | null = null
+  const { base, projects } = await listenNativeProjectAdmission({ ...config(), tenantId: "tenant-a" }, admission, {
+    async claimReceipt(key, fingerprint) {
+      assert.equal(key, scope)
+      receiptClaims++
+      claimedFingerprint = fingerprint
+      return receipt === null ? { claimed: true, receipt: null } : { claimed: false, receipt }
     },
-  )
-  const base = await listen(server)
+    async putReceipt(key, value) {
+      assert.equal(key, scope)
+      receipt = value
+    },
+    async releaseReceipt() {
+      assert.fail("successful Project create must not release its receipt")
+    },
+  })
+  const project = {
+    id: "project-a",
+    name: "Project A",
+    slug: "project-a",
+    description: "",
+    created_at: "2026-10-27T00:00:00.000Z",
+    updated_at: "2026-10-27T00:00:00.000Z",
+  }
+  const projectCreates = t.mock.method(projects, "create", async () => project)
   const init = {
     method: "POST",
     headers: {
@@ -491,28 +586,33 @@ test("a revoked session is denied before an existing idempotency result can repl
       "content-type": "application/json",
       "idempotency-key": "same-key",
     },
-    body: JSON.stringify({ value: 1 }),
+    body: JSON.stringify({ name: project.name }),
   }
 
-  assert.equal((await fetch(`${base}/v1/projects`, init)).status, 200)
+  const created = await fetch(`${base}/v1/projects`, init)
+  assert.equal(created.status, 200)
+  const createdBody = (await created.json()) as { data: unknown }
+  assert.deepEqual(createdBody.data, { project })
+  const committed = receipt as PersistentReceipt | null
+  assert.ok(committed)
+  assert.notEqual(claimedFingerprint, null)
+  assert.equal(committed.fingerprint, claimedFingerprint)
+  assert.equal(committed.status, 200)
+  assert.deepEqual(committed.body, createdBody)
   admission.deny("token", { ok: false, status: 401, code: "session_invalid" })
   const denied = await fetch(`${base}/v1/projects`, init)
 
   assert.equal(denied.status, 401)
   assert.equal(((await denied.json()) as { error: { code: string } }).error.code, "session_invalid")
   assert.equal(admission.calls.length, 2)
-  assert.equal(routeCalls, 1)
+  assert.equal(projectCreates.mock.callCount(), 1)
+  assert.equal(receiptClaims, 1)
 })
 
 test("duplicate raw Cookie headers are rejected before IAM", async () => {
   const admission = new SessionAdmissionDouble({ first: { namespace: "tenant-a", userId: "user-a" } })
-  const server = createLiveTestBffServer(config(), {
-    sessionAdmission: admission,
-    routeHandler: async ({ response }): Promise<void> => {
-      response.writeHead(204).end()
-    },
-  })
-  const base = new URL(await listen(server))
+  const app = await listenNativeProjectAdmission(config(), admission)
+  const base = new URL(app.base)
 
   const result = await new Promise<{ status: number; body: string }>((resolve, reject) => {
     const request = httpRequest(
@@ -546,8 +646,7 @@ test("duplicate raw Cookie headers are rejected before IAM", async () => {
 test("IAM rate limiting forwards only the admitted Retry-After value", async () => {
   const admission = new SessionAdmissionDouble()
   admission.deny("limited", { ok: false, status: 429, code: "session_rate_limited", retryAfter: "60" })
-  const server = createLiveTestBffServer(config(), { sessionAdmission: admission })
-  const base = await listen(server)
+  const { base } = await listenNativeProjectAdmission(config(), admission)
 
   const response = await fetch(`${base}/v1/projects`, {
     headers: {
@@ -568,8 +667,7 @@ test("IAM rate limiting forwards only the admitted Retry-After value", async () 
 test("the HTTP boundary drops an uncontrolled Retry-After returned by an invalid admission implementation", async () => {
   const admission = new SessionAdmissionDouble()
   admission.deny("limited", { ok: false, status: 429, code: "session_rate_limited", retryAfter: "99999" })
-  const server = createLiveTestBffServer(config(), { sessionAdmission: admission })
-  const base = await listen(server)
+  const { base } = await listenNativeProjectAdmission(config(), admission)
 
   const response = await fetch(`${base}/v1/projects`, {
     headers: {
@@ -584,7 +682,7 @@ test("the HTTP boundary drops an uncontrolled Retry-After returned by an invalid
   assert.equal(response.headers.get("retry-after"), null)
 })
 
-test("disconnecting during admission aborts IAM and prevents route work", async () => {
+test("disconnecting during admission aborts IAM and prevents route work", { timeout: 4000 }, async (t) => {
   let admissionStarted!: () => void
   const started = new Promise<void>((resolve) => {
     admissionStarted = resolve
@@ -593,7 +691,6 @@ test("disconnecting during admission aborts IAM and prevents route work", async 
   const aborted = new Promise<void>((resolve) => {
     observedAbort = resolve
   })
-  let routeCalls = 0
   const admission = {
     verify: async ({ signal }: { signal: AbortSignal }): Promise<{ ok: false; status: 503; code: string }> => {
       admissionStarted()
@@ -605,14 +702,9 @@ test("disconnecting during admission aborts IAM and prevents route work", async 
       return { ok: false, status: 503, code: "iam_admission_unavailable" }
     },
   }
-  const server = createLiveTestBffServer(config(), {
-    sessionAdmission: admission,
-    routeHandler: async ({ response }): Promise<void> => {
-      routeCalls += 1
-      response.writeHead(204).end()
-    },
-  })
-  const base = new URL(await listen(server))
+  const app = await listenNativeProjectAdmission(config(), admission)
+  const projectReads = t.mock.method(app.projects, "list")
+  const base = new URL(app.base)
   const request = httpRequest({
     host: base.hostname,
     port: Number(base.port),
@@ -626,31 +718,52 @@ test("disconnecting during admission aborts IAM and prevents route work", async 
   })
   request.on("error", () => undefined)
   request.end()
-  await started
-  request.destroy()
-  await aborted
+  try {
+    await started
+    request.destroy()
+    await aborted
+  } finally {
+    request.destroy()
+  }
 
-  assert.equal(routeCalls, 0)
+  assert.equal(projectReads.mock.callCount(), 0)
 })
 
 test("Share, runtime manifest, and Scheduler callback remain separate service boundaries", async () => {
   const admission = new SessionAdmissionDouble()
-  const server = createLiveTestBffServer(config(), {
-    sessionAdmission: admission,
-    sharedSessionReader: {
-      findSharedSession: () => ({ session_id: "session-share" }),
-      readSession: () => ({
-        session: {
-          session_id: "session-share",
+  const { SCHEDULED_TASK_DISPATCHER } = await import("../dist/common/tokens.js")
+  const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
+  const { SystemModule } = await import("../dist/modules/system/system.module.js")
+  const unexpected = (): never => assert.fail("service-only boundary fixture must not access BFF storage")
+  const module = await Test.createTestingModule({ imports: [SystemModule, ScheduledTasksModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config())
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected } })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+    .overrideProvider(PUBLIC_SHARE_SERVICE)
+    .useValue({
+      findActiveShare: async () => ({
+        share: { shareId: "share-a" },
+        conversation: {
+          tenantId: "tenant-server",
+          conversationId: "session-share",
           title: "Shared",
-          owner_id: "owner",
-          created_at: "2026-10-27T00:00:00.000Z",
-          updated_at: "2026-10-27T00:00:00.000Z",
+          ownerId: "owner",
+          createdAt: new Date("2026-10-27T00:00:00.000Z"),
+          updatedAt: new Date("2026-10-27T00:00:00.000Z"),
         },
       }),
-    },
-  })
-  const base = await listen(server)
+      listMessages: async () => ({ messages: [] }),
+    })
+    .overrideProvider(SCHEDULED_TASK_DISPATCHER)
+    .useValue({ start() {}, async stop() {} })
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  nestClosers.push(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
   const serviceHeaders = {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
@@ -698,7 +811,7 @@ test("GET /v1/me rereads current administrator qualification for the same Cookie
         )
     }),
   )
-  const base = await listen(createBffServer({ ...config(), iamBaseUrl: iam }, { businessStore: null, readiness: async () => undefined }))
+  const base = await listenNativeAdmission({ ...config(), iamBaseUrl: iam })
   const read = (session: string) =>
     fetch(base + "/v1/me", {
       headers: {
@@ -743,7 +856,7 @@ test("GET /v1/me rejects malformed administrator snapshots and never substitutes
       response.end(JSON.stringify(payloads[calls++]))
     }),
   )
-  const base = await listen(createBffServer({ ...config(), iamBaseUrl: iam }, { businessStore: null, readiness: async () => undefined }))
+  const base = await listenNativeAdmission({ ...config(), iamBaseUrl: iam })
   for (const _payload of payloads) {
     const response = await fetch(base + "/v1/me", {
       headers: {
@@ -873,8 +986,9 @@ test("Admin package HTTP admission preserves fresh human identity, tenant and or
   })
   const checks: SkillAuthorizationInput[] = []
   let allowed = false
-  const base = await listen(
-    createLiveTestBffServer({ ...config(), adminWebSharedSecret: "admin-test-secret" } as BffConfig, {
+  const { base, close } = await startSkillDraftTestApp(
+    { ...config(), adminWebSharedSecret: "admin-test-secret" },
+    {
       sessionAdmission: admission,
       skillAuthorization: {
         check: async (input) => {
@@ -882,8 +996,9 @@ test("Admin package HTTP admission preserves fresh human identity, tenant and or
           return allowed ? { ok: true as const } : { ok: false as const, status: 403 as const, code: "skill_forbidden" }
         },
       },
-    }),
+    },
   )
+  nestClosers.push(close)
   const headers = {
     "x-kokoro-service": "admin-web-bff",
     "x-kokoro-internal-secret": "admin-test-secret",
@@ -933,8 +1048,7 @@ test("Admin package HTTP admission preserves fresh human identity, tenant and or
 })
 
 for (const source of ["business-store", "fallback"] as const) {
-  test(`anonymous Share ${source} exposes only the original public message projection with a null process`, async () => {
-    const { createBffServer: createSourceBffServer } = await import("../src/bootstrap/server.ts")
+  test(`anonymous Share ${source} exposes only the original public message projection with a null process`, async (t) => {
     const admission = new SessionAdmissionDouble()
     const canary = "PRIVATE_TOOL_DETAIL_CANARY"
     const createdAt = "2026-10-27T00:00:00.000Z"
@@ -969,40 +1083,49 @@ for (const source of ["business-store", "fallback"] as const) {
       updated_at: createdAt,
       private_value: canary,
     }
-    const detail = {
-      session,
-      messages,
-      execution_process: { activities: [{ display_detail: { kind: "file", name: canary } }] },
-      execution_head: { pending_pauses: [{ input_schema: canary }] },
-      files: [{ path: canary }],
-      deliveries: [{ title: canary }],
-      deliveries_has_more: true,
-      event_watermark: canary,
-      private_value: canary,
-    }
-    const publicShares = {
-      findActiveShare: async () => ({
-        share: { shareId: "share-public" },
-        conversation: {
-          tenantId: "tenant-public",
-          conversationId: session.session_id,
-          title: session.title,
-          ownerId: session.owner_id,
-          createdAt: new Date(createdAt),
-          updatedAt: new Date(createdAt),
-        },
-      }),
-      listMessages: async () => ({ messages }),
-    }
-    const options =
+    const publicShares =
       source === "business-store"
         ? {
-            businessStore: null,
-            publicShareService: publicShares,
+            findActiveShare: t.mock.fn(async () => ({
+              share: { shareId: "share-public" },
+              conversation: {
+                tenantId: "tenant-public",
+                conversationId: session.session_id,
+                title: session.title,
+                ownerId: session.owner_id,
+                createdAt: new Date(createdAt),
+                updatedAt: new Date(createdAt),
+              },
+            })),
+            listMessages: t.mock.fn(async () => ({ messages })),
           }
-        : { businessStore: null, sharedSessionReader: { findSharedSession: () => ({ session_id: session.session_id }), readSession: () => detail } }
-    const server = createSourceBffServer(config(), { ...options, sessionAdmission: admission, readiness: async () => undefined })
-    const base = await listen(server)
+        : null
+    let base: string
+    if (publicShares !== null) {
+      base = await listenNativePublicShare(admission, publicShares)
+    } else {
+      const detail = {
+        session,
+        messages,
+        execution_process: { activities: [{ display_detail: { kind: "file", name: canary } }] },
+        execution_head: { pending_pauses: [{ input_schema: canary }] },
+        files: [{ path: canary }],
+        deliveries: [{ title: canary }],
+        deliveries_has_more: true,
+        event_watermark: canary,
+        private_value: canary,
+      }
+      // The raw sharedSessionReader compatibility path has no Nest producer.
+      const { createBffServer: createSourceBffServer } = await import("../src/bootstrap/server.ts")
+      base = await listen(
+        createSourceBffServer(config(), {
+          businessStore: null,
+          sharedSessionReader: { findSharedSession: () => ({ session_id: session.session_id }), readSession: () => detail },
+          sessionAdmission: admission,
+          readiness: async () => undefined,
+        }),
+      )
+    }
     const response = await fetch(`${base}/v1/shared/share-public`, {
       headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", origin: "https://web.example.test" },
     })
@@ -1030,38 +1153,55 @@ for (const source of ["business-store", "fallback"] as const) {
     })
     assert.equal(JSON.stringify(body).includes(canary), false)
     assert.equal(admission.calls.length, 0)
+    if (source === "business-store") {
+      assert.deepEqual(
+        publicShares.findActiveShare.mock.calls.map((call) => call.arguments),
+        [["share-public", undefined, undefined]],
+      )
+      assert.deepEqual(
+        publicShares.listMessages.mock.calls.map((call) => call.arguments),
+        [["share-public", "tenant-public", session.session_id, 100]],
+      )
+    }
   })
 }
 
-test("anonymous Share refuses a private ordered message instead of emitting a null success body", async () => {
-  const { createBffServer: createSourceBffServer } = await import("../src/bootstrap/server.ts")
+test("anonymous Share refuses a private ordered message instead of emitting a null success body", async (t) => {
   const at = new Date("2026-10-27T00:00:00.000Z")
-  const server = createSourceBffServer(config(), {
-    businessStore: null,
-    publicShareService: {
-      findActiveShare: async () => ({
-        share: { shareId: "share-public" },
-        conversation: { tenantId: "tenant", conversationId: "conversation", title: "title", ownerId: "owner", createdAt: at, updatedAt: at },
-      }),
-      listMessages: async () => ({
-        messages: [
-          {
-            message_id: "message",
-            role: "assistant",
-            content: null,
-            status: "completed",
-            created_at: at.toISOString(),
-            rendering: { parts_cursor: "PRIVATE_CURSOR_CANARY" },
-          },
-        ],
-      }),
-    },
-    readiness: async () => undefined,
-  })
-  const base = await listen(server)
+  const admission = new SessionAdmissionDouble()
+  const publicShares = {
+    findActiveShare: t.mock.fn(async () => ({
+      share: { shareId: "share-public" },
+      conversation: { tenantId: "tenant", conversationId: "conversation", title: "title", ownerId: "owner", createdAt: at, updatedAt: at },
+    })),
+    listMessages: t.mock.fn(async () => ({
+      messages: [
+        {
+          message_id: "message",
+          role: "assistant",
+          content: null,
+          status: "completed",
+          created_at: at.toISOString(),
+          rendering: { parts_cursor: "PRIVATE_CURSOR_CANARY" },
+        },
+      ],
+    })),
+  }
+  const base = await listenNativePublicShare(admission, publicShares)
   const response = await fetch(`${base}/v1/shared/share-public`, {
     headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", origin: "https://web.example.test" },
   })
   assert.equal(response.status, 503)
-  assert.equal((await response.text()).includes("PRIVATE_CURSOR_CANARY"), false)
+  const body = await response.text()
+  assert.equal(body.includes("PRIVATE_CURSOR_CANARY"), false)
+  assert.equal((JSON.parse(body) as { error: { code: string } }).error.code, "share_projection_invalid")
+  assert.equal(admission.calls.length, 0)
+  assert.deepEqual(
+    publicShares.findActiveShare.mock.calls.map((call) => call.arguments),
+    [["share-public", undefined, undefined]],
+  )
+  assert.deepEqual(
+    publicShares.listMessages.mock.calls.map((call) => call.arguments),
+    [["share-public", "tenant", "conversation", 100]],
+  )
 })
