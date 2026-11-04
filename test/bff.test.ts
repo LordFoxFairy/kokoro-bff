@@ -8,7 +8,6 @@ import type { INestApplication } from "@nestjs/common"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import type { BffConfig } from "../src/config/runtime.ts"
-import { createLiveTestBffServer, createTestBffServer } from "./doubles/server.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const servers: Server[] = []
@@ -67,14 +66,6 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     },
     ...overrides,
   }
-}
-
-function testServer(configValue: BffConfig, options: { moriAutoProgress?: boolean } = {}): Server {
-  return createTestBffServer(configValue, options).server
-}
-
-function liveServer(configValue: BffConfig, options: Parameters<typeof createLiveTestBffServer>[1] = {}): Server {
-  return createLiveTestBffServer(configValue, options)
 }
 
 async function startSystemTestApp(configValue: BffConfig): Promise<string> {
@@ -164,126 +155,12 @@ afterEach(async () => {
   ])
 })
 
-describe("kokoro-bff v1 mock contract", () => {
-  it("closes the project instruction read, update, and revision history flow", async () => {
-    const base = await listen(testServer(config()))
-    const projectId = "project_kokoro"
-    const read = await fetch(`${base}/v1/projects/${projectId}`, { headers: authHeaders() })
-    const readBody = (await read.json()) as {
-      data: { project: { id: string; instruction: string } }
-      meta: { request_id: string }
-    }
-    assert.equal(read.status, 200)
-    assert.equal(readBody.data.project.id, projectId)
-    assert.equal(typeof readBody.data.project.instruction, "string")
-
-    const nextInstruction = "Keep all implementation notes scoped to this project."
-    const missingKey = await fetch(`${base}/v1/projects/${projectId}`, {
-      method: "PATCH",
-      headers: { ...authHeaders(), "content-type": "application/json" },
-      body: JSON.stringify({ instruction: nextInstruction }),
-    })
-    assert.equal(missingKey.status, 400)
-    assert.equal(((await missingKey.json()) as { error: { code: string } }).error.code, "idempotency_key_required")
-
-    const init = {
-      method: "PATCH",
-      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "project-instruction-flow" },
-      body: JSON.stringify({ instruction: nextInstruction }),
-    }
-    const updated = await fetch(`${base}/v1/projects/${projectId}`, init)
-    const replayed = await fetch(`${base}/v1/projects/${projectId}`, init)
-    assert.equal(updated.status, 200)
-    assert.deepEqual(await updated.json(), await replayed.json())
-
-    const afterUpdate = await fetch(`${base}/v1/projects/${projectId}`, { headers: authHeaders() })
-    const afterUpdateBody = (await afterUpdate.json()) as { data: { project: { instruction: string } } }
-    assert.equal(afterUpdateBody.data.project.instruction, nextInstruction)
-
-    const revisions = await fetch(`${base}/v1/projects/${projectId}/instruction-revisions`, { headers: authHeaders() })
-    const revisionsBody = (await revisions.json()) as {
-      data: { items: Array<{ id: string; instruction: string; updated_at: string; actor_name: string; current: boolean }> }
-      meta: { request_id: string }
-    }
-    assert.equal(revisions.status, 200)
-    assert.ok(revisionsBody.data.items.length >= 2)
-    assert.equal(revisionsBody.data.items[0]?.instruction, nextInstruction)
-    assert.equal(revisionsBody.data.items[0]?.current, true)
-    assert.ok(revisionsBody.data.items[0]?.id)
-    assert.equal(typeof revisionsBody.data.items[0]?.updated_at, "string")
-    assert.equal(typeof revisionsBody.data.items[0]?.actor_name, "string")
-    assert.match(revisionsBody.data.items[0]?.updated_at ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u)
-    assert.deepEqual(Object.keys(revisionsBody.data.items[0] ?? {}).sort(), ["actor_name", "current", "id", "instruction", "updated_at"])
-    assert.ok(revisionsBody.meta.request_id.length > 0)
-  })
-
-  it("persists project skill state and creates scheduled tasks from snake_case Web input", async () => {
-    const { createBffServer } = await import("../dist/bootstrap/server.js")
-    const { MockBffStore } = await import("./doubles/bff-store.ts")
-    const { MoriMockBffStore } = await import("./doubles/mori-store.ts")
-    const { mockBusiness } = await import("./doubles/mock-route.ts")
-    const { SessionAdmissionDouble } = await import("./doubles/session-admission.ts")
-    const store = new MockBffStore(),
-      mori = new MoriMockBffStore(true)
-    const base = await listen(
-      createBffServer(config(), {
-        sessionAdmission: new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } }),
-        businessStore: null,
-        skillProductClient: {
-          inspect: async (input: { sourceRef: string; tenant: string; subject: string }) => {
-            assert.equal(input.tenant, "ns_test")
-            assert.equal(input.subject, "user_test")
-            assert.equal(input.sourceRef, "skill:skill-builder")
-            return { sourceRef: { value: input.sourceRef }, revision: 1n, files: [] }
-          },
-        } as never,
-        routeHandler: async ({ request, response, businessPath, context, json, mutation, idempotency }) =>
-          mockBusiness(request, response, businessPath, context, store, mori, idempotency, mutation, json),
-      }),
-    )
-    const projectId = "project_kokoro"
-    const skillPath = `${base}/v1/projects/${projectId}/skill-selection`
-    const missingSkillKey = await fetch(skillPath, {
-      method: "PUT",
-      headers: { ...authHeaders(), "content-type": "application/json" },
-      body: JSON.stringify({ installation_ids: [] }),
-    })
-    assert.equal(missingSkillKey.status, 400)
-    assert.equal(((await missingSkillKey.json()) as { error: { code: string } }).error.code, "idempotency_key_required")
-
-    const disabled = await fetch(skillPath, {
-      method: "PUT",
-      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "project-skill-disable" },
-      body: JSON.stringify({ installation_ids: [] }),
-    })
-    const disabledBody = (await disabled.json()) as { data: { project_id: string; installation_ids: string[] } }
-    assert.equal(disabled.status, 200)
-    assert.deepEqual(disabledBody.data, { project_id: projectId, installation_ids: [] })
-
-    const scheduled = await fetch(`${base}/v1/projects/${projectId}/scheduled-tasks`, {
-      method: "POST",
-      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "project-scheduled-flow" },
-      body: JSON.stringify({
-        title: "Daily briefing",
-        prompt: "Summarize the project updates.",
-        frequency: "daily",
-        time: "08:00",
-        timezone: "UTC",
-        expires_at: "2026-02-01T00:00:00.000Z",
-        auto_approve: true,
-      }),
-    })
-    const scheduledBody = (await scheduled.json()) as {
-      data: { task: { project_id: string; title: string; expires_at?: string; auto_approve: boolean } }
-    }
-    assert.equal(scheduled.status, 200)
-    assert.equal(scheduledBody.data.task.project_id, projectId)
-    assert.equal(scheduledBody.data.task.title, "Daily briefing")
-    assert.equal(scheduledBody.data.task.expires_at, "2026-02-01T00:00:00.000Z")
-    assert.equal(scheduledBody.data.task.auto_approve, true)
-  })
-
-  async function startAgentSetupApp(t: import("node:test").TestContext, configValue: BffConfig) {
+describe("kokoro-bff versioned HTTP contracts", () => {
+  async function startAgentRunsTestApp(
+    t: import("node:test").TestContext,
+    configValue: BffConfig,
+    query: () => never | Promise<never> = () => assert.fail("Agent setup must not access BFF storage"),
+  ) {
     await import("reflect-metadata")
     const { Test } = await import("@nestjs/testing")
     const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
@@ -292,14 +169,13 @@ describe("kokoro-bff v1 mock contract", () => {
     const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR } =
       await import("../dist/common/tokens.js")
     const admission = new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } })
-    const unexpected = (): never => assert.fail("Agent setup must not access BFF storage")
     const builder = Test.createTestingModule({ imports: [AgentRunsModule] })
       .overrideProvider(BFF_CONFIG)
       .useValue(configValue)
       .overrideProvider(SESSION_ADMISSION)
       .useValue(admission)
       .overrideProvider(BFF_DATABASE)
-      .useValue({ pool: { query: unexpected, connect: unexpected } })
+      .useValue({ pool: { query, connect: query } })
     for (const token of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) builder.overrideProvider(token).useValue(null)
     const module = await builder.compile()
     const app = module.createNestApplication(new BffExpressAdapter(), { ...BFF_NEST_APPLICATION_OPTIONS, logger: false, abortOnError: false })
@@ -309,7 +185,7 @@ describe("kokoro-bff v1 mock contract", () => {
   }
 
   it("keeps live Agent setup explicit and fail-closed when the owner is disabled", async (t) => {
-    const { base, admission } = await startAgentSetupApp(t, config())
+    const { base, admission } = await startAgentRunsTestApp(t, config())
     const invalid = await fetch(`${base}/v1/agents/connections/setup?platform=irc`, { headers: authHeaders() })
     assert.equal(invalid.status, 400)
     assert.equal(((await invalid.json()) as { error: { code: string } }).error.code, "invalid_agent_platform")
@@ -352,7 +228,7 @@ describe("kokoro-bff v1 mock contract", () => {
       )
     })
     const agentBase = await listen(agent)
-    const { base, admission } = await startAgentSetupApp(t, config({ agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } }))
+    const { base, admission } = await startAgentRunsTestApp(t, config({ agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } }))
     const setup = `${base}/v1/agents/connections/setup?platform=telegram`
     const headers = {
       ...authHeaders(),
@@ -1101,25 +977,78 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("does not misroute BFF-owned projects or scheduled definitions to an owner", async () => {
-    const upstream = createServer((_request, response) => {
+    await import("reflect-metadata")
+    const { Test } = await import("@nestjs/testing")
+    const {
+      AGENT_CANCELLATION_DISPATCHER,
+      AGENT_DISPATCH_DISPATCHER,
+      AGUI_PROJECTOR,
+      BFF_CONFIG,
+      BFF_DATABASE,
+      PROJECT_SERVICE,
+      SCHEDULED_TASK_DISPATCHER,
+      SCHEDULED_TASK_REPOSITORY,
+      SESSION_ADMISSION,
+    } = await import("../dist/common/tokens.js")
+    const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+    const { ScheduledTasksModule } = await import("../dist/modules/scheduled-tasks/scheduled-tasks.module.js")
+    const { SystemModule } = await import("../dist/modules/system/system.module.js")
+    const ownerCalls: Array<string | undefined> = []
+    const upstream = createServer((request, response) => {
+      ownerCalls.push(request.url)
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({ data: { items: [] }, meta: { request_id: "should-not-be-called" } }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(
-      liveServer(
+    const unexpected = (): never => assert.fail("Definition-list fixture must not perform unrelated storage I/O")
+    let localReadFailed = false
+    const readLocalDefinitions = async (scope: { tenantId: string; subjectId: string }) => {
+      assert.deepEqual(scope, { tenantId: "ns_test", subjectId: "user_test" })
+      if (localReadFailed) throw new Error("local owner read unavailable")
+      return []
+    }
+    // Keep the Scheduler client configured. Only the BFF-owned definition facts are substituted.
+    const builder = Test.createTestingModule({ imports: [ScheduledTasksModule, SystemModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(
         config({
-          mode: "live",
+          schedulerServiceToken: "scheduler-service-token",
+          schedulerTargetUrl: "http://127.0.0.1:4300/internal/bff/scheduled-tasks/dispatch",
           upstreams: { ...config().upstreams, system: upstreamBase, scheduler: upstreamBase },
         }),
-      ),
-    )
-
-    for (const path of ["/v1/projects", "/v1/scheduled-tasks"]) {
-      const response = await fetch(`${base}${path}`, { headers: authHeaders() })
-      assert.equal(response.status, 503)
-      assert.equal(((await response.json()) as { error: { code: string } }).error.code, "business_store_not_configured")
+      )
+      .overrideProvider(BFF_DATABASE)
+      .useValue({ pool: { query: unexpected, connect: unexpected } })
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } }))
+      .overrideProvider(PROJECT_SERVICE)
+      .useValue({ list: readLocalDefinitions, find: unexpected, skillSelection: unexpected, replaceSkillSelection: unexpected })
+      .overrideProvider(SCHEDULED_TASK_REPOSITORY)
+      .useValue({ readScheduledTaskSnapshots: readLocalDefinitions })
+    for (const token of [AGENT_CANCELLATION_DISPATCHER, AGENT_DISPATCH_DISPATCHER, AGUI_PROJECTOR, SCHEDULED_TASK_DISPATCHER]) {
+      builder.overrideProvider(token).useValue(null)
     }
+    const module = await builder.compile()
+    const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    ownerApps.push(app)
+    await app.listen(0, "127.0.0.1")
+    const base = await app.getUrl()
+
+    for (const [path, field, failureCode] of [
+      ["/v1/projects", "projects", "business_store_unavailable"],
+      ["/v1/scheduled-tasks", "tasks", "scheduler_current_unavailable"],
+    ] as const) {
+      localReadFailed = false
+      const response = await fetch(`${base}${path}`, { headers: authHeaders() })
+      assert.equal(response.status, 200)
+      assert.deepEqual(((await response.json()) as { data: unknown }).data, { [field]: [] })
+
+      localReadFailed = true
+      const failed = await fetch(`${base}${path}`, { headers: authHeaders() })
+      assert.equal(failed.status, 503)
+      assert.equal(((await failed.json()) as { error: { code: string } }).error.code, failureCode)
+    }
+    assert.deepEqual(ownerCalls, [])
   })
 
   it("keeps the v1 API documentation and canonical path census", () => {
@@ -1170,215 +1099,47 @@ describe("kokoro-bff v1 mock contract", () => {
     }
   })
 
-  it("serves the chat session mock contract across list, detail, messages, events, control, title, delete, and share", async () => {
-    const base = await listen(testServer(config()))
-    const headers = authHeaders()
-
-    const list = await fetch(`${base}/v1/sessions`, { headers })
-    assert.equal(list.status, 200)
-    const listBody = (await list.json()) as {
-      data: { sessions: Array<{ session_id: string; title: string; updated_at: string }>; next_cursor: string | null }
-      meta: { request_id: string }
-    }
-    assert.ok(listBody.data.sessions.length >= 1)
-    assert.equal(listBody.data.next_cursor, null)
-
-    const sessionId = listBody.data.sessions[0]?.session_id
-    assert.ok(sessionId)
-
-    const isolated = await fetch(`${base}/v1/sessions?scope=other-scope&project_ref=project_kokoro`, { headers })
-    assert.equal(isolated.status, 400)
-    assert.equal(((await isolated.json()) as { error: { code: string } }).error.code, "invalid_session_scope")
-
-    const detail = await fetch(`${base}/v1/sessions/${sessionId}`, { headers })
-    assert.equal(detail.status, 200)
-    const detailBody = (await detail.json()) as {
-      data: {
-        session: { session_id: string; title: string; owner_id: string; created_at: string; updated_at: string }
-        messages?: Array<{ message_id: string; role: string; content: string; status: string; created_at: string; run_id?: string }>
-        active_run?: { run_id: string; status: string }
-        pending_pauses: unknown[]
-        files: unknown[]
-        deliveries: unknown[]
-        deliveries_has_more: boolean
-        event_watermark: string | null
-      }
-      meta: { request_id: string }
-    }
-    assert.equal(detailBody.data.session.session_id, sessionId)
-    assert.equal(detailBody.data.session.owner_id, "ns_test")
-    assert.match(detailBody.data.event_watermark ?? "", /^agui_[0-9a-f]{32}$/u)
-    assert.equal(detailBody.data.pending_pauses.length, 0)
-    assert.equal(detailBody.data.files.length, 0)
-    assert.equal(detailBody.data.deliveries.length, 0)
-    assert.equal(detailBody.data.deliveries_has_more, false)
-
-    const message = await fetch(`${base}/v1/sessions/${sessionId}/messages`, {
-      method: "POST",
-      headers: { ...headers, "content-type": "application/json", "idempotency-key": "chat-message-1" },
-      body: JSON.stringify({ content: "Hello from mock chat" }),
-    })
-    assert.equal(message.status, 202)
-    const messageBody = (await message.json()) as {
-      data: { run_id: string; user_message_id: string; assistant_message_id: string }
-      meta: { request_id: string }
-    }
-    assert.ok(messageBody.data.run_id.length > 0)
-    assert.ok(messageBody.data.user_message_id.length > 0)
-    assert.ok(messageBody.data.assistant_message_id.length > 0)
-
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    const messagePage = await fetch(`${base}/v1/sessions/${sessionId}/messages?limit=1`, { headers })
-    assert.equal(messagePage.status, 200)
-    const messagePageBody = (await messagePage.json()) as { data: { messages: Array<{ role: string }>; next_cursor: string | null } }
-    assert.equal(messagePageBody.data.messages.length, 1)
-    assert.equal(messagePageBody.data.messages[0]?.role, "user")
-    assert.ok(messagePageBody.data.next_cursor)
-
-    const events = await fetch(`${base}/v1/sessions/${sessionId}/events`, { headers })
-    assert.equal(events.status, 200)
-    assert.ok((events.headers.get("content-type") || "").startsWith("text/event-stream"))
-    const eventsText = await events.text()
-    const frames = eventsText.trim().split(/\n\n/u).filter(Boolean)
-    assert.ok(frames.length >= 2)
-    assert.match(frames[0] || "", /"type":"CUSTOM"/u)
-    const firstFrameData =
-      frames[0]
-        ?.split("\n")
-        .find((line) => line.startsWith("data: "))
-        ?.slice("data: ".length) || ""
-    const firstEvent = JSON.parse(firstFrameData) as { name: string; value: { owner_id: string } }
-    assert.equal(firstEvent.name, "kokoro.session.created")
-    assert.equal(firstEvent.value.owner_id, "ns_test")
-    const firstFrameId = frames[0]
-      ?.split("\n")
-      .find((line) => line.startsWith("id: "))
-      ?.slice("id: ".length)
-    assert.match(firstFrameId ?? "", /^agui_[0-9a-f]{32}$/u)
-    const resumedEvents = await fetch(`${base}/v1/sessions/${sessionId}/events`, {
-      headers: { ...headers, "last-event-id": firstFrameId ?? "" },
-    })
-    assert.equal(resumedEvents.status, 200)
-    const resumedFrames = (await resumedEvents.text()).trim().split(/\n\n/u).filter(Boolean)
-    assert.deepEqual(resumedFrames, frames.slice(1))
-    const invalidEventCursor = await fetch(`${base}/v1/sessions/${sessionId}/events`, {
-      headers: { ...headers, "last-event-id": "4" },
-    })
-    assert.equal(invalidEventCursor.status, 400)
-    assert.equal(((await invalidEventCursor.json()) as { error: { code: string } }).error.code, "invalid_event_cursor")
-
-    const control = await fetch(`${base}/v1/sessions/${sessionId}/runs/${messageBody.data.run_id}/control`, {
-      method: "POST",
-      headers: { ...headers, "content-type": "application/json", "idempotency-key": "chat-control-1" },
-      body: JSON.stringify({ kind: "run.cancel" }),
-    })
-    assert.equal(control.status, 202)
-    const controlBody = (await control.json()) as {
-      data: { run_id: string; command_id: string; request_digest: string; status: string; replayed: boolean }
-      meta: { request_id: string }
-    }
-    assert.equal(controlBody.data.run_id, messageBody.data.run_id)
-    assert.equal(controlBody.data.command_id, "chat-control-1")
-    assert.match(controlBody.data.request_digest, /^sha256:/u)
-    assert.equal(controlBody.data.status, "succeeded")
-    assert.equal(controlBody.data.replayed, false)
-
-    const renamed = await fetch(`${base}/v1/sessions/${sessionId}/title`, {
-      method: "PATCH",
-      headers: { ...headers, "content-type": "application/json", "idempotency-key": "chat-title-1" },
-      body: JSON.stringify({ title: "Mock chat title" }),
-    })
-    assert.equal(renamed.status, 200)
-    const renamedBody = (await renamed.json()) as { data: { ok: true }; meta: { request_id: string } }
-    assert.equal(renamedBody.data.ok, true)
-
-    const shared = await fetch(`${base}/v1/sessions/${sessionId}/share`, {
-      method: "POST",
-      headers: { ...headers, "content-type": "application/json", "idempotency-key": "chat-share-1" },
-      body: JSON.stringify({}),
-    })
-    assert.equal(shared.status, 200)
-    const sharedBody = (await shared.json()) as { data: { share_id: string } }
-    assert.ok(sharedBody.data.share_id.length > 0)
-
-    const publicShare = await fetch(`${base}/v1/shared/${sharedBody.data.share_id}`, {
-      headers: {
-        "x-kokoro-service": "web-bff",
-        "x-kokoro-internal-secret": "test-secret",
-        origin: "https://web.example.test",
-      },
-    })
-    assert.equal(publicShare.status, 200)
-    const publicShareBody = (await publicShare.json()) as {
-      data: {
-        session: { session_id: string; title: string; owner_id: string }
-        messages?: Array<{ message_id: string; role: string; content: string; status: string; created_at: string; run_id?: string }>
-        files: unknown[]
-        deliveries: unknown[]
-        deliveries_has_more: boolean
-        event_watermark: null
-        execution_process: null
-      }
-      meta: { request_id: string }
-    }
-    assert.equal(publicShareBody.data.session.session_id, sessionId)
-    assert.equal(publicShareBody.data.session.owner_id, "ns_test")
-    assert.deepEqual(publicShareBody.data.deliveries, [])
-    assert.equal(publicShareBody.data.deliveries_has_more, false)
-    assert.equal(publicShareBody.data.event_watermark, null)
-    assert.equal(publicShareBody.data.execution_process, null)
-    assert.equal(Object.hasOwn(publicShareBody.data, "execution_head"), false)
-    assert.equal(Object.hasOwn(publicShareBody.data, "pending_pauses"), false)
-    assert.ok(publicShareBody.data.messages?.length)
-    for (const message of publicShareBody.data.messages) {
-      for (const field of ["rendering", "ordered_parts", "parts_cursor"]) assert.equal(Object.hasOwn(message, field), false)
-    }
-
-    const revoked = await fetch(`${base}/v1/sessions/${sessionId}/share`, {
-      method: "DELETE",
-      headers: { ...headers, "idempotency-key": "chat-share-delete-1" },
-    })
-    assert.equal(revoked.status, 200)
-    const revokedBody = (await revoked.json()) as { data: { share_id: string }; meta: { request_id: string } }
-    assert.equal(revokedBody.data.share_id, sharedBody.data.share_id)
-
-    const deleted = await fetch(`${base}/v1/sessions/${sessionId}`, {
-      method: "DELETE",
-      headers: { ...headers, "idempotency-key": "chat-delete-1" },
-    })
-    assert.equal(deleted.status, 200)
-    const deletedBody = (await deleted.json()) as { data: { status: string }; meta: { request_id: string } }
-    assert.equal(deletedBody.data.status, "deleted")
-
-    const missing = await fetch(`${base}/v1/sessions/${sessionId}`, { headers })
-    assert.equal(missing.status, 404)
-    assert.equal(((await missing.json()) as { error: { code: string } }).error.code, "session_not_found")
-  })
-
-  it("requires the durable BFF Chat store and never falls back to Agent-owned history or launch", async () => {
-    let received = 0
-    const agent = createServer((_request, response) => {
-      received += 1
-      response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({ data: { ok: true }, meta: { request_id: "agent" } }))
-    })
-    const agentBase = await listen(agent)
-    const base = await listen(
-      liveServer(
-        config({
-          mode: "live",
-          agentEnabled: true,
-          upstreams: { ...config().upstreams, agents: agentBase },
-        }),
-      ),
+  it("Chat scope and store failures never fall back to Agent-owned history or launch", async (t) => {
+    let ownerCalls = 0
+    const agentBase = await listen(
+      createServer((_request, response) => {
+        ownerCalls++
+        response.writeHead(200, { "content-type": "application/json" })
+        response.end(JSON.stringify({ data: { ok: true }, meta: { request_id: "agent" } }))
+      }),
     )
-    const requests: Array<{ path: string; init?: RequestInit }> = [
-      { path: "/v1/sessions" },
-      { path: "/v1/sessions/session-live" },
-      { path: "/v1/sessions/session-live/messages" },
-      { path: "/v1/sessions/session-live/events" },
+    let storeAttempts = 0
+    const unavailable = async (): Promise<never> => {
+      storeAttempts++
+      throw new Error("private-chat-store-outage")
+    }
+    const { base, admission } = await startAgentRunsTestApp(
+      t,
+      config({ agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } }),
+      unavailable,
+    )
+
+    const invalidScope = await fetch(`${base}/v1/sessions?scope=other-scope&project_ref=project_kokoro`, { headers: authHeaders() })
+    assert.equal(invalidScope.status, 400)
+    assert.equal(((await invalidScope.json()) as { error: { code: string } }).error.code, "invalid_scope")
+
+    const denied = await fetch(`${base}/v1/sessions`, {
+      headers: { ...authHeaders(), cookie: "kokoro-issuer.session_token=unknown-session" },
+    })
+    assert.equal(denied.status, 401)
+    assert.equal(((await denied.json()) as { error: { code: string } }).error.code, "session_invalid")
+    assert.equal(admission.calls.length, 2)
+    assert.equal(storeAttempts, 0)
+    assert.equal(ownerCalls, 0)
+
+    const requests: Array<{ path: string; code: string; init?: RequestInit }> = [
+      { path: "/v1/sessions", code: "business_store_unavailable" },
+      { path: "/v1/sessions/session-live", code: "chat_unavailable" },
+      { path: "/v1/sessions/session-live/messages", code: "chat_unavailable" },
+      { path: "/v1/sessions/session-live/events", code: "agui_ledger_unavailable" },
       {
         path: "/v1/sessions/session-live/messages",
+        code: "business_store_unavailable",
         init: {
           method: "POST",
           headers: { "content-type": "application/json", "idempotency-key": "live-chat-no-store" },
@@ -1387,6 +1148,7 @@ describe("kokoro-bff v1 mock contract", () => {
       },
       {
         path: "/v1/sessions/session-live/runs/run-live/control",
+        code: "agent_control_unavailable",
         init: {
           method: "POST",
           headers: { "content-type": "application/json", "idempotency-key": "live-control-no-store" },
@@ -1395,124 +1157,131 @@ describe("kokoro-bff v1 mock contract", () => {
       },
     ]
 
-    for (const item of requests) {
-      const response = await fetch(`${base}${item.path}`, {
-        ...item.init,
-        headers: { ...authHeaders(), ...item.init?.headers },
-      })
-      assert.equal(response.status, 503, item.path)
-      assert.equal(((await response.json()) as { error: { code: string } }).error.code, "business_store_not_configured", item.path)
+    for (const { path, code, init } of requests) {
+      const before = storeAttempts
+      const response = await fetch(`${base}${path}`, { ...init, headers: { ...authHeaders(), ...init?.headers } })
+      assert.equal(response.status, 503, path)
+      const body = (await response.json()) as { error: { code: string } }
+      assert.equal(body.error.code, code, path)
+      assert.doesNotMatch(JSON.stringify(body), /private-chat-store-outage/u)
+      assert.ok(storeAttempts > before, path)
     }
-    assert.equal(received, 0)
+    assert.equal(ownerCalls, 0)
   })
 
-  it("does not expose deprecated capability compatibility paths", async () => {
-    let ownerCalls = 0
-    const receipts = new Map()
-    const capability = createServer((_request, response) => {
-      ownerCalls += 1
-      response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({ data: { servers: [] }, meta: { request_id: "capability" } }))
-    })
-    const capabilityBase = await listen(capability)
-    const base = await listen(
-      liveServer(
-        config({
-          mode: "live",
-          upstreams: { ...config().upstreams, capability: capabilityBase },
-        }),
-        {
-          idempotency: receipts,
-          sessionAdmission: new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } }),
-          mcpAuthorization: { check: async () => ({ ok: true }) },
-          skillAuthorization: { check: async () => ({ ok: true }) },
-        },
-      ),
-    )
+  it("does not admit or forward retired MCP server mutations", async (t) => {
+    await import("reflect-metadata")
+    const { mkdtemp, rm, writeFile } = await import("node:fs/promises")
+    const { tmpdir } = await import("node:os")
+    const { join } = await import("node:path")
+    const { Test } = await import("@nestjs/testing")
+    const { AppModule } = await import("../dist/app.module.js")
+    const { loadConfig } = await import("../dist/config/runtime.js")
+    const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+    const { BffExpressAdapter } = await import("../dist/http/bff-express-adapter.js")
+    const {
+      AGENT_CANCELLATION_DISPATCHER,
+      AGENT_DISPATCH_DISPATCHER,
+      AGUI_PROJECTOR,
+      BFF_CONFIG,
+      BFF_DATABASE,
+      MCP_AUTHORIZATION,
+      PROJECT_SCOPE_RELEASE_DISPATCHER,
+      SCHEDULED_AGENT_DISPATCHER,
+      SCHEDULED_AGENT_TERMINAL_CONSUMER,
+      SCHEDULED_TASK_DISPATCHER,
+      SESSION_ADMISSION,
+    } = await import("../dist/common/tokens.js")
 
-    for (const path of ["/v1/connectors", "/v1/preferences", "/v1/cloud-computers", "/v1/integrations"]) {
-      const response = await fetch(`${base}${path}`, { headers: authHeaders() })
-      assert.equal(response.status, 404, path)
-      assert.equal(((await response.json()) as { error: { code: string } }).error.code, "bff_route_not_found")
+    let ownerCalls = 0
+    const ownerBase = await listen(
+      createServer((_request, response) => {
+        ownerCalls++
+        response.writeHead(502).end()
+      }),
+    )
+    const directory = await mkdtemp(join(tmpdir(), "bff-retired-mcp-"))
+    t.after(() => rm(directory, { recursive: true, force: true }))
+    const credentialFile = join(directory, "projection.json")
+    await writeFile(
+      credentialFile,
+      JSON.stringify({
+        version: 1,
+        entries: [
+          {
+            credential_id: "retired-mcp-projection",
+            secret: "retired-mcp-projection-test-only-secret",
+            caller: "kokoro-bff",
+            surfaces: ["projection"],
+            tenant_id: "ns_test",
+          },
+        ],
+      }),
+      { mode: 0o600 },
+    )
+    const admission = new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } })
+    let databaseCalls = 0
+    const unexpectedDatabase = (): never => {
+      databaseCalls++
+      assert.fail("retired MCP mutations must not read or write BFF storage")
     }
-    for (const { path, init } of [
-      { path: "/v1/mcp/servers", init: { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "mcp-register" }, body: "{}" } },
-      {
-        path: "/v1/mcp/servers/legacy/enable",
-        init: { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "mcp-enable" }, body: "{}" },
-      },
-      {
-        path: "/v1/mcp/servers/legacy/disable",
-        init: { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "mcp-disable" }, body: "{}" },
-      },
-      {
-        path: "/v1/mcp/servers/legacy",
-        init: { method: "DELETE", headers: { "content-type": "application/json", "idempotency-key": "mcp-delete" }, body: "{}" },
-      },
+    let authorizationCalls = 0
+    const configValue = loadConfig({
+      KOKORO_BFF_SHARED_SECRET: "test-secret",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
+      KOKORO_BFF_POSTGRES_URL: "postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=kokoro_bff",
+      KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:1/8",
+      KOKORO_AGENT_ENABLED: "false",
+      KOKORO_PLATFORM_BASE_URL: ownerBase,
+      KOKORO_PLATFORM_PROJECTION_CREDENTIAL_FILE: credentialFile,
+    })
+    const builder = Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(configValue)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({ pool: { query: unexpectedDatabase, connect: unexpectedDatabase } })
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(admission)
+      .overrideProvider(MCP_AUTHORIZATION)
+      .useValue({
+        check: async () => {
+          authorizationCalls++
+          return { ok: true }
+        },
+      })
+    for (const token of [
+      AGENT_CANCELLATION_DISPATCHER,
+      AGENT_DISPATCH_DISPATCHER,
+      AGUI_PROJECTOR,
+      PROJECT_SCOPE_RELEASE_DISPATCHER,
+      SCHEDULED_AGENT_DISPATCHER,
+      SCHEDULED_AGENT_TERMINAL_CONSUMER,
+      SCHEDULED_TASK_DISPATCHER,
+    ])
+      builder.overrideProvider(token).useValue(null)
+    const module = await builder.compile()
+    const app = module.createNestApplication(new BffExpressAdapter(), { ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    ownerApps.push(app)
+    await app.listen(0, "127.0.0.1")
+    const base = await app.getUrl()
+
+    for (const [method, path, key] of [
+      ["POST", "/v1/mcp/servers", "mcp-register"],
+      ["POST", "/v1/mcp/servers/legacy/enable", "mcp-enable"],
+      ["POST", "/v1/mcp/servers/legacy/disable", "mcp-disable"],
+      ["DELETE", "/v1/mcp/servers/legacy", "mcp-delete"],
     ]) {
-      const response = await fetch(`${base}${path}`, { ...init, headers: { ...authHeaders(), ...init.headers } })
+      const response = await fetch(`${base}${path}`, {
+        method,
+        headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": key },
+        body: "{}",
+      })
       assert.equal(response.status, 404, path)
       assert.equal(((await response.json()) as { error: { code: string } }).error.code, "bff_route_not_found", path)
     }
-    const guardedSkill = await fetch(`${base}/v1/skills/quota`, { headers: authHeaders() })
-    assert.equal(guardedSkill.status, 503)
-    assert.equal(((await guardedSkill.json()) as { error: { code: string } }).error.code, "platform_operation_not_available")
+    assert.equal(admission.calls.length, 0)
+    assert.equal(authorizationCalls, 0)
+    assert.equal(databaseCalls, 0)
     assert.equal(ownerCalls, 0)
-    assert.equal(receipts.size, 0)
-  })
-
-  it("terminates unknown System and Skills paths in the raw feature adapter while preserving compatibility 404s", async () => {
-    let ownerCalls = 0
-    const owner = createServer((_request, response) => {
-      ownerCalls++
-      response.statusCode = 200
-      response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({ data: { unexpected: true } }))
-    })
-    const ownerBase = await listen(owner)
-    const base = await listen(
-      liveServer(config({ upstreams: { ...config().upstreams, system: ownerBase, platform: ownerBase } }), {
-        skillAuthorization: { check: async () => ({ ok: true }) },
-      }),
-    )
-
-    for (const [path, code] of [
-      ["/v1/system/unknown", "system_projection_not_configured"],
-      ["/v1/skills/quota", "platform_operation_not_available"],
-    ] as const) {
-      const response = await fetch(`${base}${path}`, { headers: authHeaders() })
-      assert.equal(response.status, 503, path)
-      assert.equal(((await response.json()) as { error: { code: string } }).error.code, code, path)
-    }
-
-    for (const [path, init] of [
-      ["/v1/skills/missing", { method: "GET" }],
-      ["/v1/skills/missing/download", { method: "GET" }],
-      ["/v1/skills/missing/enable", { method: "POST", headers: { "idempotency-key": "raw-compat-enable" } }],
-    ] as const) {
-      const response = await fetch(`${base}${path}`, { ...init, headers: { ...authHeaders(), ...init.headers } })
-      assert.equal(response.status, 404, path)
-      assert.equal(
-        ((await response.json()) as { error: { code: string } }).error.code,
-        path.endsWith("/enable") ? "bff_route_not_found" : "route_not_found",
-        path,
-      )
-    }
-
-    for (const command of ["enable", "disable"]) {
-      const path = `/v1/skills/contract-review/${command}?scope=official`
-      const result = await fetch(`${base}${path}`, {
-        method: "POST",
-        headers: { ...authHeaders(), "idempotency-key": `skills-toggle-contract-review-${command}` },
-      })
-      assert.equal(result.status, 404, path)
-      await result.arrayBuffer()
-    }
-    assert.equal(ownerCalls, 0)
-
-    const fixtureBase = await listen(testServer(config()))
-    const fixture = await fetch(`${fixtureBase}/v1/system/unknown`, { headers: authHeaders() })
-    assert.equal(fixture.status, 404)
-    assert.equal(((await fixture.json()) as { error: { code: string } }).error.code, "bff_route_not_found")
   })
 })

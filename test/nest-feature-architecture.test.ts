@@ -45,12 +45,10 @@ test("scheduled-task state reader port is owned by its feature module", async ()
 })
 
 test("AuthenticationModule alone owns SessionAdmission and AccountModule retains only its real feature providers", async () => {
-  const [accountModule, middleware, nativeRoute, server, runtime] = await Promise.all([
+  const [accountModule, middleware, nativeRoute] = await Promise.all([
     readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/account/account.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/admin-identity-native.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
   await import("reflect-metadata")
   const { AuthenticationModule } = await import("../dist/modules/authentication/authentication.module.js")
@@ -72,32 +70,26 @@ test("AuthenticationModule alone owns SessionAdmission and AccountModule retains
   assert.equal(Reflect.getMetadata("imports", AccountModule).includes(AuthenticationModule), true)
   assert.equal(Reflect.getMetadata("exports", AccountModule).includes(SESSION_ADMISSION), false)
   assert.doesNotMatch(accountModule, /provide: SESSION_ADMISSION/u)
-  assert.match(runtime, /sessionAdmission/u)
   assert.match(middleware, /handleAdminIdentityRequest/u)
   assert.match(nativeRoute, /handleAdminIdentityRequest/u)
-  assert.match(server, /handleAdminIdentityRequest/u)
-  assert.doesNotMatch(server, /await liveAdminIdentityRead\(/u)
 })
 
 test("IamRelayModule owns the native protocol relay before the transitional dispatcher", async () => {
-  const [moduleSource, middleware, server] = await Promise.all([
+  const [moduleSource, middleware] = await Promise.all([
     readFile(path.join(root, "src/modules/iam-relay/iam-relay.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/iam-relay/iam-relay.middleware.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(moduleSource, /IamRelayMiddleware/u)
   assert.match(middleware, /iamProtocolRelay/u)
-  assert.doesNotMatch(server, /startsWith\("\/iam"\)/u)
 })
 
 test("BillingModule owns personal and administrator billing routes", async () => {
-  const [moduleSource, middleware, personalMiddleware, personalRoute, nativeRoute, server, owner] = await Promise.all([
+  const [moduleSource, middleware, personalMiddleware, personalRoute, nativeRoute, owner] = await Promise.all([
     readFile(path.join(root, "src/modules/billing/billing.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/billing/billing-admin.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/modules/billing/billing-personal.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/billing-personal-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/billing-admin-native.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/owner-request.ts"), "utf8"),
   ])
   assert.match(moduleSource, /BillingAdminMiddleware/u)
@@ -107,21 +99,16 @@ test("BillingModule owns personal and administrator billing routes", async () =>
   assert.match(personalMiddleware, /BillingPersonalMiddleware/u)
   assert.match(personalRoute, /handleBillingPersonalBusiness/u)
   assert.match(nativeRoute, /handleBillingAdminRequest/u)
-  assert.match(server, /handleBillingAdminRequest/u)
-  assert.match(server, /handleBillingPersonalBusiness/u)
   assert.doesNotMatch(owner, /billingPersonalRead|readBillingCatalog|initializeBillingCreditAccount/u)
-  assert.doesNotMatch(server, /await liveAdminCreditGrant\(/u)
-  assert.doesNotMatch(server, /await liveAdminMetering\(/u)
 })
 
 test("SystemModule owns model catalog and administrator configuration/routing routes", async () => {
-  const [moduleSource, middleware, modelMiddleware, modelRoute, nativeRoute, server, owner] = await Promise.all([
+  const [moduleSource, middleware, modelMiddleware, modelRoute, nativeRoute, owner] = await Promise.all([
     readFile(path.join(root, "src/modules/system/system.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/system/system.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/modules/system/system-model-catalog.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/system-model-catalog-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/system-admin-native.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/owner-request.ts"), "utf8"),
   ])
   await import("reflect-metadata")
@@ -136,54 +123,35 @@ test("SystemModule owns model catalog and administrator configuration/routing ro
   assert.match(modelMiddleware, /SystemModelCatalogMiddleware/u)
   assert.match(modelRoute, /handleSystemModelCatalogBusiness/u)
   assert.match(nativeRoute, /handleSystemAdminRequest/u)
-  assert.match(server, /handleSystemAdminRequest/u)
-  assert.match(server, /handleSystemModelCatalogBusiness/u)
   assert.doesNotMatch(owner, /modelCatalogData|businessPath\.length === 1 && businessPath\[0\] === "models"/u)
-  assert.doesNotMatch(server, /await liveModelConfigurationAdmin\(/u)
-  assert.doesNotMatch(server, /await liveModelRoutingAdmin\(/u)
 })
 
 test("MusicModule owns the Mori owner adapter and idempotency seam", async () => {
-  const [moduleSource, middleware, nativeRoute, server] = await Promise.all([
+  const [moduleSource, middleware, nativeRoute] = await Promise.all([
     readFile(path.join(root, "src/modules/music/music.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/music/music.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/music-native.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(moduleSource, /MUSIC_IDEMPOTENCY/u)
   assert.match(moduleSource, /MusicMiddleware/u)
   assert.match(middleware, /handleMoriRequest/u)
   assert.match(nativeRoute, /liveMoriBusiness/u)
-  assert.match(server, /handleMoriRequest/u)
-  assert.doesNotMatch(server, /isMoriBusinessPath|liveMoriBusiness/u)
 })
 
 test("ChatModule owns the archive/share adapters and chat provider", async () => {
-  const [
-    chatModule,
-    middleware,
-    nativeRoute,
-    sharedNativeRoute,
-    feedbackRoute,
-    regenerationNativeRoute,
-    mutationRoute,
-    eventsRoute,
-    messageRoute,
-    aguiModule,
-    server,
-  ] = await Promise.all([
-    readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/chat/chat.middleware.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/chat-native.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/shared-native.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/message-feedback-native.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/message-regeneration-native.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/chat-mutation-native.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/chat-events-native.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/chat-message-native.ts"), "utf8"),
-    readFile(path.join(root, "src/modules/agui/agui.module.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
-  ])
+  const [chatModule, middleware, nativeRoute, sharedNativeRoute, feedbackRoute, regenerationNativeRoute, mutationRoute, eventsRoute, messageRoute, aguiModule] =
+    await Promise.all([
+      readFile(path.join(root, "src/modules/chat/chat.module.ts"), "utf8"),
+      readFile(path.join(root, "src/modules/chat/chat.middleware.ts"), "utf8"),
+      readFile(path.join(root, "src/http/routes/chat-native.ts"), "utf8"),
+      readFile(path.join(root, "src/http/routes/shared-native.ts"), "utf8"),
+      readFile(path.join(root, "src/http/routes/message-feedback-native.ts"), "utf8"),
+      readFile(path.join(root, "src/http/routes/message-regeneration-native.ts"), "utf8"),
+      readFile(path.join(root, "src/http/routes/chat-mutation-native.ts"), "utf8"),
+      readFile(path.join(root, "src/http/routes/chat-events-native.ts"), "utf8"),
+      readFile(path.join(root, "src/http/routes/chat-message-native.ts"), "utf8"),
+      readFile(path.join(root, "src/modules/agui/agui.module.ts"), "utf8"),
+    ])
   assert.match(chatModule, /provide: CHAT_SERVICE/u)
   assert.match(chatModule, /imports: \[[^\]]*AgentDispatchModule/u)
   assert.match(await readFile(path.join(root, "src/modules/agent-dispatch/agent-dispatch.module.ts"), "utf8"), /provide: CHAT_TURN_SERVICE/u)
@@ -219,18 +187,10 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
   // rather than private helper names in the native HTTP adapter.
   assert.match(aguiModule, /AGUI_PROJECTION/u)
   assert.match(aguiModule, /AGUI_RUNTIME/u)
-  assert.match(server, /handleChatNativeRequest/u)
-  assert.match(server, /handleMessageFeedbackRequest/u)
-  assert.doesNotMatch(server, /await archivedTasksRoute\(/u)
-  assert.doesNotMatch(server, /await sharedTasksRoute\(/u)
-  assert.doesNotMatch(server, /await messageFeedbackRoute\(/u)
-  assert.match(server, /handleMoveSessionRequest/u)
-  assert.doesNotMatch(server, /await moveSessionRoute\(/u)
   assert.match(chatModule, /PUBLIC_SHARE_SERVICE/u)
   assert.match(chatModule, /SKILL_AI_ASSOCIATION/u)
   assert.match(middleware, /handleSharedPublicRequest/u)
   assert.match(sharedNativeRoute, /publicShareSnapshot/u)
-  assert.doesNotMatch(server, /segments\[1\] === "shared"/u)
 })
 
 test("Chat public-share capability port is feature-local", async () => {
@@ -262,86 +222,76 @@ test("Chat repository port is feature-local", async () => {
 test("Skills share capability port is feature-local", async () => {
   assert.equal(await fileExists("src/application/skills/skill-share-repository.ts"), true)
   assert.equal(await fileExists("src/application/ports/skill-share-repository.ts"), false)
-  const [middleware, moduleSource, route, repository, runtime] = await Promise.all([
+  const [middleware, moduleSource, route, repository] = await Promise.all([
     readFile(path.join(root, "src/modules/skills/skills.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/modules/skills/skills.module.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/skill-share.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/skill-share-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
   assert.match(middleware, /application\/skills\/skill-share-repository\.js/u)
   assert.match(moduleSource, /SKILL_SHARE_REPOSITORY/u)
   assert.match(route, /application\/skills\/skill-share-repository\.js/u)
   assert.match(repository, /application\/skills\/skill-share-repository\.js/u)
-  assert.match(runtime, /application\/skills\/skill-share-repository\.js/u)
 })
 
 test("Account personal-knowledge repository port is feature-local", async () => {
   assert.equal(await fileExists("src/application/account/personal-knowledge-repository.ts"), true)
   assert.equal(await fileExists("src/application/ports/personal-knowledge-repository.ts"), false)
-  const [middleware, route, repository, runtime] = await Promise.all([
+  const [middleware, route, repository] = await Promise.all([
     readFile(path.join(root, "src/modules/account/account.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/personal-knowledge-native.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/personal-knowledge-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
   assert.match(middleware, /application\/account\/personal-knowledge-repository\.js/u)
   assert.match(route, /application\/account\/personal-knowledge-repository\.js/u)
   assert.match(repository, /application\/account\/personal-knowledge-repository\.js/u)
-  assert.match(runtime, /application\/account\/personal-knowledge-repository\.js/u)
 })
 
 test("Account library artifact repository port is feature-local", async () => {
   assert.equal(await fileExists("src/application/account/artifact-library-repository.ts"), true)
   assert.equal(await fileExists("src/application/ports/artifact-library-repository.ts"), false)
-  const [moduleSource, middleware, route, repository, runtime] = await Promise.all([
+  const [moduleSource, middleware, route, repository] = await Promise.all([
     readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/account/library.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/library-native.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/conversation-artifact-library.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
   assert.match(moduleSource, /application\/account\/artifact-library-repository\.js/u)
   assert.match(middleware, /application\/account\/artifact-library-repository\.js/u)
   assert.match(route, /application\/account\/artifact-library-repository\.js/u)
   assert.match(repository, /application\/account\/artifact-library-repository\.js/u)
-  assert.match(runtime, /application\/account\/artifact-library-repository\.js/u)
 })
 
 test("Projects repository port is feature-local", async () => {
   assert.equal(await fileExists("src/application/projects/project-repository.ts"), true)
   assert.equal(await fileExists("src/application/ports/project-repository.ts"), false)
-  const [service, specification, route, repository, runtime] = await Promise.all([
+  const [service, specification, route, repository] = await Promise.all([
     readFile(path.join(root, "src/application/project-service.ts"), "utf8"),
     readFile(path.join(root, "src/application/skill-specification.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/project-native.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/project-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/repositories.ts"), "utf8"),
   ])
   assert.match(service, /projects\/project-repository\.js/u)
   assert.match(specification, /projects\/project-repository\.js/u)
   assert.match(route, /application\/projects\/project-repository\.js/u)
   assert.match(repository, /application\/projects\/project-repository\.js/u)
-  assert.match(runtime, /application\/projects\/project-repository\.js/u)
 })
 
 test("Projects scope-release outbox port is feature-local", async () => {
   assert.equal(await fileExists("src/application/projects/project-scope-release-outbox.ts"), true)
   assert.equal(await fileExists("src/application/ports/project-scope-release-outbox.ts"), false)
-  const [moduleSource, runtime, client, repository] = await Promise.all([
+  const [moduleSource, client, repository] = await Promise.all([
     readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/clients/storage/scope-release-client.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/project-scope-release-outbox-repository.ts"), "utf8"),
   ])
   assert.match(moduleSource, /application\/projects\/project-scope-release-outbox\.js/u)
-  assert.match(runtime, /application\/projects\/project-scope-release-outbox\.js/u)
   assert.match(client, /application\/projects\/project-scope-release-outbox\.js/u)
   assert.match(repository, /application\/projects\/project-scope-release-outbox\.js/u)
 })
 
 test("ProjectsModule owns the project command/read adapters and provider", async () => {
-  const [projectsModule, accessModule, middleware, mutationMiddleware, nativeRoute, packageMiddleware, downloadMiddleware, server] = await Promise.all([
+  const [projectsModule, accessModule, middleware, mutationMiddleware, nativeRoute, packageMiddleware, downloadMiddleware] = await Promise.all([
     readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-access.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-pin.middleware.ts"), "utf8"),
@@ -349,7 +299,6 @@ test("ProjectsModule owns the project command/read adapters and provider", async
     readFile(path.join(root, "src/http/routes/project-native.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-skill-package-inspection.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/modules/projects/project-skill-download.middleware.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(projectsModule, /ProjectAccessModule/u)
   assert.match(accessModule, /provide: PROJECT_SERVICE/u)
@@ -389,36 +338,13 @@ test("ProjectsModule owns the project command/read adapters and provider", async
   assert.match(nativeRoute, /handleProjectResourceUploadRequest/u)
   assert.match(nativeRoute, /handleProjectResourceReadRequest/u)
   assert.match(nativeRoute, /handleProjectCoreReadRequest/u)
-  assert.match(server, /handleProjectPinRequest/u)
-  assert.match(server, /handleProjectDeletionStatusRequest/u)
-  assert.match(server, /handleProjectRenameRequest/u)
-  assert.match(server, /handleProjectDeleteRequest/u)
-  assert.match(server, /handleProjectResourceListRequest/u)
-  assert.match(server, /handleProjectResourceDeleteRequest/u)
-  assert.match(server, /handleProjectResourceUploadRequest/u)
-  assert.match(server, /handleProjectResourceReadRequest/u)
-  assert.match(server, /handleProjectSkillSelectionRequest/u)
-  assert.doesNotMatch(server, /await projectPinRoute\(/u)
-  assert.doesNotMatch(server, /await projectDeletionStatusRoute\(/u)
-  assert.doesNotMatch(server, /await projectRenameRoute\(/u)
-  assert.doesNotMatch(server, /await projectDeleteRoute\(/u)
-  assert.doesNotMatch(server, /await projectResourceListRoute\(/u)
-  assert.doesNotMatch(server, /await projectResourceDeleteRoute\(/u)
-  assert.doesNotMatch(server, /await projectResourceReadRoute\(/u)
-  assert.doesNotMatch(server, /await projectResourceRoute\(/u)
-  assert.doesNotMatch(server, /await projectSkillSelectionRoute\(/u)
-  assert.doesNotMatch(server, /isProjectInstallationPath \? .*skillInstallationRoute/u)
 })
 
 test("ProjectsModule owns project-scope release worker lifecycle", async () => {
-  const [projectsModule, runtime] = await Promise.all([
-    readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
-  ])
+  const projectsModule = await readFile(path.join(root, "src/modules/projects/projects.module.ts"), "utf8")
   assert.match(projectsModule, /provide: PROJECT_SCOPE_RELEASE_OUTBOX/u)
   assert.match(projectsModule, /provide: PROJECT_SCOPE_RELEASE_DISPATCHER/u)
   assert.match(projectsModule, /ProjectScopeReleaseWorkerLifecycle/u)
-  assert.match(runtime, /explicitlySuppliedProjectScopeReleaseDispatcher/u)
 })
 
 test("ScheduledTask repository and outbox ports are feature-local", async () => {
@@ -480,25 +406,19 @@ test("Scheduled Agent and Scheduler receipt ports are feature-local", async () =
 })
 
 test("ScheduledTasksModule owns the current-state read adapter and provider", async () => {
-  const [scheduledModule, middleware, nativeRoute, server] = await Promise.all([
+  const [scheduledModule, middleware, nativeRoute] = await Promise.all([
     readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-task-read.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/scheduled-task-native.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(scheduledModule, /provide: SCHEDULED_TASK_READ_SERVICE/u)
   assert.match(scheduledModule, /ScheduledTaskReadMiddleware/u)
   assert.match(middleware, /handleScheduledTaskReadRequest/u)
   assert.match(nativeRoute, /scheduledTaskReadRoute/u)
-  assert.match(server, /handleScheduledTaskReadRequest/u)
-  assert.doesNotMatch(server, /await scheduledTaskReadRoute\(/u)
 })
 
 test("ScheduledTasksModule owns the scheduled outbox worker lifecycle", async () => {
-  const [scheduledModule, runtime] = await Promise.all([
-    readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
-  ])
+  const scheduledModule = await readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8")
   assert.match(scheduledModule, /provide: SCHEDULED_TASK_OUTBOX/u)
   assert.match(scheduledModule, /provide: SCHEDULED_TASK_DISPATCHER/u)
   assert.match(scheduledModule, /provide: SCHEDULED_TASK_REPOSITORY/u)
@@ -509,29 +429,16 @@ test("ScheduledTasksModule owns the scheduled outbox worker lifecycle", async ()
   assert.match(scheduledModule, /provide: SCHEDULED_AGENT_DISPATCH_REPOSITORY/u)
   assert.match(scheduledModule, /provide: SCHEDULED_AGENT_DISPATCHER/u)
   assert.match(scheduledModule, /provide: SCHEDULED_AGENT_TERMINAL_CONSUMER/u)
-  assert.match(runtime, /explicitlySuppliedScheduledTaskDispatcher/u)
-  assert.match(runtime, /explicitlySuppliedScheduledAgentDispatcher/u)
-  assert.match(runtime, /explicitlySuppliedScheduledAgentTerminalConsumer/u)
 })
 
 test("Scheduler dispatch shares the feature-owned entrypoint with the raw compatibility chain", async () => {
-  const [route, middleware, server] = await Promise.all([
+  const [route, middleware] = await Promise.all([
     readFile(path.join(root, "src/http/routes/scheduler.ts"), "utf8"),
     readFile(path.join(root, "src/modules/scheduled-tasks/scheduler-dispatch.middleware.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(route, /isSchedulerDispatchRequest/u)
   assert.match(route, /response\.setHeader\("x-request-id", fallbackRequestId\)/u)
   assert.match(middleware, /schedulerDispatch\(request, response, this\.config/u)
-  assert.match(server, /schedulerDispatch\(request, response, config, schedulerProvider, composition\.idempotency\)/u)
-  assert.doesNotMatch(server, /segments\[0\] === "internal" && segments\[1\] === "bff" && segments\[2\] === "scheduled-tasks" && segments\[3\] === "dispatch"/u)
-})
-
-test("raw compatibility terminates unknown configured owner paths after named adapters", async () => {
-  const server = await readFile(path.join(root, "src/bootstrap/server.ts"), "utf8")
-  assert.match(server, /isRawUnknownConfiguredOwnerRequest\(request\)/u)
-  assert.match(server, /send\(response, 404, failure\("bff_route_not_found"/u)
-  assert.match(server, /composition\.routeHandler === undefined && isRawUnknownConfiguredOwnerRequest/u)
 })
 
 test("AgentRuns execution-binding and submitted-run reader ports are feature-local", async () => {
@@ -539,29 +446,26 @@ test("AgentRuns execution-binding and submitted-run reader ports are feature-loc
   assert.equal(await fileExists("src/application/agent-runs/submitted-agent-run-reader.ts"), true)
   assert.equal(await fileExists("src/application/ports/project-execution-binding-reader.ts"), false)
   assert.equal(await fileExists("src/application/ports/submitted-agent-run-reader.ts"), false)
-  const [moduleSource, middleware, admissionRoute, displayRoute, repository, runtime] = await Promise.all([
+  const [moduleSource, middleware, admissionRoute, displayRoute, repository] = await Promise.all([
     readFile(path.join(root, "src/modules/agent-runs/agent-runs.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/agent-runs/agent-runs.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/agent-runs-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/run-display.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/project-execution-binding.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
   ])
   assert.match(moduleSource, /application\/agent-runs\/submitted-agent-run-reader\.js/u)
   assert.match(middleware, /application\/agent-runs\/(?:project-execution-binding|submitted-agent-run)-reader\.js/u)
   assert.match(admissionRoute, /application\/agent-runs\/(?:project-execution-binding|submitted-agent-run)-reader\.js/u)
   assert.match(displayRoute, /application\/agent-runs\/submitted-agent-run-reader\.js/u)
   assert.match(repository, /application\/agent-runs\/(?:project-execution-binding|submitted-agent-run)-reader\.js/u)
-  assert.match(runtime, /application\/agent-runs\/(?:project-execution-binding|submitted-agent-run)-reader\.js/u)
 })
 
 test("AgentRunsModule owns internal admission and execution-binding adapters", async () => {
-  const [agentModule, middleware, nativeRoute, controlRoute, server] = await Promise.all([
+  const [agentModule, middleware, nativeRoute, controlRoute] = await Promise.all([
     readFile(path.join(root, "src/modules/agent-runs/agent-runs.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/agent-runs/agent-runs.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/agent-runs-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/agent-control-native.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(agentModule, /provide: AGENT_RUNS_READER/u)
   assert.match(agentModule, /AgentRunsMiddleware/u)
@@ -570,23 +474,17 @@ test("AgentRunsModule owns internal admission and execution-binding adapters", a
   assert.match(nativeRoute, /agentModelAdmissionRoute/u)
   assert.match(nativeRoute, /projectExecutionBindingRoute/u)
   assert.match(controlRoute, /liveAgentSession/u)
-  assert.match(server, /handleAgentRunsInternalRequest/u)
-  assert.doesNotMatch(server, /await agentModelAdmissionRoute\(/u)
-  assert.doesNotMatch(server, /await projectExecutionBindingRoute\(/u)
 })
 
 test("AgentRunsModule owns the run-display adapter and provider seam", async () => {
-  const [agentModule, middleware, nativeRoute, server] = await Promise.all([
+  const [agentModule, middleware, nativeRoute] = await Promise.all([
     readFile(path.join(root, "src/modules/agent-runs/agent-runs.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/agent-runs/agent-runs.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/run-display.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(agentModule, /provide: RUN_DISPLAY_PROVIDER/u)
   assert.match(middleware, /handleRunDisplayRequest/u)
   assert.match(nativeRoute, /runDisplayRoute/u)
-  assert.match(server, /handleRunDisplayRequest/u)
-  assert.doesNotMatch(server, /await runDisplayRoute\(/u)
 })
 
 test("Agent dispatch and cancellation outbox ports are feature-local", async () => {
@@ -617,27 +515,18 @@ test("Agent dispatch and cancellation outbox ports are feature-local", async () 
 })
 
 test("AgentDispatchModule owns Agent outbox worker lifecycle", async () => {
-  const [dispatchModule, runtime] = await Promise.all([
-    readFile(path.join(root, "src/modules/agent-dispatch/agent-dispatch.module.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
-  ])
+  const dispatchModule = await readFile(path.join(root, "src/modules/agent-dispatch/agent-dispatch.module.ts"), "utf8")
   assert.match(dispatchModule, /provide: AGENT_DISPATCH_DISPATCHER/u)
   assert.match(dispatchModule, /provide: AGENT_CANCELLATION_DISPATCHER/u)
   assert.match(dispatchModule, /AgentDispatchWorkerLifecycle/u)
   assert.match(dispatchModule, /onModuleInit/u)
-  assert.match(runtime, /explicitlySuppliedAgentDispatchDispatcher/u)
-  assert.match(runtime, /explicitlySuppliedAgentCancellationDispatcher/u)
 })
 
 test("AguiModule owns the projector lifecycle", async () => {
-  const [aguiModule, runtime] = await Promise.all([
-    readFile(path.join(root, "src/modules/agui/agui.module.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
-  ])
+  const aguiModule = await readFile(path.join(root, "src/modules/agui/agui.module.ts"), "utf8")
   assert.match(aguiModule, /provide: AGUI_PROJECTOR/u)
   assert.match(aguiModule, /AguiProjectorLifecycle/u)
   assert.match(aguiModule, /AgentAgUiSourceReader/u)
-  assert.match(runtime, /explicitlySuppliedAgUiProjector/u)
 })
 
 test("McpModule owns MCP projections, custom API route admission and candidate clients", async () => {
@@ -654,7 +543,6 @@ test("McpModule owns MCP projections, custom API route admission and candidate c
     publicationRoute,
     customMiddleware,
     customRoute,
-    server,
     owner,
   ] = await Promise.all([
     readFile(path.join(root, "src/modules/mcp/mcp.module.ts"), "utf8"),
@@ -669,7 +557,6 @@ test("McpModule owns MCP projections, custom API route admission and candidate c
     readFile(path.join(root, "src/http/routes/mcp-project-publication-native.ts"), "utf8"),
     readFile(path.join(root, "src/modules/mcp/custom-api.middleware.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/custom-api.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/owner-request.ts"), "utf8"),
   ])
   assert.match(mcpModule, /PROJECT_MCP_RECOMMENDATIONS_PROVIDER/u)
@@ -679,32 +566,23 @@ test("McpModule owns MCP projections, custom API route admission and candidate c
   assert.match(mcpModule, /PlatformProjectionMiddleware/u)
   assert.match(projectionMiddleware, /livePlatformProjectionRead/u)
   assert.match(projectionRoute, /platformProjectionRequest/u)
-  assert.match(server, /livePlatformProjectionRead/u)
   assert.match(mcpModule, /ConnectorListMiddleware/u)
   assert.match(connectorRoute, /handleConnectorListRequest/u)
-  assert.match(server, /handleConnectorListRequest/u)
   assert.match(mcpModule, /MCP_PROVIDER_ADMIN_CLIENT/u)
   assert.match(mcpModule, /MCP_PACKAGE_ADMIN_CLIENT/u)
   assert.match(mcpModule, /McpAdminMiddleware/u)
   assert.match(adminMiddleware, /handleMcpAdminRequest/u)
   assert.match(adminRoute, /mcpProviderAdminRoute/u)
   assert.match(adminRoute, /mcpPackageAdminRoute/u)
-  assert.match(server, /handleMcpAdminRequest/u)
   assert.match(mcpModule, /MCP_PROJECT_PUBLICATION_CLIENT/u)
   assert.match(mcpModule, /McpProjectPublicationMiddleware/u)
   assert.match(publicationMiddleware, /handleMcpProjectPublicationRequest/u)
   assert.match(publicationRoute, /mcpProjectPublicationRoute/u)
-  assert.match(server, /handleMcpProjectPublicationRequest/u)
   assert.match(mcpModule, /CUSTOM_API_CLIENT/u)
   assert.match(mcpModule, /CustomApiMiddleware/u)
   assert.match(customMiddleware, /handleCustomApiRequest/u)
   assert.match(customRoute, /customApiOperation/u)
-  assert.match(server, /customApiRoute\(request, response, composition\.customApiClient/u)
   assert.match(route, /handleProjectMcpRecommendationsRequest/u)
-  assert.match(server, /handleProjectMcpRecommendationsRequest/u)
-  assert.doesNotMatch(server, /await projectMcpRecommendationsRoute\(/u)
-  assert.doesNotMatch(server, /await mcp(?:Provider|Package)AdminRoute\(/u)
-  assert.doesNotMatch(server, /await mcpProjectPublicationRoute\(/u)
   assert.doesNotMatch(owner, /livePlatformProjectionRead/u)
 })
 
@@ -727,7 +605,6 @@ test("SkillsModule owns personal skill-installation admission and client", async
     appBindingsNativeRoute,
     specificationNativeRoute,
     packageInspectionNativeRoute,
-    server,
   ] = await Promise.all([
     readFile(path.join(root, "src/modules/skills/skills.module.ts"), "utf8"),
     readFile(path.join(root, "src/modules/skills/skills.middleware.ts"), "utf8"),
@@ -746,7 +623,6 @@ test("SkillsModule owns personal skill-installation admission and client", async
     readFile(path.join(root, "src/http/routes/app-skill-bindings-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/skill-specification-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/skill-package-inspection-native.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(skillsModule, /SKILL_INSTALLATION_CLIENT/u)
   assert.match(skillsModule, /SKILL_DRAFT_CLIENT/u)
@@ -769,10 +645,6 @@ test("SkillsModule owns personal skill-installation admission and client", async
   assert.match(middleware, /handleSkillDownloadRequest/u)
   assert.match(middleware, /handleSkillPackageInspectionRequest/u)
   assert.match(packageInspectionNativeRoute, /skillPackageInspectionRoute/u)
-  assert.match(server, /handleSkillPackageInspectionRequest/u)
-  assert.match(server, /projectContentAccessForRequest/u)
-  assert.doesNotMatch(server, /exactSkillDownloadRoute/u)
-  assert.match(server, /handleAppSkillBindingsRequest/u)
   assert.match(middleware, /handlePersonalSkillInstallationRequest/u)
   assert.match(middleware, /handleManagedPersonalSkillsRequest/u)
   assert.match(middleware, /handleSkillSpecificationEnabledRequest/u)
@@ -799,16 +671,6 @@ test("SkillsModule owns personal skill-installation admission and client", async
   assert.match(usageRoute, /handleSkillUsageRequest/u)
   assert.match(managedRoute, /handleManagedPersonalSkillsRequest/u)
   assert.match(enabledRoute, /handleSkillSpecificationEnabledRequest/u)
-  assert.match(server, /handlePersonalSkillInstallationRequest/u)
-  assert.match(server, /handleManagedPersonalSkillsRequest/u)
-  assert.match(server, /handleSkillSpecificationEnabledRequest/u)
-  assert.match(server, /handleSkillGithubImportRequest/u)
-  assert.match(server, /handleSkillAiImportRequest/u)
-  assert.match(server, /handleSkillShareRequest/u)
-  assert.doesNotMatch(server, /await skillGithubImportRoute\(/u)
-  assert.doesNotMatch(server, /await skillAiImportRoute\(/u)
-  assert.doesNotMatch(server, /await skillShareRoute\(/u)
-  assert.doesNotMatch(server, /await skillInstallationRoute\(/u)
 })
 
 async function fileExists(relativePath: string): Promise<boolean> {

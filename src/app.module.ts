@@ -36,8 +36,6 @@ import { MusicModule } from "./modules/music/music.module.js"
     BillingModule,
     SystemModule,
     MusicModule,
-    // All production business routes are owned by feature modules. Raw
-    // createBffServer remains an explicit test/compatibility entrypoint.
   ],
 })
 export class AppModule {}

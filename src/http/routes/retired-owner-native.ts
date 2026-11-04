@@ -1,16 +1,14 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
-import type { RequestContext } from "../../domain/request-context.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { failure } from "../../contracts/index.js"
 import { pathOf, requestId } from "../request.js"
-import { reply, send } from "../response.js"
+import { send } from "../response.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 
 type RetiredOwner = "system" | "skills"
 
-function retiredOwnerForRequest(request: IncomingMessage, preserveRawSkillToggleNotFound: boolean): RetiredOwner | null {
+function retiredOwnerForRequest(request: IncomingMessage): RetiredOwner | null {
   let path: string[]
   try {
     path = pathOf(request)
@@ -25,30 +23,7 @@ function retiredOwnerForRequest(request: IncomingMessage, preserveRawSkillToggle
   const removedSkillRead =
     method === "GET" &&
     (path.length === 2 || (path.length === 3 && !["quota", "drafts", "github"].includes(path[2] ?? "")) || (path.length === 4 && path[3] === "download"))
-  const removedSkillToggle = preserveRawSkillToggleNotFound && path.length === 4 && ["enable", "disable"].includes(path[3] ?? "")
-  return removedSkillRead || removedSkillToggle ? null : owner
-}
-
-export async function handleRetiredOwnerBusiness(
-  request: IncomingMessage,
-  response: ServerResponse,
-  context: RequestContext,
-  idempotency: Map<string, IdempotencyEntry>,
-  mutation: MutationTicket | null,
-): Promise<boolean> {
-  const owner = retiredOwnerForRequest(request, false)
-  if (owner === null) return false
-  await reply(
-    response,
-    503,
-    owner === "system"
-      ? failure("system_projection_not_configured", "This System operation is not exposed by the BFF owner adapter", context.requestId)
-      : failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", context.requestId),
-    context,
-    idempotency,
-    mutation,
-  )
-  return true
+  return removedSkillRead ? null : owner
 }
 
 export async function handleRetiredOwnerRequest(
@@ -57,34 +32,21 @@ export async function handleRetiredOwnerRequest(
   config: BffConfig,
   admission: SessionAdmission,
 ): Promise<boolean> {
-  return handleRetiredOwnerRequestInternal(request, response, config, admission, false)
-}
-
-/**
- * Raw createBffServer additionally preserves the legacy Skill toggle 404.
- */
-export async function handleRetiredOwnerRawRequest(
-  request: IncomingMessage,
-  response: ServerResponse,
-  config: BffConfig,
-  admission: SessionAdmission,
-): Promise<boolean> {
-  return handleRetiredOwnerRequestInternal(request, response, config, admission, true)
-}
-
-async function handleRetiredOwnerRequestInternal(
-  request: IncomingMessage,
-  response: ServerResponse,
-  config: BffConfig,
-  admission: SessionAdmission,
-  preserveRawSkillToggleNotFound: boolean,
-): Promise<boolean> {
-  if (retiredOwnerForRequest(request, preserveRawSkillToggleNotFound) === null) return false
+  const owner = retiredOwnerForRequest(request)
+  if (owner === null) return false
   const id = requestId(request)
   const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000), response)
   if (!admitted.ok) {
     send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
     return true
   }
-  return handleRetiredOwnerBusiness(request, response, admitted.context, new Map(), null)
+  response.setHeader("x-request-id", admitted.context.requestId)
+  send(
+    response,
+    503,
+    owner === "system"
+      ? failure("system_projection_not_configured", "This System operation is not exposed by the BFF owner adapter", admitted.context.requestId)
+      : failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", admitted.context.requestId),
+  )
+  return true
 }

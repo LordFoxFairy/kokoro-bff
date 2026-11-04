@@ -1125,10 +1125,10 @@ async function r237Fixture(t, lane) {
   let base
   let artifactLibrary
   if (lane === "project-matrix") {
-  const config = {
-    ...bffConfig({ tenantId: tenant, agentEnabled: true, agentBase: "http://127.0.0.1:9" }),
-    storage: { baseUrl: "http://127.0.0.1:9", secret: "r237-no-storage-service", objectOrigin: "http://127.0.0.1:9" },
-  }
+    const config = {
+      ...bffConfig({ tenantId: tenant, agentEnabled: true, agentBase: "http://127.0.0.1:9" }),
+      storage: { baseUrl: "http://127.0.0.1:9", secret: "r237-no-storage-service", objectOrigin: "http://127.0.0.1:9" },
+    }
     await import("reflect-metadata")
     const { Test } = await import("@nestjs/testing")
     const {
@@ -1218,7 +1218,7 @@ async function r237Fixture(t, lane) {
       headers: {
         ...auth(options.tenant ?? tenant, options.owner ?? owner),
         "content-type": "application/json",
-        "idempotency-key": options.key ?? `r237-${randomUUID()}`,
+        ...(options.key === null ? {} : { "idempotency-key": options.key ?? `r237-${randomUUID()}` }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     })
@@ -1282,6 +1282,107 @@ function r237Schedule(projectId) {
     auto_approve: false,
   }
 }
+
+integrationTest("R237 HTTP Project instruction read, update, replay, and revision history", async (t) => {
+  const f = await r237Fixture(t, "project-matrix")
+  const { id: projectId } = await f.project()
+  const path = `projects/${projectId}`
+  const read = await f.request(path)
+  assert.equal(read.status, 200)
+  assert.equal(read.body.data.project.id, projectId)
+  assert.equal(typeof read.body.data.project.instruction, "string")
+
+  // A production Project has no automatically inserted initial revision. Make the first revision through HTTP.
+  const initial = await f.request(path, "PATCH", { instruction: read.body.data.project.instruction }, { key: "initial-instruction" })
+  assert.equal(initial.status, 200)
+  const nextInstruction = "Keep all implementation notes scoped to this project."
+  const patch = { instruction: nextInstruction }
+  await f.deny(() => f.request(path, "PATCH", patch, { key: null }), 400, "idempotency_key_required")
+
+  const update = () => f.request(path, "PATCH", patch, { key: "project-instruction-flow" })
+  const updated = await update()
+  const replayed = await update()
+  assert.equal(updated.status, 200)
+  assert.equal(replayed.status, 200)
+  assert.deepEqual(updated.body, replayed.body)
+
+  const afterUpdate = await f.request(path)
+  assert.equal(afterUpdate.body.data.project.instruction, nextInstruction)
+
+  const revisions = await f.request(`${path}/instruction-revisions`)
+  assert.equal(revisions.status, 200)
+  const { items } = revisions.body.data
+  assert.equal(items.length, 2, "exact replay must not add a third instruction revision")
+  assert.equal(items[0]?.instruction, nextInstruction)
+  assert.equal(items[0]?.current, true)
+  assert.ok(items[0]?.id)
+  assert.equal(typeof items[0]?.updated_at, "string")
+  assert.equal(typeof items[0]?.actor_name, "string")
+  assert.match(items[0]?.updated_at ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u)
+  assert.deepEqual(Object.keys(items[0] ?? {}).sort(), ["actor_name", "current", "id", "instruction", "updated_at"])
+  assert.ok(revisions.body.meta.request_id.length > 0)
+  assert.equal(items[1]?.instruction, read.body.data.project.instruction)
+  assert.equal(items[1]?.current, false)
+})
+
+integrationTest("R237 HTTP Project empty skill selection and nested ScheduledTask Web fields persist", async (t) => {
+  const f = await r237Fixture(t, "project-matrix")
+  const { id: projectId } = await f.project()
+  const path = `projects/${projectId}`
+  const skillPath = `${path}/skill-selection`
+  const seeded = await f.pool.query("UPDATE bff_project SET selected_skill_installation_ids=$4 WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3", [
+    f.tenant,
+    f.owner,
+    projectId,
+    ["previous-installation"],
+  ])
+  assert.equal(seeded.rowCount, 1)
+  const previous = await f.request(skillPath, "GET", undefined, { key: null })
+  assert.equal(previous.status, 200)
+  assert.deepEqual(previous.body.data, { project_id: projectId, installation_ids: ["previous-installation"] })
+
+  // The closed Project Skill route groups malformed headers under invalid_skill_request;
+  // the retired generic mock emitted idempotency_key_required here, but OpenAPI does not enumerate a literal code.
+  const clear = { installation_ids: [] }
+  const missingKey = await f.deny(() => f.request(skillPath, "PUT", clear, { key: null }), 400, "invalid_skill_request")
+  assert.equal(missingKey.body.error.retryable, false)
+
+  const disabled = await f.request(skillPath, "PUT", clear, { key: "project-skill-disable" })
+  assert.equal(disabled.status, 200)
+  assert.deepEqual(disabled.body.data, { project_id: projectId, installation_ids: [] })
+  const selection = await f.request(skillPath, "GET", undefined, { key: null })
+  assert.equal(selection.status, 200)
+  assert.deepEqual(selection.body.data, disabled.body.data)
+
+  const scheduled = await f.request(
+    `${path}/scheduled-tasks`,
+    "POST",
+    {
+      title: "Daily briefing",
+      prompt: "Summarize the project updates.",
+      frequency: "daily",
+      time: "08:00",
+      timezone: "UTC",
+      expires_at: "2026-02-01T00:00:00.000Z",
+      auto_approve: true,
+    },
+    { key: "project-scheduled-flow" },
+  )
+  assert.equal(scheduled.status, 200)
+  const task = scheduled.body.data.task
+  assert.equal(task.project_id, projectId)
+  assert.equal(task.title, "Daily briefing")
+  assert.equal(task.expires_at, "2026-02-01T00:00:00.000Z")
+  assert.equal(task.auto_approve, true)
+  assert.equal(task.status, "active")
+  const stored = await f.pool.query(
+    "SELECT project_id,title,expires_at,auto_approve,status FROM bff_scheduled_task WHERE tenant_id=$1 AND owner_id=$2 AND task_id=$3",
+    [f.tenant, f.owner, task.id],
+  )
+  assert.deepEqual(stored.rows, [
+    { project_id: projectId, title: "Daily briefing", expires_at: new Date("2026-02-01T00:00:00.000Z"), auto_approve: true, status: "active" },
+  ])
+})
 
 integrationTest("R237 HTTP Project active and denied ID-slug matrix leaves complete facts unchanged", async (t) => {
   for (const kind of ["deleted", "owner", "tenant"])

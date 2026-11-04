@@ -5,7 +5,6 @@ import { AppModule } from "./app.module.js"
 import { loadConfig, type BffConfig } from "./config/runtime.js"
 import { BffExpressAdapter } from "./http/bff-express-adapter.js"
 import { configureBffProtobufTextEncoding } from "./infrastructure/protobuf-text-encoding.js"
-
 const SHUTDOWN_GRACE_PERIOD_MS = 30_000
 const SHUTDOWN_HARD_DEADLINE_MS = 31_000
 export const BFF_NEST_APPLICATION_OPTIONS = { bodyParser: false, bufferLogs: true, return503OnClosing: true } as const
@@ -71,7 +70,6 @@ export async function bootstrapNest(): Promise<void> {
   })
   await startBffApplication(app, config)
 }
-
 if (import.meta.url === `file://${process.argv[1]}`) {
   void bootstrapNest().catch((error: unknown) => {
     process.stderr.write(`kokoro-bff startup failed: ${error instanceof Error ? error.message : String(error)}\n`)

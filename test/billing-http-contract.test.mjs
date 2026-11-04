@@ -9,8 +9,6 @@ const dependencyManifestUrl = new URL("contract/dependencies/billing-http.json",
 const generatedSdkUrl = new URL("src/generated/billing-http/sdk.gen.ts", root)
 const generatedZodUrl = new URL("src/generated/billing-http/zod.gen.ts", root)
 const publicSourceUrl = new URL("contract/openapi/v1/openapi.yaml", root)
-const fakeStoreUrl = new URL("test/doubles/bff-store.ts", root)
-const mockRouteUrl = new URL("test/doubles/mock-route.ts", root)
 
 const ownerSourceSha256 = "f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654"
 const creditAccountFields = ["credit_account_id", "status", "available_micros", "held_micros"]
@@ -157,16 +155,6 @@ test("public Billing summary rejects the removed float and cash-like fields", as
     schemaProperties(summary).filter((field) => oldFields.includes(field)),
     [],
   )
-})
-
-test("BFF test doubles no longer provide the fake 100-Credit summary", async () => {
-  const [source, route] = await Promise.all([readFile(fakeStoreUrl, "utf8"), readFile(mockRouteUrl, "utf8")])
-  assert.equal(
-    source.includes('readonly billing: BillingSummary = { balance: 100, currency: "USD", period: "2026-01", usage: 0 }'),
-    false,
-    "the legacy fake balance is still wired",
-  )
-  assert.doesNotMatch(route, /segments\[1\] === "summary"[\s\S]*store\.billing/u)
 })
 
 test("Catalog generated response is fully closed and key comes only from the owner", async () => {
