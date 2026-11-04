@@ -471,6 +471,10 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
     })
   }
 
+  public hasCommittedDelete(scope: ScheduledTaskOwnerScope, taskId: string, key: string): Promise<boolean> {
+    return this.outboxExists(this.database.pool, scope.tenantId, taskId, "delete", key, scope.subjectId)
+  }
+
   public async deleteScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean> {
     const taskLineage = requireLineage(scope, lineage)
     return this.transaction(async (client) => {
@@ -662,7 +666,7 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
   }
 
   private async outboxExists(
-    client: PoolClient,
+    client: Pick<PoolClient, "query">,
     tenantId: string,
     taskId: string,
     operation: ScheduledTaskOutboxOperation,

@@ -12,7 +12,7 @@ import type { IdempotencyRepository } from "../../application/ports/idempotency-
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { failure } from "../../contracts/index.js"
 import { mutationFingerprint, idempotencyKey, pathOf, readBody, requestBodyJson, requestId } from "../../http/request.js"
-import { mutationTicket } from "../../application/idempotency.js"
+import { mutationScope, mutationTicket } from "../../application/idempotency.js"
 import { send } from "../../http/response.js"
 import {
   authorizeScheduledTaskMutation,
@@ -104,15 +104,33 @@ export class ScheduledTaskMutationMiddleware implements NestMiddleware {
           return
         }
       }
-      const ticket = await mutationTicket(
-        key,
-        request.method ?? "POST",
-        `/${path.join("/")}`,
-        admitted.context,
-        mutationFingerprint(request, path, json, body),
-        this.idempotency,
-        this.persistent,
-      )
+      const method = request.method ?? "POST"
+      const mutationPath = `/${path.join("/")}`
+      const fingerprint = mutationFingerprint(request, path, json, body)
+      if (route.kind === "delete") {
+        const scope = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }
+        if (abort.signal.aborted) return
+        // This preflight does not replace the owner transaction's scoped lock and check.
+        const current = await this.tasks.find(scope, route.taskId)
+        if (abort.signal.aborted) return
+        if (current === null) {
+          const prior = await this.persistent.getReceipt(mutationScope(admitted.context, method, mutationPath, key))
+          if (abort.signal.aborted) return
+          if (prior?.status === 200) {
+            if (prior.fingerprint === fingerprint) send(response, prior.status, prior.body)
+            else send(response, 409, failure("idempotency_conflict", "Idempotency key already used with a different request payload", id))
+            return
+          }
+          // The outbox proves the scoped command, not the HTTP fingerprint. Recovery still runs through the existing receipt and owner transaction.
+          const committed = await this.tasks.hasCommittedDelete(scope, route.taskId, key)
+          if (abort.signal.aborted) return
+          if (!committed) {
+            send(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", id))
+            return
+          }
+        }
+      }
+      const ticket = await mutationTicket(key, method, mutationPath, admitted.context, fingerprint, this.idempotency, this.persistent)
       if (ticket.replay !== null) {
         send(response, ticket.replay.status, ticket.replay.body)
         return

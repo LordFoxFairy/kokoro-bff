@@ -3344,6 +3344,88 @@ integrationTest("R278 PATCH and retry hide foreign or absent ScheduledTasks befo
   assert.deepEqual(await fixture.snapshot(), afterDeletion, "a historical ACK cannot bypass current task visibility or be overwritten")
 })
 
+integrationTest("ScheduledTask DELETE hides foreign or absent tasks without receipts and preserves exact completed ACK semantics", async (t) => {
+  const fixture = await r73CreateFixture(t)
+  const created = await fixture.create(`r278-delete-scope-create-${fixture.suffix}`, r73CreatePayload())
+  assert.equal(created.status, 200, JSON.stringify(created.body))
+  const taskId = created.body.data.task.id
+  const otherTenant = await fixture.start(fixture.otherTenant)
+  const key = "r278-delete-scope"
+  const remove = async ({
+    base = fixture.base,
+    tenant = fixture.tenant,
+    subject = fixture.owner,
+    id = taskId,
+    requestKey = key,
+    requestId = "r278-delete-scope",
+    query = "",
+    body,
+  } = {}) => {
+    const response = await fetch(`${base}/v1/scheduled-tasks/${id}${query}`, {
+      method: "DELETE",
+      headers: {
+        ...auth(tenant, subject),
+        "content-type": "application/json",
+        "idempotency-key": requestKey,
+        "x-request-id": requestId,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(5000),
+    })
+    assert.equal(response.headers.get("x-request-id"), requestId)
+    assert.equal(response.headers.get("cache-control"), "no-store")
+    return { status: response.status, body: await response.json() }
+  }
+  const hidden = {
+    status: 404,
+    body: { error: { code: "scheduled_task_not_found", message: "Scheduled task was not found" }, meta: { request_id: "r278-delete-scope" } },
+  }
+  const wrongSubject = { subject: fixture.otherOwner }
+  const wrongTenant = { base: otherTenant.base, tenant: fixture.otherTenant }
+  const beforeDenials = await fixture.snapshot()
+  assert.deepEqual(await remove(wrongSubject), hidden)
+  assert.deepEqual(await remove(wrongTenant), hidden)
+  assert.deepEqual(await remove({ id: `missing-${fixture.suffix}` }), hidden)
+  assert.deepEqual(await fixture.snapshot(), beforeDenials, "denied DELETE must not change tasks, outbox, or receipts")
+
+  const original = await remove({ requestId: "r278-delete-first" })
+  assert.deepEqual(original, { status: 200, body: { data: { ok: true }, meta: { request_id: "r278-delete-first" } } })
+  const committed = await fixture.snapshot()
+  assert.deepEqual(committed.tasks, [], "the current owner physically removes the task")
+  assert.deepEqual(
+    committed.outbox.filter((row) => row.command_type === "scheduler.delete").map((row) => [row.tenant_id, row.actor_id, row.task_id, row.idempotency_key]),
+    [[fixture.tenant, fixture.owner, taskId, key]],
+  )
+  const scope = JSON.stringify([fixture.tenant, fixture.owner, "DELETE", `/scheduled-tasks/${taskId}`, key])
+  const receipt = committed.receipts.find((row) => row.scope === scope)
+  assert.equal(receipt?.status, 200)
+  assert.deepEqual(receipt.response_body, original.body)
+  assert.deepEqual(await remove({ requestId: "r278-delete-replay" }), original, "same body and query replay the original ACK")
+  for (const changed of [{ query: "?different=1" }, { body: { different: true } }]) {
+    const conflict = await remove(changed)
+    assert.equal(conflict.status, 409, JSON.stringify(conflict.body))
+    assert.equal(conflict.body.error.code, "idempotency_conflict")
+  }
+  assert.deepEqual(await remove(wrongSubject), hidden)
+  assert.deepEqual(await remove(wrongTenant), hidden)
+  assert.deepEqual(await remove({ requestKey: "different-delete-key" }), hidden, "another key cannot reuse the same owner's outbox command")
+  assert.deepEqual(await fixture.snapshot(), committed, "replay, conflicts, and denied recovery must not change durable state")
+
+  // Lose only the HTTP acknowledgement; the committed owner command still exists.
+  assert.equal((await fixture.pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1 AND status=200", [scope])).rowCount, 1)
+  const recovered = await remove({ requestId: "r278-delete-recover" })
+  assert.deepEqual(recovered, { status: 200, body: { data: { ok: true }, meta: { request_id: "r278-delete-recover" } } })
+  const afterRecovery = await fixture.snapshot()
+  assert.deepEqual(afterRecovery.tasks, committed.tasks)
+  assert.deepEqual(afterRecovery.outbox, committed.outbox, "recovery must not append or change a Scheduler command")
+  const otherReceipts = (facts) => facts.receipts.filter((row) => row.scope !== scope)
+  assert.deepEqual(otherReceipts(afterRecovery), otherReceipts(committed))
+  const recoveredReceipt = afterRecovery.receipts.find((row) => row.scope === scope)
+  assert.equal(recoveredReceipt?.status, 200)
+  assert.equal(recoveredReceipt.fingerprint, receipt.fingerprint)
+  assert.deepEqual(recoveredReceipt.response_body, recovered.body)
+})
+
 integrationTest("R278 tombstoned Project rejects new ScheduledTask enable and retry intent without durable writes", async (t) => {
   const f = await r241Fixture(t)
   for (const operation of ["enable", "retry"]) {

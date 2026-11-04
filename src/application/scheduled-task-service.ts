@@ -30,6 +30,9 @@ export class ScheduledTaskService {
   public update(scope: ScheduledTaskOwnerScope, taskId: string, input: ScheduledTaskPatch, lineage: ScheduledTaskMutationLineage): Promise<ScheduledTaskFact | null> {
     return this.repository.updateScheduledTask(scope, taskId, input, lineage)
   }
+  public hasCommittedDelete(scope: ScheduledTaskOwnerScope, taskId: string, key: string): Promise<boolean> {
+    return this.repository.hasCommittedDelete(scope, taskId, key)
+  }
   public delete(scope: ScheduledTaskOwnerScope, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean> {
     return this.repository.deleteScheduledTask(scope, taskId, lineage)
   }

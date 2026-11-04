@@ -59,5 +59,7 @@ export interface ScheduledTaskRepository {
     input: ScheduledTaskPatch,
     lineage: ScheduledTaskMutationLineage,
   ): Promise<ScheduledTaskFact | null>
+  /** Read-only evidence of a committed delete in the same owner/key lineage. */
+  hasCommittedDelete(scope: ScheduledTaskOwnerScope, taskId: string, key: string): Promise<boolean>
   deleteScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean>
 }
