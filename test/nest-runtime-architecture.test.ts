@@ -12,9 +12,20 @@ test("the compiled production AppModule resolves its real provider graph without
   // Both default test and test:architecture build dist before running this suite.
   const { AppModule } = await import("../dist/app.module.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
-  const { BFF_CONFIG, BFF_DATABASE, BFF_POOL, BFF_REDIS, CHAT_TURN_SERVICE, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER, SKILL_INSTALLATION_CLIENT } =
-    await import("../dist/common/tokens.js")
+  const {
+    BFF_CONFIG,
+    BFF_DATABASE,
+    BFF_POOL,
+    BFF_REDIS,
+    CHAT_SERVICE,
+    CHAT_TURN_SERVICE,
+    PROJECT_SERVICE,
+    PROJECT_SKILL_SELECTION_PROVIDER,
+    SKILL_INSTALLATION_CLIENT,
+  } = await import("../dist/common/tokens.js")
+  const { PERSONALIZATION_PROVIDER } = await import("../dist/modules/account/personalization.provider.js")
   const { AgentDispatchModule } = await import("../dist/modules/agent-dispatch/agent-dispatch.module.js")
+  const { ChatModule } = await import("../dist/modules/chat/chat.module.js")
   const { ProjectAccessModule } = await import("../dist/modules/projects/project-access.module.js")
   const { SkillInstallationAccessModule } = await import("../dist/modules/skills/skill-installation-access.module.js")
   const config = loadConfig({
@@ -50,6 +61,8 @@ test("the compiled production AppModule resolves its real provider graph without
     assert.equal(module.get(BFF_REDIS), database.redis)
     for (const [owner, token] of [
       [AgentDispatchModule, CHAT_TURN_SERVICE],
+      [ChatModule, CHAT_SERVICE],
+      [AccountModule, PERSONALIZATION_PROVIDER],
       [ProjectAccessModule, PROJECT_SERVICE],
       [ProjectAccessModule, PROJECT_SKILL_SELECTION_PROVIDER],
       [SkillInstallationAccessModule, SKILL_INSTALLATION_CLIENT],
@@ -923,16 +936,14 @@ test("BFF production entrypoint does not create a second raw HTTP listener", asy
 })
 
 test("Nest health controller owns health and readiness instead of the legacy route adapter", async () => {
-  const [healthModule, appModule, server] = await Promise.all([
+  const [healthModule, appModule] = await Promise.all([
     readFile(path.join(root, "src/modules/health/health.module.ts"), "utf8"),
     readFile(path.join(root, "src/app.module.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
   ])
   assert.match(healthModule, /@Get\("healthz"\)/u)
   assert.match(healthModule, /@Get\("readyz"\)/u)
+  assert.match(appModule, /imports:\s*\[[^\]]*\bHealthModule\b/u)
   assert.doesNotMatch(appModule, /LegacyRoutesModule|GracefulShutdown/u)
-  assert.doesNotMatch(server, /segments\.length === 1 && segments\[0\] === "healthz"/u)
-  assert.doesNotMatch(server, /segments\.length === 1 && segments\[0\] === "readyz"/u)
 })
 
 test("Nest production has no legacy route composition", async () => {
