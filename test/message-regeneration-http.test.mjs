@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { createBffServer } from "../src/bootstrap/server.ts"
+import { startChatTaskHttpTestApp } from "./doubles/chat-task-http-app.mjs"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 async function fixture(t) {
@@ -31,19 +31,10 @@ async function fixture(t) {
     agUi: DEFAULT_AGUI_CONFIG,
     upstreams: {},
   }
-  const server = createBffServer(config, {
-    businessStore: null,
-    chatTurnService: chatTurns,
-    readiness: async () => undefined,
-    sessionAdmission: new SessionAdmissionDouble({ qa: { namespace: "tenant", userId: "owner" } }),
-  })
-  await new Promise((r) => server.listen(0, "127.0.0.1", r))
-  t.after(async () => {
-    server.closeAllConnections()
-    await new Promise((r) => server.close(r))
-  })
+  const admission = new SessionAdmissionDouble({ qa: { namespace: "tenant", userId: "owner" } })
+  const base = await startChatTaskHttpTestApp(t, config, admission, { chatTurns })
   const request = async (body = "{}", headers = {}) => {
-    const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/sessions/session/messages/old-answer/regenerate`, {
+    const response = await fetch(`${base}/v1/sessions/session/messages/old-answer/regenerate`, {
       method: "POST",
       headers: {
         "x-kokoro-service": "web-bff",

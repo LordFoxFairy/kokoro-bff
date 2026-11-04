@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { request as nodeRequest } from "node:http"
 import test from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { startChatTaskHttpTestApp } from "./doubles/chat-task-http-app.mjs"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
@@ -42,13 +42,7 @@ async function fixture(t, options = {}) {
     upstreams: {},
   }
   const admission = options.admission ?? new SessionAdmissionDouble({ "shared-token": { namespace: "tenant-verified", userId: "user-one" } })
-  const server = createBffServer(config, { businessStore: null, chatService, readiness: async () => undefined, sessionAdmission: admission })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
-  t.after(async () => {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
-  })
-  return { base: `http://127.0.0.1:${server.address().port}`, reads }
+  return { base: await startChatTaskHttpTestApp(t, config, admission, { chatService }), reads }
 }
 test("shared tasks canonical GET reads admitted owner and returns only four safe fields", async (t) => {
   const { base, reads } = await fixture(t)

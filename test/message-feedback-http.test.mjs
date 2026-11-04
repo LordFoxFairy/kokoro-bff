@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { startChatTaskHttpTestApp } from "./doubles/chat-task-http-app.mjs"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
@@ -41,14 +41,9 @@ async function fixture(t) {
       return { session_id: q.conversationId, message_id: q.messageId, feedback }
     },
   }
-  const server = createBffServer(config, { businessStore: null, chatService: chat, readiness: async () => undefined, sessionAdmission: admission })
-  await new Promise((r) => server.listen(0, "127.0.0.1", r))
-  t.after(async () => {
-    server.closeAllConnections()
-    await new Promise((r) => server.close(r))
-  })
+  const base = await startChatTaskHttpTestApp(t, config, admission, { chatService: chat })
   const request = async (body, path = "/v1/sessions/session/messages/message/feedback", method = body === undefined ? "GET" : "PUT", extra = {}) => {
-    const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, {
+    const response = await fetch(`${base}${path}`, {
       method,
       headers: {
         "x-kokoro-service": "web-bff",
