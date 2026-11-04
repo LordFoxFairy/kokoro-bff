@@ -3,12 +3,11 @@ import type { INestApplication } from "@nestjs/common"
 import { NestFactory } from "@nestjs/core"
 import { AppModule } from "./app.module.js"
 import { loadConfig, type BffConfig } from "./config/runtime.js"
+import { BffExpressAdapter } from "./infrastructure/http/bff-express-adapter.js"
 
 const SHUTDOWN_GRACE_PERIOD_MS = 30_000
 const SHUTDOWN_HARD_DEADLINE_MS = 31_000
-
 export const BFF_NEST_APPLICATION_OPTIONS = { bodyParser: false, bufferLogs: true, return503OnClosing: true } as const
-
 /** One process owner: wait for physical startup before invoking Nest's ordered close once. */
 export async function startBffApplication(
   app: INestApplication,
@@ -64,7 +63,8 @@ export async function startBffApplication(
 export async function bootstrapNest(): Promise<void> {
   const config = loadConfig()
   // Flush framework startup logs only on success; Factory/worker causes can contain private configuration.
-  const app = await NestFactory.create(AppModule, { ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, autoFlushLogs: false }).catch(() => {
+  const options = { ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, autoFlushLogs: false }
+  const app = await NestFactory.create(AppModule, new BffExpressAdapter(), options).catch(() => {
     throw new Error("BFF application creation failed")
   })
   await startBffApplication(app, config)

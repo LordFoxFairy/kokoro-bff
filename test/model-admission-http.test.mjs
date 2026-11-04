@@ -4,7 +4,6 @@ import { mkdtemp, writeFile, rm, chmod } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test, afterEach } from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 const cleanups = []
 afterEach(async () => {
@@ -88,25 +87,45 @@ async function setup(options = {}) {
     ...options.config,
     iamWebOrigin: "https://web.example.test",
   }
-  const base = await listen(
-    createBffServer(config, {
-      businessStore: null,
-      submittedAgentRuns: {
-        readSubmittedAgentRun: async (input) => {
-          sources.push(input)
-          return options.source
-            ? options.source(input)
-            : { tenantId: "verified-tenant", userId: "original-user", runId: wire.run_id, conversationId: "original-conversation" }
-        },
-      },
-      sessionAdmission: {
-        verify: async () => {
-          throw Error("internal Agent must not use browser Session admission")
-        },
-      },
-      readiness: async () => undefined,
-    }),
-  )
+  const submittedAgentRuns = {
+    readSubmittedAgentRun: async (input) => {
+      sources.push(input)
+      return options.source
+        ? options.source(input)
+        : { tenantId: "verified-tenant", userId: "original-user", runId: wire.run_id, conversationId: "original-conversation" }
+    },
+  }
+  const sessionAdmission = {
+    verify: async () => {
+      throw Error("internal Agent must not use browser Session admission")
+    },
+  }
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { AgentRunsModule } = await import("../dist/modules/agent-runs/agent-runs.module.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { BffExpressAdapter } = await import("../dist/infrastructure/http/bff-express-adapter.js")
+  const { BFF_CONFIG, BFF_DATABASE, AGENT_RUNS_READER, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const unexpectedStorage = () => {
+    throw new Error("billing HTTP fixture must not touch BFF storage")
+  }
+  const module = await Test.createTestingModule({ imports: [AgentRunsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpectedStorage, connect: unexpectedStorage }, redis: {}, ready: unexpectedStorage })
+    .overrideProvider(AGENT_RUNS_READER)
+    .useValue(submittedAgentRuns)
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+    .compile()
+  const app = module.createNestApplication(new BffExpressAdapter(), { ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+  cleanups.push(async () => {
+    app.getHttpServer().closeAllConnections()
+    await app.close()
+  })
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
   const post = (body = wire, headers = {}, path = "/internal/v1/model-admissions") =>
     fetch(base + path, {
       method: "POST",
@@ -143,6 +162,25 @@ test("Agent budget ingress derives user and tenant from durable source, forwards
   assert.equal(call.headers["idempotency-key"], "one-attempt-key")
   assert.equal(call.headers["x-billing-execution-proof"], "x".repeat(16384))
   assert.equal(call.headers["x-kokoro-proxy-secret"], undefined)
+})
+test("Model Admission rejects oversized proof before owner I/O and still enforces a finite transport budget", async () => {
+  const t = await setup()
+  const oversizedProof = await t.post(wire, { "x-billing-execution-proof": "x".repeat(16385) })
+  assert.equal(oversizedProof.status, 400, "a proof over the field limit must be rejected by the route")
+  assert.equal((await oversizedProof.json()).error.code, "model_admission_invalid_request")
+  assert.equal(oversizedProof.headers.get("x-request-id"), "budget-request")
+  assert.equal(t.sources.length, 0)
+  assert.equal(t.calls.length, 0)
+  const transportOverflow = await t.post(wire, { "x-fixture-header-padding": "x".repeat(32768) })
+  assert.equal(transportOverflow.status, 431, "transport headers still have a finite total bound")
+  assert.equal(await transportOverflow.text(), "")
+  assert.equal(t.sources.length, 0)
+  assert.equal(t.calls.length, 0)
+  const healthy = await t.post()
+  assert.equal(healthy.status, 201)
+  assert.deepEqual(await healthy.json(), { data: receipt })
+  assert.equal(t.sources.length, 1)
+  assert.equal(t.calls.length, 1)
 })
 test("Agent-only credential, closed body and canonical path reject before any Billing mutation", async () => {
   const t = await setup()
