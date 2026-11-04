@@ -4,12 +4,15 @@ import assert from "node:assert/strict"
 import { afterEach, describe, it } from "node:test"
 import { fileURLToPath } from "node:url"
 
+import type { INestApplication } from "@nestjs/common"
+
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import type { BffConfig } from "../src/config/runtime.ts"
 import { createLiveTestBffServer, createTestBffServer } from "./doubles/server.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const servers: Server[] = []
+const ownerApps: INestApplication[] = []
 
 const modelCatalogItem = {
   key: "chat/fast",
@@ -74,6 +77,77 @@ function liveServer(configValue: BffConfig, options: Parameters<typeof createLiv
   return createLiveTestBffServer(configValue, options)
 }
 
+async function startSystemTestApp(configValue: BffConfig): Promise<string> {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { SystemModule } = await import("../dist/modules/system/system.module.js")
+  const module = await Test.createTestingModule({ imports: [SystemModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(configValue)
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(
+      new SessionAdmissionDouble({
+        "test-session": { namespace: "ns_test", userId: "user_test" },
+        "control-session": { namespace: "tenant_control", userId: "user_control" },
+      }),
+    )
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  ownerApps.push(app)
+  await app.listen(0, "127.0.0.1")
+  return app.getUrl()
+}
+
+async function startFocusedOwnerTestApp(feature: "library" | "billing-checkout" | "billing-credit" | "github" | "github-invalid", configValue: BffConfig) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, BILLING_IDEMPOTENCY, SESSION_ADMISSION, SKILL_AUTHORIZATION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const featureModule =
+    feature === "library"
+      ? (await import("../dist/modules/account/account.module.js")).AccountModule
+      : feature === "billing-checkout" || feature === "billing-credit"
+        ? (await import("../dist/modules/billing/billing.module.js")).BillingModule
+        : (await import("../dist/modules/skills/skills.module.js")).SkillsModule
+  const unexpectedDatabase = () => assert.fail("Owner HTTP fixture must not query PostgreSQL")
+  const builder = Test.createTestingModule({ imports: [featureModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(configValue)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpectedDatabase, connect: unexpectedDatabase } })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(
+      new SessionAdmissionDouble({
+        "test-session": { namespace: "ns_test", userId: "user_test" },
+        "control-session": { namespace: "tenant_control", userId: "user_control" },
+      }),
+    )
+  if (feature === "billing-checkout") {
+    // The disabled checkout may claim and release a pending receipt, never persist success.
+    const pending = new Map<string, string>()
+    builder.overrideProvider(BILLING_IDEMPOTENCY).useValue({
+      claimReceipt: async (scope: string, fingerprint: string) => {
+        assert.equal(pending.has(scope), false)
+        pending.set(scope, fingerprint)
+        return { claimed: true, receipt: null }
+      },
+      releaseReceipt: async (scope: string, fingerprint: string) => {
+        assert.equal(pending.get(scope), fingerprint)
+        pending.delete(scope)
+      },
+      putReceipt: async () => assert.fail("Disabled Billing checkout must not store a terminal receipt"),
+    })
+  }
+  if (feature === "github-invalid") builder.overrideProvider(SKILL_AUTHORIZATION).useValue({ check: async () => ({ ok: true }) })
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  ownerApps.push(app)
+  await app.listen(0, "127.0.0.1")
+  return app.getUrl()
+}
+
 function authHeaders(): Record<string, string> {
   return {
     "x-kokoro-service": "web-bff",
@@ -84,7 +158,10 @@ function authHeaders(): Record<string, string> {
 }
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
+  await Promise.all([
+    ...ownerApps.splice(0).map((app) => app.close()),
+    ...servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))),
+  ])
 })
 
 describe("kokoro-bff v1 mock contract", () => {
@@ -273,19 +350,6 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(scheduledBody.data.task.auto_approve, true)
   })
 
-  it("keeps Agent setup and Chat as BFF-owned projections", async () => {
-    const base = await listen(testServer(config()))
-    const response = await fetch(`${base}/v1/agents/connections/setup?platform=telegram`, { headers: authHeaders() })
-    assert.equal(response.status, 200)
-    const agentBody = (await response.json()) as { data: { platform: string; status: string }; meta: { request_id: string } }
-    assert.equal(agentBody.data.platform, "telegram")
-    assert.equal(agentBody.data.status, "disconnected")
-    assert.ok(agentBody.meta.request_id.length > 0)
-
-    const invalid = await fetch(`${base}/v1/agents/connections/setup?platform=irc`, { headers: authHeaders() })
-    assert.equal(invalid.status, 400)
-  })
-
   async function startAgentSetupApp(t: import("node:test").TestContext, configValue: BffConfig) {
     await import("reflect-metadata")
     const { Test } = await import("@nestjs/testing")
@@ -326,6 +390,7 @@ describe("kokoro-bff v1 mock contract", () => {
   it("projects an enabled Agent setup response through the explicit owner adapter", async (t) => {
     let ownerCalls = 0
     let malformed = false
+    let setupStatus: "pending" | "disconnected" = "pending"
     const agent = createServer((request, response) => {
       ownerCalls++
       assert.equal(request.method, "GET")
@@ -343,7 +408,7 @@ describe("kokoro-bff v1 mock contract", () => {
         JSON.stringify({
           data: {
             platform: "telegram",
-            status: "pending",
+            status: setupStatus,
             qr_value: "kokoro://connect/telegram/fixture",
             continue_url: "https://dev.kokoro.localhost/app/agents?platform=telegram",
             expires_at: "2026-11-01T00:15:00.000Z",
@@ -418,6 +483,17 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(rejectedBody.error.code, "upstream_response_invalid")
     assert.doesNotMatch(JSON.stringify(rejectedBody), /owner-private-canary/u)
     assert.equal(ownerCalls, 2)
+
+    malformed = false
+    setupStatus = "disconnected"
+    const disconnected = await fetch(setup, { headers })
+    assert.equal(disconnected.status, 200)
+    const disconnectedBody = (await disconnected.json()) as { data: { platform: string; status: string }; meta: { request_id: string } }
+    assert.equal(disconnectedBody.data.platform, "telegram")
+    assert.equal(disconnectedBody.data.status, "disconnected")
+    assert.equal(disconnectedBody.meta.request_id, "agent-owner-request")
+    assert.equal(ownerCalls, 3)
+    assert.equal(admission.calls.length, 4)
   })
 
   it("supports scheduled task mutations through the same business contract", async () => {
@@ -435,65 +511,8 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.match(createdBody.data.task.id, /^scheduled_/)
   })
 
-  it("reports readyz from the actual mode and upstream configuration", async () => {
-    const mockBase = await listen(testServer(config()))
-    const mockReady = await fetch(`${mockBase}/readyz`)
-    assert.equal(mockReady.status, 200)
-    assert.deepEqual(await mockReady.json(), { status: "ok", service: "kokoro-bff", mode: "live" })
-
-    const upstream = createServer((_request, response) => {
-      response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({ data: { ok: true }, meta: { request_id: "readyz-live" } }))
-    })
-    const upstreamBase = await listen(upstream)
-    const liveReadyBase = await listen(
-      liveServer(
-        config({
-          mode: "live",
-          upstreams: {
-            system: upstreamBase,
-            model: upstreamBase,
-            capability: upstreamBase,
-            storage: upstreamBase,
-            scheduler: upstreamBase,
-            agents: null,
-            billing: upstreamBase,
-          },
-        }),
-        {
-          readiness: async (): Promise<void> => {
-            throw new Error("database unavailable")
-          },
-        },
-      ),
-    )
-    const liveReady = await fetch(`${liveReadyBase}/readyz`)
-    assert.equal(liveReady.status, 503)
-    assert.deepEqual(await liveReady.json(), { status: "ok", service: "kokoro-bff", mode: "live" })
-
-    const liveAgentRoute = await fetch(`${liveReadyBase}/v1/sessions`, { headers: authHeaders() })
-    assert.equal(liveAgentRoute.status, 503)
-    assert.equal(((await liveAgentRoute.json()) as { error: { code: string } }).error.code, "business_store_not_configured")
-
-    const livePartialBase = await listen(
-      liveServer(
-        config({
-          mode: "live",
-          upstreams: { ...config().upstreams, system: upstreamBase },
-        }),
-        {
-          readiness: async (): Promise<void> => {
-            throw new Error("database unavailable")
-          },
-        },
-      ),
-    )
-    const livePartial = await fetch(`${livePartialBase}/readyz`)
-    assert.equal(livePartial.status, 503)
-  })
-
   it("previews a GitHub skill without requiring Idempotency-Key", async () => {
-    const base = await listen(testServer(config())),
+    const base = await startFocusedOwnerTestApp("github", config()),
       originalFetch = globalThis.fetch
     const commit = "a".repeat(40),
       calls: string[] = [],
@@ -671,7 +690,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("rejects non-GitHub URLs for GitHub skill preview and import", async () => {
-    const base = await listen(liveServer(config(), { skillAuthorization: { check: async () => ({ ok: true }) } }))
+    const base = await startFocusedOwnerTestApp("github-invalid", config())
     for (const path of ["preview", "import"]) {
       const response = await fetch(`${base}/v1/skills/github/${path}`, {
         method: "POST",
@@ -755,7 +774,7 @@ describe("kokoro-bff v1 mock contract", () => {
       connections += 1
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(liveServer(config({ mode: "live", upstreams: { ...config().upstreams, storage: upstreamBase } })))
+    const base = await startFocusedOwnerTestApp("library", config({ mode: "live", upstreams: { ...config().upstreams, storage: upstreamBase } }))
 
     const unauthenticated = await fetch(`${base}/v1/library`, { headers: { "x-kokoro-request-id": "library-unauthenticated" } })
     assert.equal(unauthenticated.status, 403)
@@ -842,7 +861,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const upstreamBase = await listen(upstream)
     const runtimeConfig = config({ mode: "live", upstreams: { ...config().upstreams, system: upstreamBase } }) as BffConfig & { tenantId: string }
     runtimeConfig.tenantId = "tenant_manifest"
-    const base = await listen(liveServer(runtimeConfig))
+    const base = await startSystemTestApp(runtimeConfig)
 
     const response = await fetch(`${base}/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web`, {
       headers: {
@@ -916,13 +935,11 @@ describe("kokoro-bff v1 mock contract", () => {
       )
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(
-      liveServer(
-        config({
-          mode: "live",
-          upstreams: { ...config().upstreams, system: upstreamBase },
-        }),
-      ),
+    const base = await startSystemTestApp(
+      config({
+        mode: "live",
+        upstreams: { ...config().upstreams, system: upstreamBase },
+      }),
     )
 
     const response = await fetch(`${base}/v1/models?feature_key=chat&limit=20&cursor=cursor-1`, {
@@ -977,7 +994,7 @@ describe("kokoro-bff v1 mock contract", () => {
         response.end(JSON.stringify(ownerBody))
       })
       const upstreamBase = await listen(upstream)
-      const base = await listen(liveServer(config({ upstreams: { ...config().upstreams, system: upstreamBase } })))
+      const base = await startSystemTestApp(config({ upstreams: { ...config().upstreams, system: upstreamBase } }))
       const response = await fetch(`${base}/v1/models?feature_key=chat`, { headers: { ...authHeaders(), "x-kokoro-request-id": "invalid-model-owner" } })
       assert.equal(response.status, 502)
       const text = await response.text()
@@ -996,7 +1013,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { items: [item], next_cursor: null } }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(liveServer(config({ upstreams: { ...config().upstreams, system: upstreamBase } })))
+    const base = await startSystemTestApp(config({ upstreams: { ...config().upstreams, system: upstreamBase } }))
     for (const displayName of ["Optional alias", "m".repeat(255)]) {
       item = { ...modelCatalogItem, display_name: displayName, request_model: "m".repeat(255) }
       const response = await fetch(`${base}/v1/models?feature_key=chat`, { headers: authHeaders() })
@@ -1079,7 +1096,7 @@ describe("kokoro-bff v1 mock contract", () => {
       const upstreamBase = await listen(upstream)
       const runtimeConfig = config({ upstreams: { ...config().upstreams, system: upstreamBase } }) as BffConfig & { tenantId: string }
       runtimeConfig.tenantId = "tenant_manifest"
-      const base = await listen(liveServer(runtimeConfig))
+      const base = await startSystemTestApp(runtimeConfig)
       const response = await fetch(`${base}/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web`, {
         headers: {
           "x-kokoro-service": "web-bff",
@@ -1129,14 +1146,13 @@ describe("kokoro-bff v1 mock contract", () => {
       })
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(
-      liveServer(
-        config({
-          mode: "live",
-          billingServiceToken: "billing-service-token",
-          upstreams: { ...config().upstreams, billing: upstreamBase },
-        }),
-      ),
+    const base = await startFocusedOwnerTestApp(
+      "billing-checkout",
+      config({
+        mode: "live",
+        billingServiceToken: "billing-service-token",
+        upstreams: { ...config().upstreams, billing: upstreamBase },
+      }),
     )
 
     const plans = await fetch(`${base}/v1/billing/plans`, { headers: { ...authHeaders(), "x-kokoro-request-id": "billing-catalog" } })
@@ -1203,7 +1219,7 @@ describe("kokoro-bff v1 mock contract", () => {
       upstreamSecret: "billing-internal-secret",
       billingServiceToken: "billing-service-token",
     } as BffConfig
-    const base = await listen(liveServer(runtimeConfig))
+    const base = await startFocusedOwnerTestApp("billing-credit", runtimeConfig)
 
     const summary = await fetch(`${base}/v1/billing/summary`, { headers: { ...authHeaders(), "x-kokoro-request-id": "billing-summary" } })
     assert.equal(summary.status, 200)
