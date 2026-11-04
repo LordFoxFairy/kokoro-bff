@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
 import { createServer, request as nodeRequest } from "node:http"
 import { afterEach, test } from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 const servers = []
+const apps = []
 async function listen(server) {
   servers.push(server)
   await new Promise((resolve, reject) => {
@@ -15,15 +15,24 @@ async function listen(server) {
   return `http://127.0.0.1:${address.port}`
 }
 afterEach(async () => {
-  await Promise.all(
-    servers.splice(0).map(
-      (server) =>
-        new Promise((resolve) => {
-          server.closeAllConnections()
-          server.close(resolve)
-        }),
-    ),
-  )
+  try {
+    await Promise.all(
+      apps.splice(0).map(async (app) => {
+        app.getHttpServer().closeAllConnections()
+        await app.close()
+      }),
+    )
+  } finally {
+    await Promise.all(
+      servers.splice(0).map(
+        (server) =>
+          new Promise((resolve) => {
+            server.closeAllConnections()
+            server.close(resolve)
+          }),
+      ),
+    )
+  }
 })
 const browser = {
   "x-kokoro-service": "admin-web-bff",
@@ -108,24 +117,38 @@ async function setup(options = {}) {
     skillDraft: { enabled: false, platformBaseUrl: null, credentialFile: null, timeoutMs: 1000 },
     ...options.config,
   }
-  const base = await listen(
-    createBffServer(config, {
-      businessStore: null,
-      readiness: async () => undefined,
-      sessionAdmission: {
-        verify: async (input) => {
-          admissions.push(input)
-          return (
-            options.admission?.(input, admissions.length) ?? {
-              ok: true,
-              identity: { namespace: "tenant-current", userId: "operator-current" },
-              platformAdmin: true,
-            }
-          )
-        },
-      },
-    }),
-  )
+  const sessionAdmission = {
+    verify: async (input) => {
+      admissions.push(input)
+      return (
+        options.admission?.(input, admissions.length) ?? {
+          ok: true,
+          identity: { namespace: "tenant-current", userId: "operator-current" },
+          platformAdmin: true,
+        }
+      )
+    },
+  }
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BillingModule } = await import("../dist/modules/billing/billing.module.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const unexpectedStorage = () => {
+    throw new Error("billing HTTP fixture must not touch BFF storage")
+  }
+  const module = await Test.createTestingModule({ imports: [BillingModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpectedStorage, connect: unexpectedStorage }, redis: {}, ready: unexpectedStorage })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+  apps.push(app)
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
   return { base, config, ownerCalls, admissions }
 }
 for (const [kind, configuration] of [
