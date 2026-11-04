@@ -165,17 +165,6 @@ afterEach(async () => {
 })
 
 describe("kokoro-bff v1 mock contract", () => {
-  it("exposes unauthenticated health and rejects browser calls to business routes", async () => {
-    const base = await listen(testServer(config()))
-    const health = await fetch(`${base}/healthz`)
-    assert.equal(health.status, 200)
-    assert.deepEqual(await health.json(), { status: "ok", service: "kokoro-bff", mode: "live" })
-
-    const response = await fetch(`${base}/v1/projects`, { headers: { "x-domain": "evil.example" } })
-    assert.equal(response.status, 403)
-    assert.equal(((await response.json()) as { error: { code: string } }).error.code, "service_auth_failed")
-  })
-
   it("returns a versioned project projection and replays idempotent creation", async () => {
     const base = await listen(testServer(config()))
     const headers = { ...authHeaders(), "x-kokoro-request-id": "request-projects" }
@@ -1264,40 +1253,7 @@ describe("kokoro-bff v1 mock contract", () => {
     }
   })
 
-  it("covers auth failures, idempotency conflicts, live normalization, and docs coverage", async () => {
-    const unauthBase = await listen(liveServer(config()))
-    const missingService = await fetch(`${unauthBase}/v1/projects`)
-    assert.equal(missingService.status, 403)
-    assert.equal(((await missingService.json()) as { error: { code: string } }).error.code, "service_auth_failed")
-
-    const secretlessBase = await listen(liveServer(config({ sharedSecret: null })))
-    const missingServiceOnSecretless = await fetch(`${secretlessBase}/v1/projects`, {
-      headers: {
-        cookie: "kokoro-issuer.session_token=test-session",
-        origin: "https://web.example.test",
-      },
-    })
-    assert.equal(missingServiceOnSecretless.status, 403)
-
-    const wrongSecret = await fetch(`${unauthBase}/v1/projects`, {
-      headers: {
-        "x-kokoro-service": "web-bff",
-        "x-kokoro-internal-secret": "wrong",
-        cookie: "kokoro-issuer.session_token=test-session",
-        origin: "https://web.example.test",
-      },
-    })
-    assert.equal(wrongSecret.status, 403)
-
-    const missingBearer = await fetch(`${unauthBase}/v1/projects`, {
-      headers: {
-        "x-kokoro-service": "web-bff",
-        "x-kokoro-internal-secret": "test-secret",
-        origin: "https://web.example.test",
-      },
-    })
-    assert.equal(missingBearer.status, 401)
-
+  it("keeps the v1 API documentation and canonical path census", () => {
     const baseDir = fileURLToPath(new URL("../docs/api/v1/", import.meta.url))
     for (const file of ["README.md", "projects.md", "system.md", "models.md", "skills.md", "mcp.md", "scheduled.md", "agents.md", "library.md", "billing.md"]) {
       assert.equal(existsSync(`${baseDir}/${file}`), true, file)

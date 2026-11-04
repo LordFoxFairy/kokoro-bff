@@ -284,26 +284,45 @@ test("the default production composition fails user traffic and readiness closed
 test("service and Cookie rejection happen before IAM and route work", async (t) => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-a", userId: "user-a" } })
   const { base, projects } = await listenNativeProjectAdmission(config(), admission)
+  const { base: secretlessBase, projects: secretlessProjects } = await listenNativeProjectAdmission({ ...config(), sharedSecret: null }, admission)
   const projectReads = t.mock.method(projects, "list")
-
-  const badService = await fetch(`${base}/v1/projects`, {
-    headers: {
-      "x-kokoro-service": "web-bff",
-      "x-kokoro-internal-secret": "wrong",
-      cookie: "kokoro-issuer.session_token=token",
-      origin: "https://web.example.test",
+  const secretlessProjectReads = t.mock.method(secretlessProjects, "list")
+  const sessionHeaders = { cookie: "kokoro-issuer.session_token=token", origin: "https://web.example.test" }
+  const serviceHeaders = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret" }
+  const cases: Array<{ name: string; origin: string; headers: HeadersInit; status: number; code: string }> = [
+    { name: "missing service", origin: base, headers: {}, status: 403, code: "service_auth_failed" },
+    { name: "forged domain", origin: base, headers: { "x-domain": "evil.example" }, status: 403, code: "service_auth_failed" },
+    {
+      name: "wrong service secret",
+      origin: base,
+      headers: { ...sessionHeaders, ...serviceHeaders, "x-kokoro-internal-secret": "wrong" },
+      status: 403,
+      code: "service_auth_failed",
     },
-  })
-  const missingBearer = await fetch(`${base}/v1/projects`, {
-    headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", origin: "https://web.example.test" },
-  })
-
-  assert.equal(badService.status, 403)
-  assert.equal(((await badService.json()) as { error: { code: string } }).error.code, "service_auth_failed")
-  assert.equal(missingBearer.status, 401)
-  assert.equal(((await missingBearer.json()) as { error: { code: string } }).error.code, "session_authentication_required")
+    {
+      name: "missing native Cookie",
+      origin: base,
+      headers: { ...serviceHeaders, origin: sessionHeaders.origin },
+      status: 401,
+      code: "session_authentication_required",
+    },
+    { name: "missing service with no configured secret", origin: secretlessBase, headers: sessionHeaders, status: 403, code: "service_auth_failed" },
+    {
+      name: "named service with no configured secret",
+      origin: secretlessBase,
+      headers: { ...sessionHeaders, ...serviceHeaders },
+      status: 403,
+      code: "service_auth_failed",
+    },
+  ]
+  for (const { name, origin, headers, status, code } of cases) {
+    const response = await fetch(`${origin}/v1/projects`, { headers })
+    assert.equal(response.status, status, name)
+    assert.equal(((await response.json()) as { error: { code: string } }).error.code, code, name)
+  }
   assert.equal(admission.calls.length, 0)
   assert.equal(projectReads.mock.callCount(), 0)
+  assert.equal(secretlessProjectReads.mock.callCount(), 0)
 })
 
 test("Admin Web credential reaches only current identity and exact named admin routes", async () => {
