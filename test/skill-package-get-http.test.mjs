@@ -287,8 +287,10 @@ test("candidate Get re-admits each read and revoked session creates no new Platf
     client,
     async (base) => {
       assert.equal((await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers })).status, 200)
-      const revoked = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers })
+      const requestId = "revoked-package-read"
+      const revoked = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers: { ...headers, "x-kokoro-request-id": requestId } })
       assert.equal(revoked.status, 401)
+      assert.equal(revoked.headers.get("x-request-id"), requestId)
       assert.deepEqual(await revoked.json(), { error: { code: "session_invalid", message: "BFF user admission failed", retryable: false } })
       assert.equal(revoked.headers.get("cache-control"), "no-store")
     },
