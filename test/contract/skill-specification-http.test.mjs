@@ -319,6 +319,7 @@ test("R357 corresponding obsolete REST reads are404, not compatibility aliases",
 
     for (const [path, input, code] of [
       ["/v1/skills/quota", undefined, "platform_operation_not_available"],
+      ["/v1/skills/contract-review/revisions?scope=official", undefined, "platform_operation_not_available"],
       ["/v1/skills/stable-series/enable", {}, "platform_operation_not_available"],
       ["/v1/system/unknown", undefined, "system_projection_not_configured"],
     ]) {
@@ -326,6 +327,16 @@ test("R357 corresponding obsolete REST reads are404, not compatibility aliases",
       assert.equal(result.status, 503, path)
       assert.equal(result.body.error.code, code, path)
     }
+    for (const command of ["enable", "disable"]) {
+      const path = `/v1/skills/contract-review/${command}?scope=official`
+      const result = await app.request(path, undefined, {
+        method: "POST",
+        headers: { ...headers, "idempotency-key": `skills-toggle-contract-review-${command}` },
+      })
+      assert.equal(result.status, 503, path)
+      assert.equal(result.body.error.code, "platform_operation_not_available", path)
+    }
+    assert.equal(admissions, 6)
     assert.equal(ownerReads, 0)
   } finally {
     await app.close()

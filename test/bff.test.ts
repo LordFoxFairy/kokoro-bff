@@ -620,66 +620,6 @@ describe("kokoro-bff v1 mock contract", () => {
     }
   })
 
-  it("completes the skill quota, revision, and toggle mock flow", async () => {
-    const base = await listen(testServer(config()))
-    const quotaResponse = await fetch(`${base}/v1/skills/quota`, {
-      headers: { ...authHeaders(), "x-kokoro-request-id": "skills-quota-request" },
-    })
-    const quotaBody = (await quotaResponse.json()) as {
-      data: {
-        namespace: string
-        package_count: number
-        package_bytes: number
-        max_packages: number
-        max_bytes: number
-      }
-      meta: { request_id: string }
-    }
-    assert.equal(quotaResponse.status, 200)
-    assert.equal(quotaBody.data.namespace, "ns_test")
-    assert.ok(Number.isInteger(quotaBody.data.package_count))
-    assert.ok(Number.isInteger(quotaBody.data.package_bytes))
-    assert.ok(Number.isInteger(quotaBody.data.max_packages))
-    assert.ok(Number.isInteger(quotaBody.data.max_bytes))
-    assert.equal(quotaBody.meta.request_id, "skills-quota-request")
-
-    const revisionsResponse = await fetch(`${base}/v1/skills/contract-review/revisions?scope=official`, {
-      headers: authHeaders(),
-    })
-    const revisionsBody = (await revisionsResponse.json()) as {
-      data: { revisions: Array<Record<string, unknown>> }
-      meta: { request_id: string }
-    }
-    assert.equal(revisionsResponse.status, 200)
-    assert.equal(revisionsBody.data.revisions.length, 1)
-    assert.deepEqual(revisionsBody.data.revisions[0], {
-      scope: "official",
-      name: "contract-review",
-      revision: 1,
-      content_hash: "sha256:fixture-contract-review",
-      package_size: 122880,
-      source: "mock",
-      created_at: 1767225600,
-    })
-    assert.ok(revisionsBody.meta.request_id.length > 0)
-
-    const toggleHeaders = {
-      ...authHeaders(),
-      "idempotency-key": "skills-toggle-contract-review-disable",
-    }
-    const disabled = await fetch(`${base}/v1/skills/contract-review/disable?scope=official`, {
-      method: "POST",
-      headers: toggleHeaders,
-    })
-    assert.equal(disabled.status, 404)
-
-    const enabled = await fetch(`${base}/v1/skills/contract-review/enable?scope=official`, {
-      method: "POST",
-      headers: { ...authHeaders(), "idempotency-key": "skills-toggle-contract-review-enable" },
-    })
-    assert.equal(enabled.status, 404)
-  })
-
   it("requires explicit Library kind after admission and does not mistake an HTTP upstream for the Storage Connect adapter", async () => {
     let connections = 0
     let requests = 0
@@ -1522,7 +1462,9 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("terminates unknown System and Skills paths in the raw feature adapter while preserving compatibility 404s", async () => {
+    let ownerCalls = 0
     const owner = createServer((_request, response) => {
+      ownerCalls++
       response.statusCode = 200
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({ data: { unexpected: true } }))
@@ -1556,6 +1498,17 @@ describe("kokoro-bff v1 mock contract", () => {
         path,
       )
     }
+
+    for (const command of ["enable", "disable"]) {
+      const path = `/v1/skills/contract-review/${command}?scope=official`
+      const result = await fetch(`${base}${path}`, {
+        method: "POST",
+        headers: { ...authHeaders(), "idempotency-key": `skills-toggle-contract-review-${command}` },
+      })
+      assert.equal(result.status, 404, path)
+      await result.arrayBuffer()
+    }
+    assert.equal(ownerCalls, 0)
 
     const fixtureBase = await listen(testServer(config()))
     const fixture = await fetch(`${fixtureBase}/v1/system/unknown`, { headers: authHeaders() })
