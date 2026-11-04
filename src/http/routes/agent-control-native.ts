@@ -11,7 +11,6 @@ import { failure } from "../../contracts/index.js"
 import { mutationTicket } from "../../application/idempotency.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
 import { liveAgentSession } from "./agent.js"
-import type { ChatBusinessProvider } from "./chat-business-provider.js"
 import { idempotencyKey, mutationFingerprint, pathOf, readBody, requestBodyJson, requestId } from "../request.js"
 import { send } from "../response.js"
 
@@ -59,8 +58,7 @@ export async function handleAgentControlRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const provider: ChatBusinessProvider = { chatService: chat, projectService: projects }
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, json, provider)
+    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, chat, projects)
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))

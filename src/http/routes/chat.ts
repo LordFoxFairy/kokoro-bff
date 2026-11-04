@@ -1,8 +1,5 @@
-import { chatMessageRoute } from "./chat-message.js"
-import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import type { RequestContext } from "../../domain/request-context.js"
@@ -11,8 +8,8 @@ import { reply } from "../response.js"
 import type { AuthorizedChatRequest } from "./chat-authorization.js"
 import { parseChatProcessPageInput } from "../chat-process-page-input.js"
 import { parseChatMessagePartsInput } from "../chat-message-parts-input.js"
+import type { ChatApplicationService } from "../../application/chat-service.js"
 import type { PrivateMessageReadContext } from "../../application/chat/chat-repository.js"
-import { chatServiceOf, chatTurnServiceOf, type ChatBusinessProvider } from "./chat-business-provider.js"
 
 function pageInput(request: IncomingMessage, defaultLimit: number): { limit: number; cursor: string | null } | null {
   const query = queryOf(request)
@@ -109,16 +106,13 @@ async function sendChatError(
 export async function liveChatBusiness(
   request: IncomingMessage,
   response: ServerResponse,
-  config: BffConfig,
   context: RequestContext,
   businessPath: string[],
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,
-  store: ChatBusinessProvider,
+  chat: ChatApplicationService,
   authorization: AuthorizedChatRequest,
-  installationClient?: SkillInstallationConnectClient | null,
-  projectAccess?: (projectId: string, signal: AbortSignal) => Promise<string>,
 ): Promise<boolean> {
   if (businessPath[0] !== "sessions") return false
   const method = request.method || "GET"
@@ -126,7 +120,6 @@ export async function liveChatBusiness(
   const subjectId = context.identity.userId
   const conversationId = businessPath[1] || ""
   const projectRef = authorization.projectRef
-  const chat = chatServiceOf(store)
 
   try {
     if (businessPath.length === 5 && businessPath[2] === "messages" && businessPath[4] === "parts" && method === "GET") {
@@ -180,27 +173,6 @@ export async function liveChatBusiness(
       }
       return true
     }
-    if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
-      const conversation = await chat.findConversation(tenantId, subjectId, conversationId, projectRef)
-      if (conversation === null) {
-        await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
-        return true
-      }
-      if (store.agUiConsumers === undefined) {
-        await reply(
-          response,
-          503,
-          failure("agui_projector_not_configured", "The durable AG-UI projector is not configured", context.requestId),
-          context,
-          idempotency,
-          mutation,
-        )
-        return true
-      }
-      await store.agUiConsumers.registerConsumer(tenantId, conversationId, conversation.owner_id)
-      return false
-    }
-
     if (businessPath.length === 1 && method === "GET") {
       const page = pageInput(request, 20)
       if (page === null) {
@@ -245,11 +217,6 @@ export async function liveChatBusiness(
       } else {
         await reply(response, 200, ok(result, context.requestId), context, idempotency, mutation)
       }
-      return true
-    }
-
-    if (businessPath.length === 3 && businessPath[2] === "messages" && method === "POST") {
-      await chatMessageRoute(request, response, config, context, conversationId, json, projectRef, chatTurnServiceOf(store), installationClient, projectAccess)
       return true
     }
 

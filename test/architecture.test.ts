@@ -609,7 +609,7 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
   assert.match(publicShareRepository, /Public share capability reads/u)
   assert.doesNotMatch(publicShareRepository, /subjectId/u)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
-  assert.match(route, /chatServiceOf\(store\)/u)
+  assert.match(route, /chat: ChatApplicationService/u)
   assert.match(route, /subjectId/u)
   // Keep submission/replay coverage in the HTTP and real-PG suites, not a private call-expression lock.
   assert.doesNotMatch(route, /callAgent/u)
@@ -639,7 +639,7 @@ test("private BFF resources use named owner scopes before receipts and keep serv
   assert.match(scheduledRepository, /FOR SHARE/u)
   assert.doesNotMatch(client, /invalidateProjects|projects:\$\{tenant/u)
   assert.match(chatAuthorization, /scope must be omitted, empty, or direct/u)
-  assert.match(chatAuthorization, /chatServiceOf\(store\)\.findConversation/u)
+  assert.match(chatAuthorization, /chat\.findConversation/u)
   assert.match(openapi, /DirectScopeQuery:[\s\S]*enum: \['', direct\]/u)
   assert.match(openapi, /ShareScopeQuery:[\s\S]*minLength: 1/u)
   assert.match(schema, /uq_bff_project_owner_slug/u)
@@ -660,7 +660,7 @@ test("Conversation collection filtering stays one BFF-owned discriminated path w
 
   assert.match(port, /ConversationCollectionFilter[\s\S]*kind: "all"[\s\S]*kind: "direct"[\s\S]*kind: "project"; projectRef: string/u)
   assert.match(authorization, /isConversationCollection && queryScope\.scope === "direct" && projectRef !== undefined/u)
-  assert.ok(authorization.indexOf("scope=direct cannot be combined with project_ref") < authorization.indexOf("projectServiceOf(store)"))
+  assert.ok(authorization.indexOf("scope=direct cannot be combined with project_ref") < authorization.indexOf("await projects.find("))
   assert.match(authorization, /collectionFilter: ConversationCollectionFilter/u)
   assert.match(route, /authorization\.collectionFilter/u)
   assert.match(service, /filter: ConversationCollectionFilter/u)

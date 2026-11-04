@@ -40,23 +40,17 @@ async function collectionRepositoryCall(query: string): Promise<{ calls: unknown
     },
   }
   const chat = new ChatApplicationService(repository as never)
-  const store = {
-    chatService: chat,
-    projectService: {
-      find: async () => {
-        projectReads += 1
-        return {}
-      },
+  const projects = {
+    find: async () => {
+      projectReads += 1
+      return {}
     },
   } as never
   const request = collectionRequest(query)
-  const authorization = await authorizeChatRequest(request, collectionContext, ["sessions"], {}, store)
+  const authorization = await authorizeChatRequest(request, collectionContext, ["sessions"], chat, projects)
   assert.ok(authorization?.ok)
   const response = responseDouble()
-  assert.equal(
-    await liveChatBusiness(request, response.response, {} as never, collectionContext, ["sessions"], {}, null, new Map(), store, authorization),
-    true,
-  )
+  assert.equal(await liveChatBusiness(request, response.response, collectionContext, ["sessions"], {}, null, new Map(), chat, authorization), true)
   return { calls, projectReads, responseHeaders: response.headers }
 }
 
@@ -108,16 +102,15 @@ for (const [name, query, expectedFilter, expectedProjectReads] of [
 
 test("rejects direct plus project collection filters before Project lookup", async () => {
   let projectReads = 0
-  const store = {
-    projectService: {
-      find: async () => {
-        projectReads += 1
-        return {}
-      },
+  const projects = {
+    find: async () => {
+      projectReads += 1
+      return {}
     },
   } as never
+  const chat = { findConversation: () => assert.fail("A rejected collection filter must not read a Conversation") }
 
-  const authorization = await authorizeChatRequest(collectionRequest("?scope=direct&project_ref=project_a"), collectionContext, ["sessions"], {}, store)
+  const authorization = await authorizeChatRequest(collectionRequest("?scope=direct&project_ref=project_a"), collectionContext, ["sessions"], chat, projects)
 
   assert.deepEqual(
     {
@@ -131,18 +124,16 @@ test("rejects direct plus project collection filters before Project lookup", asy
 test("keeps direct plus project resource authorization on the existing project-bound path", async () => {
   let projectReads = 0
   let conversationReads = 0
-  const store = {
-    projectService: {
-      find: async () => {
-        projectReads += 1
-        return {}
-      },
+  const projects = {
+    find: async () => {
+      projectReads += 1
+      return {}
     },
-    chatService: {
-      findConversation: async () => {
-        conversationReads += 1
-        return {}
-      },
+  } as never
+  const chat = {
+    findConversation: async () => {
+      conversationReads += 1
+      return {}
     },
   } as never
 
@@ -150,8 +141,8 @@ test("keeps direct plus project resource authorization on the existing project-b
     collectionRequest("?scope=direct&project_ref=project_a"),
     collectionContext,
     ["sessions", "conversation_a"],
-    {},
-    store,
+    chat,
+    projects,
   )
 
   assert.deepEqual(

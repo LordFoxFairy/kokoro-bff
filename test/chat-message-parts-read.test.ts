@@ -465,13 +465,12 @@ async function partsHttp(
   const handled = await liveChatBusiness(
     request as never,
     response as never,
-    {} as never,
     { requestId: "parts_http", identity: { namespace: "tenant", userId: "owner" } } as never,
     ["sessions", "session", "messages", "message", "parts"],
     {},
     null,
     new Map(),
-    { chatService: { readMessageParts: read } } as never,
+    { readMessageParts: read } as never,
     authorization as never,
   )
   return { handled, status, body, headers, request, response }

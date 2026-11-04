@@ -56,7 +56,7 @@ export async function handleChatEventsRequest(
       const context = { requestId: id, identity: admitted.identity, platformAdmin: admitted.platformAdmin }
       const businessPath = pathOf(request).slice(1)
       signal.throwIfAborted()
-      const authorization = await authorizeChatRequest(request, context, businessPath, {}, { chatService: chat, projectService: projects, signal })
+      const authorization = await authorizeChatRequest(request, context, businessPath, chat, projects, signal)
       signal.throwIfAborted()
       if (authorization === null) return
       if (!authorization.ok) {

@@ -10,7 +10,6 @@ import { failure } from "../../contracts/index.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
 import { liveChatBusiness } from "./chat.js"
-import type { ChatBusinessProvider } from "./chat-business-provider.js"
 import { idempotencyKey, mutationFingerprint, pathOf, readBody, requestBodyJson, requestId, requiresIdempotency } from "../request.js"
 import { send } from "../response.js"
 
@@ -70,8 +69,7 @@ export async function handleChatMutationRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const provider: ChatBusinessProvider = { chatService: chat, projectService: projects }
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, json, provider)
+    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, chat, projects)
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))
@@ -103,7 +101,7 @@ export async function handleChatMutationRequest(
       send(response, 409, failure("idempotency_in_progress", "An identical mutation is already in progress", id))
       return true
     }
-    const handled = await liveChatBusiness(request, response, config, admitted.context, businessPath, json, ticket.ticket, idempotency, provider, authorization)
+    const handled = await liveChatBusiness(request, response, admitted.context, businessPath, json, ticket.ticket, idempotency, chat, authorization)
     return handled
   } catch {
     if (!response.headersSent && !response.writableEnded && !response.destroyed)

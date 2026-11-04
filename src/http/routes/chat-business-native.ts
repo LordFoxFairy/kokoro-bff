@@ -5,7 +5,7 @@ import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { ChatApplicationService } from "../../application/chat-service.js"
 import type { ProjectService } from "../../application/project-service.js"
 import { failure } from "../../contracts/index.js"
-import { pathOf, queryOf, requestId } from "../request.js"
+import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
 import { liveChatBusiness } from "./chat.js"
@@ -30,13 +30,12 @@ export async function handleChatBusinessReadRequest(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
-  chat: ChatApplicationService | null,
-  projects: ProjectService | null = null,
+  chat: ChatApplicationService,
+  projects: Pick<ProjectService, "find">,
 ): Promise<boolean> {
   if (!isChatBusinessReadRequest(request)) return false
   const id = requestId(request)
   response.setHeader("x-request-id", id)
-  if (chat === null) return false
   const abort = new AbortController()
   const deadlineAt = performance.now() + Math.min(config.upstreamTimeoutMs, 10_000)
   const timer = setTimeout(() => abort.abort(), Math.max(0, deadlineAt - performance.now()))
@@ -53,21 +52,13 @@ export async function handleChatBusinessReadRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const projectRef = queryOf(request).get("project_ref")?.trim() ?? ""
-    if (projectRef !== "" && projects === null) return false
-    const authorization = await authorizeChatRequest(
-      request,
-      admitted.context,
-      businessPath,
-      {},
-      projects === null ? { chatService: chat } : { chatService: chat, projectService: projects },
-    )
+    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, chat, projects)
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))
       return true
     }
-    await liveChatBusiness(request, response, config, admitted.context, businessPath, {}, null, new Map(), { chatService: chat }, authorization)
+    await liveChatBusiness(request, response, admitted.context, businessPath, {}, null, new Map(), chat, authorization)
     return true
   } catch {
     if (!response.headersSent && !response.writableEnded && !response.destroyed)

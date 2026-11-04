@@ -5,8 +5,6 @@ import { createHash } from "node:crypto"
 import { create } from "@bufbuild/protobuf"
 import { SkillProductFactsSchema } from "../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
-import { liveChatBusiness } from "../dist/http/routes/chat.js"
-import { authorizeUserRequest } from "../dist/auth/user-admission.js"
 import { handleChatMessageRequest } from "../dist/http/routes/chat-message-native.js"
 import { createServer } from "node:http"
 import { once } from "node:events"
@@ -32,6 +30,7 @@ import { ChatModule } from "../dist/modules/chat/chat.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
+const unexpectedProjects = { find: () => assert.fail("Unscoped Chat reads must not access the Project owner") }
 const servers = []
 const config = {
   host: "127.0.0.1",
@@ -68,7 +67,7 @@ test("Chat business read middleware owns direct collection reads without Project
     },
   }
   const server = createServer((request, response) => {
-    void handleChatBusinessReadRequest(request, response, config, admission, chat).then((handled) => {
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedProjects).then((handled) => {
       if (!handled) {
         response.writeHead(404)
         response.end()
@@ -152,7 +151,7 @@ test("Chat business read middleware rechecks the session owner before serving a 
     },
   }
   const server = createServer((request, response) => {
-    void handleChatBusinessReadRequest(request, response, config, admission, chat).then((handled) => {
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedProjects).then((handled) => {
       if (!handled) {
         response.writeHead(404)
         response.end()
@@ -401,58 +400,30 @@ test("Message local JSON and byte errors keep400/413 and never claim or submit o
   for (const [index, id] of ["bad-json", "bad-message", "oversized-message"].entries()) assert.equal(results[index].headers.get("x-request-id"), id)
 })
 
-test("legacy and native Message projections retain the same canonical wire and trusted input without generic receipts", async (t) => {
-  const native = await messageBoundaryFixture(t)
-  const admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "owner" } })
-  const calls = [],
-    genericMap = new Map()
-  const runtime = { ...config, agentEnabled: true, upstreams: { agents: "http://agent.invalid" } }
-  const server = createServer(async (request, response) => {
-    const admitted = await authorizeUserRequest(request, runtime, admission, "shared-message", new AbortController().signal, response)
-    assert.equal(admitted.ok, true)
-    const chunks = []
-    for await (const chunk of request) chunks.push(chunk)
-    const json = JSON.parse(Buffer.concat(chunks).toString())
-    await liveChatBusiness(
-      request,
-      response,
-      runtime,
-      admitted.context,
-      ["sessions", "conv_message", "messages"],
-      json,
-      null,
-      genericMap,
-      {
-        chatService: {},
-        chatTurnService: {
-          submit: async (input) => {
-            calls.push(input)
-            return { run_id: "canonical-run", user_message_id: "canonical-user", assistant_message_id: "canonical-assistant" }
-          },
-        },
-      },
-      { ok: true },
-    )
+test("native Message submission returns canonical wire and passes the trusted input without generic receipts", async (t) => {
+  const f = await messageBoundaryFixture(t)
+  const requestId = "shared-message"
+  const result = await f.post('{"content":"hello","selected_skill_source_refs":[]}', requestId)
+  assert.equal(result.status, 202)
+  assert.deepEqual(result.body, {
+    data: { run_id: "canonical-run", user_message_id: "canonical-user", assistant_message_id: "canonical-assistant" },
+    meta: { request_id: requestId },
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
-  t.after(async () => {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
-  })
-  const raw = '{"content":"hello","selected_skill_source_refs":[]}'
-  const first = await native.post(raw, "shared-message")
-  const second = await fetch(`http://127.0.0.1:${server.address().port}/v1/sessions/conv_message/messages`, {
-    method: "POST",
-    headers: { ...nativeHeaders, "idempotency-key": "same-intent" },
-    body: raw,
-  })
-  assert.equal(second.status, first.status)
-  assert.deepEqual(await second.json(), first.body)
-  assert.deepEqual(calls, native.submissions)
-  assert.equal(second.headers.get("x-request-id"), "shared-message")
-  assert.equal(genericMap.size, 0)
-  assert.deepEqual(native.genericCalls, [])
+  assert.deepEqual(f.submissions, [
+    {
+      tenantId: "tenant",
+      conversationId: "conv_message",
+      content: "hello",
+      selectedSkillSourceRefs: [],
+      subjectId: "owner",
+      actorId: "owner",
+      requestId,
+      idempotencyKey: "same-intent",
+    },
+  ])
+  assert.equal(result.headers.get("x-request-id"), requestId)
+  assert.deepEqual(f.genericCalls, [])
+  assert.equal(f.receipts.size, 0)
 })
 
 test("Message default Skills bind exact installations and a post-read Project loss prevents canonical commit", async (t) => {

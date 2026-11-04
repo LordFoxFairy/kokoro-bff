@@ -2536,11 +2536,18 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
     const first = await dispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_a",
       limit: 1,
-      leaseDurationMs: 5,
+      leaseDurationMs: 5000,
       maxAttempts: 8,
     })
     assert.equal(first.length, 1)
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    // Exercise reclaim of the exact owned lease without racing SQL round trips against a 5 ms budget.
+    const expired = await pool.query(
+      `UPDATE bff_agent_dispatch_outbox
+          SET lease_until = clock_timestamp() - interval '1 second'
+        WHERE tenant_id = $1 AND outbox_id = $2 AND fence = $3 AND status = 'leased'`,
+      [tenant, first[0].outboxId, first[0].fence],
+    )
+    assert.equal(expired.rowCount, 1)
     const second = await dispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_b",
       limit: 1,

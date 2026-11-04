@@ -7,9 +7,8 @@ import type { ProjectService } from "../../application/project-service.js"
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { failure } from "../../contracts/index.js"
-import { authorizeChatRequest } from "./chat-authorization.js"
+import { validateChatMessageRequest } from "./chat-authorization.js"
 import { chatMessageRoute } from "./chat-message.js"
-import type { ChatBusinessProvider } from "./chat-business-provider.js"
 import { pathOf, readBody, requestBodyJson, requestId } from "../request.js"
 import { send } from "../response.js"
 
@@ -65,9 +64,7 @@ export async function handleChatMessageRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const provider: ChatBusinessProvider = { chatTurnService: chatTurns, projectService: projects }
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, json, provider)
-    if (authorization === null) return false
+    const authorization = validateChatMessageRequest(request, json)
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))
       return true
