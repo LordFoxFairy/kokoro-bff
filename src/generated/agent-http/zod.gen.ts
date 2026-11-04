@@ -59,6 +59,42 @@ export const zLaunchRequest = z.object({
     .max(32)
     .refine((values) => new Set(values.map((value) => value.profile_id)).size === values.length)
     .optional(),
+  personal_context: z
+    .object({
+      schema_version: z.literal(1),
+      owner: z.object({
+        tenant_ref: z.string().min(1),
+        user_ref: z.string().min(1),
+      }),
+      profile: z
+        .object({
+          revision: z.int().gte(1).lte(9007199254740991),
+          nickname: z.string().max(128).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+          occupation: z.string().max(256).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+          about: z.string().max(2000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+          instructions: z.string().max(8000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+        })
+        .nullable(),
+      knowledge: z.intersection(
+        z.unknown(),
+        z.object({
+          usage_revision: z.int().gte(0).lte(9007199254740991),
+          enabled: z.boolean(),
+          items: z
+            .array(
+              z.object({
+                knowledge_id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\s\S])/),
+                revision: z.int().gte(1).lte(9007199254740991),
+                name: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                when_to_use: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                content: z.string().min(1).max(2000).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+              }),
+            )
+            .max(100),
+        }),
+      ),
+    })
+    .nullish(),
 })
 
 export const zLaunchReceipt = z

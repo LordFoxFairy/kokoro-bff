@@ -48,6 +48,34 @@ export type LaunchRequest = {
     profile_id: string
     expected_state_version: number
   }>
+  /**
+   * Private BFF-owned personal snapshot bound to the trusted human actor and tenant. Omitted/null preserves pre-8.11 request bytes; knowledge items have unique knowledge_id values. Not public display or tool authority.
+   */
+  personal_context?: null | {
+    schema_version: 1
+    owner: {
+      tenant_ref: string
+      user_ref: string
+    }
+    profile: null | {
+      revision: number
+      nickname: string
+      occupation: string
+      about: string
+      instructions: string
+    }
+    knowledge: unknown & {
+      usage_revision: number
+      enabled: boolean
+      items: Array<{
+        knowledge_id: string
+        revision: number
+        name: string
+        when_to_use: string
+        content: string
+      }>
+    }
+  }
 }
 
 export type LaunchReceipt = {

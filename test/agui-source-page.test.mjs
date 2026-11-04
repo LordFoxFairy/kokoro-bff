@@ -46,6 +46,7 @@ const FAILURE_CODES = [
   "model_unavailable",
   "dependency_unavailable",
   "model_access_denied",
+  "context_window_exceeded",
 ]
 const RETRYABLE_FAILURE_CODES = new Set(["model_unavailable", "dependency_unavailable"])
 

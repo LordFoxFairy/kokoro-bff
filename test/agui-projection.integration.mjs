@@ -725,6 +725,7 @@ integrationTest("reads Artifact deliveries and public watermark from one repeata
 for (const failure of [
   { code: "model_unavailable", retryable: true },
   { code: "model_settlement_pending", retryable: false },
+  { code: "context_window_exceeded", retryable: false },
 ]) {
   integrationTest(`reconciles ${failure.code} with retained content and the committed Agent source ledger`, async () => {
     const pool = new Pool({

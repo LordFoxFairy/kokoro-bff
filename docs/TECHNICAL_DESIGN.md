@@ -1,3 +1,7 @@
+## T‑09：Agent 8.11 安全终态配对
+
+沿用既有 AG‑UI 投影与回放，不增加事件层或旁路。Agent 8.11 原件继续由现生成器生成；Chat 已用保存命令闭集拒绝 `personal_context`，Scheduled 以严格窄投影排除该字段。Agent 1 MiB body marker 是既有 owner 限额记录，不改变 BFF 限额。
+
 ## 2026-11-03 T-17：BFF 生命周期与 AG-UI 传输退役（本地已验证）
 
 **基线与状态。** 实施基线为 `8cb6169cf1d15d54c3a3bacad9ea622695642228`；G1/T-05 已在 Root 冻结组合验收。T-17 已在冻结 BFF 源码完成正常 worker/HTTP drain、Nest 原生关闭拒入、AG-UI 传输退役与物理 settlement、有限关闭失败，以及唯一进程 owner 的本地验收。以下范围不代表 T-11 遗留入口已删除、C-4 精确组合已验、Root 已重新固定版本或正常环境已切换。下方较早认证/组合状态按对应日期读取。

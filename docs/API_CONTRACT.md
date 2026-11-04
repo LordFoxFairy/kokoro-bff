@@ -1,3 +1,7 @@
+## T‑09：Agent 8.11 安全终态配对
+
+Public 28.19 在普通及 ordered assistant Message 的既有安全 failure tuple 中追加 `context_window_exceeded`，仅允许 `retryable: false`。保留 `model_unavailable`、`dependency_unavailable` 为仅有可重试码。原路由、AG‑UI 事件及鉴权不变。Agent HTTP 8.11 固定至 `40effb2d028b7d40264704543e45fdf3645f6d11`；不启用 BFF 发出 `personal_context`。
+
 > 当前候选（2026-11-03）：D0已通过；IAM固定896405d／internal0.20与Better Auth1.7.3正式snapshot，BFF源码正在同片收口。独立browser-private合同已由Root在34c9f997发行；Root已完成完整工程门、423项真实PG及真实IAM认证relay验证，各项证据只覆盖对应停写候选与范围。Skill inspection owner组合及含共享Admin的浏览器G1仍待，不代表正常环境已切换。
 
 I-49仅恢复现机器合同已有行为：Message本地坏JSON/输入400、超限413，canonical digest冲突409、原scope缺失404；移除外围HTTP成功cache后每次重放仍鲜准入并交canonical owner。ScheduledTask owner具名Project缺失为404 project_not_found，未识别依赖错误仍503；Project DELETE尾斜杠仍400 invalid_project_deletion_request而非合法删除。无新path/DTO/状态码或Schema，未知写入不换key、不自动重放；最终真实IAM与浏览器组合另验。

@@ -6,7 +6,7 @@ import { load } from "js-yaml"
 test("account profile public contract exposes the native-session read and existing CAS write", async () => {
   const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
   const api = load(source)
-  assert.equal(api.info.version, "28.18.0")
+  assert.equal(api.info.version, "28.19.0")
   const profile = api.paths["/v1/account/profile"]
   assert.deepEqual(Object.keys(profile), ["get", "patch"])
   assert.equal(profile.get.operationId, "readAccountProfile")

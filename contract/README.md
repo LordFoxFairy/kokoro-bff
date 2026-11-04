@@ -1,3 +1,7 @@
+## T‑09：Agent 8.11 安全终态配对
+
+唯一 Public 28.19 只扩两个现有 failure code 枚举；其余 OpenAPI 字节可用 build/test inverse 还原为原 28.18。Agent HTTP 8.11 vendored OpenAPI/provenance 取自 `40effb2`，只有一个当前 pin，BFF 不启用 `personal_context`。
+
 ## 当前最终答复引用（Public28.14，reader-first）
 
 固定 Agent b802f9b／HTTP8.8，在成功 RUN_FINISHED.result 和私有 OrderedMessageRendering／MessagePartsPage 增 optional final_segment_id。同 Run 原公开正文身份、与 parts revision 原子持久化，历史缺失保持缺失；无新operation、无Share或命令扩展。完整28.14→28.13、Agent8.8→8.7逆证保留。候选不是正常页面完成，配对见 docs/CURRENT.md。

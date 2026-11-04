@@ -1,3 +1,7 @@
+## T‑09：Agent 8.11 安全终态配对
+
+唯一 `database/schema.sql` 将新码加入 `ck_bff_message_agent_failure` 原有闭集，仍要求 failed assistant、同 Run 与合法可重试对。验收使用隔离 fresh schema；本切片不引入迁移链或修改现有非空库。
+
 > 当前候选（2026-11-03）：D0已通过；IAM固定896405d／internal0.20与Better Auth1.7.3正式snapshot，BFF源码正在同片收口。独立browser-private合同已由Root在34c9f997发行；Root已完成完整工程门、423项真实PG及真实IAM认证relay验证，各项证据只覆盖对应停写候选与范围。Skill inspection owner组合及含共享Admin的浏览器G1仍待，不代表正常环境已切换。
 
 ## 2026-11-02 AUTH-STD-D0：真实 principal，无 BFF 会话／授权副本（源码候选，未正常激活）

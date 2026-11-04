@@ -70,6 +70,7 @@ export function restoreAgent88FinalDisplayContract(document) {
 }
 
 export function restoreAgent89CustomApiSelectionRaw(source) {
+  source = restoreAgent810ContextWindowRaw(source)
   if (!source.includes('"version": "8.10.0"')) return source
   assert.equal(hash(source), "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e", "Agent8.10 Custom API child drift")
   const field =
@@ -80,6 +81,7 @@ export function restoreAgent89CustomApiSelectionRaw(source) {
   return source
 }
 export function restoreAgent89CustomApiSelectionContract(document) {
+  document = restoreAgent810ContextWindowContract(document)
   if (document.info?.version !== "8.10.0") return document
   const parent = structuredClone(document)
   assert.deepEqual(
@@ -106,5 +108,40 @@ export function restoreAgent89CustomApiSelectionContract(document) {
   delete parent.components.schemas.LaunchRequest.properties.selected_custom_api_profiles
   parent.info.version = "8.9.0"
   assert.equal(hash(JSON.stringify(parent)), "390e799d6534f7eda94bf4fe8b1318640e944a4da06326a33ed7e303cc618278", "Agent8.9 Custom API complete parent drift")
+  return parent
+}
+
+function restoreAgent810ContextWindowRaw(source) {
+  if (!source.includes('"version": "8.11.0"')) return source
+  assert.equal(hash(source), "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b", "Agent8.11 context window child drift")
+  const field =
+    /,\n          "personal_context": \{\n[\s\S]*?^          \}(?=\n        \},\n        "additionalProperties": false\n      \},\n      "LaunchReceipt":)/gmu
+  assert.equal([...source.matchAll(field)].length, 1, "Agent8.11 personal context delta drift")
+  source = source.replace(field, "")
+  for (const [child, parent] of [
+    ['"version": "8.11.0"', '"version": "8.10.0"'],
+    [',\n              "context_window_exceeded"', ""],
+    [',\n        "x-kokoro-max-body-bytes": 1048576', ""],
+  ]) {
+    assert.equal(source.split(child).length, 2, "Agent8.11 context window exact delta drift")
+    source = source.replace(child, parent)
+  }
+  assert.equal(hash(source), "af76b63e7aeccec434bae30f41c554416dbd1ebf77871b94e67a5043221dbf6e", "Agent8.10 context window parent drift")
+  return source
+}
+
+function restoreAgent810ContextWindowContract(document) {
+  if (document.info?.version !== "8.11.0") return document
+  assert.equal(hash(JSON.stringify(document)), "bd241f7412be7bd194a6d06ac1c73559f01d6729980ed41350ee2fe9c4b78b11", "Agent8.11 context window shape drift")
+  const parent = structuredClone(document)
+  assert.equal(parent.components.schemas.Failure.properties.code.enum.pop(), "context_window_exceeded")
+  delete parent.components.schemas.LaunchRequest.properties.personal_context
+  delete parent.paths["/v1/runs"].post["x-kokoro-max-body-bytes"]
+  parent.info.version = "8.10.0"
+  assert.equal(
+    hash(JSON.stringify(parent)),
+    "91a79c67ad6adc0f2ba727a8cb870e4505ed2ad95f50fb1792af8c395f09d793",
+    "Agent8.10 context window complete parent drift",
+  )
   return parent
 }

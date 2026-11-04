@@ -18,6 +18,7 @@ const SAFE_FAILURE_CODES = [
   "dependency_unavailable",
   "model_access_denied",
   "model_settlement_pending",
+  "context_window_exceeded",
 ]
 const RETRYABLE_FAILURE_CODES = ["model_unavailable", "dependency_unavailable"]
 

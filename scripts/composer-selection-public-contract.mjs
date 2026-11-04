@@ -6,6 +6,12 @@ const accountProfileCurrentSha256 = "35a86f91e44beb1aeb6b17eca41d3bfdc79f11a4363
 const accountProfileParentSha256 = "ea0031103488daa1fcc0cca45fdd13f4d4061546ac4525c745ec47105649f7e7"
 
 export function restorePublic2818AccountProfileContract(source) {
+  if (/^  version: 28\.19\.0$/mu.test(source)) {
+    if (hash(source) !== "27032917fb272601b6da8ba9227bab5324ac305682a72c94adca72e4f9e25577") throw Error("Context window Public28.19 child drift")
+    const field = "                - context_window_exceeded\n"
+    if (source.split(field).length !== 3) throw Error("Context window Public28.19 exact delta drift")
+    source = source.replaceAll(field, "").replace("  version: 28.19.0\n", "  version: 28.18.0\n")
+  }
   if (!/^  version: 28\.18\.0$/mu.test(source)) return source
   if (hash(source) !== accountProfileCurrentSha256) throw Error("Account profile Public28.18 child drift")
   const pathMatch = source.match(/^  \/v1\/account\/profile:\n    get:[\s\S]*?(?=    patch:)/mu)
