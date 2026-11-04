@@ -1,17 +1,22 @@
 import { performance } from "node:perf_hooks"
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 
-import type {
-  PersonalizationFields,
-  PersonalizationReadOptions,
-  PersonalizationReadResult,
-  PersonalizationReplacement,
-  PersonalizationProvider,
-  PersonalizationSaveResult,
-  PersonalizationScope,
-  PersonalizationSnapshot,
-} from "../../modules/account/personalization.provider.js"
 import type { PostgresBffDatabase } from "./client.js"
+
+type PersonalizationFields = Readonly<{
+  nickname: string
+  occupation: string
+  about: string
+  instructions: string
+}>
+
+type PersonalizationScope = Readonly<{ tenantId: string; subjectId: string }>
+type PersonalizationReadOptions = Readonly<{ signal: AbortSignal; deadline: number }>
+export type PersonalizationReplacement = Readonly<{ expectedRevision: number; fields: PersonalizationFields }>
+type PersonalizationSnapshot = Readonly<{ personalization: PersonalizationFields | null; revision: number }>
+type PersonalizationReadResult = Readonly<{ kind: "read"; snapshot: PersonalizationSnapshot }> | Readonly<{ kind: "unavailable" }>
+type PersonalizationSaveResult =
+  Readonly<{ kind: "saved"; snapshot: PersonalizationSnapshot }> | Readonly<{ kind: "conflict" | "exhausted" | "unavailable" | "unknown" }>
 
 function snapshot(row: Record<string, unknown> | undefined): PersonalizationSnapshot {
   if (row === undefined) return { personalization: null, revision: 0 }
@@ -36,7 +41,7 @@ function snapshot(row: Record<string, unknown> | undefined): PersonalizationSnap
 }
 
 /** One caller-owned row and its finite exact-client lifecycle; no generic receipt or retry. */
-export class PostgresPersonalizationRepository implements PersonalizationProvider {
+export class PostgresPersonalizationRepository {
   public constructor(private readonly database: PostgresBffDatabase) {}
 
   public async read(scope: PersonalizationScope, options: PersonalizationReadOptions): Promise<PersonalizationReadResult> {

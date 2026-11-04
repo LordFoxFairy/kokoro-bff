@@ -994,7 +994,7 @@ test("R257 personalization stays caller-owned and bypasses generic receipt dispa
   assert.match(route, /context\.identity\.namespace/u)
   assert.match(route, /context\.identity\.userId/u)
   assert.doesNotMatch(route, /BffBusinessStore|platformAdmin|ownerIdentityHeaders|localStorage|mutationTicket/u)
-  assert.match(provider, /export interface PersonalizationProvider/u)
+  assert.doesNotMatch(provider, /export interface PersonalizationProvider/u, "Account must not retain a duplicate provider contract")
   assert.match(provider, /PERSONALIZATION_PROVIDER/u)
   assert.doesNotMatch(provider, /from ["'](?:pg|redis|node:http)["']/u)
   assert.doesNotMatch(repository, /bff_idempotency_receipt|kokoro_iam|kokoro_system|\.redis\./u)
