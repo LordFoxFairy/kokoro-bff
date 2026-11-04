@@ -3,8 +3,7 @@ import { createServer } from "node:http"
 import { test } from "node:test"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
-import { createLiveTestBffServer } from "./doubles/server.ts"
-import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
+import { SessionAdmissionDouble, TEST_WEB_ORIGIN } from "./doubles/session-admission.ts"
 
 const account = {
   credit_account_id: "11111111-1111-4111-8111-111111111111",
@@ -90,17 +89,48 @@ async function within(promise, milliseconds, message) {
   }
 }
 
+async function createBillingTestApp(serverConfig, { sessionAdmission } = {}) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { BillingModule } = await import("../dist/modules/billing/billing.module.js")
+  const unexpectedIo = () => assert.fail("Personal Billing HTTP fixture must not access BFF PostgreSQL")
+  const module = await Test.createTestingModule({ imports: [BillingModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue({
+      ...serverConfig,
+      iamWebOrigin: serverConfig.iamWebOrigin === undefined ? (serverConfig.iamRelay?.webOrigin ?? TEST_WEB_ORIGIN) : serverConfig.iamWebOrigin,
+    })
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpectedIo, connect: unexpectedIo } })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(
+      sessionAdmission ??
+        new SessionAdmissionDouble({
+          "test-session": { namespace: "ns_test", userId: "user_test" },
+          "control-session": { namespace: "tenant_control", userId: "user_control" },
+        }),
+    )
+    .compile()
+  return module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false, forceCloseConnections: true })
+}
+
 async function withOwner(handler, run, overrides = {}, serverOptions = {}) {
   const owner = createServer(handler)
   let bff
   try {
     const ownerBase = await listen(owner)
-    bff = createLiveTestBffServer(config(ownerBase, overrides), serverOptions)
-    const bffBase = await listen(bff)
+    bff = await createBillingTestApp(config(ownerBase, overrides), serverOptions)
+    await bff.listen(0, "127.0.0.1")
+    const bffBase = await bff.getUrl()
     await run(bffBase)
   } finally {
-    if (bff !== undefined) await close(bff)
-    await close(owner)
+    try {
+      await bff?.close()
+    } finally {
+      await close(owner)
+    }
   }
 }
 
@@ -446,17 +476,21 @@ test("personal Credit read does not follow an owner redirect or disclose credent
       response.end()
     })
     const ownerBase = await listen(owner)
-    bff = createLiveTestBffServer(config(ownerBase))
-    const bffBase = await listen(bff)
+    bff = await createBillingTestApp(config(ownerBase))
+    await bff.listen(0, "127.0.0.1")
+    const bffBase = await bff.getUrl()
     const response = await fetch(`${bffBase}/v1/billing/summary`, { headers: publicHeaders("billing-redirect") })
     assert.equal(response.status, 502)
     assert.equal(((await response.json()).error ?? {}).code, "upstream_response_invalid")
     await new Promise((resolve) => setTimeout(resolve, 25))
     assert.deepEqual(receiverRequests, [])
   } finally {
-    if (bff !== undefined) await close(bff)
-    await close(owner)
-    await close(receiver)
+    try {
+      await bff?.close()
+    } finally {
+      await close(owner)
+      await close(receiver)
+    }
   }
 })
 

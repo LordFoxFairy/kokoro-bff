@@ -8,7 +8,6 @@ import test from "node:test"
 
 import { PlatformProjectionHttpClient } from "../dist/infrastructure/clients/platform/projection-http.js"
 import { livePlatformProjectionRead } from "../dist/http/routes/platform-projection.js"
-import { createBffServer } from "../dist/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
 async function fixture(owner, { deadlineMs, entryDelayMs = 0 } = {}) {
@@ -139,49 +138,20 @@ test("MCP projection fails closed before owner socket without credential", async
 })
 
 test("bootstrap admission rejects Platform reads with strict error-only envelopes before the owner", async () => {
-  const config = {
-    host: "127.0.0.1",
-    port: 4300,
-    mode: "live",
-    domain: "dev.kokoro.localhost",
-    tenantId: "123e4567-e89b-42d3-a456-426614174000",
-    iamBaseUrl: null,
-    iamWebOrigin: "https://web.example.test",
-    sharedSecret: "test-secret",
-    upstreamSecret: null,
-    upstreamTimeoutMs: 1000,
-    upstreamMaxResponseBytes: 1024 * 1024,
-    schedulerServiceToken: null,
-    schedulerTargetUrl: null,
-    agentEnabled: false,
-    postgresUrl: null,
-    redisUrl: null,
-    agUi: DEFAULT_AGUI_CONFIG,
-    upstreams: { system: null, platform: null, scheduler: null, agents: null, billing: null, music: null },
-    platformProjection: { baseUrl: null, credentialFile: null, timeoutMs: 1000 },
-    skillDraft: { enabled: false, platformBaseUrl: null, credentialFile: null, timeoutMs: 1000 },
-  }
-  let admissionCalls = 0
-  let ownerDispatches = 0
-  const server = createBffServer(config, {
-    businessStore: null,
-    readiness: async () => undefined,
-    sessionAdmission: {
-      verify: async () => {
-        admissionCalls++
-        return { ok: false, status: 429, code: "session_rate_limited", retryAfter: "3" }
+  let actionChecks = 0
+  const app = await managedFixture({
+    feature: "mcp",
+    admission: async () => ({ ok: false, status: 429, code: "session_rate_limited", retryAfter: "3" }),
+    mcpAuthorization: {
+      check: async () => {
+        actionChecks++
+        throw new Error("refused Session reached MCP action authorization")
       },
     },
-    routeHandler: async () => {
-      ownerDispatches++
-      return false
-    },
   })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
-  const origin = `http://127.0.0.1:${server.address().port}`
   try {
     for (const resource of ["/v1/mcp/servers", "/v1/mcp/connections"]) {
-      const missing = await fetch(`${origin}${resource}`, {
+      const missing = await fetch(`${app.origin}${resource}`, {
         headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", origin: "https://web.example.test" },
       })
       assert.equal(missing.status, 401, resource)
@@ -192,7 +162,7 @@ test("bootstrap admission rejects Platform reads with strict error-only envelope
       )
       assert.equal(missing.headers.get("cache-control"), "no-store")
       assert.ok(missing.headers.get("x-request-id"))
-      const limited = await fetch(`${origin}${resource}`, {
+      const limited = await fetch(`${app.origin}${resource}`, {
         headers: {
           "x-kokoro-service": "web-bff",
           "x-kokoro-internal-secret": "test-secret",
@@ -204,10 +174,11 @@ test("bootstrap admission rejects Platform reads with strict error-only envelope
       assert.deepEqual(await limited.json(), { error: { code: "session_rate_limited", message: "BFF user admission failed", retryable: true } }, resource)
       assert.equal(limited.headers.get("retry-after"), "3")
     }
-    assert.equal(admissionCalls, 2, "only the two requests carrying Cookie reach the authentication provider")
-    assert.equal(ownerDispatches, 0, "no refused read reaches the owner route dispatcher")
+    assert.equal(app.admissionCalls.length, 2, "only the two requests carrying Cookie reach the authentication provider")
+    assert.equal(actionChecks, 0, "no refused Session reaches MCP action authorization")
+    assert.equal(app.calls.length, 0, "no refused read reaches the owner")
   } finally {
-    await new Promise((resolve) => server.close(resolve))
+    await app.close()
   }
 })
 
@@ -487,7 +458,7 @@ function managedBrowserHeaders(extra = {}) {
   }
 }
 
-async function managedFixture({ owner, admission, mcpAuthorization } = {}) {
+async function managedFixture({ owner, admission, mcpAuthorization, feature = "skills" } = {}) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "bff-managed-skills-"))
   const credentialFile = path.join(dir, "projection.json")
   await writeFile(
@@ -534,24 +505,46 @@ async function managedFixture({ owner, admission, mcpAuthorization } = {}) {
       return { ok: true, identity: { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "person" }, platformAdmin: false }
     },
   }
-  const server = createBffServer(managedConfig(credentialFile), {
-    businessStore: null,
-    readiness: async () => undefined,
-    sessionAdmission,
-    ...(mcpAuthorization ? { mcpAuthorization } : {}),
-  })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
-  origin = `http://127.0.0.1:${server.address().port}`
-  return {
-    origin,
-    calls,
-    admissionCalls,
-    async close() {
-      globalThis.fetch = originalFetch
-      server.closeAllConnections()
-      await new Promise((resolve) => server.close(resolve))
+  const config = managedConfig(credentialFile)
+  let closeBff
+  const close = async () => {
+    globalThis.fetch = originalFetch
+    try {
+      await closeBff?.()
+    } finally {
       await rm(dir, { recursive: true, force: true })
-    },
+    }
+  }
+  try {
+    await import("reflect-metadata")
+    const { Test } = await import("@nestjs/testing")
+    const { BFF_CONFIG, BFF_DATABASE, MCP_AUTHORIZATION, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+    const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+    const featureModule =
+      feature === "mcp" ? (await import("../dist/modules/mcp/mcp.module.js")).McpModule : (await import("../dist/modules/skills/skills.module.js")).SkillsModule
+    const databaseCall = () => {
+      throw new Error("Platform projection HTTP fixture must not query PostgreSQL")
+    }
+    const builder = Test.createTestingModule({ imports: [featureModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({ pool: { query: databaseCall, connect: databaseCall } })
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(sessionAdmission)
+    if (mcpAuthorization) builder.overrideProvider(MCP_AUTHORIZATION).useValue(mcpAuthorization)
+    const module = await builder.compile()
+    const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    closeBff = async () => {
+      app.getHttpServer().closeAllConnections()
+      await app.close()
+    }
+    await app.listen(0, "127.0.0.1")
+    origin = await app.getUrl()
+    return { origin, calls, admissionCalls, close }
+  } catch (error) {
+    await close()
+    throw error
   }
 }
 
@@ -946,10 +939,11 @@ test("owned series history preserves exact revisions and rejects mutation or cal
   }
 })
 
-// A direct projection-handler fixture misses bootstrap's production route classifier.
+// The production feature listener must classify only the named projection paths.
 test("MCP Connection projection reaches its owner through the production bootstrap, not a generic proxy", async () => {
   const authorization = []
   const app = await managedFixture({
+    feature: "mcp",
     mcpAuthorization: {
       check: async (input) => {
         authorization.push(input)
@@ -987,6 +981,7 @@ test("MCP Connection projection reaches its owner through the production bootstr
 
 test("MCP Server projection also keeps its named production handler after admission", async () => {
   const app = await managedFixture({
+    feature: "mcp",
     mcpAuthorization: { check: async () => ({ ok: true }) },
     owner: async (request) =>
       new Response(JSON.stringify({ data: { servers: [] } }), {
@@ -1007,6 +1002,7 @@ test("MCP Server projection also keeps its named production handler after admiss
 
 test("production MCP projection admission denial never reaches its owner", async () => {
   const app = await managedFixture({
+    feature: "mcp",
     mcpAuthorization: { check: async () => ({ ok: false, status: 403, code: "mcp_action_denied" }) },
     owner: async () => {
       throw new Error("denied MCP projection reached owner")
