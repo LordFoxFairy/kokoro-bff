@@ -8,7 +8,7 @@ import { create } from "@bufbuild/protobuf"
 import { TimestampSchema } from "@bufbuild/protobuf/wkt"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { SkillDownloadHandles } from "../../src/application/skill-download-handles.ts"
-import { createBffServer } from "../../src/bootstrap/server.ts"
+import { SkillDownloadHandles as NestSkillDownloadHandles } from "../../dist/application/skill-download-handles.js"
 import { DEFAULT_AGUI_CONFIG } from "../../src/config/runtime.ts"
 import { SkillInstallationChange, SkillProductFactsSchema } from "../../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts"
 
@@ -60,7 +60,7 @@ async function fixture(
     platformAdmin: false,
   }),
   configOverride = {},
-  options = {},
+  { installationClient, skillShareRepository, mountDownloadHandles = false, mountSystem = false } = {},
 ) {
   const config = {
     host: "127.0.0.1",
@@ -90,28 +90,62 @@ async function fixture(
     },
     ...configOverride,
   }
-  const server = createBffServer(config, {
-    businessStore: null,
-    sessionAdmission: { verify: admission },
-    skillListAdmission: { verify: async () => ({ ok: true, principal: { kind: "user_api_key", tenant_id: "tenant", user_id: "human", key_id: "key" } }) },
-    skillSpecificationSource:
-      source === null
-        ? null
-        : {
-            ...source,
-            readPublicList:
-              source.readPublicList?.bind(source) ?? ((input, context, signal, deadline) => source.read("skill.list", input, context, signal, deadline)),
-            read: source.read?.bind(source),
-            readDetail: source.readDetail?.bind(source),
-            prepareDownload: source.prepareDownload?.bind(source),
-            confirmDownload: source.confirmDownload?.bind(source),
-          },
-    ...options,
-  })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const skillListAdmission = {
+    verify: async () => ({ ok: true, principal: { kind: "user_api_key", tenant_id: "tenant", user_id: "human", key_id: "key" } }),
+  }
+  const skillSpecificationSource =
+    source === null
+      ? null
+      : {
+          ...source,
+          readPublicList:
+            source.readPublicList?.bind(source) ?? ((input, context, signal, deadline) => source.read("skill.list", input, context, signal, deadline)),
+          read: source.read?.bind(source),
+          readDetail: source.readDetail?.bind(source),
+          prepareDownload: source.prepareDownload?.bind(source),
+          confirmDownload: source.confirmDownload?.bind(source),
+        }
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../../dist/main.js")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, SKILL_INSTALLATION_CLIENT, SKILL_LIST_ADMISSION, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE } =
+    await import("../../dist/common/tokens.js")
+  // The production Project middleware serves opaque handles, using its imported Skills registry.
+  const ownerModule = mountDownloadHandles
+    ? (await import("../../dist/modules/projects/projects.module.js")).ProjectsModule
+    : (await import("../../dist/modules/skills/skills.module.js")).SkillsModule
+  const imports = [ownerModule]
+  if (mountSystem) imports.push((await import("../../dist/modules/system/system.module.js")).SystemModule)
+  const builder = Test.createTestingModule({ imports })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: Object.freeze({}) })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue({ verify: admission })
+    .overrideProvider(SKILL_LIST_ADMISSION)
+    .useValue(skillListAdmission)
+    .overrideProvider(SKILL_SPECIFICATION_SOURCE)
+    .useValue(skillSpecificationSource)
+  if (installationClient !== undefined) builder.overrideProvider(SKILL_INSTALLATION_CLIENT).useValue(installationClient)
+  if (skillShareRepository !== undefined) builder.overrideProvider(SKILL_SHARE_REPOSITORY).useValue(skillShareRepository)
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+  let base
+  try {
+    await app.listen(0, "127.0.0.1")
+    base = await app.getUrl()
+  } catch (error) {
+    await Promise.allSettled([app.close()])
+    throw error
+  }
+  const close = async () => {
+    app.getHttpServer().closeAllConnections()
+    await app.close()
+  }
   return {
     async request(path, input, extra = {}) {
-      const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, {
+      const response = await fetch(`${base}${path}`, {
         headers: {
           ...(path.split("?", 1)[0] === "/v1/skill.list"
             ? { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", authorization: "Bearer human", "x-request-id": "spec-request" }
@@ -133,10 +167,7 @@ async function fixture(
         body: response.headers.get("content-type") === "application/zip" ? Buffer.from(await response.arrayBuffer()) : await response.json(),
       }
     },
-    async close() {
-      server.closeAllConnections()
-      await server.shutdown()
-    },
+    close,
   }
 }
 
@@ -259,14 +290,43 @@ test("R357 private read methods require fresh current human/tenant; scope is not
   }
 })
 test("R357 corresponding obsolete REST reads are404, not compatibility aliases", async () => {
-  const app = await fixture({
-    async read() {
-      throw Error("old alias must not call new owner")
+  let ownerReads = 0
+  let admissions = 0
+  const app = await fixture(
+    {
+      async read() {
+        ownerReads++
+        throw Error("old alias must not call new owner")
+      },
     },
-  })
+    async () => {
+      admissions++
+      return { ok: true, identity: { namespace: "tenant", userId: "human" }, platformAdmin: false }
+    },
+    {},
+    { mountSystem: true },
+  )
   try {
-    for (const path of ["/v1/skills", "/v1/skills/pool", "/v1/skills/catalog", "/v1/skills/stable-series", "/v1/skills/stable-series/download"])
-      assert.equal((await app.request(path)).status, 404)
+    const retiredReads = ["/v1/skills", "/v1/skills/pool", "/v1/skills/catalog", "/v1/skills/stable-series", "/v1/skills/stable-series/download"]
+    const actual = []
+    for (const path of retiredReads) actual.push({ path, status: (await app.request(path)).status })
+    assert.deepEqual(
+      actual,
+      retiredReads.map((path) => ({ path, status: 404 })),
+    )
+    assert.equal(admissions, 0)
+    assert.equal(ownerReads, 0)
+
+    for (const [path, input, code] of [
+      ["/v1/skills/quota", undefined, "platform_operation_not_available"],
+      ["/v1/skills/stable-series/enable", {}, "platform_operation_not_available"],
+      ["/v1/system/unknown", undefined, "system_projection_not_configured"],
+    ]) {
+      const result = await app.request(path, input)
+      assert.equal(result.status, 503, path)
+      assert.equal(result.body.error.code, code, path)
+    }
+    assert.equal(ownerReads, 0)
   } finally {
     await app.close()
   }
@@ -301,7 +361,7 @@ test("metadata detail uses current authorized facts without package IO or handle
     downloads++
     throw new ConnectError("private package deadline", Code.DeadlineExceeded)
   }
-  const issued = t.mock.method(SkillDownloadHandles.prototype, "issue")
+  const issued = t.mock.method(NestSkillDownloadHandles.prototype, "issue")
   const app = await fixture(owner.service)
   try {
     const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
@@ -346,7 +406,7 @@ for (const fault of ["series", "source", "status"])
       downloads++
       throw Error("package should not be read")
     }
-    const issued = t.mock.method(SkillDownloadHandles.prototype, "issue")
+    const issued = t.mock.method(NestSkillDownloadHandles.prototype, "issue")
     const app = await fixture(owner.service)
     try {
       const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
@@ -492,11 +552,16 @@ test("R357 prepare refuses different stable identity/tenant/subject without disc
   }
 })
 test("R357 byte handle missing or lost after restart is410, not latest/version fallback", async () => {
-  const app = await fixture({
-    async confirmDownload() {
-      throw Error("must not resolve missing handle")
+  const app = await fixture(
+    {
+      async confirmDownload() {
+        throw Error("must not resolve missing handle")
+      },
     },
-  })
+    undefined,
+    {},
+    { mountDownloadHandles: true },
+  )
   try {
     assert.equal((await app.request("/skill-downloads/" + "x".repeat(43))).status, 410)
   } finally {
@@ -568,33 +633,44 @@ async function bytesFixture(confirm, admission, filename = "原始技能.zip") {
       expiresAt: Date.now() + 300000,
     },
   }
-  const app = await fixture(
-    {
-      async prepareDownload() {
-        return { skill: detail, binding }
-      },
-      async confirmDownload(...args) {
-        await confirm(...args)
-      },
-    },
-    admission,
-    { storageObjectOrigin: origin },
-  )
-  const metadata = await app.request("/skill.v1.SkillService/DownloadSkill", {
-    skillId: "stable-series",
-  })
-  assert.equal(metadata.status, 200)
-  return {
-    ...app,
-    bytes,
-    binding,
-    path: metadata.body.downloadInfo.downloadUrl.slice(4),
-    objects: () => objects,
-    async close() {
-      await app.close()
+  let app
+  const close = async () => {
+    try {
+      await app?.close()
+    } finally {
       object.closeAllConnections()
       await new Promise((resolve) => object.close(resolve))
-    },
+    }
+  }
+  try {
+    app = await fixture(
+      {
+        async prepareDownload() {
+          return { skill: detail, binding }
+        },
+        async confirmDownload(...args) {
+          await confirm(...args)
+        },
+      },
+      admission,
+      { storageObjectOrigin: origin },
+      { mountDownloadHandles: true },
+    )
+    const metadata = await app.request("/skill.v1.SkillService/DownloadSkill", {
+      skillId: "stable-series",
+    })
+    assert.equal(metadata.status, 200)
+    return {
+      ...app,
+      bytes,
+      binding,
+      path: metadata.body.downloadInfo.downloadUrl.slice(4),
+      objects: () => objects,
+      close,
+    }
+  } catch (error) {
+    await Promise.allSettled([close()])
+    throw error
   }
 }
 test("R357 handle serves real hash/size verified bytes, requalifies exact version twice and reads current human again", async () => {
@@ -1055,7 +1131,7 @@ test("R357 malformed qualified handle facts fail502 before any successful metada
 test("R357 cancelled download preparation never issues a handle from late owner results", async (t) => {
   let finish, entered
   const called = new Promise((resolve) => (entered = resolve))
-  const spy = t.mock.method(SkillDownloadHandles.prototype, "issue")
+  const spy = t.mock.method(NestSkillDownloadHandles.prototype, "issue")
   const app = await fixture({
     async prepareDownload() {
       entered()
@@ -1452,8 +1528,12 @@ test("R357 formal download aggregation binds exact cover locator without inline 
   )
 })
 test("R357 production composition uses the formal Skills aggregation rather than permanent pending503 when all existing dependencies are configured", async () => {
-  const { createBffComposition } = await import("../../src/bootstrap/runtime.ts")
-  const { SkillSpecificationService } = await import("../../src/application/skill-specification.ts")
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, SKILL_INSTALLATION_CLIENT, SKILL_PRODUCT_CLIENT, SKILL_SPECIFICATION_SOURCE } =
+    await import("../../dist/common/tokens.js")
+  const { SkillSpecificationService } = await import("../../dist/application/skill-specification.js")
+  const { SkillsModule } = await import("../../dist/modules/skills/skills.module.js")
   const config = {
     upstreams: { agents: null },
     iamBaseUrl: "http://iam.test",
@@ -1468,16 +1548,23 @@ test("R357 production composition uses the formal Skills aggregation rather than
     postgresUrl: null,
     redisUrl: null,
   }
-  const composition = createBffComposition(config, {
-    businessStore: null,
-    sessionAdmission: { async verify() {} },
-    skillProductClient: {},
-    installationClient: {},
-  })
+  const module = await Test.createTestingModule({ imports: [SkillsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: Object.freeze({}) })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue({ async verify() {} })
+    .overrideProvider(SKILL_PRODUCT_CLIENT)
+    .useValue({})
+    .overrideProvider(SKILL_INSTALLATION_CLIENT)
+    .useValue({})
+    .compile()
   try {
-    assert.ok(composition.skillSpecificationSource instanceof SkillSpecificationService)
+    const source = module.select(SkillsModule).get(SKILL_SPECIFICATION_SOURCE, { strict: true })
+    assert.ok(source instanceof SkillSpecificationService)
   } finally {
-    await composition.close()
+    await module.close()
   }
 })
 
@@ -1930,6 +2017,8 @@ test("R357 over128 cross-subject explicit downloads retain bounded eviction and 
       identity: { namespace: "tenant", userId: subject },
       platformAdmin: false,
     }),
+    {},
+    { mountDownloadHandles: true },
   )
   try {
     const first = await app.request("/skill.v1.SkillService/DownloadSkill", {
@@ -2046,7 +2135,6 @@ test("shared revision summary serves exact old revision through the admitted pub
     undefined,
     {},
     {
-      businessStore: null,
       skillShareRepository: {
         findActive: async () => {
           reads++
@@ -2151,7 +2239,6 @@ for (const scenario of ["revoked", "expired", "changed-source", "other-tenant", 
       undefined,
       {},
       {
-        businessStore: null,
         skillShareRepository: {
           findActive: async () => {
             reads++
@@ -2285,7 +2372,6 @@ test("shared summary disconnect cancels exact metadata and prevents a late secon
     undefined,
     {},
     {
-      businessStore: null,
       skillShareRepository: {
         findActive: async () => {
           reads++
