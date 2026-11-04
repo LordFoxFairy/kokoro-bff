@@ -91,9 +91,10 @@ export class ScheduledTaskMutationMiddleware implements NestMiddleware {
         }
         checkedCreate = input
       }
-      if (route.kind === "create" || route.kind === "project_create") {
+      // DELETE may recover its original acknowledgement after the task has been physically removed.
+      if (route.kind === "create" || route.kind === "project_create" || route.kind === "patch" || route.kind === "retry") {
         if (abort.signal.aborted) return
-        const access = await authorizeScheduledTaskMutation("POST", admitted.context, path, checkedCreate ?? null, {
+        const access = await authorizeScheduledTaskMutation(route.kind === "patch" ? "PATCH" : "POST", admitted.context, path, checkedCreate ?? null, {
           projects: this.projects,
           scheduledTasks: this.tasks,
         })

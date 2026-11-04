@@ -3282,6 +3282,68 @@ async function r278CommitTombstoneAndPause(f, projectId, taskId) {
   }
 }
 
+integrationTest("R278 PATCH and retry hide foreign or absent ScheduledTasks before receipt lookup", async (t) => {
+  const fixture = await r73CreateFixture(t)
+  const created = await fixture.create(`r278-item-create-${fixture.suffix}`, r73CreatePayload())
+  assert.equal(created.status, 200, JSON.stringify(created.body))
+  const taskId = created.body.data.task.id
+  const otherTenant = await fixture.start(fixture.otherTenant)
+  const requestId = "r278-item-owner-scope"
+  const patch = { method: "PATCH", suffix: "", key: "r278-item-patch", body: { prompt: "A valid owner update" } }
+  const retry = { method: "POST", suffix: "/retry", key: "r278-item-retry" }
+  const operations = [patch, retry]
+  const mutate = async (operation, { base = fixture.base, tenant = fixture.tenant, subject = fixture.owner, id = taskId } = {}) => {
+    const response = await fetch(`${base}/v1/scheduled-tasks/${id}${operation.suffix}`, {
+      method: operation.method,
+      headers: {
+        ...auth(tenant, subject),
+        "content-type": "application/json",
+        "idempotency-key": operation.key,
+        "x-request-id": requestId,
+      },
+      ...(operation.body === undefined ? {} : { body: JSON.stringify(operation.body) }),
+      signal: AbortSignal.timeout(5000),
+    })
+    assert.equal(response.headers.get("x-request-id"), requestId)
+    assert.equal(response.headers.get("cache-control"), "no-store")
+    return { status: response.status, body: await response.json() }
+  }
+  const original = []
+  for (const operation of operations) {
+    const ack = await mutate(operation)
+    assert.equal(ack.status, 200, JSON.stringify(ack.body))
+    assert.equal(ack.body.data.task.id, taskId)
+    original.push(ack)
+  }
+  const beforeDenials = await fixture.snapshot()
+  for (const [index, operation] of operations.entries()) {
+    const scope = JSON.stringify([fixture.tenant, fixture.owner, operation.method, `/scheduled-tasks/${taskId}${operation.suffix}`, operation.key])
+    const receipt = beforeDenials.receipts.find((row) => row.scope === scope)
+    assert.equal(receipt?.status, 200)
+    assert.deepEqual(receipt.response_body, original[index].body)
+    assert.deepEqual(await mutate(operation), original[index], "the current owner still receives the original completed ACK")
+  }
+
+  const hidden = {
+    status: 404,
+    body: { error: { code: "scheduled_task_not_found", message: "Scheduled task was not found" }, meta: { request_id: requestId } },
+  }
+  for (const operation of operations) {
+    assert.deepEqual(await mutate(operation, { subject: fixture.otherOwner }), hidden)
+    assert.deepEqual(await mutate(operation, { base: otherTenant.base, tenant: fixture.otherTenant }), hidden)
+    assert.deepEqual(await mutate(operation, { id: `missing-${fixture.suffix}` }), hidden)
+  }
+  assert.deepEqual(await fixture.snapshot(), beforeDenials, "foreign and absent operations must not change tasks, outbox, or receipts")
+
+  // Physical deletion removes current task visibility but leaves both old successful item receipts.
+  const deleted = await mutate({ method: "DELETE", suffix: "", key: "r278-item-delete" })
+  assert.equal(deleted.status, 200, JSON.stringify(deleted.body))
+  const afterDeletion = await fixture.snapshot()
+  assert.deepEqual(afterDeletion.tasks, [])
+  for (const operation of operations) assert.deepEqual(await mutate(operation), hidden)
+  assert.deepEqual(await fixture.snapshot(), afterDeletion, "a historical ACK cannot bypass current task visibility or be overwritten")
+})
+
 integrationTest("R278 tombstoned Project rejects new ScheduledTask enable and retry intent without durable writes", async (t) => {
   const f = await r241Fixture(t)
   for (const operation of ["enable", "retry"]) {
