@@ -1,7 +1,4 @@
-import { readProjectMcpRecommendations, replaceProjectMcpRecommendations } from "./project-mcp-recommendations.js"
-import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations } from "../../application/projects/project-repository.js"
-import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
-import { renameProject, replaceProjectSkillSelection } from "./project-rename.js"
+import { renameProject } from "./project-rename.js"
 import { deleteProjectAggregate, readProjectDeletion } from "./project-delete.js"
 import type { Pool } from "pg"
 import { randomUUID } from "node:crypto"
@@ -16,9 +13,6 @@ import type {
   ProjectRepository,
   RenameProjectCommand,
   RenameProjectResult,
-  ReplaceProjectSkillSelectionCommand,
-  ReplaceProjectSkillSelectionResult,
-  ProjectSkillSelection,
 } from "../../application/projects/project-repository.js"
 
 type ProjectRow = {
@@ -127,13 +121,6 @@ export type ProjectTaskReader = ReturnType<typeof createProjectTaskReader>
 export class PostgresProjectRepository implements ProjectRepository {
   public constructor(private readonly database: PostgresBffDatabase) {}
 
-  public projectMcpRecommendations(input: ProjectMcpRecommendationQuery) {
-    return readProjectMcpRecommendations(this.database, input)
-  }
-  public replaceProjectMcpRecommendations(input: ReplaceProjectMcpRecommendations) {
-    return replaceProjectMcpRecommendations(this.database, input)
-  }
-
   public renameProject(command: RenameProjectCommand): Promise<RenameProjectResult> {
     return renameProject(this.database, command)
   }
@@ -229,21 +216,6 @@ export class PostgresProjectRepository implements ProjectRepository {
       [scope.tenantId, project.id, scope.subjectId],
     )
     return result.rows.map(revisionFromRow)
-  }
-
-  public async projectSkillSelection(scope: ProjectOwnerScope, projectId: string): Promise<ProjectSkillSelection | null> {
-    const result = await this.database.pool.query<{ project_id: string; selected_skill_installation_ids: string[] }>(
-      `SELECT project_id, selected_skill_installation_ids FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
-      [scope.tenantId, scope.subjectId, projectId],
-    )
-    const row = result.rows[0]
-    if (!row) return null
-    const ids = parseProjectSkillSelection(row.selected_skill_installation_ids)
-    if (ids === null) throw new Error("PROJECT_SKILL_SELECTION_ROW_INVALID")
-    return { project_id: row.project_id, installation_ids: ids }
-  }
-  public replaceProjectSkillSelection(command: ReplaceProjectSkillSelectionCommand): Promise<ReplaceProjectSkillSelectionResult> {
-    return replaceProjectSkillSelection(this.database, command)
   }
 
   public deleteProject(

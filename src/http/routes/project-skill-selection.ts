@@ -5,7 +5,8 @@ import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { IdempotencyRepository, PersistentReceipt } from "../../application/ports/idempotency-repository.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
+import type { ProjectSkillSelectionOperations } from "../../infrastructure/postgres/project-skill-selection.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import { projectInstallation } from "../../infrastructure/clients/platform/skill-installation-response.js"
@@ -15,32 +16,10 @@ import { requestId } from "../request.js"
 import { runSkillRoute, readSkillBody } from "./skill-drafts.js"
 import { send } from "../response.js"
 
-export type ProjectSkillSelectionProvider = Pick<ProjectService, "find" | "skillSelection" | "replaceSkillSelection"> &
-  Pick<IdempotencyRepository, "getReceipt">
+export type ProjectSkillSelectionProvider = ProjectLookup & ProjectSkillSelectionOperations & Pick<IdempotencyRepository, "getReceipt">
 
 export function isProjectSkillSelectionRequest(request: IncomingMessage): boolean {
   return ["GET", "PUT"].includes(request.method ?? "") && /^\/v1\/projects\/[^/]+\/skill-selection(?:\?|$)/u.test(request.url ?? "")
-}
-
-export function projectSkillSelectionProvider(
-  projects: ProjectService | null,
-  receipts: Pick<IdempotencyRepository, "getReceipt"> | null,
-): ProjectSkillSelectionProvider | null {
-  if (
-    !projects ||
-    typeof projects.find !== "function" ||
-    typeof projects.skillSelection !== "function" ||
-    typeof projects.replaceSkillSelection !== "function" ||
-    !receipts ||
-    typeof receipts.getReceipt !== "function"
-  )
-    return null
-  return {
-    find: projects.find.bind(projects),
-    skillSelection: projects.skillSelection.bind(projects),
-    replaceSkillSelection: projects.replaceSkillSelection.bind(projects),
-    getReceipt: receipts.getReceipt.bind(receipts),
-  }
 }
 
 export async function handleProjectSkillSelectionRequest(
@@ -48,7 +27,7 @@ export async function handleProjectSkillSelectionRequest(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
-  store: ProjectSkillSelectionProvider | null,
+  store: ProjectSkillSelectionProvider,
   client: SkillInstallationConnectClient | null,
 ): Promise<boolean> {
   if (!isProjectSkillSelectionRequest(request)) return false
@@ -83,7 +62,6 @@ export async function handleProjectSkillSelectionRequest(
       throw new ConnectError("Project not found", Code.NotFound)
     }
     await projectSkillSelectionRoute(request, response, context, store, client, async (projectSignal) => {
-      if (!store) throw new ConnectError("Project owner unavailable", Code.Unavailable)
       const fresh = await authorizeUserRequest(request, config, admission, id, projectSignal, response)
       if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
       if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
@@ -111,7 +89,7 @@ export async function projectSkillSelectionRoute(
   request: IncomingMessage,
   response: ServerResponse,
   context: RequestContext,
-  store: ProjectSkillSelectionProvider | null,
+  store: ProjectSkillSelectionProvider,
   client: SkillInstallationConnectClient | null,
   projectAccess: (signal: AbortSignal) => Promise<string>,
 ): Promise<void> {
@@ -139,7 +117,6 @@ export async function projectSkillSelectionRoute(
       return
     }
     if (new URL(request.url ?? "", "http://bff.local").search) throw new ConnectError("Query is not accepted", Code.InvalidArgument)
-    if (!store) throw new ConnectError("Project store unavailable", Code.Unavailable)
     const projectId = await currentProject(signal)
     if (projectId === null) return
     const scope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }

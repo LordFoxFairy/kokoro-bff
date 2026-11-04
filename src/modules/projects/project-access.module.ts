@@ -4,6 +4,7 @@ import {
   BFF_DATABASE,
   BFF_POOL,
   PROJECT_LOOKUP,
+  PROJECT_MCP_RECOMMENDATIONS_STORE,
   PROJECT_PINS,
   PROJECT_TASK_READER,
   PROJECT_SERVICE,
@@ -14,6 +15,9 @@ import type { Pool } from "pg"
 import { createProjectLookup, createProjectTaskReader, PostgresProjectRepository } from "../../infrastructure/postgres/project-repository.js"
 import { createProjectPins } from "../../infrastructure/postgres/project-pin.js"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
+import { createProjectSkillSelectionOperations } from "../../infrastructure/postgres/project-skill-selection.js"
+import { createProjectMcpRecommendationsStore } from "../../infrastructure/postgres/project-mcp-recommendations.js"
+import type { ProjectLookup } from "../../application/projects/project-repository.js"
 import { ProjectService } from "../../application/project-service.js"
 import type { ProjectSkillSelectionProvider } from "../../http/routes/project-skill-selection.js"
 
@@ -24,6 +28,7 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
     { provide: PROJECT_PINS, inject: [BFF_DATABASE], useFactory: createProjectPins },
     { provide: PROJECT_TASK_READER, inject: [BFF_POOL], useFactory: createProjectTaskReader },
     { provide: PROJECT_LOOKUP, inject: [BFF_POOL], useFactory: createProjectLookup },
+    { provide: PROJECT_MCP_RECOMMENDATIONS_STORE, inject: [BFF_DATABASE], useFactory: createProjectMcpRecommendationsStore },
     {
       provide: PROJECT_SERVICE,
       inject: [BFF_DATABASE],
@@ -31,18 +36,17 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
     },
     {
       provide: PROJECT_SKILL_SELECTION_PROVIDER,
-      inject: [PROJECT_SERVICE, BFF_POOL],
-      useFactory: (projectService: ProjectService, pool: Pool): ProjectSkillSelectionProvider => {
+      inject: [PROJECT_LOOKUP, BFF_DATABASE, BFF_POOL],
+      useFactory: (lookup: ProjectLookup, database: PostgresBffDatabase, pool: Pool): ProjectSkillSelectionProvider => {
         const receipts = new PostgresIdempotencyRepository(pool)
         return {
-          find: projectService.find.bind(projectService),
-          skillSelection: projectService.skillSelection.bind(projectService),
-          replaceSkillSelection: projectService.replaceSkillSelection.bind(projectService),
+          find: lookup.find,
+          ...createProjectSkillSelectionOperations(database),
           getReceipt: receipts.getReceipt.bind(receipts),
         }
       },
     },
   ],
-  exports: [PROJECT_LOOKUP, PROJECT_PINS, PROJECT_TASK_READER, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER],
+  exports: [PROJECT_LOOKUP, PROJECT_MCP_RECOMMENDATIONS_STORE, PROJECT_PINS, PROJECT_TASK_READER, PROJECT_SERVICE, PROJECT_SKILL_SELECTION_PROVIDER],
 })
 export class ProjectAccessModule {}

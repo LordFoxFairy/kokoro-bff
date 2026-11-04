@@ -6,8 +6,8 @@ import {
   CUSTOM_API_CLIENT,
   MCP_AUTHORIZATION,
   MCP_PERSONAL_CLIENT,
-  PROJECT_SERVICE,
-  PROJECT_SKILL_SELECTION_PROVIDER,
+  PROJECT_LOOKUP,
+  PROJECT_MCP_RECOMMENDATIONS_STORE,
   SESSION_ADMISSION,
 } from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
@@ -255,10 +255,7 @@ async function bootstrapFixture(t, { denyMcp = false } = {}) {
       }
     },
   }
-  const projectService = {
-    find: async (scope, id) => {
-      assert.fail("recommendation bootstrap must not fall back to the unbounded legacy Project finder")
-    },
+  const recommendationStore = {
     mcpRecommendations: async () => structuredClone(state),
     replaceMcpRecommendations: async (q) => {
       calls.writes++
@@ -277,10 +274,10 @@ async function bootstrapFixture(t, { denyMcp = false } = {}) {
       pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
       redis: Object.freeze({}),
     })
-    .overrideProvider(PROJECT_SERVICE)
-    .useValue(projectService)
-    .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
-    .useValue(null)
+    .overrideProvider(PROJECT_MCP_RECOMMENDATIONS_STORE)
+    .useValue(recommendationStore)
+    .overrideProvider(PROJECT_LOOKUP)
+    .useValue({ find: () => assert.fail("recommendation bootstrap must not use the general Project lookup") })
     .overrideProvider(SESSION_ADMISSION)
     .useValue(sessionAdmission)
     .overrideProvider(MCP_AUTHORIZATION)

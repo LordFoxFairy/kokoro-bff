@@ -1,4 +1,3 @@
-import type { ProjectMcpRecommendationQuery, ReplaceProjectMcpRecommendations } from "./projects/project-repository.js"
 import { createHash } from "node:crypto"
 
 import type { Project, ProjectInstructionRevision } from "../contracts/index.js"
@@ -7,13 +6,6 @@ import type { DeleteProjectResult, ProjectDeletionResource, ProjectOwnerScope, P
 /** Project use cases. HTTP handlers depend on this service, not on SQL adapters. */
 export class ProjectService {
   public constructor(private readonly repository: ProjectRepository) {}
-
-  public mcpRecommendations(input: ProjectMcpRecommendationQuery) {
-    return this.repository.projectMcpRecommendations(input)
-  }
-  public replaceMcpRecommendations(input: ReplaceProjectMcpRecommendations) {
-    return this.repository.replaceProjectMcpRecommendations(input)
-  }
 
   public rename(scope: ProjectOwnerScope, projectId: string, name: string, key: string, signal: AbortSignal): Promise<RenameProjectResult> {
     return this.repository.renameProject({
@@ -42,21 +34,6 @@ export class ProjectService {
   }
   public revisions(scope: ProjectOwnerScope, idOrSlug: string): Promise<ProjectInstructionRevision[] | null> {
     return this.repository.instructionRevisions(scope, idOrSlug)
-  }
-  public skillSelection(scope: ProjectOwnerScope, projectId: string) {
-    return this.repository.projectSkillSelection(scope, projectId)
-  }
-  public replaceSkillSelection(scope: ProjectOwnerScope, projectId: string, installationIds: string[], key: string, signal: AbortSignal) {
-    return this.repository.replaceProjectSkillSelection({
-      ...scope,
-      projectId,
-      installationIds,
-      signal,
-      receiptScope: JSON.stringify([scope.tenantId, scope.subjectId, "project.skill-selection:v1", projectId, key]),
-      fingerprint: createHash("sha256")
-        .update(JSON.stringify(["project.skill-selection:v1", projectId, installationIds]), "utf8")
-        .digest("hex"),
-    })
   }
   public delete(scope: ProjectOwnerScope, projectId: string, key: string, requestId: string, signal: AbortSignal): Promise<DeleteProjectResult> {
     const fingerprint = createHash("sha256")

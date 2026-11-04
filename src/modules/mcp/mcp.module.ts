@@ -9,7 +9,7 @@ import {
   CUSTOM_API_CLIENT,
   MCP_PROVIDER_ADMIN_CLIENT,
   PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
-  PROJECT_SERVICE,
+  PROJECT_MCP_RECOMMENDATIONS_STORE,
 } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
@@ -19,7 +19,7 @@ import { McpPackageAdminConnectClient } from "../../infrastructure/clients/platf
 import { McpProviderAdminConnectClient } from "../../infrastructure/clients/platform/mcp-provider-admin-connect.js"
 import { McpProjectPublicationConnectClient } from "../../infrastructure/clients/platform/mcp-project-publication-connect.js"
 import { CustomApiConnectClient } from "../../infrastructure/clients/platform/custom-api-connect.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectMcpRecommendationsStore } from "../../infrastructure/postgres/project-mcp-recommendations.js"
 import { ProjectMcpRecommendationsMiddleware } from "./project-mcp-recommendations.middleware.js"
 import { ConnectorListMiddleware } from "./connector-list.middleware.js"
 import { McpAdminMiddleware } from "./mcp-admin.middleware.js"
@@ -30,7 +30,7 @@ import { CustomApiMiddleware, type CustomApiClient } from "./custom-api.middlewa
 import type { ProjectMcpRecommendationsProvider } from "../../http/routes/project-mcp-recommendations.js"
 import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { IamRelayModule } from "../iam-relay/iam-relay.module.js"
-import { ProjectsModule } from "../projects/projects.module.js"
+import { ProjectAccessModule } from "../projects/project-access.module.js"
 
 @Injectable()
 class ProjectMcpRecommendationsRuntime implements OnApplicationShutdown {
@@ -67,7 +67,7 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
 }
 
 @Module({
-  imports: [AuthenticationModule, IamRelayModule, ProjectsModule, BffConfigModule],
+  imports: [AuthenticationModule, IamRelayModule, ProjectAccessModule, BffConfigModule],
   providers: [
     ProjectMcpRecommendationsMiddleware,
     ConnectorListMiddleware,
@@ -100,9 +100,9 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
     },
     {
       provide: PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
-      inject: [PROJECT_SERVICE, MCP_PERSONAL_CLIENT, CUSTOM_API_CLIENT],
+      inject: [PROJECT_MCP_RECOMMENDATIONS_STORE, MCP_PERSONAL_CLIENT, CUSTOM_API_CLIENT],
       useFactory: (
-        project: ProjectService,
+        project: ProjectMcpRecommendationsStore,
         mcpPersonalClient: McpPersonalConnectClient | null,
         customApiClient: CustomApiClient | null,
       ): ProjectMcpRecommendationsProvider => {

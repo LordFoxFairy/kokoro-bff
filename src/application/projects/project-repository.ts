@@ -40,8 +40,6 @@ export type ProjectPinQuery = ProjectOwnerScope &
   Readonly<{ projectId: string | null; limit: number; position: ProjectPinPosition | null; signal: AbortSignal; deadlineAt: number }>
 export type SetProjectPin = ProjectOwnerScope & Readonly<{ projectId: string; isPinned: boolean; signal: AbortSignal; deadlineAt: number }>
 export interface ProjectRepository {
-  projectMcpRecommendations(input: ProjectMcpRecommendationQuery): Promise<ProjectMcpRecommendations | null>
-  replaceProjectMcpRecommendations(input: ReplaceProjectMcpRecommendations): Promise<ReplaceProjectMcpRecommendationsResult>
   deleteProject(
     scope: ProjectOwnerScope,
     projectId: string,
@@ -57,8 +55,6 @@ export interface ProjectRepository {
   createProject(scope: ProjectOwnerScope, name: string, description: string): Promise<Project>
   updateProjectInstruction(scope: ProjectOwnerScope, idOrSlug: string, instruction: string): Promise<Project | null>
   instructionRevisions(scope: ProjectOwnerScope, idOrSlug: string): Promise<ProjectInstructionRevision[] | null>
-  projectSkillSelection(scope: ProjectOwnerScope, projectId: string): Promise<ProjectSkillSelection | null>
-  replaceProjectSkillSelection(command: ReplaceProjectSkillSelectionCommand): Promise<ReplaceProjectSkillSelectionResult>
 }
 
 export type ProjectMcpRecommendationQuery = ProjectOwnerScope & Readonly<{ projectId: string; signal: AbortSignal; deadlineAt: number }>

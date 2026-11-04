@@ -10,6 +10,7 @@ import { createClient } from "redis"
 
 import { AgUiProjectionService } from "../dist/application/agui/project-session-events.js"
 import { createChatMove } from "../dist/application/chat/move-conversation.js"
+import { createProjectSkillSelectionOperations } from "../dist/infrastructure/postgres/project-skill-selection.js"
 import { moveConversation } from "../dist/infrastructure/postgres/conversation-move.js"
 import { createChatSessionReads } from "../dist/application/chat/session-reads.js"
 import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
@@ -5670,6 +5671,7 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
   const sessionStore = new PostgresChatSessionStore(database)
   const move = createChatMove(moveConversation.bind(null, database))
   const projects = new ProjectService(new PostgresProjectRepository(database))
+  const selection = createProjectSkillSelectionOperations(database)
   const tenant = `selection_${randomUUID()}`,
     subject = "selection-owner",
     scope = { tenantId: tenant, subjectId: subject },
@@ -5679,13 +5681,13 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     const project = await projects.create(scope, "Selection test", "")
     const other = await projects.create(scope, "Other project", "")
-    const save = (ids, key) => projects.replaceSkillSelection(scope, project.id, ids, key, signal)
+    const save = (ids, key) => selection.replaceSkillSelection(scope, project.id, ids, key, signal)
     assert.equal((await save(["installation_a"], "first-default")).kind, "replaced")
     assert.equal((await save(["installation_b"], "second-default")).kind, "replaced")
     assert.deepEqual((await save(["installation_a"], "first-default")).receipt.data.installation_ids, ["installation_a"])
-    assert.deepEqual((await projects.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
+    assert.deepEqual((await selection.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
     assert.equal((await save(["installation_c"], "first-default")).kind, "conflict")
-    assert.equal(await projects.skillSelection({ ...scope, subjectId: "other-owner" }, project.id), null)
+    assert.equal(await selection.skillSelection({ ...scope, subjectId: "other-owner" }, project.id), null)
     const fault = `selection_fault_${randomUUID().replaceAll("-", "")}`
     const faultScope = JSON.stringify([tenant, subject, "project.skill-selection:v1", project.id, "rollback-default"])
     await pool.query(`CREATE FUNCTION ${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
@@ -5694,7 +5696,7 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
     try {
       await pool.query(`CREATE TRIGGER ${fault} BEFORE INSERT ON bff_idempotency_receipt FOR EACH ROW EXECUTE FUNCTION ${fault}()`)
       await assert.rejects(save(["installation_failed"], "rollback-default"), /selection_receipt_failure/)
-      assert.deepEqual((await projects.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
+      assert.deepEqual((await selection.skillSelection(scope, project.id)).installation_ids, ["installation_b"])
       assert.equal((await pool.query("SELECT 1 FROM bff_idempotency_receipt WHERE scope=$1", [faultScope])).rowCount, 0)
     } finally {
       await pool.query(`DROP TRIGGER IF EXISTS ${fault} ON bff_idempotency_receipt`)

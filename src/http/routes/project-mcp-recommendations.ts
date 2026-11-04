@@ -5,7 +5,7 @@ import { authorizeMcpAction, authorizeUserRequest } from "../../auth/user-admiss
 import type { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { ProjectService } from "../../application/project-service.js"
+import type { ProjectMcpRecommendationsStore } from "../../infrastructure/postgres/project-mcp-recommendations.js"
 import { decodeProjectMcpRecommendations, recommendationIdentity, projectMcpId } from "../../domain/project/mcp-recommendations.js"
 import {
   validateProjectMcpRecommendationCandidates,
@@ -29,23 +29,12 @@ export class ProjectMcpRecommendationsAdmissionError extends Error {
 }
 
 export type ProjectMcpRecommendationsProvider = {
-  project: Pick<ProjectService, "mcpRecommendations" | "replaceMcpRecommendations">
+  project: ProjectMcpRecommendationsStore
   clients: RecommendationCandidateClients
 }
 
 export function isProjectMcpRecommendationsRequest(request: IncomingMessage): boolean {
   return ["GET", "PUT"].includes(request.method ?? "") && /^\/v1\/projects\/[^/]+\/mcp-recommendations(?:\?|$)/u.test(request.url ?? "")
-}
-
-export function projectMcpRecommendationsProvider(
-  project: ProjectService | null,
-  clients: RecommendationCandidateClients,
-): ProjectMcpRecommendationsProvider | null {
-  if (!project) return null
-  return {
-    project,
-    clients,
-  }
 }
 
 export async function handleProjectMcpRecommendationsRequest(
@@ -54,7 +43,7 @@ export async function handleProjectMcpRecommendationsRequest(
   config: BffConfig,
   admission: SessionAdmission,
   mcpAuthorization: Pick<McpAuthorizationClient, "check">,
-  provider: ProjectMcpRecommendationsProvider | null,
+  provider: ProjectMcpRecommendationsProvider,
 ): Promise<boolean> {
   if (!isProjectMcpRecommendationsRequest(request)) return false
   const id = requestId(request)
@@ -92,10 +81,9 @@ export async function handleProjectMcpRecommendationsRequest(
       response,
       context,
       ["projects", projectRef, "mcp-recommendations"],
-      provider?.project ?? null,
-      provider?.clients ?? { mcpPersonalClient: null, customApiClient: null },
-      async (mcpRead, currentSignal, deadlineAt) => {
-        void deadlineAt
+      provider.project,
+      provider.clients,
+      async (mcpRead, currentSignal) => {
         const fresh = await authorizeUserRequest(request, config, admission, id, currentSignal, response)
         if (!fresh.ok) throw new ProjectMcpRecommendationsAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
         if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
@@ -104,7 +92,6 @@ export async function handleProjectMcpRecommendationsRequest(
           const read = await authorizeMcpAction(mcpAuthorization, fresh, "read", currentSignal)
           if (!read.ok) throw new ProjectMcpRecommendationsAdmissionError(read.status, read.code, read.retryAfter)
         }
-        if (!provider) throw new ConnectError("Project owner unavailable", Code.Unavailable)
         currentSignal.throwIfAborted()
         return projectRef
       },
@@ -128,7 +115,7 @@ export async function projectMcpRecommendationsRoute(
   response: ServerResponse,
   context: RequestContext,
   path: readonly string[],
-  store: Pick<ProjectService, "mcpRecommendations" | "replaceMcpRecommendations"> | null,
+  store: ProjectMcpRecommendationsStore,
   clients: RecommendationCandidateClients,
   currentAccess: (mcpRead: boolean, signal: AbortSignal, deadlineAt: number) => Promise<string>,
 ): Promise<void> {
@@ -206,10 +193,8 @@ export async function projectMcpRecommendationsRoute(
       if (!input) invalid()
     }
     await access()
-    if (!store) throw new Error("project_owner_unavailable")
-    const projectStore = store
     const query = { tenantId: context.identity.namespace, subjectId: context.identity.userId, projectId: path[1]!, signal: controller.signal, deadlineAt }
-    const raw = await within(projectStore.mcpRecommendations(query))
+    const raw = await within(store.mcpRecommendations(query))
     controller.signal.throwIfAborted()
     if (raw === null) throw new ProjectRecommendationNotFound()
     let current
@@ -237,7 +222,7 @@ export async function projectMcpRecommendationsRoute(
         )
       }
       await access()
-      const changed = await within(projectStore.replaceMcpRecommendations({ ...query, ...input }))
+      const changed = await within(store.replaceMcpRecommendations({ ...query, ...input }))
       controller.signal.throwIfAborted()
       if (changed.kind === "not_found") throw new ProjectRecommendationNotFound()
       if (changed.kind === "precondition_failed") throw new ConnectError("Project recommendation changed", Code.FailedPrecondition)

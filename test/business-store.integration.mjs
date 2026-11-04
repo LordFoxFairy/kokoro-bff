@@ -1,4 +1,4 @@
-import { ProjectService } from "../dist/application/project-service.js"
+import { createProjectSkillSelectionOperations } from "../dist/infrastructure/postgres/project-skill-selection.js"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { createServer } from "node:http"
@@ -1584,9 +1584,18 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
     const before = await f.facts()
     for (const ref of [project.id, project.slug]) {
       assert.equal(await repository.updateProjectInstruction(f.scope, ref, "Denied"), null)
-      assert.deepEqual(await new ProjectService(repository).replaceSkillSelection(f.scope, ref, ["installation_r237"], "r237", new AbortController().signal), {
-        kind: "not_found",
-      })
+      assert.deepEqual(
+        await createProjectSkillSelectionOperations({ pool: f.pool }).replaceSkillSelection(
+          f.scope,
+          ref,
+          ["installation_r237"],
+          "r237",
+          new AbortController().signal,
+        ),
+        {
+          kind: "not_found",
+        },
+      )
     }
     assert.deepEqual(await f.facts(), before)
   })
@@ -1790,7 +1799,7 @@ integrationTest("R237 real Project row-lock races revalidate active before Messa
         else if (operation.startsWith("move"))
           pending = f.request(`sessions/${id}/move`, "POST", { target_project_id: operation === "move-target" ? project.id : null })
         else if (operation === "skill")
-          pending = new ProjectService(new PostgresProjectRepository({ pool: f.pool })).replaceSkillSelection(
+          pending = createProjectSkillSelectionOperations({ pool: f.pool }).replaceSkillSelection(
             f.scope,
             project.id,
             ["installation_r237"],

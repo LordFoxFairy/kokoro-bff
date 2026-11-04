@@ -30,6 +30,8 @@ test("the compiled production AppModule resolves its real provider graph without
     CHAT_MOVE,
     CHAT_TURN_SERVICE,
     PROJECT_LOOKUP,
+    PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
+    PROJECT_MCP_RECOMMENDATIONS_STORE,
     PROJECT_PINS,
     PROJECT_TASK_READER,
     PROJECT_SERVICE,
@@ -43,6 +45,7 @@ test("the compiled production AppModule resolves its real provider graph without
   const { AgentDispatchModule } = await import("../dist/modules/agent-dispatch/agent-dispatch.module.js")
   const { AgentRunsModule } = await import("../dist/modules/agent-runs/agent-runs.module.js")
   const { ChatModule } = await import("../dist/modules/chat/chat.module.js")
+  const { McpModule } = await import("../dist/modules/mcp/mcp.module.js")
   const { ProjectAccessModule } = await import("../dist/modules/projects/project-access.module.js")
   const { SkillInstallationAccessModule } = await import("../dist/modules/skills/skill-installation-access.module.js")
   const config = loadConfig({
@@ -91,6 +94,8 @@ test("the compiled production AppModule resolves its real provider graph without
       [AgentRunsModule, RUN_FINAL_ANSWER_LOOKUP],
       [AccountModule, PERSONALIZATION_PROVIDER],
       [ProjectAccessModule, PROJECT_LOOKUP],
+      [ProjectAccessModule, PROJECT_MCP_RECOMMENDATIONS_STORE],
+      [McpModule, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
       [ProjectAccessModule, PROJECT_PINS],
       [ProjectAccessModule, PROJECT_TASK_READER],
       [ProjectAccessModule, PROJECT_SERVICE],
@@ -106,6 +111,10 @@ test("the compiled production AppModule resolves its real provider graph without
     const lookup = projectAccess.get(PROJECT_LOOKUP, { strict: true })
     assert.deepEqual(Reflect.ownKeys(lookup), ["find"], "lookup must not expose Project mutations or another capability")
     assert.equal(typeof lookup.find, "function")
+    const recommendations = projectAccess.get(PROJECT_MCP_RECOMMENDATIONS_STORE, { strict: true })
+    assert.deepEqual(Reflect.ownKeys(recommendations), ["mcpRecommendations", "replaceMcpRecommendations"])
+    assert.equal(module.select(McpModule).get(PROJECT_MCP_RECOMMENDATIONS_PROVIDER, { strict: true }).project, recommendations)
+    assert.equal(projectAccess.get(PROJECT_SKILL_SELECTION_PROVIDER, { strict: true }).find, lookup.find)
     assert.deepEqual(Reflect.ownKeys(projectAccess.get(PROJECT_PINS, { strict: true })), ["listPins", "setPin"])
     assert.equal(typeof projectAccess.get(PROJECT_TASK_READER, { strict: true }), "function")
     assert.notEqual(lookup, projectAccess.get(PROJECT_SERVICE, { strict: true }))

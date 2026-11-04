@@ -160,3 +160,12 @@ export function replaceProjectMcpRecommendations(
     false,
   )
 }
+
+export function createProjectMcpRecommendationsStore(database: PostgresBffDatabase) {
+  return {
+    mcpRecommendations: readProjectMcpRecommendations.bind(null, database),
+    replaceMcpRecommendations: replaceProjectMcpRecommendations.bind(null, database),
+  }
+}
+
+export type ProjectMcpRecommendationsStore = ReturnType<typeof createProjectMcpRecommendationsStore>
