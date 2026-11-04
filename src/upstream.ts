@@ -94,6 +94,7 @@ export async function proxyUpstream(
   callerService = "kokoro-bff",
   serviceToken: string | null = config.upstreamSecret,
   timeoutBudgetMs?: number,
+  lastEventId?: string,
 ): Promise<UpstreamResponse> {
   const target = new URL(path, `${baseUrl.replace(/\/+$/u, "/")}`)
   const requestFn = target.protocol === "https:" ? httpsRequest : httpRequest
@@ -124,6 +125,7 @@ export async function proxyUpstream(
       return new UpstreamRequestError("upstream_connection_error", "The upstream connection failed", error)
     }
     const headers = requestHeaders({ ...config, upstreamSecret: serviceToken }, requestId, incoming, trustedHeaders, callerService)
+    if (lastEventId !== undefined) headers["last-event-id"] = lastEventId
     // The Agent ingress is a small stdlib HTTP server and intentionally reads
     // Content-Length rather than implementing chunked transfer decoding. Keep
     // the BFF transport explicit so JSON mutation bodies are not observed as
