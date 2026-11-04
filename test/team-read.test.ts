@@ -3,14 +3,15 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { afterEach, test } from "node:test"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
-import { createBffServer } from "../dist/bootstrap/server.js"
 import type { BffConfig } from "../src/config/runtime.ts"
+import { startAccountTestApp } from "./doubles/account-app.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
 
 const credentials = await fixtureIamCredentials("tenant-verified")
 
 const servers: Server[] = []
+const appClosers: Array<() => Promise<void>> = []
 
 async function listen(server: Server): Promise<string> {
   servers.push(server)
@@ -24,15 +25,18 @@ async function listen(server: Server): Promise<string> {
 }
 
 afterEach(async () => {
-  await Promise.all(
-    servers.splice(0).map(
+  const results = await Promise.allSettled([
+    ...appClosers.splice(0).map(async (close) => close()),
+    ...servers.splice(0).map(
       (server) =>
         new Promise<void>((resolve) => {
           server.closeAllConnections()
           server.close(() => resolve())
         }),
     ),
-  )
+  ])
+  const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+  if (failures.length > 0) throw new AggregateError(failures, "Team HTTP fixture cleanup failed")
 })
 
 function config(iamBaseUrl: string): BffConfig {
@@ -57,6 +61,12 @@ function config(iamBaseUrl: string): BffConfig {
     agUi: DEFAULT_AGUI_CONFIG,
     upstreams: {},
   }
+}
+
+async function startTeamBff(owner: string): Promise<string> {
+  const app = await startAccountTestApp(config(owner), new SessionAdmissionDouble({ "team-token": { namespace: "tenant-verified", userId: "user-1" } }))
+  appClosers.push(() => app.close())
+  return app.base
 }
 
 function memberPage(): object {
@@ -85,13 +95,7 @@ test("Team read uses only admitted tenant, actor and service credential, project
       response.end(JSON.stringify(memberPage()))
     }),
   )
-  const bff = await listen(
-    createBffServer(config(owner), {
-      businessStore: null,
-      readiness: async () => undefined,
-      sessionAdmission: new SessionAdmissionDouble({ "team-token": { namespace: "tenant-verified", userId: "user-1" } }),
-    }),
-  )
+  const bff = await startTeamBff(owner)
 
   const response = await fetch(`${bff}/v1/team/members?limit=2&cursor=cursor-old`, {
     headers: userHeaders({ "x-kokoro-tenant-id": "tenant-attacker", "x-kokoro-principal-id": "user-attacker", "x-kokoro-actor-id": "user-attacker" }),
@@ -122,13 +126,7 @@ test("Team rejects malformed pagination and missing session before owner I/O", a
       response.writeHead(500).end()
     }),
   )
-  const bff = await listen(
-    createBffServer(config(owner), {
-      businessStore: null,
-      readiness: async () => undefined,
-      sessionAdmission: new SessionAdmissionDouble({ "team-token": { namespace: "tenant-verified", userId: "user-1" } }),
-    }),
-  )
+  const bff = await startTeamBff(owner)
   for (const query of ["limit=0", "limit=101", "limit=2&limit=3", "cursor=", "unknown=x"]) {
     const response = await fetch(`${bff}/v1/team/roles?${query}`, { headers: userHeaders() })
     assert.equal(response.status, 400, query)
@@ -154,13 +152,7 @@ test("Team owner errors are sanitized and malformed owner success fails closed",
       )
     }),
   )
-  const bff = await listen(
-    createBffServer(config(owner), {
-      businessStore: null,
-      readiness: async () => undefined,
-      sessionAdmission: new SessionAdmissionDouble({ "team-token": { namespace: "tenant-verified", userId: "user-1" } }),
-    }),
-  )
+  const bff = await startTeamBff(owner)
   const limited = await fetch(`${bff}/v1/team/members`, { headers: userHeaders() })
   assert.equal(limited.status, 429)
   assert.equal(limited.headers.get("retry-after"), "60")
@@ -267,13 +259,7 @@ test("invitations and roles use their distinct generated owner schemas", async (
       response.end(JSON.stringify(pages[kind]))
     }),
   )
-  const bff = await listen(
-    createBffServer(config(owner), {
-      businessStore: null,
-      readiness: async () => undefined,
-      sessionAdmission: new SessionAdmissionDouble({ "team-token": { namespace: "tenant-verified", userId: "user-1" } }),
-    }),
-  )
+  const bff = await startTeamBff(owner)
   for (const kind of ["invitations", "roles"] as const) {
     const response = await fetch(`${bff}/v1/team/${kind}`, { headers: userHeaders() })
     assert.equal(response.status, 200, kind)
@@ -296,13 +282,7 @@ test("Team rejects owner cache drift, invalid media, oversized body and unexpect
       response.end(JSON.stringify(mode === "size" ? { ...memberPage(), padding: "x".repeat(8192) } : memberPage()))
     }),
   )
-  const bff = await listen(
-    createBffServer(config(owner), {
-      businessStore: null,
-      readiness: async () => undefined,
-      sessionAdmission: new SessionAdmissionDouble({ "team-token": { namespace: "tenant-verified", userId: "user-1" } }),
-    }),
-  )
+  const bff = await startTeamBff(owner)
   for (mode of ["cache", "media", "size", "status"]) {
     const response = await fetch(`${bff}/v1/team/members`, { headers: userHeaders() })
     assert.equal(response.status, 502, mode)
@@ -325,13 +305,7 @@ test("disconnecting the browser cancels the in-flight IAM Team read", async () =
       reachedOwner()
     }),
   )
-  const bff = await listen(
-    createBffServer(config(owner), {
-      businessStore: null,
-      readiness: async () => undefined,
-      sessionAdmission: new SessionAdmissionDouble({ "team-token": { namespace: "tenant-verified", userId: "user-1" } }),
-    }),
-  )
+  const bff = await startTeamBff(owner)
   const abort = new AbortController()
   const browser = fetch(`${bff}/v1/team/roles`, { headers: userHeaders(), signal: abort.signal })
   await reached
@@ -364,13 +338,7 @@ for (const [label, permissions] of Object.entries({
         response.end(JSON.stringify({ data: [{ role_id: null, name: "member", kind: "builtin", permissions }], meta: { next_cursor: null } }))
       }),
     )
-    const bff = await listen(
-      createBffServer(config(owner), {
-        businessStore: null,
-        readiness: async () => undefined,
-        sessionAdmission: new SessionAdmissionDouble({ "team-token": { namespace: "tenant-verified", userId: "user-1" } }),
-      }),
-    )
+    const bff = await startTeamBff(owner)
     const response = await fetch(`${bff}/v1/team/roles`, { headers: userHeaders() })
     assert.equal(response.status, 502)
     assert.equal(((await response.json()) as { error: { code: string } }).error.code, "team_owner_response_invalid")
