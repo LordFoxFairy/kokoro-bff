@@ -1075,12 +1075,12 @@ import { StorageScopeReleaseClient } from "../dist/infrastructure/clients/storag
 import { ScheduledTaskService } from "../dist/application/scheduled-task-service.js"
 import { PostgresProjectRepository } from "../dist/infrastructure/postgres/project-repository.js"
 import { createOwnedRunProcessReader } from "../dist/infrastructure/postgres/agui-process-page.js"
-import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
+import { PostgresChatSessionStore } from "../dist/infrastructure/postgres/chat-session-store.js"
 import { PostgresScheduledTaskRepository } from "../dist/infrastructure/postgres/scheduled-task-repository.js"
 import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
 import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
 import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
-import { ChatApplicationService } from "../dist/application/chat-service.js"
+import { moveConversation } from "../dist/infrastructure/postgres/conversation-move.js"
 import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
 
 const r237IdleWorker = { start() {}, async stop() {} }
@@ -1590,7 +1590,7 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
         project.id,
       ])
       const originalPage =
-        operation === "messages" ? await new PostgresChatRepository({ pool: f.pool }).listMessages(f.tenant, f.owner, conversation, 20, null) : null
+        operation === "messages" ? await new PostgresChatSessionStore({ pool: f.pool }).listMessages(f.tenant, f.owner, conversation, 20, null) : null
       if (operation === "messages") {
         assert.ok(originalPage)
         assert.equal(originalPage.messages.length, 1)
@@ -1615,10 +1615,10 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
         }
       })
       if (operation === "messages") {
-        const result = await new PostgresChatRepository(database).listMessages(f.tenant, f.owner, conversation, 20, null)
+        const result = await new PostgresChatSessionStore(database).listMessages(f.tenant, f.owner, conversation, 20, null)
         // This in-flight Message read owns one RR snapshot; the next read must observe the committed tombstone.
         assert.deepEqual(result, originalPage)
-        assert.equal(await new PostgresChatRepository({ pool: f.pool }).listMessages(f.tenant, f.owner, conversation, 20, null), null)
+        assert.equal(await new PostgresChatSessionStore({ pool: f.pool }).listMessages(f.tenant, f.owner, conversation, 20, null), null)
       } else {
         const repository = new PostgresProjectRepository(database)
         const result =
@@ -1632,7 +1632,7 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
     await t.test(method, async (t) => {
       const f = await r237Fixture(t, "postgres")
       const project = await f.project("deleted")
-      const repository = new PostgresChatRepository({ pool: f.pool })
+      const repository = new PostgresChatSessionStore({ pool: f.pool })
       for (const ref of [project.id, project.slug]) {
         const id = await f.conversation(ref)
         const before = await f.facts()
@@ -1738,7 +1738,7 @@ integrationTest("R237 Move source resolution rechecks after winner lookup withou
       expected = await f.facts()
     }
   })
-  const result = await new PostgresChatRepository(database).moveConversation({
+  const result = await moveConversation(database, {
     tenantId: f.tenant,
     subjectId: f.owner,
     conversationId: id,
@@ -4066,7 +4066,7 @@ integrationTest("R279 aggregate deletion freezes active and deleted members and 
   const project = await f.project("R279 aggregate Project")
   const seedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
   const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(seedDatabase), new Sha256StableIdGenerator())
-  const chat = new ChatApplicationService(new PostgresChatRepository(seedDatabase))
+  const chat = new PostgresChatSessionStore(seedDatabase)
   let activeConversation
   let deletedConversation
   try {
@@ -4902,7 +4902,7 @@ integrationTest(
     const project = await f.project("R285 release all frozen scopes")
     const seedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
     const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(seedDatabase), new Sha256StableIdGenerator())
-    const chat = new ChatApplicationService(new PostgresChatRepository(seedDatabase))
+    const chat = new PostgresChatSessionStore(seedDatabase)
     let activeConversation
     let deletedConversation
     try {

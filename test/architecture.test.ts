@@ -129,7 +129,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/contracts/mori.ts",
     "src/application/idempotency.ts",
     "src/application/project-service.ts",
-    "src/application/chat-service.ts",
+    "src/application/chat/session-reads.ts",
     "src/application/chat-turn-service.ts",
     "src/application/agent-dispatch-outbox-dispatcher.ts",
     "src/application/chat/mappers.ts",
@@ -137,7 +137,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/ports/idempotency-repository.ts",
     "src/application/account/artifact-library-repository.ts",
     "src/application/projects/project-repository.ts",
-    "src/application/chat/chat-repository.ts",
+    "src/application/chat/types.ts",
     "src/application/agent-dispatch/agent-dispatch-outbox-repository.ts",
     "src/application/agent-dispatch/agent-dispatch-delivery.ts",
     "src/application/scheduled/task-facts.ts",
@@ -156,7 +156,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/postgres/idempotency-repository.ts",
     "src/infrastructure/postgres/agui-projection-repository.ts",
     "src/infrastructure/postgres/project-repository.ts",
-    "src/infrastructure/postgres/chat-repository.ts",
+    "src/infrastructure/postgres/chat-session-store.ts",
     "src/infrastructure/postgres/conversation-move.ts",
     "src/infrastructure/postgres/conversation-move-lease.ts",
     "src/infrastructure/postgres/agent-dispatch-outbox-repository.ts",
@@ -546,7 +546,7 @@ test("Chat admission commits messages, AG-UI lineage, and Agent delivery before 
   const [route, messageRoute, chatRepository, dispatchRepository, chatTurnCommit, registration, dispatcher, agentDispatchModule, schema] = await Promise.all([
     readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-message.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-session-store.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/agent-dispatch-outbox-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/chat-turn-commit.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/agui-consumer-registration.ts"), "utf8"),
@@ -592,7 +592,7 @@ test("Chat admission commits messages, AG-UI lineage, and Agent delivery before 
 
 test("BFF Chat facts keep owner predicates and isolate public share capability reads", async () => {
   const [repository, publicShareRepository, route, sharedRoute, schema] = await Promise.all([
-    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-session-store.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/public-share-repository.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/shared-native.ts"), "utf8"),
@@ -609,7 +609,6 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
   assert.match(publicShareRepository, /Public share capability reads/u)
   assert.doesNotMatch(publicShareRepository, /subjectId/u)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
-  assert.match(route, /chat: ChatApplicationService/u)
   assert.match(route, /subjectId/u)
   // Keep submission/replay coverage in the HTTP and real-PG suites, not a private call-expression lock.
   assert.doesNotMatch(route, /callAgent/u)
@@ -639,7 +638,7 @@ test("private BFF resources use named owner scopes before receipts and keep serv
   assert.match(scheduledRepository, /FOR SHARE/u)
   assert.doesNotMatch(client, /invalidateProjects|projects:\$\{tenant/u)
   assert.match(chatAuthorization, /scope must be omitted, empty, or direct/u)
-  assert.match(chatAuthorization, /chat\.findConversation/u)
+  assert.match(chatAuthorization, /await findConversation\(/u)
   assert.match(openapi, /DirectScopeQuery:[\s\S]*enum: \['', direct\]/u)
   assert.match(openapi, /ShareScopeQuery:[\s\S]*minLength: 1/u)
   assert.match(schema, /uq_bff_project_owner_slug/u)
@@ -650,11 +649,11 @@ test("private BFF resources use named owner scopes before receipts and keep serv
 
 test("Conversation collection filtering stays one BFF-owned discriminated path without resource authorization drift", async () => {
   const [port, authorization, route, service, repository, openapi] = await Promise.all([
-    readFile(path.join(root, "src/application/chat/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/chat/types.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-authorization.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
-    readFile(path.join(root, "src/application/chat-service.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/chat/session-reads.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-session-store.ts"), "utf8"),
     readFile(path.join(root, "contract/openapi/v1/openapi.yaml"), "utf8"),
   ])
 
@@ -679,20 +678,15 @@ test("Move input uses the neutral strict JSON decoder, not a Platform client dep
 
 test("Conversation Move keeps one PostgreSQL implementation and a bounded driver-only lease", async () => {
   const [repository, move, lease, mappers] = await Promise.all([
-    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-session-store.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/conversation-move.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/conversation-move-lease.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/chat-repository-mappers.ts"), "utf8"),
   ])
 
-  assert.ok(repository.trimEnd().split("\n").length <= 800, "Chat Repository must stay within the Root source-size gate")
+  assert.ok(repository.trimEnd().split("\n").length <= 800, "Chat Session Store must stay within the Root source-size gate")
   assert.ok(move.trimEnd().split("\n").length <= 800)
   assert.ok(lease.trimEnd().split("\n").length <= 800)
-  assert.match(repository, /from "\.\/conversation-move\.js"/u)
-  assert.match(
-    repository,
-    /public async moveConversation\(command: MoveConversationCommand\): Promise<MoveConversationResult> \{\s*return moveConversation\(this\.database, command\)\s*\}/u,
-  )
   assert.doesNotMatch(repository, /MOVE_BUDGET_MS|MOVE_LOCK_WAIT_MS|MoveSqlLease|acquireMoveLease|MOVE_RECEIPT_INVALID|INSERT INTO bff_idempotency_receipt/u)
   assert.match(move, /from "\.\/conversation-move-lease\.js"/u)
   assert.match(move, /from "\.\/chat-repository-mappers\.js"/u)

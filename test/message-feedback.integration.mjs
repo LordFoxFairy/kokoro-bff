@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import pg from "pg"
 import { applyCanonicalSchema, loadCanonicalSchema } from "../scripts/apply-schema.mjs"
-import { PostgresChatRepository } from "../src/infrastructure/postgres/chat-repository.ts"
+import { createMessageFeedback } from "../src/infrastructure/postgres/message-feedback.ts"
+import { PostgresChatSessionStore } from "../src/infrastructure/postgres/chat-session-store.ts"
 const databaseUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const integration = databaseUrl ? test : test.skip
 integration("real PG feedback, exact owner noops, abort and parent deletion preserve Messages", { timeout: 30000 }, async (t) => {
@@ -12,7 +13,8 @@ integration("real PG feedback, exact owner noops, abort and parent deletion pres
   try {
     assert.equal((await pool.query("SELECT to_regclass('kokoro_bff.bff_message') AS relation")).rows[0].relation, null, "empty owned database required")
     await applyCanonicalSchema(databaseUrl, await loadCanonicalSchema())
-    const repository = new PostgresChatRepository({ pool }),
+    const repository = new PostgresChatSessionStore({ pool }),
+      feedbackProvider = createMessageFeedback({ pool }),
       tenantId = "feedback_" + randomUUID(),
       subjectId = "owner",
       conversationId = "session_" + randomUUID(),
@@ -39,8 +41,8 @@ integration("real PG feedback, exact owner noops, abort and parent deletion pres
       deadlineAt: performance.now() + 5000,
       ...extra,
     })
-    const read = (extra) => repository.readMessageFeedback(q(extra)),
-      put = (feedback, extra) => repository.setMessageFeedback({ ...q(extra), feedback })
+    const read = (extra) => feedbackProvider.readMessageFeedback(q(extra)),
+      put = (feedback, extra) => feedbackProvider.setMessageFeedback({ ...q(extra), feedback })
     const preference = async () =>
       (await pool.query("SELECT to_jsonb(f) AS row,xmin::text AS xmin FROM bff_message_feedback f WHERE tenant_id=$1 AND message_id=$2", [tenantId, messageId]))
         .rows

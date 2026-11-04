@@ -20,7 +20,7 @@ import {
   AGUI_RUNTIME,
   BFF_CONFIG,
   BFF_DATABASE,
-  CHAT_SERVICE,
+  CHAT_SESSION_READS,
   CHAT_TURN_SERVICE,
   SESSION_ADMISSION,
 } from "../dist/common/tokens.js"
@@ -1349,7 +1349,7 @@ integrationTest(
       for (const { event } of frames) assert.doesNotThrow(() => EventSchemas.parse(event))
       assert.equal(launchRequests.length, 1)
       assert.ok(eventRequests.some(({ publishB: released, launchCount }) => released && launchCount === 1))
-      const finalSnapshot = await bff.get(CHAT_SERVICE).snapshot(tenantId, ownerId, sessionId, undefined)
+      const finalSnapshot = await bff.get(CHAT_SESSION_READS).snapshot(tenantId, ownerId, sessionId, undefined)
       assert.equal(finalSnapshot.execution_head, undefined)
       assert.equal(finalSnapshot.event_watermark, frames.at(-1).id)
       const replay = await bff.get(AGUI_PROJECTION).replay(tenantId, sessionId, originalSnapshot.event_watermark, 100)

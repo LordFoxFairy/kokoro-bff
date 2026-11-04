@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ChatArchive } from "../../infrastructure/postgres/archived-tasks.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import {
   parseArchiveInput,
@@ -19,7 +19,7 @@ export async function archivedTasksRoute(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
-  chat: ChatApplicationService | undefined,
+  archive: ChatArchive,
   requestId: string,
 ): Promise<void> {
   const deadlineAt = performance.now() + Math.min(config.upstreamTimeoutMs, 10000)
@@ -76,14 +76,10 @@ export async function archivedTasksRoute(
     }
     const { namespace: tenantId, userId: subjectId } = admitted.context.identity
     const identity = { tenantId, subjectId, signal: controller.signal, deadlineAt }
-    if (!chat) {
-      fail(503, unavailable())
-      return
-    }
     if (input.kind === "list") {
       const cursorIdentity = { tenantId, subjectId, limit: input.limit }
       const position = decodeArchivedCursor(input.cursor, cursorIdentity)
-      const result = await Promise.race([chat.listOwnedArchivedTasks({ ...identity, limit: input.limit, position }), interrupted])
+      const result = await Promise.race([archive.listOwnedArchivedTasks({ ...identity, limit: input.limit, position }), interrupted])
       active()
       if (!result || Object.keys(result).sort().join() !== "items,nextPosition" || !archivedItemsValid(result.items, input.limit))
         throw new Error("ARCHIVE_OUTPUT_INVALID")
@@ -109,7 +105,7 @@ export async function archivedTasksRoute(
       return
     }
     if (input.kind === "state") {
-      const result = await Promise.race([chat.readArchiveState({ ...identity, conversationId: input.conversationId }), interrupted])
+      const result = await Promise.race([archive.readArchiveState({ ...identity, conversationId: input.conversationId }), interrupted])
       active()
       if (result === null) {
         fail(404, "session_not_found")
@@ -172,7 +168,7 @@ export async function archivedTasksRoute(
       .update(JSON.stringify([input.kind, input.conversationId]))
       .digest("hex")
     const result = await Promise.race([
-      chat.changeArchiveState({ ...identity, conversationId: input.conversationId, action: input.kind, scope, fingerprint }),
+      archive.changeArchiveState({ ...identity, conversationId: input.conversationId, action: input.kind, scope, fingerprint }),
       interrupted,
     ])
     active()

@@ -277,7 +277,7 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
   `src/application/personal-file-upload.ts` 与 `src/infrastructure/clients/storage/personal-file-upload.ts`
   调 Storage personal Create/Complete/GetAsset；当前已真链验可见 CLEAN 上传，跨进程未知结果恢复仍待放行。
   Agent Artifact 与个人下载仍待独立切片。
-- Chat facts：`src/http/routes/chat.ts` 读取/写入 BFF PostgreSQL；已发布 `src/infrastructure/postgres/chat-repository.ts` 维护 tenant、锁和 cursor。在已发布的 R155 Move 职责拆分中，该 Repository 只委派 Move；`conversation-move.ts` 持单一 Move 事务/赢家 receipt 重放，`conversation-move-lease.ts` 持有界 PoolClient 生命周期，既有 `chat-repository-mappers.ts` 做纯 receipt Row 校验；本仓 SQL、public `7.1.0`、port 与行为不变。`chat-turn-service.ts` 与 `agent-dispatch-outbox-repository.ts` 原子提交 Message/Agent command；
+- Chat facts：`ChatModule` 分别装配私有会话读、写、Archive、Shared list、Feedback 和 Move。私有读写共用 `src/infrastructure/postgres/chat-session-store.ts`；授权复用 `chat-conversation-lookup.ts`，快照沿同一事务读 AG-UI。`conversation-move.ts` 仍是唯一 Move writer，保原锁和 receipt；公开 Share 仍走独立能力，Message／Agent 命令仍由 ChatTurn 与 outbox 原子提交。
 - Agent Chat：`src/http/routes/agent.ts` 只承接 durable AG-UI 读取和 run control；Agent launch 由后台 outbox dispatcher 投递；`src/application/agui/` 投影；
   `src/application/agui/projector.ts` 独立消费 Agent source；`agui-projection-repository.ts` 在公开发送前持久化并分配 cursor，
   `agui-consumer-repository.ts` 维护 lease/fence、重试、保留水位与 tombstone GC

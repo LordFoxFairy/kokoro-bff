@@ -1,9 +1,10 @@
 import type { IncomingMessage } from "node:http"
 
 import { parseMessageCreateRequest } from "../../application/chat/message-create-input.js"
-import type { ConversationCollectionFilter } from "../../application/chat/chat-repository.js"
+import type { ConversationCollectionFilter } from "../../application/chat/types.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { queryOf } from "../request.js"
+import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
 import type { ProjectService } from "../../application/project-service.js"
 
 export type ChatAuthorization =
@@ -48,7 +49,7 @@ export async function authorizeChatRequest(
   request: IncomingMessage,
   context: RequestContext,
   businessPath: readonly string[],
-  chat: Readonly<{ findConversation(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<object | null> }>,
+  findConversation: ChatConversationLookup,
   projects: Pick<ProjectService, "find">,
   signal?: AbortSignal,
 ): Promise<ChatAuthorization | null> {
@@ -80,7 +81,7 @@ export async function authorizeChatRequest(
     let currentConversation = null
     if (conversationId !== undefined && conversationId !== "") {
       signal?.throwIfAborted()
-      currentConversation = await chat.findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
+      currentConversation = await findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
       signal?.throwIfAborted()
     }
     if (conversationId === undefined || conversationId === "" || currentConversation === null) {

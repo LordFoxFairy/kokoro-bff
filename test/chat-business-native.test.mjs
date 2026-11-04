@@ -19,7 +19,7 @@ import {
   BFF_CONFIG,
   BFF_DATABASE,
   CHAT_IDEMPOTENCY,
-  CHAT_SERVICE,
+  CHAT_CONVERSATION_LOOKUP,
   CHAT_TURN_SERVICE,
   PROJECT_SERVICE,
   PROJECT_SKILL_SELECTION_PROVIDER,
@@ -30,6 +30,7 @@ import { ChatModule } from "../dist/modules/chat/chat.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
+const unexpectedConversation = () => assert.fail("Collection or rejected requests must not read a Conversation")
 const unexpectedProcess = () => assert.fail("Non-process Chat reads must not use the AG-UI process reader")
 const unexpectedProjects = { find: () => assert.fail("Unscoped Chat reads must not access the Project owner") }
 const servers = []
@@ -68,7 +69,7 @@ test("Chat business read middleware owns direct collection reads without Project
     },
   }
   const server = createServer((request, response) => {
-    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedProjects, unexpectedProcess).then((handled) => {
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedConversation, unexpectedProjects, unexpectedProcess).then((handled) => {
       if (!handled) {
         response.writeHead(404)
         response.end()
@@ -110,7 +111,7 @@ test("Chat business read middleware owns project-scoped collection reads with th
     },
   }
   const server = createServer((request, response) => {
-    void handleChatBusinessReadRequest(request, response, config, admission, chat, projects, unexpectedProcess).then((handled) => {
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedConversation, projects, unexpectedProcess).then((handled) => {
       if (!handled) {
         response.writeHead(404)
         response.end()
@@ -152,7 +153,7 @@ test("Chat business read middleware rechecks the session owner before serving a 
     },
   }
   const server = createServer((request, response) => {
-    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedProjects, unexpectedProcess).then((handled) => {
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, chat.findConversation, unexpectedProjects, unexpectedProcess).then((handled) => {
       if (!handled) {
         response.writeHead(404)
         response.end()
@@ -204,7 +205,7 @@ test("Chat mutation early authorization, body and Session denials retain exact r
     },
   }
   const server = createServer((request, response) => {
-    void handleChatMutationRequest(request, response, config, admission, chat, {}, new Map(), null).then((handled) => {
+    void handleChatMutationRequest(request, response, config, admission, chat, chat.findConversation, {}, new Map(), null).then((handled) => {
       if (!handled) response.writeHead(404).end()
     })
   })
@@ -244,11 +245,9 @@ test("Move Session denial and authentication dependency failure retain request-i
     },
   }
   const server = createServer((request, response) => {
-    void handleMoveSessionRequest(request, response, config, provider, {
-      moveConversation: async () => {
-        moves++
-        throw new Error("unexpected move")
-      },
+    void handleMoveSessionRequest(request, response, config, provider, async () => {
+      moves++
+      throw new Error("unexpected move")
     }).then((handled) => {
       if (!handled) response.writeHead(404).end()
     })
@@ -314,8 +313,8 @@ async function messageBoundaryFixture(t) {
     .useValue({ pool: Object.freeze({}), redis: Object.freeze({}) })
     .overrideProvider(SESSION_ADMISSION)
     .useValue(admission)
-    .overrideProvider(CHAT_SERVICE)
-    .useValue({ findConversation: async () => null })
+    .overrideProvider(CHAT_CONVERSATION_LOOKUP)
+    .useValue(() => assert.fail("Canonical Message admission must not query an unlocked Conversation"))
     .overrideProvider(PROJECT_SERVICE)
     .useValue({ find: async () => null })
     .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)

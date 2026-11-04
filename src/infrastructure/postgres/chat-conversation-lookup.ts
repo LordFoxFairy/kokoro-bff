@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from "pg"
-import type { MessageReadLifetime } from "../../application/chat/chat-repository.js"
+import type { MessageReadLifetime } from "../../application/chat/types.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import { conversationColumns, conversationFromRow, type ConversationRow } from "./chat-repository-mappers.js"
 import { withMessageReadClient } from "./message-parts-read.js"

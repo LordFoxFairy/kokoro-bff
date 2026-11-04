@@ -1,5 +1,5 @@
 import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg"
-import type { ArchiveIdentity } from "../../application/chat/chat-repository.js"
+import type { ArchiveIdentity } from "../../application/chat/types.js"
 
 /** Owns one bounded archive transaction client, never the shared pool. */
 export class ArchiveSqlLease {

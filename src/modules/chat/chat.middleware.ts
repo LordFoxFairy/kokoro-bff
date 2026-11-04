@@ -8,7 +8,13 @@ import {
   AGUI_SOURCE_PROJECTION_ACTIVE,
   BFF_CONFIG,
   CHAT_IDEMPOTENCY,
-  CHAT_SERVICE,
+  CHAT_CONVERSATION_LOOKUP,
+  CHAT_SESSION_READS,
+  CHAT_SESSION_MUTATIONS,
+  CHAT_ARCHIVE,
+  CHAT_SHARED_TASKS,
+  CHAT_MESSAGE_FEEDBACK,
+  CHAT_MOVE,
   CHAT_TURN_SERVICE,
   PROJECT_SERVICE,
   PUBLIC_SHARE_SERVICE,
@@ -18,7 +24,13 @@ import {
 import type { AgUiRunProcessReader } from "../../infrastructure/postgres/agui-process-page.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ChatSessionReads } from "../../application/chat/session-reads.js"
+import type { ChatSessionMutations } from "../../infrastructure/postgres/chat-session-store.js"
+import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
+import type { ChatArchive } from "../../infrastructure/postgres/archived-tasks.js"
+import type { SharedTasksReader } from "../../infrastructure/postgres/shared-tasks.js"
+import type { MessageFeedbackProvider } from "../../infrastructure/postgres/message-feedback.js"
+import type { ChatMove } from "../../application/chat/move-conversation.js"
 import type { PublicShareApplicationService } from "../../application/public-share-service.js"
 import type { ChatTurnApplicationService } from "../../application/chat-turn-service.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
@@ -45,7 +57,13 @@ export class ChatMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(CHAT_SERVICE) private readonly chat: ChatApplicationService,
+    @Inject(CHAT_CONVERSATION_LOOKUP) private readonly findConversation: ChatConversationLookup,
+    @Inject(CHAT_SESSION_READS) private readonly reads: ChatSessionReads,
+    @Inject(CHAT_SESSION_MUTATIONS) private readonly mutations: ChatSessionMutations,
+    @Inject(CHAT_ARCHIVE) private readonly archive: ChatArchive,
+    @Inject(CHAT_SHARED_TASKS) private readonly shared: SharedTasksReader,
+    @Inject(CHAT_MESSAGE_FEEDBACK) private readonly feedback: MessageFeedbackProvider,
+    @Inject(CHAT_MOVE) private readonly move: ChatMove,
     @Inject(PROJECT_SERVICE) private readonly projects: ProjectService,
     @Inject(SKILL_INSTALLATION_CLIENT) private readonly installations: SkillInstallationConnectClient | null,
     @Inject(CHAT_TURN_SERVICE) private readonly chatTurns: ChatTurnApplicationService,
@@ -60,15 +78,29 @@ export class ChatMiddleware implements NestMiddleware {
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleSharedPublicRequest(request, response, this.config, this.publicShare)
-      .then((handled) => handled || handleChatNativeRequest(request, response, this.config, this.admission, this.chat))
-      .then((handled) => handled || handleChatBusinessReadRequest(request, response, this.config, this.admission, this.chat, this.projects, this.readProcess))
-      .then((handled) => handled || handleMessageFeedbackRequest(request, response, this.config, this.admission, this.chat))
-      .then((handled) => handled || handleMessageRegenerationRequest(request, response, this.config, this.admission, this.chatTurns))
-      .then((handled) => handled || handleMoveSessionRequest(request, response, this.config, this.admission, this.chat))
+      .then((handled) => handled || handleChatNativeRequest(request, response, this.config, this.admission, this.archive, this.shared))
       .then(
         (handled) =>
           handled ||
-          handleChatMutationRequest(request, response, this.config, this.admission, this.chat, this.projects, this.idempotency, this.chatIdempotency),
+          handleChatBusinessReadRequest(request, response, this.config, this.admission, this.reads, this.findConversation, this.projects, this.readProcess),
+      )
+      .then((handled) => handled || handleMessageFeedbackRequest(request, response, this.config, this.admission, this.feedback))
+      .then((handled) => handled || handleMessageRegenerationRequest(request, response, this.config, this.admission, this.chatTurns))
+      .then((handled) => handled || handleMoveSessionRequest(request, response, this.config, this.admission, this.move))
+      .then(
+        (handled) =>
+          handled ||
+          handleChatMutationRequest(
+            request,
+            response,
+            this.config,
+            this.admission,
+            this.mutations,
+            this.findConversation,
+            this.projects,
+            this.idempotency,
+            this.chatIdempotency,
+          ),
       )
       .then(
         (handled) =>
@@ -78,7 +110,7 @@ export class ChatMiddleware implements NestMiddleware {
             response,
             this.config,
             this.admission,
-            this.chat,
+            this.findConversation,
             this.projects,
             this.agUiProjection,
             this.agUiConsumers,

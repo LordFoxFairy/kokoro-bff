@@ -15,11 +15,9 @@ const headers = {
 }
 async function fixture(t, options = {}) {
   const reads = []
-  const chatService = {
-    async listOwnedSharedTasks(...args) {
-      reads.push(args)
-      return options.read ? options.read(...args) : { items: [item], nextPosition: null }
-    },
+  const sharedTasks = async (...args) => {
+    reads.push(args)
+    return options.read ? options.read(...args) : { items: [item], nextPosition: null }
   }
   const config = {
     host: "127.0.0.1",
@@ -42,17 +40,24 @@ async function fixture(t, options = {}) {
     upstreams: {},
   }
   const admission = options.admission ?? new SessionAdmissionDouble({ "shared-token": { namespace: "tenant-verified", userId: "user-one" } })
-  return { base: await startChatTaskHttpTestApp(t, config, admission, { chatService }), reads }
+  return { base: await startChatTaskHttpTestApp(t, config, admission, { sharedTasks }), reads }
 }
 test("shared tasks canonical GET reads admitted owner and returns only four safe fields", async (t) => {
-  const { base, reads } = await fixture(t)
+  const { base, reads } = await fixture(t, {
+    read: async (_tenant, _subject, _limit, _anchor, signal, deadlineAt) => {
+      assert.ok(signal instanceof AbortSignal && !signal.aborted)
+      assert.ok(Number.isFinite(deadlineAt) && deadlineAt > performance.now())
+      return { items: [item], nextPosition: null }
+    },
+  })
   const response = await fetch(`${base}/v1/account/shared-tasks`, { headers })
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { data: { items: [item], next_cursor: null } })
   assert.equal(response.headers.get("cache-control"), "no-store")
   assert.equal(response.headers.get("x-request-id"), "shared-http")
   assert.equal(reads.length, 1)
-  assert.deepEqual(reads[0].slice(0, 2), ["tenant-verified", "user-one"])
+  const [tenant, subject, limit, anchor] = reads[0]
+  assert.deepEqual([tenant, subject, limit, anchor], ["tenant-verified", "user-one", 20, null])
   assert.deepEqual(Object.keys(item).sort(), ["expires_at", "session_id", "shared_at", "title"])
 })
 test("shared tasks anonymous request cannot reach owner read", async (t) => {

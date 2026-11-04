@@ -5,9 +5,9 @@ import { test } from "node:test"
 import pg from "pg"
 import { applyCanonicalSchema, loadCanonicalSchema } from "../scripts/apply-schema.mjs"
 import { ChatTurnApplicationService } from "../src/application/chat-turn-service.ts"
-import { ChatApplicationService } from "../src/application/chat-service.ts"
+import { createChatSessionReads } from "../src/application/chat/session-reads.ts"
 import { PostgresAgentDispatchOutboxRepository } from "../src/infrastructure/postgres/agent-dispatch-outbox-repository.ts"
-import { PostgresChatRepository } from "../src/infrastructure/postgres/chat-repository.ts"
+import { PostgresChatSessionStore } from "../src/infrastructure/postgres/chat-session-store.ts"
 const url = process.env.KOKORO_TEST_POSTGRES_URL
 const integration = url ? test : test.skip
 integration("real PG private snapshot restores only latest ordinary accepted MCP choices without rewriting any history", { timeout: 30000 }, async (t) => {
@@ -20,8 +20,8 @@ integration("real PG private snapshot restores only latest ordinary accepted MCP
     const turns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(db), {
       generate: (material) => createHash("sha256").update(material).digest("hex"),
     })
-    const repository = new PostgresChatRepository(db),
-      chat = new ChatApplicationService(repository)
+    const repository = new PostgresChatSessionStore(db),
+      chat = createChatSessionReads(repository)
     const tenantId = "composer_" + randomUUID(),
       subjectId = "owner",
       conversationId = "session_" + randomUUID()

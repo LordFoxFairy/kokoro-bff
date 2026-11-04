@@ -2,7 +2,8 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ChatSessionReads } from "../../application/chat/session-reads.js"
+import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
 import type { ProjectService } from "../../application/project-service.js"
 import { failure } from "../../contracts/index.js"
 import { pathOf, requestId } from "../request.js"
@@ -10,7 +11,7 @@ import { send } from "../response.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
 import type { AgUiRunProcessReader } from "../../infrastructure/postgres/agui-process-page.js"
 import { sendAgUiRunProcess } from "./agui-process.js"
-import { liveChatBusiness } from "./chat.js"
+import { readChatBusiness } from "./chat.js"
 
 export function isChatBusinessReadRequest(request: IncomingMessage): boolean {
   if (request.method !== "GET") return false
@@ -32,7 +33,8 @@ export async function handleChatBusinessReadRequest(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
-  chat: ChatApplicationService,
+  reads: ChatSessionReads,
+  findConversation: ChatConversationLookup,
   projects: Pick<ProjectService, "find">,
   readProcess: AgUiRunProcessReader,
 ): Promise<boolean> {
@@ -55,7 +57,7 @@ export async function handleChatBusinessReadRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, chat, projects)
+    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, findConversation, projects)
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))
@@ -65,7 +67,7 @@ export async function handleChatBusinessReadRequest(
       await sendAgUiRunProcess(request, response, admitted.context, businessPath[1] ?? "", businessPath[3] ?? "", authorization.projectRef, readProcess)
       return true
     }
-    await liveChatBusiness(request, response, admitted.context, businessPath, {}, null, new Map(), chat, authorization)
+    await readChatBusiness(request, response, admitted.context, businessPath, reads, authorization)
     return true
   } catch {
     if (!response.headersSent && !response.writableEnded && !response.destroyed)

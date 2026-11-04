@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { ChatApplicationService } from "../src/application/chat-service.js"
+import { createChatSessionReads } from "../src/application/chat/session-reads.js"
 
 const snapshot = {
   conversation: {
@@ -27,14 +27,14 @@ test("private snapshot exposes the admitted composer selection including an expl
       selected_mcp_connection_ids: ids,
       selected_custom_api_profiles: [],
     }
-    const service = new ChatApplicationService({
+    const service = createChatSessionReads({
       readSnapshot: async () => ({ ...snapshot, composerSelection }),
     } as never)
     assert.deepEqual((await service.snapshot("tenant", "owner", "session", undefined))?.composer_selection, composerSelection)
   }
 })
 test("private snapshot leaves the composer baseline absent when its owner has no proven source", async () => {
-  const service = new ChatApplicationService({
+  const service = createChatSessionReads({
     readSnapshot: async () => snapshot,
   } as never)
   assert.equal(Object.hasOwn((await service.snapshot("tenant", "owner", "session", undefined))!, "composer_selection"), false)

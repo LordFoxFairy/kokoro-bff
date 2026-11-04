@@ -29,7 +29,6 @@ async function fixture(t) {
   }
   const admission = new SessionAdmissionDouble({ "feedback-session": { namespace: "tenant", userId: "subject" } })
   const chat = {
-    findConversation: async () => ({ conversationId: "session" }),
     readMessageFeedback: async (q) => {
       calls.push(["GET", q])
       return q.messageId === "foreign" ? null : { session_id: q.conversationId, message_id: q.messageId, feedback }
@@ -41,7 +40,7 @@ async function fixture(t) {
       return { session_id: q.conversationId, message_id: q.messageId, feedback }
     },
   }
-  const base = await startChatTaskHttpTestApp(t, config, admission, { chatService: chat })
+  const base = await startChatTaskHttpTestApp(t, config, admission, { feedback: chat })
   const request = async (body, path = "/v1/sessions/session/messages/message/feedback", method = body === undefined ? "GET" : "PUT", extra = {}) => {
     const response = await fetch(`${base}${path}`, {
       method,

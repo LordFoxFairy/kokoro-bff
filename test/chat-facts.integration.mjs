@@ -9,7 +9,9 @@ import { Pool } from "pg"
 import { createClient } from "redis"
 
 import { AgUiProjectionService } from "../dist/application/agui/project-session-events.js"
-import { ChatApplicationService } from "../dist/application/chat-service.js"
+import { createChatMove } from "../dist/application/chat/move-conversation.js"
+import { moveConversation } from "../dist/infrastructure/postgres/conversation-move.js"
+import { createChatSessionReads } from "../dist/application/chat/session-reads.js"
 import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
 import { ProjectService } from "../dist/application/project-service.js"
 import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
@@ -17,7 +19,7 @@ import { PostgresAgentCancellationOutboxRepository } from "../dist/infrastructur
 import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
 import { PostgresAgUiConsumerRepository } from "../dist/infrastructure/postgres/agui-consumer-repository.js"
 import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgres/agui-projection-repository.js"
-import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
+import { PostgresChatSessionStore } from "../dist/infrastructure/postgres/chat-session-store.js"
 import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
 import { PostgresProjectRepository } from "../dist/infrastructure/postgres/project-repository.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
@@ -2625,7 +2627,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
     database = new PostgresBffDatabase(postgresUrl, redisUrl)
     const dispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
     const chatTurns = new ChatTurnApplicationService(dispatchOutbox, new Sha256StableIdGenerator())
-    const chat = new ChatApplicationService(new PostgresChatRepository(database))
+    const chat = createChatSessionReads(new PostgresChatSessionStore(database))
     const projection = new AgUiProjectionService(new PostgresAgUiProjectionRepository(database))
     const consumers = new PostgresAgUiConsumerRepository(database)
     await database.ready()
@@ -2828,7 +2830,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
     database = new PostgresBffDatabase(postgresUrl, redisUrl)
     const dispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
     const chatTurns = new ChatTurnApplicationService(dispatchOutbox, new Sha256StableIdGenerator())
-    const chat = new ChatApplicationService(new PostgresChatRepository(database))
+    const chat = createChatSessionReads(new PostgresChatSessionStore(database))
     await database.ready()
     const firstReceipt = await chatTurns.submit({
       tenantId: tenant,
@@ -2994,7 +2996,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     const dispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
     const cancellationOutbox = new PostgresAgentCancellationOutboxRepository(database)
     const chatTurns = new ChatTurnApplicationService(dispatchOutbox, new Sha256StableIdGenerator())
-    const chat = new ChatApplicationService(new PostgresChatRepository(database))
+    const sessionStore = new PostgresChatSessionStore(database)
     await database.ready()
     for (const suffix of ["admitted", "inflight", "local_only"]) {
       assert.ok(
@@ -3017,7 +3019,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     })
     assert.ok(admitted)
     assert.equal(await dispatchOutbox.markAgentDispatchAdmitted(admitted), true)
-    assert.equal(await chat.deleteConversation(tenant, "chat_user", conversationId, "request_delete_conversation"), true)
+    assert.equal(await sessionStore.deleteConversation(tenant, "chat_user", conversationId, "request_delete_conversation"), true)
     assert.deepEqual(await dispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_after_delete", limit: 10, leaseDurationMs: 5000, maxAttempts: 8 }), [])
 
     const dispatch = await pool.query(
@@ -3188,7 +3190,8 @@ integrationTest(
       database = new PostgresBffDatabase(postgresUrl, redisUrl)
       const dispatchOutbox = new PostgresAgentDispatchOutboxRepository(database)
       chatTurns = new ChatTurnApplicationService(dispatchOutbox, new Sha256StableIdGenerator())
-      const chat = new ChatApplicationService(new PostgresChatRepository(database))
+      const sessionStore = new PostgresChatSessionStore(database)
+      const chat = createChatSessionReads(sessionStore)
       const projection = new AgUiProjectionService(new PostgresAgUiProjectionRepository(database))
       consumers = new PostgresAgUiConsumerRepository(database)
       await database.ready()
@@ -3232,7 +3235,7 @@ integrationTest(
         dispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_delete_claim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
       )
       await waitForBlockedStream(deleteLock)
-      const deletePromise = track(chat.deleteConversation(tenant, owner, deleteConversation, "barrier_delete"))
+      const deletePromise = track(sessionStore.deleteConversation(tenant, owner, deleteConversation, "barrier_delete"))
       await releaseLocker(deleteLock)
       await Promise.all([deleteClaimPromise, deletePromise])
       assert.deepEqual(await dispatchOutbox.claimAgentDispatchOutbox({ workerId: "after_delete", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }), [])
@@ -3642,7 +3645,7 @@ integrationTest(
       await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
       database = new PostgresBffDatabase(postgresUrl, redisUrl)
       let chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(database), new Sha256StableIdGenerator())
-      const chat = new ChatApplicationService(new PostgresChatRepository(database))
+      const chat = createChatSessionReads(new PostgresChatSessionStore(database))
       await database.ready()
       const before = await fingerprint()
       assert.ok(Object.values(before.facts).every((rows) => rows.length === 0))
@@ -3734,7 +3737,7 @@ integrationTest("R124 Conversation deletion removes owned compact process rows w
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     database = new PostgresBffDatabase(postgresUrl, redisUrl)
-    const chat = new ChatApplicationService(new PostgresChatRepository(database))
+    const sessionStore = new PostgresChatSessionStore(database)
     await database.ready()
     assert.equal(
       (await pool.query("SELECT to_regclass('kokoro_bff.bff_agui_run_process') AS process, to_regclass('kokoro_bff.bff_agui_run_activity') AS activity"))
@@ -3774,7 +3777,7 @@ integrationTest("R124 Conversation deletion removes owned compact process rows w
         "agui_" + "d".repeat(32),
       ],
     )
-    assert.equal(await chat.deleteConversation(tenantId, ownerId, conversationId, "r124_delete_request_" + suffix), true)
+    assert.equal(await sessionStore.deleteConversation(tenantId, ownerId, conversationId, "r124_delete_request_" + suffix), true)
     assert.equal(
       (await pool.query("SELECT count(*)::int AS count FROM bff_agui_run_process WHERE tenant_id=$1 AND session_id=$2", [tenantId, conversationId])).rows[0]
         .count,
@@ -5664,7 +5667,8 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const database = new PostgresBffDatabase(postgresUrl, redisUrl)
   const chatTurns = new ChatTurnApplicationService(new PostgresAgentDispatchOutboxRepository(database), new Sha256StableIdGenerator())
-  const chat = new ChatApplicationService(new PostgresChatRepository(database))
+  const sessionStore = new PostgresChatSessionStore(database)
+  const move = createChatMove(moveConversation.bind(null, database))
   const projects = new ProjectService(new PostgresProjectRepository(database))
   const tenant = `selection_${randomUUID()}`,
     subject = "selection-owner",
@@ -5757,7 +5761,7 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
     ])
     await assert.rejects(
       chatTurns.submit({ ...input, conversationId: movedId, idempotencyKey: "move-race" }, async () => {
-        const moved = await chat.moveConversation(
+        const moved = await move(
           { requestId: "selection-move", identity: { namespace: tenant, userId: subject } },
           movedId,
           other.id,
@@ -5770,7 +5774,7 @@ integrationTest("project Skill defaults freeze exact message refs, reject concur
       /CHAT_SKILL_SELECTION_CHANGED/,
     )
     assert.equal((await pool.query("SELECT 1 FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2", [tenant, movedId])).rowCount, 0)
-    assert.equal(await chat.deleteConversation(tenant, subject, input.conversationId, "delete-selection", project.id), true)
+    assert.equal(await sessionStore.deleteConversation(tenant, subject, input.conversationId, "delete-selection", project.id), true)
     const before = (await pool.query("SELECT count(*)::int AS n FROM bff_message WHERE tenant_id=$1", [tenant])).rows[0].n
     assert.equal(
       await chatTurns.submit(input, async () => {

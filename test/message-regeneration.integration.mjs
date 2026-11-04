@@ -5,7 +5,7 @@ import pg from "pg"
 import { applyCanonicalSchema, loadCanonicalSchema } from "../scripts/apply-schema.mjs"
 import { ChatTurnApplicationService } from "../src/application/chat-turn-service.ts"
 import { PostgresAgentDispatchOutboxRepository } from "../src/infrastructure/postgres/agent-dispatch-outbox-repository.ts"
-import { PostgresChatRepository } from "../src/infrastructure/postgres/chat-repository.ts"
+import { PostgresChatSessionStore } from "../src/infrastructure/postgres/chat-session-store.ts"
 import { PostgresPublicShareRepository } from "../src/infrastructure/postgres/public-share-repository.ts"
 const url = process.env.KOKORO_TEST_POSTGRES_URL
 const integration = url ? test : test.skip
@@ -20,7 +20,7 @@ integration(
       await applyCanonicalSchema(url, await loadCanonicalSchema())
       const db = { pool, notifyAgUiProjection: async () => undefined },
         repo = new PostgresAgentDispatchOutboxRepository(db),
-        chat = new PostgresChatRepository(db),
+        chat = new PostgresChatSessionStore(db),
         shares = new PostgresPublicShareRepository(db)
       const service = new ChatTurnApplicationService(repo, { generate: (material) => createHash("sha256").update(material).digest("hex") })
       const tenantId = "regen_" + randomUUID(),

@@ -162,3 +162,12 @@ export function setMessageFeedback(database: PostgresBffDatabase, input: SetMess
     false,
   )
 }
+
+export function createMessageFeedback(database: PostgresBffDatabase) {
+  return {
+    readMessageFeedback: readMessageFeedback.bind(null, database),
+    setMessageFeedback: setMessageFeedback.bind(null, database),
+  }
+}
+
+export type MessageFeedbackProvider = ReturnType<typeof createMessageFeedback>

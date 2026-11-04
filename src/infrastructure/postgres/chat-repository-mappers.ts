@@ -1,5 +1,5 @@
 import { parseSkillSourceSelection } from "../../domain/chat/skill-source-selection.js"
-import type { MoveConversationReceipt, MoveConversationResult } from "../../application/chat/chat-repository.js"
+import type { MoveConversationReceipt, MoveConversationResult } from "../../application/chat/types.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { AgentFailureCode, Message, MessageRole, MessageStatus } from "../../domain/chat/message.js"
 import type { Share } from "../../domain/chat/share.js"

@@ -152,7 +152,6 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
       readFile(path.join(root, "src/http/routes/chat-message-native.ts"), "utf8"),
       readFile(path.join(root, "src/modules/agui/agui.module.ts"), "utf8"),
     ])
-  assert.match(chatModule, /provide: CHAT_SERVICE/u)
   assert.match(chatModule, /imports: \[[^\]]*AgentDispatchModule/u)
   assert.match(await readFile(path.join(root, "src/modules/agent-dispatch/agent-dispatch.module.ts"), "utf8"), /provide: CHAT_TURN_SERVICE/u)
   assert.match(chatModule, /ChatMiddleware/u)
@@ -168,7 +167,7 @@ test("ChatModule owns the archive/share adapters and chat provider", async () =>
   assert.match(nativeRoute, /sharedTasksRoute/u)
   assert.match(feedbackRoute, /messageFeedbackRoute/u)
   assert.match(regenerationNativeRoute, /messageRegenerationRoute/u)
-  assert.match(mutationRoute, /liveChatBusiness/u)
+  assert.match(mutationRoute, /writeChatBusiness/u)
   assert.match(mutationRoute, /mutationTicket/u)
   assert.match(chatModule, /CHAT_IDEMPOTENCY/u)
   assert.match(chatModule, /ProjectAccessModule/u)
@@ -204,19 +203,11 @@ test("Chat public-share capability port is feature-local", async () => {
   assert.match(repository, /application\/chat\/public-share-repository\.js/u)
 })
 
-test("Chat repository port is feature-local", async () => {
-  assert.equal(await fileExists("src/application/chat/chat-repository.ts"), true)
-  assert.equal(await fileExists("src/application/ports/chat-repository.ts"), false)
-  const [service, route, repository, publicShare] = await Promise.all([
-    readFile(path.join(root, "src/application/chat-service.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/public-share-repository.ts"), "utf8"),
-  ])
-  assert.match(service, /chat\/chat-repository\.js/u)
-  assert.match(route, /application\/chat\/chat-repository\.js/u)
-  assert.match(repository, /application\/chat\/chat-repository\.js/u)
-  assert.match(publicShare, /application\/chat\/chat-repository\.js/u)
+test("Chat no longer exposes a shared service or repository port", async () => {
+  for (const file of ["src/application/chat-service.ts", "src/application/chat/chat-repository.ts", "src/application/ports/chat-repository.ts"])
+    assert.equal(await fileExists(file), false, `${file} must remain retired`)
+  const tokens = await readFile(path.join(root, "src/common/tokens.ts"), "utf8")
+  assert.doesNotMatch(tokens, /\bCHAT_SERVICE\b/u)
 })
 
 test("Skills share capability port is feature-local", async () => {

@@ -5,7 +5,8 @@ import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { failure } from "../../contracts/index.js"
 import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
-import { messageFeedbackRoute, MessageFeedbackAdmissionError, type MessageFeedbackProvider } from "./message-feedback.js"
+import type { MessageFeedbackProvider } from "../../infrastructure/postgres/message-feedback.js"
+import { messageFeedbackRoute, MessageFeedbackAdmissionError } from "./message-feedback.js"
 
 export function isMessageFeedbackRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
@@ -18,7 +19,7 @@ export async function handleMessageFeedbackRequest(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
-  provider: MessageFeedbackProvider | null,
+  provider: MessageFeedbackProvider,
 ): Promise<boolean> {
   if (!isMessageFeedbackRequest(request)) return false
   const id = requestId(request)

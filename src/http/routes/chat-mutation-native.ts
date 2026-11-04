@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ChatSessionMutations } from "../../infrastructure/postgres/chat-session-store.js"
+import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
 import type { ProjectService } from "../../application/project-service.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
 import { mutationTicket } from "../../application/idempotency.js"
@@ -9,7 +10,7 @@ import type { IdempotencyRepository } from "../../application/ports/idempotency-
 import { failure } from "../../contracts/index.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
-import { liveChatBusiness } from "./chat.js"
+import { writeChatBusiness } from "./chat.js"
 import { idempotencyKey, mutationFingerprint, pathOf, readBody, requestBodyJson, requestId, requiresIdempotency } from "../request.js"
 import { send } from "../response.js"
 
@@ -44,7 +45,8 @@ export async function handleChatMutationRequest(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
-  chat: ChatApplicationService,
+  mutations: ChatSessionMutations,
+  findConversation: ChatConversationLookup,
   projects: ProjectService,
   idempotency: Map<string, IdempotencyEntry>,
   persistent: IdempotencyRepository | null,
@@ -69,7 +71,7 @@ export async function handleChatMutationRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, chat, projects)
+    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, findConversation, projects)
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))
@@ -101,7 +103,7 @@ export async function handleChatMutationRequest(
       send(response, 409, failure("idempotency_in_progress", "An identical mutation is already in progress", id))
       return true
     }
-    const handled = await liveChatBusiness(request, response, admitted.context, businessPath, json, ticket.ticket, idempotency, chat, authorization)
+    const handled = await writeChatBusiness(request, response, admitted.context, businessPath, json, ticket.ticket, idempotency, mutations, authorization)
     return handled
   } catch {
     if (!response.headersSent && !response.writableEnded && !response.destroyed)

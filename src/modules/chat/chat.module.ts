@@ -5,15 +5,25 @@ import {
   BFF_POOL,
   CHAT_CONVERSATION_LOOKUP,
   CHAT_IDEMPOTENCY,
-  CHAT_SERVICE,
+  CHAT_SESSION_READS,
+  CHAT_SESSION_MUTATIONS,
+  CHAT_ARCHIVE,
+  CHAT_SHARED_TASKS,
+  CHAT_MESSAGE_FEEDBACK,
+  CHAT_MOVE,
   PUBLIC_SHARE_SERVICE,
   SKILL_AI_ASSOCIATION,
 } from "../../common/tokens.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import { createChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
-import { PostgresChatRepository } from "../../infrastructure/postgres/chat-repository.js"
+import { PostgresChatSessionStore, createChatSessionMutations } from "../../infrastructure/postgres/chat-session-store.js"
+import { createChatArchive } from "../../infrastructure/postgres/archived-tasks.js"
+import { createSharedTasksReader } from "../../infrastructure/postgres/shared-tasks.js"
+import { createMessageFeedback } from "../../infrastructure/postgres/message-feedback.js"
+import { moveConversation } from "../../infrastructure/postgres/conversation-move.js"
+import { createChatMove } from "../../application/chat/move-conversation.js"
 import { PostgresPublicShareRepository } from "../../infrastructure/postgres/public-share-repository.js"
-import { ChatApplicationService } from "../../application/chat-service.js"
+import { createChatSessionReads } from "../../application/chat/session-reads.js"
 import { PublicShareApplicationService } from "../../application/public-share-service.js"
 import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { ChatMiddleware } from "./chat.middleware.js"
@@ -37,9 +47,19 @@ import type { Pool } from "pg"
     },
     { provide: CHAT_CONVERSATION_LOOKUP, inject: [BFF_POOL], useFactory: createChatConversationLookup },
     {
-      provide: CHAT_SERVICE,
+      provide: PostgresChatSessionStore,
       inject: [BFF_DATABASE],
-      useFactory: (database: PostgresBffDatabase): ChatApplicationService => new ChatApplicationService(new PostgresChatRepository(database)),
+      useFactory: (database: PostgresBffDatabase) => new PostgresChatSessionStore(database),
+    },
+    { provide: CHAT_SESSION_READS, inject: [PostgresChatSessionStore], useFactory: createChatSessionReads },
+    { provide: CHAT_SESSION_MUTATIONS, inject: [PostgresChatSessionStore], useFactory: createChatSessionMutations },
+    { provide: CHAT_ARCHIVE, inject: [BFF_POOL], useFactory: createChatArchive },
+    { provide: CHAT_SHARED_TASKS, inject: [BFF_POOL], useFactory: createSharedTasksReader },
+    { provide: CHAT_MESSAGE_FEEDBACK, inject: [BFF_DATABASE], useFactory: createMessageFeedback },
+    {
+      provide: CHAT_MOVE,
+      inject: [BFF_DATABASE],
+      useFactory: (database: PostgresBffDatabase) => createChatMove(moveConversation.bind(null, database)),
     },
     {
       provide: PUBLIC_SHARE_SERVICE,

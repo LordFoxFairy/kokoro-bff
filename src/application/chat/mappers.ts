@@ -1,5 +1,5 @@
 import type { ChatMessage, ChatMessageRead, ChatSessionSummary } from "../../contracts/index.js"
-import type { PrivateMessageRead } from "./chat-repository.js"
+import type { PrivateMessageRead } from "./types.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Message } from "../../domain/chat/message.js"
 

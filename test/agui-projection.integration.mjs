@@ -9,12 +9,12 @@ import { createClient } from "redis"
 import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
 import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgres/agui-projection-repository.js"
 import { PostgresAgUiConsumerRepository } from "../dist/infrastructure/postgres/agui-consumer-repository.js"
-import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
+import { PostgresChatSessionStore } from "../dist/infrastructure/postgres/chat-session-store.js"
 import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
 import { PostgresConversationArtifactLibrary } from "../dist/infrastructure/postgres/conversation-artifact-library.js"
 import { PostgresPublicShareRepository } from "../dist/infrastructure/postgres/public-share-repository.js"
 import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
-import { ChatApplicationService } from "../dist/application/chat-service.js"
+import { createChatSessionReads } from "../dist/application/chat/session-reads.js"
 import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
 import { PublicShareApplicationService } from "../dist/application/public-share-service.js"
 import { projectRunProcessFrame } from "../dist/infrastructure/postgres/agui-process-projection.js"
@@ -172,7 +172,8 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
     const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
     const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
-    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    const sessionStore = new PostgresChatSessionStore(ownerDatabase)
+    const chatService = createChatSessionReads(sessionStore)
     const artifactLibrary = new PostgresConversationArtifactLibrary(ownerDatabase)
     await ownerDatabase.ready()
     const tenantId = "tenant_artifact_projection"
@@ -374,7 +375,7 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
       (await chatService.snapshot(tenantId, ownerId, sessionId, undefined)).deliveries.map(({ artifact_id }) => artifact_id),
       ["artifact_second", "artifact_first"],
     )
-    assert.equal(await chatService.deleteConversation(tenantId, ownerId, sessionId, "delete-artifact-projection"), true)
+    assert.equal(await sessionStore.deleteConversation(tenantId, ownerId, sessionId, "delete-artifact-projection"), true)
     assert.deepEqual(await linked(), [])
     await assert.rejects(agUi.ingest(tenantId, sessionId, [source(3, "artifact_late", secondRun.run_id)]), /AGUI_ARTIFACT_BINDING_MISSING/u)
     assert.deepEqual(await linked(), [])
@@ -398,7 +399,8 @@ integrationTest("bounds Chat deliveries independently of Messages and reapplies 
     const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
     const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
     const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
-    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    const sessionStore = new PostgresChatSessionStore(ownerDatabase)
+    const chatService = createChatSessionReads(sessionStore)
     await ownerDatabase.ready()
     const tenantId = "tenant_snapshot_limit"
     const sessionId = "session_snapshot_limit"
@@ -479,7 +481,7 @@ integrationTest("bounds Chat deliveries independently of Messages and reapplies 
     await pool.query("UPDATE bff_conversation SET project_ref = 'project_snapshot' WHERE conversation_id = $1", [sessionId])
     assert.equal((await chatService.snapshot(tenantId, ownerId, sessionId, "project_snapshot")).deliveries.length, 100)
     assert.equal(await chatService.snapshot(tenantId, ownerId, sessionId, "wrong_project"), null)
-    assert.equal(await chatService.deleteConversation(tenantId, ownerId, sessionId, "delete-snapshot-limit", "project_snapshot"), true)
+    assert.equal(await sessionStore.deleteConversation(tenantId, ownerId, sessionId, "delete-snapshot-limit", "project_snapshot"), true)
     assert.equal(await chatService.snapshot(tenantId, ownerId, sessionId, undefined), null)
   } finally {
     if (ownerDatabase !== null) await ownerDatabase.close()
@@ -515,7 +517,7 @@ integrationTest("reads Artifact deliveries and public watermark from one repeata
     const conversationRead = new Promise((resolve) => {
       markConversationRead = resolve
     })
-    const gated = new PostgresChatRepository({
+    const gated = new PostgresChatSessionStore({
       pool: {
         connect: async () => ({
           on: reader.on.bind(reader),
@@ -671,7 +673,7 @@ integrationTest("reads Artifact deliveries and public watermark from one repeata
     assert.deepEqual(before.messages ?? [], [])
     assert.equal(before.eventWatermark, null)
     assert.equal(before.executionHead, undefined)
-    const after = await new PostgresChatRepository({ pool }).readSnapshot(tenantId, ownerId, sessionId, undefined)
+    const after = await new PostgresChatSessionStore({ pool }).readSnapshot(tenantId, ownerId, sessionId, undefined)
     assert.deepEqual(
       after.deliveries.map(({ artifactId }) => artifactId),
       ["artifact_race"],
@@ -738,7 +740,7 @@ for (const failure of [
       let agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
       let agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
       let chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
-      let chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+      let chatService = createChatSessionReads(new PostgresChatSessionStore(ownerDatabase))
       await ownerDatabase.ready()
       const sessionId = "session_assistant_reconcile"
       await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)", [
@@ -1055,7 +1057,7 @@ for (const failure of [
       agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
       agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
       chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
-      chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+      chatService = createChatSessionReads(new PostgresChatSessionStore(ownerDatabase))
       await ownerDatabase.ready()
       assert.deepEqual(await agUi.replay("tenant_reconcile", sessionId, null, 100), failedReplay)
       assert.deepEqual(await chatService.snapshot("tenant_reconcile", "owner_reconcile", sessionId, undefined), failedSnapshot)
@@ -1364,7 +1366,7 @@ integrationTest("CHAT-ORDER persists public text/activity slots without erasing 
     ownerDatabase = null
     reopenedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
     const reopenedAgUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(reopenedDatabase))
-    const reopenedChatService = new ChatApplicationService(new PostgresChatRepository(reopenedDatabase))
+    const reopenedChatService = createChatSessionReads(new PostgresChatSessionStore(reopenedDatabase))
     await reopenedDatabase.ready()
     const replay = await reopenedAgUi.replay(tenantId, sessionId, null, 100)
     assert.equal(replay.kind, "page")
@@ -1522,7 +1524,7 @@ integrationTest("loads the latest 100 Message facts in stable chronological orde
     ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
     const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
     const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
-    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    const chatService = createChatSessionReads(new PostgresChatSessionStore(ownerDatabase))
     await ownerDatabase.ready()
     const sessionId = "session_latest_messages"
     await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, 'Long chat')", [
@@ -2274,7 +2276,8 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
     const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
     const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
     const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
-    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    const sessionStore = new PostgresChatSessionStore(ownerDatabase)
+    const chatService = createChatSessionReads(sessionStore)
     const publicShareService = new PublicShareApplicationService(new PostgresPublicShareRepository(ownerDatabase))
     await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ('session_gc', 'tenant_a', 'owner_gc', 'GC snapshot')")
     const latestRun = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
@@ -2358,7 +2361,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
        VALUES ('message_failure_gc', 'tenant_a', 'session_gc', 'run_1', 'assistant', 'partial', 'failed', 1,
                'dependency_unavailable', TRUE)`,
     )
-    const share = await chatService.createShare("tenant_a", "owner_gc", "session_gc")
+    const share = await sessionStore.createShare("tenant_a", "owner_gc", "session_gc")
     assert.ok(share)
     const before = await agUi.replay("tenant_a", "session_gc", null, 100)
     assert.equal(before.kind, "page")
@@ -2656,7 +2659,7 @@ integrationTest("consumer claims stop when the owning BFF conversation is delete
     ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
     const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
     const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
-    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    const sessionStore = new PostgresChatSessionStore(ownerDatabase)
     await agUiConsumers.registerConsumer("tenant_a", "session_deleted", "user_a")
     const now = new Date()
     const activeClaims = await agUiConsumers.claimConsumers({
@@ -2666,7 +2669,7 @@ integrationTest("consumer claims stop when the owning BFF conversation is delete
       limit: 10,
     })
     assert.equal(activeClaims.length, 1)
-    assert.equal(await chatService.deleteConversation("tenant_a", "user_a", "session_deleted", "delete-conversation-integration"), true)
+    assert.equal(await sessionStore.deleteConversation("tenant_a", "user_a", "session_deleted", "delete-conversation-integration"), true)
     await assert.rejects(
       agUi.ingest(
         "tenant_a",
@@ -2716,7 +2719,7 @@ integrationTest("registering a newer run clears the prior terminal before source
     const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
     const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
     const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
-    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    const chatService = createChatSessionReads(new PostgresChatSessionStore(ownerDatabase))
     const oldTurn = await chatTurnService.submit({
       tenantId: "tenant_a",
       conversationId: "session_next_run",
@@ -2906,7 +2909,7 @@ integrationTest("rejects blank markers and a foreign terminal without rejecting 
       `INSERT INTO bff_agui_stream (tenant_id, session_id, consumer_subject_id, expected_run_id, latest_run_id, terminal_run_id) VALUES ('tenant_a', 'session_invalid_markers', 'user_a', 'run_expected', '', NULL)`,
     )
     ownerDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
-    const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+    const chatService = createChatSessionReads(new PostgresChatSessionStore(ownerDatabase))
     await assert.rejects(chatService.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
     await pool.query(
       `UPDATE bff_agui_stream SET latest_run_id = 'run_expected', terminal_run_id = ' ' WHERE tenant_id = 'tenant_a' AND session_id = 'session_invalid_markers'`,
@@ -3506,7 +3509,7 @@ integrationTest(
   { timeout: 30_000 },
   async () => {
     const { randomUUID } = await import("node:crypto")
-    const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+    const { createChatSessionReads } = await import("../dist/application/chat/session-reads.js")
     const pool = new Pool({
       connectionString: postgresUrl,
       options: "-c search_path=kokoro_bff -c timezone=UTC",
@@ -3547,7 +3550,7 @@ integrationTest(
       const agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(ownerDatabase))
       const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
       const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
-      const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+      const chatService = createChatSessionReads(new PostgresChatSessionStore(ownerDatabase))
       await ownerDatabase.ready()
       const submit = (name) =>
         chatTurnService.submit({
@@ -3586,7 +3589,7 @@ integrationTest(
       assert.match(before.event_watermark, /^agui_[0-9a-f]{32}$/u)
       reader = await pool.connect()
       let authorizationCount = 0
-      const gated = new PostgresChatRepository({
+      const gated = new PostgresChatSessionStore({
         pool: {
           connect: async () => ({
             on: reader.on.bind(reader),
@@ -3609,7 +3612,7 @@ integrationTest(
           }),
         },
       })
-      pending = new ChatApplicationService(gated).snapshot(tenantId, ownerId, sessionId, undefined)
+      pending = createChatSessionReads(gated).snapshot(tenantId, ownerId, sessionId, undefined)
       void pending.catch(() => undefined)
       await bounded(
         Promise.race([
@@ -4186,7 +4189,7 @@ integrationTest(
     assert.equal(beforeB.bff_agui_stream[0].retention_floor_sequence, 0)
     assert.deepEqual(beforeB.bff_agui_cursor_tombstone, [])
     // This reader uses the real Pool and production RR query, with no query or return replacement.
-    const reader = new PostgresChatRepository({ pool })
+    const reader = new PostgresChatSessionStore({ pool })
     const snapshotA = await reader.readSnapshot(tenantId, ownerId, aSessionId, undefined)
     const snapshotB = await reader.readSnapshot(tenantId, ownerId, bSessionId, undefined)
     assert.deepEqual(snapshotA?.executionHead, {
@@ -4456,7 +4459,7 @@ async function r57ProjectionContext(context, { started = true, dispatchState = "
   const agUiConsumers = new PostgresAgUiConsumerRepository(ownerDatabase)
   const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(ownerDatabase)
   const chatTurnService = new ChatTurnApplicationService(agentDispatchOutbox, new Sha256StableIdGenerator())
-  const chatService = new ChatApplicationService(new PostgresChatRepository(ownerDatabase))
+  const chatService = createChatSessionReads(new PostgresChatSessionStore(ownerDatabase))
   await ownerDatabase.ready()
   const runId = await submitAndAdmit(chatTurnService, agentDispatchOutbox, pool, {
     tenantId,
@@ -4768,7 +4771,7 @@ integrationTest(
   { timeout: 30_000 },
   async (context) => {
     const c = await r57ProjectionContext(context)
-    const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+    const { createChatSessionReads } = await import("../dist/application/chat/session-reads.js")
     const waiting = r57Waiting()
     assert.equal((await c.ingest([c.source(2, waiting)])).insertedFrames, 1)
     const before = await c.snapshot()
@@ -4784,7 +4787,7 @@ integrationTest(
       pending = null,
       gatedOnce = false
     try {
-      const repository = new PostgresChatRepository({
+      const repository = new PostgresChatSessionStore({
         pool: {
           connect: async () => ({
             on: reader.on.bind(reader),
@@ -4807,7 +4810,7 @@ integrationTest(
           }),
         },
       })
-      pending = new ChatApplicationService(repository).snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+      pending = createChatSessionReads(repository).snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
       void pending.catch(() => undefined)
       await r57Bounded(
         Promise.race([
@@ -4943,7 +4946,7 @@ integrationTest(
   { timeout: 30_000 },
   async (context) => {
     const c = await r57ProjectionContext(context)
-    const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+    const { createChatSessionReads } = await import("../dist/application/chat/session-reads.js")
     const waiting = r57Waiting()
     const segmentId = "r118_segment_" + c.suffix
     assert.equal(
@@ -4984,7 +4987,7 @@ integrationTest(
       gatedOnce = false,
       primaryFailure = null
     try {
-      const repository = new PostgresChatRepository({
+      const repository = new PostgresChatSessionStore({
         pool: {
           connect: async () => ({
             on: reader.on.bind(reader),
@@ -5007,7 +5010,7 @@ integrationTest(
           }),
         },
       })
-      pending = new ChatApplicationService(repository).snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+      pending = createChatSessionReads(repository).snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
       void pending.catch(() => undefined)
       await r57Bounded(
         Promise.race([
@@ -5223,7 +5226,7 @@ integrationTest("R124 successor registration preserves terminal A process until 
 
 integrationTest("R124 one authorized RR snapshot binds Message head process HITL Delivery and watermark", { timeout: 30_000 }, async (context) => {
   const c = await r57ProjectionContext(context)
-  const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+  const { createChatSessionReads } = await import("../dist/application/chat/session-reads.js")
   const oldInteraction = r57Waiting()
   const oldSkill = {
     activity: "skill",
@@ -5267,7 +5270,7 @@ integrationTest("R124 one authorized RR snapshot binds Message head process HITL
     pending = null,
     gated = false
   try {
-    const repository = new PostgresChatRepository({
+    const repository = new PostgresChatSessionStore({
       pool: {
         connect: async () => ({
           on: reader.on.bind(reader),
@@ -5290,7 +5293,7 @@ integrationTest("R124 one authorized RR snapshot binds Message head process HITL
         }),
       },
     })
-    pending = new ChatApplicationService(repository).snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+    pending = createChatSessionReads(repository).snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
     void pending.catch(() => undefined)
     await r57Bounded(
       Promise.race([
@@ -5971,7 +5974,7 @@ integrationTest("preflight-first initial terminal survives a page and restart wi
   )
   const restartedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
   const restartedAgUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(restartedDatabase))
-  const restartedChatService = new ChatApplicationService(new PostgresChatRepository(restartedDatabase))
+  const restartedChatService = createChatSessionReads(new PostgresChatSessionStore(restartedDatabase))
   try {
     await restartedDatabase.ready()
     const snapshot = await restartedChatService.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
@@ -6134,7 +6137,7 @@ integrationTest(
     const before = await c.fingerprint()
     const restartedDatabase = new PostgresBffDatabase(postgresUrl, redisUrl)
     const restartedAgUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(restartedDatabase))
-    const restartedChatService = new ChatApplicationService(new PostgresChatRepository(restartedDatabase))
+    const restartedChatService = createChatSessionReads(new PostgresChatSessionStore(restartedDatabase))
     try {
       await restartedDatabase.ready()
       const stream = await new PostgresAgUiProjectionRepository({ pool: c.pool }).readStream(c.tenantId, c.sessionId)
@@ -6228,7 +6231,7 @@ integrationTest(
   { timeout: 30_000 },
   async (context) => {
     const c = await r57ProjectionContext(context)
-    const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+    const { createChatSessionReads } = await import("../dist/application/chat/session-reads.js")
     const write = {
       activity: "tool",
       activity_id: `act_${"a".repeat(64)}`,
@@ -6251,7 +6254,7 @@ integrationTest(
     await c.ingest(batch)
     assert.deepEqual(await c.fingerprint(), committed)
     // A new reader reconstructs from committed JSONB, not projector memory or fixture output.
-    const reopened = new ChatApplicationService(new PostgresChatRepository({ pool: c.pool }))
+    const reopened = createChatSessionReads(new PostgresChatSessionStore({ pool: c.pool }))
     assert.equal(await reopened.snapshot(c.tenantId, "other_subject", c.sessionId, undefined), null)
     const snapshot = await reopened.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
     assert.ok(snapshot)
@@ -6279,7 +6282,7 @@ integrationTest(
   { timeout: 30000 },
   async (context) => {
     const c = await r57ProjectionContext(context)
-    const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+    const { createChatSessionReads } = await import("../dist/application/chat/session-reads.js")
     const running = {
       activity: "tool",
       activity_id: `act_${"a".repeat(64)}`,
@@ -6370,7 +6373,7 @@ integrationTest(
     const committed = await c.fingerprint()
     await c.ingest(batch)
     assert.deepEqual(await c.fingerprint(), committed)
-    const reopened = new ChatApplicationService(new PostgresChatRepository({ pool: c.pool }))
+    const reopened = createChatSessionReads(new PostgresChatSessionStore({ pool: c.pool }))
     assert.equal(await reopened.snapshot(c.tenantId, "other_subject", c.sessionId, undefined), null)
     const snapshot = await reopened.snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
     assert.deepEqual(snapshot.execution_process.activities, [completed, historical])

@@ -1,9 +1,7 @@
-import type { MessageFeedbackQuery, SetMessageFeedback, MessageFeedbackState } from "../chat/message-feedback-input.js"
-import type { ChatComposerSelection, MessagePartsPage, OrderedMessageRendering } from "../../contracts/chat.js"
+import type { ChatComposerSelection, OrderedMessageRendering } from "../../contracts/chat.js"
 import type { ChatExecutionHead, RunExecutionProcess } from "../agui/run-read.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Message } from "../../domain/chat/message.js"
-import type { Share } from "../../domain/chat/share.js"
 
 export type ConversationPage = {
   conversations: Conversation[]
@@ -90,49 +88,3 @@ export type ArchiveStateQuery = ArchiveIdentity & Readonly<{ conversationId: str
 export type ArchiveState = Readonly<{ session_id: string; archived_at: string | null }>
 export type ArchiveStateCommand = ArchiveStateQuery & Readonly<{ action: "archive" | "restore"; scope: string; fingerprint: string }>
 export type ArchiveStateResult = Readonly<{ kind: "changed"; receipt: Readonly<{ data: ArchiveState }> }> | Readonly<{ kind: "not_found" | "conflict" }>
-
-export type ChatRepository = {
-  readMessageFeedback(input: MessageFeedbackQuery): Promise<MessageFeedbackState | null>
-  setMessageFeedback(input: SetMessageFeedback): Promise<MessageFeedbackState | null>
-  listOwnedArchivedTasks(query: ArchivedTasksQuery): Promise<ArchivedTasksRead>
-  readArchiveState(query: ArchiveStateQuery): Promise<ArchiveState | null>
-  changeArchiveState(command: ArchiveStateCommand): Promise<ArchiveStateResult>
-  listOwnedSharedTasks(
-    tenantId: string,
-    subjectId: string,
-    limit: number,
-    position: SharedTasksPosition | null,
-    signal: AbortSignal,
-    deadlineAt: number,
-  ): Promise<SharedTasksRead>
-  listConversations(tenantId: string, subjectId: string, filter: ConversationCollectionFilter, limit: number, cursor: string | null): Promise<ConversationPage>
-  findConversation(
-    tenantId: string,
-    subjectId: string,
-    conversationId: string,
-    projectRef: string | undefined,
-    lifetime?: MessageReadLifetime,
-  ): Promise<Conversation | null>
-  readSnapshot(
-    tenantId: string,
-    subjectId: string,
-    conversationId: string,
-    projectRef: string | undefined,
-    context?: PrivateMessageReadContext,
-  ): Promise<ChatSnapshot | null>
-  readMessageParts(query: MessagePartsQuery): Promise<MessagePartsPage | null>
-  listMessages(
-    tenantId: string,
-    subjectId: string,
-    conversationId: string,
-    limit: number,
-    cursor: string | null,
-    projectRef?: string,
-    context?: PrivateMessageReadContext,
-  ): Promise<PrivateMessagePage | null>
-  renameConversation(tenantId: string, subjectId: string, conversationId: string, title: string, projectRef?: string): Promise<Conversation | null>
-  moveConversation(command: MoveConversationCommand): Promise<MoveConversationResult>
-  deleteConversation(tenantId: string, subjectId: string, conversationId: string, requestId: string, projectRef?: string): Promise<boolean>
-  createShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<Share | null>
-  revokeShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<Share | null>
-}

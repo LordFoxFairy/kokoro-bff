@@ -54,7 +54,7 @@ async function fixture(t, options = {}) {
     upstreams: {},
   }
   const admission = options.admission ?? new SessionAdmissionDouble({ "shared-token": { namespace: "tenant-verified", userId: "user-one" } })
-  return { base: await startChatTaskHttpTestApp(t, config, admission, { chatService }), reads }
+  return { base: await startChatTaskHttpTestApp(t, config, admission, { archive: chatService }), reads }
 }
 
 for (const [method, path, body] of [

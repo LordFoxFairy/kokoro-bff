@@ -1,6 +1,6 @@
 import { performance } from "node:perf_hooks"
 
-import type { MoveConversationCommand, MoveConversationReceipt, MoveConversationResult } from "../../application/chat/chat-repository.js"
+import type { MoveConversationCommand, MoveConversationReceipt, MoveConversationResult } from "../../application/chat/types.js"
 import type { PostgresBffDatabase } from "./client.js"
 import { moveReceiptFromRow } from "./chat-repository-mappers.js"
 import { acquireMoveLease, MOVE_BUDGET_MS, moveRemaining } from "./conversation-move-lease.js"

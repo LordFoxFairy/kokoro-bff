@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { ChatApplicationService } from "../src/application/chat-service.ts"
+import { createChatSessionReads } from "../src/application/chat/session-reads.ts"
 import { chatMessage } from "../src/application/chat/mappers.ts"
 
 const watermark = "agui_" + "1".repeat(32)
@@ -23,7 +23,7 @@ const message = {
 }
 
 test("private snapshot preserves the ordered read reference and does not turn a non-inlined body into empty text", async () => {
-  const service = new ChatApplicationService({
+  const service = createChatSessionReads({
     readSnapshot: async () => ({
       conversation: { conversationId: "session", ownerId: "owner", title: "Task", createdAt: new Date(0), updatedAt: new Date(0) },
       messages: [message],
@@ -436,7 +436,7 @@ test("parts reject page-wide metadata overflow before parsing or exposing it", (
     /MESSAGE_PARTS_BUDGET_EXCEEDED/,
   ))
 
-import { liveChatBusiness } from "../src/http/routes/chat.ts"
+import { readChatBusiness } from "../src/http/routes/chat.ts"
 
 async function partsHttp(
   read: (query: unknown) => Promise<unknown>,
@@ -462,14 +462,11 @@ async function partsHttp(
       this.writableEnded = true
     },
   })
-  const handled = await liveChatBusiness(
+  const handled = await readChatBusiness(
     request as never,
     response as never,
     { requestId: "parts_http", identity: { namespace: "tenant", userId: "owner" } } as never,
     ["sessions", "session", "messages", "message", "parts"],
-    {},
-    null,
-    new Map(),
     { readMessageParts: read } as never,
     authorization as never,
   )

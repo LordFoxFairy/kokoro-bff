@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { SharedTasksReader } from "../../infrastructure/postgres/shared-tasks.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import { parseSharedTasksInput, decodeSharedTasksCursor, encodeSharedTasksCursor, sharedTasksPageValid } from "../shared-tasks-input.js"
 import { send } from "../response.js"
@@ -11,7 +11,7 @@ export async function sharedTasksRoute(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
-  chat: ChatApplicationService | undefined,
+  readSharedTasks: SharedTasksReader,
   requestId: string,
 ): Promise<void> {
   const deadlineAt = performance.now() + Math.min(config.upstreamTimeoutMs, 10000)
@@ -58,11 +58,7 @@ export async function sharedTasksRoute(
     const { namespace: tenantId, userId: subjectId } = admitted.context.identity
     const position = decodeSharedTasksCursor(input.cursor, tenantId, subjectId, input.limit)
     active()
-    if (!chat) {
-      fail(503, "shared_tasks_unavailable")
-      return
-    }
-    const result = await Promise.race([chat.listOwnedSharedTasks(tenantId, subjectId, input.limit, position, controller.signal, deadlineAt), interruption])
+    const result = await Promise.race([readSharedTasks(tenantId, subjectId, input.limit, position, controller.signal, deadlineAt), interruption])
     active()
     let nextCursor: string | null = null
     try {

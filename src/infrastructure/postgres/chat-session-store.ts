@@ -1,26 +1,12 @@
 import { readChatComposerSelection } from "./chat-composer-selection.js"
-import { createChatConversationLookup, readOwnedConversationSnapshotRow, type ChatConversationLookup } from "./chat-conversation-lookup.js"
-import { readMessageFeedback, setMessageFeedback } from "./message-feedback.js"
-import type { MessageFeedbackQuery, SetMessageFeedback } from "../../application/chat/message-feedback-input.js"
-import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "../../application/chat/chat-repository.js"
-import { listOwnedArchivedTasks, readArchiveState, changeArchiveState } from "./archived-tasks.js"
-import { listOwnedSharedTasks } from "./shared-tasks.js"
-import type { SharedTasksPosition, SharedTasksRead } from "../../application/chat/chat-repository.js"
+import { readOwnedConversationSnapshotRow } from "./chat-conversation-lookup.js"
 import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
 import type { MessagePartsPage } from "../../contracts/chat.js"
-import type { MessagePartsQuery, PrivateMessageReadContext, PrivateMessagePage } from "../../application/chat/chat-repository.js"
+import type { MessagePartsQuery, PrivateMessageReadContext, PrivateMessagePage } from "../../application/chat/types.js"
 import { withMessageReadClient, messageReadLifetime, privateMessagesFromRows, readMessageParts, type PrivateMessageRow } from "./message-parts-read.js"
 
-import type {
-  ChatArtifactDelivery,
-  ChatRepository,
-  ChatSnapshot,
-  ConversationCollectionFilter,
-  ConversationPage,
-  MoveConversationCommand,
-  MoveConversationResult,
-} from "../../application/chat/chat-repository.js"
+import type { ChatArtifactDelivery, ChatSnapshot, ConversationCollectionFilter, ConversationPage } from "../../application/chat/types.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Share } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
@@ -37,7 +23,6 @@ import {
   type ShareRow,
 } from "./chat-repository-mappers.js"
 import { readAgUiSnapshotState } from "./agui-run-state-read.js"
-import { moveConversation } from "./conversation-move.js"
 
 type ArtifactDeliveryRow = {
   conversation_id: string
@@ -67,46 +52,8 @@ function artifactDeliveryFromRow(row: ArtifactDeliveryRow): ChatArtifactDelivery
   }
 }
 
-export class PostgresChatRepository implements ChatRepository {
-  private readonly database: PostgresBffDatabase
-  public readonly findConversation: ChatConversationLookup
-
-  public constructor(database: PostgresBffDatabase) {
-    this.database = database
-    this.findConversation = createChatConversationLookup(database.pool)
-  }
-
-  public async moveConversation(command: MoveConversationCommand): Promise<MoveConversationResult> {
-    return moveConversation(this.database, command)
-  }
-
-  public listOwnedSharedTasks(
-    tenantId: string,
-    subjectId: string,
-    limit: number,
-    position: SharedTasksPosition | null,
-    signal: AbortSignal,
-    deadlineAt: number,
-  ): Promise<SharedTasksRead> {
-    return listOwnedSharedTasks(this.database.pool, tenantId, subjectId, limit, position, signal, deadlineAt)
-  }
-
-  public readMessageFeedback(input: MessageFeedbackQuery) {
-    return readMessageFeedback(this.database, input)
-  }
-  public setMessageFeedback(input: SetMessageFeedback) {
-    return setMessageFeedback(this.database, input)
-  }
-
-  public listOwnedArchivedTasks(query: ArchivedTasksQuery) {
-    return listOwnedArchivedTasks(this.database.pool, query)
-  }
-  public readArchiveState(query: ArchiveStateQuery) {
-    return readArchiveState(this.database.pool, query)
-  }
-  public changeArchiveState(command: ArchiveStateCommand) {
-    return changeArchiveState(this.database.pool, command)
-  }
+export class PostgresChatSessionStore {
+  public constructor(private readonly database: PostgresBffDatabase) {}
 
   public async listConversations(
     tenantId: string,
@@ -483,3 +430,14 @@ export class PostgresChatRepository implements ChatRepository {
     return row === undefined ? null : shareFromRow(row)
   }
 }
+
+export function createChatSessionMutations(store: PostgresChatSessionStore) {
+  return {
+    renameConversation: store.renameConversation.bind(store),
+    deleteConversation: store.deleteConversation.bind(store),
+    createShare: store.createShare.bind(store),
+    revokeShare: store.revokeShare.bind(store),
+  }
+}
+
+export type ChatSessionMutations = ReturnType<typeof createChatSessionMutations>

@@ -1,7 +1,7 @@
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { MessageFeedbackProvider } from "../../infrastructure/postgres/message-feedback.js"
 import { messageFeedbackId, type MessageFeedback } from "../../application/chat/message-feedback-input.js"
 import { readBodyBeforeDeadline, rawHeaderCount } from "../request-body.js"
 import { send } from "../response.js"
@@ -16,14 +16,12 @@ export class MessageFeedbackAdmissionError extends Error {
   }
 }
 
-export type MessageFeedbackProvider = Pick<ChatApplicationService, "readMessageFeedback" | "setMessageFeedback">
-
 export async function messageFeedbackRoute(
   request: IncomingMessage,
   response: ServerResponse,
   context: RequestContext,
   path: readonly string[],
-  store: MessageFeedbackProvider | null,
+  store: MessageFeedbackProvider,
   deadlineAt: number,
   currentAdmission: (signal: AbortSignal) => Promise<void>,
 ): Promise<void> {
@@ -99,7 +97,6 @@ export async function messageFeedbackRoute(
       feedback = parseMessageFeedbackInput(bytes)
     }
     await within(() => currentAdmission(controller.signal))
-    if (!store) throw Error("message_feedback_unavailable")
     const input = {
       tenantId: context.identity.namespace,
       subjectId: context.identity.userId,

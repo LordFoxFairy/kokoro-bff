@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
-import type { ChatApplicationService } from "../../application/chat-service.js"
+import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
 import type { ProjectService } from "../../application/project-service.js"
 import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
@@ -34,7 +34,7 @@ export async function handleChatEventsRequest(
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
-  chat: ChatApplicationService,
+  findConversation: ChatConversationLookup,
   projects: ProjectService,
   projection: AgUiProjectionService,
   consumers: AgUiProjectionConsumerRepository,
@@ -56,7 +56,7 @@ export async function handleChatEventsRequest(
       const context = { requestId: id, identity: admitted.identity, platformAdmin: admitted.platformAdmin }
       const businessPath = pathOf(request).slice(1)
       signal.throwIfAborted()
-      const authorization = await authorizeChatRequest(request, context, businessPath, chat, projects, signal)
+      const authorization = await authorizeChatRequest(request, context, businessPath, findConversation, projects, signal)
       signal.throwIfAborted()
       if (authorization === null) return
       if (!authorization.ok) {
@@ -64,14 +64,14 @@ export async function handleChatEventsRequest(
         return
       }
       signal.throwIfAborted()
-      const conversation = await chat.findConversation(context.identity.namespace, context.identity.userId, businessPath[1] ?? "", authorization.projectRef)
+      const conversation = await findConversation(context.identity.namespace, context.identity.userId, businessPath[1] ?? "", authorization.projectRef)
       signal.throwIfAborted()
       if (conversation === null) {
         send(response, 404, failure("session_not_found", "Session was not found", id))
         return
       }
       signal.throwIfAborted()
-      await consumers.registerConsumer(context.identity.namespace, businessPath[1] ?? "", conversation.owner_id)
+      await consumers.registerConsumer(context.identity.namespace, businessPath[1] ?? "", conversation.ownerId)
       signal.throwIfAborted()
       await liveAgentSessionEvents(request, response, config, context, businessPath[1] ?? "", projection, sourceProjectionActive, runtime, signal)
       signal.throwIfAborted()

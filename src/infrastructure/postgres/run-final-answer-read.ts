@@ -1,5 +1,5 @@
 import type { Pool } from "pg"
-import type { MessageReadLifetime } from "../../application/chat/chat-repository.js"
+import type { MessageReadLifetime } from "../../application/chat/types.js"
 import { withMessageReadClient } from "./message-parts-read.js"
 import { parseMessageParts } from "./message-parts.js"
 

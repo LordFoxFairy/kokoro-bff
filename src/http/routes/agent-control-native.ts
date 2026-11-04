@@ -58,7 +58,7 @@ export async function handleAgentControlRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, { findConversation }, projects)
+    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, findConversation, projects)
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))

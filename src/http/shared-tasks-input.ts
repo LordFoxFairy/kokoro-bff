@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http"
 import { strictParseRawJson } from "../infrastructure/raw-json.js"
-import type { SharedTaskItem, SharedTasksPage, SharedTasksPosition } from "../application/chat/chat-repository.js"
+import type { SharedTaskItem, SharedTasksPage, SharedTasksPosition } from "../application/chat/types.js"
 
 const invalid = (): never => {
   throw new Error("SHARED_TASKS_INPUT_INVALID")

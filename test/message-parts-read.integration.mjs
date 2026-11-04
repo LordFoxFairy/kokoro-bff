@@ -11,7 +11,7 @@ import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/sche
 import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
 import { PostgresAgUiConsumerRepository } from "../dist/infrastructure/postgres/agui-consumer-repository.js"
 import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgres/agui-projection-repository.js"
-import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
+import { PostgresChatSessionStore } from "../dist/infrastructure/postgres/chat-session-store.js"
 import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
 import { decodeMessagePartsCursor } from "../dist/infrastructure/postgres/message-parts-read.js"
 import { readRunFinalAnswer } from "../dist/infrastructure/postgres/run-final-answer-read.js"
@@ -46,7 +46,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
     const agUiConsumers = new PostgresAgUiConsumerRepository(database)
     const publicShareService = new PublicShareApplicationService(new PostgresPublicShareRepository(database))
     await database.ready()
-    const reader = new PostgresChatRepository({ pool })
+    const reader = new PostgresChatSessionStore({ pool })
     async function create({
       legacy = false,
       long = "A",
@@ -223,7 +223,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
       })
       const snapshot = assistant(await c.snapshot())
       assert.equal(snapshot.rendering.final_segment_id, "public-b")
-      const fresh = new PostgresChatRepository({ pool })
+      const fresh = new PostgresChatSessionStore({ pool })
       let cursor = snapshot.rendering.parts_cursor,
         count = 0,
         seenFinal = false
@@ -285,7 +285,7 @@ integrationTest("private Message parts PostgreSQL vertical slice (owned empty da
     await suite.test("Agent8.2 trusted detail survives a fresh private parts reader without widening Share", async () => {
       const detail = { ...tool, display_code: "tool.mcp.call", display_detail: { kind: "mcp_tool", name: "public_lookup" } }
       const c = await create({ twoSegments: true, activity: detail })
-      const freshReader = new PostgresChatRepository({ pool })
+      const freshReader = new PostgresChatSessionStore({ pool })
       const snapshot = await freshReader.readSnapshot(c.tenantId, c.subjectId, c.conversationId, undefined, lifetime())
       assert.deepEqual(snapshot.executionProcess.activities, [detail])
       const message = assistant(snapshot)

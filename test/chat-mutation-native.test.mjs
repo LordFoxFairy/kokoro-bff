@@ -58,7 +58,7 @@ test("Chat direct title/share/delete mutations use feature-owned idempotency", a
   const projects = { find: async () => ({ id: "project-1" }) }
   const entries = new Map()
   const server = createServer((request, response) => {
-    void handleChatMutationRequest(request, response, config, admission, chat, projects, entries, null).then((handled) => {
+    void handleChatMutationRequest(request, response, config, admission, chat, chat.findConversation, projects, entries, null).then((handled) => {
       if (!handled && !response.writableEnded) {
         response.writeHead(404)
         response.end()

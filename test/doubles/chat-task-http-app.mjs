@@ -1,11 +1,11 @@
 import "reflect-metadata"
 import assert from "node:assert/strict"
 import { Test } from "@nestjs/testing"
-import { BFF_CONFIG, BFF_DATABASE, CHAT_SERVICE, CHAT_TURN_SERVICE, SESSION_ADMISSION } from "../../dist/common/tokens.js"
+import { BFF_CONFIG, BFF_DATABASE, CHAT_ARCHIVE, CHAT_SHARED_TASKS, CHAT_MESSAGE_FEEDBACK, CHAT_TURN_SERVICE, SESSION_ADMISSION } from "../../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../../dist/main.js"
 import { ChatModule } from "../../dist/modules/chat/chat.module.js"
 
-export async function startChatTaskHttpTestApp(t, config, sessionAdmission, { chatService, chatTurns }) {
+export async function startChatTaskHttpTestApp(t, config, sessionAdmission, { archive, sharedTasks, feedback, chatTurns }) {
   const unexpected = () => assert.fail("Chat task HTTP fixture must not reach PostgreSQL")
   const builder = Test.createTestingModule({ imports: [ChatModule] })
     .overrideProvider(BFF_CONFIG)
@@ -14,7 +14,9 @@ export async function startChatTaskHttpTestApp(t, config, sessionAdmission, { ch
     .useValue({ pool: { query: unexpected, connect: unexpected }, ready: unexpected })
     .overrideProvider(SESSION_ADMISSION)
     .useValue(sessionAdmission)
-  if (chatService !== undefined) builder.overrideProvider(CHAT_SERVICE).useValue(chatService)
+  if (archive !== undefined) builder.overrideProvider(CHAT_ARCHIVE).useValue(archive)
+  if (sharedTasks !== undefined) builder.overrideProvider(CHAT_SHARED_TASKS).useValue(sharedTasks)
+  if (feedback !== undefined) builder.overrideProvider(CHAT_MESSAGE_FEEDBACK).useValue(feedback)
   if (chatTurns !== undefined) builder.overrideProvider(CHAT_TURN_SERVICE).useValue(chatTurns)
   const module = await builder.compile()
   const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })

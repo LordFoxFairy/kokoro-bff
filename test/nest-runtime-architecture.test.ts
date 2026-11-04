@@ -22,7 +22,12 @@ test("the compiled production AppModule resolves its real provider graph without
     BFF_POOL,
     BFF_REDIS,
     CHAT_CONVERSATION_LOOKUP,
-    CHAT_SERVICE,
+    CHAT_SESSION_READS,
+    CHAT_SESSION_MUTATIONS,
+    CHAT_ARCHIVE,
+    CHAT_SHARED_TASKS,
+    CHAT_MESSAGE_FEEDBACK,
+    CHAT_MOVE,
     CHAT_TURN_SERVICE,
     PROJECT_SERVICE,
     PROJECT_SKILL_SELECTION_PROVIDER,
@@ -73,7 +78,12 @@ test("the compiled production AppModule resolves its real provider graph without
       [AgentRunsModule, AGENT_RUNS_READER],
       [AguiModule, AGUI_RUN_PROCESS_READER],
       [AguiModule, AGUI_RUN_CONTROL_READER],
-      [ChatModule, CHAT_SERVICE],
+      [ChatModule, CHAT_SESSION_READS],
+      [ChatModule, CHAT_SESSION_MUTATIONS],
+      [ChatModule, CHAT_ARCHIVE],
+      [ChatModule, CHAT_SHARED_TASKS],
+      [ChatModule, CHAT_MESSAGE_FEEDBACK],
+      [ChatModule, CHAT_MOVE],
       [ChatModule, CHAT_CONVERSATION_LOOKUP],
       [AgentRunsModule, RUN_FINAL_ANSWER_LOOKUP],
       [AccountModule, PERSONALIZATION_PROVIDER],
@@ -662,11 +672,9 @@ test("production Nest retires AG-UI transports before worker drain while retaini
           }
         },
       }
-      const chat = {
-        findConversation: async () => {
-          await atPhase("authorization")
-          return { owner_id: "owner_agui_close" }
-        },
+      const findConversation = async () => {
+        await atPhase("authorization")
+        return { ownerId: "owner_agui_close" }
       }
       const projects = {
         find: async () => {
@@ -707,7 +715,7 @@ test("production Nest retires AG-UI transports before worker drain while retaini
         [tokens.BFF_CONFIG, config],
         [tokens.BFF_DATABASE, database],
         [tokens.SESSION_ADMISSION, admission],
-        [tokens.CHAT_SERVICE, chat],
+        [tokens.CHAT_CONVERSATION_LOOKUP, findConversation],
         [tokens.PROJECT_SERVICE, projects],
         [tokens.AGUI_PROJECTION_CONSUMERS, consumers],
         [tokens.AGUI_PROJECTION, projection],
