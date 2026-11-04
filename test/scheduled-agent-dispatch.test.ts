@@ -52,47 +52,53 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
     assert.equal(await runner.runOnce(), 1)
     assert.deepEqual(calls, ["deliver", "admitted"])
   })
-  it("performs no delivery after the observed lease budget is exhausted", async () => {
-    let deliveries = 0
-    let releases = 0
-    const repository = {
-      claim: async () => ({
-        tenantId: "t",
-        taskId: "task",
-        dispatchId: "d",
-        runId: "r",
-        subjectId: "u",
-        requestId: "q",
-        idempotencyKey: "i",
-        identityAssertionRef: "a",
-        payload: {},
-        leaseOwner: "w",
-        leaseToken: "x",
-        fence: 1,
-        attemptCount: 1,
-        admissionUnknownSeen: false,
-        leaseRemainingMs: 400,
-        leaseObservedAt: performance.now() - 10,
-      }),
-      releaseNeverSent: async () => {
-        releases += 1
-        return true
-      },
-    }
-    const delivery = {
-      deliver: async () => {
-        deliveries += 1
-        return { outcome: "admitted" as const }
-      },
-    }
-    const runner = new ScheduledAgentDispatcher(repository as never, delivery, {
-      workerId: "w",
-      concurrency: 1,
+  for (const [name, remaining, elapsed] of [
+    ["performs no delivery after the observed lease budget is exhausted", 400, 10],
+    ["performs no delivery when elapsed time exhausts a lease initially above its settlement reserve", 1100, 700],
+  ] as const) {
+    it(name, async () => {
+      let deliveries = 0
+      let releases = 0
+      const repository = {
+        claim: async () => ({
+          tenantId: "t",
+          taskId: "task",
+          dispatchId: "d",
+          runId: "r",
+          subjectId: "u",
+          requestId: "q",
+          idempotencyKey: "i",
+          identityAssertionRef: "a",
+          payload: {},
+          leaseOwner: "w",
+          leaseToken: "x",
+          fence: 1,
+          attemptCount: 1,
+          admissionUnknownSeen: false,
+          leaseRemainingMs: remaining,
+          leaseObservedAt: performance.now() - elapsed,
+        }),
+        markAdmitted: async () => true,
+        releaseNeverSent: async () => {
+          releases += 1
+          return true
+        },
+      }
+      const delivery = {
+        deliver: async () => {
+          deliveries += 1
+          return { outcome: "admitted" as const }
+        },
+      }
+      const runner = new ScheduledAgentDispatcher(repository as never, delivery, {
+        workerId: "w",
+        concurrency: 1,
+      })
+      assert.equal(await runner.runOnce(), 0)
+      assert.equal(deliveries, 0)
+      assert.equal(releases, 1)
     })
-    assert.equal(await runner.runOnce(), 0)
-    assert.equal(deliveries, 0)
-    assert.equal(releases, 1)
-  })
+  }
   it("uses a bounded worker pool so an independent slow scope does not block another scope", async () => {
     let claims = 0
     let releaseSlow!: () => void

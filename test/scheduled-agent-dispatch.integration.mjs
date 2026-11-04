@@ -3,14 +3,25 @@ import { randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 import { Pool } from "pg"
-import { createPostgresBffOwnerResources } from "../dist/infrastructure/postgres/repositories.js"
 import { scheduledSourceEventDigest } from "../dist/application/scheduled-source-event-digest.js"
+import { assertBffPostgresUrl } from "../dist/config/runtime.js"
 import { buildScheduledAgentLaunch } from "../dist/infrastructure/clients/agent/launch.js"
 import { schedulerDispatchDigest, schedulerDispatchScope, schedulerOccurrenceIdentity } from "../dist/infrastructure/clients/scheduler/dispatch-identity.js"
 import { schedulerScheduleName } from "../dist/infrastructure/clients/scheduler/schedule.js"
-const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL,
-  redisUrl = process.env.KOKORO_TEST_REDIS_URL
-const integrationTest = postgresUrl && redisUrl ? test : test.skip
+import { PostgresScheduledAgentDispatchRepository } from "../dist/infrastructure/postgres/scheduled-agent-dispatch-repository.js"
+import { PostgresSchedulerDispatchReceiptRepository } from "../dist/infrastructure/postgres/scheduler-dispatch-receipt-repository.js"
+
+const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
+const integrationTest = postgresUrl ? test : test.skip
+
+function createDispatchOwnerPool() {
+  assertBffPostgresUrl(postgresUrl)
+  return new Pool({
+    connectionString: postgresUrl,
+    max: 10,
+    options: "-c search_path=kokoro_bff -c timezone=UTC",
+  })
+}
 
 async function waitForBlockedBy(pool, blockerPid) {
   const deadline = Date.now() + 3000
@@ -37,14 +48,15 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store
+  let ownerPool
   const tenant = "scheduled_gate"
   try {
     await pool.query(
       "DROP TABLE IF EXISTS bff_scheduled_agent_source_event,bff_scheduled_agent_dispatch,bff_scheduled_agent_scope,bff_agui_cursor_tombstone,bff_agui_event,bff_agui_source_event,bff_conversation_artifact,bff_agui_stream,bff_agent_cancellation_outbox,bff_agent_dispatch_outbox,bff_share,bff_message,bff_conversation,bff_idempotency_receipt,bff_scheduled_task_outbox,bff_scheduled_task,bff_project_instruction_revision,bff_project CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+    ownerPool = createDispatchOwnerPool()
+    const scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
     const task = "task",
       session = "scheduled:task",
       subject = "owner"
@@ -88,7 +100,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
         ],
       )
     await insert("a", "2026-09-01T12:00:02.000000000Z", "run_a")
-    const a = await store.scheduledAgentDispatch.claim({
+    const a = await scheduledAgentDispatch.claim({
       workerId: "worker",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -97,7 +109,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
     assert.equal(a?.runId, "run_a")
     await insert("b", "2026-09-01T12:00:01.000000000Z", "run_b")
     assert.equal(
-      await store.scheduledAgentDispatch.claim({
+      await scheduledAgentDispatch.claim({
         workerId: "other",
         leaseDurationMs: 5000,
         settlementReserveMs: 50,
@@ -126,14 +138,14 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
       `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES('ready',$1,$2,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z',$3,'qr','kr',$4,'run_ready','bff:x',$5::jsonb)`,
       [tenant, otherTask, subject, "d".repeat(64), launchPayload(otherTask, "run_ready", "qr")],
     )
-    const ready = await store.scheduledAgentDispatch.claim({
+    const ready = await scheduledAgentDispatch.claim({
       workerId: "ready_worker",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
       maxAttempts: 8,
     })
     assert.equal(ready?.runId, "run_ready")
-    assert.equal(await store.scheduledAgentDispatch.markNotAdmitted(ready, 0, "fixture_not_admitted"), true)
+    assert.equal(await scheduledAgentDispatch.markNotAdmitted(ready, 0, "fixture_not_admitted"), true)
 
     const orderedTask = "task_ordered"
     await pool.query("INSERT INTO bff_scheduled_agent_scope(tenant_id,task_id,session_id,subject_id) VALUES($1,$2,$3,$4)", [
@@ -162,13 +174,13 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
     await orderedInsert("f", "2026-09-01T12:00:00.000000010Z", "2026-09-01T12:00:00.000000010Z", "run_later")
     await orderedInsert("e", "2026-09-01T12:00:00.000000001Z", "2026-09-01T12:00:00.000000001Z", "run_earlier")
     const competing = await Promise.all([
-      store.scheduledAgentDispatch.claim({
+      scheduledAgentDispatch.claim({
         workerId: "left",
         leaseDurationMs: 5000,
         settlementReserveMs: 50,
         maxAttempts: 8,
       }),
-      store.scheduledAgentDispatch.claim({
+      scheduledAgentDispatch.claim({
         workerId: "right",
         leaseDurationMs: 5000,
         settlementReserveMs: 50,
@@ -177,34 +189,34 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
     ])
     assert.deepEqual(competing.map((claim) => claim?.runId ?? null).sort(), [null, "run_earlier"])
     const earlier = competing.find((claim) => claim !== null)
-    assert.equal(await store.scheduledAgentDispatch.markNotAdmitted(earlier, 0, "fixture_not_admitted"), true)
-    const later = await store.scheduledAgentDispatch.claim({
+    assert.equal(await scheduledAgentDispatch.markNotAdmitted(earlier, 0, "fixture_not_admitted"), true)
+    const later = await scheduledAgentDispatch.claim({
       workerId: "later",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
       maxAttempts: 8,
     })
     assert.equal(later?.runId, "run_later")
-    assert.equal(await store.scheduledAgentDispatch.markUnknown(later, 0, "timeout"), true)
-    const sticky = await store.scheduledAgentDispatch.claim({
+    assert.equal(await scheduledAgentDispatch.markUnknown(later, 0, "timeout"), true)
+    const sticky = await scheduledAgentDispatch.claim({
       workerId: "sticky",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
       maxAttempts: 8,
     })
     assert.equal(sticky?.runId, "run_later")
-    assert.equal(await store.scheduledAgentDispatch.markNotAdmitted(sticky, 0, "late_rejection"), true)
+    assert.equal(await scheduledAgentDispatch.markNotAdmitted(sticky, 0, "late_rejection"), true)
     assert.deepEqual((await pool.query("SELECT status,admission_unknown_seen FROM bff_scheduled_agent_dispatch WHERE dispatch_id='f'")).rows, [
       { status: "retryable", admission_unknown_seen: true },
     ])
-    const neverSent = await store.scheduledAgentDispatch.claim({
+    const neverSent = await scheduledAgentDispatch.claim({
       workerId: "never_sent",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
       maxAttempts: 8,
     })
     assert.equal(neverSent?.runId, "run_later")
-    assert.equal(await store.scheduledAgentDispatch.releaseNeverSent(neverSent, 0), true)
+    assert.equal(await scheduledAgentDispatch.releaseNeverSent(neverSent, 0), true)
     assert.deepEqual(
       (
         await pool.query(
@@ -223,7 +235,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
     await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1 AND task_id=$2", [tenant, orderedTask])
     await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2", [tenant, orderedTask])
 
-    const consumer = await store.scheduledAgentDispatch.claimConsumer({
+    const consumer = await scheduledAgentDispatch.claimConsumer({
       workerId: "consumer",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -248,7 +260,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
       payload_json: '{"status":"failed","code":"invented","retryable":false}',
     }
     await assert.rejects(
-      store.scheduledAgentDispatch.commitSourcePage(
+      scheduledAgentDispatch.commitSourcePage(
         consumer,
         [
           {
@@ -272,7 +284,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
     )
 
     await assert.rejects(
-      store.scheduledAgentDispatch.commitSourcePage(
+      scheduledAgentDispatch.commitSourcePage(
         consumer,
         [
           {
@@ -311,7 +323,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
       [],
     )
     assert.equal(
-      await store.scheduledAgentDispatch.commitSourcePage(
+      await scheduledAgentDispatch.commitSourcePage(
         consumer,
         [
           {
@@ -352,9 +364,9 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
       ),
       true,
     )
-    assert.equal(await store.scheduledAgentDispatch.markAdmitted(a), false)
+    assert.equal(await scheduledAgentDispatch.markAdmitted(a), false)
     assert.equal(
-      await store.scheduledAgentDispatch.claim({
+      await scheduledAgentDispatch.claim({
         workerId: "blocked_during_drain",
         leaseDurationMs: 5000,
         settlementReserveMs: 50,
@@ -362,7 +374,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
       }),
       null,
     )
-    const drainLease = await store.scheduledAgentDispatch.claimConsumer({
+    const drainLease = await scheduledAgentDispatch.claimConsumer({
       workerId: "drain_consumer",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -378,7 +390,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
       payload_json: "{}",
     }
     assert.equal(
-      await store.scheduledAgentDispatch.commitSourcePage(
+      await scheduledAgentDispatch.commitSourcePage(
         drainLease,
         [
           {
@@ -396,7 +408,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
       ),
       true,
     )
-    const b = await store.scheduledAgentDispatch.claim({
+    const b = await scheduledAgentDispatch.claim({
       workerId: "worker_b",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -409,7 +421,7 @@ integrationTest("scheduled scope fixes the active head and advances a session-le
       [{ active_run_id: "run_b", source_high_watermark: "3" }],
     )
   } finally {
-    if (store) await store.close().catch(() => undefined)
+    if (ownerPool) await ownerPool.end().catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_source_event WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1", [tenant]).catch(() => undefined)
@@ -427,7 +439,7 @@ integrationTest("expired dispatch lease fences the stale winner while never-sent
   const task = `task_${suffix}`
   const dispatch = `dispatch_${suffix}`
   const run = `run_${suffix}`
-  let store
+  let ownerPool
   try {
     await pool.query("INSERT INTO bff_scheduled_agent_scope(tenant_id,task_id,session_id,subject_id) VALUES($1,$2,$3,'owner')", [
       tenant,
@@ -438,8 +450,9 @@ integrationTest("expired dispatch lease fences the stale winner while never-sent
       `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES($1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','request','key',$4,$5,'bff:x','{}')`,
       [dispatch, tenant, task, "5".repeat(64), run],
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const stale = await store.scheduledAgentDispatch.claim({
+    ownerPool = createDispatchOwnerPool()
+    const scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
+    const stale = await scheduledAgentDispatch.claim({
       workerId: "stale",
       leaseDurationMs: 100,
       settlementReserveMs: 10,
@@ -447,7 +460,7 @@ integrationTest("expired dispatch lease fences the stale winner while never-sent
     })
     assert.ok(stale)
     await pool.query("SELECT pg_sleep(0.12)")
-    const winner = await store.scheduledAgentDispatch.claim({
+    const winner = await scheduledAgentDispatch.claim({
       workerId: "winner",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -455,9 +468,9 @@ integrationTest("expired dispatch lease fences the stale winner while never-sent
     })
     assert.equal(winner?.runId, run)
     assert.ok(winner.fence > stale.fence)
-    assert.equal(await store.scheduledAgentDispatch.releaseNeverSent(stale, 0), false)
-    assert.equal(await store.scheduledAgentDispatch.markAdmitted(stale), false)
-    assert.equal(await store.scheduledAgentDispatch.releaseNeverSent(winner, 0), true)
+    assert.equal(await scheduledAgentDispatch.releaseNeverSent(stale, 0), false)
+    assert.equal(await scheduledAgentDispatch.markAdmitted(stale), false)
+    assert.equal(await scheduledAgentDispatch.releaseNeverSent(winner, 0), true)
     assert.deepEqual(
       (
         await pool.query(
@@ -475,7 +488,7 @@ integrationTest("expired dispatch lease fences the stale winner while never-sent
       ],
     )
   } finally {
-    if (store) await store.close().catch(() => undefined)
+    if (ownerPool) await ownerPool.end().catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.end()
@@ -489,11 +502,12 @@ integrationTest("consumer claim locks scope then active dispatch and starts its 
   })
   const tenant = "scheduled_consumer_barrier"
   const task = "task_consumer_barrier"
-  let store
+  let ownerPool
   let locker
   let pendingClaim
   try {
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+    ownerPool = createDispatchOwnerPool()
+    const scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
     await pool.query(
       "INSERT INTO bff_scheduled_agent_scope(tenant_id,task_id,session_id,subject_id,active_dispatch_id,active_run_id,consumer_next_poll_at) VALUES($1,$2,$3,$4,'barrier_dispatch','run_barrier','2000-01-01')",
       [tenant, task, `scheduled:${task}`, "owner"],
@@ -517,7 +531,7 @@ integrationTest("consumer claim locks scope then active dispatch and starts its 
     const blockerPid = (await locker.query("SELECT pg_backend_pid() pid")).rows[0].pid
     await locker.query("SELECT 1 FROM bff_scheduled_agent_dispatch WHERE dispatch_id='barrier_dispatch' FOR UPDATE")
     await locker.query("UPDATE bff_scheduled_agent_dispatch SET status='terminal',completed_at=clock_timestamp() WHERE dispatch_id='barrier_dispatch'")
-    pendingClaim = store.scheduledAgentDispatch.claimConsumer({
+    pendingClaim = scheduledAgentDispatch.claimConsumer({
       workerId: "terminal_drain_consumer",
       leaseDurationMs: 100,
       settlementReserveMs: 10,
@@ -531,7 +545,7 @@ integrationTest("consumer claim locks scope then active dispatch and starts its 
     assert.ok(lease)
     assert.equal(lease.taskId, task)
     assert.ok(lease.leaseRemainingMs > 10)
-    assert.equal(await store.scheduledAgentDispatch.releaseConsumer(lease, 0), true)
+    assert.equal(await scheduledAgentDispatch.releaseConsumer(lease, 0), true)
     assert.deepEqual(
       (
         await pool.query("SELECT active_dispatch_id,active_run_id,consumer_lease_token FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2", [
@@ -553,7 +567,7 @@ integrationTest("consumer claim locks scope then active dispatch and starts its 
       locker.release()
     }
     await pendingClaim?.catch(() => undefined)
-    if (store) await store.close().catch(() => undefined)
+    if (ownerPool) await ownerPool.end().catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.end()
@@ -570,8 +584,8 @@ integrationTest("source resumes from non-zero N plus one across a real repositor
   const task = `task_${suffix}`
   const dispatch = `dispatch_${suffix}`
   const run = `run_${suffix}`
-  let firstStore
-  let restartedStore
+  let firstOwnerPool
+  let restartedOwnerPool
   try {
     await pool.query(
       "INSERT INTO bff_scheduled_agent_scope(tenant_id,task_id,session_id,subject_id,active_dispatch_id,active_run_id,source_high_watermark,consumer_next_poll_at) VALUES($1,$2,$3,'owner',$4,$5,7,'2000-01-01')",
@@ -586,8 +600,9 @@ integrationTest("source resumes from non-zero N plus one across a real repositor
          SELECT $1,$2,n,'history_'||n,$3,'kokoro-agent',repeat('a',64),clock_timestamp(),'activity','{}'::jsonb FROM generate_series(1,7) n`,
       [tenant, task, run],
     )
-    firstStore = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const firstLease = await firstStore.scheduledAgentDispatch.claimConsumer({
+    firstOwnerPool = createDispatchOwnerPool()
+    const firstScheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: firstOwnerPool })
+    const firstLease = await firstScheduledAgentDispatch.claimConsumer({
       workerId: "before_restart",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -602,7 +617,7 @@ integrationTest("source resumes from non-zero N plus one across a real repositor
       payload_json: '{"status":"completed"}',
     }
     assert.equal(
-      await firstStore.scheduledAgentDispatch.commitSourcePage(
+      await firstScheduledAgentDispatch.commitSourcePage(
         firstLease,
         [
           {
@@ -620,10 +635,12 @@ integrationTest("source resumes from non-zero N plus one across a real repositor
       ),
       true,
     )
-    await firstStore.close()
-    firstStore = undefined
-    restartedStore = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const restartedLease = await restartedStore.scheduledAgentDispatch.claimConsumer({
+    const firstPoolToClose = firstOwnerPool
+    firstOwnerPool = undefined
+    await firstPoolToClose.end()
+    restartedOwnerPool = createDispatchOwnerPool()
+    const restartedScheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: restartedOwnerPool })
+    const restartedLease = await restartedScheduledAgentDispatch.claimConsumer({
       workerId: "after_restart",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -638,7 +655,7 @@ integrationTest("source resumes from non-zero N plus one across a real repositor
       payload_json: "{}",
     }
     assert.equal(
-      await restartedStore.scheduledAgentDispatch.commitSourcePage(
+      await restartedScheduledAgentDispatch.commitSourcePage(
         restartedLease,
         [
           {
@@ -672,8 +689,8 @@ integrationTest("source resumes from non-zero N plus one across a real repositor
       ],
     )
   } finally {
-    if (firstStore) await firstStore.close().catch(() => undefined)
-    if (restartedStore) await restartedStore.close().catch(() => undefined)
+    if (firstOwnerPool) await firstOwnerPool.end().catch(() => undefined)
+    if (restartedOwnerPool) await restartedOwnerPool.end().catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_source_event WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1", [tenant]).catch(() => undefined)
@@ -691,7 +708,7 @@ integrationTest("source gap and run or event identity conflicts roll back cursor
   const task = `task_${suffix}`
   const dispatch = `dispatch_${suffix}`
   const run = `run_${suffix}`
-  let store
+  let ownerPool
   try {
     await pool.query(
       "INSERT INTO bff_scheduled_agent_scope(tenant_id,task_id,session_id,subject_id,active_dispatch_id,active_run_id,consumer_next_poll_at) VALUES($1,$2,$3,'owner',$4,$5,'2000-01-01')",
@@ -701,8 +718,9 @@ integrationTest("source gap and run or event identity conflicts roll back cursor
       `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,status,admitted_at) VALUES($1,$2,$3,'2026-09-01T12:00:00Z','2026-09-01T12:00:00.000000000Z','owner','request','key',$4,$5,'bff:x','{}','admitted',clock_timestamp())`,
       [dispatch, tenant, task, "2".repeat(64), run],
     )
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const lease = await store.scheduledAgentDispatch.claimConsumer({
+    ownerPool = createDispatchOwnerPool()
+    const scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
+    const lease = await scheduledAgentDispatch.claimConsumer({
       workerId: "conflict",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -762,7 +780,7 @@ integrationTest("source gap and run or event identity conflicts roll back cursor
       ],
     ]
     for (const batch of invalidBatches) {
-      await assert.rejects(store.scheduledAgentDispatch.commitSourcePage(lease, batch, batch[0].sourceSequence, false), /SOURCE_(GAP|IDENTITY_INVALID)/)
+      await assert.rejects(scheduledAgentDispatch.commitSourcePage(lease, batch, batch[0].sourceSequence, false), /SOURCE_(GAP|IDENTITY_INVALID)/)
       assert.deepEqual(
         (await pool.query("SELECT source_high_watermark::text FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2", [tenant, task])).rows,
         [{ source_high_watermark: "0" }],
@@ -777,7 +795,7 @@ integrationTest("source gap and run or event identity conflicts roll back cursor
       [tenant, task, base.chat_event_id, run, "e".repeat(64)],
     )
     await assert.rejects(
-      store.scheduledAgentDispatch.commitSourcePage(
+      scheduledAgentDispatch.commitSourcePage(
         lease,
         [
           {
@@ -809,7 +827,7 @@ integrationTest("source gap and run or event identity conflicts roll back cursor
       [tenant, task, `stored_${suffix}`, run, "d".repeat(64)],
     )
     await assert.rejects(
-      store.scheduledAgentDispatch.commitSourcePage(
+      scheduledAgentDispatch.commitSourcePage(
         lease,
         [
           {
@@ -833,7 +851,7 @@ integrationTest("source gap and run or event identity conflicts roll back cursor
     )
     assert.equal((await pool.query("SELECT 1 FROM bff_scheduled_agent_source_event WHERE tenant_id=$1", [tenant])).rowCount, 1)
   } finally {
-    if (store) await store.close().catch(() => undefined)
+    if (ownerPool) await ownerPool.end().catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_source_event WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1", [tenant]).catch(() => undefined)
@@ -849,7 +867,7 @@ integrationTest("a locked slow scope does not block another scope and one scope 
   })
   const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
   const tenant = `scheduled_parallel_${suffix}`
-  let store
+  let ownerPool
   let locker
   try {
     for (const name of ["slow", "fast"]) {
@@ -864,11 +882,12 @@ integrationTest("a locked slow scope does not block another scope and one scope 
         [`${name}_dispatch_${suffix}`, tenant, task, `${name}_request`, `${name}_key`, (name === "slow" ? "3" : "4").repeat(64), `${name}_run_${suffix}`],
       )
     }
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+    ownerPool = createDispatchOwnerPool()
+    const scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
     locker = await pool.connect()
     await locker.query("BEGIN")
     await locker.query("SELECT 1 FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE", [tenant, `slow_${suffix}`])
-    const fast = await store.scheduledAgentDispatch.claim({
+    const fast = await scheduledAgentDispatch.claim({
       workerId: "fast_worker",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -876,13 +895,13 @@ integrationTest("a locked slow scope does not block another scope and one scope 
     })
     assert.equal(fast?.taskId, `fast_${suffix}`)
     const sameScope = await Promise.all([
-      store.scheduledAgentDispatch.claim({
+      scheduledAgentDispatch.claim({
         workerId: "same_left",
         leaseDurationMs: 5000,
         settlementReserveMs: 50,
         maxAttempts: 8,
       }),
-      store.scheduledAgentDispatch.claim({
+      scheduledAgentDispatch.claim({
         workerId: "same_right",
         leaseDurationMs: 5000,
         settlementReserveMs: 50,
@@ -894,13 +913,13 @@ integrationTest("a locked slow scope does not block another scope and one scope 
     locker.release()
     locker = undefined
     const slowWinners = await Promise.all([
-      store.scheduledAgentDispatch.claim({
+      scheduledAgentDispatch.claim({
         workerId: "slow_left",
         leaseDurationMs: 5000,
         settlementReserveMs: 50,
         maxAttempts: 8,
       }),
-      store.scheduledAgentDispatch.claim({
+      scheduledAgentDispatch.claim({
         workerId: "slow_right",
         leaseDurationMs: 5000,
         settlementReserveMs: 50,
@@ -913,7 +932,7 @@ integrationTest("a locked slow scope does not block another scope and one scope 
       await locker.query("ROLLBACK").catch(() => undefined)
       locker.release()
     }
-    if (store) await store.close().catch(() => undefined)
+    if (ownerPool) await ownerPool.end().catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.end()
@@ -933,7 +952,7 @@ integrationTest("active terminal and next claim serialize behind the exact scope
   const bDispatch = `b_dispatch_${suffix}`
   const aRun = `a_run_${suffix}`
   const bRun = `b_run_${suffix}`
-  let store
+  let ownerPool
   let locker
   let terminalOperation
   let claimOperation
@@ -951,8 +970,9 @@ integrationTest("active terminal and next claim serialize behind the exact scope
         [dispatch, tenant, task, order, `request_${dispatch}`, `key_${dispatch}`, (status === "admitted" ? "6" : "7").repeat(64), run, status],
       )
     }
-    store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
-    const consumer = await store.scheduledAgentDispatch.claimConsumer({
+    ownerPool = createDispatchOwnerPool()
+    const scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
+    const consumer = await scheduledAgentDispatch.claimConsumer({
       workerId: "terminal",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -970,7 +990,7 @@ integrationTest("active terminal and next claim serialize behind the exact scope
     await locker.query("BEGIN")
     const blockerPid = (await locker.query("SELECT pg_backend_pid() pid")).rows[0].pid
     await locker.query("SELECT 1 FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE", [tenant, task])
-    terminalOperation = store.scheduledAgentDispatch.commitSourcePage(
+    terminalOperation = scheduledAgentDispatch.commitSourcePage(
       consumer,
       [
         {
@@ -987,7 +1007,7 @@ integrationTest("active terminal and next claim serialize behind the exact scope
       true,
     )
     await waitForBlockedCount(pool, blockerPid, 1)
-    claimOperation = store.scheduledAgentDispatch.claim({
+    claimOperation = scheduledAgentDispatch.claim({
       workerId: "next",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -1003,7 +1023,7 @@ integrationTest("active terminal and next claim serialize behind the exact scope
     locker = undefined
     assert.equal(await terminalOperation, true)
     terminalOperation = undefined
-    const next = await store.scheduledAgentDispatch.claim({
+    const next = await scheduledAgentDispatch.claim({
       workerId: "next_after_terminal",
       leaseDurationMs: 5000,
       settlementReserveMs: 50,
@@ -1032,7 +1052,7 @@ integrationTest("active terminal and next claim serialize behind the exact scope
       locker.release()
     }
     await Promise.allSettled([terminalOperation, claimOperation].filter(Boolean))
-    if (store) await store.close().catch(() => undefined)
+    if (ownerPool) await ownerPool.end().catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_source_event WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1", [tenant]).catch(() => undefined)
@@ -1099,7 +1119,7 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
         const owner = `owner_${suffix}`
         const key = `key_${suffix}`
         const receiptScope = schedulerDispatchScope(tenant, key)
-        let store
+        let ownerPool
         let locker
         let acceptOperation
         try {
@@ -1116,7 +1136,9 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
               owner,
             ])
           }
-          store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+          ownerPool = createDispatchOwnerPool()
+          const scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
+          const schedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(ownerPool)
           const schedule = schedulerScheduleName(task)
           const occurrence = "2026-09-01T12:00:00.123456789Z"
           const digest = schedulerDispatchDigest({
@@ -1125,7 +1147,7 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
             occurrence,
             body: { tenant_id: tenant, task_id: task, owner_id: owner, prompt: "go", auto_approve: false, timezone: "UTC" },
           })
-          const claimed = await store.schedulerDispatchReceipts.claim(receiptScope, digest)
+          const claimed = await schedulerDispatchReceipts.claim(receiptScope, digest)
           assert.equal(claimed.outcome, "claimed")
           const launch = buildScheduledAgentLaunch({
             identity: { namespace: tenant, userId: owner },
@@ -1144,7 +1166,7 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
             taskRevision: 1,
             launch: { requestId: `request_${suffix}`, ...launch },
           }
-          const prepared = await store.schedulerDispatchReceipts.prepareSnapshot(claimed.claim, snapshot)
+          const prepared = await schedulerDispatchReceipts.prepareSnapshot(claimed.claim, snapshot)
           assert.ok(prepared)
           const input = {
             claim: { ...claimed.claim, ...prepared, snapshot },
@@ -1174,7 +1196,7 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
           const validBeforeAccept = await pool.query("SELECT clock_timestamp() < $1::timestamptz AS valid", [leaseUntil])
           assert.equal(validBeforeAccept.rows[0].valid, true, "accept must start with a live receipt lease")
           // Settle failures immediately as data so barrier failures cannot leave an unhandled rejection.
-          acceptOperation = store.scheduledAgentDispatch.accept(input).then(
+          acceptOperation = scheduledAgentDispatch.accept(input).then(
             (accepted) => ({ accepted }),
             (error) => ({ error }),
           )
@@ -1211,11 +1233,15 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
             assert.equal(after.receipt[0].status, 202)
             assert.equal(after.receipt[0].response_body.state, "terminal")
             assert.deepEqual(after.receipt[0].response_body.response, input.response)
-            await store.close()
-            store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+            const poolToClose = ownerPool
+            ownerPool = undefined
+            await poolToClose.end()
+            ownerPool = createDispatchOwnerPool()
+            const restartedScheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
+            const restartedSchedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(ownerPool)
             // This is the same terminal claim branch that returns the original callback ACK.
-            assert.deepEqual(await store.schedulerDispatchReceipts.claim(receiptScope, digest), { outcome: "terminal", response: input.response })
-            assert.deepEqual(await store.scheduledAgentDispatch.accept(input), { outcome: "claim_lost" })
+            assert.deepEqual(await restartedSchedulerDispatchReceipts.claim(receiptScope, digest), { outcome: "terminal", response: input.response })
+            assert.deepEqual(await restartedScheduledAgentDispatch.accept(input), { outcome: "claim_lost" })
             assert.deepEqual(await scheduledAcceptFacts(pool, tenant, task, receiptScope), after)
           }
         } finally {
@@ -1224,7 +1250,7 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
             locker.release()
           }
           if (acceptOperation) await acceptOperation
-          if (store) await store.close()
+          if (ownerPool) await ownerPool.end()
           await pool.query("DELETE FROM bff_scheduled_agent_source_event WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
           await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
           await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
@@ -1259,7 +1285,7 @@ function r67AcceptanceRejections(requestId) {
         const owner = `owner_${suffix}`
         const key = `key_${suffix}`
         const receiptScope = schedulerDispatchScope(tenant, key)
-        let store
+        let ownerPool
         let locker
         let acceptOperation
         try {
@@ -1268,7 +1294,9 @@ function r67AcceptanceRejections(requestId) {
              VALUES($1,$2,$3,'Rejection lease','go','daily','08:00','UTC','paused',false)`,
             [task, tenant, owner],
           )
-          store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+          ownerPool = createDispatchOwnerPool()
+          const scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
+          const schedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(ownerPool)
           const schedule = schedulerScheduleName(task)
           const occurrence = "2026-09-01T12:00:00.123456789Z"
           const digest = schedulerDispatchDigest({
@@ -1277,7 +1305,7 @@ function r67AcceptanceRejections(requestId) {
             occurrence,
             body: { tenant_id: tenant, task_id: task, owner_id: owner, prompt: "go", auto_approve: false, timezone: "UTC" },
           })
-          const claimed = await store.schedulerDispatchReceipts.claim(receiptScope, digest)
+          const claimed = await schedulerDispatchReceipts.claim(receiptScope, digest)
           assert.equal(claimed.outcome, "claimed")
           const launch = buildScheduledAgentLaunch({
             identity: { namespace: tenant, userId: owner },
@@ -1296,7 +1324,7 @@ function r67AcceptanceRejections(requestId) {
             taskRevision: 1,
             launch: { requestId: `request_${suffix}`, ...launch },
           }
-          const prepared = await store.schedulerDispatchReceipts.prepareSnapshot(claimed.claim, snapshot)
+          const prepared = await schedulerDispatchReceipts.prepareSnapshot(claimed.claim, snapshot)
           assert.ok(prepared)
           const input = {
             claim: { ...claimed.claim, ...prepared, snapshot },
@@ -1326,7 +1354,7 @@ function r67AcceptanceRejections(requestId) {
           const validBeforeAccept = await pool.query("SELECT clock_timestamp() < $1::timestamptz AS valid", [leaseUntil])
           assert.equal(validBeforeAccept.rows[0].valid, true, "accept must start with a live receipt lease")
           // Settle failures immediately as data so barrier failures cannot leave an unhandled rejection.
-          acceptOperation = store.scheduledAgentDispatch.accept(input).then(
+          acceptOperation = scheduledAgentDispatch.accept(input).then(
             (accepted) => ({ accepted }),
             (error) => ({ error }),
           )
@@ -1358,14 +1386,18 @@ function r67AcceptanceRejections(requestId) {
             assert.equal(after.receipt[0].status, 409)
             assert.equal(after.receipt[0].response_body.state, "terminal")
             assert.deepEqual(after.receipt[0].response_body.response, input.rejections.task_not_active)
-            await store.close()
-            store = createPostgresBffOwnerResources(postgresUrl, redisUrl)
+            const poolToClose = ownerPool
+            ownerPool = undefined
+            await poolToClose.end()
+            ownerPool = createDispatchOwnerPool()
+            const restartedScheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
+            const restartedSchedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(ownerPool)
             // Reopening must return the same durable rejection, not attempt to enqueue again.
-            assert.deepEqual(await store.schedulerDispatchReceipts.claim(receiptScope, digest), {
+            assert.deepEqual(await restartedSchedulerDispatchReceipts.claim(receiptScope, digest), {
               outcome: "terminal",
               response: input.rejections.task_not_active,
             })
-            assert.deepEqual(await store.scheduledAgentDispatch.accept(input), { outcome: "claim_lost" })
+            assert.deepEqual(await restartedScheduledAgentDispatch.accept(input), { outcome: "claim_lost" })
             assert.deepEqual(await scheduledAcceptFacts(pool, tenant, task, receiptScope), after)
           }
         } finally {
@@ -1374,7 +1406,7 @@ function r67AcceptanceRejections(requestId) {
             locker.release()
           }
           if (acceptOperation) await acceptOperation
-          if (store) await store.close()
+          if (ownerPool) await ownerPool.end()
           await pool.query("DELETE FROM bff_scheduled_agent_source_event WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
           await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
           await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
