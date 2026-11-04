@@ -3,14 +3,15 @@ import { createServer, type IncomingMessage, type Server } from "node:http"
 import { afterEach, test } from "node:test"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
-import { createBffServer } from "../dist/bootstrap/server.js"
 import type { BffConfig } from "../src/config/runtime.ts"
+import { startAccountTestApp } from "./doubles/account-app.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
 
 const credentials = await fixtureIamCredentials("tenant-verified")
 
 const servers: Server[] = []
+const appClosers: Array<() => Promise<void>> = []
 async function listen(server: Server): Promise<string> {
   servers.push(server)
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
@@ -19,15 +20,18 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`
 }
 afterEach(async () => {
-  await Promise.all(
-    servers.splice(0).map(
+  const results = await Promise.allSettled([
+    ...appClosers.splice(0).map(async (close) => close()),
+    ...servers.splice(0).map(
       (server) =>
         new Promise<void>((resolve) => {
           server.closeAllConnections()
           server.close(() => resolve())
         }),
     ),
-  )
+  ])
+  const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+  if (failures.length > 0) throw new AggregateError(failures, "Team HTTP fixture cleanup failed")
 })
 function config(iamBaseUrl: string): BffConfig {
   return {
@@ -98,12 +102,10 @@ const routes = [
     data: { member_id: "member-self", status: "left" },
   },
 ] as const
-function bff(owner: string): Server {
-  return createBffServer(config(owner), {
-    businessStore: null,
-    readiness: async () => undefined,
-    sessionAdmission: new SessionAdmissionDouble({ "team-token": { namespace: "tenant-verified", userId: "user-1" } }),
-  })
+async function startTeamBff(owner: string): Promise<string> {
+  const app = await startAccountTestApp(config(owner), new SessionAdmissionDouble({ "team-token": { namespace: "tenant-verified", userId: "user-1" } }))
+  appClosers.push(() => app.close())
+  return app.base
 }
 function ownerHeaders() {
   return { "content-type": "application/json", "x-request-id": "iam-team-write-1" }
@@ -120,7 +122,7 @@ test("six Team mutations use only admitted tenant, actor and service credential,
       response.writeHead(route ? 200 : 404, ownerHeaders()).end(JSON.stringify({ data: route?.data ?? {} }))
     }),
   )
-  const app = await listen(bff(owner))
+  const app = await startTeamBff(owner)
   for (const route of routes) {
     const response = await fetch(`${app}${route.path}`, {
       method: route.method,
@@ -157,7 +159,7 @@ test("Team mutation rejects extra identity, invalid body, query and absent sessi
       response.writeHead(500).end()
     }),
   )
-  const app = await listen(bff(owner))
+  const app = await startTeamBff(owner)
   const cases = [
     ["/v1/team/invitations", "POST", { email: "new@example.test", roles: ["member"], tenant_id: "tenant-attacker" }],
     ["/v1/team/invitations", "POST", { email: "bad", roles: ["member"] }],
@@ -186,7 +188,7 @@ test("Team preserves owner business 409 and fails closed on malformed owner enve
   let status = 409
   let payload: object = { error: { code: "LAST_OWNER", message: "private", retryable: false, details: [] } }
   const owner = await listen(createServer((_request, response) => response.writeHead(status, ownerHeaders()).end(JSON.stringify(payload))))
-  const app = await listen(bff(owner))
+  const app = await startTeamBff(owner)
   const call = () => fetch(`${app}/v1/team/members/me`, { method: "DELETE", headers })
   let response = await call()
   assert.equal(response.status, 409)
@@ -212,7 +214,7 @@ test("Team preserves owner not-found codes, validates status-code pairs and boun
         .end(JSON.stringify({ error: { code, message: "private owner detail", retryable: status === 429, details: [] } }))
     }),
   )
-  const app = await listen(bff(owner))
+  const app = await startTeamBff(owner)
   const call = () =>
     fetch(`${app}/v1/team/members/member-1/roles`, {
       method: "PUT",
@@ -259,7 +261,7 @@ test("Team mutation has no automatic retry on an uncertain owner result", async 
       response.destroy()
     }),
   )
-  const app = await listen(bff(owner))
+  const app = await startTeamBff(owner)
   const response = await fetch(`${app}/v1/team/members/me`, { method: "DELETE", headers })
   assert.equal(response.status, 503)
   assert.equal(calls, 1)
@@ -272,7 +274,7 @@ test("Team mutation still rejects malformed owner media type and request ID with
       response.writeHead(200, responseHeaders).end(JSON.stringify({ data: { invitation_id: "invite-1", status: "pending" } }))
     }),
   )
-  const app = await listen(bff(owner))
+  const app = await startTeamBff(owner)
   const call = () =>
     fetch(`${app}/v1/team/invitations`, {
       method: "POST",
@@ -313,7 +315,7 @@ test("real Team write service401 is dependency503 while unknown, malformed or wr
       reply.writeHead(status, ownerHeaders()).end(JSON.stringify({ error }))
     }),
   )
-  const app = await listen(bff(owner))
+  const app = await startTeamBff(owner)
   for (const [wireStatus, code, extra, expectedStatus] of [
     [401, "bff_user_context_service_unauthenticated", {}, 503],
     [401, "UNKNOWN_SERVICE_DENIAL", {}, 502],

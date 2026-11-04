@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { createServer, request as nodeRequest } from "node:http"
 import test from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
+import { startAccountTestApp } from "./doubles/account-app.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 import { fixtureIamCredentials, TEST_IAM_ACCOUNT_SESSIONS_SECRET } from "./doubles/iam-credentials.ts"
 
@@ -66,14 +66,17 @@ async function fixture(t, body) {
     upstreams: {},
   }
   const admission = new SessionAdmissionDouble({ "account-token": { namespace: "tenant-verified", userId: "user-one" } })
-  const bff = createBffServer(config, { businessStore: null, readiness: async () => undefined, sessionAdmission: admission })
-  const base = await listen(bff)
+  let bff
   t.after(async () => {
-    for (const server of [bff, owner]) {
-      server.closeAllConnections()
-      await new Promise((resolve) => server.close(resolve))
+    try {
+      await bff?.close()
+    } finally {
+      owner.closeAllConnections()
+      await new Promise((resolve) => owner.close(resolve))
     }
   })
+  bff = await startAccountTestApp(config, admission)
+  const { base } = bff
   return { base, seen, admission, ownerClosed: () => ownerClosed }
 }
 
