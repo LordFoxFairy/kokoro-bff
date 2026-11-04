@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Module } from "@nestjs/common"
+import { Controller, Get, Inject, Module, ServiceUnavailableException } from "@nestjs/common"
 import { ReadinessIndicator } from "../../common/lifecycle/readiness.indicator.js"
 import { DatabaseModule } from "../../common/database/database.module.js"
 import { BFF_CONFIG } from "../../common/tokens.js"
@@ -18,8 +18,12 @@ class HealthController {
 
   @Get("readyz")
   public async ready(): Promise<{ status: "ok"; service: "kokoro-bff"; mode: BffConfig["mode"] }> {
-    await this.readiness.assertReady()
-    return { status: "ok", service: "kokoro-bff", mode: this.config.mode }
+    try {
+      await this.readiness.assertReady()
+    } catch {
+      throw new ServiceUnavailableException(this.health())
+    }
+    return this.health()
   }
 }
 

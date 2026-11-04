@@ -64,6 +64,58 @@ test("the compiled production AppModule resolves its real provider graph without
   }
 })
 
+test("HealthModule preserves the probe response when readiness is blocked", async (t) => {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE } = await import("../dist/common/tokens.js")
+  const { loadConfig } = await import("../dist/config/runtime.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { HealthModule } = await import("../dist/modules/health/health.module.js")
+  for (const { name, iamConfigured, databaseReady, expectedStatus, expectedReads } of [
+    { name: "IAM missing", iamConfigured: false, databaseReady: true, expectedStatus: 503, expectedReads: 0 },
+    { name: "database unavailable", iamConfigured: true, databaseReady: false, expectedStatus: 503, expectedReads: 1 },
+    { name: "ready", iamConfigured: true, databaseReady: true, expectedStatus: 200, expectedReads: 1 },
+  ]) {
+    await t.test(name, async (t) => {
+      const config = loadConfig({
+        KOKORO_BFF_SHARED_SECRET: "health-probe-test-only",
+        KOKORO_BFF_POSTGRES_URL: "postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=kokoro_bff",
+        KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:1/8",
+        KOKORO_AGENT_ENABLED: "false",
+        ...(iamConfigured ? { KOKORO_IAM_BASE_URL: "http://127.0.0.1:1" } : {}),
+      })
+      let readinessReads = 0
+      const unexpectedIo = (): never => assert.fail("HealthModule must not access PostgreSQL or Redis directly")
+      const module = await Test.createTestingModule({ imports: [HealthModule] })
+        .overrideProvider(BFF_CONFIG)
+        .useValue(config)
+        .overrideProvider(BFF_DATABASE)
+        .useValue({
+          pool: { query: unexpectedIo, connect: unexpectedIo },
+          ready: async () => {
+            readinessReads++
+            if (!databaseReady) throw new Error("readiness fixture must not be disclosed")
+          },
+        })
+        .compile()
+      const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+      t.after(async () => {
+        app.getHttpServer().closeAllConnections()
+        await app.close()
+      })
+      await app.listen(0, "127.0.0.1")
+      const base = await app.getUrl()
+      const body = { status: "ok", service: "kokoro-bff", mode: "live" }
+      const health = await fetch(base + "/healthz", { signal: AbortSignal.timeout(2000) })
+      assert.deepEqual({ status: health.status, body: await health.json() }, { status: 200, body })
+      assert.equal(readinessReads, 0)
+      const readiness = await fetch(base + "/readyz", { signal: AbortSignal.timeout(2000) })
+      assert.equal(readinessReads, expectedReads)
+      assert.deepEqual({ status: readiness.status, body: await readiness.json() }, { status: expectedStatus, body })
+    })
+  }
+})
+
 test("production Nest listener begins worker drain during an active request and retains resources until both settle", { timeout: 10_000 }, async (t) => {
   await import("reflect-metadata")
   const { Test } = await import("@nestjs/testing")
