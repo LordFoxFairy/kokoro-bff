@@ -12,6 +12,8 @@ import { send } from "../response.js"
 
 function messageFault(error: unknown): { status: number; code: string; message: string } | null {
   if (!(error instanceof Error)) return null
+  if (error.message === "request_body_too_large")
+    return { status: 413, code: "request_body_too_large", message: "The Message and Project instruction exceed the execution request limit" }
   if (error.message === "skill_installation_response_invalid")
     return { status: 502, code: "skill_installation_response_invalid", message: "Installation owner returned an invalid response" }
   if (error instanceof ConnectError && error.code === Code.PermissionDenied)

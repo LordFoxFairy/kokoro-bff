@@ -6313,3 +6313,66 @@ integrationTest("A03 interrupt admits one successor and one exact cancellation u
     }
   }
 })
+
+integrationTest("A06 Project instructions freeze at the first canonical Message acceptance", { timeout: 20_000 }, async () => {
+  const tenant = `a06_instruction_${randomUUID()}`
+  const subject = "a06-owner"
+  const scope = { tenantId: tenant, subjectId: subject }
+  const projectSession = `conv_${randomUUID()}`
+  const directSession = `conv_${randomUUID()}`
+  const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+  const projects = createProjectMutationStore(database.pool)
+  const v1 = "  A06 private Project revision one — 原文\nsecond line  "
+  const v2 = "A06 private Project revision two — 次の版"
+  const headers = auth(tenant, subject)
+  const responseJson = async (url, init, expected) => {
+    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(8000) })
+    const body = await response.json()
+    assert.equal(response.status, expected, JSON.stringify(body))
+    return body.data
+  }
+  try {
+    await database.ready()
+    await app.listen(0, "127.0.0.1")
+    const base = await app.getUrl()
+    const send = (session, key, content, identity = headers, status = 202) => responseJson(
+      `${base}/v1/sessions/${session}/messages`,
+      { method: "POST", headers: { ...identity, "idempotency-key": key, "content-type": "application/json" },
+        body: JSON.stringify({ content, selected_skill_source_refs: [] }) },
+      status,
+    )
+    const project = await projects.create(scope, "A06 acceptance project", "")
+    assert.equal((await projects.updateInstruction(scope, project.id, v1)).instruction, v1)
+    await database.pool.query(
+      "INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title) VALUES ($1,$2,$3,$4,'Project instruction freeze')",
+      [projectSession, tenant, subject, project.id],
+    )
+    const first = await send(projectSession, "first", "Public first input")
+    assert.equal((await projects.updateInstruction(scope, project.id, v2)).instruction, v2)
+    assert.deepEqual(await send(projectSession, "first", "Public first input"), first)
+    const next = await send(projectSession, "next", "Public next input")
+    const direct = await send(directSession, "direct", "Public direct input")
+    await send(projectSession, "wrong-owner", "Other subject", auth(tenant, "other-subject"), 404)
+    const overLimit = "x".repeat(1024 * 1024 - 4096)
+    await projects.updateInstruction(scope, project.id, overLimit)
+    await send(projectSession, "too-large", "y".repeat(8192), headers, 413)
+    assert.deepEqual(await send(projectSession, "first", "Public first input"), first)
+    const { rows } = await database.pool.query(
+      "SELECT run_id, payload->'launch' AS launch FROM bff_agent_dispatch_outbox WHERE tenant_id=$1",
+      [tenant],
+    )
+    assert.equal(rows.length, 3)
+    const byRun = new Map(rows.map(({ run_id, launch }) => [run_id, launch]))
+    assert.equal(byRun.get(first.run_id).project_ref, project.id)
+    assert.equal(byRun.get(first.run_id).project_instruction, v1)
+    assert.equal(byRun.get(next.run_id).project_instruction, v2)
+    assert.equal(Object.hasOwn(byRun.get(direct.run_id), "project_instruction"), false)
+    const visible = await responseJson(`${base}/v1/sessions/${projectSession}?project_ref=${encodeURIComponent(project.id)}`, { headers }, 200)
+    assert.equal(JSON.stringify(visible).includes("A06 private Project revision"), false)
+  } finally {
+    for (const table of ["bff_agui_event", "bff_agui_stream", "bff_agent_dispatch_outbox", "bff_message", "bff_conversation", "bff_project_instruction_revision", "bff_project"]) {
+      await database.pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant])
+    }
+    await app.close()
+  }
+})

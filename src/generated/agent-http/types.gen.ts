@@ -76,6 +76,10 @@ export type LaunchRequest = {
       }>
     }
   }
+  /**
+   * Private Project owner instruction frozen for this Run. Valid only for trusted user chat with project_ref. Omit when absent; blank, invalid Unicode and NUL text are rejected. Not a Message, trace field or tool authority.
+   */
+  project_instruction?: string
 }
 
 export type LaunchReceipt = {

@@ -474,24 +474,29 @@ export async function commitChatTurn(
         )
         if (latest.rows[0]?.message_id !== command.regeneration.sourceMessageId || active.rows.length > 0) throw Error("MESSAGE_REGENERATION_NOT_READY")
       }
-      if (command.skillSelection !== undefined) {
-        if (command.skillSelection.projectId !== scope.canonicalProjectId) throw new Error("CHAT_SKILL_SELECTION_CHANGED")
-        const defaults =
-          scope.canonicalProjectId === null
-            ? []
-            : (
-                await query<{ selected_skill_installation_ids: string[] }>(
-                  `SELECT selected_skill_installation_ids FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
-                  [command.tenantId, command.subjectId, scope.canonicalProjectId],
-                )
-              ).rows[0]?.selected_skill_installation_ids
-        if (JSON.stringify(defaults) !== JSON.stringify(command.skillSelection.installationIds)) throw new Error("CHAT_SKILL_SELECTION_CHANGED")
-      }
       if (command.projectRef !== undefined && (scope.callerProjectId === null || scope.callerProjectId !== scope.canonicalProjectId)) {
         await rollback()
         return null
       }
-      const payload = bindAgentDispatchPayloadProjectScope(callerPayload, scope.canonicalProjectId)
+      // Project is already locked in this transaction. Replays above never read a new revision.
+      const project =
+        scope.canonicalProjectId === null
+          ? null
+          : (await query<{ instruction: string | null; selected_skill_installation_ids: string[] }>(
+              `SELECT instruction, selected_skill_installation_ids
+                 FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
+              [command.tenantId, command.subjectId, scope.canonicalProjectId],
+            )).rows[0]
+      if (project === undefined) throw new Error("CHAT_TURN_PROJECT_NOT_FOUND")
+      if (command.skillSelection !== undefined) {
+        if (command.skillSelection.projectId !== scope.canonicalProjectId) throw new Error("CHAT_SKILL_SELECTION_CHANGED")
+        if (JSON.stringify(project?.selected_skill_installation_ids ?? []) !== JSON.stringify(command.skillSelection.installationIds))
+          throw new Error("CHAT_SKILL_SELECTION_CHANGED")
+      }
+      const payload = bindAgentDispatchPayloadProjectScope(callerPayload, scope.canonicalProjectId, project?.instruction ?? null)
+      // Agent HTTP accepts at most 1 MiB; reject before any outbox/interrupt effects.
+      if (payload.launch.project_instruction !== undefined && Buffer.byteLength(JSON.stringify(payload.launch)) > 1024 * 1024)
+        throw new Error("request_body_too_large")
       const registration = agUiConsumerRegistration(command.tenantId, command.conversationId, command.subjectId, undefined)
       const registered = await query(registration.text, registration.values)
       if (registered.rowCount !== 1) throw new Error("AGENT_DISPATCH_CONSUMER_REGISTRATION_FAILED")

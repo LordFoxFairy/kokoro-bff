@@ -354,12 +354,12 @@ it("freezes ordered Skill selection in v3 payload and digest, rejecting old dura
   assert.equal(empty.schema_version, 3)
   assert.deepEqual(empty.launch.selected_skill_source_refs, [])
   assert.equal(empty.launch.project_ref, null)
-  assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical").launch.project_ref, "project-canonical")
+  assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical", null).launch.project_ref, "project-canonical")
   assert.notEqual(agentDispatchRequestMaterial(input), agentDispatchRequestMaterial({ ...input, selectedSkillSourceRefs: [] }))
-  assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical").launch.trace.project_ref, "project-canonical")
+  assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical", null).launch.trace.project_ref, "project-canonical")
   assert.equal(
     Object.hasOwn(
-      bindAgentDispatchPayloadProjectScope({ ...empty, launch: { ...empty.launch, trace: { ...empty.launch.trace, project_ref: "caller-slug" } } }, null).launch
+      bindAgentDispatchPayloadProjectScope({ ...empty, launch: { ...empty.launch, trace: { ...empty.launch.trace, project_ref: "caller-slug" } } }, null, null).launch
         .trace,
       "project_ref",
     ),

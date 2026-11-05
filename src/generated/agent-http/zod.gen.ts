@@ -95,6 +95,11 @@ export const zLaunchRequest = z.object({
       ),
     })
     .nullish(),
+  project_instruction: z
+    .string()
+    .min(1)
+    .regex(new RegExp("[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]", "u"))
+    .optional(),
 })
 
 export const zLaunchReceipt = z

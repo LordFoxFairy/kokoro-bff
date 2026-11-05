@@ -13,6 +13,7 @@ export type AgentLaunchBody = {
   message_id: string
   content: string
   project_ref: string | null
+  project_instruction?: string
   selected_skill_source_refs: string[]
   selected_mcp_connection_ids?: string[]
   selected_custom_api_profiles?: SelectedCustomApiProfile[]
@@ -184,15 +185,24 @@ export function buildAgentDispatchPayload(input: AgentDispatchInput, ids: { runI
   }
 }
 
-/** Bind the durable Conversation scope only after its parent/Conversation locks agree. */
-export function bindAgentDispatchPayloadProjectScope(value: AgentDispatchPayload, canonicalProjectId: string | null): AgentDispatchPayload {
+/** Bind the exact owner Project values only after its parent/Conversation locks agree. */
+export function bindAgentDispatchPayloadProjectScope(
+  value: AgentDispatchPayload,
+  canonicalProjectId: string | null,
+  currentInstruction: string | null,
+): AgentDispatchPayload {
   const payload = parseAgentDispatchPayload(value)
+  if (payload.launch.project_instruction !== undefined) throw new Error("AGENT_DISPATCH_LINEAGE_MISMATCH")
   const { project_ref: _callerProjectRef, ...trace } = payload.launch.trace
+  const projectInstruction = canonicalProjectId !== null && currentInstruction !== null && /\P{White_Space}/u.test(currentInstruction)
+    ? currentInstruction
+    : undefined
   return {
     ...payload,
     launch: {
       ...payload.launch,
       project_ref: canonicalProjectId,
+      ...(projectInstruction === undefined ? {} : { project_instruction: projectInstruction }),
       trace: canonicalProjectId === null ? trace : { ...trace, project_ref: canonicalProjectId },
     },
   }
@@ -216,6 +226,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
           "message_id",
           "content",
           "project_ref",
+          "project_instruction",
           "selected_skill_source_refs",
           "selected_mcp_connection_ids",
           "selected_custom_api_profiles",
@@ -229,6 +240,12 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
   const executionProject = launchValue.project_ref
   if (executionProject !== null && (typeof executionProject !== "string" || !/^[^\s\x00-\x1f\x7f]{1,255}$/u.test(executionProject)))
     throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
+  const projectInstruction = launchValue.project_instruction
+  if (
+    projectInstruction !== undefined &&
+    (executionProject === null || typeof projectInstruction !== "string" || !/\P{White_Space}/u.test(projectInstruction) ||
+      /[\u0000\p{Surrogate}]/u.test(projectInstruction))
+  ) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const traceValue = launchValue.trace
   if (Object.keys(traceValue).some((key) => !["source", "project_ref", "agent", "thinking", "mcp_servers"].includes(key)))
     throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
@@ -258,6 +275,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
       message_id: requiredString(launchValue.message_id, "AGENT_DISPATCH_PAYLOAD_INVALID"),
       content: requiredString(launchValue.content, "AGENT_DISPATCH_PAYLOAD_INVALID"),
       project_ref: executionProject,
+      ...(projectInstruction === undefined ? {} : { project_instruction: projectInstruction }),
       selected_skill_source_refs: selectedSkillSourceRefs,
       ...(selectedMcpConnectionIds === undefined ? {} : { selected_mcp_connection_ids: selectedMcpConnectionIds }),
       ...(selectedCustomApiProfiles === undefined ? {} : { selected_custom_api_profiles: selectedCustomApiProfiles }),

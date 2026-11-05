@@ -12,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "163b38a41a870754b32fc4f80d04d11c7e4416d1"
+const ownerCommit = "92e235e782178b7002f0bd68daa143b507db870d"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b"
-const provenanceDigest = "9cb099ef84d5085085afe65eafd456b37194d4095d6eb211aad9d668fc5366d0"
-const ownerContractVersion = "8.11.0"
+const ownerDigest = "94c497ea815eaccc545429756af9b8826d82c7f82a896d3a1fda972e03c71596"
+const provenanceDigest = "3820e94f7bae40553e1b69e4fd1872a61b5f72bd6a8f31923bfa7c3f26922bbf"
+const ownerContractVersion = "8.12.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -120,6 +120,7 @@ const capabilityDescriptionDelta =
 const capabilityConditionDelta =
   ',\n              "allOf": [\n                {\n                  "if": {\n                    "required": [\n                      "tool_description"\n                    ]\n                  },\n                  "then": {\n                    "required": [\n                      "target"\n                    ],\n                    "properties": {\n                      "tool_name": {\n                        "enum": [\n                          "mcp_call",\n                          "mcp_describe_tool"\n                        ]\n                      },\n                      "target": {\n                        "properties": {\n                          "kind": {\n                            "const": "mcp_tool"\n                          }\n                        }\n                      }\n                    }\n                  }\n                }\n              ]'
 export function restoreAgent85ActionDisplayRaw(source) {
+  source = restoreAgent811ProjectInstructionRaw(source)
   source = restoreAgent87FinalAnswerRaw(source)
   if (source.includes('"version": "8.7.0"')) {
     assert.equal(sha256(source), "74fb43159ba559fe049f027a5fe4877d29524f5a73eae88c8d15913760cfb9fc", "Agent8.7 action child drift")
@@ -133,6 +134,25 @@ export function restoreAgent85ActionDisplayRaw(source) {
   }
   return source
 }
+export function restoreAgent811ProjectInstructionRaw(source) {
+  if (!source.includes('"version": "8.12.0"')) return source
+  const match = source.match(/          "project_instruction": \{\n[\s\S]*?          \}\n/u)
+  assert.equal(match?.length, 1, "Agent8.12 project instruction delta drift")
+  source = source.replace(match[0], "").replace('          },\n        },', '          }\n        },')
+  source = source.replace('"version": "8.12.0"', '"version": "8.11.0"')
+  assert.equal(sha256(source), "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b", "Agent8.11 project instruction parent drift")
+  return source
+}
+
+export function restoreAgent811ProjectInstructionContract(document) {
+  if (document.info?.version !== "8.12.0") return document
+  const parent = structuredClone(document)
+  delete parent.components.schemas.LaunchRequest.properties.project_instruction
+  parent.info.version = "8.11.0"
+  assert.equal(sha256(JSON.stringify(parent)), "bd241f7412be7bd194a6d06ac1c73559f01d6729980ed41350ee2fe9c4b78b11", "Agent8.11 project instruction parent drift")
+  return parent
+}
+
 export function restoreAgent85ActionDisplayContract(document) {
   document = restoreAgent87FinalAnswerContract(document)
   if (!["8.6.0", "8.7.0"].includes(document.info?.version)) return document
@@ -158,6 +178,7 @@ export function restoreAgent85ActionDisplayContract(document) {
 }
 
 export function restoreAgent84ActivityDetailsRaw(source) {
+  source = restoreAgent811ProjectInstructionRaw(source)
   source = restoreAgent85ActionDisplayRaw(source)
   assert.equal(sha256(source), "b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897", "Agent8.5 complete raw child drift")
   const replacements = [
@@ -239,6 +260,7 @@ export function restoreAgent82DisplayRaw(source) {
 }
 // Build/test-only strict full owner child inverse. Production generation requires the current exact blob above.
 export function restoreAgent84ActivityDetailsContract(document) {
+  document = restoreAgent811ProjectInstructionContract(document)
   document = restoreAgent85ActionDisplayContract(document)
   if (document.info?.version !== "8.5.0" && !document.components?.schemas?.RunDisplay?.properties?.activity_details) return document
   assert.equal(
@@ -857,6 +879,19 @@ async function generateCustomApiSelectionValidator(directory, document) {
   await writeFile(file, source)
 }
 
+async function normalizeProjectInstructionPattern(directory, document) {
+  // Hey API emits the ECMAScript trim-whitespace exclusion as a literal control-character class,
+  // which is not valid TypeScript. Preserve the owner pattern through RegExp construction.
+  const pattern = document.components.schemas.LaunchRequest.properties.project_instruction.pattern
+  const malformed = pattern.replace(/\\u(?:0009|000a|000b|000c|000d|0020|0085|00a0|1680|2000|2001|2002|2003|2004|2005|2006|2007|2008|2009|200a|2028|2029|202f|205f|3000)/gu, (value) =>
+    String.fromCodePoint(Number.parseInt(value.slice(2), 16)),
+  )
+  assert.notEqual(malformed, pattern, "Agent 8.12 project instruction pattern must need normalization")
+  await normalizeFile(directory, "zod.gen.ts", [
+    [`regex(/${malformed}/)`, `regex(new RegExp(${JSON.stringify(pattern)}, "u"))`, 1, "owner project instruction whitespace pattern"],
+  ])
+}
+
 async function normalizePersonalContextPatterns(directory, document) {
   // Hey API 0.99 decodes these escaped UTF-16 classes into NUL and replacement
   // characters. Restore the exact owner patterns; BFF launch paths still reject the field.
@@ -891,6 +926,7 @@ async function generate(directory) {
   await generateMcpSelectionValidator(directory, ownerDocument)
   await generateCustomApiSelectionValidator(directory, ownerDocument)
   await normalizePersonalContextPatterns(directory, ownerDocument)
+  await normalizeProjectInstructionPattern(directory, ownerDocument)
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
