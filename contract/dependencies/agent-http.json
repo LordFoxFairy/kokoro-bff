@@ -3,18 +3,18 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-agent",
-    "repository_commit": "40effb2d028b7d40264704543e45fdf3645f6d11",
+    "repository_commit": "163b38a41a870754b32fc4f80d04d11c7e4416d1",
     "contract_version": "8.11.0",
     "contract_path": "contract/openapi/v1/openapi.json",
     "contract_sha256": "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b",
     "provenance_path": "contract/provenance.json",
-    "provenance_sha256": "d3525ac95b4c6e0bfeea8bfaa2a935a03e4597dfac92340bb5a34d073cafb0ed"
+    "provenance_sha256": "9cb099ef84d5085085afe65eafd456b37194d4095d6eb211aad9d668fc5366d0"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.agent.config.ts",
-    "config_sha256": "082e3dd608569fd1a5b1fefb336ed5b44ba0bd02dbffee24bae93b27a82b81f1"
+    "config_sha256": "e657e8c7edde6fc4239f4a41aa5481f4efed09cf68843cab3156b677602bdb2e"
   },
   "runtime": {
     "node": "24.20.0",

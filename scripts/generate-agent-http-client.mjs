@@ -12,11 +12,11 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "40effb2d028b7d40264704543e45fdf3645f6d11"
+const ownerCommit = "163b38a41a870754b32fc4f80d04d11c7e4416d1"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
 const ownerDigest = "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b"
-const provenanceDigest = "d3525ac95b4c6e0bfeea8bfaa2a935a03e4597dfac92340bb5a34d073cafb0ed"
+const provenanceDigest = "9cb099ef84d5085085afe65eafd456b37194d4095d6eb211aad9d668fc5366d0"
 const ownerContractVersion = "8.11.0"
 const failureCodes = [
   "token_budget_exceeded",

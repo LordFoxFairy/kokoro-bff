@@ -31,12 +31,12 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "40effb2d028b7d40264704543e45fdf3645f6d11",
+        repository_commit: "163b38a41a870754b32fc4f80d04d11c7e4416d1",
         contract_version: "8.11.0",
         contract_path: "contract/openapi/v1/openapi.json",
         contract_sha256: "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "d3525ac95b4c6e0bfeea8bfaa2a935a03e4597dfac92340bb5a34d073cafb0ed",
+        provenance_sha256: "9cb099ef84d5085085afe65eafd456b37194d4095d6eb211aad9d668fc5366d0",
       },
     )
     assert.deepEqual(
@@ -53,7 +53,7 @@ describe("Agent event-protocol provenance", () => {
   it("uses one HTTP8 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "40effb2d028b7d40264704543e45fdf3645f6d11")
+    assert.equal(manifest.owner.repository_commit, "163b38a41a870754b32fc4f80d04d11c7e4416d1")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
@@ -64,7 +64,7 @@ describe("Agent event-protocol provenance", () => {
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/40effb2d028b7d40264704543e45fdf3645f6d11/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/163b38a41a870754b32fc4f80d04d11c7e4416d1/openapi.json", import.meta.url), "utf8"),
     )
     assert.deepEqual(owner.components.schemas.ChatActivity.oneOf[0].properties.display_code, {
       type: "string",
