@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.21.0
+  version: 28.22.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -22993,6 +22993,10 @@ components:
           minLength: 1
           description: BFF projection of the trusted runId path parameter; the Agent owner receipt does not repeat it.
         command_id: { type: string, minLength: 1 }
+        message_id:
+          type: string
+          minLength: 1
+          description: Only present for run.steer; the BFF-owned user Message ID, not the client intent ID. Pending does not prove injection.
         request_digest: { type: string, minLength: 1 }
         status: { type: string, enum: [pending, succeeded, failed] }
         error_code: { type: string, minLength: 1 }

@@ -1,3 +1,9 @@
+## A‑03：同 Run 补充消息（Public 28.22 候选）
+
+沿原 `POST /v1/sessions/{id}/runs/{runId}/control`，仅 `run.steer` 的 202 回执新增 `message_id`（BFF 的 canonical user Message，非客户端输入标识）。输入、取消/继续回执、端点及 Share 形状不变。首次提交在 BFF 持久接纳后返回 `pending`，不表示已注入。使用相同 Run、键和原 body 重放会读最新状态；已授权的原命令可在原 Run 结束后读回，同键改意图返回 409。现私有会话读取按原 Message status 承接 `pending` / `completed` / `failed`，不增加状态接口或 SSE 帧。
+
+Agent 沿原 8.11 control wire；只和 checkpoint 成功语义已验证的 Agent 组合发布。没有 owner 确认时，即使本地断连、重启或 Run 终态，均不伪造补充消息终态；安全失败码只投影 owner 已确认的结果。App 与 Root 固定组合前不把此候选视为产品闭环。
+
 ## A‑07：Project Todo（Public 28.20 候选，D0）
 
 唯一机器合同见 [OpenAPI](../contract/openapi/v1/openapi.yaml)。既有集合 GET 保留 id/slug、`data.tasks`、`updated_at DESC, task_id ASC`，只给每项增不透明 `revision`。本片不改 GET 的默认结果或分页形状。写入仅接受 canonical Project ID：集合 POST `{title}` 默认 `todo`，返回 201 及 Location；成员 PATCH 至少一个 `title`／`status`，返回 200；成员 DELETE 无请求体，返回 204。状态 `todo / in_progress / done`。App 先 trim 标题；HTTP title 输入最多 160 Unicode 标量，BFF 规范化后非空，拒绝控制字符或未配对代理项。新创建上限为每项目 200；已存在的超限行仍完整可读、可改、可删，原 key 可重放，超限新 key 返回 `409 project_task_limit_reached`。写回执只含 `id / project_id / revision`，不存用户标题；读取列表取得当前资源表示。

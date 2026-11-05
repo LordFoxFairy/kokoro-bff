@@ -1,3 +1,9 @@
+## A‑03：同 Run 补充消息（候选）
+
+唯一 `database/schema.sql` 新增 `bff_run_steer`：按可信 tenant、subject、Conversation 和原幂等键摘要定位，指纹区分原 Run、客户端消息标识和完整内容。持久记录只保存原目标、身份、稳定 Agent 命令 ID、Message ID、投递进度及已确认的安全失败码；正文只存同事务的一条 `bff_message` user 行。按 Project → Conversation → AG-UI stream 锁序校验当前已开始的 Run；同键先回读原记录，不替换 Run。投递记录的唯一 Message ID 使补充消息不影响启动消息的 MCP/API 选择。
+
+BFF 同进程独立短周期以有期限的 token 认领；旧 token/过期 lease 不能更新结果。重复发送只用原 Agent 命令和 canonical Message ID；Agent exact receipt 确认后，Message 状态与投递收口同一 SQL 事务。未知和 `pending` 保持可恢复，不因重试耗尽伪造失败；无其他 Run、assistant、SSE 或 Redis 数据写入。只在隔离 fresh schema 验证，不在使用中的库自动改表。
+
 ## A‑07：Project Todo（D0，零 DDL）
 
 继续使用 `bff_project_task` 和 `bff_idempotency_receipt`，不改 canonical schema、不新建迁移链、列、索引、Redis 键或 outbox。比较独立版本列后选择复用现 `updated_at TIMESTAMPTZ(3)`：有效 PATCH 以 `GREATEST(clock_timestamp()::timestamptz(3), updated_at + interval '1 millisecond')` 严格推进，no-op 保持。它仍是 UTC 的最后修改排序时间，在同毫秒写入或时钟回拨时按上一值最小推进；完整公开任务字段生成强不透明 revision，旧行免回填，同毫秒/ABA 不复用。不得以 `xmin`、裸当前时钟或进程计数冒充持久版本。

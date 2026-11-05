@@ -245,7 +245,7 @@ export async function runAgentControl(
   }
 
   const control = buildAgentControl(sessionId, json)
-  if (control === null) {
+  if (control === null || control.kind === "run.steer") {
     reply(response, 400, failure("invalid_run_control", "Control request does not match the v1 contract", context.requestId), context, idempotency, mutation)
     return
   }

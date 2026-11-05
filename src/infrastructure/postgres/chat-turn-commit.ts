@@ -34,6 +34,7 @@ type ExistingDispatchRow = {
 
 type QueuedHeadProjector = (client: PoolClient, tenantId: string, conversationId: string) => Promise<string | null>
 type DeadlineQuery = <Row extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]) => Promise<QueryResult<Row>>
+type ChatScopeInput = Pick<CommitChatTurn, "tenantId" | "subjectId" | "conversationId" | "projectRef" | "content">
 
 function requiredIdentity(value: string): void {
   if (value.trim() === "") throw new Error("CHAT_TURN_INPUT_INVALID")
@@ -116,6 +117,8 @@ async function acquireClient(database: PostgresBffDatabase, deadline: number, si
     throw error
   }
 }
+
+export { acquireClient as acquireChatClient, startWithin as startWithinChatDeadline }
 
 /** The pre-resolution read shares Chat's bounded checkout and late-client cleanup. */
 export async function prepareChatTurnSelection(database: PostgresBffDatabase, input: ChatTurnSelectionInput): Promise<ChatTurnSelection | null> {
@@ -219,14 +222,14 @@ async function resolveActiveProject(query: DeadlineQuery, tenantId: string, subj
   return result.rows[0]?.project_id ?? null
 }
 
-async function lockChatScope(query: DeadlineQuery, command: CommitChatTurn): Promise<LockedChatScope> {
+export async function lockChatScope(query: DeadlineQuery, command: ChatScopeInput, existingOnly: boolean): Promise<LockedChatScope> {
   const preRead = await query<{ project_ref: string | null }>(
     `SELECT project_ref FROM bff_conversation
       WHERE tenant_id=$1 AND conversation_id=$2 AND owner_id=$3 AND status='active'`,
     [command.tenantId, command.conversationId, command.subjectId],
   )
   const preReadRow = preRead.rows[0]
-  if (preReadRow === undefined && command.interruptRunId !== undefined) return { kind: "not_found" }
+  if (preReadRow === undefined && existingOnly) return { kind: "not_found" }
   const callerProjectId =
     command.projectRef === undefined ? undefined : await resolveActiveProject(query, command.tenantId, command.subjectId, command.projectRef)
 
@@ -409,7 +412,7 @@ export async function commitChatTurn(
         `${Math.min(CHAT_TURN_LOCK_BUDGET_MS, remaining)}ms`,
         `${remaining}ms`,
       ])
-      const scope = await lockChatScope(query, command)
+      const scope = await lockChatScope(query, command, command.interruptRunId !== undefined)
       if (scope.kind === "retry") {
         await rollback()
         continue

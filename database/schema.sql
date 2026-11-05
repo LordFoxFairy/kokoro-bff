@@ -327,6 +327,37 @@ CREATE TABLE IF NOT EXISTS bff_message (
 CREATE INDEX IF NOT EXISTS ix_bff_message_tenant_conversation_sequence
   ON bff_message (tenant_id, conversation_id, message_seq ASC, message_id ASC);
 
+-- Same-Run input is an independent command, not a Chat turn or a second copy
+-- of the Message. Its public outcome is the bound user Message's status.
+CREATE TABLE IF NOT EXISTS bff_run_steer (
+  tenant_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  idempotency_key_hash TEXT NOT NULL CONSTRAINT ck_bff_run_steer_key CHECK (idempotency_key_hash ~ '^[0-9a-f]{64}$'),
+  intent_digest TEXT NOT NULL CONSTRAINT ck_bff_run_steer_digest CHECK (intent_digest ~ '^sha256:[0-9a-f]{64}$'),
+  run_id TEXT NOT NULL,
+  message_id TEXT NOT NULL UNIQUE,
+  agent_command_id TEXT NOT NULL UNIQUE,
+  actor_id TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  identity_assertion_ref TEXT NOT NULL,
+  available_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  lease_token TEXT,
+  lease_until TIMESTAMPTZ(3),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CONSTRAINT ck_bff_run_steer_attempt_count CHECK (attempt_count BETWEEN 0 AND 8),
+  settled_at TIMESTAMPTZ(3),
+  error_code TEXT CONSTRAINT ck_bff_run_steer_error CHECK (error_code IS NULL OR (
+    settled_at IS NOT NULL AND error_code IN ('control_apply_failed', 'control_enqueue_failed', 'control_superseded')
+  )),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, subject_id, conversation_id, idempotency_key_hash),
+  CONSTRAINT ck_bff_run_steer_lease CHECK ((lease_token IS NULL AND lease_until IS NULL) OR (
+    settled_at IS NULL AND lease_token IS NOT NULL AND lease_until IS NOT NULL
+  ))
+);
+CREATE INDEX IF NOT EXISTS ix_bff_run_steer_pending
+  ON bff_run_steer (available_at, created_at, agent_command_id) WHERE settled_at IS NULL;
+
 -- Transactional Chat -> Agent command queue. A user message, its provisional
 -- assistant message, expected AG-UI run fence, and this row commit together.
 -- MESSAGE-FEEDBACK-SQL-BEGIN

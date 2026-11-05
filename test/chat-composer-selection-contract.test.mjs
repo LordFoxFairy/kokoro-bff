@@ -5,6 +5,18 @@ import { test } from "node:test"
 import { load } from "js-yaml"
 import { restorePublic2815ComposerSelectionContract, restorePublic2816CustomApiSelectionContract, restorePublic2820InterruptContract } from "../scripts/composer-selection-public-contract.mjs"
 
+test("only a steer receipt adds the canonical Message identity to Public28.21", async () => {
+  const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const receipt = load(raw).components.schemas.ControlReceipt
+  assert.equal(receipt.additionalProperties, false)
+  assert.deepEqual(receipt.required, ["run_id", "command_id", "request_digest", "status", "replayed"])
+  assert.equal(receipt.properties.message_id?.minLength, 1)
+  const { restorePublic2821SteerContract } = await import("../scripts/composer-selection-public-contract.mjs")
+  const parent = restorePublic2821SteerContract(raw)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "a5ea4bb0ef1458a536e3b54e01049267aec2913d147f2ad7bb99a481197d0525")
+  assert.throws(() => restorePublic2821SteerContract(raw.replace("Only present for run.steer", "Present for every command")), /drift/)
+})
+
 test("interrupt is an optional exact Run on Message Create, with the Public28.20 parent preserved", async () => {
   const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
   const parent = restorePublic2820InterruptContract(source)

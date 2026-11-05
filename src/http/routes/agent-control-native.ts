@@ -7,11 +7,14 @@ import type { AgUiRunControlReader } from "../../infrastructure/postgres/agui-ru
 import type { IdempotencyEntry } from "../../application/idempotency.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
-import { failure } from "../../contracts/index.js"
+import { failure, ok } from "../../contracts/index.js"
 import { mutationTicket } from "../../application/idempotency.js"
+import { buildAgentControl } from "../../infrastructure/clients/agent/control.js"
+import { commitRunSteer, isRunSteerText } from "../../infrastructure/postgres/run-steer-commit.js"
+import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import { authorizeChatRequest } from "./chat-authorization.js"
 import { runAgentControl } from "./agent.js"
-import { idempotencyKey, mutationFingerprint, pathOf, readBody, requestBodyJson, requestId } from "../request.js"
+import { idempotencyKey, mutationFingerprint, pathOf, queryOf, readBody, requestBodyJson, requestId } from "../request.js"
 import { send } from "../response.js"
 
 function agentControlPath(request: IncomingMessage): boolean {
@@ -38,6 +41,7 @@ export async function handleAgentControlRequest(
   readControl: AgUiRunControlReader,
   idempotency: Map<string, IdempotencyEntry>,
   persistent: IdempotencyRepository | null,
+  database: PostgresBffDatabase,
 ): Promise<boolean> {
   if (!agentControlPath(request)) return false
   const id = requestId(request)
@@ -67,6 +71,45 @@ export async function handleAgentControlRequest(
     const key = idempotencyKey(request)
     if (key === null) {
       send(response, 400, failure("idempotency_key_required", "Control requests require Idempotency-Key", id))
+      return true
+    }
+    if (json.kind === "run.steer") {
+      response.setHeader("x-request-id", id)
+      const sessionId = businessPath[1] ?? ""
+      const runId = businessPath[3] ?? ""
+      const control = buildAgentControl(sessionId, json)
+      if (control?.kind !== "run.steer" || ![runId, control.message_id, control.content].every(isRunSteerText)) {
+        send(response, 400, failure("invalid_run_control", "Control request does not match the v1 contract", id))
+        return true
+      }
+      if (!config.agentEnabled || (config.upstreams.agents ?? null) === null) {
+        send(response, 503, failure("agent_not_configured", "Agent execution is disabled or not configured", id))
+        return true
+      }
+      const { namespace, userId } = admitted.context.identity
+      const result = await commitRunSteer(database, {
+        tenantId: namespace, subjectId: userId, actorId: userId, conversationId: sessionId, runId, requestId: id,
+        scope: queryOf(request).get("scope")?.trim() === "direct" ? "direct" : "all",
+        ...(authorization.projectRef === undefined ? {} : { projectRef: authorization.projectRef }),
+        idempotencyKey: key, clientMessageId: control.message_id, content: control.content,
+        lifetime: { signal: abort.signal, deadlineAt: performance.now() + config.upstreamTimeoutMs },
+      })
+      abort.signal.throwIfAborted()
+      switch (result.kind) {
+        case "accepted":
+        case "replay":
+          send(response, 202, ok({ ...result.receipt, replayed: result.kind === "replay" }, id))
+          break
+        case "not_found":
+          send(response, 404, failure("session_not_found", "Session was not found", id))
+          break
+        case "run_not_current":
+          send(response, 409, failure("run_control_conflict", "Control does not match the current Run", id))
+          break
+        case "idempotency_conflict":
+          send(response, 409, failure("idempotency_conflict", "Idempotency key already used with a different request payload", id))
+          break
+      }
       return true
     }
     const ticket = await mutationTicket(

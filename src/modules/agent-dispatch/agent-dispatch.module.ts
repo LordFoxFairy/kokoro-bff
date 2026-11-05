@@ -13,6 +13,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import { PostgresAgentDispatchOutboxRepository } from "../../infrastructure/postgres/agent-dispatch-outbox-repository.js"
 import { PostgresAgentCancellationOutboxRepository } from "../../infrastructure/postgres/agent-cancellation-outbox-repository.js"
+import { RunSteerDispatcher } from "../../infrastructure/postgres/run-steer-dispatch.js"
 import { ChatTurnApplicationService } from "../../application/chat-turn-service.js"
 import { AgentDispatchOutboxDispatcher } from "../../application/agent-dispatch-outbox-dispatcher.js"
 import { AgentCancellationOutboxDispatcher } from "../../application/agent-cancellation-outbox-dispatcher.js"
@@ -26,14 +27,17 @@ class AgentDispatchWorkerLifecycle implements OnModuleInit, BeforeApplicationShu
   public constructor(
     @Inject(AGENT_DISPATCH_DISPATCHER) private readonly dispatch: AgentDispatchOutboxDispatcher | null,
     @Inject(AGENT_CANCELLATION_DISPATCHER) private readonly cancellation: AgentCancellationOutboxDispatcher | null,
+    @Inject(RunSteerDispatcher) private readonly steer: RunSteerDispatcher | null,
   ) {}
 
   public onModuleInit(): void {
     this.dispatch?.start()
     this.cancellation?.start()
+    this.steer?.start()
   }
 
   public async beforeApplicationShutdown(): Promise<void> {
+    const stoppingSteer = this.steer?.stop()
     let failed = false
     try {
       await this.cancellation?.stop()
@@ -45,6 +49,7 @@ class AgentDispatchWorkerLifecycle implements OnModuleInit, BeforeApplicationShu
     } catch {
       failed = true
     }
+    await stoppingSteer
     if (failed) {
       process.exitCode = 1
       throw new Error("bff_agent_dispatch_shutdown_failed")
@@ -90,6 +95,12 @@ class AgentDispatchWorkerLifecycle implements OnModuleInit, BeforeApplicationShu
       inject: [AGENT_DISPATCH_OUTBOX],
       useFactory: (outbox: PostgresAgentDispatchOutboxRepository): ChatTurnApplicationService =>
         new ChatTurnApplicationService(outbox, new Sha256StableIdGenerator()),
+    },
+    {
+      provide: RunSteerDispatcher,
+      inject: [BFF_DATABASE, BFF_CONFIG],
+      useFactory: (database: PostgresBffDatabase, config: BffConfig): RunSteerDispatcher | null =>
+        !config.agentEnabled || (config.upstreams.agents ?? null) === null ? null : new RunSteerDispatcher(database, config),
     },
     AgentDispatchWorkerLifecycle,
   ],

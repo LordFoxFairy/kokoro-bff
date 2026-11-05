@@ -33,9 +33,13 @@ export async function readChatComposerSelection(
        CASE WHEN octet_length((dispatch.payload#>'{launch,selected_custom_api_profiles}')::text) <= 16384
          THEN dispatch.payload#>'{launch,selected_custom_api_profiles}' END AS selected_custom_api_profiles
      FROM (
-       SELECT message_id, run_id FROM bff_message
-       WHERE tenant_id=$1 AND conversation_id=$3 AND role='user' AND origin='normal'
-       ORDER BY message_seq DESC, message_id DESC LIMIT 1
+       SELECT message.message_id, message.run_id FROM bff_message AS message
+       WHERE message.tenant_id=$1 AND message.conversation_id=$3 AND message.role='user' AND message.origin='normal'
+         AND NOT EXISTS (
+           SELECT 1 FROM bff_run_steer AS steer WHERE steer.message_id=message.message_id
+             AND steer.tenant_id=$1 AND steer.subject_id=$2 AND steer.conversation_id=$3
+         )
+       ORDER BY message.message_seq DESC, message.message_id DESC LIMIT 1
      ) AS latest
      LEFT JOIN bff_agent_dispatch_outbox AS dispatch
        ON dispatch.tenant_id=$1 AND dispatch.subject_id=$2 AND dispatch.actor_id=$2

@@ -5913,6 +5913,219 @@ integrationTest("SET21 real HTTP creates own turns and shares, pages safe facts 
   }
 })
 
+integrationTest("A03 steer admits one same-Run user message per intent without replacing launch selection", { timeout: 15_000 }, async () => {
+  const { commitRunSteer } = await import("../dist/infrastructure/postgres/run-steer-commit.js")
+  const suffix = randomUUID()
+  const tenantId = `a03_steer_${suffix}`
+  const subjectId = `a03_owner_${suffix}`
+  const conversationId = `conv_${randomUUID()}`
+  const projectRef = `a03_project_${suffix}`
+  const database = new PostgresBffDatabase(postgresUrl, redisUrl)
+  const { pool } = database
+  const dispatch = new PostgresAgentDispatchOutboxRepository(database)
+  const turns = new ChatTurnApplicationService(dispatch, new Sha256StableIdGenerator())
+  const chat = createChatSessionReads(new PostgresChatSessionStore(database))
+  const projection = new AgUiProjectionService(new PostgresAgUiProjectionRepository(database))
+  const scope = { tenantId, subjectId, actorId: subjectId, conversationId, projectRef }
+  const turn = (idempotencyKey, content) => turns.submit({
+    ...scope, idempotencyKey, requestId: idempotencyKey, content,
+    selectedSkillSourceRefs: [], selectedMcpConnectionIds: ["connection-a"],
+  })
+  const event = (seq, runId, kind, payload) => {
+    const id = `a03-steer-${suffix}-${seq}`
+    const timestamp = new Date(seq * 1000).toISOString()
+    return {
+      sourceRunId: runId, sourceEventId: id, sourceSequence: seq, sourceOccurredAt: timestamp,
+      sourcePayload: { run_id: runId },
+      event: { event_id: id, seq, session_id: conversationId, run_id: runId, timestamp, kind, payload },
+    }
+  }
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await database.ready()
+    await pool.query("INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug) VALUES ($1,$2,$3,$1,$1)", [projectRef, tenantId, subjectId])
+    const original = await turn("original-turn", "Launch this Run")
+    assert.ok(original)
+    const intent = { ...scope, requestId: "steer-request", runId: original.run_id, idempotencyKey: "steer-intent", clientMessageId: original.assistant_message_id, content: "Same text" }
+    const write = (changes = {}) => commitRunSteer(database, { ...intent, ...changes })
+    assert.deepEqual(await write(), { kind: "run_not_current" }, "a queued Run cannot take a steer")
+    const [lease] = await dispatch.claimAgentDispatchOutbox({ workerId: suffix, limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+    assert.equal(lease?.runId, original.run_id)
+    assert.equal(await dispatch.markAgentDispatchAdmitted(lease), true)
+    await projection.ingest(tenantId, conversationId, [event(1, original.run_id, "run.created", { run_id: original.run_id })])
+    const before = await chat.snapshot(tenantId, subjectId, conversationId, projectRef)
+    assert.deepEqual(before.composer_selection, {
+      source_message_id: original.user_message_id, selected_mcp_connection_ids: ["connection-a"], selected_custom_api_profiles: [],
+    })
+    assert.deepEqual(await write({ subjectId: "other-subject", actorId: "other-subject" }), { kind: "not_found" })
+    assert.deepEqual(await write({ projectRef: "foreign-project" }), { kind: "not_found" })
+    assert.deepEqual(await write({ scope: "direct", projectRef: undefined }), { kind: "not_found" })
+
+    const concurrent = await Promise.all([write(), write({ requestId: "different-request-id" })])
+    assert.deepEqual(concurrent.map(({ kind }) => kind).sort(), ["accepted", "replay"])
+    const accepted = concurrent.find(({ kind }) => kind === "accepted")
+    const replay = concurrent.find(({ kind }) => kind === "replay")
+    assert.deepEqual(replay.receipt, accepted.receipt)
+    assert.equal(accepted.receipt.run_id, original.run_id)
+    assert.equal(accepted.receipt.status, "pending")
+    assert.notEqual(accepted.receipt.message_id, intent.clientMessageId, "a client ID cannot claim an existing canonical Message ID")
+    assert.deepEqual(await write({ clientMessageId: "different-client-intent" }), { kind: "idempotency_conflict" })
+    assert.deepEqual(await write({ content: "Same text " }), { kind: "idempotency_conflict" })
+
+    const second = await write({ idempotencyKey: "steer-second", clientMessageId: "second-client-intent" })
+    assert.equal(second.kind, "accepted")
+    assert.notEqual(second.receipt.message_id, accepted.receipt.message_id, "same content does not merge distinct intents")
+    const after = await chat.snapshot(tenantId, subjectId, conversationId, projectRef)
+    assert.deepEqual(after.composer_selection, before.composer_selection)
+    assert.deepEqual(after.execution_head, before.execution_head)
+    assert.deepEqual(after.messages.slice(-2).map(({ message_id, run_id, role, content, status }) => ({ message_id, run_id, role, content, status })),
+      [accepted, second].map(({ receipt }) => ({ message_id: receipt.message_id, run_id: original.run_id, role: "user", content: intent.content, status: "pending" })))
+    const commandFacts = async () => (await pool.query(
+      `SELECT (SELECT count(*)::int FROM bff_run_steer WHERE tenant_id=$1 AND conversation_id=$2) AS steers,
+              (SELECT count(*)::int FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2) AS launches,
+              (SELECT count(*)::int FROM bff_agent_cancellation_outbox WHERE tenant_id=$1 AND conversation_id=$2) AS cancels,
+              (SELECT count(*)::int FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant') AS assistants`,
+      [tenantId, conversationId],
+    )).rows[0]
+    assert.deepEqual(await commandFacts(), { steers: 2, launches: 1, cancels: 0, assistants: 1 })
+    const successor = await turn("queued-successor", "A real next turn")
+    assert.ok(successor)
+    assert.deepEqual(await write({ runId: successor.run_id }), { kind: "idempotency_conflict" }, "the same key cannot retarget")
+    assert.deepEqual(await write({ runId: successor.run_id, idempotencyKey: "new-queued-steer" }), { kind: "run_not_current" })
+    await projection.ingest(tenantId, conversationId, [event(2, original.run_id, "run.completed", { status: "cancelled" })])
+    assert.deepEqual(await write(), { kind: "replay", receipt: accepted.receipt }, "terminal is not evidence the original command was not consumed")
+    assert.deepEqual(await write({ idempotencyKey: "new-terminal-steer" }), { kind: "run_not_current" })
+    assert.deepEqual(await commandFacts(), { steers: 2, launches: 2, cancels: 0, assistants: 2 })
+  } finally {
+    try {
+      for (const table of ["bff_agui_run_activity", "bff_agui_run_process", "bff_agui_run_interaction", "bff_agui_event", "bff_agui_source_event", "bff_agui_stream"]) {
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1 AND session_id=$2`, [tenantId, conversationId])
+      }
+      for (const table of ["bff_run_steer", "bff_agent_dispatch_outbox", "bff_message", "bff_conversation"]) {
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1 AND conversation_id=$2`, [tenantId, conversationId])
+      }
+      await pool.query("DELETE FROM bff_project WHERE tenant_id=$1 AND project_id=$2", [tenantId, projectRef])
+    } finally {
+      await database.close()
+    }
+  }
+})
+
+integrationTest("A03 durable steer HTTP replays one owner command through unknown, pending and confirmed results", { timeout: 15_000 }, async () => {
+  const { agentControlRequestDigest } = await import("../dist/infrastructure/clients/agent/control-receipt.js")
+  const suffix = randomUUID()
+  const tenant = `a03_steer_http_${suffix}`
+  const subject = `a03_steer_http_owner_${suffix}`
+  const sessionId = `conv_${randomUUID()}`
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const attempts = []
+  let outcome = "pending"
+  let app
+  const owner = createServer(async (request, response) => {
+    try {
+      const path = /^\/v1\/runs\/([^/]+)\/control$/u.exec(request.url ?? "")
+      if (request.method !== "POST" || path === null) return response.writeHead(404).end()
+      const buffers = []
+      for await (const part of request) buffers.push(part)
+      const body = JSON.parse(Buffer.concat(buffers).toString("utf8"))
+      const runId = decodeURIComponent(path[1])
+      const commandId = request.headers["idempotency-key"]
+      attempts.push({ body, runId, commandId, tenant: request.headers["x-kokoro-tenant-ref"], subject: request.headers["x-kokoro-subject-ref"], actor: request.headers["x-kokoro-actor-ref"] })
+      if (attempts.length === 1) return request.destroy() // Owner ACK is unknown, not a failed Message.
+      const status = body.content === "Too late" ? "failed" : outcome
+      response.writeHead(202, { "content-type": "application/json" }).end(JSON.stringify({ data: {
+        command_id: commandId, request_digest: agentControlRequestDigest(runId, body), status, replayed: attempts.length > 2,
+        ...(status === "failed" ? { error_code: "control_superseded" } : {}),
+      } }))
+    } catch {
+      response.writeHead(500).end()
+    }
+  })
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    const { app: nest, database, chatTurns } = await createMoveNestApp(tenant, { messageAdmission: true, runControl: true, agentBase: await listen(owner) })
+    app = nest
+    await database.ready()
+    await app.listen(0, "127.0.0.1")
+    const base = await app.getUrl()
+    const initial = await chatTurns.submit({ tenantId: tenant, subjectId: subject, actorId: subject, conversationId: sessionId,
+      requestId: "start", idempotencyKey: "start", content: "Original", selectedSkillSourceRefs: [] })
+    assert.ok(initial)
+    const dispatch = new PostgresAgentDispatchOutboxRepository(database)
+    const [lease] = await dispatch.claimAgentDispatchOutbox({ workerId: suffix, limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+    assert.equal(lease?.runId, initial.run_id)
+    assert.equal(await dispatch.markAgentDispatchAdmitted(lease), true)
+    const { AGUI_PROJECTION } = await import("../dist/common/tokens.js")
+    const sourceEventId = `start-${suffix}`
+    const timestamp = new Date(1000).toISOString()
+    await app.get(AGUI_PROJECTION).ingest(tenant, sessionId, [{ sourceRunId: initial.run_id, sourceEventId, sourceSequence: 1, sourceOccurredAt: timestamp,
+      sourcePayload: { run_id: initial.run_id }, event: { event_id: sourceEventId, seq: 1, session_id: sessionId, run_id: initial.run_id, timestamp, kind: "run.created", payload: { run_id: initial.run_id } } }])
+    const controls = `${base}/v1/sessions/${sessionId}/runs/${initial.run_id}/control`
+    const sessionHeaders = auth(tenant, subject)
+    const steer = async (key, content, principal = sessionHeaders) => {
+      const response = await fetch(controls, { method: "POST", headers: { ...principal, "content-type": "application/json", "idempotency-key": key },
+        body: JSON.stringify({ kind: "run.steer", message_id: key, content }), signal: AbortSignal.timeout(4000) })
+      return { status: response.status, body: await response.json() }
+    }
+    const malformed = await steer("steer-malformed", "Unpaired \uD800")
+    assert.equal(malformed.status, 400)
+    assert.equal(malformed.body.error.code, "invalid_run_control")
+    const detail = "Use the new detail 🚀"
+    const first = await steer("steer-http", detail)
+    assert.equal(first.status, 202, JSON.stringify(first.body))
+    assert.equal(first.body.data.status, "pending")
+    assert.equal(first.body.data.replayed, false)
+    assert.equal(first.body.data.command_id, "steer-http")
+    assert.notEqual(first.body.data.message_id, "steer-http")
+    assert.equal((await steer("steer-http", detail, auth(tenant, "foreign"))).status, 404)
+    const conflict = await steer("steer-http", "Different input")
+    assert.equal(conflict.status, 409)
+    assert.equal(conflict.body.error.code, "idempotency_conflict")
+    await waitFor(() => attempts.length >= 2)
+    assert.deepEqual(attempts[0], attempts[1])
+    assert.notEqual(attempts[0].commandId, first.body.data.command_id)
+    assert.deepEqual(attempts[0].body, { kind: "run.steer", session_id: sessionId, message_id: first.body.data.message_id, content: detail })
+    assert.deepEqual([attempts[0].tenant, attempts[0].subject, attempts[0].actor, attempts[0].runId], [tenant, subject, subject, initial.run_id])
+    assert.deepEqual((await steer("steer-http", detail)).body.data, { ...first.body.data, replayed: true })
+    outcome = "succeeded"
+    const confirmed = await waitFor(async () => {
+      const replay = await steer("steer-http", detail)
+      return replay.body.data?.status === "succeeded" ? replay.body.data : null
+    })
+    assert.deepEqual(confirmed, { ...first.body.data, status: "succeeded", replayed: true })
+    const rejected = await steer("steer-failed", "Too late")
+    assert.equal(rejected.status, 202)
+    const failed = await waitFor(async () => {
+      const replay = await steer("steer-failed", "Too late")
+      return replay.body.data?.status === "failed" ? replay.body.data : null
+    })
+    assert.equal(failed.error_code, "control_superseded")
+    assert.equal(failed.message_id, rejected.body.data.message_id)
+    const snapshotResponse = await fetch(`${base}/v1/sessions/${sessionId}`, { headers: sessionHeaders, signal: AbortSignal.timeout(4000) })
+    assert.equal(snapshotResponse.status, 200)
+    const snapshot = (await snapshotResponse.json()).data
+    assert.deepEqual(snapshot.messages.filter(({ message_id }) => [confirmed.message_id, failed.message_id].includes(message_id))
+      .map(({ run_id, role, status }) => [run_id, role, status]), [[initial.run_id, "user", "completed"], [initial.run_id, "user", "failed"]])
+    assert.deepEqual(snapshot.messages.filter(({ role }) => role === "assistant").map(({ message_id }) => message_id), [initial.assistant_message_id])
+    assert.equal(snapshot.execution_head.run_id, initial.run_id)
+  } finally {
+    try {
+      await app?.close()
+      await close(owner)
+      for (const table of ["bff_agui_run_activity", "bff_agui_run_process", "bff_agui_run_interaction", "bff_agui_event", "bff_agui_source_event", "bff_agui_stream"]) {
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1 AND session_id=$2`, [tenant, sessionId])
+      }
+      for (const table of ["bff_run_steer", "bff_agent_dispatch_outbox", "bff_message", "bff_conversation"]) {
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1 AND conversation_id=$2`, [tenant, sessionId])
+      }
+    } finally {
+      await pool.end()
+    }
+  }
+})
+
 integrationTest("A03 interrupt admits one successor and one exact cancellation under the Conversation lock", { timeout: 15_000 }, async () => {
   const suffix = randomUUID()
   const tenant = `a03_interrupt_${suffix}`

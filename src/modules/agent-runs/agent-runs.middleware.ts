@@ -5,12 +5,14 @@ import {
   AGENT_RUNS_READER,
   AGUI_RUN_CONTROL_READER,
   BFF_CONFIG,
+  BFF_DATABASE,
   CHAT_CONVERSATION_LOOKUP,
   PROJECT_LOOKUP,
   RUN_DISPLAY_PROVIDER,
   SESSION_ADMISSION,
 } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
+import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { AgentRunsReader } from "../../infrastructure/postgres/project-execution-binding.js"
 import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
@@ -36,6 +38,7 @@ export class AgentRunsMiddleware implements NestMiddleware {
     @Inject(PROJECT_LOOKUP) private readonly projects: ProjectLookup,
     @Inject(AGUI_RUN_CONTROL_READER) private readonly readControl: AgUiRunControlReader,
     @Inject(AGENT_CONTROL_IDEMPOTENCY) private readonly controlIdempotency: IdempotencyRepository,
+    @Inject(BFF_DATABASE) private readonly database: PostgresBffDatabase,
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
@@ -55,6 +58,7 @@ export class AgentRunsMiddleware implements NestMiddleware {
             this.readControl,
             this.idempotency,
             this.controlIdempotency,
+            this.database,
           ),
       )
       .then((handled) => {
