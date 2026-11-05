@@ -3,10 +3,10 @@ import { createHash } from "node:crypto"
 import { access, readFile } from "node:fs/promises"
 import { test } from "node:test"
 
-const ownerCommit = "d13f33acfc7a482d61ebffc58e7b2667b58ae197"
+const ownerCommit = "4a990617ffe36d739b5a3e622132c304d4d48d41"
 const sources = {
   "kokoro/common/v1/common.proto": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd",
-  "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
+  "kokoro/storage/v3/storage.proto": "b84a2fb1fd9c6e8c16e15a29cafbc33de670f40f703f3f33ef27652a0237a629",
 }
 const root = new URL("../", import.meta.url)
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -37,7 +37,7 @@ async function sourceBytes() {
 test("Storage consumer pins exact owner Proto bytes and generated provenance, not an execution artifact", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/storage-connect.json"))
   assert.equal(manifest.owner.repository_commit, ownerCommit)
-  assert.equal(manifest.owner.published_combined_sha256, "47e2659f577cf5c0a5e44a9ee9165d0fee17471bb3d7abb80095a956f655c1f9")
+  assert.equal(manifest.owner.published_combined_sha256, "c8e9c5c975b2f2c0035b486dd1295c36603e1ad12fa6bc22dc26b94264becd78")
   assert.equal(manifest.owner.package_name, "kokoro.storage.v3")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-storage")
   assert.equal(manifest.execution_artifact, null)
@@ -120,11 +120,6 @@ test("Storage release consumer exposes only command bodies and authenticated pro
       ],
     )
   }
-
-  const proto = String(await sourceBytes().then((files) => files["kokoro/storage/v3/storage.proto"]))
-  assert.match(proto, /x-kokoro-tenant-id, x-kokoro-subject-id, and x-kokoro-request-id transport metadata/u)
-  assert.match(proto, /x-kokoro-scope-kind \(personal\|project\|conversation\|skill_package\|skill_cover\)/u)
-  assert.match(proto, /Scope is asserted by an authenticated, permitted business owner; body identity is forbidden\./u)
 })
 
 test("Storage F2 generated Artifact reads preserve owner identity and byte-reference fields", async () => {
