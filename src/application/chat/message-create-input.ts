@@ -1,6 +1,7 @@
 import { parseCustomApiProfileSelection, type SelectedCustomApiProfile } from "../../domain/chat/custom-api-profile-selection.js"
 import { parseMcpConnectionSelection } from "../../domain/chat/mcp-connection-selection.js"
 import { parseSkillSourceSelection } from "../../domain/chat/skill-source-selection.js"
+import { isInterruptRunId } from "../../domain/chat/agent-dispatch.js"
 
 export type MessageCreateInput = {
   content: string
@@ -11,6 +12,7 @@ export type MessageCreateInput = {
   selectedMcpConnectionIds?: string[]
   selectedCustomApiProfiles?: SelectedCustomApiProfile[]
   projectRef?: string
+  interruptRunId?: string
 }
 
 const MESSAGE_CREATE_KEYS = new Set([
@@ -22,6 +24,7 @@ const MESSAGE_CREATE_KEYS = new Set([
   "selected_mcp_connection_ids",
   "selected_custom_api_profiles",
   "project_ref",
+  "interrupt_run_id",
 ])
 
 function optionalTrimmedString(value: unknown): string | undefined | null {
@@ -40,6 +43,8 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
   const agent = optionalTrimmedString(json.agent)
   const bodyProjectRef = optionalTrimmedString(json.project_ref)
   const fallbackProjectRef = optionalTrimmedString(queryProjectRef)
+  const interruptRunId = json.interrupt_run_id
+  if (interruptRunId !== undefined && !isInterruptRunId(interruptRunId)) return null
   const selectedSkillSourceRefs = json.selected_skill_source_refs === undefined ? undefined : parseSkillSourceSelection(json.selected_skill_source_refs)
   const selectedMcpConnectionIds = json.selected_mcp_connection_ids === undefined ? undefined : parseMcpConnectionSelection(json.selected_mcp_connection_ids)
   const selectedCustomApiProfiles =
@@ -66,5 +71,6 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
     ...(selectedMcpConnectionIds === undefined ? {} : { selectedMcpConnectionIds }),
     ...(selectedCustomApiProfiles === undefined ? {} : { selectedCustomApiProfiles }),
     ...(projectRef === undefined ? {} : { projectRef }),
+    ...(interruptRunId === undefined ? {} : { interruptRunId }),
   }
 }

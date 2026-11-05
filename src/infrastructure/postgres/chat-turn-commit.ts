@@ -5,7 +5,12 @@ import { performance } from "node:perf_hooks"
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 
 import type { CommitChatTurn, ChatTurnSelectionInput, ChatTurnSelection } from "../../application/agent-dispatch/agent-dispatch-outbox-repository.js"
-import { bindAgentDispatchPayloadProjectScope, parseAgentDispatchPayload, type AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
+import {
+  bindAgentDispatchPayloadProjectScope,
+  isInterruptRunId,
+  parseAgentDispatchPayload,
+  type AgentDispatchReceipt,
+} from "../../domain/chat/agent-dispatch.js"
 import { firstMessageConversationTitle, isClientCreatedConversationId } from "../../domain/chat/conversation.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
 import { AGUI_NOTIFICATION_DEADLINE_MS, type PostgresBffDatabase } from "./client.js"
@@ -167,7 +172,7 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
         input.conversationId,
         input.idempotencyKey,
         input.projectRef ?? null,
-        isClientCreatedConversationId(input.conversationId),
+        input.interruptRunId === undefined && isClientCreatedConversationId(input.conversationId),
       ],
       query_timeout: remainingMilliseconds(deadline),
     }
@@ -221,6 +226,7 @@ async function lockChatScope(query: DeadlineQuery, command: CommitChatTurn): Pro
     [command.tenantId, command.conversationId, command.subjectId],
   )
   const preReadRow = preRead.rows[0]
+  if (preReadRow === undefined && command.interruptRunId !== undefined) return { kind: "not_found" }
   const callerProjectId =
     command.projectRef === undefined ? undefined : await resolveActiveProject(query, command.tenantId, command.subjectId, command.projectRef)
 
@@ -306,6 +312,9 @@ export async function commitChatTurn(
   ])
     requiredIdentity(value)
   if (!/^[0-9a-f]{64}$/u.test(command.requestDigest)) throw new Error("CHAT_TURN_DIGEST_INVALID")
+  if (command.interruptRunId !== undefined && (!isInterruptRunId(command.interruptRunId) || command.regeneration !== undefined)) {
+    throw new Error("CHAT_TURN_INPUT_INVALID")
+  }
   const callerPayload = parseAgentDispatchPayload(command.payload)
   if (
     callerPayload.launch.request_id !== command.requestId ||
@@ -484,6 +493,30 @@ export async function commitChatTurn(
       const registered = await query(registration.text, registration.values)
       if (registered.rowCount !== 1) throw new Error("AGENT_DISPATCH_CONSUMER_REGISTRATION_FAILED")
       await query("SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE", [command.tenantId, command.conversationId])
+      if (command.interruptRunId !== undefined) {
+        // The stream lock fences owner terminal/head changes; the unique cancellation
+        // record also excludes a different command from claiming the same Run.
+        const cancellation = await query(
+          `WITH head AS (
+             SELECT outbox_id,tenant_id,conversation_id,conversation_dispatch_seq,run_id,subject_id,identity_assertion_ref
+               FROM bff_agent_dispatch_outbox
+              WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted')
+              ORDER BY conversation_dispatch_seq,outbox_id LIMIT 1
+           )
+           INSERT INTO bff_agent_cancellation_outbox
+             (cancellation_id,tenant_id,conversation_id,conversation_dispatch_seq,run_id,subject_id,actor_id,
+              request_id,command_id,identity_assertion_ref,payload,status,attempt_count,available_at,fence)
+           SELECT 'cancel_'||head.outbox_id,head.tenant_id,head.conversation_id,head.conversation_dispatch_seq,
+                  head.run_id,head.subject_id,$5,$6,'cancel_'||head.outbox_id,head.identity_assertion_ref,
+                  jsonb_build_object('kind','run.cancel','session_id',head.conversation_id),'cancel_requested',0,CURRENT_TIMESTAMP(3),0
+             FROM head JOIN bff_agui_stream stream ON stream.tenant_id=head.tenant_id AND stream.session_id=head.conversation_id
+            WHERE head.subject_id=$3 AND stream.consumer_subject_id=$3 AND head.run_id=$4
+              AND stream.expected_run_id=$4 AND stream.latest_run_id=$4 AND stream.terminal_run_id IS DISTINCT FROM $4
+           ON CONFLICT (tenant_id,run_id) DO NOTHING`,
+          [command.tenantId, command.conversationId, command.subjectId, command.interruptRunId, command.actorId, command.requestId],
+        )
+        if (cancellation.rowCount !== 1) throw new Error("CHAT_INTERRUPT_TARGET_NOT_CURRENT")
+      }
 
       const sequence = await query<{ next_seq: string | number }>(
         `SELECT COALESCE(MAX(message_seq),0)+1 AS next_seq FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2`,

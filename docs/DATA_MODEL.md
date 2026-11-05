@@ -1578,6 +1578,10 @@ Root用现实例与同role的自有临时数据库验证canonical fresh apply及
 
 # kokoro-bff data model
 
+## A‑03：取消与后继消息的原子写入
+
+不改 canonical SQL。复用 `bff_agent_cancellation_outbox` 的 tenant/run 唯一约束，控制 ID 由目标 Run 的 dispatch outbox ID 派生。旧 Run 的取消记录、后继用户／助手记录与 dispatch 在同一个 ChatTurn 事务提交或一起回滚。只有 Agent 真实终态才能推进 FIFO；暂停或自然结束仍用现有投影。
+
 ## BFF-CHAT-ROLE2：`bff_message.role` 两角色约束（2026-10-01；目标态，未实施）
 
 `bff_message` 仍由 BFF Chat 唯一写入。当前 canonical SQL、domain/public TypeScript 与 OpenAPI 一致声明

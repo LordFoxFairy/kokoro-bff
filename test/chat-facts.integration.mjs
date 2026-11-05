@@ -5912,3 +5912,191 @@ integrationTest("SET21 real HTTP creates own turns and shares, pages safe facts 
     }
   }
 })
+
+integrationTest("A03 interrupt admits one successor and one exact cancellation under the Conversation lock", { timeout: 15_000 }, async () => {
+  const suffix = randomUUID()
+  const tenant = `a03_interrupt_${suffix}`
+  const subject = `a03_owner_${suffix}`
+  const sessionId = `conv_${randomUUID()}`
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const controller = new AbortController()
+  let bff = null
+  let blocker = null
+  const requests = []
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    const { app, database } = await createMoveNestApp(tenant, { messageAdmission: true })
+    bff = app
+    await database.ready()
+    await bff.listen(0, "127.0.0.1")
+    const base = await bff.getUrl()
+    const { AGUI_PROJECTION } = await import("../dist/common/tokens.js")
+    const projection = bff.get(AGUI_PROJECTION)
+    const dispatch = new PostgresAgentDispatchOutboxRepository(database)
+    const headers = auth(tenant, subject)
+    const messages = `${base}/v1/sessions/${sessionId}/messages`
+    const send = async (key, input) => {
+      const response = await fetch(messages, {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json", "idempotency-key": key },
+        body: JSON.stringify({ ...input, selected_skill_source_refs: [] }),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(6000)]),
+      })
+      return { status: response.status, body: await response.json() }
+    }
+    const detail = async () => {
+      const response = await fetch(`${base}/v1/sessions/${sessionId}`, { headers, signal: AbortSignal.timeout(5000) })
+      const body = await response.json()
+      assert.equal(response.status, 200, JSON.stringify(body))
+      return body.data.execution_head
+    }
+    const claim = () => dispatch.claimAgentDispatchOutbox({ workerId: `a03-worker-${suffix}`, limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+    const admit = async (runId) => {
+      const [candidate] = await claim()
+      assert.equal(candidate?.runId, runId)
+      assert.equal(await dispatch.markAgentDispatchAdmitted(candidate), true)
+    }
+    const event = (seq, runId, kind, payload) => {
+      const id = `a03-interrupt-${suffix}-${seq}`
+      const timestamp = new Date(seq * 1000).toISOString()
+      return {
+        sourceRunId: runId,
+        sourceEventId: id,
+        sourceSequence: seq,
+        sourceOccurredAt: timestamp,
+        sourcePayload: { run_id: runId },
+        event: { event_id: id, seq, session_id: sessionId, run_id: runId, timestamp, kind, payload },
+      }
+    }
+    const snapshot = async () => {
+      const rows = async (sql) => (await pool.query(sql, [tenant, sessionId])).rows
+      return {
+        messages: await rows(`SELECT message_id,run_id,role,content,status FROM bff_message
+          WHERE tenant_id=$1 AND conversation_id=$2 ORDER BY message_seq`),
+        dispatches: await rows(`SELECT outbox_id,run_id,idempotency_key,subject_id,identity_assertion_ref,status FROM bff_agent_dispatch_outbox
+          WHERE tenant_id=$1 AND conversation_id=$2 ORDER BY conversation_dispatch_seq`),
+        cancels: await rows(`SELECT cancellation_id,command_id,run_id,subject_id,identity_assertion_ref,payload,status FROM bff_agent_cancellation_outbox
+          WHERE tenant_id=$1 AND conversation_id=$2 ORDER BY cancellation_id`),
+      }
+    }
+
+    const first = await send(`a03-original-${suffix}`, { content: "Original active turn" })
+    assert.equal(first.status, 202, JSON.stringify(first.body))
+    const a = first.body.data
+    await admit(a.run_id)
+    await projection.ingest(tenant, sessionId, [event(1, a.run_id, "run.created", { run_id: a.run_id })])
+    assert.deepEqual(await detail(), { run_id: a.run_id, state: "active", pending_pauses: [] })
+    const before = await snapshot()
+    assert.equal(before.messages.length, 2)
+    assert.equal(before.dispatches.length, 1)
+    assert.deepEqual(before.cancels, [])
+
+    blocker = await pool.connect()
+    await blocker.query("BEGIN")
+    const held = await blocker.query("SELECT conversation_id FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2 FOR UPDATE", [
+      tenant,
+      sessionId,
+    ])
+    assert.equal(held.rowCount, 1)
+    const blockerPid = (await blocker.query("SELECT pg_backend_pid()::int AS pid")).rows[0].pid
+    const intents = [1, 2].map((number) => ({
+      key: `a03-interrupt-${suffix}-${number}`,
+      input: { content: `Interrupt successor ${number}`, interrupt_run_id: a.run_id },
+      result: null,
+    }))
+    for (const intent of intents) {
+      requests.push(send(intent.key, intent.input).then(
+        (result) => { intent.result = result; return result },
+        (error) => { intent.result = { error }; return intent.result },
+      ))
+    }
+    const locked = await waitFor(async () => {
+      const settled = intents.find((intent) => intent.result !== null)?.result
+      if (settled !== undefined) return { settled }
+      const { rows } = await pool.query(
+        `SELECT pid,query,pg_blocking_pids(pid) AS blockers FROM pg_stat_activity
+          WHERE datname=current_database() AND wait_event_type='Lock'`,
+      )
+      const firstWaiter = rows.find((row) => /FROM bff_conversation\b[\s\S]*FOR UPDATE/u.test(row.query) && row.blockers.includes(blockerPid))
+      if (!firstWaiter) return false
+      const secondWaiter = rows.find((row) => row.pid !== firstWaiter.pid &&
+        /FROM bff_conversation\b[\s\S]*FOR UPDATE/u.test(row.query) &&
+        (row.blockers.includes(blockerPid) || row.blockers.includes(firstWaiter.pid)))
+      return secondWaiter ? { pids: [firstWaiter.pid, secondWaiter.pid] } : false
+    }, 800)
+    if ("settled" in locked) {
+      // On the unchanged route this is 400 invalid_message, not a fixture timeout.
+      assert.equal(locked.settled.status, 202, `valid interrupt returned before the owner lock: ${JSON.stringify(locked.settled)}`)
+      assert.fail("an interrupt must not commit before the owner Conversation lock is released")
+    }
+    assert.equal(new Set(locked.pids).size, 2)
+    assert.deepEqual(await snapshot(), before, "neither blocked command may write admission facts")
+    await blocker.query("COMMIT")
+    blocker.release()
+    blocker = null
+
+    const results = await Promise.all(requests)
+    assert.deepEqual(results.map(({ status }) => status).sort((left, right) => left - right), [202, 409], JSON.stringify(results))
+    const winnerIndex = results.findIndex(({ status }) => status === 202)
+    const winner = results[winnerIndex].body.data
+    assert.deepEqual(Object.keys(winner).sort(), ["assistant_message_id", "run_id", "user_message_id"])
+    assert.notEqual(winner.run_id, a.run_id)
+    assert.equal(results[1 - winnerIndex].body.error?.code, "run_delivery_conflict")
+    const admitted = await snapshot()
+    assert.equal(admitted.messages.length, 4)
+    assert.equal(admitted.dispatches.length, 2)
+    assert.deepEqual(admitted.dispatches.map(({ run_id, status }) => [run_id, status]), [[a.run_id, "admitted"], [winner.run_id, "pending"]])
+    assert.equal(admitted.dispatches[1].idempotency_key, intents[winnerIndex].key)
+    assert.deepEqual(admitted.messages.filter(({ run_id }) => run_id === winner.run_id).map(({ role, content }) => [role, content]), [
+      ["user", intents[winnerIndex].input.content],
+      ["assistant", ""],
+    ])
+    const [cancel] = admitted.cancels
+    assert.equal(admitted.cancels.length, 1)
+    assert.deepEqual(
+      [cancel.run_id, cancel.subject_id, cancel.identity_assertion_ref, cancel.command_id, cancel.status],
+      [a.run_id, subject, before.dispatches[0].identity_assertion_ref, `cancel_${before.dispatches[0].outbox_id}`, "cancel_requested"],
+    )
+    assert.equal(cancel.cancellation_id, cancel.command_id)
+    assert.equal(cancel.payload.kind, "run.cancel")
+    assert.equal(cancel.payload.session_id, sessionId)
+    assert.deepEqual(await claim(), [], "BFF admission or a queued cancellation is not a terminal")
+
+    // Feed a canonical source fact through the actual owner projector, never by
+    // writing stream/head state directly. This is not a claim of an Agent E2E.
+    await projection.ingest(tenant, sessionId, [event(2, a.run_id, "run.completed", { status: "cancelled" })])
+    await admit(winner.run_id)
+    await projection.ingest(tenant, sessionId, [event(3, winner.run_id, "run.created", { run_id: winner.run_id })])
+    assert.deepEqual(await detail(), { run_id: winner.run_id, state: "active", pending_pauses: [] })
+    const changedHead = await snapshot()
+    const replay = await send(intents[winnerIndex].key, intents[winnerIndex].input)
+    assert.equal(replay.status, 202, JSON.stringify(replay.body))
+    assert.deepEqual(replay.body.data, winner, "same intent returns the original three IDs even after head advances")
+    const stale = await send(`a03-stale-${suffix}`, { content: "Stale should not write", interrupt_run_id: a.run_id })
+    assert.equal(stale.status, 409, JSON.stringify(stale.body))
+    assert.equal(stale.body.error?.code, "run_delivery_conflict")
+    const changed = await send(intents[winnerIndex].key, { ...intents[winnerIndex].input, interrupt_run_id: winner.run_id })
+    assert.equal(changed.status, 409, JSON.stringify(changed.body))
+    assert.equal(changed.body.error?.code, "idempotency_conflict")
+    assert.deepEqual(await snapshot(), changedHead, "replay, stale target and changed input leave the owner facts byte-equivalent")
+  } finally {
+    controller.abort()
+    try {
+      if (blocker !== null) {
+        await blocker.query("ROLLBACK")
+        blocker.release()
+      }
+      await Promise.allSettled(requests)
+      if (bff !== null) await bff.close()
+      for (const table of ["bff_agui_run_activity", "bff_agui_run_process", "bff_agui_run_interaction", "bff_agui_event", "bff_agui_source_event", "bff_agui_stream"]) {
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1 AND session_id=$2`, [tenant, sessionId])
+      }
+      for (const table of ["bff_agent_cancellation_outbox", "bff_agent_dispatch_outbox", "bff_message", "bff_conversation"]) {
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1 AND conversation_id=$2`, [tenant, sessionId])
+      }
+    } finally {
+      await pool.end()
+    }
+  }
+})

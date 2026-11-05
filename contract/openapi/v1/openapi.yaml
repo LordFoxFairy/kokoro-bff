@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.20.0
+  version: 28.21.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -22831,6 +22831,16 @@ components:
         model: { type: string, minLength: 1 }
         agent: { type: string, minLength: 1 }
         thinking: { type: boolean }
+        interrupt_run_id:
+          type: string
+          minLength: 1
+          maxLength: 191
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
+          description: >-
+            For an existing session, name its exact active Run to cancel while accepting this
+            FIFO successor. The same key and input return the original receipt. A stale target
+            or a Run already claimed by another interrupt returns 409 run_delivery_conflict
+            without accepting a new message. Acceptance does not prove cancellation or bypass FIFO.
         selected_skill_source_refs:
           type: array
           maxItems: 16

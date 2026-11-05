@@ -2239,6 +2239,10 @@ cursor只作为位置，不授予权限；每页重新应用tenant/subject/activ
 
 # kokoro-bff API contract policy
 
+## Public 28.21：打断并发送
+
+原 `POST /v1/sessions/{id}/messages` 可选 `interrupt_run_id`（exact active Run）。仅已存在的本人会话可接受，缺失/他人仍 404；当前目标失效或已被另一 interrupt 认领返回 409 `run_delivery_conflict`，同键换入参仍 409 `idempotency_conflict`。同键原输入返回原三 ID，202 不证明旧 Run 已取消；不改变 FIFO。
+
 ## BFF-CHAT-ROLE2：Message role public 收窄（2026-10-01；目标 `3.0.0`，未发布）
 
 当前 canonical OpenAPI 仍为 public `2.0.0`，`ChatMessage.role` 声明 `user | assistant | system`；实际 BFF writer、Agent

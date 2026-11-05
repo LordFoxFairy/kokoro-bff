@@ -3,7 +3,17 @@ import { readFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { test } from "node:test"
 import { load } from "js-yaml"
-import { restorePublic2815ComposerSelectionContract, restorePublic2816CustomApiSelectionContract } from "../scripts/composer-selection-public-contract.mjs"
+import { restorePublic2815ComposerSelectionContract, restorePublic2816CustomApiSelectionContract, restorePublic2820InterruptContract } from "../scripts/composer-selection-public-contract.mjs"
+
+test("interrupt is an optional exact Run on Message Create, with the Public28.20 parent preserved", async () => {
+  const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const parent = restorePublic2820InterruptContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "c5fc7225901fa5b815cdb7ee5286354d7c4cabed9919676e6e86651fb9910783")
+  const request = load(source).components.schemas.MessageCreateRequest
+  assert.deepEqual(request.required, ["content"])
+  assert.equal(request.properties.interrupt_run_id.maxLength, 191)
+  assert.throws(() => restorePublic2820InterruptContract(source.replace("interrupt_run_id:", "loose_run_id:")), /drift/)
+})
 
 test("composer selection is private-only and preserves the exact parent contract and submission semantics", async () => {
   const raw = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")

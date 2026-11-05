@@ -1,3 +1,7 @@
+## A‑03：打断并发送（BFF owner 候选）
+
+Public 28.21 给既有 Message Create 加 exact `interrupt_run_id`。正常 FIFO、成功三 ID 和原摘要保持；取消和后继同事务，不改 canonical SQL 或 Agent wire。真实 Nest/PG 在旧路由复现 400；候选下两新键等同一个 Conversation 锁，放锁后仅一笔 202、一笔 409，取消和后继各一，同键跨 head 回原三 ID，陈旧目标零写，原租约不越过真正终态。隔离资源已回收。该验收用实际 BFF projector 的 owner terminal 输入，未运行 Agent Worker 或 App，后续分别补齐，不冒称取消已完成。
+
 ## A‑07：Project Todo 的 BFF owner 已验
 
 Public 28.20 在现 Project 任务列表增加强 revision，并补创建、编辑／状态切换与删除。真实 Nest Projects 和隔离 PostgreSQL 已验现有行、持久幂等、并发／ABA、权限、限额和父项目删除；受控 Session 准入，不作为 App 原生浏览器验收。原 canonical schema 全字节不变。App 生成、浏览器和 A/B 真实登记由 Root 继续。

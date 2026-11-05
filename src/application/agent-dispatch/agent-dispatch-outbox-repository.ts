@@ -8,6 +8,7 @@ export type CommitChatTurn = {
   tenantId: string
   conversationId: string
   projectRef?: string
+  interruptRunId?: string
   subjectId: string
   actorId: string
   requestId: string
@@ -24,7 +25,7 @@ export type CommitChatTurn = {
 
 export type ChatTurnSelectionInput = Pick<
   CommitChatTurn,
-  "tenantId" | "conversationId" | "subjectId" | "projectRef" | "idempotencyKey" | "requestDigest" | "lifetime"
+  "tenantId" | "conversationId" | "subjectId" | "projectRef" | "interruptRunId" | "idempotencyKey" | "requestDigest" | "lifetime"
 >
 export type ChatTurnSelection = { kind: "new"; projectId: string | null; installationIds: string[] } | { kind: "replay"; receipt: AgentDispatchReceipt }
 

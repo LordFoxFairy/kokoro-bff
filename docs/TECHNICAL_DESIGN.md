@@ -2864,6 +2864,10 @@ Owner 为 BFF Conversation；复用现 PostgreSQL ChatRepository，不新增文�
 
 # kokoro-bff 技术设计
 
+## A‑03：打断并发送
+
+现有 Message Create 可绑定当前已启动的 exact Run。按 Project → Conversation → stream 锁序，先处理 owner 同键回执，再在同事务写正常后继和指定旧 Run 的现有取消记录。普通请求摘要与队列不变；错目标或其它命令先认领则整笔不写。不建新 API 或 worker。取消投递 ACK 只证明控制接纳，真实终态仍由 owner 投影后放行。
+
 ## BFF-CHAT-ROLE2：Message 角色声明收敛（2026-10-01；设计门，未实施）
 
 ### 当前态与目标态

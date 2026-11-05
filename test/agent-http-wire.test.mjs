@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { describe, it } from "node:test"
+import { load } from "js-yaml"
 import { parseAgentErrorCode, parseAgentHttpJson, parseLaunchReceipt, parseReplayPage } from "../dist/infrastructure/clients/agent/http-wire.js"
 
 import { mapAgentEvent } from "../dist/infrastructure/clients/agent/projection.js"
@@ -289,11 +290,11 @@ it("typed selection runtime and public limits match the fixed Agent machine cont
   const schema = owner.components.schemas.LaunchRequest.properties.selected_skill_source_refs
   const pattern = new RegExp(schema.items.pattern, "u")
   const publicContract = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  const section = publicContract.split("    MessageCreateRequest:\n")[1].split("    MessageReceipt:\n")[0]
-  assert.match(section, new RegExp(`maxItems: ${schema.maxItems}`))
-  assert.match(section, new RegExp(`x-kokoro-json-byte-limit: ${schema["x-kokoro-json-byte-limit"]}`))
-  assert.match(section, /uniqueItems: true/)
-  const publicPattern = new RegExp(section.match(/pattern: '([^']+)'/)[1], "u")
+  const publicSelection = load(publicContract).components.schemas.MessageCreateRequest.properties.selected_skill_source_refs
+  assert.equal(publicSelection.maxItems, schema.maxItems)
+  assert.equal(publicSelection["x-kokoro-json-byte-limit"], schema["x-kokoro-json-byte-limit"])
+  assert.equal(publicSelection.uniqueItems, true)
+  const publicPattern = new RegExp(publicSelection.items.pattern, "u")
   for (const value of [
     "skill:a",
     "skill:a.b:c-d_e",

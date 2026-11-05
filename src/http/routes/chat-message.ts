@@ -22,6 +22,9 @@ function messageFault(error: unknown): { status: number; code: string; message: 
   if (error.message === "CHAT_TURN_IDEMPOTENCY_CONFLICT") {
     return { status: 409, code: "idempotency_conflict", message: "Idempotency key was already used with different Chat input" }
   }
+  if (error.message === "CHAT_INTERRUPT_TARGET_NOT_CURRENT") {
+    return { status: 409, code: "run_delivery_conflict", message: "The selected Run is no longer available for interruption" }
+  }
   if (error.message === "CHAT_SKILL_SELECTION_CHANGED")
     return { status: 409, code: "skill_selection_changed", message: "Project Skill selection changed before submission; retry the original intent" }
   if (error.message === "CHAT_TURN_PROJECT_NOT_FOUND") {

@@ -73,6 +73,7 @@ export type AgentDispatchInput = {
   tenantId: string
   conversationId: string
   projectRef?: string
+  interruptRunId?: string
   subjectId: string
   actorId: string
   requestId: string
@@ -84,6 +85,10 @@ export type AgentDispatchInput = {
   selectedSkillSourceRefs?: string[]
   selectedMcpConnectionIds?: string[]
   selectedCustomApiProfiles?: SelectedCustomApiProfile[]
+}
+
+export function isInterruptRunId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/u.test(value)
 }
 
 function requiredString(value: unknown, code: string): string {
@@ -113,6 +118,7 @@ export function assertAgentDispatchInput(input: AgentDispatchInput): void {
   for (const value of [input.projectRef, input.model, input.agent]) {
     if (value !== undefined && value.trim() === "") throw new Error("CHAT_TURN_INPUT_INVALID")
   }
+  if (input.interruptRunId !== undefined && !isInterruptRunId(input.interruptRunId)) throw new Error("CHAT_TURN_INPUT_INVALID")
   if (parseSkillSourceSelection(input.selectedSkillSourceRefs === undefined ? [] : input.selectedSkillSourceRefs) === null)
     throw new Error("CHAT_TURN_INPUT_INVALID")
   if (input.selectedMcpConnectionIds !== undefined && parseMcpConnectionSelection(input.selectedMcpConnectionIds) === null)
@@ -148,7 +154,7 @@ export function agentDispatchRequestMaterial(input: AgentDispatchInput): string 
     material.push({
       selected_custom_api_profiles: input.selectedCustomApiProfiles.map(({ profile_id, expected_state_version }) => ({ profile_id, expected_state_version })),
     })
-  return JSON.stringify(material)
+  return JSON.stringify(input.interruptRunId === undefined ? material : ["message.interrupt:v1", input.interruptRunId, material])
 }
 
 export function buildAgentDispatchPayload(input: AgentDispatchInput, ids: { runId: string; userMessageId: string }): AgentDispatchPayload {

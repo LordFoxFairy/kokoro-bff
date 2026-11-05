@@ -146,6 +146,7 @@ export class ChatTurnApplicationService {
         tenantId: input.tenantId,
         conversationId: input.conversationId,
         ...(input.projectRef === undefined ? {} : { projectRef: input.projectRef }),
+        ...(input.interruptRunId === undefined ? {} : { interruptRunId: input.interruptRunId }),
         subjectId: input.subjectId,
         actorId: input.actorId,
         requestId: input.requestId,
