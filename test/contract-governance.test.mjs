@@ -219,9 +219,9 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
-test("the IAM consumer pins the complete 0.20.0 owner and native authentication artifacts without retired BFF admission operations", async () => {
-  const commit = "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7"
-  const digest = "61cf99b4fe836deafedb9f59d9fa2ea3446ce172f4069944f7facb14e816c7ca"
+test("the IAM consumer pins the complete 0.21.0 owner artifact without retired workload introspection or BFF admission operations", async () => {
+  const commit = "b6a9745b340149808afb1aae357574d0aa7bbad3"
+  const digest = "d279907ae52e0f8594ee28a388f22c9d79e298e8e49caeb2efc3ca2291cdf0b9"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -233,8 +233,11 @@ test("the IAM consumer pins the complete 0.20.0 owner and native authentication 
   const sha256 = (value) => createHash("sha256").update(value).digest("hex")
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
+  assert.equal(manifest.owner.contract_version, "0.21.0")
+  assert.equal(owner.paths["/internal/v1/platform-workload-tokens/introspect"], undefined)
+  assert.equal(owner.components.securitySchemes.platformResourceServerBasic, undefined)
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.20.0")
+  assert.equal(owner.info.version, "0.21.0")
   // This operation still serves independent OAuth consumers; only the BFF include is retired.
   assert.ok(owner.paths["/internal/v1/session-authorizations/verify"])
   for (const [ownerPath, method] of [
@@ -266,7 +269,7 @@ test("the IAM consumer pins the complete 0.20.0 owner and native authentication 
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.20.0",
+    contract_version: "0.21.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -335,15 +338,16 @@ test("the IAM consumer pins the complete 0.20.0 owner and native authentication 
   for (const resource of ["members", "invitations", "roles"]) {
     assert.match(config, new RegExp(`GET /internal/v1/tenants/\\{tenant_id\\}/${resource}`, "u"))
   }
+  const authCommit = "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7"
   const [authManifestSource, authConfig, authVendor] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-auth.json", import.meta.url), "utf8"),
     readFile(new URL("../openapi-ts.iam-auth.config.ts", import.meta.url), "utf8"),
-    readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/better-auth.v1.7.3.json`, import.meta.url)),
+    readFile(new URL(`../contract/vendor/kokoro-iam/${authCommit}/better-auth.v1.7.3.json`, import.meta.url)),
   ])
   const authManifest = JSON.parse(authManifestSource)
   assert.deepEqual(authManifest.owner, {
     repository_path: "apps/kokoro-iam",
-    repository_commit: commit,
+    repository_commit: authCommit,
     framework: "better-auth",
     framework_version: "1.7.3",
     contract_path: "contract/vendor/better-auth.v1.7.3.json",

@@ -94,7 +94,7 @@ test("published browser-private policy is a deterministic read-only projection o
   })
 })
 
-test("vendored IAM 0.20.0 contract and generated-client manifest pin the current owner bytes", async () => {
+test("the relay keeps its immutable IAM 0.20.0 provenance artifact without obsolete vendor snapshots", async () => {
   const ownerCommit = "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7"
   const expectedDigest = "61cf99b4fe836deafedb9f59d9fa2ea3446ce172f4069944f7facb14e816c7ca"
   const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
@@ -116,16 +116,6 @@ test("vendored IAM 0.20.0 contract and generated-client manifest pin the current
   assert.equal(retiredAdmissionVendor, null, "retired 0.7 admission vendor path must be removed")
   const contract = JSON.parse(vendor!.toString("utf8")) as { info?: { version?: string } }
   assert.equal(contract.info?.version, "0.20.0")
-  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8")) as {
-    owner?: { repository_commit?: string; contract_version?: string; contract_sha256?: string }
-  }
-  assert.deepEqual(manifest.owner, {
-    repository_path: "apps/kokoro-iam",
-    repository_commit: ownerCommit,
-    contract_version: "0.20.0",
-    contract_path: "contract/openapi/iam.internal.v1.json",
-    contract_sha256: expectedDigest,
-  })
 })
 
 test("generated IAM client exposes only the three browser-private invitation operations added by 0.4.0", () => {

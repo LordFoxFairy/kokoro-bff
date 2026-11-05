@@ -2,7 +2,7 @@
 
 当前普通私有请求只经受信Web/Admin服务envelope＋IAM issuer Cookie＋固定Origin进入唯一显式`AuthenticationModule`；官方`GET /iam/get-session`鲜读后，IAM `tenant/read`核当前Product资格。普通IAM业务只传专用服务身份＋真实actor，不传Cookie、Origin、登录Session或人类Bearer；独立公开API Key/OpenApp与执行／资金proof不变。
 
-- IAM固定`896405d146c4ff96f5f39d5c2ce1bc788d46c2c7`／internal0.20；配置snapshot Better Auth1.7.3与18个只读生成文件由现正常IAM生成命令校验。
+- IAM 业务 HTTP 生成消费固定 `b6a9745b340149808afb1aae357574d0aa7bbad3`／internal 0.21，只更新来源、保留已选的 22 个操作。Better Auth 1.7.3 与原生 relay 的独立 provenance 锚仍为 `896405d146c4ff96f5f39d5c2ce1bc788d46c2c7`，不改变认证路径。
 - `KOKORO_BFF_IAM_USER_CONTEXT_SERVICE_CREDENTIAL_FILE`用于17项普通私有业务；`KOKORO_BFF_IAM_ACCOUNT_SESSIONS_SERVICE_CREDENTIAL_FILE`只用于独立账户会话认证生命周期（服务身份 AND Cookie AND exact Origin）。旧ADMISSION配置不再读取。
 - browser-private `GET /browser/v1/auth/session`严格`refresh=true|false`，默认true供可写状态观察；RSC显式false。仅返回安全身份／真实expiry，request ID只在header；逐条安全Set-Cookie，不输出raw Session／set-auth-jwt。
 - 独立合同profile1.0.0及relay3.0.0已由Root提交`34c9f997`；浏览器raw get-session出口关闭。公开`/v1/me`三字段和原envelope保持。
