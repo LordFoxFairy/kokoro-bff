@@ -1,3 +1,9 @@
+## A‑07：Project Todo（Public 28.20 候选，D0）
+
+唯一机器合同见 [OpenAPI](../contract/openapi/v1/openapi.yaml)。既有集合 GET 保留 id/slug、`data.tasks`、`updated_at DESC, task_id ASC`，只给每项增不透明 `revision`。本片不改 GET 的默认结果或分页形状。写入仅接受 canonical Project ID：集合 POST `{title}` 默认 `todo`，返回 201 及 Location；成员 PATCH 至少一个 `title`／`status`，返回 200；成员 DELETE 无请求体，返回 204。状态 `todo / in_progress / done`。App 先 trim 标题；HTTP title 输入最多 160 Unicode 标量，BFF 规范化后非空，拒绝控制字符或未配对代理项。新创建上限为每项目 200；已存在的超限行仍完整可读、可改、可删，原 key 可重放，超限新 key 返回 `409 project_task_limit_reached`。写回执只含 `id / project_id / revision`，不存用户标题；读取列表取得当前资源表示。
+
+全部写入要求一枚 `Idempotency-Key`；PATCH/DELETE 还要求一个双引号包裹的强 `If-Match`，拒绝 wildcard、weak、重复或不合法值。缺前置 428、坏输入 400、过期 412、同操作同键异指纹 409、不可见 Project/Task 404；依赖故障及未知提交 503，不返回伪成功。重放先核 Project 当前归属，再比较原 key/body/version，返回原成功回执和状态；DELETE 的原 204 可重放，另一个 key 对不存在任务仍 404。当前请求的 `x-request-id` 不落持久回执。无新 OAuth/Session 机制。
+
 ## T‑09：Agent 8.11 安全终态配对
 
 Public 28.19 在普通及 ordered assistant Message 的既有安全 failure tuple 中追加 `context_window_exceeded`，仅允许 `retryable: false`。保留 `model_unavailable`、`dependency_unavailable` 为仅有可重试码。原路由、AG‑UI 事件及鉴权不变。Agent HTTP 8.11 固定至 `40effb2d028b7d40264704543e45fdf3645f6d11`；不启用 BFF 发出 `personal_context`。

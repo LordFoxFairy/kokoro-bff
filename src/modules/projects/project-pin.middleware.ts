@@ -4,7 +4,7 @@ import {
   BFF_CONFIG,
   BFF_POOL,
   PROJECT_PINS,
-  PROJECT_TASK_READER,
+  PROJECT_TASKS,
   PROJECT_LOOKUP,
   PROJECT_READS,
   PROJECT_RENAME,
@@ -21,7 +21,9 @@ import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/ide
 import type { ProjectLookup } from "../../application/projects/types.js"
 import type { ProjectDeletion, ProjectRenamer } from "../../application/projects/commands.js"
 import type { ProjectPinProvider } from "../../infrastructure/postgres/project-pin.js"
-import type { ProjectReadStore, ProjectTaskReader } from "../../infrastructure/postgres/project-store.js"
+import type { ProjectReadStore } from "../../infrastructure/postgres/project-store.js"
+import type { ProjectTasks } from "../../infrastructure/postgres/project-tasks.js"
+import { handleProjectTaskRequest } from "../../http/routes/project-tasks.js"
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import {
   handleProjectSkillSelectionRequest,
@@ -55,7 +57,7 @@ export class ProjectPinMiddleware implements NestMiddleware {
     @Inject(PROJECT_RENAME) private readonly rename: ProjectRenamer,
     @Inject(PROJECT_DELETION) private readonly deletion: ProjectDeletion,
     @Inject(PROJECT_PINS) private readonly pins: ProjectPinProvider,
-    @Inject(PROJECT_TASK_READER) private readonly readTasks: ProjectTaskReader,
+    @Inject(PROJECT_TASKS) private readonly tasks: ProjectTasks,
     @Inject(PROJECT_SKILL_SELECTION_PROVIDER) private readonly projectSkillSelection: ProjectSkillSelectionProvider,
     @Inject(SKILL_INSTALLATION_CLIENT) private readonly installationClient: SkillInstallationConnectClient | null,
     @Inject(SKILL_AUTHORIZATION) private readonly skillAuthorization: Pick<SkillAuthorizationClient, "check">,
@@ -87,7 +89,8 @@ export class ProjectPinMiddleware implements NestMiddleware {
       )
       .then((handled) => handled || handleProjectResourceReadRequest(request, response, this.config, this.admission, this.lookup))
       .then((handled) => handled || handleProjectResourceListRequest(request, response, this.config, this.admission, this.lookup))
-      .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.reads, this.lookup, this.readTasks))
+      .then((handled) => handled || handleProjectTaskRequest(request, response, this.config, this.admission, this.tasks))
+      .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.reads, this.lookup))
       .then((handled) => handled || handleProjectPinRequest(request, response, this.config, this.admission, this.pins))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()

@@ -6,12 +6,13 @@ import {
   PROJECT_LOOKUP,
   PROJECT_MCP_RECOMMENDATIONS_STORE,
   PROJECT_PINS,
-  PROJECT_TASK_READER,
+  PROJECT_TASKS,
   PROJECT_SKILL_SELECTION_PROVIDER,
 } from "../../common/tokens.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import type { Pool } from "pg"
-import { createProjectLookup, createProjectTaskReader } from "../../infrastructure/postgres/project-store.js"
+import { createProjectLookup } from "../../infrastructure/postgres/project-store.js"
+import { createProjectTasks } from "../../infrastructure/postgres/project-tasks.js"
 import { createProjectPins } from "../../infrastructure/postgres/project-pin.js"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
 import { createProjectSkillSelectionOperations } from "../../infrastructure/postgres/project-skill-selection.js"
@@ -24,7 +25,7 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
   imports: [DatabaseModule],
   providers: [
     { provide: PROJECT_PINS, inject: [BFF_DATABASE], useFactory: createProjectPins },
-    { provide: PROJECT_TASK_READER, inject: [BFF_POOL], useFactory: createProjectTaskReader },
+    { provide: PROJECT_TASKS, inject: [BFF_DATABASE], useFactory: createProjectTasks },
     { provide: PROJECT_LOOKUP, inject: [BFF_POOL], useFactory: createProjectLookup },
     { provide: PROJECT_MCP_RECOMMENDATIONS_STORE, inject: [BFF_DATABASE], useFactory: createProjectMcpRecommendationsStore },
     {
@@ -40,6 +41,6 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
       },
     },
   ],
-  exports: [PROJECT_LOOKUP, PROJECT_MCP_RECOMMENDATIONS_STORE, PROJECT_PINS, PROJECT_TASK_READER, PROJECT_SKILL_SELECTION_PROVIDER],
+  exports: [PROJECT_LOOKUP, PROJECT_MCP_RECOMMENDATIONS_STORE, PROJECT_PINS, PROJECT_TASKS, PROJECT_SKILL_SELECTION_PROVIDER],
 })
 export class ProjectAccessModule {}

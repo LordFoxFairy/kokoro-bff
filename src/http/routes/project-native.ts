@@ -20,7 +20,7 @@ import { reply, send } from "../response.js"
 import { parseProjectResource } from "../project-resource-input.js"
 import { StorageUploadClient } from "../../infrastructure/clients/storage/client.js"
 import type { ProjectPinProvider } from "../../infrastructure/postgres/project-pin.js"
-import type { ProjectReadStore, ProjectTaskReader } from "../../infrastructure/postgres/project-store.js"
+import type { ProjectReadStore } from "../../infrastructure/postgres/project-store.js"
 import { projectPinRoute, ProjectPinAdmissionError } from "./project-pin.js"
 import { projectResourceReadRoute, type ProjectResourceReadClientFactory, type ProjectResourceReadSpooler } from "./project-resource-read.js"
 
@@ -45,8 +45,7 @@ export function isProjectCoreReadRequest(request: IncomingMessage): boolean {
     request.method === "GET" &&
     (path === "/v1/projects" ||
       /^\/v1\/projects\/[^/]+$/u.test(path) ||
-      /^\/v1\/projects\/[^/]+\/instruction-revisions$/u.test(path) ||
-      /^\/v1\/projects\/[^/]+\/tasks$/u.test(path))
+      /^\/v1\/projects\/[^/]+\/instruction-revisions$/u.test(path))
   )
 }
 
@@ -583,7 +582,6 @@ export async function handleProjectCoreReadRequest(
   admission: SessionAdmission,
   reads: ProjectReadStore,
   lookup: ProjectLookup,
-  readTasks: ProjectTaskReader,
 ): Promise<boolean> {
   if (!isProjectCoreReadRequest(request)) return false
   const id = requestId(request)
@@ -605,12 +603,6 @@ export async function handleProjectCoreReadRequest(
     const scope = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }
     const path = (request.url ?? "").split("?", 1)[0] ?? ""
     const projectId = path === "/v1/projects" ? null : path.slice("/v1/projects/".length)
-    if (projectId !== null && projectId.endsWith("/tasks")) {
-      const tasks = await readTasks(scope, projectId.slice(0, -"/tasks".length))
-      if (abort.signal.aborted || response.destroyed || response.writableEnded) return true
-      send(response, tasks === null ? 404 : 200, tasks === null ? failure("project_not_found", "Project was not found", id) : ok({ tasks }, id))
-      return true
-    }
     if (projectId !== null && projectId.endsWith("/instruction-revisions")) {
       const revisions = await reads.revisions(scope, projectId.slice(0, -"/instruction-revisions".length))
       if (abort.signal.aborted || response.destroyed || response.writableEnded) return true

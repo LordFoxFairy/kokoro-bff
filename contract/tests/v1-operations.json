@@ -387,6 +387,21 @@
       "operation_id": "listProjectTasks"
     },
     {
+      "method": "POST",
+      "path": "/v1/projects/{projectId}/tasks",
+      "operation_id": "createProjectTask"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/projects/{projectId}/tasks/{taskId}",
+      "operation_id": "updateProjectTask"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/{projectId}/tasks/{taskId}",
+      "operation_id": "deleteProjectTask"
+    },
+    {
       "method": "GET",
       "path": "/v1/projects/{projectId}/instruction-revisions",
       "operation_id": "listProjectInstructionRevisions"

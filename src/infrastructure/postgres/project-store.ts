@@ -1,7 +1,7 @@
 import type { Pool } from "pg"
 import { randomUUID } from "node:crypto"
 
-import type { Project, ProjectInstructionRevision, Task } from "../../contracts/index.js"
+import type { Project, ProjectInstructionRevision } from "../../contracts/index.js"
 import type { ProjectLookup, ProjectOwnerScope } from "../../application/projects/types.js"
 
 type ProjectRow = {
@@ -24,15 +24,6 @@ type RevisionRow = {
   current: boolean
 }
 
-type ProjectTaskRow = {
-  task_id: string
-  tenant_id: string
-  project_id: string
-  title: string
-  status: "todo" | "in_progress" | "done"
-  updated_at: Date | string
-}
-
 function timestamp(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
 }
@@ -45,16 +36,6 @@ function projectFromRow(row: ProjectRow): Project {
     description: row.description,
     ...(row.instruction === null ? {} : { instruction: row.instruction }),
     created_at: timestamp(row.created_at),
-    updated_at: timestamp(row.updated_at),
-  }
-}
-
-function taskFromRow(row: ProjectTaskRow): Task {
-  return {
-    id: row.task_id,
-    project_id: row.project_id,
-    title: row.title,
-    status: row.status,
     updated_at: timestamp(row.updated_at),
   }
 }
@@ -83,29 +64,6 @@ async function findOwnedProject(pool: Pick<Pool, "query">, scope: ProjectOwnerSc
 export function createProjectLookup(pool: Pick<Pool, "query">): ProjectLookup {
   return { find: (scope, idOrSlug) => findOwnedProject(pool, scope, idOrSlug) }
 }
-
-export function createProjectTaskReader(pool: Pick<Pool, "query">) {
-  return async function readProjectTasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null> {
-    const project = await findOwnedProject(pool, scope, projectId)
-    if (project === null) return null
-    const result = await pool.query<ProjectTaskRow>(
-      `SELECT task_id, tenant_id, project_id, title, status, updated_at
-         FROM bff_project_task
-        WHERE tenant_id = $1 AND project_id = $2
-          AND EXISTS (
-            SELECT 1 FROM bff_project
-             WHERE bff_project.tenant_id = bff_project_task.tenant_id
-               AND bff_project.project_id = bff_project_task.project_id
-               AND bff_project.owner_id = $3 AND bff_project.deleted_at IS NULL
-          )
-        ORDER BY updated_at DESC, task_id ASC`,
-      [scope.tenantId, project.id, scope.subjectId],
-    )
-    return result.rows.map(taskFromRow)
-  }
-}
-
-export type ProjectTaskReader = ReturnType<typeof createProjectTaskReader>
 
 export function createProjectReadStore(pool: Pick<Pool, "query">) {
   async function list(scope: ProjectOwnerScope): Promise<Project[]> {

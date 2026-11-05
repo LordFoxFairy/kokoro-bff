@@ -1,11 +1,13 @@
 // Build/test-only exact additive private snapshot change; no runtime downgrade.
 import { createHash } from "node:crypto"
+import { restorePublic2819ProjectTasksContract } from "./project-tasks-public-contract.mjs"
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
 const accountProfileCurrentSha256 = "35a86f91e44beb1aeb6b17eca41d3bfdc79f11a43633662113a1778b4fab6082"
 const accountProfileParentSha256 = "ea0031103488daa1fcc0cca45fdd13f4d4061546ac4525c745ec47105649f7e7"
 
 export function restorePublic2818AccountProfileContract(source) {
+  source = restorePublic2819ProjectTasksContract(source)
   if (/^  version: 28\.19\.0$/mu.test(source)) {
     if (hash(source) !== "27032917fb272601b6da8ba9227bab5324ac305682a72c94adca72e4f9e25577") throw Error("Context window Public28.19 child drift")
     const field = "                - context_window_exceeded\n"

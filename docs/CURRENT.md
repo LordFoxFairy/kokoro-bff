@@ -1,3 +1,7 @@
+## A‑07：Project Todo 的 BFF owner 已验
+
+Public 28.20 在现 Project 任务列表增加强 revision，并补创建、编辑／状态切换与删除。真实 Nest Projects 和隔离 PostgreSQL 已验现有行、持久幂等、并发／ABA、权限、限额和父项目删除；受控 Session 准入，不作为 App 原生浏览器验收。原 canonical schema 全字节不变。App 生成、浏览器和 A/B 真实登记由 Root 继续。
+
 ## 2026-11-01 T-17 前置：真实 Nest DI 装配修复（候选）
 
 真实当前native启动曾失败于ChatModule非法导出。新增生产AppModule容器compile回归（只替换测试配置与外部数据库边界），依次复现Chat/Projects/Skills非法导出及ProjectAccess/Billing数据库依赖不可见五个RED；只修正五个module的imports/exports，不重复注册provider、不Global化。四个共享token保持单注册及严格owner同实例。两条旧非法re-export源码断言转查真实owner，业务路由断言保持。

@@ -1,3 +1,5 @@
+A‑07 Project Todo：`src/http/routes/project-tasks.ts` 唯一 HTTP 读写，`src/infrastructure/postgres/project-tasks.ts` 唯一任务投影／事务／强 revision 与回执；Projects 当前 owner 与父删除锁不变。非 Run Todo、Conversation 或 ScheduledTask。
+
 ## 原 Run Skill／文件展示（2026-10-28，候选）
 
 `routes/run-display.ts` 仅为当前Session/owned Conversation的exact submitted Run按需读Agent正式8.3；前后bounded资格与caller abort，最后owned检查在immutable映射之后，不插snapshot/list N+1。新safeactivity可选事实沿原process/ordered保留；旧display为独立只读hint，不改source/event/digest、不纳Share或当前catalog。原18生成器及完整父逆证在contract入口，正常由Root后验。

@@ -1,5 +1,6 @@
 import { restoreFinalAnswerSchema } from "./message-final-answer-schema.mjs"
 import { restorePublic2813FinalAnswerContract } from "./final-answer-public-contract.mjs"
+import { projectTasksParentInventory } from "./project-tasks-public-contract.mjs"
 // Build/test-only complete Public28.5→28.4 inverse. Never imported by production.
 import { createHash } from "node:crypto"
 const hash = (value) => createHash("sha256").update(value).digest("hex")
@@ -238,6 +239,7 @@ export function projectContentParentInventory(inventory) {
 }
 
 export function messageActionsParentInventory(inventory) {
+  inventory = projectTasksParentInventory(inventory)
   const accountProfileReads = inventory.filter((item) => item.operation_id === "readAccountProfile")
   if (accountProfileReads.length > 0) {
     if (accountProfileReads.length !== 1 || accountProfileReads[0]?.method !== "GET" || accountProfileReads[0]?.path !== "/v1/account/profile")

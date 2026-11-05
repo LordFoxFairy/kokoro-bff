@@ -1,3 +1,9 @@
+## A‑07：Project Todo（D0，待实现与验收）
+
+BFF Projects 继续唯一拥有手动项目待办。替换现只有读的 task 路由接线为同一 `/v1/projects/{projectId}/tasks` 资源读写；沿原 Projects module 和当前用户准入，不加全局 dispatcher、SDK、缓存或独立服务。复用原表、现有回执和父 Project 行锁。项目所有者（可信 tenant + subject、未墓碑）才能读写；不新增 IAM action，不把团队、Agent Run Todo、ScheduledTask 或 Conversation 当此资源。
+
+事务唯一锁序：当前主体的 active Project `FOR UPDATE` → 同键回执 → 所属 Task → 变更及回执 → COMMIT。读端保持现 scope 和稳定顺序；失败与断连有界，不重置总预算，不猜测提交结果。Project 删除持同一父锁，在墓碑事务中移除本项目任务。后继变更归 Projects 的 HTTP handler 与 Postgres store，不恢复旧 Repository/Service/Port 链。
+
 ## T‑09：Agent 8.11 安全终态配对
 
 沿用既有 AG‑UI 投影与回放，不增加事件层或旁路。Agent 8.11 原件继续由现生成器生成；Chat 已用保存命令闭集拒绝 `personal_context`，Scheduled 以严格窄投影排除该字段。Agent 1 MiB body marker 是既有 owner 限额记录，不改变 BFF 限额。

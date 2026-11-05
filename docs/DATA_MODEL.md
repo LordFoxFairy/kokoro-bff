@@ -1,3 +1,9 @@
+## A‑07：Project Todo（D0，零 DDL）
+
+继续使用 `bff_project_task` 和 `bff_idempotency_receipt`，不改 canonical schema、不新建迁移链、列、索引、Redis 键或 outbox。比较独立版本列后选择复用现 `updated_at TIMESTAMPTZ(3)`：有效 PATCH 以 `GREATEST(clock_timestamp()::timestamptz(3), updated_at + interval '1 millisecond')` 严格推进，no-op 保持。它仍是 UTC 的最后修改排序时间，在同毫秒写入或时钟回拨时按上一值最小推进；完整公开任务字段生成强不透明 revision，旧行免回填，同毫秒/ABA 不复用。不得以 `xmin`、裸当前时钟或进程计数冒充持久版本。
+
+回执范围按可信 tenant、subject、Project、操作与 key；指纹包含目标 Task、原前置版本、规范化输入。新建在父锁内检查 200 行上限，只记成功终态 ACK（不记标题或认证材料），随现回执保留策略，不引入定时清理。Task 明确删除及 Project 墓碑同事务清理其内容，失去 Project 当前归属后一律拒绝回执重放。已存在本地库不做 DDL、清卷或重装；真实验收用独立资源，验证旧行可读写。
+
 ## T‑09：Agent 8.11 安全终态配对
 
 唯一 `database/schema.sql` 将新码加入 `ck_bff_message_agent_failure` 原有闭集，仍要求 failed assistant、同 Run 与合法可重试对。验收使用隔离 fresh schema；本切片不引入迁移链或修改现有非空库。

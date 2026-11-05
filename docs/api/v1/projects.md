@@ -207,7 +207,7 @@ Idempotency-Key: project-instruction-001
 
 ## GET `/v1/projects/:projectId/tasks`
 
-返回项目关联的任务投影。Task 的执行事实、消息和 SSE 不属于 BFF；Chat/run 仍由 Session 所有。
+返回 BFF Projects 拥有的手动待办（不是 Conversation、ScheduledTask 或 Agent Run Todo）。原列表顺序保持；每行新增不透明 `revision`。创建／编辑／删除与精确前置、重放和错误以 [OpenAPI](../../../contract/openapi/v1/openapi.yaml) 的 Project Task 四个 operation 为准。
 
 ### Response `200`
 

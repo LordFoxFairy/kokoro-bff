@@ -1074,7 +1074,8 @@ import { PostgresProjectScopeReleaseOutboxRepository } from "../dist/infrastruct
 import { ProjectScopeReleaseOutboxDispatcher } from "../dist/application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../dist/infrastructure/clients/storage/scope-release-client.js"
 import { ScheduledTaskService } from "../dist/application/scheduled-task-service.js"
-import { createProjectTaskReader, createProjectMutationStore, createProjectReadStore } from "../dist/infrastructure/postgres/project-store.js"
+import { createProjectMutationStore, createProjectReadStore } from "../dist/infrastructure/postgres/project-store.js"
+import { createProjectTaskReader } from "../dist/infrastructure/postgres/project-tasks.js"
 import { createOwnedRunProcessReader } from "../dist/infrastructure/postgres/agui-process-page.js"
 import { PostgresChatSessionStore } from "../dist/infrastructure/postgres/chat-session-store.js"
 import { PostgresScheduledTaskRepository } from "../dist/infrastructure/postgres/scheduled-task-repository.js"
@@ -1428,9 +1429,15 @@ integrationTest("R237 HTTP Project active and denied ID-slug matrix leaves compl
         const beforeTaskRead = await f.facts()
         const taskPage = await f.request(`projects/${ref}/tasks`)
         assert.equal(taskPage.status, 200)
-        assert.deepEqual(taskPage.body.data, {
-          tasks: [{ id: taskId, project_id: active.id, title: "Owned task", status: "todo", updated_at: taskUpdatedAt }],
-        })
+        assert.equal(taskPage.body.data.tasks.length, 1)
+        const { revision, ...task } = taskPage.body.data.tasks[0]
+        assert.match(revision, /^ptask_[A-Za-z0-9_-]{43}$/u)
+        assert.deepEqual(
+          { ...taskPage.body.data, tasks: [task] },
+          {
+            tasks: [{ id: taskId, project_id: active.id, title: "Owned task", status: "todo", updated_at: taskUpdatedAt }],
+          },
+        )
         assert.deepEqual(await f.facts(), beforeTaskRead)
         assert.equal((await f.request("scheduled-tasks", "POST", r237Schedule(ref))).status, 200)
       }

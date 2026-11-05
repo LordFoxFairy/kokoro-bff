@@ -33,7 +33,7 @@ test("the compiled production AppModule resolves its real provider graph without
     PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
     PROJECT_MCP_RECOMMENDATIONS_STORE,
     PROJECT_PINS,
-    PROJECT_TASK_READER,
+    PROJECT_TASKS,
     PROJECT_READS,
     PROJECT_MUTATIONS,
     PROJECT_RENAME,
@@ -101,7 +101,7 @@ test("the compiled production AppModule resolves its real provider graph without
       [ProjectAccessModule, PROJECT_MCP_RECOMMENDATIONS_STORE],
       [McpModule, PROJECT_MCP_RECOMMENDATIONS_PROVIDER],
       [ProjectAccessModule, PROJECT_PINS],
-      [ProjectAccessModule, PROJECT_TASK_READER],
+      [ProjectAccessModule, PROJECT_TASKS],
       [ProjectsModule, PROJECT_READS],
       [ProjectsModule, PROJECT_MUTATIONS],
       [ProjectsModule, PROJECT_RENAME],
@@ -123,7 +123,10 @@ test("the compiled production AppModule resolves its real provider graph without
     assert.equal(module.select(McpModule).get(PROJECT_MCP_RECOMMENDATIONS_PROVIDER, { strict: true }).project, recommendations)
     assert.equal(projectAccess.get(PROJECT_SKILL_SELECTION_PROVIDER, { strict: true }).find, lookup.find)
     assert.deepEqual(Reflect.ownKeys(projectAccess.get(PROJECT_PINS, { strict: true })), ["listPins", "setPin"])
-    assert.equal(typeof projectAccess.get(PROJECT_TASK_READER, { strict: true }), "function")
+    const tasks = projectAccess.get(PROJECT_TASKS, { strict: true })
+    assert.deepEqual(Reflect.ownKeys(tasks), ["list", "write"])
+    assert.equal(typeof tasks.list, "function")
+    assert.equal(typeof tasks.write, "function")
     const projects = module.select(ProjectsModule)
     assert.deepEqual(Reflect.ownKeys(projects.get(PROJECT_READS, { strict: true })), ["list", "revisions"])
     assert.deepEqual(Reflect.ownKeys(projects.get(PROJECT_MUTATIONS, { strict: true })), ["create", "updateInstruction"])
