@@ -3,7 +3,7 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-billing",
-    "repository_commit": "23ff71993f7772219cab8d3a3a4c7fbb4d66f735",
+    "repository_commit": "b7c9858844df4c9b99e40e16bd9984b1d268b503",
     "contract_version": "4.0.0-experimental.10",
     "contract_path": "contract/openapi/v1/openapi.yaml",
     "contract_sha256": "f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654"
@@ -12,7 +12,7 @@
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.billing.config.ts",
-    "config_sha256": "4f8a09ab8390cc51d7cbb864f31530583858c8b58dfaea5402ef1a05457908ff"
+    "config_sha256": "1dd8b21cd57fb94af459aec133179be9997603df64c539bb0559c93d2b3193a0"
   },
   "runtime": {
     "node": "24.20.0",

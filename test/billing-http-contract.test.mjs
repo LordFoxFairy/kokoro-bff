@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
 const root = new URL("../", import.meta.url)
-const ownerSourceUrl = new URL("contract/vendor/kokoro-billing/23ff71993f7772219cab8d3a3a4c7fbb4d66f735/openapi.yaml", root)
+const ownerSourceUrl = new URL("contract/vendor/kokoro-billing/b7c9858844df4c9b99e40e16bd9984b1d268b503/openapi.yaml", root)
 const dependencyManifestUrl = new URL("contract/dependencies/billing-http.json", root)
 const generatedSdkUrl = new URL("src/generated/billing-http/sdk.gen.ts", root)
 const generatedZodUrl = new URL("src/generated/billing-http/zod.gen.ts", root)
@@ -74,7 +74,7 @@ test("generated Billing dependency is fixed and exposes Catalog and the two pers
   const manifest = JSON.parse(await readFile(dependencyManifestUrl, "utf8"))
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-billing",
-    repository_commit: "23ff71993f7772219cab8d3a3a4c7fbb4d66f735",
+    repository_commit: "b7c9858844df4c9b99e40e16bd9984b1d268b503",
     contract_version: "4.0.0-experimental.10",
     contract_path: "contract/openapi/v1/openapi.yaml",
     contract_sha256: ownerSourceSha256,
