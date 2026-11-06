@@ -2,7 +2,7 @@
   "version": "v2",
   "modules": [
     {
-      "path": "contract/vendor/kokoro-storage/4a990617ffe36d739b5a3e622132c304d4d48d41/proto"
+      "path": "contract/vendor/kokoro-storage/b07405c464e98dd2c596f22115d1186511cf00cb/proto"
     }
   ]
 }
