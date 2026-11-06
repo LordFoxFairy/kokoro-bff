@@ -1,0 +1,106 @@
+{
+  "profile": "mcp-project-publication-v1",
+  "version": "1.0.0",
+  "owner": "Platform/MCP",
+  "visibility": "internal-owner",
+  "service": "kokoro.platform.v1.ProductMcpProjectPublicationService",
+  "base_commit": "7d8115a4b0dc752687babe7db35d0a936f51c76a",
+  "normal_environment_activated": false,
+  "authentication": {
+    "profile": "platform-bff-service-auth",
+    "surface": "mcp_personal",
+    "caller": "kokoro-bff",
+    "trusted_context": "current tenant credential and trusted subject; BFF verifies fresh human MCP action and every canonical project",
+    "unchanged_profile_sha256": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef"
+  },
+  "methods": [
+    {
+      "method": "PublishMcpUrlToProjects",
+      "command": true
+    },
+    {
+      "method": "ListProjectMcpPins",
+      "command": false
+    },
+    {
+      "method": "RemoveProjectMcpPin",
+      "command": true
+    },
+    {
+      "method": "GetMcpProjectPublicationReceipt",
+      "command": false
+    }
+  ],
+  "limits": {
+    "id_pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$",
+    "source_and_pin_version_max": 2147483647,
+    "targets_min": 1,
+    "targets_max": 32,
+    "list_default": 50,
+    "list_max": 100,
+    "cursor_max": 2048,
+    "body_bytes": 65536,
+    "total_budget_ms": 10000
+  },
+  "semantics": {
+    "publication": "definition and project pin only; no shared secret/Connection/authorization/execution grant",
+    "runtime_revision_binding": "not implemented in this slice",
+    "execution_ready": "required presence and false",
+    "snapshot": "independent immutable URL revision ID/content digest; source CAS only a precondition",
+    "expected_pin": "absent=true requires no row, tombstone requires current CAS",
+    "pin_change": "new successful command advances current pin +1, even same definition; original replay preserves original ACK",
+    "remove": "new command on tombstone rejected; original successful key replayed",
+    "receipt_missing": "not confirmed, never evidence of not sent",
+    "digest": "sha256 UTF8 JSON.stringify fixed tuple; ordered target array sorted ASCII project_id; requestId/key excluded",
+    "publish_tuple": [
+      "mcp-project-publication/v1",
+      "tenant_id",
+      "subject_id",
+      "mcp.url.publish_projects",
+      "server_id",
+      "connector_id",
+      "source_state_version:number",
+      "sorted [[project_id, null | [pin_id,state_version:number]]]"
+    ],
+    "remove_tuple": [
+      "mcp-project-publication/v1",
+      "tenant_id",
+      "subject_id",
+      "mcp.project_pin.remove",
+      "project_id",
+      "pin_id",
+      "state_version:number"
+    ]
+  },
+  "inputs": [
+    {
+      "path": "contract/proto/kokoro/platform/v1/mcp_project_publication.proto",
+      "sha256": "d27615eed4df8988ce3fa1dea120a76723b1b23559847ab0cb6cd962320226ba"
+    },
+    {
+      "path": "contract/descriptor/mcp-project-publication-v1.binpb",
+      "sha256": "ddd31dbb7577769c80cb5b8f3ff5fd6bd697455f1e50a2a95c537d365669a152"
+    },
+    {
+      "path": "src/generated/proto/kokoro/platform/v1/mcp_project_publication_pb.ts",
+      "sha256": "a12957ded3c52e7276cee93d2cbe5788fbd0a1b92a518882991ab3421dd0fb1d"
+    },
+    {
+      "path": "src/modules/mcp/server/mcp-project-publication.binding.ts",
+      "sha256": "6911c374c269dd8bdc354b31acfdf6982a43c56d5e50a432152afe01fb337b90"
+    },
+    {
+      "path": "contract/auth/bff-service-auth-v1.json",
+      "sha256": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef"
+    },
+    {
+      "path": "contract/errors/command-receipt-v1.json",
+      "sha256": "d82a4b30039adc0754fe1bcc43738fc68be2cd3cbef0e710d14089f55bc0ac68"
+    },
+    {
+      "path": "contract/proto/kokoro/common/v1/common.proto",
+      "sha256": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08"
+    }
+  ],
+  "vectors_sha256": "c7e11b9aca14630687aef8c26e901a0151f1e465d9ced9f1b0089c2eb77026de"
+}

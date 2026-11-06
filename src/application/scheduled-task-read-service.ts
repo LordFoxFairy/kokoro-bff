@@ -1,15 +1,15 @@
 import { isDeepStrictEqual } from "node:util"
-import type { ScheduledTaskOwnerScope, ScheduledTaskReadSnapshot } from "./ports/scheduled-task-repository.js"
-import type { ScheduledTaskStateReader, ScheduledTaskSchedulingState } from "./ports/scheduled-task-state-reader.js"
+import type { ScheduledTaskOwnerScope, ScheduledTaskReadSnapshot } from "./scheduled/task-facts.js"
+import type { ScheduledTaskStateReader, ScheduledTaskSchedulingState } from "../modules/scheduled-tasks/scheduled-task-state-reader.js"
 import type { ScheduledTaskFact } from "../domain/scheduled-task/task.js"
 
 export type ScheduledTaskReadOptions = Readonly<{ taskId?: string; revalidate?: () => Promise<void>; deadline?: number }>
 export type ScheduledTaskCurrentView = Readonly<{ task: ScheduledTaskFact; state: ScheduledTaskSchedulingState; nextRunAt: Date | null }>
-type Snapshots = { snapshots(scope: ScheduledTaskOwnerScope, signal: AbortSignal, taskId?: string): Promise<ScheduledTaskReadSnapshot[]> }
+export type ScheduledTaskSnapshots = { snapshots(scope: ScheduledTaskOwnerScope, signal: AbortSignal, taskId?: string): Promise<ScheduledTaskReadSnapshot[]> }
 /** Bounded parallel reads; all rows or an explicit error, never a partially fresh list. */
 export class ScheduledTaskReadService {
   public constructor(
-    private readonly source: Snapshots,
+    private readonly source: ScheduledTaskSnapshots,
     private readonly owner: ScheduledTaskStateReader,
   ) {}
 

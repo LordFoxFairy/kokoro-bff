@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { performance } from "node:perf_hooks"
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 
-import type { ProjectDeletionResource, ProjectOwnerScope } from "../../application/ports/project-repository.js"
+import type { ProjectDeletionResource, ProjectOwnerScope } from "../../application/projects/types.js"
 import type { PostgresBffDatabase } from "./client.js"
 import { deleteLockedConversationFacts } from "./conversation-delete.js"
 import { pauseProjectScheduledTasks } from "./scheduled-task-repository.js"
@@ -205,6 +205,8 @@ export async function deleteProjectAggregate(
     }
     await pauseProjectScheduledTasks(bounded, scope, projectId, requestId, key)
     await insertRelease(bounded, scope, projectId, "project", projectId)
+    await query("DELETE FROM bff_project_pin WHERE tenant_id=$1 AND project_id=$2", [scope.tenantId, projectId])
+    await query("DELETE FROM bff_project_task WHERE tenant_id=$1 AND project_id=$2", [scope.tenantId, projectId])
     await query(`UPDATE bff_project SET deleted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3`, [
       scope.tenantId,
       scope.subjectId,

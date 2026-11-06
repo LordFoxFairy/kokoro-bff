@@ -1,3 +1,5 @@
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
+const credentials = await fixtureIamCredentials("tenant")
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { once } from "node:events"
@@ -9,6 +11,9 @@ async function peer(body: unknown, status = 200) {
   const server = createServer(async (request, response) => {
     const chunks = []
     for await (const chunk of request) chunks.push(chunk)
+    assert.equal(request.headers["x-kokoro-actor-id"], "current-operator")
+    assert.equal(request.headers.cookie, undefined)
+    assert.equal(request.headers.origin, undefined)
     seen.push({ path: request.url, authorization: request.headers.authorization, body: Buffer.concat(chunks).toString() })
     response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "request-app" })
     response.end(JSON.stringify(body))
@@ -18,6 +23,7 @@ async function peer(body: unknown, status = 200) {
   return {
     seen,
     client: new OpenAppManagementAdmissionClient({
+      credentialFile: credentials.iamUserContextServiceCredentialFile,
       baseUrl: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
       timeoutMs: 1000,
       maxResponseBytes: 4096,
@@ -28,7 +34,7 @@ async function peer(body: unknown, status = 200) {
     },
   }
 }
-const input = () => ({ token: "current-operator", requestId: "request-app", signal: new AbortController().signal, tenantId: "tenant", appId: "app" })
+const input = () => ({ subjectId: "current-operator", requestId: "request-app", signal: new AbortController().signal, tenantId: "tenant", appId: "app" })
 test("Open App management requires a fresh exact IAM operator registration, with no caller-supplied client or trust", async () => {
   const registration = { allowed: true, tenant_id: "tenant", app_id: "app", client_id: "managed-client" }
   const fixture = await peer({ data: registration })
@@ -37,7 +43,11 @@ test("Open App management requires a fresh exact IAM operator registration, with
     assert.deepEqual(await fixture.client.verify(input()), { ok: true, registration })
     assert.deepEqual(
       fixture.seen,
-      Array(2).fill({ path: "/internal/v1/open-app-registrations/app/management-authorizations/verify", authorization: "Bearer current-operator", body: "" }),
+      Array(2).fill({
+        path: "/internal/v1/open-app-registrations/app/management-authorizations/verify",
+        authorization: `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`,
+        body: "",
+      }),
     )
   } finally {
     await fixture.close()

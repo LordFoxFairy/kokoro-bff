@@ -130,6 +130,51 @@ function fixture() {
   return { receipts, calls, input, store, storage, context, asset }
 }
 
+test("Projects feature handler owns resource upload with persistent receipt recovery", async () => {
+  const { createServer } = await import("node:http")
+  const { once } = await import("node:events")
+  const { handleProjectResourceUploadRequest } = await moduleAt("http/routes/project-native")
+  assert.equal(typeof handleProjectResourceUploadRequest, "function")
+  const f = fixture()
+  const server = createServer((request, response) => {
+    void handleProjectResourceUploadRequest(
+      request,
+      response,
+      { tenantId: "tenant-1", sharedSecret: "web-secret", storage: {}, iamWebOrigin: "https://web.example.test" },
+      { verify: async () => ({ ok: true, identity: { namespace: "tenant-1", userId: "subject-1" } }) },
+      {
+        find: async () => ({ id: "project-1" }),
+        receipts: f.store,
+        idempotency: new Map(),
+      },
+      () => f.storage,
+    ).catch(() => undefined)
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const url = `http://127.0.0.1:${server.address().port}/v1/projects/slug/resources`
+  try {
+    const form = new FormData()
+    form.append("files", new File([f.input.bytes], f.input.filename, { type: f.input.mimeType }))
+    const result = await fetch(url, {
+      method: "POST",
+      headers: {
+        cookie: "kokoro-issuer.session_token=user",
+        origin: "https://web.example.test",
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "web-secret",
+        "idempotency-key": "upload-key",
+      },
+      body: form,
+    })
+    assert.equal(result.status, 200)
+    assert.equal((await result.json()).data.resources[0].asset_id, "asset-1")
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
 test("durable upload checkpoint allows reconstructed service to recover completed upload without a second asset", async () => {
   const { uploadProjectResource } = await moduleAt("application/project-resource-upload")
   const f = fixture()
@@ -233,74 +278,10 @@ test("Storage v3 facade uses generated Connect calls and only trusted project me
   assert.equal((await client.createUpload("command-1", "a".repeat(64), f.input, AbortSignal.timeout(5000))).uploadId, "upload-1")
 })
 
-test("project resource route resolves current ownership before replay and uses canonical project id", async () => {
-  const { projectResourceRoute } = await moduleAt("http/routes/project-resource")
-  const { EventEmitter } = await import("node:events")
-  const f = fixture(),
-    context = { identity: { namespace: "tenant-1", userId: "subject-1" }, requestId: "request-1" }
-  let visible = true,
-    calls = 0
-  const store = {
-    ...f.store,
-    services: {
-      projects: {
-        async find(scope, id) {
-          assert.deepEqual(scope, { tenantId: "tenant-1", subjectId: "subject-1" })
-          assert.equal(id, "project-slug")
-          return visible ? { id: "project-1" } : null
-        },
-      },
-    },
-  }
-  const form = new FormData()
-  form.append("files", new File(["hello"], "hello.txt", { type: "text/plain" }))
-  const wire = new Request("http://bff.test", { method: "POST", body: form })
-  const body = Buffer.from(await wire.arrayBuffer())
-  const invoke = async () => {
-    const req = new EventEmitter()
-    req.headers = { "content-type": wire.headers.get("content-type"), "idempotency-key": "public-key" }
-    const res = new EventEmitter()
-    res.headers = new Map()
-    res.setHeader = (name, value) => {
-      res.headers.set(name.toLowerCase(), value)
-    }
-    res.writeHead = (status) => {
-      res.status = status
-    }
-    res.end = (data) => {
-      res.body = JSON.parse(data)
-      res.writableEnded = true
-    }
-    await projectResourceRoute(
-      req,
-      res,
-      { storage: { baseUrl: "http://storage.test", secret: "secret", objectOrigin: "http://objects.test" } },
-      context,
-      "project-slug",
-      body,
-      store,
-      new Map(),
-      (_config, uploadContext) => {
-        calls++
-        assert.equal(uploadContext.projectId, "project-1")
-        return f.storage
-      },
-    )
-    return res
-  }
-  const accepted = await invoke()
-  assert.equal(accepted.status, 200)
-  assert.equal(accepted.headers.get("x-request-id"), context.requestId)
-  assert.equal((await invoke()).status, 200)
-  assert.equal(calls, 1)
-  visible = false
-  assert.equal((await invoke()).status, 404)
-  assert.equal(calls, 1)
-})
-
 test("Storage configuration is independent, atomic and origin-only", async () => {
   const { loadConfig } = await import("../dist/config/runtime.js")
   const env = {
+    KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
     KOKORO_BFF_SHARED_SECRET: "secret",
     KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
     KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -349,14 +330,20 @@ test("public project resource contract is a bounded single file with explicit as
     assert.ok(source.split("    ProjectResourceUploadResponse:")[1].split("    RequestId:")[0].includes(field))
 })
 
-test("HTTP composition performs Connect upload and exact presigned PUT then replays without another asset", async () => {
+test("HTTP composition performs Connect upload and exact presigned PUT then replays without another asset", async (t) => {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { createBffServer } = await import("../dist/bootstrap/server.js")
+  const { BFF_CONFIG, BFF_DATABASE, PROJECT_SCOPE_RELEASE_DISPATCHER, PROJECT_LOOKUP, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
+  const { PostgresIdempotencyRepository } = await import("../dist/infrastructure/postgres/idempotency-repository.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const { StorageService, UploadState, ScanState, UploadPurpose } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const f = fixture(),
     servers = []
+  let app
   const listen = async (server) => {
     servers.push(server)
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
@@ -365,6 +352,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
   let puts = 0,
     creates = 0,
     completes = 0,
+    storageReads = 0,
     allowed = true
   try {
     const objects = await listen(
@@ -402,6 +390,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
                 }
               },
               getUploadStatus() {
+                storageReads++
                 return {
                   uploadId: "upload-1",
                   state: completes ? UploadState.COMPLETED : UploadState.PENDING,
@@ -416,6 +405,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
                 return { uploadId: "upload-1", assetId: "asset-1", scanState: ScanState.CLEAN }
               },
               getAsset() {
+                storageReads++
                 return {
                   assetId: "asset-1",
                   contentSha256: f.input.sha256,
@@ -433,6 +423,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
     )
     const config = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -440,17 +431,13 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
       KOKORO_STORAGE_OBJECT_ORIGIN: objects,
       KOKORO_BFF_STORAGE_SECRET: "storage-secret",
     })
-    const store = {
-      ...f.store,
-      services: {
-        projects: {
-          async find(scope) {
-            assert.deepEqual(scope, { tenantId: "tenant-1", subjectId: "subject-1" })
-            return allowed ? { id: "project-1" } : null
-          },
-        },
+    const projectService = {
+      async find(scope) {
+        assert.deepEqual(scope, { tenantId: "tenant-1", subjectId: "subject-1" })
+        return allowed ? { id: "project-1" } : null
       },
     }
+    const store = { ...f.store }
     let failFinalReceipt = true
     const persist = store.putReceipt
     store.putReceipt = async (key, receipt) => {
@@ -460,41 +447,66 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
       }
       await persist(key, receipt)
     }
-    const bff = await listen(
-      createBffServer(config, {
-        businessStore: store,
-        readiness: async () => {},
-        sessionAdmission: {
-          async verify() {
-            return { ok: true, identity: { namespace: "tenant-1", userId: "subject-1" } }
-          },
-        },
-      }),
+    // The real upload middleware constructs its repository directly. Keep this
+    // test's original receipt double at that boundary instead of simulating SQL.
+    const receiptCalls = ["getReceipt", "claimReceipt", "putReceipt", "compareAndSetReceipt", "releaseReceipt"].map((operation) =>
+      t.mock.method(PostgresIdempotencyRepository.prototype, operation, (...args) => store[operation](...args)),
     )
-    const upload = async (files = 1) => {
+    const admission = {
+      async verify() {
+        return { ok: true, identity: { namespace: "tenant-1", userId: "subject-1" } }
+      },
+    }
+    const module = await Test.createTestingModule({ imports: [ProjectsModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({
+        pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
+        redis: Object.freeze({}),
+      })
+      .overrideProvider(PROJECT_LOOKUP)
+      .useValue(projectService)
+      .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
+      .useValue(null)
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(admission)
+      .compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+    await app.listen(0, "127.0.0.1")
+    const bff = await app.getUrl()
+    const upload = async (files = 1, key = "key-1") => {
       const form = new FormData()
       for (let i = 0; i < files; i++) form.append("files", new File([f.input.bytes], "fox.txt", { type: "text/plain" }))
       return fetch(`${bff}/v1/projects/slug/resources`, {
         method: "POST",
         headers: {
-          authorization: "Bearer test",
+          cookie: "kokoro-issuer.session_token=test",
+          origin: "https://web.example.test",
           "x-kokoro-service": "web-bff",
           "x-kokoro-internal-secret": "web-secret",
-          "idempotency-key": "key-1",
+          ...(key === null ? {} : { "idempotency-key": key }),
           "x-kokoro-tenant-id": "forged",
         },
         body: form,
       })
     }
+    const missingKey = await upload(1, null)
+    assert.equal(missingKey.status, 400)
+    assert.equal((await missingKey.json()).error.code, "invalid_idempotency_key")
+    assert.deepEqual({ creates, puts, completes, storageReads }, { creates: 0, puts: 0, completes: 0, storageReads: 0 })
+    assert.ok(receiptCalls.every((receipt) => receipt.mock.callCount() === 0))
+
     let response = await upload()
     assert.equal(response.status, 503)
     await response.arrayBuffer()
     response = await upload()
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    assert.equal((await response.json()).data.resources[0].asset_id, "asset-1")
+    const completed = await response.json()
+    assert.equal(completed.data.resources[0].asset_id, "asset-1")
     response = await upload()
     assert.equal(response.status, 200)
-    await response.arrayBuffer()
+    assert.deepEqual(await response.json(), completed)
     assert.equal(puts, 1)
     assert.equal(completes, 1)
     assert.equal(creates, 2)
@@ -507,9 +519,13 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
     await response.arrayBuffer()
     assert.equal(completes, 1)
   } finally {
-    for (const server of servers.reverse()) {
-      server.closeAllConnections()
-      await new Promise((resolve) => server.close(resolve))
+    try {
+      await app?.close()
+    } finally {
+      for (const server of servers.reverse()) {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
     }
   }
 })
@@ -547,133 +563,5 @@ test("both Complete and GetAsset require CLEAN; infection and pending scans have
     const match = (error) => error.code === code && error.status === status && error.retryable === retryable
     await assert.rejects(client.completeUpload("complete", "a".repeat(64), "upload-1", "version-A", f.input, AbortSignal.timeout(5000)), match)
     await assert.rejects(client.getAsset("upload-1", "asset-1", f.input, AbortSignal.timeout(5000)), match)
-  }
-})
-
-test("quarantined completion returns no resource; same-key retries retain one asset and only clean recovers", async () => {
-  const { StorageUploadClient } = await moduleAt("infrastructure/clients/storage/client")
-  const { projectResourceRoute } = await moduleAt("http/routes/project-resource")
-  const { createRouterTransport } = await import("@connectrpc/connect")
-  const { EventEmitter } = await import("node:events")
-  const { StorageService, ScanState, UploadState, UploadPurpose } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
-  for (const initialScan of [ScanState.INFECTED, ScanState.UNKNOWN, ScanState.PENDING]) {
-    const f = fixture()
-    let scan = initialScan,
-      creates = 0,
-      puts = 0,
-      completes = 0,
-      reads = 0
-    const transport = createRouterTransport((router) =>
-      router.service(StorageService, {
-        createUpload() {
-          creates++
-          return {
-            uploadId: "upload-1",
-            uploadReference: {
-              url: "http://objects.test/object",
-              method: "PUT",
-              requiredHeaders: { "content-type": "text/plain" },
-              expiresAt: { seconds: BigInt(Math.floor(Date.now() / 1000) + 60) },
-            },
-          }
-        },
-        getUploadStatus() {
-          return {
-            uploadId: "upload-1",
-            state: completes ? UploadState.COMPLETED : UploadState.PENDING,
-            assetId: completes ? "asset-1" : undefined,
-            expectedSha256: f.input.sha256,
-            expectedSizeBytes: 5n,
-            mimeType: "text/plain",
-          }
-        },
-        completeUpload() {
-          completes++
-          return { uploadId: "upload-1", assetId: "asset-1", scanState: scan }
-        },
-        getAsset() {
-          reads++
-          return {
-            assetId: "asset-1",
-            filename: f.input.filename,
-            mimeType: f.input.mimeType,
-            sizeBytes: 5n,
-            contentSha256: f.input.sha256,
-            uploadPurpose: UploadPurpose.ASSET,
-            scanState: scan,
-          }
-        },
-        abortUpload() {
-          assert.fail("never abort completed/quarantined assets")
-        },
-        getDownloadReference() {
-          assert.fail("never issue a download reference")
-        },
-      }),
-    )
-    const config = { storage: { baseUrl: "http://storage.test", secret: "secret", objectOrigin: "http://objects.test" } }
-    const store = {
-      ...f.store,
-      services: {
-        projects: {
-          async find() {
-            return { id: "project-1" }
-          },
-        },
-      },
-    }
-    const [contentType, body] = await multipart([new File([f.input.bytes], f.input.filename, { type: f.input.mimeType })])
-    const invoke = async () => {
-      const request = new EventEmitter()
-      request.headers = { "content-type": contentType, "idempotency-key": "same-key" }
-      const response = new EventEmitter()
-      response.headers = new Map()
-      response.setHeader = (name, value) => {
-        response.headers.set(name.toLowerCase(), value)
-      }
-      response.writeHead = (status) => {
-        response.status = status
-      }
-      response.end = (bytes) => {
-        response.body = JSON.parse(bytes)
-        response.writableEnded = true
-      }
-      await projectResourceRoute(
-        request,
-        response,
-        config,
-        { identity: { namespace: "tenant-1", userId: "subject-1" }, requestId: "request" },
-        "slug",
-        body,
-        store,
-        new Map(),
-        (cfg, ctx) => {
-          const client = new StorageUploadClient(cfg, ctx, transport)
-          client.put = async () => {
-            puts++
-          }
-          return client
-        },
-      )
-      return response
-    }
-    const expected = initialScan === ScanState.INFECTED ? [422, "resource_file_infected"] : [503, "resource_scan_pending"]
-    const first = await invoke()
-    assert.equal(first.status, expected[0])
-    assert.equal(first.headers.get("x-request-id"), "request")
-    assert.equal(first.body.error.code, expected[1])
-    assert.equal(first.body.data, undefined)
-    assert.equal(reads, 0, "Complete scan is checked before asset lookup")
-    const retry = await invoke()
-    assert.equal(retry.status, expected[0])
-    assert.equal(retry.body.error.code, expected[1])
-    assert.equal(retry.body.data, undefined)
-    scan = ScanState.CLEAN
-    const recovered = await invoke()
-    assert.equal(recovered.status, initialScan === ScanState.INFECTED ? 422 : 200)
-    if (initialScan !== ScanState.INFECTED) assert.equal(recovered.body.data.resources[0].scan_state, "clean")
-    assert.equal(creates, 2)
-    assert.equal(puts, 1)
-    assert.equal(completes, 1)
   }
 })

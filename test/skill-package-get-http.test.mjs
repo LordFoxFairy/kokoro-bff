@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { Code, ConnectError } from "@connectrpc/connect"
 
-import { createLiveTestBffServer } from "./doubles/server.ts"
+import { startSkillDraftTestApp } from "./doubles/skill-draft-app.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
@@ -17,6 +17,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -30,20 +31,23 @@ const config = {
   upstreams: {},
   skillDraft: { enabled: false, platformBaseUrl: null, credentialFile: null, timeoutMs: 100 },
 }
-const headers = { authorization: "Bearer session", "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" }
+const headers = {
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
+  "x-kokoro-service": "web-bff",
+  "x-kokoro-internal-secret": "secret",
+}
 
 async function withServer(client, run, admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "user" } })) {
-  const server = createLiveTestBffServer(config, {
+  const { base, close } = await startSkillDraftTestApp(config, {
     skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: admission,
     skillDraftClient: client,
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
   try {
-    await run(`http://127.0.0.1:${server.address().port}`)
+    await run(base)
   } finally {
-    await new Promise((resolve) => server.close(resolve))
+    await close()
   }
 }
 
@@ -283,8 +287,10 @@ test("candidate Get re-admits each read and revoked session creates no new Platf
     client,
     async (base) => {
       assert.equal((await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers })).status, 200)
-      const revoked = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers })
+      const requestId = "revoked-package-read"
+      const revoked = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers: { ...headers, "x-kokoro-request-id": requestId } })
       assert.equal(revoked.status, 401)
+      assert.equal(revoked.headers.get("x-request-id"), requestId)
       assert.deepEqual(await revoked.json(), { error: { code: "session_invalid", message: "BFF user admission failed", retryable: false } })
       assert.equal(revoked.headers.get("cache-control"), "no-store")
     },

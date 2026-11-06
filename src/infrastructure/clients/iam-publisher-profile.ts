@@ -1,3 +1,4 @@
+import { iamUserContextHeaders } from "../../auth/iam-user-context.js"
 import { isDeepStrictEqual } from "node:util"
 import { createClient } from "../../generated/iam-http/client/client.gen.js"
 import { resolveSkillListPublisherProfiles, resolveTenantPublisherProfiles } from "../../generated/iam-http/sdk.gen.js"
@@ -9,11 +10,16 @@ import {
 } from "../../generated/iam-http/zod.gen.js"
 import { strictParseRawJson } from "../raw-json.js"
 
+// Reuse the pinned IAM component; callers must preserve raw-vs-parsed exactness.
+export const skillPublisherProfileSchema = zResolveTenantPublisherProfilesResponse.shape.data.shape.items.element
+export type SkillPublisherProfile = import("zod").infer<typeof skillPublisherProfileSchema>
+
 /** One fresh bounded IAM batch per product page; no display-name inference or cache. */
 export class IamPublisherProfileClient {
   constructor(
     private readonly baseUrl: string,
     private readonly timeoutMs: number,
+    private readonly credentialFile: string | null = null,
   ) {}
   async resolvePublic(
     tenant: string,
@@ -22,19 +28,19 @@ export class IamPublisherProfileClient {
     refs: ReadonlyArray<{ kind: "user" | "organization"; id: string }>,
     signal: AbortSignal,
   ) {
-    return this.resolveProfiles(tenant, token, requestId, refs, signal, true)
+    return this.resolveProfiles(tenant, { kind: "public", token }, requestId, refs, signal)
   }
-  async resolve(tenant: string, token: string, requestId: string, refs: ReadonlyArray<{ kind: "user" | "organization"; id: string }>, signal: AbortSignal) {
-    return this.resolveProfiles(tenant, token, requestId, refs, signal, false)
+  async resolve(tenant: string, subjectId: string, requestId: string, refs: ReadonlyArray<{ kind: "user" | "organization"; id: string }>, signal: AbortSignal) {
+    return this.resolveProfiles(tenant, { kind: "private", subjectId }, requestId, refs, signal)
   }
   private async resolveProfiles(
     tenant: string,
-    token: string,
+    identity: { kind: "public"; token: string } | { kind: "private"; subjectId: string },
     requestId: string,
     refs: ReadonlyArray<{ kind: "user" | "organization"; id: string }>,
     signal: AbortSignal,
-    publicList: boolean,
   ) {
+    const publicList = identity.kind === "public"
     const requested = [...new Map(refs.map((ref) => [JSON.stringify([ref.kind, ref.id]), ref])).values()]
     if (requested.length === 0) return new Map()
     const body = (publicList ? zResolveSkillListPublisherProfilesBody : zResolveTenantPublisherProfilesBody).strict().parse({ refs: requested })
@@ -44,6 +50,8 @@ export class IamPublisherProfileClient {
         const response = await fetch(input, { ...init, redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) })
         if (
           response.status !== 200 ||
+          response.headers.has("set-cookie") ||
+          response.headers.has("location") ||
           response.headers.get("x-request-id") !== requestId ||
           response.headers.get("cache-control") !== "no-store" ||
           response.headers.get("content-type")?.split(";", 1)[0] !== "application/json" ||
@@ -73,7 +81,11 @@ export class IamPublisherProfileClient {
         return new Response(JSON.stringify(parsed), { status: 200, headers: response.headers })
       },
     })
-    const options = { client, throwOnError: true as const, body, headers: { authorization: `Bearer ${token}`, "x-request-id": requestId }, signal }
+    const authentication =
+      identity.kind === "public"
+        ? { authorization: `Bearer ${identity.token}` }
+        : await iamUserContextHeaders({ tenantId: tenant, subjectId: identity.subjectId, requestId, signal, credentialFile: this.credentialFile })
+    const options = { client, throwOnError: true as const, body, headers: { ...authentication, "x-request-id": requestId }, signal }
     const response = publicList
       ? await resolveSkillListPublisherProfiles(options)
       : await resolveTenantPublisherProfiles({ ...options, path: { tenant_id: tenant } })
@@ -88,7 +100,7 @@ export class IamPublisherProfileClient {
     signal.throwIfAborted()
     return result
   }
-  async enrich<T>(tenant: string, token: string, requestId: string, value: T, signal: AbortSignal): Promise<T> {
+  async enrich<T>(tenant: string, subjectId: string, requestId: string, value: T, signal: AbortSignal): Promise<T> {
     const refs: { kind: "user" | "organization"; id: string }[] = []
     const collect = (item: unknown): void => {
       if (typeof item !== "object" || item === null) return
@@ -103,7 +115,7 @@ export class IamPublisherProfileClient {
       Object.values(record).forEach(collect)
     }
     collect(value)
-    const profiles = await this.resolve(tenant, token, requestId, refs, signal)
+    const profiles = await this.resolve(tenant, subjectId, requestId, refs, signal)
     const attach = (item: unknown): unknown => {
       if (typeof item !== "object" || item === null) return item
       if (Array.isArray(item)) return item.map(attach)

@@ -1,3 +1,7 @@
+## MCP 已绑定图标媒体读取（2026-10-26）
+
+独立 `GET /browser/v1/mcp/servers/{server_id}/icon` 的设计/错误/无数据模型变化见三设计首节；唯一新私有机器出口为 [`../contract/openapi/browser/v1/mcp-server-icon.json`](../contract/openapi/browser/v1/mcp-server-icon.json)。列表仍metadata-only，正常环境配对由Root验收；loopback边界测试不是正常业务成功证明。
+
 ## SET47 当前归档候选入口
 
 本人归档的状态、权限、幂等、Project锁序、canonical fresh-install与未验运行边界见三设计SET47前缀；实现/实际纯门/Root后继真实PG验收见[CURRENT.md](./CURRENT.md)。唯一公开机器事实是public15.4候选，未发行不得提前消费者激活；以下记录是历史。

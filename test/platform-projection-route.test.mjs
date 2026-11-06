@@ -8,7 +8,6 @@ import test from "node:test"
 
 import { PlatformProjectionHttpClient } from "../dist/infrastructure/clients/platform/projection-http.js"
 import { livePlatformProjectionRead } from "../dist/http/routes/platform-projection.js"
-import { createBffServer } from "../dist/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
 async function fixture(owner, { deadlineMs, entryDelayMs = 0 } = {}) {
@@ -139,50 +138,47 @@ test("MCP projection fails closed before owner socket without credential", async
 })
 
 test("bootstrap admission rejects Platform reads with strict error-only envelopes before the owner", async () => {
-  const config = {
-    host: "127.0.0.1",
-    port: 4300,
-    mode: "live",
-    domain: "dev.kokoro.localhost",
-    tenantId: "123e4567-e89b-42d3-a456-426614174000",
-    iamBaseUrl: null,
-    sharedSecret: "test-secret",
-    upstreamSecret: null,
-    upstreamTimeoutMs: 1000,
-    upstreamMaxResponseBytes: 1024 * 1024,
-    schedulerServiceToken: null,
-    schedulerTargetUrl: null,
-    agentEnabled: false,
-    postgresUrl: null,
-    redisUrl: null,
-    agUi: DEFAULT_AGUI_CONFIG,
-    upstreams: { system: null, platform: null, scheduler: null, agents: null, billing: null, music: null },
-    platformProjection: { baseUrl: null, credentialFile: null, timeoutMs: 1000 },
-    skillDraft: { enabled: false, platformBaseUrl: null, credentialFile: null, timeoutMs: 1000 },
-  }
-  const server = createBffServer(config, {
-    businessStore: null,
-    readiness: async () => undefined,
-    sessionAdmission: { verify: async () => ({ ok: false, status: 429, code: "session_rate_limited", retryAfter: "3" }) },
+  let actionChecks = 0
+  const app = await managedFixture({
+    feature: "mcp",
+    admission: async () => ({ ok: false, status: 429, code: "session_rate_limited", retryAfter: "3" }),
+    mcpAuthorization: {
+      check: async () => {
+        actionChecks++
+        throw new Error("refused Session reached MCP action authorization")
+      },
+    },
   })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
-  const origin = `http://127.0.0.1:${server.address().port}`
   try {
     for (const resource of ["/v1/mcp/servers", "/v1/mcp/connections"]) {
-      const missing = await fetch(`${origin}${resource}`, { headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret" } })
+      const missing = await fetch(`${app.origin}${resource}`, {
+        headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", origin: "https://web.example.test" },
+      })
       assert.equal(missing.status, 401, resource)
-      assert.deepEqual(Object.keys(await missing.json()), ["error"], resource)
+      assert.deepEqual(
+        await missing.json(),
+        { error: { code: "session_authentication_required", message: "BFF user admission failed", retryable: false } },
+        resource,
+      )
       assert.equal(missing.headers.get("cache-control"), "no-store")
       assert.ok(missing.headers.get("x-request-id"))
-      const limited = await fetch(`${origin}${resource}`, {
-        headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", authorization: "Bearer test-session" },
+      const limited = await fetch(`${app.origin}${resource}`, {
+        headers: {
+          "x-kokoro-service": "web-bff",
+          "x-kokoro-internal-secret": "test-secret",
+          cookie: "kokoro-issuer.session_token=test-session",
+          origin: "https://web.example.test",
+        },
       })
       assert.equal(limited.status, 429, resource)
       assert.deepEqual(await limited.json(), { error: { code: "session_rate_limited", message: "BFF user admission failed", retryable: true } }, resource)
       assert.equal(limited.headers.get("retry-after"), "3")
     }
+    assert.equal(app.admissionCalls.length, 2, "only the two requests carrying Cookie reach the authentication provider")
+    assert.equal(actionChecks, 0, "no refused Session reaches MCP action authorization")
+    assert.equal(app.calls.length, 0, "no refused read reaches the owner")
   } finally {
-    await new Promise((resolve) => server.close(resolve))
+    await app.close()
   }
 })
 
@@ -435,6 +431,7 @@ function managedConfig(credentialFile) {
     domain: "dev.kokoro.localhost",
     tenantId: "123e4567-e89b-42d3-a456-426614174000",
     iamBaseUrl: "http://iam.test",
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: 1000,
@@ -455,12 +452,13 @@ function managedBrowserHeaders(extra = {}) {
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
-    authorization: "Bearer current-session",
+    cookie: "kokoro-issuer.session_token=current-session",
+    origin: "https://web.example.test",
     ...extra,
   }
 }
 
-async function managedFixture({ owner, admission } = {}) {
+async function managedFixture({ owner, admission, mcpAuthorization, feature = "skills" } = {}) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "bff-managed-skills-"))
   const credentialFile = path.join(dir, "projection.json")
   await writeFile(
@@ -507,19 +505,46 @@ async function managedFixture({ owner, admission } = {}) {
       return { ok: true, identity: { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "person" }, platformAdmin: false }
     },
   }
-  const server = createBffServer(managedConfig(credentialFile), { businessStore: null, readiness: async () => undefined, sessionAdmission })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
-  origin = `http://127.0.0.1:${server.address().port}`
-  return {
-    origin,
-    calls,
-    admissionCalls,
-    async close() {
-      globalThis.fetch = originalFetch
-      server.closeAllConnections()
-      await new Promise((resolve) => server.close(resolve))
+  const config = managedConfig(credentialFile)
+  let closeBff
+  const close = async () => {
+    globalThis.fetch = originalFetch
+    try {
+      await closeBff?.()
+    } finally {
       await rm(dir, { recursive: true, force: true })
-    },
+    }
+  }
+  try {
+    await import("reflect-metadata")
+    const { Test } = await import("@nestjs/testing")
+    const { BFF_CONFIG, BFF_DATABASE, MCP_AUTHORIZATION, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+    const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+    const featureModule =
+      feature === "mcp" ? (await import("../dist/modules/mcp/mcp.module.js")).McpModule : (await import("../dist/modules/skills/skills.module.js")).SkillsModule
+    const databaseCall = () => {
+      throw new Error("Platform projection HTTP fixture must not query PostgreSQL")
+    }
+    const builder = Test.createTestingModule({ imports: [featureModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({ pool: { query: databaseCall, connect: databaseCall } })
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(sessionAdmission)
+    if (mcpAuthorization) builder.overrideProvider(MCP_AUTHORIZATION).useValue(mcpAuthorization)
+    const module = await builder.compile()
+    const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    closeBff = async () => {
+      app.getHttpServer().closeAllConnections()
+      await app.close()
+    }
+    await app.listen(0, "127.0.0.1")
+    origin = await app.getUrl()
+    return { origin, calls, admissionCalls, close }
+  } catch (error) {
+    await close()
+    throw error
   }
 }
 
@@ -909,6 +934,87 @@ test("owned series history preserves exact revisions and rejects mutation or cal
       400,
     )
     assert.equal(app.calls.length, before)
+  } finally {
+    await app.close()
+  }
+})
+
+// The production feature listener must classify only the named projection paths.
+test("MCP Connection projection reaches its owner through the production bootstrap, not a generic proxy", async () => {
+  const authorization = []
+  const app = await managedFixture({
+    feature: "mcp",
+    mcpAuthorization: {
+      check: async (input) => {
+        authorization.push(input)
+        return { ok: true }
+      },
+    },
+    owner: async (request) =>
+      new Response(JSON.stringify({ data: { connections: [] } }), {
+        status: 200,
+        headers: { "content-type": "application/json", "cache-control": "no-store", "x-kokoro-request-id": request.headers.get("x-kokoro-request-id") },
+      }),
+  })
+  try {
+    const response = await fetch(`${app.origin}/v1/mcp/connections`, { headers: managedBrowserHeaders() })
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), { data: { connections: [] } })
+    assert.equal(response.headers.get("cache-control"), "no-store")
+    assert.ok(response.headers.get("x-request-id"))
+    assert.equal(app.calls.length, 1)
+    assert.equal(new URL(app.calls[0].url).pathname, "/v1/mcp/connections")
+    assert.equal(authorization.length, 1)
+    assert.equal(authorization[0].action, "read")
+    assert.equal(app.calls[0].headers.get("x-kokoro-subject"), "person")
+    const ownerCount = app.calls.length
+    for (const resource of ["/v1/mcp/unrecognized", "/v1/mcp/connections/unknown", "/browser/v1/mcp/connections"]) {
+      const rejected = await fetch(app.origin + resource, { headers: managedBrowserHeaders() })
+      assert.equal(rejected.status, 404, resource)
+      await rejected.arrayBuffer()
+    }
+    assert.equal(app.calls.length, ownerCount, "unknown/private aliases must never reach the projection owner")
+  } finally {
+    await app.close()
+  }
+})
+
+test("MCP Server projection also keeps its named production handler after admission", async () => {
+  const app = await managedFixture({
+    feature: "mcp",
+    mcpAuthorization: { check: async () => ({ ok: true }) },
+    owner: async (request) =>
+      new Response(JSON.stringify({ data: { servers: [] } }), {
+        status: 200,
+        headers: { "content-type": "application/json", "cache-control": "no-store", "x-kokoro-request-id": request.headers.get("x-kokoro-request-id") },
+      }),
+  })
+  try {
+    const response = await fetch(`${app.origin}/v1/mcp/servers`, { headers: managedBrowserHeaders() })
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), { data: { servers: [] } })
+    assert.equal(app.calls.length, 1)
+    assert.equal(new URL(app.calls[0].url).pathname, "/v1/mcp/servers")
+  } finally {
+    await app.close()
+  }
+})
+
+test("production MCP projection admission denial never reaches its owner", async () => {
+  const app = await managedFixture({
+    feature: "mcp",
+    mcpAuthorization: { check: async () => ({ ok: false, status: 403, code: "mcp_action_denied" }) },
+    owner: async () => {
+      throw new Error("denied MCP projection reached owner")
+    },
+  })
+  try {
+    for (const path of ["/v1/mcp/connections", "/v1/mcp/servers"]) {
+      const response = await fetch(app.origin + path, { headers: managedBrowserHeaders() })
+      assert.equal(response.status, 403)
+      assert.equal((await response.json()).error.code, "mcp_action_denied")
+    }
+    assert.equal(app.calls.length, 0)
   } finally {
     await app.close()
   }

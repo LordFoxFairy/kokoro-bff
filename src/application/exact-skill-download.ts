@@ -47,25 +47,50 @@ export type ExactSkillDownloadSource = Readonly<{
 export class ExactSkillDownloadService implements ExactSkillDownloadSource {
   public constructor(
     private readonly dependencies: Readonly<{
-      installation: Resolver
-      managed: Resolver
-      share: Resolver
-      download(sourceRef: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<SkillDownloadFact>
+      projectInstallation?: Readonly<{
+        resolve(
+          projectId: string,
+          installationId: string,
+          context: SkillSpecificationContext,
+          signal: AbortSignal,
+          deadlineAt: number,
+        ): Promise<ExactSkillDownloadRecord | null>
+        download(
+          projectId: string,
+          installationId: string,
+          context: SkillSpecificationContext,
+          signal: AbortSignal,
+          deadlineAt: number,
+        ): Promise<SkillDownloadFact>
+      }>
+      installation?: Resolver
+      managed?: Resolver
+      share?: Resolver
+      download?(sourceRef: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<SkillDownloadFact>
       handles: SkillDownloadHandles
       objectOrigin: string | null
     }>,
   ) {}
 
-  private resolver(qualifier: ExactSkillDownloadQualifier): readonly [Resolver, string] {
-    if (qualifier.kind === "installation") return [this.dependencies.installation, qualifier.installationId]
-    if (qualifier.kind === "managed") return [this.dependencies.managed, qualifier.versionId]
-    return [this.dependencies.share, qualifier.shareId]
+  private resolver(qualifier: Exclude<ExactSkillDownloadQualifier, { kind: "project_installation" }>): readonly [Resolver, string] {
+    const resolve =
+      qualifier.kind === "installation" ? this.dependencies.installation : qualifier.kind === "managed" ? this.dependencies.managed : this.dependencies.share
+    if (!resolve) throw new ConnectError("Skill download dependency missing", Code.Unavailable)
+    if (qualifier.kind === "installation") return [resolve, qualifier.installationId]
+    if (qualifier.kind === "managed") return [resolve, qualifier.versionId]
+    return [resolve, qualifier.shareId]
   }
 
   private async record(qualifier: ExactSkillDownloadQualifier, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number) {
     active(signal, deadlineAt)
-    const [resolve, id] = this.resolver(qualifier)
-    const record = await resolve(id, context, signal, deadlineAt)
+    let record: ExactSkillDownloadRecord | null
+    if (qualifier.kind === "project_installation") {
+      if (!this.dependencies.projectInstallation) throw new ConnectError("Project download not permitted", Code.PermissionDenied)
+      record = await this.dependencies.projectInstallation.resolve(qualifier.projectId, qualifier.installationId, context, signal, deadlineAt)
+    } else {
+      const [resolve, id] = this.resolver(qualifier)
+      record = await resolve(id, context, signal, deadlineAt)
+    }
     active(signal, deadlineAt)
     if (record === null) throw new ConnectError("Exact Skill was not found", Code.NotFound)
     if (!SOURCE.test(record.sourceRef) || !REVISION.test(record.revision) || BigInt(record.revision) > MAX_REVISION) throw new Error("skill_response_invalid")
@@ -79,9 +104,20 @@ export class ExactSkillDownloadService implements ExactSkillDownloadSource {
     signal: AbortSignal,
     deadlineAt: number,
   ): Promise<SkillDownloadBinding> {
-    const owner = await this.dependencies.download(record.sourceRef, context, signal, deadlineAt)
+    const owner =
+      qualifier.kind === "project_installation"
+        ? await this.dependencies.projectInstallation!.download(qualifier.projectId, qualifier.installationId, context, signal, deadlineAt)
+        : this.dependencies.download
+          ? await this.dependencies.download(record.sourceRef, context, signal, deadlineAt)
+          : (() => {
+              throw new ConnectError("Skill download dependency missing", Code.Unavailable)
+            })()
     active(signal, deadlineAt)
     const packageFact = verifiedSkillDownloadPackage(owner, record, this.dependencies.objectOrigin)
+    if (qualifier.kind === "project_installation") {
+      const current = await this.record(qualifier, context, signal, deadlineAt)
+      if (current.sourceRef !== record.sourceRef || current.revision !== record.revision) throw new ConnectError("Project installation changed", Code.NotFound)
+    }
     return {
       tenantId: context.identity.namespace,
       subjectId: context.identity.userId,

@@ -1,11 +1,20 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
 import test from "node:test"
 import { request as httpRequest } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
-import { createBffServer } from "../src/bootstrap/server.js"
-import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.js"
-import { startMcpRequestBudget } from "../src/http/mcp-request-budget.js"
-const headers = { "x-kokoro-service": "admin-web-bff", "x-kokoro-internal-secret": "admin-test-secret", authorization: "Bearer admin-session" }
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, MCP_AUTHORIZATION, MCP_PACKAGE_ADMIN_CLIENT, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { McpModule } from "../dist/modules/mcp/mcp.module.js"
+import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
+import { startMcpRequestBudget } from "../dist/http/mcp-request-budget.js"
+const headers = {
+  "x-kokoro-service": "admin-web-bff",
+  "x-kokoro-internal-secret": "admin-test-secret",
+  cookie: "kokoro-issuer.session_token=admin-session",
+  origin: "https://web.example.test",
+}
 const packageId = "package-1",
   uploadId = "upload-1",
   base = `/v1/admin/mcp/packages/${packageId}`
@@ -21,86 +30,96 @@ const commands = [
 async function fixture(t: import("node:test").TestContext, budget?: number) {
   const state = { admin: true, allowed: true, fault: null as ConnectError | null, waiting: false, cancelled: false },
     calls: any[] = []
-  const server = createBffServer(
-    {
-      host: "127.0.0.1",
-      port: 0,
-      mode: "live",
-      domain: "dev.kokoro.localhost",
-      sharedSecret: "test-secret",
-      adminWebSharedSecret: "admin-test-secret",
-      tenantId: "tenant-one",
-      iamBaseUrl: null,
-      iamServiceToken: null,
-      iamAdmissionTimeoutMs: 5000,
-      iamAdmissionMaxResponseBytes: 65536,
-      browserCredentials: { "admin-web-bff": "admin-test-secret" },
-      upstreamSecret: "upstream-secret",
-      upstreamTimeoutMs: 5000,
-      upstreamMaxResponseBytes: 1048576,
-      schedulerServiceToken: null,
-      schedulerTargetUrl: null,
-      agentEnabled: false,
-      postgresUrl: null,
-      redisUrl: null,
-      agUi: DEFAULT_AGUI_CONFIG,
-      upstreams: { system: null, platform: null, scheduler: null, agents: null, billing: null, music: null },
-      platformProjection: { baseUrl: null, credentialFile: null, timeoutMs: 5000 },
-      skillDraft: { platformBaseUrl: null, credentialFile: null, timeoutMs: 5000 },
-    },
-    {
-      businessStore: null,
-      readiness: async () => undefined,
-      sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant-one", userId: "admin-one" }, platformAdmin: state.admin }) },
-      mcpAuthorization: {
-        check: async (input) => {
-          assert.equal(input.resource, "mcp_catalog")
-          assert.equal(input.action, "manage")
-          return state.allowed ? { ok: true } : { ok: false, status: 403, code: "session_forbidden" }
-        },
+  const config = {
+    host: "127.0.0.1",
+    port: 0,
+    mode: "live",
+    domain: "dev.kokoro.localhost",
+    sharedSecret: "test-secret",
+    adminWebSharedSecret: "admin-test-secret",
+    tenantId: "tenant-one",
+    iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
+    iamServiceToken: null,
+    iamAdmissionTimeoutMs: 5000,
+    iamAdmissionMaxResponseBytes: 65536,
+    browserCredentials: { "admin-web-bff": "admin-test-secret" },
+    upstreamSecret: "upstream-secret",
+    upstreamTimeoutMs: 5000,
+    upstreamMaxResponseBytes: 1048576,
+    schedulerServiceToken: null,
+    schedulerTargetUrl: null,
+    agentEnabled: false,
+    postgresUrl: null,
+    redisUrl: null,
+    agUi: DEFAULT_AGUI_CONFIG,
+    upstreams: { system: null, platform: null, scheduler: null, agents: null, billing: null, music: null },
+    platformProjection: { baseUrl: null, credentialFile: null, timeoutMs: 5000 },
+    skillDraft: { platformBaseUrl: null, credentialFile: null, timeoutMs: 5000 },
+  }
+  const databaseCall = () => {
+    throw new Error("MCP HTTP fixture must not query PostgreSQL")
+  }
+  const builder = Test.createTestingModule({ imports: [McpModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: databaseCall, connect: databaseCall } })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue({ verify: async () => ({ ok: true, identity: { namespace: "tenant-one", userId: "admin-one" }, platformAdmin: state.admin }) })
+    .overrideProvider(MCP_AUTHORIZATION)
+    .useValue({
+      check: async (input) => {
+        assert.equal(input.resource, "mcp_catalog")
+        assert.equal(input.action, "manage")
+        return state.allowed ? { ok: true } : { ok: false, status: 403, code: "session_forbidden" }
       },
-      mcpPackageAdminClient: {
-        execute: async (identity: any, input: any, signal: AbortSignal, deadline: number) => {
-          calls.push({ identity, input, deadline })
-          if (state.waiting)
-            await new Promise<void>((resolve) => {
-              signal.addEventListener(
-                "abort",
-                () => {
-                  state.cancelled = true
-                  resolve()
-                },
-                { once: true },
-              )
-            })
-          if (state.fault) throw state.fault
-          if (input.kind === "begin")
-            return {
-              kind: "begin",
-              package_id: packageId,
-              upload_id: uploadId,
-              transfer_reference: { url: "https://object.fixture/upload", method: "PUT", required_headers: {}, expires_at: "2099-01-01T00:00:00.000Z" },
-            }
-          if (input.kind === "complete" || input.kind === "status") return { kind: input.kind, upload: status }
-          if (input.kind === "abort") return { kind: "abort", upload_id: uploadId, state: "aborted" }
+    })
+    .overrideProvider(MCP_PACKAGE_ADMIN_CLIENT)
+    .useValue({
+      close() {},
+      execute: async (identity: any, input: any, signal: AbortSignal, deadline: number) => {
+        calls.push({ identity, input, deadline })
+        if (state.waiting)
+          await new Promise<void>((resolve) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                state.cancelled = true
+                resolve()
+              },
+              { once: true },
+            )
+          })
+        if (state.fault) throw state.fault
+        if (input.kind === "begin")
           return {
-            kind: "publish",
-            package_version_id: "11111111-1111-4111-8111-111111111111",
-            server_id: "22222222-2222-4222-8222-222222222222",
-            replayed: true,
+            kind: "begin",
+            package_id: packageId,
+            upload_id: uploadId,
+            transfer_reference: { url: "https://object.fixture/upload", method: "PUT", required_headers: {}, expires_at: "2099-01-01T00:00:00.000Z" },
           }
-        },
+        if (input.kind === "complete" || input.kind === "status") return { kind: input.kind, upload: status }
+        if (input.kind === "abort") return { kind: "abort", upload_id: uploadId, state: "aborted" }
+        return {
+          kind: "publish",
+          package_version_id: "11111111-1111-4111-8111-111111111111",
+          server_id: "22222222-2222-4222-8222-222222222222",
+          replayed: true,
+        }
       },
-    } as any,
-  )
-  if (budget !== undefined) server.prependListener("request", (req) => startMcpRequestBudget(req, budget))
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
-  const address = server.address()
-  assert.ok(address && typeof address !== "string")
+    })
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  const server = app.getHttpServer()
+  if (budget !== undefined) server.prependListener("request", (request) => startMcpRequestBudget(request, budget))
   t.after(async () => {
     server.closeAllConnections()
-    await new Promise<void>((resolve) => server.close(() => resolve()))
+    await app.close()
   })
+  await app.listen(0, "127.0.0.1")
+  const address = server.address()
+  assert.ok(address && typeof address !== "string")
   const origin = `http://127.0.0.1:${address.port}`
   const send = (method: string, path: string, body?: unknown) =>
     fetch(origin + path, {

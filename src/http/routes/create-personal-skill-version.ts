@@ -1,3 +1,4 @@
+import type { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
 import { assertSkillWireKnown, projectSkillStateVersion } from "../../infrastructure/clients/platform/skill-product-response.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
@@ -58,8 +59,9 @@ export async function createPersonalSkillVersionRoute(
   requestId: string,
   skillId: string,
   client: CatalogConnectClient | null,
+  skillAuthorization: Pick<SkillAuthorizationClient, "check">,
 ): Promise<void> {
-  await withPersonalSkillLifecycle(request, response, config, admission, requestId, async (scope) => {
+  await withPersonalSkillLifecycle(request, response, config, admission, requestId, { source: skillAuthorization, action: "create_version" }, async (scope) => {
     const rawPath = (request.url ?? "").split("?", 1)[0] ?? ""
     const rawMatch = /^\/v1\/self\/skills\/([^/]+)\/versions$/u.exec(rawPath)
     if (

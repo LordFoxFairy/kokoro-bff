@@ -4,6 +4,7 @@ export type SkillUsageReadyFact = { kind: "ready"; runId: string; sourceRefs: st
 export type SkillUsageTerminalFact = { kind: "terminal"; runId: string; status: "completed" | "cancelled" | "failed" }
 export type SkillUsageFact = SkillUsageReadyFact | SkillUsageTerminalFact
 export type SkillUsageResult = { status: "unavailable" } | { status: "available"; successfulRunCount: string }
+export type SkillUsageReader = (tenant: string, refs: readonly string[]) => Promise<Map<string, SkillUsageResult>>
 
 type EventLike = { kind: string; value?: unknown; payload?: unknown }
 

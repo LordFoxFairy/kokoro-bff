@@ -1,3 +1,4 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
 import { createHash, randomBytes } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -7,10 +8,12 @@ import { test } from "node:test"
 import { connectNodeAdapter } from "@connectrpc/connect-node"
 import { Pool } from "pg"
 
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_POOL, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { AccountModule } from "../dist/modules/account/account.module.js"
 import { loadConfig } from "../dist/config/runtime.js"
 import { StorageService, ScanState, UploadPurpose, UploadState } from "../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js"
-import { PostgresIdempotencyRepository } from "../dist/infrastructure/postgres/idempotency-repository.js"
 
 const postgresAdminUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const integrationTest = postgresAdminUrl ? test : test.skip
@@ -56,7 +59,8 @@ async function post(base, key, filename, content, bearer = "owner") {
   const response = await fetch(`${base}/v1/library/files`, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${bearer}`,
+      cookie: `kokoro-issuer.session_token=${bearer}`,
+      origin: "https://web.example.test",
       "x-kokoro-service": "web-bff",
       "x-kokoro-internal-secret": "web-secret",
       "idempotency-key": key,
@@ -78,6 +82,16 @@ integrationTest("personal upload survives lost Complete response and lost public
   const servers = []
   let databaseCreated = false
   let bff = null
+  const stopBff = async () => {
+    if (bff === null) return
+    const current = bff
+    bff = null
+    try {
+      await current.close()
+    } finally {
+      pools.pop()
+    }
+  }
   try {
     await admin.query(`CREATE DATABASE ${databaseName}`)
     databaseCreated = true
@@ -190,6 +204,7 @@ integrationTest("personal upload survives lost Complete response and lost public
     const admission = { revoked: false, calls: 0 }
     const config = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: databaseUrl.toString(),
       KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:9/0",
@@ -198,27 +213,25 @@ integrationTest("personal upload survives lost Complete response and lost public
       KOKORO_STORAGE_OBJECT_ORIGIN: objectBase,
     })
     const startBff = async () => {
-      const pool = new Pool({ connectionString: databaseUrl.toString(), options: "-c search_path=kokoro_bff -c timezone=UTC" })
-      pools.push(pool)
-      bff = createBffServer(config, {
-        businessStore: new PostgresIdempotencyRepository(pool),
-        readiness: async () => {},
-        sessionAdmission: {
-          async verify({ token }) {
+      const module = await Test.createTestingModule({ imports: [AccountModule] })
+        .overrideProvider(BFF_CONFIG)
+        .useValue(config)
+        .overrideProvider(SESSION_ADMISSION)
+        .useValue({
+          async verify({ cookie }) {
+            const token = cookie.slice("kokoro-issuer.session_token=".length)
             admission.calls++
             return admission.revoked
               ? { ok: false, status: 401, code: "session_invalid" }
               : { ok: true, identity: { namespace: "tenant-1", userId: token === "owner" ? "subject-1" : "subject-2" } }
           },
-        },
-      })
-      return listen(bff)
-    }
-    const stopBff = async () => {
-      await bff.shutdown()
-      bff = null
-      await pools.at(-1).end()
-      pools.pop()
+        })
+        .compile()
+      bff = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+      // This is the actual receipt pool for this app; Nest owns its close on each restart.
+      pools.push(bff.get(BFF_POOL))
+      await bff.listen(0, "127.0.0.1")
+      return bff.getUrl()
     }
     const firstBase = await startBff()
     const firstContent = "file from first uncertain Complete"
@@ -290,7 +303,7 @@ integrationTest("personal upload survives lost Complete response and lost public
     assert.ok(admission.calls >= 5)
     await stopBff()
   } finally {
-    if (bff !== null) await bff.shutdown()
+    await stopBff()
     for (const server of servers.reverse()) await new Promise((resolve) => server.close(resolve))
     for (const pool of pools.reverse()) await pool.end()
     if (databaseCreated) {

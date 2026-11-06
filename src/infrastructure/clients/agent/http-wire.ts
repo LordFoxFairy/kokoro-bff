@@ -2,6 +2,8 @@ import { zCreateRunResponse, zErrorEnvelope, zLaunchRequest, zReplaySessionEvent
 import { isRecord } from "../../../domain/json.js"
 import type { LaunchRequest, LaunchReceiptEnvelope } from "../../../generated/agent-http/types.gen.js"
 
+const zSavedAgentLaunch = zLaunchRequest.omit({ personal_context: true }).strict()
+
 /** The owner OpenAPI is the sole source of both successful HTTP response schemas. */
 export function parseAgentHttpJson(body: Buffer): unknown {
   try {
@@ -37,12 +39,24 @@ export function projectSavedAgentLaunch(value: unknown): LaunchRequest | null {
   if (value.trace.source !== "kokoro-bff" && value.trace.source !== "kokoro-bff-scheduler") return null
   const project = value.trace.project_ref
   if (Object.hasOwn(value.trace, "project_ref") && (typeof project !== "string" || !/^[^\s\u0000-\u001f\u007f]{1,255}$/u.test(project))) return null
-  const projected = zLaunchRequest.strict().safeParse({ ...value, project_ref: project ?? null })
+  const projected = zSavedAgentLaunch.safeParse({ ...value, project_ref: project ?? null })
   if (!projected.success) return null
-  const { requested_model_label, trace, ...required } = projected.data
+  const { requested_model_label, project_instruction, trace, selected_mcp_connection_ids, selected_custom_api_profiles, selected_resource_refs, ...required } = projected.data
   return {
     ...required,
     ...(requested_model_label === undefined ? {} : { requested_model_label }),
+    ...(project_instruction === undefined ? {} : { project_instruction }),
     ...(trace === undefined ? {} : { trace }),
+    ...(selected_mcp_connection_ids === undefined ? {} : { selected_mcp_connection_ids }),
+    ...(selected_custom_api_profiles === undefined ? {} : { selected_custom_api_profiles }),
+    ...(selected_resource_refs === undefined
+      ? {}
+      : {
+          selected_resource_refs: selected_resource_refs.map((ref) => ({
+            kind: ref.kind,
+            resource_id: ref.resource_id,
+            ...(ref.version_id === undefined ? {} : { version_id: ref.version_id }),
+          })),
+        }),
   }
 }

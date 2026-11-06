@@ -6,7 +6,7 @@ import type {
   ScheduledAgentRejectionReason,
   ScheduledAgentConsumerLease,
   ScheduledAgentDispatchRepository,
-} from "../../application/ports/scheduled-agent-dispatch-repository.js"
+} from "../../application/scheduled/scheduled-agent-dispatch-repository.js"
 import type { ScheduledAgentDispatchCommand, ScheduledAgentDispatchLease, ScheduledAgentSourceEvent } from "../../domain/scheduled-task/agent-dispatch.js"
 import { scheduledOccurrenceOrderKey } from "../../domain/scheduled-task/agent-dispatch.js"
 import { scheduledSourceEventDigest } from "../../application/scheduled-source-event-digest.js"

@@ -28,7 +28,6 @@ export async function liveTeamRead(
   response: ServerResponse,
   config: BffConfig,
   context: RequestContext,
-  token: string,
   businessPath: readonly string[],
 ): Promise<void> {
   response.setHeader("x-request-id", context.requestId)
@@ -50,10 +49,11 @@ export async function liveTeamRead(
   request.once("aborted", onAbort)
   response.once("close", onClose)
   try {
+    const ownerAuth = { credentialFile: config.iamUserContextServiceCredentialFile, subjectId: context.identity.userId }
     const result = await readIamTeamPage({
       baseUrl: config.iamBaseUrl,
       tenantId: context.identity.namespace,
-      token,
+      ...ownerAuth,
       kind: kind as TeamReadKind,
       ...query,
       requestId: context.requestId,
@@ -89,7 +89,6 @@ export async function liveTeamWrite(
   response: ServerResponse,
   config: BffConfig,
   context: RequestContext,
-  token: string,
   businessPath: readonly string[],
 ): Promise<void> {
   response.setHeader("x-request-id", context.requestId)
@@ -130,10 +129,11 @@ export async function liveTeamWrite(
   request.once("aborted", onAbort)
   response.once("close", onClose)
   try {
+    const ownerAuth = { credentialFile: config.iamUserContextServiceCredentialFile, subjectId: context.identity.userId }
     const result = await writeIamTeam({
       baseUrl: config.iamBaseUrl,
       tenantId: context.identity.namespace,
-      token,
+      ...ownerAuth,
       kind: route.kind,
       resourceId: route.resourceId,
       body,

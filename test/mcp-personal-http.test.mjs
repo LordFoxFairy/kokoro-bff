@@ -1,14 +1,22 @@
+import "reflect-metadata"
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
+import { fixtureNativeSession } from "./doubles/iam-native-session.ts"
 import { startMcpRequestBudget } from "../dist/http/mcp-request-budget.js"
 import assert from "node:assert/strict"
 import { createServer, request as nodeRequest } from "node:http"
 import test from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { BffExpressAdapter } from "../dist/http/bff-express-adapter.js"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, MCP_AUTHORIZATION, MCP_PERSONAL_CLIENT, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { McpModule } from "../dist/modules/mcp/mcp.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer human-session",
+  cookie: "kokoro-issuer.session_token=human-session",
+  origin: "https://web.example.test",
   "x-request-id": "mcp-http-1",
 }
 const paths = [
@@ -19,7 +27,18 @@ const paths = [
   "/browser/v1/mcp/connectors/connector-one/connections",
   "/browser/v1/mcp/connections/connection-one",
 ]
-async function fixture(decision, { realSession = false, check, routeHandler, mcpPersonalClient, verify, deadlineMs, sessionDelayMs = 0 } = {}) {
+async function fixture(
+  decision,
+  {
+    realSession = false,
+    check,
+    mcpPersonalClient,
+    verify,
+    deadlineMs,
+    sessionDelayMs = 0,
+    nativeSession = () => fixtureNativeSession("tenant-server", "human-one"),
+  } = {},
+) {
   const seen = []
   const iam = createServer(async (request, response) => {
     const chunks = []
@@ -27,6 +46,9 @@ async function fixture(decision, { realSession = false, check, routeHandler, mcp
     seen.push({
       path: request.url,
       authorization: request.headers.authorization,
+      cookie: request.headers.cookie,
+      origin: request.headers.origin,
+      actor: request.headers["x-kokoro-actor-id"],
       body: chunks.length === 0 ? null : JSON.parse(Buffer.concat(chunks).toString()),
     })
     response.writeHead(200, {
@@ -34,35 +56,20 @@ async function fixture(decision, { realSession = false, check, routeHandler, mcp
       "cache-control": "no-store",
       "x-request-id": request.headers["x-request-id"],
     })
-    response.end(
-      JSON.stringify({
-        data:
-          request.url === "/internal/v1/session-authorizations/verify"
-            ? {
-                allowed: true,
-                tenant_id: "tenant-server",
-                user_id: "human-one",
-                platform_admin: false,
-                session_id: "session-one",
-                client_id: "web-one",
-              }
-            : {
-                allowed: decision,
-                tenant_id: "tenant-server",
-                subject_id: "human-one",
-                decision_source: "current_membership",
-              },
-      }),
-    )
+    if (request.url.startsWith("/iam/get-session")) response.end(JSON.stringify(nativeSession()))
+    else
+      response.end(JSON.stringify({ data: { allowed: decision, tenant_id: "tenant-server", subject_id: "human-one", decision_source: "current_membership" } }))
   })
   await new Promise((resolve) => iam.listen(0, "127.0.0.1", resolve))
   const config = {
+    ...(await fixtureIamCredentials("tenant-server")),
     host: "127.0.0.1",
     port: 0,
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-server",
     iamBaseUrl: `http://127.0.0.1:${iam.address().port}`,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: "upstream-secret",
     upstreamTimeoutMs: 5000,
@@ -82,45 +89,46 @@ async function fixture(decision, { realSession = false, check, routeHandler, mcp
       music: null,
     },
   }
-  const app = createBffServer(config, {
-    businessStore: null,
-    readiness: async () => undefined,
-    ...(realSession
-      ? {}
-      : {
-          sessionAdmission: {
-            verify:
-              verify ??
-              (async () => {
-                if (sessionDelayMs) await new Promise((resolve) => setTimeout(resolve, sessionDelayMs))
-                return {
-                  ok: true,
-                  identity: { namespace: "tenant-server", userId: "human-one" },
-                  platformAdmin: false,
-                }
-              }),
-          },
-        }),
-    ...(check ? { mcpAuthorization: { check } } : {}),
-    ...(routeHandler ? { routeHandler } : {}),
-    ...(mcpPersonalClient ? { mcpPersonalClient } : {}),
-  })
-  if (deadlineMs !== undefined) {
-    const handler = app.listeners("request")[0]
-    app.removeAllListeners("request")
-    app.on("request", (request, response) => {
-      startMcpRequestBudget(request, deadlineMs)
-      handler(request, response)
-    })
+  const sessionAdmission = realSession
+    ? undefined
+    : {
+        verify:
+          verify ??
+          (async () => {
+            if (sessionDelayMs) await new Promise((resolve) => setTimeout(resolve, sessionDelayMs))
+            return {
+              ok: true,
+              identity: { namespace: "tenant-server", userId: "human-one" },
+              platformAdmin: false,
+            }
+          }),
+      }
+  const databaseCall = () => {
+    throw new Error("MCP HTTP fixture must not query PostgreSQL")
   }
-  await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve))
+  const builder = Test.createTestingModule({ imports: [McpModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: databaseCall, connect: databaseCall } })
+  if (sessionAdmission) builder.overrideProvider(SESSION_ADMISSION).useValue(sessionAdmission)
+  if (check) builder.overrideProvider(MCP_AUTHORIZATION).useValue({ check })
+  if (mcpPersonalClient) builder.overrideProvider(MCP_PERSONAL_CLIENT).useValue(mcpPersonalClient)
+  const module = await builder.compile()
+  const app = module.createNestApplication(new BffExpressAdapter(), { ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  const server = app.getHttpServer()
+  if (deadlineMs !== undefined) server.prependListener("request", (request) => startMcpRequestBudget(request, deadlineMs))
+  await app.listen(0, "127.0.0.1")
   return {
     seen,
-    origin: `http://127.0.0.1:${app.address().port}`,
+    origin: await app.getUrl(),
     close: async () => {
-      for (const server of [app, iam]) {
+      try {
         server.closeAllConnections()
-        await new Promise((resolve) => server.close(resolve))
+        await app.close()
+      } finally {
+        iam.closeAllConnections()
+        await new Promise((resolve) => iam.close(resolve))
       }
     },
   }
@@ -147,7 +155,7 @@ for (const [path, response] of [
   ["/browser/v1/mcp/providers", { items: [], next_cursor: null }],
   ["/browser/v1/mcp/connectors", { items: [connector], next_cursor: null }],
 ])
-  test(`personal read performs one session verification and one current action check: ${path}`, async () => {
+  test(`personal read performs fresh native session, membership and current action checks: ${path}`, async () => {
     const f = await fixture(true, {
       realSession: true,
       mcpPersonalClient: { read: async () => response },
@@ -155,8 +163,8 @@ for (const [path, response] of [
     try {
       const result = await fetch(f.origin + path, { headers })
       assert.equal(result.status, 200)
-      assert.equal(f.seen.filter(({ path: ownerPath }) => ownerPath === "/internal/v1/session-authorizations/verify").length, 1)
-      assert.equal(f.seen.filter(({ path: ownerPath }) => ownerPath === "/internal/v1/authorization/check").length, 1)
+      assert.equal(f.seen.filter(({ path: ownerPath }) => ownerPath.startsWith("/iam/get-session")).length, 2)
+      assert.equal(f.seen.filter(({ path: ownerPath }) => ownerPath === "/internal/v1/authorization/check").length, 3)
     } finally {
       await f.close()
     }
@@ -241,7 +249,17 @@ for (const key of ["content-length", "idempotency-key"])
   })
 test("unissued personal methods and provider writes remain blocked without owner IO", async () => {
   let reads = 0
+  let admissionCalls = 0
+  let authorizationCalls = 0
   const f = await fixture(true, {
+    verify: async () => {
+      admissionCalls++
+      assert.fail("an unissued method must not run admission")
+    },
+    check: async () => {
+      authorizationCalls++
+      assert.fail("an unissued method must not check permissions")
+    },
     mcpPersonalClient: {
       read: async () => {
         reads++
@@ -256,9 +274,46 @@ test("unissued personal methods and provider writes remain blocked without owner
     ]) {
       const result = await fetch(f.origin + path, { method, headers })
       assert.equal(result.status, 404)
-      assert.equal((await result.json()).error.code, "route_not_found")
+      assert.equal(result.headers.get("x-request-id"), "mcp-http-1")
+      assert.equal(result.headers.get("cache-control"), "no-store")
+      assert.deepEqual(await result.json(), {
+        error: { code: "route_not_found", message: "Route was not found" },
+        meta: { request_id: "mcp-http-1" },
+      })
     }
     assert.equal(reads, 0)
+    assert.equal(admissionCalls, 0)
+    assert.equal(authorizationCalls, 0)
+    assert.deepEqual(f.seen, [])
+  } finally {
+    await f.close()
+  }
+})
+test("anonymous browser MCP reads use the typed error envelope before any owner I/O", async () => {
+  let admissionCalls = 0
+  let ownerCalls = 0
+  const f = await fixture(true, {
+    verify: async () => {
+      admissionCalls++
+      return { ok: false, status: 401, code: "session_invalid" }
+    },
+    mcpPersonalClient: { read: async () => { ownerCalls++; return { items: [], next_cursor: null } } },
+  })
+  try {
+    const { cookie, ...browserHeaders } = headers
+    for (const [requestHeaders, code] of [
+      [browserHeaders, "session_authentication_required"],
+      [{ ...browserHeaders, cookie }, "session_invalid"],
+    ]) {
+      const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers: requestHeaders })
+      assert.equal(response.status, 401)
+      assert.equal(response.headers.get("x-request-id"), headers["x-request-id"])
+      assert.equal(response.headers.get("cache-control"), "no-store")
+      assert.deepEqual(await response.json(), { error: { code, message: "Personal MCP request failed", retryable: false } })
+    }
+    assert.equal(admissionCalls, 1)
+    assert.equal(ownerCalls, 0)
+    assert.deepEqual(f.seen, [])
   } finally {
     await f.close()
   }
@@ -302,8 +357,11 @@ test("post-owner action check remains bound to the initially admitted tenant and
   let verifies = 0
   let captured
   let ownerDone = false
+  let ownerSignal
+  const verificationSignals = []
   const f = await fixture(true, {
-    verify: async () => {
+    verify: async (input) => {
+      verificationSignals.push(input.signal)
       verifies++
       return { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
     },
@@ -313,7 +371,8 @@ test("post-owner action check remains bound to the initially admitted tenant and
       return { ok: true }
     },
     mcpPersonalClient: {
-      read: async () => {
+      read: async (_operation, _input, signal) => {
+        ownerSignal = signal
         ownerDone = true
         return { items: [connector], next_cursor: null }
       },
@@ -322,10 +381,12 @@ test("post-owner action check remains bound to the initially admitted tenant and
   try {
     const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
     assert.equal(response.status, 200)
-    assert.equal(verifies, 1)
+    assert.equal(verifies, 2)
     assert.equal(captured.tenantId, "tenant-server")
     assert.equal(captured.subjectId, "human-one")
     assert.equal(captured.action, "read")
+    assert.equal(verificationSignals[1], ownerSignal, "delivery Session check uses the owner request signal")
+    assert.equal(captured.signal, ownerSignal)
   } finally {
     await f.close()
   }
@@ -384,7 +445,7 @@ test("caller disconnect cancels the personal owner read without late response", 
   }
 })
 
-test("post-owner current action check blocks release without repeating session verification", async () => {
+test("post-owner current action and fresh Session checks both gate release", async () => {
   let verifies = 0
   let checks = 0
   let ownerDone = false
@@ -433,7 +494,7 @@ test("post-owner current action check blocks release without repeating session v
     releaseCheck({ ok: true })
     const response = await pending
     assert.equal(response.status, 200)
-    assert.equal(verifies, 1)
+    assert.equal(verifies, 2)
     assert.equal(checks, 1)
   } finally {
     clearTimeout(timeout)
@@ -444,23 +505,16 @@ test("post-owner current action check blocks release without repeating session v
   }
 })
 
-test("post-owner current action check preserves revoked session denial", async () => {
-  let verifies = 0
-  let checks = 0
-  let ownerDone = false
+test("post-owner fresh official Session blocks withdrawn private data even when service action still allows", async () => {
+  let active = true
+  let reads = 0
   const f = await fixture(true, {
-    verify: async () => {
-      verifies++
-      return { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
-    },
-    check: async () => {
-      checks++
-      assert.equal(ownerDone, true)
-      return { ok: false, status: 401, code: "session_invalid" }
-    },
+    realSession: true,
+    nativeSession: () => (active ? fixtureNativeSession("tenant-server", "human-one") : null),
     mcpPersonalClient: {
       read: async () => {
-        ownerDone = true
+        reads++
+        active = false
         return { items: [connector], next_cursor: null }
       },
     },
@@ -468,9 +522,23 @@ test("post-owner current action check preserves revoked session denial", async (
   try {
     const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
     assert.equal(response.status, 401)
-    assert.equal((await response.json()).error.code, "session_invalid")
-    assert.equal(verifies, 1)
-    assert.equal(checks, 1)
+    assert.deepEqual(await response.json(), { error: { code: "session_invalid", message: "Personal MCP request failed", retryable: false } })
+    assert.equal(reads, 1)
+    assert.equal(f.seen.filter(({ path }) => path.startsWith("/iam/get-session")).length, 2)
+    const actions = f.seen.filter(({ path, body }) => path === "/internal/v1/authorization/check" && body?.resource === "mcp_personal")
+    assert.equal(actions.length, 1)
+    assert.equal(actions[0].authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+    assert.equal(actions[0].cookie, undefined)
+    assert.equal(actions[0].origin, undefined)
+    assert.equal(actions[0].actor, "human-one")
+    assert.ok(
+      f.seen
+        .filter(({ path }) => path.startsWith("/iam/get-session"))
+        .every(
+          ({ path, cookie, authorization }) =>
+            path === "/iam/get-session?disableCookieCache=true&disableRefresh=true" && cookie === headers.cookie && authorization === undefined,
+        ),
+    )
   } finally {
     await f.close()
   }
@@ -501,9 +569,157 @@ test("post-owner action transport failure does not leak the owner response", asy
     const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
     assert.equal(response.status, 503)
     assert.equal((await response.json()).error.code, "mcp_personal_dependency_unavailable")
-    assert.equal(verifies, 1)
+    assert.equal(verifies, 2)
     assert.equal(checks, 1)
   } finally {
     await f.close()
   }
 })
+
+test("all five icon routes use existing browser admission, original key and body; Get performs only a read", async () => {
+  const calls = []
+  const intent = "12345678-1234-1234-1234-123456789abc"
+  const f = await fixture(true, {
+    mcpPersonalClient: {
+      read: async () => {
+        throw Error("not connector read")
+      },
+      icon: async (operation, input) => {
+        calls.push({ operation, input })
+        return { intent: { intent_id: intent } }
+      },
+    },
+  })
+  try {
+    for (const [method, suffix, body, operation] of [
+      ["POST", "/uploads", { filename: "icon.png", mime_type: "image/png", content_sha256: "a".repeat(64), size_bytes: "1024" }, "beginIcon"],
+      ["POST", "/import", { image_url: "https://images.example/icon.png" }, "importIcon"],
+      ["GET", `/${intent}`, undefined, "getIcon"],
+      ["POST", `/${intent}/complete`, { expected_state_version: "1", source_version_id: "exact-version" }, "completeIcon"],
+      ["POST", `/${intent}/cancel`, { expected_state_version: "2" }, "cancelIcon"],
+    ]) {
+      const response = await fetch(`${f.origin}/browser/v1/mcp/icons${suffix}`, {
+        method,
+        headers: { ...headers, ...(body === undefined ? {} : { "content-type": "application/json", "idempotency-key": "original-icon-key" }) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
+      assert.equal(response.status, 200, operation)
+      assert.equal(response.headers.get("cache-control"), "no-store")
+      await response.arrayBuffer()
+      const last = calls.at(-1)
+      assert.equal(last.operation, operation)
+      assert.equal(last.input.tenant, "tenant-server")
+      assert.equal(last.input.subject, "human-one")
+      assert.equal(last.input.commandId, body === undefined ? undefined : "original-icon-key")
+    }
+    for (const [suffix, body] of [
+      [`/${intent}/complete`, { expected_state_version: 2, source_version_id: "v" }],
+      ["/uploads", { filename: "i.png", mime_type: "image/png", content_sha256: "a".repeat(64), size_bytes: "1", subject_id: "other" }],
+    ]) {
+      const response = await fetch(`${f.origin}/browser/v1/mcp/icons${suffix}`, {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json", "idempotency-key": "invalid-key" },
+        body: JSON.stringify(body),
+      })
+      assert.equal(response.status, 400)
+      await response.arrayBuffer()
+    }
+    assert.equal(calls.length, 5)
+  } finally {
+    await f.close()
+  }
+})
+
+test("denied icon mutation reaches no Platform command", async () => {
+  let count = 0
+  const f = await fixture(false, {
+    mcpPersonalClient: {
+      read: async () => ({}),
+      icon: async () => {
+        count++
+        return {}
+      },
+    },
+  })
+  try {
+    const response = await fetch(`${f.origin}/browser/v1/mcp/icons/uploads`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "denied-key" },
+      body: JSON.stringify({ filename: "icon.png", mime_type: "image/png", content_sha256: "a".repeat(64), size_bytes: "1024" }),
+    })
+    assert.equal(response.status, 403)
+    await response.arrayBuffer()
+    assert.equal(count, 0)
+  } finally {
+    await f.close()
+  }
+})
+
+for (const stage of ["public-pre-owner", "private-post-owner"]) {
+  for (const retryAfter of ["1", "86400", undefined, "0", "1.5", "86401", "tomorrow"]) {
+    test(`MCP429 ${stage} preserves only a bounded action delay: ${retryAfter ?? "absent"}`, async () => {
+      let checks = 0
+      let ownerReads = 0
+      const f = await fixture(true, {
+        check: async () => {
+          checks++
+          assert.equal(ownerReads, stage === "private-post-owner" ? 1 : 0)
+          return {
+            ok: false,
+            status: 429,
+            code: "session_rate_limited",
+            ...(retryAfter === undefined ? {} : { retryAfter }),
+          }
+        },
+        mcpPersonalClient: {
+          read: async () => {
+            ownerReads++
+            return { items: [connector], next_cursor: null }
+          },
+        },
+      })
+      try {
+        const response = await fetch(`${f.origin}${stage === "public-pre-owner" ? "/v1/mcp/connections" : "/browser/v1/mcp/connectors"}`, { headers })
+        assert.equal(response.status, 429)
+        assert.equal(response.headers.get("retry-after"), retryAfter === "1" || retryAfter === "86400" ? retryAfter : null)
+        assert.equal(response.headers.get("cache-control"), "no-store")
+        assert.equal(response.headers.get("x-request-id"), headers["x-request-id"])
+        const body = await response.json()
+        assert.deepEqual(Object.keys(body), ["error"])
+        assert.deepEqual(Object.keys(body.error).sort(), ["code", "message", "retryable"])
+        assert.equal(body.error.code, "session_rate_limited")
+        assert.equal(body.error.retryable, true)
+        assert.equal(checks, 1)
+        assert.equal(ownerReads, stage === "private-post-owner" ? 1 : 0)
+      } finally {
+        await f.close()
+      }
+    })
+  }
+  test(`MCP429 ${stage} never adds a delay to a non429 rejection`, async () => {
+    let checks = 0
+    const f = await fixture(true, {
+      check: async () => {
+        checks++
+        return {
+          ok: false,
+          status: 403,
+          code: "session_forbidden",
+          retryAfter: "60",
+        }
+      },
+      mcpPersonalClient: {
+        read: async () => ({ items: [connector], next_cursor: null }),
+      },
+    })
+    try {
+      const response = await fetch(`${f.origin}${stage === "public-pre-owner" ? "/v1/mcp/connections" : "/browser/v1/mcp/connectors"}`, { headers })
+      assert.equal(response.status, 403)
+      assert.equal(response.headers.get("retry-after"), null)
+      assert.equal((await response.json()).error.code, "session_forbidden")
+      assert.equal(checks, 1)
+    } finally {
+      await f.close()
+    }
+  })
+}

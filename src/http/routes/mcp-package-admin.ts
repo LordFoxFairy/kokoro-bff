@@ -1,12 +1,20 @@
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
 import { authorizeMcpCatalogAction, authorizeUserRequest } from "../../auth/user-admission.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
+import type { McpPackageAdminConnectClient } from "../../infrastructure/clients/platform/mcp-package-admin-connect.js"
 import type { McpPackageAdminInput } from "../../infrastructure/clients/platform/mcp-package-admin-input.js"
 import { parseMcpPackageHttpInput, readMcpPackageBody } from "../mcp-package-admin-input.js"
 import { mcpRequestRemaining } from "../mcp-request-budget.js"
 import { send } from "../response.js"
+
+export type McpPackageAdminProvider = Readonly<{
+  sessionAdmission: SessionAdmission
+  mcpAuthorization: Pick<McpAuthorizationClient, "check">
+  mcpPackageAdminClient: Pick<McpPackageAdminConnectClient, "execute"> | null
+}>
 export function mcpPackageAdminOperation(path: string[], method: string): McpPackageAdminInput["kind"] | null {
   if (path[0] !== "admin" || path[1] !== "mcp" || path[2] !== "packages") return null
   if (path.length === 5 && method === "POST") return path[4] === "uploads" ? "begin" : path[4] === "publish" ? "publish" : null
@@ -37,7 +45,7 @@ export async function mcpPackageAdminRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: McpPackageAdminProvider,
   requestId: string,
   path: string[],
 ) {
@@ -74,7 +82,7 @@ export async function mcpPackageAdminRoute(
   try {
     const raw = mutation ? await readMcpPackageBody(request, controller.signal) : Buffer.alloc(0)
     if (mutation && Number(length) !== raw.byteLength) throw new ConnectError("Invalid body length", Code.InvalidArgument)
-    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal)
+    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal, response)
     controller.signal.throwIfAborted()
     if (!current.ok) {
       fail(response, current.status, current.code, current.status === 429 || current.status === 503)

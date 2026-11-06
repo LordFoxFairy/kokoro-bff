@@ -1,5 +1,5 @@
 import { CALENDAR_FIELDS, calendarFromWire, freezeCalendar } from "../../domain/scheduled-task/calendar.js"
-import type { ScheduledTaskCreateInput, ScheduledTaskPatch } from "../ports/scheduled-task-repository.js"
+import type { ScheduledTaskCreateInput, ScheduledTaskPatch } from "./task-facts.js"
 import { parseUtcTimestamp } from "../../domain/scheduled-task/task.js"
 
 const CREATE_FIELDS = new Set(["project_id", "title", "prompt", ...CALENDAR_FIELDS, "expires_at", "auto_approve"])

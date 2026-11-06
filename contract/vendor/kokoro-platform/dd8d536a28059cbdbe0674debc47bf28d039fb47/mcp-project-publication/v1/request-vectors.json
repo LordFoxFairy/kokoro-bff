@@ -1,0 +1,50 @@
+[
+  {
+    "caller": {
+      "tenantId": "tenant-publication",
+      "subjectId": "subject-publication"
+    },
+    "input": {
+      "requestId": "request-1",
+      "commandId": "command-1",
+      "requestDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "kind": "publish",
+      "serverId": "server-1",
+      "connectorId": "connector-1",
+      "sourceVersion": 7,
+      "targets": [
+        {
+          "projectId": "project-1",
+          "expected": {
+            "kind": "absent"
+          }
+        },
+        {
+          "projectId": "project-2",
+          "expected": {
+            "kind": "current",
+            "pinId": "pin-2",
+            "version": 3
+          }
+        }
+      ]
+    },
+    "request_digest": "e451f997d55dcdc2d58e4f4b6f509237d6e3ac05012a4cc625483ddec5e8c6eb"
+  },
+  {
+    "caller": {
+      "tenantId": "tenant-publication",
+      "subjectId": "subject-publication"
+    },
+    "input": {
+      "requestId": "request-2",
+      "commandId": "command-2",
+      "requestDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "kind": "remove",
+      "projectId": "project-1",
+      "pinId": "pin-1",
+      "version": 3
+    },
+    "request_digest": "db6d96837e0a5b464c2079066e942c1e94b95cd301878f646862e84e5ec3ca8d"
+  }
+]

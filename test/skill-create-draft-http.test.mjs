@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { once } from "node:events"
 import test from "node:test"
 import { SkillStatus } from "../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
-import { createLiveTestBffServer } from "./doubles/server.ts"
+import { startSkillDraftTestApp } from "./doubles/skill-draft-app.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
@@ -36,6 +36,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -50,24 +51,23 @@ const config = {
   skillDraft: { enabled: false, platformBaseUrl: null, credentialFile: null, timeoutMs: 100 },
 }
 const headers = {
-  authorization: "Bearer session",
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
   "content-type": "application/json",
   "idempotency-key": "draft-1",
 }
 async function withServer(client, run) {
-  const server = createLiveTestBffServer(config, {
+  const app = await startSkillDraftTestApp(config, {
     skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "user" } }),
     skillDraftClient: client,
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
   try {
-    await run(`http://127.0.0.1:${server.address().port}`)
+    await run(app.base)
   } finally {
-    await new Promise((resolve) => server.close(resolve))
+    await app.close()
   }
 }
 
@@ -297,15 +297,13 @@ test("same-key replay always re-admits IAM and revoked replay performs zero addi
       }
     },
   }
-  const server = createLiveTestBffServer(config, {
+  const app = await startSkillDraftTestApp(config, {
     skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: admission,
     skillDraftClient: client,
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
   try {
-    const base = `http://127.0.0.1:${server.address().port}`
+    const base = app.base
     const init = { method: "POST", headers, body: JSON.stringify({ display_name: "Tea", summary: "", tags: [] }) }
     assert.equal((await fetch(`${base}/v1/skills/drafts`, init)).status, 201)
     assert.equal((await fetch(`${base}/v1/skills/drafts`, init)).status, 201)
@@ -313,7 +311,7 @@ test("same-key replay always re-admits IAM and revoked replay performs zero addi
     assert.equal(admissions, 3)
     assert.equal(platformCalls, 2)
   } finally {
-    await new Promise((resolve) => server.close(resolve))
+    await app.close()
   }
 })
 

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { Code, ConnectError } from "@connectrpc/connect"
-import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { createServer } from "node:http"
 import { once } from "node:events"
@@ -12,6 +11,7 @@ const correctionConfig = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -32,7 +32,8 @@ const correctionConfig = {
   },
 }
 const correctionHeaders = {
-  authorization: "Bearer session",
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
   "content-type": "application/json",
@@ -41,12 +42,40 @@ const correctionHeaders = {
 
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf"
 import * as wire from "../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts"
+async function startSkillAdminTestApp(config, { sessionAdmission, skillAuthorization, skillAdminClient }) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, SKILL_ADMIN_CLIENT, SKILL_AUTHORIZATION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { SkillsModule } = await import("../dist/modules/skills/skills.module.js")
+  const unexpected = () => assert.fail("Skills admin HTTP fixture must not use a database")
+  const module = await Test.createTestingModule({ imports: [SkillsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected }, ready: unexpected })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+    .overrideProvider(SKILL_AUTHORIZATION)
+    .useValue(skillAuthorization)
+    .overrideProvider(SKILL_ADMIN_CLIENT)
+    .useValue(skillAdminClient)
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  try {
+    await app.listen(0, "127.0.0.1")
+    return { base: await app.getUrl(), close: () => app.close() }
+  } catch (error) {
+    await app.close()
+    throw error
+  }
+}
+
 test("Admin owner machine admission rejection is terminal service authentication failure", async (t) => {
   for (const ownerCode of [Code.Unauthenticated, Code.PermissionDenied]) {
     await t.test(Code[ownerCode], async () => {
       let calls = 0
-      const server = createBffServer(correctionConfig, {
-        businessStore: null,
+      const app = await startSkillAdminTestApp(correctionConfig, {
         sessionAdmission: {
           verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: true }),
         },
@@ -58,13 +87,12 @@ test("Admin owner machine admission rejection is terminal service authentication
           },
         },
       })
-      server.listen(0, "127.0.0.1")
-      await once(server, "listening")
+
       try {
         const headers = { ...correctionHeaders }
         delete headers["idempotency-key"]
         delete headers["content-type"]
-        const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills`, { headers })
+        const response = await fetch(`${app.base}/v1/admin/skills`, { headers })
         assert.equal(response.status, 403)
         const body = await response.json()
         assert.equal(body.error.code, "service_auth_failed")
@@ -72,8 +100,7 @@ test("Admin owner machine admission rejection is terminal service authentication
         assert.equal(JSON.stringify(body).includes("private owner admission detail"), false)
         assert.equal(calls, 1)
       } finally {
-        server.closeAllConnections()
-        await new Promise((resolve) => server.close(resolve))
+        await app.close()
       }
     })
   }
@@ -102,8 +129,7 @@ test("Admin real HTTP distinguishes bad protobuf owner facts and ACK from browse
         },
       })
       const received = fromBinary(wire.SkillProductRecordSchema, toBinary(wire.SkillProductRecordSchema, record))
-      const server = createBffServer(correctionConfig, {
-        businessStore: null,
+      const app = await startSkillAdminTestApp(correctionConfig, {
         sessionAdmission: {
           verify: async () => ({
             ok: true,
@@ -123,8 +149,7 @@ test("Admin real HTTP distinguishes bad protobuf owner facts and ACK from browse
           },
         },
       })
-      server.listen(0, "127.0.0.1")
-      await once(server, "listening")
+
       try {
         const mutation = fault === "ack" || fault === "input",
           headers = { ...correctionHeaders }
@@ -132,7 +157,7 @@ test("Admin real HTTP distinguishes bad protobuf owner facts and ACK from browse
           delete headers["idempotency-key"]
           delete headers["content-type"]
         }
-        const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills/s${mutation ? "/audience" : ""}`, {
+        const response = await fetch(`${app.base}/v1/admin/skills/s${mutation ? "/audience" : ""}`, {
           method: mutation ? "POST" : "GET",
           headers,
           ...(mutation
@@ -148,8 +173,7 @@ test("Admin real HTTP distinguishes bad protobuf owner facts and ACK from browse
         if (!["valid", "input"].includes(fault)) assert.equal((await response.json()).error.code, "skill_response_invalid")
         assert.equal(calls, fault === "input" ? 0 : 1)
       } finally {
-        server.closeAllConnections()
-        await new Promise((resolve) => server.close(resolve))
+        await app.close()
       }
     })
 })
@@ -212,8 +236,7 @@ test("Admin creates one official draft without caller-chosen identity or CAS", a
   const received = fromBinary(wire.SkillProductRecordSchema, toBinary(wire.SkillProductRecordSchema, record))
   const calls = []
   const authorizations = []
-  const server = createBffServer(correctionConfig, {
-    businessStore: null,
+  const app = await startSkillAdminTestApp(correctionConfig, {
     sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "admin" }, platformAdmin: true }) },
     skillAuthorization: {
       check: async (input) => {
@@ -229,11 +252,10 @@ test("Admin creates one official draft without caller-chosen identity or CAS", a
       },
     },
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
+
   try {
     const request = (body, headers = {}) =>
-      fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills`, {
+      fetch(`${app.base}/v1/admin/skills`, {
         method: "POST",
         headers: { ...correctionHeaders, ...headers },
         body: JSON.stringify(body),
@@ -259,8 +281,7 @@ test("Admin creates one official draft without caller-chosen identity or CAS", a
       assert.equal(calls.length, 1)
     }
   } finally {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
+    await app.close()
   }
 })
 
@@ -270,8 +291,7 @@ test("machine credentials never replace the current session and fresh Skills adm
       let ownerCalls = 0
       let actionGranted = denied === "action"
       const actions = []
-      const server = createBffServer(correctionConfig, {
-        businessStore: null,
+      const app = await startSkillAdminTestApp(correctionConfig, {
         sessionAdmission: {
           verify: async () =>
             denied === "session"
@@ -314,11 +334,10 @@ test("machine credentials never replace the current session and fresh Skills adm
           },
         },
       })
-      server.listen(0, "127.0.0.1")
-      await once(server, "listening")
+
       try {
         if (denied === "action") {
-          const first = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills/disposable-draft/discard`, {
+          const first = await fetch(`${app.base}/v1/admin/skills/disposable-draft/discard`, {
             method: "POST",
             headers: correctionHeaders,
             body: JSON.stringify({ expected_state_version: "1", reason: "Denied discard" }),
@@ -337,7 +356,7 @@ test("machine credentials never replace the current session and fresh Skills adm
             delete headers["content-type"]
             delete headers["idempotency-key"]
           }
-          const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, {
+          const response = await fetch(`${app.base}${path}`, {
             method,
             headers,
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -351,8 +370,7 @@ test("machine credentials never replace the current session and fresh Skills adm
         assert.equal(ownerCalls, denied === "action" ? 1 : 0)
         assert.deepEqual(actions, denied === "action" ? ["admin_discard_draft", "admin_read", "admin_create_draft", "admin_discard_draft"] : [])
       } finally {
-        server.closeAllConnections()
-        await new Promise((resolve) => server.close(resolve))
+        await app.close()
       }
     })
 })
@@ -370,8 +388,7 @@ test("Admin publish preserves explicit absent/current publication as native expe
     metadata: { displayName: "Name", summary: "", categoryKeys: { keys: [] } },
     product: { publicationAudience: "owner", stateVersion: 1n },
   })
-  const server = createBffServer(correctionConfig, {
-    businessStore: null,
+  const app = await startSkillAdminTestApp(correctionConfig, {
     sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: true }) },
     skillAuthorization: { check: async () => ({ ok: true }) },
     skillAdminClient: {
@@ -384,12 +401,10 @@ test("Admin publish preserves explicit absent/current publication as native expe
       },
     },
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
+
   try {
     const body = { audience: "owner", expected_state_version: "5", publisher: { kind: "user", id: "publisher" } }
-    const send = (value) =>
-      fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills/s/publish`, { method: "POST", headers: correctionHeaders, body: JSON.stringify(value) })
+    const send = (value) => fetch(`${app.base}/v1/admin/skills/s/publish`, { method: "POST", headers: correctionHeaders, body: JSON.stringify(value) })
     assert.equal((await send(body)).status, 400)
     assert.equal(calls.length, 0)
     assert.equal((await send({ ...body, expected_publication: null })).status, 200)
@@ -407,8 +422,7 @@ test("Admin publish preserves explicit absent/current publication as native expe
     assert.equal((await busy.json()).error.retryable, true)
     assert.equal(calls.length, 4)
   } finally {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
+    await app.close()
   }
 })
 
@@ -446,8 +460,7 @@ test("Admin detail projects only explicit publication snapshots; missing, malfor
   ])
     await t.test(label, async () => {
       let calls = 0
-      const server = createBffServer(correctionConfig, {
-        businessStore: null,
+      const app = await startSkillAdminTestApp(correctionConfig, {
         sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: true }) },
         skillAuthorization: { check: async () => ({ ok: true }) },
         skillAdminClient: {
@@ -457,13 +470,12 @@ test("Admin detail projects only explicit publication snapshots; missing, malfor
           },
         },
       })
-      server.listen(0, "127.0.0.1")
-      await once(server, "listening")
+
       try {
         const headers = { ...correctionHeaders }
         delete headers["idempotency-key"]
         delete headers["content-type"]
-        const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills/s`, { headers })
+        const response = await fetch(`${app.base}/v1/admin/skills/s`, { headers })
         assert.equal(response.status, expected === undefined ? 502 : 200)
         const body = await response.json()
         if (expected === undefined) assert.equal(body.error.code, "skill_response_invalid")
@@ -475,8 +487,7 @@ test("Admin detail projects only explicit publication snapshots; missing, malfor
         assert.equal(calls, 1)
         assert.equal(response.headers.get("cache-control"), "no-store")
       } finally {
-        server.closeAllConnections()
-        await new Promise((resolve) => server.close(resolve))
+        await app.close()
       }
     })
 })
@@ -520,27 +531,24 @@ test("Admin detail crosses the real Native Connect binary client with exact conf
   owner.listen(0, "127.0.0.1")
   await once(owner, "listening")
   const client = new SkillAdminConnectClient(`http://127.0.0.1:${owner.address().port}`, { get: async () => "admin-machine" }, 1000)
-  const server = createBffServer(correctionConfig, {
-    businessStore: null,
-    sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "admin" }, platformAdmin: true }) },
-    skillAuthorization: { check: async () => ({ ok: true }) },
-    skillAdminClient: client,
-  })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
+  let app
   try {
+    app = await startSkillAdminTestApp(correctionConfig, {
+      sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "admin" }, platformAdmin: true }) },
+      skillAuthorization: { check: async () => ({ ok: true }) },
+      skillAdminClient: client,
+    })
     const headers = { ...correctionHeaders }
     delete headers["idempotency-key"]
     delete headers["content-type"]
-    const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills/s`, { headers })
+    const response = await fetch(`${app.base}/v1/admin/skills/s`, { headers })
     assert.equal(response.status, 200)
     const body = await response.json()
     assert.equal(body.data.skill_id, "s")
     assert.deepEqual(body.meta, { publication: { current_version_id: "other-current", state_version: "9007199254740993" } })
     assert.equal(calls, 1)
   } finally {
-    server.closeAllConnections()
     owner.closeAllConnections()
-    await Promise.all([new Promise((resolve) => server.close(resolve)), new Promise((resolve) => owner.close(resolve))])
+    await Promise.all([app?.close(), new Promise((resolve) => owner.close(resolve))])
   }
 })

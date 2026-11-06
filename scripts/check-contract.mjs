@@ -106,7 +106,21 @@ function expectedIdempotency(operation) {
     )
   )
     return "none"
+  if (
+    operation.method === "PUT" &&
+    operation.path === "/v1/sessions/{id}/messages/{messageId}/feedback" &&
+    operation.fields.get("operationId") === "setMessageFeedback"
+  )
+    return "natural"
+  if (operation.method === "PUT" && operation.path === "/v1/projects/{projectId}/pin" && operation.fields.get("operationId") === "setProjectPin")
+    return "natural"
   if (TEAM_OWNER_DELEGATED_MUTATIONS.has(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)) return "none"
+  if (
+    operation.method === "PUT" &&
+    operation.path === "/v1/projects/{projectId}/mcp-recommendations" &&
+    operation.fields.get("operationId") === "replaceProjectMcpRecommendations"
+  )
+    return "natural"
   if (
     operation.method === "PUT" &&
     operation.path === "/v1/preferences/personalization" &&
@@ -192,6 +206,7 @@ export function inspectOpenApiGovernance(source) {
     const formalIamPermission = new Map([
       ["GET /v1/account/sessions listAccountSessions", "iam:account-session.read"],
       ["DELETE /v1/account/sessions/{session_id} revokeAccountSession", "iam:account-session.revoke"],
+      ["GET /v1/account/profile readAccountProfile", "iam:account-profile.read"],
       ["PATCH /v1/account/profile updateAccountProfile", "iam:account-profile.write"],
     ]).get(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)
     if (permission !== undefined && permission !== formalIamPermission && !/^(?:anonymous|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/u.test(permission)) {

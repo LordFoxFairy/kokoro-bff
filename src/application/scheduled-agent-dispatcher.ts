@@ -1,5 +1,5 @@
-import type { ScheduledAgentDispatchRepository } from "./ports/scheduled-agent-dispatch-repository.js"
-import type { ScheduledAgentDispatchDeliveryPort } from "./ports/scheduled-agent-dispatch-delivery.js"
+import type { ScheduledAgentDispatchRepository } from "./scheduled/scheduled-agent-dispatch-repository.js"
+import type { ScheduledAgentDispatchDeliveryPort } from "./scheduled/scheduled-agent-dispatch-delivery.js"
 export class ScheduledAgentDispatcher {
   private timer: ReturnType<typeof setInterval> | null = null
   private active: Promise<number> | null = null

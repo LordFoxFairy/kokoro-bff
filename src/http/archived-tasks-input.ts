@@ -1,5 +1,5 @@
 import type { IncomingMessage } from "node:http"
-import type { ArchivedTaskItem, ArchivedTasksPosition, ArchiveState } from "../application/ports/chat-repository.js"
+import type { ArchivedTaskItem, ArchivedTasksPosition, ArchiveState } from "../application/chat/types.js"
 import { strictParseRawJson } from "../infrastructure/raw-json.js"
 
 const invalid = (): never => {

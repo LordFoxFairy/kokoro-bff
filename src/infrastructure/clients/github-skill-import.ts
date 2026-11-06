@@ -95,7 +95,8 @@ function readGithubArchive(archive: Buffer, subdirectory: string | undefined): M
     const prefix = `${root}/${subdirectory ? `${subdirectory}/` : ""}`
     if (name.startsWith(prefix) && !name.endsWith("/") && (subdirectory !== undefined || name.endsWith("/SKILL.md"))) {
       const relative = name.slice(prefix.length)
-      if (Buffer.byteLength(relative) > 256 || size > 16_777_216 || entries.size >= 128) throw new Error("github_package_invalid")
+      if (Buffer.byteLength(relative) > 256 || size > 16_777_216 || entries.size >= (subdirectory === undefined ? 512 : 128))
+        throw new Error("github_package_invalid")
       expanded += size
       if (expanded > 134_217_728) throw new Error("github_package_invalid")
       const compressedBytes = archive.subarray(dataStart, dataStart + compressed)

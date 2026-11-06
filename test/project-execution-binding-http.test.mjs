@@ -20,7 +20,7 @@ const wire = {
     .digest("hex"),
 }
 test("Internal project binding admits only the current dedicated IAM credential and exact intent", async () => {
-  const module = await import("../src/http/routes/project-execution-binding.ts").catch(() => ({}))
+  const module = await import("../dist/http/routes/project-execution-binding.js").catch(() => ({}))
   assert.equal(typeof module.projectExecutionBindingRoute, "function")
   const dir = await mkdtemp(join(tmpdir(), "kokoro-binding-"))
   const file = join(dir, "credential.json")
@@ -82,7 +82,7 @@ test("Internal project binding admits only the current dedicated IAM credential 
 })
 
 test("Internal binding deadline rejects late reads without a late successful response", async () => {
-  const { projectExecutionBindingRoute } = await import("../src/http/routes/project-execution-binding.ts")
+  const { projectExecutionBindingRoute } = await import("../dist/http/routes/project-execution-binding.js")
   const dir = await mkdtemp(join(tmpdir(), "kokoro-binding-deadline-"))
   const file = join(dir, "credential.json")
   const secret = "IAM-ONLY-" + "d".repeat(40)

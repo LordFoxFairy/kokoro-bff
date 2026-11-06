@@ -1,7 +1,7 @@
 import type {
   AgentCancellationDeliveryPort,
   AgentCancellationDeliveryResult,
-} from "../../../application/ports/agent-cancellation-delivery.js"
+} from "../../../application/agent-dispatch/agent-cancellation-delivery.js"
 import type { BffConfig } from "../../../config/runtime.js"
 import type { AgentCancellationCommand } from "../../../domain/chat/agent-cancellation.js"
 import { isRecord } from "../../../domain/json.js"

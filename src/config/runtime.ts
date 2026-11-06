@@ -67,21 +67,24 @@ export type BffConfig = {
   domain: string
   tenantId: string | null
   iamBaseUrl: string | null
+  /** Native first-party session admission inputs; optional on transitional fixtures. */
+  iamWebOrigin?: string | null
+  iamUserContextServiceCredentialFile?: string | null
+  iamAccountSessionsServiceCredentialFile?: string | null
   iamRelay?: Readonly<{
-    publicIssuerUrl: string
     webOrigin: string
-    callbackUri: string
-    postLogoutUri: string
     secureCookies: boolean
   }>
   storage?: Readonly<{ baseUrl: string; secret: string; objectOrigin: string }>
   storageObjectOrigin?: string | null
+  agentModelAdmissionCredentialFile?: string | null
   projectExecutionCredentialFile?: string | null
   sharedSecret: string | null
   adminWebSharedSecret?: string | null
   upstreamSecret: string | null
   systemModelManagementToken?: string | null
   billingServiceToken?: string | null
+  billingOperatorProxySecret?: string | null
   upstreamTimeoutMs: number
   upstreamMaxResponseBytes: number
   schedulerServiceToken: string | null
@@ -144,38 +147,15 @@ function optionalOrigin(value: string | undefined, name = "KOKORO_IAM_BASE_URL")
 }
 
 function iamRelayConfig(env: NodeJS.ProcessEnv): BffConfig["iamRelay"] {
-  const values = [env.KOKORO_IAM_ISSUER_URL, env.KOKORO_IAM_WEB_ORIGIN, env.KOKORO_IAM_WEB_CALLBACK_URI, env.KOKORO_IAM_WEB_POST_LOGOUT_URI]
+  const values = [env.KOKORO_IAM_WEB_ORIGIN]
   if (values.every((value) => value === undefined || value.trim() === "")) return undefined
-  if (values.some((value) => value === undefined || value.trim() === ""))
-    throw new Error("IAM relay requires issuer, Web origin, callback URI and post-logout URI")
-  const [issuerRaw, originRaw, callbackRaw, logoutRaw] = values as [string, string, string, string]
+  const originRaw = values[0]
+  if (originRaw === undefined || originRaw.trim() === "") throw new Error("IAM relay requires Web origin")
   const webOrigin = optionalOrigin(originRaw)
   if (webOrigin === null) throw new Error("KOKORO_IAM_WEB_ORIGIN must be an HTTP(S) origin")
-  const issuer = new URL(issuerRaw)
-  const callback = new URL(callbackRaw)
-  const logout = new URL(logoutRaw)
-  if (
-    issuer.toString() !== `${webOrigin}/iam` ||
-    callback.origin !== webOrigin ||
-    callback.username !== "" ||
-    callback.password !== "" ||
-    !/^\/api\/auth\/callback\/[a-z0-9-]+$/u.test(callback.pathname) ||
-    callback.search !== "" ||
-    callback.hash !== "" ||
-    logout.origin !== webOrigin ||
-    logout.pathname !== "/auth/sign-in" ||
-    logout.username !== "" ||
-    logout.password !== "" ||
-    logout.search !== "" ||
-    logout.hash !== ""
-  )
-    throw new Error("IAM relay URLs must bind the exact Web issuer, callback and post-logout paths")
   return {
-    publicIssuerUrl: issuer.toString(),
     webOrigin,
-    callbackUri: callback.toString(),
-    postLogoutUri: logout.toString(),
-    secureCookies: env.NODE_ENV === "production",
+    secureCookies: new URL(webOrigin).protocol === "https:" || env.NODE_ENV === "production",
   }
 }
 
@@ -268,6 +248,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     }
     if (billingServiceToken === upstreamSecret) throw new Error("Billing service token must be independent from the Billing internal secret")
   }
+  const billingOperatorProxySecret = env.KOKORO_BILLING_OPERATOR_PROXY_SECRET?.trim() || null
+  if (
+    billingOperatorProxySecret !== null &&
+    (!/^[\x21-\x7e]{32,2048}$/u.test(billingOperatorProxySecret) ||
+      [upstreamSecret, billingServiceToken, sharedSecret, adminWebSharedSecret].includes(billingOperatorProxySecret))
+  )
+    throw new Error("Billing operator proxy credential must be independent and contain 32–2048 visible ASCII characters")
   const upstreamTimeoutMs = positiveInteger(env.KOKORO_UPSTREAM_TIMEOUT_MS, "KOKORO_UPSTREAM_TIMEOUT_MS", DEFAULT_UPSTREAM_TIMEOUT_MS)
   const agUi: AgUiConfig = {
     replayPageFrames: positiveInteger(env.KOKORO_AGUI_REPLAY_PAGE_FRAMES, "KOKORO_AGUI_REPLAY_PAGE_FRAMES", DEFAULT_AGUI_CONFIG.replayPageFrames),
@@ -385,6 +372,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     throw new Error("Storage requires base URL, object origin and independent BFF Storage secret")
   if (storageSecret !== null && !/^[\x21-\x7e]+$/u.test(storageSecret)) throw new Error("Storage secret must be a visible ASCII header value")
   const relay = iamRelayConfig(env)
+  const iamWebOrigin = optionalOrigin(env.KOKORO_IAM_WEB_ORIGIN, "KOKORO_IAM_WEB_ORIGIN")
   for (const retired of ["KOKORO_BFF_PLATFORM_CATALOG_CREDENTIALS_FILE", "KOKORO_BFF_SKILLS_ADMIN_CREDENTIAL_FILE"]) {
     if (env[retired] !== undefined) throw new Error(`retired OAuth credential configuration: ${retired}; configure the explicit service credential file`)
   }
@@ -401,6 +389,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     domain,
     tenantId: env.KOKORO_TENANT_ID?.trim() || null,
     iamBaseUrl: optionalOrigin(env.KOKORO_IAM_BASE_URL),
+    iamWebOrigin,
+    iamUserContextServiceCredentialFile: env.KOKORO_BFF_IAM_USER_CONTEXT_SERVICE_CREDENTIAL_FILE?.trim() || null,
+    iamAccountSessionsServiceCredentialFile: env.KOKORO_BFF_IAM_ACCOUNT_SESSIONS_SERVICE_CREDENTIAL_FILE?.trim() || null,
     ...(relay === undefined ? {} : { iamRelay: relay }),
     ...(storageBase !== null && storageOrigin !== null && storageSecret !== null
       ? {
@@ -412,12 +403,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
         }
       : {}),
     storageObjectOrigin: storageOrigin,
+    agentModelAdmissionCredentialFile: env.KOKORO_BFF_AGENT_MODEL_ADMISSION_CREDENTIAL_FILE?.trim() || null,
     projectExecutionCredentialFile: env.KOKORO_BFF_PROJECT_EXECUTION_CREDENTIAL_FILE?.trim() || null,
     sharedSecret,
     adminWebSharedSecret,
     upstreamSecret,
     systemModelManagementToken,
     billingServiceToken,
+    billingOperatorProxySecret,
     upstreamTimeoutMs,
     upstreamMaxResponseBytes: positiveInteger(
       env.KOKORO_UPSTREAM_MAX_RESPONSE_BYTES,

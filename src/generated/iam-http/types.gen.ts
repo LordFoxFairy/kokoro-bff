@@ -27,6 +27,9 @@ export type ApiErrorResponse = {
       | "PAYLOAD_TOO_LARGE"
       | "RATE_LIMITED"
       | "DEPENDENCY_UNAVAILABLE"
+      | "bff_user_context_service_unauthenticated"
+      | "account_session_service_unauthenticated"
+      | "account_session_invalid"
       | "INTERNAL"
     message: string
     retryable: boolean
@@ -183,6 +186,10 @@ export type VerifyOpenAppManagementAuthorizationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     app_id: string
@@ -241,6 +248,65 @@ export type VerifyOpenAppManagementAuthorizationResponses = {
 
 export type VerifyOpenAppManagementAuthorizationResponse = VerifyOpenAppManagementAuthorizationResponses[keyof VerifyOpenAppManagementAuthorizationResponses]
 
+export type ReadAccountProfileData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
+  }
+  path?: never
+  query?: never
+  url: "/internal/v1/account/profile"
+}
+
+export type ReadAccountProfileErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type ReadAccountProfileError = ReadAccountProfileErrors[keyof ReadAccountProfileErrors]
+
+export type ReadAccountProfileResponses = {
+  200: {
+    data: {
+      subject: string
+      name: string
+      email: string
+      email_verified: boolean
+    }
+  }
+}
+
+export type ReadAccountProfileResponse = ReadAccountProfileResponses[keyof ReadAccountProfileResponses]
+
 export type UpdateAccountProfileData = {
   body: {
     /**
@@ -257,6 +323,10 @@ export type UpdateAccountProfileData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path?: never
   query?: never
@@ -317,11 +387,15 @@ export type UpdateAccountProfileResponse = UpdateAccountProfileResponses[keyof U
 
 export type ListAccountSessionsData = {
   body?: never
-  headers?: {
+  headers: {
     /**
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Exact IAM_WEB_ORIGIN, including GET. Native authentication lifecycle CSRF boundary.
+     */
+    Origin: string
   }
   path?: never
   query?: {
@@ -392,11 +466,15 @@ export type ListAccountSessionsResponse = ListAccountSessionsResponses[keyof Lis
 
 export type RevokeAccountSessionData = {
   body?: never
-  headers?: {
+  headers: {
     /**
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Exact IAM_WEB_ORIGIN, including GET. Native authentication lifecycle CSRF boundary.
+     */
+    Origin: string
   }
   path: {
     session_id: string
@@ -500,6 +578,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -532,6 +613,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -564,6 +648,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -596,6 +683,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -628,6 +718,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -660,6 +753,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -692,6 +788,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -724,6 +823,9 @@ export type GetTenantInvitationContextErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -786,6 +888,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -818,6 +923,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -850,6 +958,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -882,6 +993,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -914,6 +1028,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -946,6 +1063,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -978,6 +1098,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1010,6 +1133,9 @@ export type AcceptTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1069,6 +1195,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1101,6 +1230,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1133,6 +1265,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1165,6 +1300,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1197,6 +1335,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1229,6 +1370,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1261,6 +1405,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1293,6 +1440,9 @@ export type RejectTenantInvitationErrors = {
         | "PAYLOAD_TOO_LARGE"
         | "RATE_LIMITED"
         | "DEPENDENCY_UNAVAILABLE"
+        | "bff_user_context_service_unauthenticated"
+        | "account_session_service_unauthenticated"
+        | "account_session_invalid"
         | "INTERNAL"
       message: string
       retryable: boolean
@@ -1321,6 +1471,10 @@ export type ListTenantMembersData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1394,6 +1548,10 @@ export type LeaveTenantData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1457,6 +1615,10 @@ export type RemoveTenantMemberData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1523,6 +1685,10 @@ export type ReplaceTenantMemberRolesData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1591,6 +1757,10 @@ export type ListTenantRolesData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1688,6 +1858,10 @@ export type ListTenantInvitationsData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1764,6 +1938,10 @@ export type CreateTenantInvitationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1831,6 +2009,10 @@ export type ResendTenantInvitationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1899,6 +2081,10 @@ export type CancelTenantInvitationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -1968,6 +2154,10 @@ export type ResolveTenantPublisherProfilesData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string
@@ -2059,6 +2249,10 @@ export type CheckAuthorizationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path?: never
   query?: never
@@ -2119,75 +2313,6 @@ export type CheckAuthorizationResponses = {
 
 export type CheckAuthorizationResponse = CheckAuthorizationResponses[keyof CheckAuthorizationResponses]
 
-export type VerifySessionAuthorizationData = {
-  body?: never
-  headers?: {
-    /**
-     * Caller correlation identifier. Missing or invalid values are replaced by the service.
-     */
-    "x-request-id"?: string
-  }
-  path?: never
-  query?: never
-  url: "/internal/v1/session-authorizations/verify"
-}
-
-export type VerifySessionAuthorizationErrors = {
-  /**
-   * Stable internal API error envelope.
-   */
-  400: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  401: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  403: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  404: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  409: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  413: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  429: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  500: ApiErrorResponse
-  /**
-   * Stable internal API error envelope.
-   */
-  503: ApiErrorResponse
-}
-
-export type VerifySessionAuthorizationError = VerifySessionAuthorizationErrors[keyof VerifySessionAuthorizationErrors]
-
-export type VerifySessionAuthorizationResponses = {
-  200: {
-    data: {
-      allowed: true
-      platform_admin: boolean
-      tenant_id: string
-      user_id: string
-      session_id: string
-      client_id: string
-    }
-  }
-}
-
-export type VerifySessionAuthorizationResponse = VerifySessionAuthorizationResponses[keyof VerifySessionAuthorizationResponses]
-
 export type CheckTenantSkillAuthorizationData = {
   body: {
     action:
@@ -2222,6 +2347,10 @@ export type CheckTenantSkillAuthorizationData = {
      * Caller correlation identifier. Missing or invalid values are replaced by the service.
      */
     "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
   }
   path: {
     tenant_id: string

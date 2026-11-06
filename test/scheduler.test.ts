@@ -1,12 +1,33 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { describe, it } from "node:test"
+import { Test } from "@nestjs/testing"
 
+import {
+  AGENT_CANCELLATION_DISPATCHER,
+  AGENT_DISPATCH_DISPATCHER,
+  AGUI_PROJECTOR,
+  BFF_CONFIG,
+  BFF_DATABASE,
+  PROJECT_SCOPE_RELEASE_DISPATCHER,
+  SCHEDULED_AGENT_DISPATCH_REPOSITORY,
+  SCHEDULED_AGENT_DISPATCHER,
+  SCHEDULED_AGENT_TERMINAL_CONSUMER,
+  SCHEDULED_TASK_DISPATCHER,
+  SCHEDULER_DISPATCH_RECEIPTS,
+} from "../dist/common/tokens.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
-import { createBffServer } from "../dist/main.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { SCHEDULED_TASK_CALLBACK_LOOKUP } from "../dist/modules/scheduled-tasks/scheduled-task.providers.js"
+import { ScheduledTasksModule } from "../dist/modules/scheduled-tasks/scheduled-tasks.module.js"
 import { schedulerDispatchDigest } from "../dist/infrastructure/clients/scheduler/dispatch-identity.js"
 import { parseSchedulerDispatchWebhook } from "../dist/infrastructure/clients/scheduler/webhook-contract.js"
 import { buildScheduledAgentLaunch } from "../dist/infrastructure/clients/agent/index.js"
+import { handleScheduledTaskMutationBusiness, scheduledTaskMutation } from "../dist/http/routes/scheduled-task-mutation-native.js"
+import { handleScheduledTaskReadRequest } from "../dist/http/routes/scheduled-task-native.js"
+import { mutationTicket } from "../dist/application/idempotency.js"
+import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 import { scheduledTaskId } from "../dist/http/routes/scheduler.js"
 
 function headers(overrides: Record<string, string> = {}) {
@@ -59,7 +80,7 @@ describe("Scheduler generated webhook boundary", () => {
   })
 })
 
-async function listen(server: ReturnType<typeof createServer> | ReturnType<typeof createBffServer>): Promise<string> {
+async function listen(server: ReturnType<typeof createServer>): Promise<string> {
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject)
     server.listen(0, "127.0.0.1", resolve)
@@ -69,9 +90,8 @@ async function listen(server: ReturnType<typeof createServer> | ReturnType<typeo
   return `http://127.0.0.1:${address.port}`
 }
 
-async function close(server: ReturnType<typeof createServer> | ReturnType<typeof createBffServer>): Promise<void> {
-  if ("shutdown" in server) await server.shutdown()
-  else await new Promise<void>((resolve) => server.close(() => resolve()))
+async function close(server: ReturnType<typeof createServer>): Promise<void> {
+  await new Promise<void>((resolve) => server.close(() => resolve()))
 }
 
 function config(agentBase: string | null, upstreamTimeoutMs = 70_000) {
@@ -93,6 +113,52 @@ function config(agentBase: string | null, upstreamTimeoutMs = 70_000) {
     redisUrl: null,
     agUi: DEFAULT_AGUI_CONFIG,
     upstreams: { system: null, capability: null, storage: null, scheduler: null, agents: agentBase, billing: null },
+  }
+}
+
+async function startSchedulerReceiver(runtimeConfig: ReturnType<typeof config>, scheduledTasks: object, receipts: object, scheduledAgentDispatch?: object) {
+  const unexpectedDatabaseIo = (): never => assert.fail("Scheduler callback fixture must not access database resources")
+  const builder = Test.createTestingModule({ imports: [ScheduledTasksModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(runtimeConfig)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({
+      pool: { query: unexpectedDatabaseIo, connect: unexpectedDatabaseIo, end: unexpectedDatabaseIo },
+      redis: { connect: unexpectedDatabaseIo, ping: unexpectedDatabaseIo, close: unexpectedDatabaseIo },
+      ready: unexpectedDatabaseIo,
+      close: async () => undefined,
+    })
+    .overrideProvider(SCHEDULED_TASK_CALLBACK_LOOKUP)
+    .useValue(scheduledTasks)
+    .overrideProvider(SCHEDULER_DISPATCH_RECEIPTS)
+    .useValue(receipts)
+  if (scheduledAgentDispatch !== undefined) {
+    builder.overrideProvider(SCHEDULED_AGENT_DISPATCH_REPOSITORY).useValue(scheduledAgentDispatch)
+  }
+  // The tests exercise the receiver, never the background delivery or projection workers.
+  for (const token of [
+    AGENT_CANCELLATION_DISPATCHER,
+    AGENT_DISPATCH_DISPATCHER,
+    AGUI_PROJECTOR,
+    PROJECT_SCOPE_RELEASE_DISPATCHER,
+    SCHEDULED_AGENT_DISPATCHER,
+    SCHEDULED_AGENT_TERMINAL_CONSUMER,
+    SCHEDULED_TASK_DISPATCHER,
+  ]) {
+    builder.overrideProvider(token).useValue(null)
+  }
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+  try {
+    await app.listen(0, "127.0.0.1")
+    return { base: await app.getUrl(), close: () => app.close() }
+  } catch (error) {
+    try {
+      await app.close()
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], "Scheduler receiver fixture setup failed")
+    }
+    throw error
   }
 }
 
@@ -141,19 +207,15 @@ function dispatchBody(extra = ""): string {
 describe("Scheduler receiver admission", () => {
   it("rejects missing or malformed task revisions before claiming a receipt", async () => {
     let claims = 0
-    const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
-      schedulerDispatchReceipts: {
-        claim: async () => {
-          claims += 1
-          return { outcome: "pending" }
-        },
+    const tasks = { findRecord: async () => null }
+    const receipts = {
+      claim: async () => {
+        claims += 1
+        return { outcome: "pending" }
       },
-      ready: async () => undefined,
-      close: async () => undefined,
     }
-    const bff = createBffServer(config(null), { businessStore: store as never, readiness: async () => undefined })
-    const base = await listen(bff)
+    const bff = await startSchedulerReceiver(config(null), tasks, receipts)
+    const base = bff.base
     try {
       const original = JSON.parse(dispatchBody()) as Record<string, unknown>
       for (const value of [undefined, null, "1", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
@@ -167,7 +229,7 @@ describe("Scheduler receiver admission", () => {
       }
       assert.equal(claims, 0)
     } finally {
-      await close(bff)
+      await bff.close()
     }
   })
 
@@ -175,34 +237,28 @@ describe("Scheduler receiver admission", () => {
     let prepared = 0
     let accepted = 0
     let recovered: ReturnType<typeof dispatchSnapshot>["snapshot"] | null = null
-    const store = {
-      services: {
-        scheduledTasks: {
-          findRecord: async () => ({
-            ownerId: "owner_fixture",
-            task: { id: "scheduled_fixture", prompt: "go", autoApprove: false, timezone: "UTC", revision: 2, enabled: true, status: "active" },
-          }),
-        },
-      },
-      schedulerDispatchReceipts: {
-        claim: async () => ({ outcome: "claimed", claim: { ...dispatchSnapshot(60_000), snapshot: recovered } }),
-        prepareSnapshot: async () => {
-          prepared += 1
-          return {}
-        },
-        complete: async () => true,
-      },
-      scheduledAgentDispatch: {
-        accept: async () => {
-          accepted += 1
-          return { outcome: "accepted" }
-        },
-      },
-      ready: async () => undefined,
-      close: async () => undefined,
+    const tasks = {
+      findRecord: async () => ({
+        ownerId: "owner_fixture",
+        task: { id: "scheduled_fixture", prompt: "go", autoApprove: false, timezone: "UTC", revision: 2, enabled: true, status: "active" },
+      }),
     }
-    const bff = createBffServer(config(null), { businessStore: store as never, readiness: async () => undefined })
-    const base = await listen(bff)
+    const receipts = {
+      claim: async () => ({ outcome: "claimed", claim: { ...dispatchSnapshot(60_000), snapshot: recovered } }),
+      prepareSnapshot: async () => {
+        prepared += 1
+        return {}
+      },
+      complete: async () => true,
+    }
+    const scheduledAgentDispatch = {
+      accept: async () => {
+        accepted += 1
+        return { outcome: "accepted" }
+      },
+    }
+    const bff = await startSchedulerReceiver(config(null), tasks, receipts, scheduledAgentDispatch)
+    const base = bff.base
     try {
       const result = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
         method: "POST",
@@ -223,31 +279,28 @@ describe("Scheduler receiver admission", () => {
       assert.equal(prepared, 0)
       assert.equal(accepted, 0)
     } finally {
-      await close(bff)
+      await bff.close()
     }
   })
 
-  it("returns 400 for raw 1e400 JSON without receipt or Agent I/O", async () => {
+  it("returns 400 for raw 1e400 JSON without receipt or Agent I/O", async (t) => {
     let receiptClaims = 0
     let agentCalls = 0
     const agent = createServer((_request, response) => {
       agentCalls += 1
       response.end()
     })
+    t.after(() => close(agent))
     const agentBase = await listen(agent)
-    const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
-      schedulerDispatchReceipts: {
-        claim: async () => {
-          receiptClaims += 1
-          return { outcome: "pending" }
-        },
+    const tasks = { findRecord: async () => null }
+    const receipts = {
+      claim: async () => {
+        receiptClaims += 1
+        return { outcome: "pending" }
       },
-      ready: async () => undefined,
-      close: async () => undefined,
     }
-    const bff = createBffServer(config(agentBase), { businessStore: store as never, readiness: async () => undefined })
-    const base = await listen(bff)
+    const bff = await startSchedulerReceiver(config(agentBase), tasks, receipts)
+    const base = bff.base
     try {
       const result = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
         method: "POST",
@@ -258,8 +311,7 @@ describe("Scheduler receiver admission", () => {
       assert.equal(receiptClaims, 0)
       assert.equal(agentCalls, 0)
     } finally {
-      await close(bff)
-      await close(agent)
+      await bff.close()
     }
   })
 
@@ -274,14 +326,9 @@ describe("Scheduler receiver admission", () => {
         return admittedDigest === digest ? { outcome: "terminal", response: { status: 202, body: { data: { run_id: "first" } } } } : { outcome: "conflict" }
       },
     }
-    const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
-      schedulerDispatchReceipts: receipts,
-      ready: async () => undefined,
-      close: async () => undefined,
-    }
-    const bff = createBffServer(config(null), { businessStore: store as never, readiness: async () => undefined })
-    const base = await listen(bff)
+    const tasks = { findRecord: async () => null }
+    const bff = await startSchedulerReceiver(config(null), tasks, receipts)
+    const base = bff.base
     try {
       const first = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
         method: "POST",
@@ -296,42 +343,11 @@ describe("Scheduler receiver admission", () => {
       assert.equal(first.status, 202)
       assert.equal(second.status, 409)
     } finally {
-      await close(bff)
+      await bff.close()
     }
   })
 
-  it("does not call Agent when the receipt lease cannot fund settlement reserve", async () => {
-    let agentCalls = 0
-    const agent = createServer((_request, response) => {
-      agentCalls += 1
-      response.end()
-    })
-    const agentBase = await listen(agent)
-    const claim = dispatchSnapshot(4_999)
-    const receipts = {
-      claim: async () => ({ outcome: "claimed", claim }),
-      releaseRetryable: async () => true,
-      complete: async () => true,
-    }
-    const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
-      schedulerDispatchReceipts: receipts,
-      ready: async () => undefined,
-      close: async () => undefined,
-    }
-    const bff = createBffServer(config(agentBase), { businessStore: store as never, readiness: async () => undefined })
-    const base = await listen(bff)
-    try {
-      const result = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, { method: "POST", headers: dispatchHeaders(), body: dispatchBody() })
-      assert.equal(result.status, 502)
-      assert.equal(agentCalls, 0)
-    } finally {
-      await close(bff)
-      await close(agent)
-    }
-  })
-
-  it("durably accepts without performing Agent I/O in the callback", async () => {
+  it("durably accepts without performing Agent I/O in the callback", async (t) => {
     let agentCalls = 0
     const agent = createServer((_request, response) => {
       agentCalls += 1
@@ -339,6 +355,7 @@ describe("Scheduler receiver admission", () => {
         if (!response.destroyed) response.end(JSON.stringify({ data: { run_id: "run_fixture" } }))
       }, 1000)
     })
+    t.after(() => close(agent))
     const agentBase = await listen(agent)
     const claim = dispatchSnapshot(5_150)
     const receipts = {
@@ -346,113 +363,19 @@ describe("Scheduler receiver admission", () => {
       releaseRetryable: async () => true,
       complete: async () => true,
     }
-    const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
-      schedulerDispatchReceipts: receipts,
-      scheduledAgentDispatch: { accept: async () => ({ outcome: "accepted" }) },
-      ready: async () => undefined,
-      close: async () => undefined,
-    }
-    const bff = createBffServer(config(agentBase, 70_000), { businessStore: store as never, readiness: async () => undefined })
-    const base = await listen(bff)
+    const tasks = { findRecord: async () => null }
+    const scheduledAgentDispatch = { accept: async () => ({ outcome: "accepted" }) }
+    const bff = await startSchedulerReceiver(config(agentBase, 70_000), tasks, receipts, scheduledAgentDispatch)
+    const base = bff.base
     try {
       const startedAt = Date.now()
       const result = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, { method: "POST", headers: dispatchHeaders(), body: dispatchBody() })
       assert.equal(result.status, 202)
+      assert.equal(result.headers.get("x-request-id"), "transport-request")
       assert.equal(agentCalls, 0)
       assert.ok(Date.now() - startedAt < 900)
     } finally {
-      await close(bff)
-      await close(agent)
-    }
-  })
-
-  it("charges claim return latency against a recovered snapshot before Agent I/O", async () => {
-    let agentCalls = 0
-    const agent = createServer((_request, response) => {
-      agentCalls += 1
-      response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({ data: { run_id: "run_fixture" } }))
-    })
-    const agentBase = await listen(agent)
-    const claim = dispatchSnapshot(5_100)
-    const receipts = {
-      claim: async () => {
-        claim.leaseObservedAt = performance.now()
-        await new Promise((resolve) => setTimeout(resolve, 150))
-        return { outcome: "claimed", claim }
-      },
-      releaseRetryable: async () => true,
-      complete: async () => true,
-    }
-    const store = {
-      services: { scheduledTasks: { findRecord: async () => null } },
-      schedulerDispatchReceipts: receipts,
-      ready: async () => undefined,
-      close: async () => undefined,
-    }
-    const bff = createBffServer(config(agentBase), { businessStore: store as never, readiness: async () => undefined })
-    const base = await listen(bff)
-    try {
-      const result = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, { method: "POST", headers: dispatchHeaders(), body: dispatchBody() })
-      assert.equal(result.status, 502)
-      assert.equal(agentCalls, 0)
-    } finally {
-      await close(bff)
-      await close(agent)
-    }
-  })
-
-  it("charges prepare return latency against first-admission Agent I/O", async () => {
-    let agentCalls = 0
-    const agent = createServer((_request, response) => {
-      agentCalls += 1
-      response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({ data: { run_id: "unexpected" } }))
-    })
-    const agentBase = await listen(agent)
-    const claim = { ...dispatchSnapshot(60_000), snapshot: null }
-    const receipts = {
-      claim: async () => ({ outcome: "claimed", claim }),
-      prepareSnapshot: async () => {
-        const leaseObservedAt = performance.now()
-        await new Promise((resolve) => setTimeout(resolve, 150))
-        return { leaseRemainingMs: 5_100, leaseObservedAt }
-      },
-      releaseRetryable: async () => true,
-      complete: async () => true,
-    }
-    const record = {
-      ownerId: "owner_fixture",
-      task: {
-        id: "scheduled_fixture",
-        title: "Fixture",
-        prompt: "go",
-        frequency: "daily",
-        time: "08:00",
-        timezone: "UTC",
-        recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
-        autoApprove: false,
-        enabled: true,
-        status: "active",
-        revision: 1,
-      },
-    }
-    const store = {
-      services: { scheduledTasks: { findRecord: async () => record } },
-      schedulerDispatchReceipts: receipts,
-      ready: async () => undefined,
-      close: async () => undefined,
-    }
-    const bff = createBffServer(config(agentBase), { businessStore: store as never, readiness: async () => undefined })
-    const base = await listen(bff)
-    try {
-      const result = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, { method: "POST", headers: dispatchHeaders(), body: dispatchBody() })
-      assert.equal(result.status, 502)
-      assert.equal(agentCalls, 0)
-    } finally {
-      await close(bff)
-      await close(agent)
+      await bff.close()
     }
   })
 })
@@ -477,5 +400,124 @@ describe("Agent launch identities", () => {
     assert.equal(left.receipt.run_id, right.receipt.run_id)
     assert.equal(left.identityAssertionRef, right.identityAssertionRef)
     assert.notEqual(left.body.request_id, right.body.request_id)
+  })
+})
+
+describe("ScheduledTask HTTP method ownership", () => {
+  it("completes a 404 receipt only for the exact Project-not-found owner error and releases unknown failures", async () => {
+    const context = { requestId: "mutation-error", identity: { namespace: "tenant_fixture", userId: "owner" } }
+    const idempotency = new Map()
+    let ownerError: unknown
+    let receiptScope = ""
+    const server = createServer((request, response) => {
+      void mutationTicket("original-key", "PATCH", "/scheduled-tasks/task-1", context, "original-fingerprint", idempotency).then(async (claim) => {
+        assert.ok(claim.ticket)
+        receiptScope = claim.ticket.scope
+        await handleScheduledTaskMutationBusiness(
+          request,
+          response,
+          context,
+          {
+            update: async () => {
+              throw ownerError
+            },
+          } as never,
+          {} as never,
+          { status: "active", enabled: true },
+          claim.ticket,
+          idempotency,
+        )
+      })
+    })
+    const base = await listen(server)
+    try {
+      for (const [error, status, code, message] of [
+        [new Error("PROJECT_NOT_FOUND"), 404, "project_not_found", "Project was not found"],
+        [new Error("database-secret-canary"), 503, "business_store_unavailable", "The BFF business store is unavailable"],
+        ["PROJECT_NOT_FOUND", 503, "business_store_unavailable", "The BFF business store is unavailable"],
+      ] as const) {
+        ownerError = error
+        idempotency.clear()
+        const response = await fetch(base + "/v1/scheduled-tasks/task-1", { method: "PATCH", headers: { "idempotency-key": "original-key" } })
+        assert.equal(response.status, status)
+        assert.equal(response.headers.get("x-request-id"), context.requestId)
+        assert.equal(response.headers.get("cache-control"), "no-store")
+        const body = await response.json()
+        assert.deepEqual(body, { error: { code, message }, meta: { request_id: context.requestId } })
+        if (status === 404) assert.deepEqual([...idempotency.entries()], [[receiptScope, { fingerprint: "original-fingerprint", receipt: { status, body } }]])
+        else assert.equal(idempotency.size, 0)
+      }
+    } finally {
+      await close(server)
+    }
+  })
+
+  it("matches collection create without treating item POST as create and preserves existing mutation targets", async () => {
+    const server = createServer((request, response) => {
+      response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(scheduledTaskMutation(request)))
+    })
+    const base = await listen(server)
+    try {
+      for (const [method, path, expected] of [
+        ["POST", "/v1/scheduled-tasks", { kind: "create" }],
+        ["POST", "/v1/scheduled-tasks/task-1", null],
+        ["POST", "/v1/projects/project-1/scheduled-tasks", { kind: "project_create", projectId: "project-1" }],
+        ["POST", "/v1/scheduled-tasks/task-1/retry", { kind: "retry", taskId: "task-1" }],
+        ["PATCH", "/v1/scheduled-tasks/task-1", { kind: "patch", taskId: "task-1" }],
+        ["DELETE", "/v1/scheduled-tasks/task-1", { kind: "delete", taskId: "task-1" }],
+      ] as const) {
+        const response = await fetch(base + path, { method })
+        assert.equal(response.status, 200)
+        assert.deepEqual(await response.json(), expected, `${method} ${path}`)
+      }
+    } finally {
+      await close(server)
+    }
+  })
+
+  it("current-state GET never intercepts non-GET methods or authenticates their requests", async () => {
+    const admission = new SessionAdmissionDouble({ session: { namespace: "tenant_fixture", userId: "owner" } })
+    let reads = 0
+    const reader = {
+      read: async (_scope: unknown, _requestId: string, _signal: AbortSignal, options: { revalidate(): Promise<void> }) => {
+        reads++
+        await options.revalidate()
+        return []
+      },
+    }
+    const server = createServer((request, response) => {
+      void handleScheduledTaskReadRequest(
+        request,
+        response,
+        { ...config(null, 1000), iamWebOrigin: "https://web.example.test" },
+        admission,
+        reader as never,
+      ).then((handled) => {
+        if (!handled) response.writeHead(404).end()
+      })
+    })
+    const base = await listen(server)
+    const native = {
+      "x-kokoro-service": "web-bff",
+      "x-kokoro-internal-secret": "web-secret",
+      cookie: "kokoro-issuer.session_token=session",
+      origin: "https://web.example.test",
+    }
+    try {
+      for (const method of ["POST", "PATCH", "DELETE", "PUT"]) {
+        const response = await fetch(`${base}/v1/scheduled-tasks`, { method, headers: native })
+        assert.equal(response.status, 404, method)
+        await response.arrayBuffer()
+        assert.equal(reads, 0)
+        assert.equal(admission.calls.length, 0)
+      }
+      const response = await fetch(`${base}/v1/scheduled-tasks`, { headers: native })
+      assert.equal(response.status, 200)
+      assert.deepEqual((await response.json()).data, { tasks: [] })
+      assert.equal(reads, 1)
+      assert.equal(admission.calls.length, 2)
+    } finally {
+      await close(server)
+    }
   })
 })

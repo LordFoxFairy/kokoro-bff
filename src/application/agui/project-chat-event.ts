@@ -42,7 +42,12 @@ export type AgUiEvent = {
   name?: string
   value?: unknown
   usage?: Array<Record<string, unknown>>
-  outcome?: { type: "success" } | { type: "interrupt"; interrupts: Array<{ id: string; reason: string; message?: string }> }
+  outcome?:
+    | { type: "success" }
+    | {
+        type: "interrupt"
+        interrupts: Array<{ id: string; reason: string; message?: string }>
+      }
   status?: string
 }
 
@@ -163,7 +168,10 @@ export function projectChatEvent(event: ChatEvent, state: AgUiProjectionState): 
                   interrupts: [{ id: `cancelled:${event.event_id}`, reason: "cancelled", message: "Agent run cancelled" }],
                 },
               }
-            : { outcome: { type: "success" } }),
+            : {
+                outcome: { type: "success" },
+                ...(payload.final_segment_id === undefined ? {} : { result: { final_segment_id: payload.final_segment_id } }),
+              }),
           ...(usage === undefined ? {} : { usage }),
         }),
       ]

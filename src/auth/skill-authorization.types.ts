@@ -1,7 +1,7 @@
 import type { CheckTenantSkillAuthorizationData } from "../generated/iam-http/types.gen.js"
-import type { SessionAdmissionInput } from "./session-admission.types.js"
+import type { IamUserContextInput } from "./iam-user-context.js"
 
-export type SkillAuthorizationInput = SessionAdmissionInput &
+export type SkillAuthorizationInput = IamUserContextInput &
   Readonly<{
     tenantId: string
     subjectId: string

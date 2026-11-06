@@ -2,6 +2,9 @@ import assert from "node:assert/strict"
 import { afterEach, test } from "node:test"
 import { requestIamAccountSessions } from "../src/infrastructure/clients/iam-account-sessions.ts"
 import type { AccountSessionInput } from "../src/infrastructure/clients/iam-account-sessions.types.ts"
+import { fixtureIamCredentials, TEST_IAM_ACCOUNT_SESSIONS_SECRET } from "./doubles/iam-credentials.ts"
+
+const credentials = await fixtureIamCredentials("tenant-verified")
 
 const originalFetch = globalThis.fetch
 afterEach(() => {
@@ -12,7 +15,10 @@ const page = () => ({ data: { current_session: session("current"), sessions: [se
 function input(extra: Partial<AccountSessionInput> = {}): AccountSessionInput {
   return {
     baseUrl: "http://iam.test",
-    token: "delegated-secret",
+    credentialFile: credentials.iamAccountSessionsServiceCredentialFile,
+    tenantId: "tenant-verified",
+    cookie: "kokoro-issuer.session_token=account-session",
+    origin: "https://web.example.test",
     requestId: "account-client",
     signal: new AbortController().signal,
     deadlineAt: performance.now() + 1000,
@@ -33,7 +39,7 @@ function fetched(value: Response) {
   globalThis.fetch = async () => value
 }
 
-test("normal generated list/revoke operations forward only bearer and correlation and require owner ACK", async () => {
+test("generated list/revoke use a distinct service credential, Cookie, exact Origin and correlation and require owner ACK", async () => {
   const seen: Request[] = []
   globalThis.fetch = async (request) => {
     const req = request as Request
@@ -44,9 +50,11 @@ test("normal generated list/revoke operations forward only bearer and correlatio
   assert.deepEqual(await requestIamAccountSessions(input({ kind: "revoke", sessionId: "other" })), { ok: true, data: { session_id: "other", revoked: true } })
   assert.equal(seen[0]!.url, "http://iam.test/internal/v1/account/sessions?limit=25")
   assert.equal(seen[1]!.url, "http://iam.test/internal/v1/account/sessions/other")
-  assert.equal(seen[1]!.headers.get("authorization"), "Bearer delegated-secret")
   for (const req of seen) {
-    assert.equal(req.headers.get("cookie"), null)
+    assert.equal(req.headers.get("authorization"), `Bearer ${TEST_IAM_ACCOUNT_SESSIONS_SECRET}`)
+    assert.equal(req.headers.get("cookie"), "kokoro-issuer.session_token=account-session")
+    assert.equal(req.headers.get("origin"), "https://web.example.test")
+    assert.equal(req.headers.get("x-kokoro-actor-id"), null)
     assert.equal(req.body, null)
     assert.equal(req.headers.get("x-request-id"), "account-client")
   }
@@ -95,7 +103,8 @@ test("revoke rejects wrong ID and false ACK", async () => {
 
 for (const [status, code, expectedStatus, expectedCode] of [
   [400, "INVALID_ARGUMENT", 400, "account_session_input_invalid"],
-  [401, "UNAUTHENTICATED", 401, "session_invalid"],
+  [401, "UNAUTHENTICATED", 503, "account_sessions_unavailable"],
+  [401, "account_session_invalid", 401, "session_invalid"],
   [403, "PERMISSION_DENIED", 403, "account_session_forbidden"],
   [404, "NOT_FOUND", 404, "account_session_not_found"],
   [409, "CONFLICT", 409, "account_session_conflict"],
@@ -188,11 +197,17 @@ test("the same deadline cancels and releases a body reader even if cancel itself
 test("abort closes an in-flight revoke without automatically retrying or claiming ACK", async () => {
   const controller = new AbortController()
   let calls = 0
+  let started!: () => void
+  const reachedOwner = new Promise<void>((resolve) => {
+    started = resolve
+  })
   globalThis.fetch = async () => {
     calls += 1
+    started()
     return new Promise(() => {})
   }
   const pending = requestIamAccountSessions(input({ kind: "revoke", sessionId: "other", signal: controller.signal }))
+  await reachedOwner
   controller.abort()
   assert.deepEqual(await pending, { ok: false, status: 503, code: "account_sessions_unavailable" })
   assert.equal(calls, 1)

@@ -1,4 +1,4 @@
-import type { AgentDispatchDeliveryPort, AgentDispatchDeliveryResult } from "../../../application/ports/agent-dispatch-delivery.js"
+import type { AgentDispatchDeliveryPort, AgentDispatchDeliveryResult } from "../../../application/agent-dispatch/agent-dispatch-delivery.js"
 import type { BffConfig } from "../../../config/runtime.js"
 import { parseAgentDispatchPayload, type AgentDispatchCommand } from "../../../domain/chat/agent-dispatch.js"
 import { zLaunchRequest } from "../../../generated/agent-http/zod.gen.js"

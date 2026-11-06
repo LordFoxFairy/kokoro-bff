@@ -1,3 +1,5 @@
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
+const credentials = await fixtureIamCredentials("tenant")
 import assert from "node:assert/strict"
 import test from "node:test"
 import { create } from "@bufbuild/protobuf"
@@ -107,7 +109,11 @@ test("Skill specification facade accepts the canonical public valid package phas
 })
 
 import { once } from "node:events"
-import { createLiveTestBffServer } from "./doubles/server.ts"
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, SKILL_AUTHORIZATION, SKILL_INSTALLATION_CLIENT, SKILL_PRODUCT_CLIENT } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { SkillsModule } from "../dist/modules/skills/skills.module.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 const productConfig = {
@@ -117,6 +123,7 @@ const productConfig = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -137,15 +144,44 @@ const productConfig = {
   },
 }
 const headers = {
-  authorization: "Bearer session",
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
   "content-type": "application/json",
   "idempotency-key": "product-draft-1",
 }
+async function startProductHttpTestApp({ sessionAdmission, skillAuthorization, skillProductClient, installationClient, forceCloseConnections = false }) {
+  const builder = Test.createTestingModule({ imports: [SkillsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(productConfig)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: Object.freeze({}) })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+    .overrideProvider(SKILL_AUTHORIZATION)
+    .useValue(skillAuthorization)
+  if (skillProductClient !== undefined) builder.overrideProvider(SKILL_PRODUCT_CLIENT).useValue(skillProductClient)
+  if (installationClient !== undefined) builder.overrideProvider(SKILL_INSTALLATION_CLIENT).useValue(installationClient)
+
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false, forceCloseConnections })
+  try {
+    await app.listen(0, "127.0.0.1")
+    return { base: await app.getUrl(), close: () => app.close() }
+  } catch (error) {
+    try {
+      await app.close()
+    } catch (closeError) {
+      throw new AggregateError([error, closeError], "Skill Product test listener failed to start and close")
+    }
+    throw error
+  }
+}
+
 test("Public Product draft route admits current human action then forwards exact CAS and explicit empty metadata", async () => {
   const calls = []
-  const server = createLiveTestBffServer(productConfig, {
+  const { base, close } = await startProductHttpTestApp({
     sessionAdmission: new SessionAdmissionDouble({
       session: { namespace: "tenant", userId: "user" },
     }),
@@ -162,10 +198,8 @@ test("Public Product draft route admits current human action then forwards exact
       },
     },
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
   try {
-    const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/skills/skill-1/draft`, {
+    const response = await fetch(`${base}/v1/skills/skill-1/draft`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({
@@ -189,7 +223,7 @@ test("Public Product draft route admits current human action then forwards exact
     assert.deepEqual(calls[1][3].metadata.example_prompts, { prompts: [] })
     assert.deepEqual(calls[1][3].metadata.category_keys, { keys: [] })
   } finally {
-    await new Promise((resolve) => server.close(resolve))
+    await close()
   }
 })
 
@@ -229,7 +263,10 @@ test("IAM enrichment batches exact repeated publishers and represents missing wi
     let body = ""
     for await (const chunk of request) body += chunk
     calls++
-    assert.equal(request.headers.authorization, "Bearer session")
+    assert.equal(request.headers.authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+    assert.equal(request.headers["x-kokoro-actor-id"], "session")
+    assert.equal(request.headers.cookie, undefined)
+    assert.equal(request.headers.origin, undefined)
     assert.match(request.url, /\/tenant\//u)
     assert.deepEqual(JSON.parse(body), {
       refs: [{ kind: "user", id: "user-1" }],
@@ -253,7 +290,7 @@ test("IAM enrichment batches exact repeated publishers and represents missing wi
   owner.listen(0, "127.0.0.1")
   await once(owner, "listening")
   try {
-    const client = new IamPublisherProfileClient(`http://127.0.0.1:${owner.address().port}`, 1000),
+    const client = new IamPublisherProfileClient(`http://127.0.0.1:${owner.address().port}`, 1000, credentials.iamUserContextServiceCredentialFile),
       item = {
         product: {
           publisher: { kind: "iam", iam: { kind: "user", id: "user-1" } },
@@ -311,7 +348,7 @@ test("Installation real HTTP preserves owner response502 and browser input400", 
           : {}),
       })
       let calls = 0
-      const server = createLiveTestBffServer(productConfig, {
+      const { base, close } = await startProductHttpTestApp({
         sessionAdmission: new SessionAdmissionDouble({
           session: { namespace: "tenant", userId: "user" },
         }),
@@ -322,22 +359,20 @@ test("Installation real HTTP preserves owner response502 and browser input400", 
             return { installations: [item], page: {} }
           },
         },
+        forceCloseConnections: true,
       })
-      server.listen(0, "127.0.0.1")
-      await once(server, "listening")
       try {
         const requestHeaders = { ...headers }
         delete requestHeaders["idempotency-key"]
         delete requestHeaders["content-type"]
-        const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/skill-installations${fault === "input" ? "?enabled=bogus" : ""}`, {
+        const response = await fetch(`${base}/v1/skill-installations${fault === "input" ? "?enabled=bogus" : ""}`, {
           headers: requestHeaders,
         })
         assert.equal(response.status, fault === "valid" ? 200 : fault === "input" ? 400 : 502)
         if (!["valid", "input"].includes(fault)) assert.equal((await response.json()).error.code, "skill_installation_response_invalid")
         assert.equal(calls, fault === "input" ? 0 : 1)
       } finally {
-        server.closeAllConnections()
-        await new Promise((resolve) => server.close(resolve))
+        await close()
       }
     })
 })

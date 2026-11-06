@@ -14,17 +14,13 @@ test("retired knowledge requests do no repository or response I/O", async () => 
         throw Error("response must not be used")
       },
     })
-    const store = {
-      services: {
-        personalKnowledge: {
-          list: async () => {
-            calls += 1
-            return { kind: "ok", value: [] }
-          },
-        },
+    const repository = {
+      list: async () => {
+        calls += 1
+        return { kind: "ok", value: [] }
       },
     }
-    await personalKnowledgeRoute(req, res, { identity: { namespace: "tenant", userId: "subject" }, requestId: "request" }, store)
+    await personalKnowledgeRoute(req, res, { identity: { namespace: "tenant", userId: "subject" }, requestId: "request" }, repository)
     assert.equal(calls, 0, state)
   }
 })

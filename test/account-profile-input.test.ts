@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { parseAccountProfileBody, accountProfileMetadataValid } from "../src/http/account-profile-input.ts"
+import { parseAccountProfileBody, accountProfileMetadataValid, accountProfileReadMetadataValid } from "../src/http/account-profile-input.ts"
 import type { IncomingMessage } from "node:http"
 const parse = (value: unknown) => parseAccountProfileBody(Buffer.from(JSON.stringify(value)))
 test("exact Unicode name and historical expected name are never trimmed or normalized", () => {
@@ -36,6 +36,20 @@ test("metadata accepts JSON chunked and single identity encoding, rejects query 
       } as IncomingMessage),
       false,
     )
+})
+test("read metadata is exact and bodyless", () => {
+  const request = (headers: Record<string, string> = {}, rawHeaders: string[] = [], url = "/v1/account/profile") =>
+    ({ method: "GET", url, headers, rawHeaders }) as IncomingMessage
+  assert.equal(accountProfileReadMetadataValid(request()), true)
+  assert.equal(accountProfileReadMetadataValid(request({ "content-length": "0" }, ["Content-Length", "0"])), true)
+  for (const candidate of [
+    request({}, [], "/v1/account/profile?x=1"),
+    request({ "content-length": "1" }, ["Content-Length", "1"]),
+    request({ "transfer-encoding": "chunked" }, ["Transfer-Encoding", "chunked"]),
+    request({ "content-encoding": "gzip" }, ["Content-Encoding", "gzip"]),
+    request({ "idempotency-key": "replay" }, ["Idempotency-Key", "replay"]),
+  ])
+    assert.equal(accountProfileReadMetadataValid(candidate), false)
 })
 test("historical expected_name preserves escaped lone UTF16 while new name still rejects it", () => {
   for (const expected_name of ["\ud800", "\udfff", " \u0000\u0085\ud800 ", "\ud800".repeat(16384)])

@@ -2884,3 +2884,32 @@ test("personal series delete is additive and preserves the complete published co
   assert.equal(skillSeriesDeleteParentBaseline(inventory).length, 176)
   assert.throws(() => restoreSkillSeriesDeleteContract(source.replace("entire personal Skill series", "different personal Skill series")), /delete.*drift/u)
 })
+
+test("Project Todo publishes scoped, conditional and replayable writes on its existing collection", async () => {
+  const { load } = await import("js-yaml")
+  const document = load(await readFile(currentOpenapiUrl, "utf8"))
+  const collection = document.paths["/v1/projects/{projectId}/tasks"]
+  const member = document.paths["/v1/projects/{projectId}/tasks/{taskId}"]
+  assert.equal(collection.get.operationId, "listProjectTasks")
+  assert.equal(collection.post?.operationId, "createProjectTask")
+  assert.equal(member?.patch.operationId, "updateProjectTask")
+  assert.equal(member?.delete.operationId, "deleteProjectTask")
+  assert.ok(document.components.schemas.Task.required.includes("revision"))
+  for (const [operation, status] of [[collection.post, "201"], [member.patch, "200"], [member.delete, "204"]]) {
+    assert.equal(operation["x-kokoro-permission"], "project.write")
+    assert.ok(operation.parameters.some(({ $ref }) => $ref === "#/components/parameters/ProjectTaskIdempotencyKey"))
+    assert.ok(operation.responses[status])
+    assert.ok(operation.responses["404"])
+    assert.ok(operation.responses["409"])
+  }
+  for (const operation of [member.patch, member.delete]) {
+    assert.ok(operation.parameters.some(({ $ref }) => $ref === "#/components/parameters/ProjectTaskIfMatch"))
+    assert.ok(operation.responses["412"])
+    assert.ok(operation.responses["428"])
+  }
+  assert.ok(collection.post.responses["201"].headers.Location)
+  assert.ok(!Object.hasOwn(member.delete.responses["204"], "content"))
+  assert.deepEqual(document.components.schemas.ProjectTaskWriteReceipt.required, ["id", "project_id", "revision"])
+  assert.equal(document.components.schemas.UpdateProjectTaskRequest.additionalProperties, false)
+  assert.equal(document.components.schemas.UpdateProjectTaskRequest.minProperties, 1)
+})

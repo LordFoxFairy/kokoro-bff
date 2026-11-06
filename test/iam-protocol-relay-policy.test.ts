@@ -14,15 +14,40 @@ test("published browser-private policy is a deterministic read-only projection o
   const bytes = await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url))
   const published = JSON.parse(bytes.toString("utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "63e36a79c7448d4b9e47442df4f5467f230ecf0e9ac702a350cbc92a2c77eb46")
-  assert.deepEqual(IAM_RELAY_POLICY.webInteractionPaths, ["/auth/sign-in", "/auth/select-tenant", "/auth/consent", "/iam/interactions/consent"])
-  assert.equal(IAM_RELAY_POLICY.version, "2.1.0")
-  assert.equal(IAM_RELAY_POLICY.iamOpenapiVersion, "0.7.0")
-  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "e3c035b99cf9479ac8357c7d38147f1541dcbcac")
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "c88bab0bd1d5529573eee318e50ac2dd41349a03fc84e8b7284416af700a0ebe")
+  // Undo only the v3 owner repin and raw Session relay removal; preserve the complete v2.1 oracle.
+  const historical = {
+    ...IAM_RELAY_POLICY,
+    version: "2.1.0",
+    iamOwnerCommit: "e3c035b99cf9479ac8357c7d38147f1541dcbcac",
+    iamSnapshotSha256: "b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1",
+    iamOpenapiVersion: "0.7.0",
+    iamOpenapiSha256: "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2",
+    routes: Object.fromEntries(
+      Object.entries(IAM_RELAY_POLICY.routes).flatMap(([route, methods]) =>
+        route === "/organization/set-active"
+          ? [
+              ["/get-session", ["GET"]],
+              [route, methods],
+            ]
+          : [[route, methods]],
+      ),
+    ),
+  }
+  assert.equal(
+    createHash("sha256")
+      .update(JSON.stringify(historical, null, 2) + "\n")
+      .digest("hex"),
+    "b2adc766332c1ca87b55900f359f5cc931b7f50505a19ea21cbb0c36faf9f72f",
+  )
+  assert.deepEqual(IAM_RELAY_POLICY.webInteractionPaths, ["/auth/sign-in", "/auth/select-tenant", "/iam/interactions/invitation"])
+  assert.equal(IAM_RELAY_POLICY.version, "3.0.0")
+  assert.equal(IAM_RELAY_POLICY.iamOpenapiVersion, "0.20.0")
+  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7")
   assert.equal(IAM_RELAY_POLICY.iamAllowlistSha256, "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead")
   assert.equal(
     (IAM_RELAY_POLICY as unknown as { iamOpenapiSha256?: string }).iamOpenapiSha256,
-    "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2",
+    "61cf99b4fe836deafedb9f59d9fa2ea3446ce172f4069944f7facb14e816c7ca",
   )
   assert.deepEqual((IAM_RELAY_POLICY.routes as Record<string, readonly string[]>)["/sign-up/email"], ["POST"])
   assert.equal(
@@ -58,6 +83,7 @@ test("published browser-private policy is a deterministic read-only projection o
       idempotency: "none",
     },
   ])
+  assert.deepEqual(IAM_RELAY_POLICY.cookiePaths, { default: "/" })
   assert.deepEqual((IAM_RELAY_POLICY as unknown as { invitationLocation?: unknown }).invitationLocation, {
     sourceRoute: "/verify-email",
     path: "/iam/interactions/invitation",
@@ -68,13 +94,14 @@ test("published browser-private policy is a deterministic read-only projection o
   })
 })
 
-test("vendored IAM 0.15.0 contract and generated-client manifest pin the execution owner bytes", async () => {
-  const ownerCommit = "4db7012a85752071f5fd30b9a5a3b4977e9dd4f3"
-  const expectedDigest = "db46bc6a3f0e821f0a6e94f7ee9f75a80d8e92cfbbe5ae5c1ca612d0b2754600"
+test("the relay keeps its immutable IAM 0.20.0 provenance artifact without obsolete vendor snapshots", async () => {
+  const ownerCommit = "896405d146c4ff96f5f39d5c2ce1bc788d46c2c7"
+  const expectedDigest = "61cf99b4fe836deafedb9f59d9fa2ea3446ce172f4069944f7facb14e816c7ca"
   const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
   assert.notEqual(vendor, null)
   assert.equal(createHash("sha256").update(vendor!).digest("hex"), expectedDigest)
   await assert.rejects(readFile(new URL("../contract/vendor/kokoro-iam/c64faa7992301f31495e163d04049c48a23d0225/iam.internal.v1.json", import.meta.url)))
+  await assert.rejects(readFile(new URL("../contract/vendor/kokoro-iam/497900ab6ec7274c800f1889cc06c993662dd9d6/iam.internal.v1.json", import.meta.url)))
   const oldVendor = await readFile(
     new URL("../contract/vendor/kokoro-iam/4d981441d154c83b63987f284e3a82a559595870/iam.internal.v1.json", import.meta.url),
   ).catch(() => null)
@@ -88,17 +115,7 @@ test("vendored IAM 0.15.0 contract and generated-client manifest pin the executi
   ).catch(() => null)
   assert.equal(retiredAdmissionVendor, null, "retired 0.7 admission vendor path must be removed")
   const contract = JSON.parse(vendor!.toString("utf8")) as { info?: { version?: string } }
-  assert.equal(contract.info?.version, "0.15.0")
-  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8")) as {
-    owner?: { repository_commit?: string; contract_version?: string; contract_sha256?: string }
-  }
-  assert.deepEqual(manifest.owner, {
-    repository_path: "apps/kokoro-iam",
-    repository_commit: ownerCommit,
-    contract_version: "0.15.0",
-    contract_path: "contract/openapi/iam.internal.v1.json",
-    contract_sha256: expectedDigest,
-  })
+  assert.equal(contract.info?.version, "0.20.0")
 })
 
 test("generated IAM client exposes only the three browser-private invitation operations added by 0.4.0", () => {
@@ -166,6 +183,9 @@ test("invitation matcher accepts only the three exact owner routes with canonica
 })
 
 test("relay route matrix is exact and never treats aliases as owner paths", () => {
+  for (const target of ["/iam/get-session", "/iam/get-session?disableCookieCache=true", "/iam/get-session?disableRefresh=true"]) {
+    assert.equal(iamRelayRoute(target, "GET"), null, target)
+  }
   assert.equal(iamRelayRoute("/iam/organization/list", "GET"), null)
   assert.equal(iamRelayRoute("/iam/organization/set-active", "POST")?.path, "/organization/set-active")
   const verificationQuery = "?token=opaque%2B%2F%3D&callbackURL=http%3A%2F%2Fweb.example.test%2Fauth%2Fsign-in&x=one&x=two"
@@ -175,11 +195,8 @@ test("relay route matrix is exact and never treats aliases as owner paths", () =
   })
   assert.equal(iamRelayRoute("/iam/verify-email", "POST"), null)
   assert.equal(iamRelayRoute("/iam/%76erify-email?token=opaque", "GET"), null)
-  assert.deepEqual(iamRelayRoute("/iam/oauth2/authorize?client_id=a&ba_param=scope&ba_param=state", "GET"), {
-    path: "/oauth2/authorize",
-    query: "?client_id=a&ba_param=scope&ba_param=state",
-  })
   for (const path of [
+    "/iam/oauth2/authorize",
     "/iam/oauth2/authorize/",
     "/iam/oauth2/%61uthorize",
     "/iam//oauth2/authorize",
@@ -190,53 +207,41 @@ test("relay route matrix is exact and never treats aliases as owner paths", () =
     assert.equal(iamRelayRoute(path, "GET"), null, path)
   }
   assert.equal(iamRelayRoute("/iam/oauth2/token", "GET"), null)
-  assert.equal(iamRelayRoute("/iam/oauth2/token", "POST")?.path, "/oauth2/token")
+  assert.equal(iamRelayRoute("/iam/oauth2/token", "POST"), null)
 })
 
 test("only the locked issuer cookie names pass in their deployment mode", () => {
   assert.equal(iamRelayCookieName("kokoro-issuer.session_token", false), true)
   assert.equal(iamRelayCookieName("__Secure-kokoro-issuer.session_token", true), true)
   assert.equal(iamRelayCookieName("kokoro-issuer.session_token", true), false)
+  assert.equal(iamRelayCookieName("__Secure-kokoro-issuer.session_token", false), false)
   assert.equal(iamRelayCookieName("kokoro-issuer.evil", false), false)
   assert.equal(iamRelayCookieName("authjs.session-token", false), false)
 })
 
-test("relay URL configuration rejects partial settings and callback authority aliases", () => {
+test("native relay configuration requires only the canonical Web origin", () => {
   const base = {
     KOKORO_BFF_SHARED_SECRET: "test-secret",
     KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused?schema=kokoro_bff",
     KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
-    KOKORO_IAM_ISSUER_URL: "https://web.example.test/iam",
     KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
-    KOKORO_IAM_WEB_CALLBACK_URI: "https://web.example.test/api/auth/callback/kokoro-iam",
-    KOKORO_IAM_WEB_POST_LOGOUT_URI: "https://web.example.test/auth/sign-in",
   }
-  assert.equal(loadConfig(base).iamRelay?.callbackUri, base.KOKORO_IAM_WEB_CALLBACK_URI)
-  assert.throws(() => loadConfig({ ...base, KOKORO_IAM_WEB_CALLBACK_URI: undefined }), /IAM relay requires/u)
-  assert.throws(
-    () =>
-      loadConfig({
-        ...base,
-        KOKORO_IAM_WEB_CALLBACK_URI: "https://user:pass@web.example.test/api/auth/callback/kokoro-iam",
-      }),
-    /IAM relay URLs/u,
-  )
-  assert.throws(
-    () =>
-      loadConfig({
-        ...base,
-        KOKORO_IAM_WEB_CALLBACK_URI: "https://web.example.test/api/auth/callback/kokoro-iam?next=evil",
-      }),
-    /IAM relay URLs/u,
-  )
-  assert.throws(
-    () =>
-      loadConfig({
-        ...base,
-        KOKORO_IAM_ISSUER_URL: "https://other.example.test/iam",
-      }),
-    /IAM relay URLs/u,
-  )
+  for (const [origin, environment, secureCookies] of [
+    ["http://web.example.test", "development", false],
+    ["http://web.example.test", "test", false],
+    ["https://web.example.test", "development", true],
+    ["https://web.example.test", "test", true],
+    ["https://web.example.test", "production", true],
+    // Preserve the existing production security floor, without adding an HTTP rejection.
+    ["http://web.example.test", "production", true],
+  ] as const) {
+    assert.deepEqual(
+      loadConfig({ ...base, KOKORO_IAM_WEB_ORIGIN: origin, NODE_ENV: environment }).iamRelay,
+      { webOrigin: origin, secureCookies },
+      `${origin} / ${environment}`,
+    )
+  }
+  assert.throws(() => loadConfig({ ...base, KOKORO_IAM_WEB_ORIGIN: "https://user:pass@web.example.test" }), /KOKORO_IAM_BASE_URL|KOKORO_IAM_WEB_ORIGIN/u)
 })
 
 test("R357 IAM 0.12 preserves all original fifteen consumer operations and their complete shared schemas", async () => {

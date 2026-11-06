@@ -36,17 +36,20 @@ describe("AG-UI session runtime", () => {
   it("coalesces concurrent ledger waits and resets backoff after observing frames", async () => {
     assert.notEqual(runtimeModule, null)
     const sleeps = []
-    const coordinator = new runtimeModule.AgUiLedgerWaitCoordinator({
-      baseDelayMs: 100,
-      maxDelayMs: 800,
-      jitterRatio: 0.2,
-    }, {
-      random: () => 0.75,
-      sleep: async (milliseconds) => {
-        sleeps.push(milliseconds)
-        await new Promise((resolve) => setImmediate(resolve))
+    const coordinator = new runtimeModule.AgUiLedgerWaitCoordinator(
+      {
+        baseDelayMs: 100,
+        maxDelayMs: 800,
+        jitterRatio: 0.2,
       },
-    })
+      {
+        random: () => 0.75,
+        sleep: async (milliseconds) => {
+          sleeps.push(milliseconds)
+          await new Promise((resolve) => setImmediate(resolve))
+        },
+      },
+    )
 
     await Promise.all(Array.from({ length: 20 }, () => coordinator.wait("tenant_a", "session_1")))
     assert.deepEqual(sleeps, [110])
@@ -83,5 +86,62 @@ describe("AG-UI session runtime", () => {
     await coordinator.replay("tenant_a", "session_1", null, 128, 4096, load)
     assert.equal(loads, 3)
     assert.deepEqual(coordinator.snapshot(), { loads: 3, entries: 1 })
+  })
+  it("retires only the cancelled waiter while another client retains their shared session wait", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] })
+    const coordinator = new runtimeModule.AgUiLedgerWaitCoordinator({ baseDelayMs: 100, maxDelayMs: 100, jitterRatio: 0 })
+    const clientA = new AbortController()
+    const clientB = new AbortController()
+    let settledA = false
+    let settledB = false
+    const waitingA = coordinator.wait("tenant_a", "session_1", clientA.signal).finally(() => {
+      settledA = true
+    })
+    const waitingB = coordinator.wait("tenant_a", "session_1", clientB.signal).finally(() => {
+      settledB = true
+    })
+    const collected = Promise.allSettled([waitingA, waitingB])
+    try {
+      clientA.abort()
+      await new Promise((resolve) => setImmediate(resolve))
+      assert.equal(settledA, true, "the cancelled client must leave without waiting for the shared delay")
+      assert.equal(settledB, false, "one client must not retire another client on the same session")
+      assert.deepEqual(coordinator.snapshot(), { waits: 1, entries: 1 })
+      t.mock.timers.tick(99)
+      await new Promise((resolve) => setImmediate(resolve))
+      assert.equal(settledB, false)
+      t.mock.timers.tick(1)
+      await collected
+      assert.equal(settledB, true)
+    } finally {
+      clientB.abort()
+      t.mock.timers.tick(100)
+      await collected
+      coordinator.clear("tenant_a", "session_1")
+      assert.equal(coordinator.snapshot().entries, 0)
+    }
+  })
+
+  it("clears its own timer when the last shared waiter retires", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] })
+    const clearTimer = t.mock.method(globalThis, "clearTimeout")
+    const coordinator = new runtimeModule.AgUiLedgerWaitCoordinator({ baseDelayMs: 100, maxDelayMs: 100, jitterRatio: 0 })
+    const client = new AbortController()
+    let settled = false
+    const waiting = coordinator.wait("tenant_a", "session_1", client.signal).finally(() => {
+      settled = true
+    })
+    const collected = Promise.allSettled([waiting])
+    try {
+      client.abort()
+      await new Promise((resolve) => setImmediate(resolve))
+      assert.equal(settled, true)
+      assert.equal(coordinator.snapshot().entries, 0)
+      assert.equal(clearTimer.mock.callCount(), 1, "the abandoned shared delay must release its owned timer")
+    } finally {
+      t.mock.timers.tick(100)
+      await collected
+      coordinator.clear("tenant_a", "session_1")
+    }
   })
 })

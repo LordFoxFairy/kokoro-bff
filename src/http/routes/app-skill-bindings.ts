@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
-import { bearerToken } from "../../auth/user-admission.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { OpenAppManagementAdmission } from "../../auth/open-app-management-admission.client.js"
+import type { AppSkillBindingClient } from "../../application/app-skill-bindings.types.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import { skillIdSchema } from "../skill-product-input.js"
 import { appSkillBindingQuerySchema, putAppSkillBindingSchema, removeAppSkillBindingSchema } from "../app-skill-binding-input.js"
@@ -17,12 +18,17 @@ import {
 } from "./personal-skill-lifecycle.js"
 
 const count = (request: IncomingMessage, name: string) => request.rawHeaders.filter((value, index) => index % 2 === 0 && value.toLowerCase() === name).length
+export type AppSkillBindingProvider = Readonly<{
+  sessionAdmission: SessionAdmission
+  openAppManagementAdmission: OpenAppManagementAdmission
+  appSkillBindingClient: AppSkillBindingClient | null
+}>
 /** Exact App binding scope is derived from fresh IAM operator qualification, never platform-admin or body identity. */
 export async function appSkillBindingsRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: AppSkillBindingProvider,
   requestId: string,
   pathname: string,
 ): Promise<boolean> {
@@ -34,7 +40,7 @@ export async function appSkillBindingsRoute(
     send(response, 405, lifecycleError(requestId, "method_not_allowed", "Request method is invalid"))
     return true
   }
-  await withPersonalSkillLifecycle(request, response, config, composition.sessionAdmission, requestId, async (scope) => {
+  await withPersonalSkillLifecycle(request, response, config, composition.sessionAdmission, requestId, null, async (scope) => {
     const fail = (status: number, code: string, retryAfter?: string) =>
       replyPersonalSkillLifecycle(
         response,
@@ -128,7 +134,7 @@ export async function appSkillBindingsRoute(
       }
       scope.active()
       const checked = await composition.openAppManagementAdmission.verify({
-        token: bearerToken(request)!,
+        subjectId: scope.context.identity.userId,
         requestId,
         signal: scope.signal,
         tenantId: scope.context.identity.namespace,

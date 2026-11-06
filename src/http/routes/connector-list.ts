@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { authorizeMcpAction, authorizeUserRequest } from "../../auth/user-admission.js"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
+import type { McpPersonalConnectClient } from "../../infrastructure/clients/platform/mcp-personal-connect.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { AdmittedUserRequestContext } from "../../domain/request-context.js"
 import { mcpRequestRemaining } from "../mcp-request-budget.js"
@@ -13,6 +15,12 @@ export function isConnectorListRequest(path: readonly string[], method: string):
   return method === "GET" && path.length === 1 && path[0] === "connector.list"
 }
 
+export type ConnectorListProvider = Readonly<{
+  mcpPersonalClient: Pick<McpPersonalConnectClient, "read"> | null
+  sessionAdmission: SessionAdmission
+  mcpAuthorization: Pick<McpAuthorizationClient, "check">
+}>
+
 export function connectorListFailure(response: ServerResponse, status: number, requestId: string, code: string, message: string): void {
   if (!response.destroyed && !response.writableEnded) {
     response.setHeader("cache-control", "no-store")
@@ -24,7 +32,7 @@ export function connectorListFailure(response: ServerResponse, status: number, r
 type Page = Readonly<{ items: readonly unknown[]; next_cursor: string | null }>
 
 async function readAll(
-  read: NonNullable<BffServerComposition["mcpPersonalClient"]>["read"],
+  read: McpPersonalConnectClient["read"],
   operation: "connectors" | "providers",
   input: Readonly<{ requestId: string; tenant: string; subject: string }>,
   signal: AbortSignal,
@@ -60,7 +68,7 @@ export async function connectorListRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: ConnectorListProvider,
   context: AdmittedUserRequestContext,
 ): Promise<void> {
   const requestId = context.requestId
@@ -97,7 +105,7 @@ export async function connectorListRoute(
       readAll(client.read.bind(client), "providers", input, controller.signal, deadlineAt),
     ])
     controller.signal.throwIfAborted()
-    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal)
+    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal, response)
     if (!current.ok) {
       connectorListFailure(
         response,

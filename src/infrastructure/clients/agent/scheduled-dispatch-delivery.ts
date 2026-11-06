@@ -1,4 +1,4 @@
-import type { ScheduledAgentDispatchDeliveryPort, ScheduledAgentDeliveryResult } from "../../../application/ports/scheduled-agent-dispatch-delivery.js"
+import type { ScheduledAgentDispatchDeliveryPort, ScheduledAgentDeliveryResult } from "../../../application/scheduled/scheduled-agent-dispatch-delivery.js"
 import type { ScheduledAgentDispatchCommand } from "../../../domain/scheduled-task/agent-dispatch.js"
 import type { BffConfig } from "../../../config/runtime.js"
 import { isRecord } from "../../../domain/json.js"

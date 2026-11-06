@@ -1,3 +1,4 @@
+import type { SkillAuthorizationClient } from "../../auth/skill-authorization.client.js"
 import { createHash } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
@@ -24,8 +25,9 @@ export async function deletePersonalSkillSeriesRoute(
   requestId: string,
   skillId: string,
   client: CatalogConnectClient | null,
+  skillAuthorization: Pick<SkillAuthorizationClient, "check">,
 ): Promise<void> {
-  await withPersonalSkillLifecycle(request, response, config, admission, requestId, async (scope) => {
+  await withPersonalSkillLifecycle(request, response, config, admission, requestId, { source: skillAuthorization, action: "delete_series" }, async (scope) => {
     const rawPath = (request.url ?? "").split("?", 1)[0] ?? ""
     const match = /^\/v1\/self\/skills\/([^/]+)$/u.exec(rawPath)
     if (

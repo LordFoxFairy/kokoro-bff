@@ -1,3 +1,7 @@
+## AGENT-1 内部预算回程（2026-10-22）
+
+769冻结输入无漂移、七工程门全0（contract986／architecture36／default1672 PASS、3原资源SKIP）。新实际来源PG1 PASS和actual BFF→Billing→IAM→BFF live binding隔离25检查覆盖退休后无receipt拒绝、已有receipt恢复且唯一预占。原IAM live reader／public23保持，16KiB proof真TCP／取消／重复header及严格ACK有回归。详见[当前事实](CURRENT.md)首节；隔离seed和Agent signer fixture不等于正常用户／worker执行及结算通过。
+
 ## 2026-10-19 已合 owner 发布物的固定配对（集成收尾）
 
 IAM internal/SDK 0.14.0 固定到 7cbe988d8f3868f293a15120135e1885de8516ff；Billing 4.0.0-experimental.2 固定到 3f5e0dacc25c1e24d87cbe0c59337d3b909466de 的唯一 `/v1` artifact。原 allowlist 不扩张，IAM 生成输出全部原字节、Billing 仅三 GET URL 随 owner 正规生成；Public19/SQL/历史双父逆证及独立浏览器 relay policy 均不变。未纳入正常工作树的 availability WIP。

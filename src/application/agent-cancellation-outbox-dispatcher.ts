@@ -3,8 +3,8 @@ import {
   type AgentCancellationCommand,
   type AgentCancellationLease,
 } from "../domain/chat/agent-cancellation.js"
-import type { AgentCancellationDeliveryPort } from "./ports/agent-cancellation-delivery.js"
-import type { AgentCancellationOutboxRepository } from "./ports/agent-cancellation-outbox-repository.js"
+import type { AgentCancellationDeliveryPort } from "./agent-dispatch/agent-cancellation-delivery.js"
+import type { AgentCancellationOutboxRepository } from "./agent-dispatch/agent-cancellation-outbox-repository.js"
 
 export type AgentCancellationOutboxDispatcherOptions = {
   workerId: string

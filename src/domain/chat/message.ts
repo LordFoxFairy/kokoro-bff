@@ -11,10 +11,13 @@ export type AgentFailureCode =
   | "model_unavailable"
   | "dependency_unavailable"
   | "model_access_denied"
+  | "model_settlement_pending"
+  | "context_window_exceeded"
 
 export type AgentFailureProfile = { source: "agent"; code: AgentFailureCode; retryable: boolean }
 
 export type Message = {
+  regeneratedFromMessageId?: string
   messageId: string
   tenantId: string
   conversationId: string

@@ -2,8 +2,11 @@ import { isDeepStrictEqual } from "node:util"
 import { authorizePublicSkillList } from "../../auth/public-skill-list-admission.js"
 import { ConnectError, Code } from "@connectrpc/connect"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
 import type { SkillSpecificationOperation } from "../../application/skill-specification.types.js"
+import type { SkillListAdmission } from "../../auth/skill-list-admission.client.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { SkillSpecificationSource } from "../../application/skill-specification.types.js"
+import type { SkillDownloadHandles } from "../../application/skill-download-handles.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import {
   publicSkillListSchema,
@@ -14,6 +17,7 @@ import {
   websiteListResponseSchema,
   websiteSkillRequestSchema,
   websiteSkillSchema,
+  websiteDetailResponseSchema,
 } from "../skill-specification-schema.js"
 import { startSkillRequestBudget, readSkillBody } from "./skill-drafts.js"
 import { mcpRequestRemaining } from "../mcp-request-budget.js"
@@ -27,9 +31,25 @@ import { PlatformProjectionHttpClient, type ProjectionOperation } from "../../in
 import { queryOf } from "../request.js"
 import { send } from "../response.js"
 
+export type SkillSpecificationProvider = Readonly<{
+  skillListAdmission: SkillListAdmission
+  skillSpecificationSource: SkillSpecificationSource | null
+  sessionAdmission: SessionAdmission
+  skillDownloadHandles: SkillDownloadHandles
+}>
+
 const clients = new WeakMap<BffConfig, PlatformProjectionHttpClient>()
 const connectionQueryKeys = new Set(["connection_id", "provider_key", "limit", "cursor"])
 const mcpQueryKeys = new Set(["provider_key", "limit", "cursor"])
+
+export function platformProjectionRequest(request: IncomingMessage): boolean {
+  try {
+    const path = new URL(request.url ?? "/", "http://bff.local").pathname
+    return request.method === "GET" && (path === "/v1/mcp/servers" || path === "/v1/mcp/connections")
+  } catch {
+    return false
+  }
+}
 
 function operationFor(path: string[], method: string): ProjectionOperation | null {
   if (method !== "GET") return null
@@ -152,7 +172,7 @@ export async function skillSpecificationReadRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: SkillSpecificationProvider,
   requestId: string,
   pathname: string,
 ): Promise<boolean> {
@@ -247,7 +267,7 @@ export async function skillSpecificationReadRoute(
       if (!response.destroyed && !response.writableEnded) send(response, 200, { ok: true, request_id: requestId, data: parsed.data })
       return true
     }
-    const admission = await within(authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal))
+    const admission = await within(authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal, response))
     if (!admission.ok) {
       if (admission.retryAfter !== undefined) response.setHeader("retry-after", admission.retryAfter)
       error(admission.status, admission.code, "Current user admission is required")
@@ -255,9 +275,15 @@ export async function skillSpecificationReadRoute(
     }
     const source = composition.skillSpecificationSource
     if (source === null) throw new Error("skill_dependency_unavailable")
-    const context = Object.freeze({ ...admission.context, identity: Object.freeze({ ...admission.context.identity }), humanBearer: admission.bearerToken })
+    const context = Object.freeze({ ...admission.context, identity: Object.freeze({ ...admission.context.identity }) })
     let payload: unknown
-    if (operation === "GetSkill" || operation === "DownloadSkill") {
+    if (operation === "GetSkill") {
+      const raw = await within(source.readDetail(input.skillId as string, context, controller.signal, deadlineAt))
+      const result = websiteDetailResponseSchema.safeParse(raw)
+      if (!result.success || result.data.skill.id !== input.skillId || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(result.data.skill.version ?? ""))
+        throw new Error("skill_response_invalid")
+      payload = result.data
+    } else if (operation === "DownloadSkill") {
       const prepared = await within(source.prepareDownload(operation, input.skillId as string, context, controller.signal, deadlineAt))
       if (typeof prepared !== "object" || prepared === null || typeof prepared.binding !== "object" || prepared.binding === null)
         throw new Error("skill_response_invalid")

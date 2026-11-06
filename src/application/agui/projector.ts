@@ -318,7 +318,7 @@ export class AgUiProjectorRunner {
           afterSequence = page.nextSequence
         }
         if (page.exhausted) {
-          const settled = await this.consumers.markConsumerProgress(lease, this.nextPollAt(), nowIso(this.now))
+          const settled = await this.consumers.markConsumerProgress(lease, this.nextPollAt(), nowIso(this.now), true)
           if (!settled) return { kind: "lease_lost", sourceEvents, insertedFrames }
           return { kind: "succeeded", sourceEvents, insertedFrames }
         }

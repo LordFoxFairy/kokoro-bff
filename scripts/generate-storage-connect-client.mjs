@@ -7,13 +7,13 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "d13f33acfc7a482d61ebffc58e7b2667b58ae197"
+const ownerCommit = "b07405c464e98dd2c596f22115d1186511cf00cb"
 const vendor = `contract/vendor/kokoro-storage/${ownerCommit}/proto`
 const output = path.join(root, "src/generated/storage-connect")
 const manifestPath = path.join(root, "contract/dependencies/storage-connect.json")
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd",
-  "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
+  "kokoro/storage/v3/storage.proto": "1df62524f9c61db1c74fc39a0d06912ef851796ffdf0792b6521eaa9715bfc87",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/storage", "kokoro/storage/v3"]
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
@@ -58,8 +58,8 @@ async function tree(directory, prefix = "") {
 }
 
 async function verifyInputs() {
-  assert.equal(process.versions.node, "22.22.2", "Storage consumer generation requires pinned Node 22.22.2")
-  assert.equal(await readFile(path.join(root, ".node-version"), "utf8"), "22.22.2\n")
+  assert.equal(process.versions.node, "24.20.0", "Storage consumer generation requires pinned Node 24.20.0")
+  assert.equal(await readFile(path.join(root, ".node-version"), "utf8"), "24.20.0\n", ".node-version must pin Node 24.20.0")
   const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"))
   assert.equal(packageJson.packageManager, "pnpm@11.25.0")
   for (const [name, version] of Object.entries({ ...versions, prettier: "3.9.6", typescript: "5.9.3" })) {
@@ -110,7 +110,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-storage",
       repository_commit: ownerCommit,
-      published_combined_sha256: "47e2659f577cf5c0a5e44a9ee9165d0fee17471bb3d7abb80095a956f655c1f9",
+      published_combined_sha256: "6f6bfb8893d28aa2ea366a7cdbafdaae6f0694004f662da3be382a0613232ba5",
       package_name: "kokoro.storage.v3",
       sources: Object.entries(sourceDigests).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
     },
@@ -135,7 +135,7 @@ async function manifestFor(directory) {
       exit_path: "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
       sources: ["https://connectrpc.com/docs/node/using-clients/", "https://github.com/bufbuild/protobuf-es/releases/tag/v2.14.0"],
     },
-    runtime: { node: "22.22.2", pnpm: "11.25.0", typescript: "5.9.3" },
+    runtime: { node: process.versions.node, pnpm: "11.25.0", typescript: "5.9.3" },
     lockfile_sha256: sha256(await readFile(path.join(root, "pnpm-lock.yaml"))),
     build_policy_sha256: sha256(await readFile(path.join(root, "pnpm-workspace.yaml"))),
     generated: await Promise.all(generatedFiles.map(async (file) => ({ path: file, sha256: sha256(await readFile(path.join(directory, file))) }))),
