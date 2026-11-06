@@ -59,6 +59,25 @@ export const zLaunchRequest = z.object({
     .max(32)
     .refine((values) => new Set(values.map((value) => value.profile_id)).size === values.length)
     .optional(),
+  selected_resource_refs: z
+    .array(
+      z.object({
+        kind: z.enum(["asset", "artifact"]),
+        resource_id: z
+          .string()
+          .min(1)
+          .max(191)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/),
+        version_id: z
+          .string()
+          .min(1)
+          .max(191)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/)
+          .optional(),
+      }),
+    )
+    .max(16)
+    .optional(),
   personal_context: z
     .object({
       schema_version: z.literal(1),

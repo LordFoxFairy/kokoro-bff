@@ -97,8 +97,8 @@ function canonicalJsonBody(request: IncomingMessage, businessPath: readonly stri
   if (request.method === "POST" && businessPath.length === 3 && businessPath[0] === "sessions" && businessPath[2] === "messages") {
     const parsed = parseMessageCreateRequest(Object.fromEntries(Object.entries(json)), queryOf(request).get("project_ref") ?? undefined)
     if (parsed === null) return json
-    const { selectedCustomApiProfiles, ...prior } = parsed
-    return selectedCustomApiProfiles?.length ? parsed : prior
+    const { selectedCustomApiProfiles, selectedResourceRefs, ...prior } = parsed
+    return selectedCustomApiProfiles?.length || selectedResourceRefs?.length ? parsed : prior
   }
   if (
     request.method === "PATCH" &&

@@ -12,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "92e235e782178b7002f0bd68daa143b507db870d"
+const ownerCommit = "0b4b6c4fe9a1319922e9f61344200cba74e5b9d8"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "94c497ea815eaccc545429756af9b8826d82c7f82a896d3a1fda972e03c71596"
-const provenanceDigest = "3820e94f7bae40553e1b69e4fd1872a61b5f72bd6a8f31923bfa7c3f26922bbf"
-const ownerContractVersion = "8.12.0"
+const ownerDigest = "873da626bd2924c494a1c885d7bdad248f85498b639439d9852e5f24dfa084ba"
+const provenanceDigest = "05ee7d2f406a41bf6a451f22e60906559fa87a120adbacca20ad2e907cf9e700"
+const ownerContractVersion = "8.13.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -134,7 +134,17 @@ export function restoreAgent85ActionDisplayRaw(source) {
   }
   return source
 }
+export function restoreAgent812ResourceRefsRaw(source) {
+  if (!source.includes('"version": "8.13.0"')) return source
+  const match = source.match(/          "selected_resource_refs": \{[\s\S]*?          \},\n          "personal_context": \{/u)
+  assert.equal(match?.length, 1, "Agent8.13 resource refs delta drift")
+  source = source.replace(match[0], '          "personal_context": {').replace('"version": "8.13.0"', '"version": "8.12.0"')
+  assert.equal(sha256(source), "94c497ea815eaccc545429756af9b8826d82c7f82a896d3a1fda972e03c71596", "Agent8.12 resource refs parent drift")
+  return source
+}
+
 export function restoreAgent811ProjectInstructionRaw(source) {
+  source = restoreAgent812ResourceRefsRaw(source)
   if (!source.includes('"version": "8.12.0"')) return source
   const match = source.match(/          "project_instruction": \{\n[\s\S]*?          \}\n/u)
   assert.equal(match?.length, 1, "Agent8.12 project instruction delta drift")
@@ -145,6 +155,13 @@ export function restoreAgent811ProjectInstructionRaw(source) {
 }
 
 export function restoreAgent811ProjectInstructionContract(document) {
+  if (document.info?.version === "8.13.0") {
+    const resourceParent = structuredClone(document)
+    delete resourceParent.components.schemas.LaunchRequest.properties.selected_resource_refs
+    resourceParent.info.version = "8.12.0"
+    assert.equal(sha256(JSON.stringify(resourceParent)), "51722eb1c75be7c5f61c3d55db5a0c21dfdc574d919f4fda55600b538e706d9c", "Agent8.12 resource refs parent drift")
+    document = resourceParent
+  }
   if (document.info?.version !== "8.12.0") return document
   const parent = structuredClone(document)
   delete parent.components.schemas.LaunchRequest.properties.project_instruction

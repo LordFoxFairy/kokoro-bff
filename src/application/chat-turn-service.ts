@@ -37,6 +37,7 @@ export class ChatTurnApplicationService {
       ...(frozen.selected_custom_api_profiles === undefined
         ? {}
         : { selectedCustomApiProfiles: frozen.selected_custom_api_profiles.map((profile) => ({ ...profile })) }),
+      ...(frozen.selected_resource_refs === undefined ? {} : { selectedResourceRefs: frozen.selected_resource_refs.map((ref) => ({ ...ref })) }),
       ...(frozen.requested_model_label === undefined ? {} : { model: frozen.requested_model_label }),
       ...(frozen.trace.agent === undefined ? {} : { agent: frozen.trace.agent }),
       ...(frozen.trace.thinking === undefined ? {} : { thinking: frozen.trace.thinking }),
@@ -115,6 +116,7 @@ export class ChatTurnApplicationService {
       if (input.selectedMcpConnectionIds !== undefined) input = { ...input, selectedMcpConnectionIds: [...input.selectedMcpConnectionIds] }
       if (input.selectedCustomApiProfiles !== undefined)
         input = { ...input, selectedCustomApiProfiles: input.selectedCustomApiProfiles.map((profile) => ({ ...profile })) }
+      if (input.selectedResourceRefs !== undefined) input = { ...input, selectedResourceRefs: input.selectedResourceRefs.map((ref) => ({ ...ref })) }
       const runId = `run_bff_${suffix}`
       const userMessageId = `msg_bff_${suffix}_user`
       const assistantMessageId = `msg_bff_${suffix}_assistant`

@@ -841,3 +841,40 @@ it("expired or pre-aborted prepare performs no checkout and no SQL", async () =>
     )
   assert.equal(checkouts, 0)
 })
+
+it("freezes opaque resource references in launch and digest without admitting content", async () => {
+  const { agentDispatchRequestMaterial, buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/domain/chat/agent-dispatch.js")
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conversation",
+    subjectId: "subject",
+    actorId: "actor",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+  }
+  const refs = [
+    { kind: "asset" as const, resource_id: "asset-1" },
+    { kind: "artifact" as const, resource_id: "artifact-1", version_id: "v1" },
+  ]
+  const selected = { ...input, selectedResourceRefs: refs }
+  const payload = buildAgentDispatchPayload(selected, { runId: "run", userMessageId: "message" })
+  refs[0].resource_id = "asset-mutated"
+  assert.deepEqual(payload.launch.selected_resource_refs, [
+    { kind: "asset", resource_id: "asset-1" },
+    { kind: "artifact", resource_id: "artifact-1", version_id: "v1" },
+  ])
+  assert.deepEqual(parseAgentDispatchPayload(JSON.parse(JSON.stringify(payload))), payload)
+  assert.notEqual(agentDispatchRequestMaterial(selected), agentDispatchRequestMaterial(input))
+  for (const invalid of [
+    null,
+    [{ kind: "asset", resource_id: "asset-1", url: "https://example.invalid" }],
+    [{ kind: "asset", resource_id: "asset-1", content_sha256: "a".repeat(64) }],
+    [{ kind: "asset", resource_id: "asset-1" }, { kind: "asset", resource_id: "asset-1" }],
+  ]) {
+    assert.throws(
+      () => parseAgentDispatchPayload({ ...payload, launch: { ...payload.launch, selected_resource_refs: invalid } }),
+      /AGENT_DISPATCH_PAYLOAD_INVALID/,
+    )
+  }
+})

@@ -2,6 +2,7 @@ import { parseCustomApiProfileSelection, type SelectedCustomApiProfile } from ".
 import { parseMcpConnectionSelection } from "./mcp-connection-selection.js"
 import { isRecord } from "../json.js"
 import { parseSkillSourceSelection } from "./skill-source-selection.js"
+import { parseResourceReferenceSelection, type SelectedResourceRef } from "./resource-reference-selection.js"
 
 export const AGENT_DISPATCH_SCHEMA_VERSION = 3 as const
 
@@ -17,6 +18,7 @@ export type AgentLaunchBody = {
   selected_skill_source_refs: string[]
   selected_mcp_connection_ids?: string[]
   selected_custom_api_profiles?: SelectedCustomApiProfile[]
+  selected_resource_refs?: SelectedResourceRef[]
   requested_model_label?: string
   trace: {
     source: "kokoro-bff"
@@ -86,6 +88,7 @@ export type AgentDispatchInput = {
   selectedSkillSourceRefs?: string[]
   selectedMcpConnectionIds?: string[]
   selectedCustomApiProfiles?: SelectedCustomApiProfile[]
+  selectedResourceRefs?: SelectedResourceRef[]
 }
 
 export function isInterruptRunId(value: unknown): value is string {
@@ -126,6 +129,8 @@ export function assertAgentDispatchInput(input: AgentDispatchInput): void {
     throw new Error("CHAT_TURN_INPUT_INVALID")
   if (input.selectedCustomApiProfiles !== undefined && parseCustomApiProfileSelection(input.selectedCustomApiProfiles) === null)
     throw new Error("CHAT_TURN_INPUT_INVALID")
+  if (input.selectedResourceRefs !== undefined && parseResourceReferenceSelection(input.selectedResourceRefs) === null)
+    throw new Error("CHAT_TURN_INPUT_INVALID")
 }
 
 /** Stable command identity; payload changes are detected separately by requestDigest. */
@@ -155,6 +160,7 @@ export function agentDispatchRequestMaterial(input: AgentDispatchInput): string 
     material.push({
       selected_custom_api_profiles: input.selectedCustomApiProfiles.map(({ profile_id, expected_state_version }) => ({ profile_id, expected_state_version })),
     })
+  if (input.selectedResourceRefs?.length) material.push({ selected_resource_refs: input.selectedResourceRefs.map((ref) => ({ ...ref })) })
   return JSON.stringify(input.interruptRunId === undefined ? material : ["message.interrupt:v1", input.interruptRunId, material])
 }
 
@@ -179,6 +185,7 @@ export function buildAgentDispatchPayload(input: AgentDispatchInput, ids: { runI
       selected_skill_source_refs: [...(input.selectedSkillSourceRefs ?? [])],
       ...(input.selectedMcpConnectionIds?.length ? { selected_mcp_connection_ids: [...input.selectedMcpConnectionIds] } : {}),
       ...(input.selectedCustomApiProfiles?.length ? { selected_custom_api_profiles: input.selectedCustomApiProfiles.map((profile) => ({ ...profile })) } : {}),
+      ...(input.selectedResourceRefs?.length ? { selected_resource_refs: input.selectedResourceRefs.map((ref) => ({ ...ref })) } : {}),
       ...(input.model === undefined ? {} : { requested_model_label: input.model }),
       trace,
     },
@@ -230,6 +237,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
           "selected_skill_source_refs",
           "selected_mcp_connection_ids",
           "selected_custom_api_profiles",
+          "selected_resource_refs",
           "requested_model_label",
           "trace",
         ].includes(key),
@@ -262,6 +270,8 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
   const selectedCustomApiProfiles =
     launchValue.selected_custom_api_profiles === undefined ? undefined : parseCustomApiProfileSelection(launchValue.selected_custom_api_profiles)
   if (selectedCustomApiProfiles === null) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
+  const selectedResourceRefs = launchValue.selected_resource_refs === undefined ? undefined : parseResourceReferenceSelection(launchValue.selected_resource_refs)
+  if (selectedResourceRefs === null) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const thinking = traceValue.thinking
   if (thinking !== undefined && typeof thinking !== "boolean") throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const requestedModel = optionalString(launchValue, "requested_model_label")
@@ -279,6 +289,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
       selected_skill_source_refs: selectedSkillSourceRefs,
       ...(selectedMcpConnectionIds === undefined ? {} : { selected_mcp_connection_ids: selectedMcpConnectionIds }),
       ...(selectedCustomApiProfiles === undefined ? {} : { selected_custom_api_profiles: selectedCustomApiProfiles }),
+      ...(selectedResourceRefs === undefined ? {} : { selected_resource_refs: selectedResourceRefs }),
       ...(requestedModel === undefined ? {} : { requested_model_label: requestedModel }),
       trace: {
         source: "kokoro-bff",

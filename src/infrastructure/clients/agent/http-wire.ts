@@ -41,7 +41,7 @@ export function projectSavedAgentLaunch(value: unknown): LaunchRequest | null {
   if (Object.hasOwn(value.trace, "project_ref") && (typeof project !== "string" || !/^[^\s\u0000-\u001f\u007f]{1,255}$/u.test(project))) return null
   const projected = zSavedAgentLaunch.safeParse({ ...value, project_ref: project ?? null })
   if (!projected.success) return null
-  const { requested_model_label, project_instruction, trace, selected_mcp_connection_ids, selected_custom_api_profiles, ...required } = projected.data
+  const { requested_model_label, project_instruction, trace, selected_mcp_connection_ids, selected_custom_api_profiles, selected_resource_refs, ...required } = projected.data
   return {
     ...required,
     ...(requested_model_label === undefined ? {} : { requested_model_label }),
@@ -49,5 +49,14 @@ export function projectSavedAgentLaunch(value: unknown): LaunchRequest | null {
     ...(trace === undefined ? {} : { trace }),
     ...(selected_mcp_connection_ids === undefined ? {} : { selected_mcp_connection_ids }),
     ...(selected_custom_api_profiles === undefined ? {} : { selected_custom_api_profiles }),
+    ...(selected_resource_refs === undefined
+      ? {}
+      : {
+          selected_resource_refs: selected_resource_refs.map((ref) => ({
+            kind: ref.kind,
+            resource_id: ref.resource_id,
+            ...(ref.version_id === undefined ? {} : { version_id: ref.version_id }),
+          })),
+        }),
   }
 }

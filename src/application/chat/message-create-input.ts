@@ -1,6 +1,7 @@
 import { parseCustomApiProfileSelection, type SelectedCustomApiProfile } from "../../domain/chat/custom-api-profile-selection.js"
 import { parseMcpConnectionSelection } from "../../domain/chat/mcp-connection-selection.js"
 import { parseSkillSourceSelection } from "../../domain/chat/skill-source-selection.js"
+import { parseResourceReferenceSelection, type SelectedResourceRef } from "../../domain/chat/resource-reference-selection.js"
 import { isInterruptRunId } from "../../domain/chat/agent-dispatch.js"
 
 export type MessageCreateInput = {
@@ -11,6 +12,7 @@ export type MessageCreateInput = {
   selectedSkillSourceRefs?: string[]
   selectedMcpConnectionIds?: string[]
   selectedCustomApiProfiles?: SelectedCustomApiProfile[]
+  selectedResourceRefs?: SelectedResourceRef[]
   projectRef?: string
   interruptRunId?: string
 }
@@ -23,6 +25,7 @@ const MESSAGE_CREATE_KEYS = new Set([
   "selected_skill_source_refs",
   "selected_mcp_connection_ids",
   "selected_custom_api_profiles",
+  "selected_resource_refs",
   "project_ref",
   "interrupt_run_id",
 ])
@@ -49,6 +52,7 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
   const selectedMcpConnectionIds = json.selected_mcp_connection_ids === undefined ? undefined : parseMcpConnectionSelection(json.selected_mcp_connection_ids)
   const selectedCustomApiProfiles =
     json.selected_custom_api_profiles === undefined ? undefined : parseCustomApiProfileSelection(json.selected_custom_api_profiles)
+  const selectedResourceRefs = json.selected_resource_refs === undefined ? undefined : parseResourceReferenceSelection(json.selected_resource_refs)
   if (
     model === null ||
     agent === null ||
@@ -57,6 +61,7 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
     selectedSkillSourceRefs === null ||
     selectedMcpConnectionIds === null ||
     selectedCustomApiProfiles === null ||
+    selectedResourceRefs === null ||
     (json.thinking !== undefined && typeof json.thinking !== "boolean") ||
     (bodyProjectRef !== undefined && fallbackProjectRef !== undefined && bodyProjectRef !== fallbackProjectRef)
   )
@@ -70,6 +75,7 @@ export function parseMessageCreateRequest(json: Record<string, unknown>, queryPr
     ...(selectedSkillSourceRefs === undefined ? {} : { selectedSkillSourceRefs }),
     ...(selectedMcpConnectionIds === undefined ? {} : { selectedMcpConnectionIds }),
     ...(selectedCustomApiProfiles === undefined ? {} : { selectedCustomApiProfiles }),
+    ...(selectedResourceRefs === undefined ? {} : { selectedResourceRefs }),
     ...(projectRef === undefined ? {} : { projectRef }),
     ...(interruptRunId === undefined ? {} : { interruptRunId }),
   }

@@ -49,6 +49,14 @@ export type LaunchRequest = {
     expected_state_version: number
   }>
   /**
+   * Opaque owner references selected for this Run. Only asset/artifact IDs and an optional version ID are accepted; URLs, content, identities and digests are forbidden. Omission or [] selects none.
+   */
+  selected_resource_refs?: Array<{
+    kind: "asset" | "artifact"
+    resource_id: string
+    version_id?: string
+  }>
+  /**
    * Private BFF-owned personal snapshot bound to the trusted human actor and tenant. Omitted/null preserves pre-8.11 request bytes; knowledge items have unique knowledge_id values. Not public display or tool authority.
    */
   personal_context?: null | {
