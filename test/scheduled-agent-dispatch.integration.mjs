@@ -424,6 +424,29 @@ integrationTest("two workers have one scope winner while a locked independent sc
   }
 })
 
+integrationTest("project activation uses current owner instructions and filtering hides deleted parents", async (context) => {
+  const f = await fixture(context)
+  const project = `project_${randomUUID()}`
+  await f.pool.query(
+    "INSERT INTO bff_project(project_id,tenant_id,owner_id,name,slug,instruction) VALUES($1,$2,$3,'Project','project','Current instruction')",
+    [project, f.tenant, f.subject],
+  )
+  await f.task()
+  await f.pool.query("UPDATE bff_scheduled_task SET project_id=$1 WHERE task_id='task'", [project])
+  const accepted = await f.accept("task", 1, project)
+  assert.deepEqual(await f.submission.deliver(await f.scheduled.claim(claimOptions), 4000), { outcome: "submitted" })
+  const ordinary = (await f.pool.query("SELECT execution_project_ref,payload FROM bff_agent_dispatch_outbox WHERE run_id=$1", [accepted.run_id])).rows[0]
+  assert.equal(ordinary.execution_project_ref, project)
+  assert.equal(ordinary.payload.launch.project_instruction, "Current instruction")
+  const reader = new PostgresScheduledTaskExecutionReader(f.pool)
+  const scope = { tenantId: f.tenant, subjectId: f.subject },
+    signal = new AbortController().signal
+  assert.equal((await reader.read(scope, { limit: 20, projectId: project }, signal)).executions[0].project_id, project)
+  assert.deepEqual((await reader.read(scope, { limit: 20, projectId: "other-project" }, signal)).executions, [])
+  await f.pool.query("UPDATE bff_project SET deleted_at=clock_timestamp() WHERE project_id=$1", [project])
+  assert.deepEqual((await reader.read(scope, { limit: 20, projectId: project }, signal)).executions, [])
+})
+
 for (const outcome of ["cancelled", "failed"]) {
   integrationTest(`standard ${outcome} terminal preserves its result class and drains through the sole source consumer`, async (context) => {
     const f = await fixture(context)
