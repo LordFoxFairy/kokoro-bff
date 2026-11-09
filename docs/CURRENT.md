@@ -2,7 +2,7 @@
 
 基线 `5226ccd`；正规消费 Agent `55beed29` / HTTP8.14 和 Storage `c31a0657`，Public28.24 保留 opaque `{kind,resource_id}` 并明确拒绝无 owner 语义的 `version_id`。唯一 Chat turn 先检查重放，在事务外有界解析 owner 元数据，最后事务复核当前 Project 与本人源 Artifact 关系并原子冻结 canonical manifest。源关系以 `FOR SHARE OF c,a NOWAIT` 核验，争用立即回滚，不引入反向阻塞；不在 PG 行锁内调用 owner 网络。regenerate 复用原 manifest，不重新解析。
 
-停写后主控类型/build、76 项相关定向及真实 Nest/隔离 PG 8 项均 PASS（0 SKIP），测试库已回收；覆盖三种源、重放、regenerate、scope/association 变化与源行争用。Storage 元数据为明确 Connect fixture，未称真实 Storage/浏览器组合通过。writer 正规生成、lint、格式与契约 lint/semantic 通过；默认广套件最终主控复跑中，既有 SQL inverse/worker 失败另列，不冒全绿。Agent runtime 与 App/Root 精确组合、真实附件旅程仍待。
+停写后主控类型/build、76 项相关定向及真实 Nest/隔离 PG 8 项均 PASS（0 SKIP），测试库已回收；覆盖三种源、重放、regenerate、scope/association 变化与源行争用。Storage 元数据为明确 Connect fixture，未称真实 Storage/浏览器组合通过。writer 正规生成、lint、格式与契约 lint/semantic 通过；主控完整默认实测 2408 PASS / 7 FAIL / 2 条件 SKIP；五项 SQL inverse 失败在父基线复现，另两项后台 RunSteerDispatcher 干扰零 I/O 夹具亦在父基线复现。后两处仅隔离测试 worker，保留原场景与断言，主控两文件定向 59 PASS / 0 FAIL / 0 SKIP；不把此定向与完整默认拼成全绿。Agent runtime 与 App/Root 精确组合、真实附件旅程仍待。
 
 ## 2026-11-09 A‑12 正式 Chat 接线候选
 

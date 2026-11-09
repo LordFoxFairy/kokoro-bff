@@ -155,6 +155,7 @@ test("unmatched Product routes keep the BFF error envelope without calling any o
   const { loadConfig } = await import("../dist/config/runtime.js")
   const { BffExpressAdapter } = await import("../dist/http/bff-express-adapter.js")
   const { SessionAdmissionDouble } = await import("./doubles/session-admission.ts")
+  const { RunSteerDispatcher } = await import("../dist/infrastructure/postgres/run-steer-dispatch.js")
   const {
     AGENT_CANCELLATION_DISPATCHER,
     AGENT_DISPATCH_DISPATCHER,
@@ -221,6 +222,7 @@ test("unmatched Product routes keep the BFF error envelope without calling any o
     PROJECT_SCOPE_RELEASE_DISPATCHER,
     SCHEDULED_TASK_DISPATCHER,
     SCHEDULED_AGENT_DISPATCHER,
+    RunSteerDispatcher,
   ])
     builder.overrideProvider(token).useValue(null)
   const module = await builder.compile()

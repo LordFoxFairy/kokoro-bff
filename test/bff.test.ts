@@ -166,6 +166,7 @@ describe("kokoro-bff versioned HTTP contracts", () => {
     const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
     const { BffExpressAdapter } = await import("../dist/http/bff-express-adapter.js")
     const { AgentRunsModule } = await import("../dist/modules/agent-runs/agent-runs.module.js")
+    const { RunSteerDispatcher } = await import("../dist/infrastructure/postgres/run-steer-dispatch.js")
     const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR } =
       await import("../dist/common/tokens.js")
     const admission = new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } })
@@ -176,7 +177,8 @@ describe("kokoro-bff versioned HTTP contracts", () => {
       .useValue(admission)
       .overrideProvider(BFF_DATABASE)
       .useValue({ pool: { query, connect: query } })
-    for (const token of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) builder.overrideProvider(token).useValue(null)
+    for (const token of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR, RunSteerDispatcher])
+      builder.overrideProvider(token).useValue(null)
     const module = await builder.compile()
     const app = module.createNestApplication(new BffExpressAdapter(), { ...BFF_NEST_APPLICATION_OPTIONS, logger: false, abortOnError: false })
     t.after(() => app.close())
