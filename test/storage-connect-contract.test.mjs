@@ -3,10 +3,10 @@ import { createHash } from "node:crypto"
 import { access, readFile } from "node:fs/promises"
 import { test } from "node:test"
 
-const ownerCommit = "b07405c464e98dd2c596f22115d1186511cf00cb"
+const ownerCommit = "c31a065708ce3a0f2713efd29f064f63eb9d44c9"
 const sources = {
   "kokoro/common/v1/common.proto": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd",
-  "kokoro/storage/v3/storage.proto": "1df62524f9c61db1c74fc39a0d06912ef851796ffdf0792b6521eaa9715bfc87",
+  "kokoro/storage/v3/storage.proto": "cf84f2b18202708a978e9f2ee75efc80ae251c4dac28f3d0d9c96931be2dcdbf",
 }
 const root = new URL("../", import.meta.url)
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -37,7 +37,7 @@ async function sourceBytes() {
 test("Storage consumer pins exact owner Proto bytes and generated provenance, not an execution artifact", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/storage-connect.json"))
   assert.equal(manifest.owner.repository_commit, ownerCommit)
-  assert.equal(manifest.owner.published_combined_sha256, "6f6bfb8893d28aa2ea366a7cdbafdaae6f0694004f662da3be382a0613232ba5")
+  assert.equal(manifest.owner.published_combined_sha256, "57e1b5a490345834aab87026dc3dbe785f4cbf7b292fa2cb801b7e68bd6b9bd9")
   assert.equal(manifest.owner.package_name, "kokoro.storage.v3")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-storage")
   assert.equal(manifest.execution_artifact, null)
@@ -158,7 +158,7 @@ test("Storage F2 generated Artifact reads preserve owner identity and byte-refer
   )
   assert.deepEqual(
     GetFinalArtifactDownloadReferenceRequestSchema.fields.map((field) => field.name),
-    ["command", "artifact_id"],
+    ["command", "artifact_id", "run_id", "asset_id", "content_sha256", "consumer_run_id"],
   )
   assert.deepEqual(
     GetFinalArtifactDownloadReferenceResponseSchema.fields.map((field) => field.name),

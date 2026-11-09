@@ -148,7 +148,7 @@ it("accepts only exact unique Custom API profile/version references without trea
 it("accepts only opaque resource references and rejects content-bearing values", () => {
   const refs = [
     { kind: "asset", resource_id: "asset-1" },
-    { kind: "artifact", resource_id: "artifact-1", version_id: "v1" },
+    { kind: "artifact", resource_id: "artifact-1" },
   ]
   assert.deepEqual(parseMessageCreateRequest({ content: "hello", selected_resource_refs: refs }, undefined), {
     content: "hello",
@@ -160,9 +160,13 @@ it("accepts only opaque resource references and rejects content-bearing values",
     [{ kind: "asset", resource_id: "asset-1", url: "https://example.invalid" }],
     [{ kind: "asset", resource_id: "asset-1", content: "secret" }],
     [{ kind: "asset", resource_id: "asset-1", content_sha256: "a".repeat(64) }],
-    [{ kind: "asset", resource_id: "asset-1" }, { kind: "asset", resource_id: "asset-1" }],
+    [
+      { kind: "asset", resource_id: "asset-1" },
+      { kind: "asset", resource_id: "asset-1" },
+    ],
     [{ kind: "other", resource_id: "asset-1" }],
     [{ kind: "asset", resource_id: "asset-1", version_id: "" }],
+    [{ kind: "asset", resource_id: "asset-1", version_id: "v1" }],
     [{ kind: "asset", resource_id: "asset-1\n" }],
     Array.from({ length: 17 }, (_, i) => ({ kind: "asset", resource_id: `asset-${i}` })),
   ]) {

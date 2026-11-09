@@ -1,3 +1,4 @@
+import { createMessageResourceResolver } from "../../infrastructure/clients/storage/message-resource-selection.js"
 import { BeforeApplicationShutdown, Inject, Injectable, Module, OnModuleInit } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
 import {
@@ -25,9 +26,12 @@ import { randomUUID } from "node:crypto"
 @Injectable()
 class AgentDispatchWorkerLifecycle implements OnModuleInit, BeforeApplicationShutdown {
   public constructor(
-    @Inject(AGENT_DISPATCH_DISPATCHER) private readonly dispatch: AgentDispatchOutboxDispatcher | null,
-    @Inject(AGENT_CANCELLATION_DISPATCHER) private readonly cancellation: AgentCancellationOutboxDispatcher | null,
-    @Inject(RunSteerDispatcher) private readonly steer: RunSteerDispatcher | null,
+    @Inject(AGENT_DISPATCH_DISPATCHER)
+    private readonly dispatch: AgentDispatchOutboxDispatcher | null,
+    @Inject(AGENT_CANCELLATION_DISPATCHER)
+    private readonly cancellation: AgentCancellationOutboxDispatcher | null,
+    @Inject(RunSteerDispatcher)
+    private readonly steer: RunSteerDispatcher | null,
   ) {}
 
   public onModuleInit(): void {
@@ -92,9 +96,9 @@ class AgentDispatchWorkerLifecycle implements OnModuleInit, BeforeApplicationShu
     },
     {
       provide: CHAT_TURN_SERVICE,
-      inject: [AGENT_DISPATCH_OUTBOX],
-      useFactory: (outbox: PostgresAgentDispatchOutboxRepository): ChatTurnApplicationService =>
-        new ChatTurnApplicationService(outbox, new Sha256StableIdGenerator()),
+      inject: [AGENT_DISPATCH_OUTBOX, BFF_CONFIG, BFF_DATABASE],
+      useFactory: (outbox: PostgresAgentDispatchOutboxRepository, config: BffConfig, database: PostgresBffDatabase): ChatTurnApplicationService =>
+        new ChatTurnApplicationService(outbox, new Sha256StableIdGenerator(), createMessageResourceResolver(config, database)),
     },
     {
       provide: RunSteerDispatcher,

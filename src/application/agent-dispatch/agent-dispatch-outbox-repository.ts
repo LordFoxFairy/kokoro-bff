@@ -12,7 +12,12 @@ export type CommitChatTurn = {
     leaseToken: string
     fence: number
   }>
-  regeneration?: Readonly<{ sourceMessageId: string; originalUserMessageId: string; sourceRunId: string; sourceFingerprint: string }>
+  regeneration?: Readonly<{
+    sourceMessageId: string
+    originalUserMessageId: string
+    sourceRunId: string
+    sourceFingerprint: string
+  }>
   lifetime?: Readonly<{ signal: AbortSignal; deadlineAt: number }>
   outboxId: string
   tenantId: string
@@ -29,7 +34,11 @@ export type CommitChatTurn = {
   assistantMessageId: string
   identityAssertionRef: string
   content: string
-  skillSelection?: Readonly<{ projectId: string | null; installationIds: string[] }>
+  resourceSelection?: Readonly<{ projectId: string | null }>
+  skillSelection?: Readonly<{
+    projectId: string | null
+    installationIds: string[]
+  }>
   payload: AgentDispatchPayload
 }
 

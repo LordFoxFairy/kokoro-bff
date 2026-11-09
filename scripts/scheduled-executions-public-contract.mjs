@@ -1,7 +1,9 @@
+import { restorePublic2823MessageResourceContract } from "./message-resource-public-contract.mjs"
 import { createHash } from "node:crypto"
 const hash = (value) => createHash("sha256").update(value).digest("hex")
 
 export function restorePublic2822ScheduledExecutionsContract(source) {
+  source = restorePublic2823MessageResourceContract(source)
   if (!/^  version: 28\.23\.0$/mu.test(source)) return source
   if (hash(source) !== "0abd300ffc5d50d3aefa19832a32feb53ea358933bcc4df655202517554a7504") throw Error("Scheduled executions Public28.23 child drift")
   const parent = source

@@ -138,7 +138,9 @@ export async function messageRegenerationRoute(
     else if (error instanceof Error && error.message === "message_regeneration_request_invalid") fail(400, error.message)
     else if (
       error instanceof Error &&
-      ["MESSAGE_REGENERATION_NOT_READY", "MESSAGE_REGENERATION_SOURCE_CHANGED", "CHAT_TURN_IDEMPOTENCY_CONFLICT"].includes(error.message)
+      ["MESSAGE_REGENERATION_NOT_READY", "MESSAGE_REGENERATION_SOURCE_CHANGED", "CHAT_RESOURCE_SELECTION_CHANGED", "CHAT_TURN_IDEMPOTENCY_CONFLICT"].includes(
+        error.message,
+      )
     )
       fail(409, error.message === "CHAT_TURN_IDEMPOTENCY_CONFLICT" ? "idempotency_conflict" : "message_regeneration_not_ready")
     else fail(503, "message_regeneration_unavailable")

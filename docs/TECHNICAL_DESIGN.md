@@ -1,3 +1,9 @@
+## A‑08 canonical 消息输入（实施中）
+
+公共选择只接受有限去重的 `{kind,resource_id}`，`version_id` 没有 owner 语义并明确拒绝。Chat 先沿现 prepare 返回同键回执；新请求在事务外通过正式 Storage 元数据和本人 Artifact 关联解析，再于原 Project/Conversation 锁内重验 scope/关联并冻结唯一 launch。显式 Skill 选择不继承默认。personal scope 固定可信 subject，Project Asset 必须属于当前 canonical Project，历史 Artifact 仅来自本人 active 源会话且不得跨项目。网络调用共享原总期限与取消，不持数据库锁调用 owner。
+
+Agent 内部 `selected_resource_refs` 替换 opaque 类型：共同字段为 kind/resource_id/asset_id/content_sha256/size_bytes（十进制字符串）/mime_type/filename/source_scope，Artifact 另含 source_run_id。BFF 只读 metadata，不下载正文或持久 signed URL；consumer Run 仍取顶层 run_id。重新生成保留原 canonical manifest，不重新 resolve；当前资格失效时拒绝，不重写原快照。空选择保持旧持久字节与摘要。已由原生成器固定消费正式 Agent HTTP8.14（55beed29）与 Storage（c31a0657）artifact；候选源码不作为来源。没有新认证、grant、表、SDK 或 service 层。
+
 ### A‑12 执行读投影
 
 执行记录直接投影本 owner 的 scheduled dispatch/scope、当前 Task、普通 Conversation/Message 与既有 durable Run terminal；不新增执行事实库或第二个终稿 reader。当前项目可见性和墓碑约束控制结果链接；分页绑定身份/过滤且排序使用冻结 occurrence，不随状态更新时间重排。Web Updates 通过同源 adapter 消费公开只读接口，结果链接复用正式会话页。

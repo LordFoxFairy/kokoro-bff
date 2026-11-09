@@ -1,3 +1,4 @@
+import { selectedArtifactInTransaction } from "./conversation-artifact-library.js"
 import { regenerationSourceInTransaction } from "./message-regeneration.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
 import { performance } from "node:perf_hooks"
@@ -20,7 +21,11 @@ const CHAT_TURN_LOCK_BUDGET_MS = 1000
 const CHAT_TURN_MAX_SCOPE_ATTEMPTS = 4
 
 type LockedChatScope =
-  | Readonly<{ kind: "locked"; canonicalProjectId: string | null; callerProjectId: string | null | undefined }>
+  | Readonly<{
+      kind: "locked"
+      canonicalProjectId: string | null
+      callerProjectId: string | null | undefined
+    }>
   | Readonly<{ kind: "retry" }>
   | Readonly<{ kind: "project_not_found" }>
   | Readonly<{ kind: "not_found" }>
@@ -92,7 +97,9 @@ async function startWithin<T>(
 }
 
 async function acquireClient(database: PostgresBffDatabase, deadline: number, signal?: AbortSignal): Promise<PoolClient> {
-  const acquisition: { promise: Promise<PoolClient> | null } = { promise: null }
+  const acquisition: { promise: Promise<PoolClient> | null } = {
+    promise: null,
+  }
   try {
     return await startWithin(
       deadline,
@@ -138,7 +145,9 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
     destroyClient = true
   }
   client.on("error", onError)
-  input.lifetime?.signal.addEventListener("abort", onCallerAbort, { once: true })
+  input.lifetime?.signal.addEventListener("abort", onCallerAbort, {
+    once: true,
+  })
   if (input.lifetime?.signal.aborted) onCallerAbort()
   try {
     input.lifetime?.signal.throwIfAborted()
@@ -197,7 +206,14 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
     if (row.request_digest !== null) {
       if (row.request_digest !== input.requestDigest) throw new Error("CHAT_TURN_IDEMPOTENCY_CONFLICT")
       if (!row.run_id || !row.user_message_id || !row.assistant_message_id) throw new Error("AGENT_DISPATCH_LINEAGE_MISMATCH")
-      return { kind: "replay", receipt: { run_id: row.run_id, user_message_id: row.user_message_id, assistant_message_id: row.assistant_message_id } }
+      return {
+        kind: "replay",
+        receipt: {
+          run_id: row.run_id,
+          user_message_id: row.user_message_id,
+          assistant_message_id: row.assistant_message_id,
+        },
+      }
     }
     const ids = parseProjectSkillSelection(row.installation_ids)
     if (ids === null) throw new Error("CHAT_SKILL_SELECTION_INVALID")
@@ -264,7 +280,11 @@ export async function lockChatScope(query: DeadlineQuery, command: ChatScopeInpu
         FOR UPDATE`,
       [command.tenantId, command.conversationId, command.subjectId],
     )
-    return { kind: "locked", canonicalProjectId: callerProjectId ?? null, callerProjectId }
+    return {
+      kind: "locked",
+      canonicalProjectId: callerProjectId ?? null,
+      callerProjectId,
+    }
   }
 
   const canonicalProjectId =
@@ -343,7 +363,9 @@ export async function commitChatTurn(
     destroyClient = true
   }
   client.on("error", onLeaseClientError)
-  command.lifetime?.signal.addEventListener("abort", onCallerAbort, { once: true })
+  command.lifetime?.signal.addEventListener("abort", onCallerAbort, {
+    once: true,
+  })
   if (command.lifetime?.signal.aborted) onCallerAbort()
   async function query<Row extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>> {
     return startWithin(
@@ -464,6 +486,8 @@ export async function commitChatTurn(
           original.content !== command.content
         )
           throw Error("MESSAGE_REGENERATION_SOURCE_CHANGED")
+        if (JSON.stringify(callerPayload.launch.selected_resource_refs ?? []) !== JSON.stringify(original.payload.launch.selected_resource_refs ?? []))
+          throw new Error("MESSAGE_REGENERATION_SOURCE_CHANGED")
         const latest = await query<{ message_id: string }>(
           `SELECT message_id FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant' ORDER BY message_seq DESC,message_id DESC LIMIT 1`,
           [command.tenantId, command.conversationId],
@@ -483,7 +507,10 @@ export async function commitChatTurn(
         scope.canonicalProjectId === null
           ? null
           : (
-              await query<{ instruction: string | null; selected_skill_installation_ids: string[] }>(
+              await query<{
+                instruction: string | null
+                selected_skill_installation_ids: string[]
+              }>(
                 `SELECT instruction, selected_skill_installation_ids
                  FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
                 [command.tenantId, command.subjectId, scope.canonicalProjectId],
@@ -495,10 +522,38 @@ export async function commitChatTurn(
         if (JSON.stringify(project?.selected_skill_installation_ids ?? []) !== JSON.stringify(command.skillSelection.installationIds))
           throw new Error("CHAT_SKILL_SELECTION_CHANGED")
       }
+      const resources = callerPayload.launch.selected_resource_refs ?? []
+      if (resources.length && command.regeneration === undefined && command.resourceSelection?.projectId !== scope.canonicalProjectId)
+        throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
+      for (const resource of resources) {
+        const source = resource.source_scope
+        if (resource.kind === "asset") {
+          if ((source.kind === "personal" && source.id !== command.subjectId) || (source.kind === "project" && source.id !== scope.canonicalProjectId))
+            throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
+        } else {
+          const association = await selectedArtifactInTransaction(
+            { query },
+            {
+              tenantId: command.tenantId,
+              subjectId: command.subjectId,
+              artifactId: resource.resource_id,
+              projectId: scope.canonicalProjectId,
+            },
+            true,
+          )
+          if (
+            association === null ||
+            association.conversationId !== source.id ||
+            association.runId !== resource.source_run_id ||
+            association.sourceAssetId !== resource.asset_id ||
+            association.sourceContentSha256 !== resource.content_sha256
+          )
+            throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
+        }
+      }
       const payload = bindAgentDispatchPayloadProjectScope(callerPayload, scope.canonicalProjectId, project?.instruction ?? null)
       // Agent HTTP accepts at most 1 MiB; reject before any outbox/interrupt effects.
-      if (payload.launch.project_instruction !== undefined && Buffer.byteLength(JSON.stringify(payload.launch)) > 1024 * 1024)
-        throw new Error("request_body_too_large")
+      if (Buffer.byteLength(JSON.stringify(payload.launch)) > 1024 * 1024) throw new Error("request_body_too_large")
       const registration = agUiConsumerRegistration(command.tenantId, command.conversationId, command.subjectId, undefined)
       const registered = await query(registration.text, registration.values)
       if (registered.rowCount !== 1) throw new Error("AGENT_DISPATCH_CONSUMER_REGISTRATION_FAILED")
@@ -648,7 +703,11 @@ export async function commitChatTurn(
           AGUI_NOTIFICATION_DEADLINE_MS,
         ).catch(() => undefined)
       }
-      return { run_id: command.runId, user_message_id: command.userMessageId, assistant_message_id: command.assistantMessageId }
+      return {
+        run_id: command.runId,
+        user_message_id: command.userMessageId,
+        assistant_message_id: command.assistantMessageId,
+      }
     }
     throw new Error("CHAT_TURN_SCOPE_CHANGED")
   } catch (error) {

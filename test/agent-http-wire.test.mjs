@@ -32,19 +32,19 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "0b4b6c4fe9a1319922e9f61344200cba74e5b9d8",
-        contract_version: "8.13.0",
+        repository_commit: "55beed29a541dff25d18055571f89dd72a05c48a",
+        contract_version: "8.14.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "873da626bd2924c494a1c885d7bdad248f85498b639439d9852e5f24dfa084ba",
+        contract_sha256: "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "05ee7d2f406a41bf6a451f22e60906559fa87a120adbacca20ad2e907cf9e700",
+        provenance_sha256: "0617aa718b2e32f2d2fef01e0e6cb05f86c08de36d33a143c43b752d3823c35e",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "873da626bd2924c494a1c885d7bdad248f85498b639439d9852e5f24dfa084ba",
+        source_sha256: "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
@@ -54,18 +54,18 @@ describe("Agent event-protocol provenance", () => {
   it("uses one HTTP8 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "0b4b6c4fe9a1319922e9f61344200cba74e5b9d8")
+    assert.equal(manifest.owner.repository_commit, "55beed29a541dff25d18055571f89dd72a05c48a")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "873da626bd2924c494a1c885d7bdad248f85498b639439d9852e5f24dfa084ba",
+      "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/0b4b6c4fe9a1319922e9f61344200cba74e5b9d8/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/55beed29a541dff25d18055571f89dd72a05c48a/openapi.json", import.meta.url), "utf8"),
     )
     assert.deepEqual(owner.components.schemas.ChatActivity.oneOf[0].properties.display_code, {
       type: "string",
@@ -696,4 +696,53 @@ it("Agent Custom API launch validators preserve exact optional refs and reject d
   assert.deepEqual(zLaunchRequest.strict().parse(ownerInput), ownerInput)
   const { project_ref: _scope, ...savedWithPrivateContext } = ownerInput
   assert.equal(projectSavedAgentLaunch(savedWithPrivateContext), null)
+})
+
+it("Agent canonical resource launch keeps complete immutable owner material and rejects opaque or mixed-scope refs", async () => {
+  const { projectSavedAgentLaunch } = await import("../dist/infrastructure/clients/agent/http-wire.js")
+  const base = {
+    request_id: "request",
+    run_id: "consumer-run",
+    session_id: "consumer-session",
+    feature_key: "chat",
+    selected_skill_source_refs: [],
+    message_id: "message",
+    content: "hello",
+    trace: { source: "kokoro-bff", project_ref: "project-one" },
+  }
+  const asset = {
+    kind: "asset",
+    resource_id: "asset-one",
+    asset_id: "asset-one",
+    content_sha256: "a".repeat(64),
+    size_bytes: "18446744073709551615",
+    mime_type: "text/plain",
+    filename: "input.txt",
+    source_scope: { kind: "project", id: "project-one" },
+  }
+  const artifact = {
+    ...asset,
+    kind: "artifact",
+    resource_id: "artifact-one",
+    source_scope: { kind: "conversation", id: "source-session" },
+    source_run_id: "source-run",
+  }
+  const saved = { ...base, selected_resource_refs: [asset, artifact] }
+  const wire = projectSavedAgentLaunch(saved)
+  assert.deepEqual(wire, { ...saved, project_ref: "project-one" })
+  assert.equal(wire.run_id, "consumer-run")
+  saved.selected_resource_refs[0].source_scope.id = "mutated"
+  assert.equal(wire.selected_resource_refs[0].source_scope.id, "project-one")
+  for (const refs of [
+    [{ kind: "asset", resource_id: "asset-one" }],
+    [{ ...asset, version_id: "v1" }],
+    [{ ...asset, source_scope: { kind: "conversation", id: "source-session" } }],
+    [{ ...artifact, source_run_id: undefined }],
+    [{ ...artifact, source_scope: { kind: "project", id: "project-one" } }],
+    [{ ...asset, size_bytes: "18446744073709551616" }],
+    [{ ...asset, filename: "../input.txt" }],
+    [asset, asset],
+  ])
+    assert.equal(projectSavedAgentLaunch({ ...base, selected_resource_refs: refs }), null, JSON.stringify(refs))
+  assert.equal(Object.hasOwn(projectSavedAgentLaunch(base), "selected_resource_refs"), false)
 })

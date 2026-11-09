@@ -13,31 +13,84 @@ import { send } from "../response.js"
 function messageFault(error: unknown): { status: number; code: string; message: string } | null {
   if (!(error instanceof Error)) return null
   if (error.message === "request_body_too_large")
-    return { status: 413, code: "request_body_too_large", message: "The Message and Project instruction exceed the execution request limit" }
+    return {
+      status: 413,
+      code: "request_body_too_large",
+      message: "The Message and Project instruction exceed the execution request limit",
+    }
   if (error.message === "skill_installation_response_invalid")
-    return { status: 502, code: "skill_installation_response_invalid", message: "Installation owner returned an invalid response" }
+    return {
+      status: 502,
+      code: "skill_installation_response_invalid",
+      message: "Installation owner returned an invalid response",
+    }
   if (error instanceof ConnectError && error.code === Code.PermissionDenied)
-    return { status: 403, code: "permission_denied", message: "Current Project access is required" }
-  if (error instanceof ConnectError && error.code === Code.NotFound) return { status: 404, code: "project_not_found", message: "Project was not found" }
+    return {
+      status: 403,
+      code: "permission_denied",
+      message: "Current Project access is required",
+    }
+  if (error instanceof ConnectError && error.code === Code.NotFound)
+    return {
+      status: 404,
+      code: "project_not_found",
+      message: "Project was not found",
+    }
+  if (error.message === "CHAT_RESOURCE_SELECTION_INVALID")
+    return {
+      status: 400,
+      code: "invalid_resource_selection",
+      message: "Selected resource is unavailable in this context",
+    }
+  if (error.message === "CHAT_RESOURCE_SELECTION_CHANGED")
+    return {
+      status: 409,
+      code: "resource_selection_changed",
+      message: "Resource context changed before submission",
+    }
   if (error.message === "CHAT_SKILL_SELECTION_INVALID")
-    return { status: 400, code: "invalid_skill_selection", message: "Project Skill selection is no longer usable; update the selection" }
+    return {
+      status: 400,
+      code: "invalid_skill_selection",
+      message: "Project Skill selection is no longer usable; update the selection",
+    }
   if (error.message === "CHAT_TURN_IDEMPOTENCY_CONFLICT") {
-    return { status: 409, code: "idempotency_conflict", message: "Idempotency key was already used with different Chat input" }
+    return {
+      status: 409,
+      code: "idempotency_conflict",
+      message: "Idempotency key was already used with different Chat input",
+    }
   }
   if (error.message === "CHAT_INTERRUPT_TARGET_NOT_CURRENT") {
-    return { status: 409, code: "run_delivery_conflict", message: "The selected Run is no longer available for interruption" }
+    return {
+      status: 409,
+      code: "run_delivery_conflict",
+      message: "The selected Run is no longer available for interruption",
+    }
   }
   if (error.message === "CHAT_SKILL_SELECTION_CHANGED")
-    return { status: 409, code: "skill_selection_changed", message: "Project Skill selection changed before submission; retry the original intent" }
+    return {
+      status: 409,
+      code: "skill_selection_changed",
+      message: "Project Skill selection changed before submission; retry the original intent",
+    }
   if (error.message === "CHAT_TURN_PROJECT_NOT_FOUND") {
-    return { status: 404, code: "project_not_found", message: "Project was not found" }
+    return {
+      status: 404,
+      code: "project_not_found",
+      message: "Project was not found",
+    }
   }
   if (
     error.message === "CHAT_TURN_INPUT_INVALID" ||
     error.message === "AGENT_DISPATCH_PAYLOAD_INVALID" ||
     error.message === "AGENT_DISPATCH_LINEAGE_MISMATCH"
   ) {
-    return { status: 400, code: "invalid_message", message: "Chat message input is invalid" }
+    return {
+      status: 400,
+      code: "invalid_message",
+      message: "Chat message input is invalid",
+    }
   }
   return null
 }
@@ -84,7 +137,15 @@ export async function chatMessageRoute(
     subjectId = context.identity.userId
   try {
     const receipt = await chatTurns.submit(
-      { tenantId, conversationId, ...input, subjectId, actorId: subjectId, requestId: context.requestId, idempotencyKey: key },
+      {
+        tenantId,
+        conversationId,
+        ...input,
+        subjectId,
+        actorId: subjectId,
+        requestId: context.requestId,
+        idempotencyKey: key,
+      },
       async (projectId, installationIds, lifetime) => {
         const selectionSignal = lifetime.signal
         if (!installationClient || !projectAccess || (await projectAccess(projectId, selectionSignal)) !== projectId)
@@ -93,7 +154,16 @@ export async function chatMessageRoute(
         for (const installationId of installationIds) {
           selectionSignal.throwIfAborted()
           const result = await installationClient
-            .get({ requestId: context.requestId, tenant: tenantId, subject: subjectId, projectRef: projectId, installationId }, selectionSignal)
+            .get(
+              {
+                requestId: context.requestId,
+                tenant: tenantId,
+                subject: subjectId,
+                projectRef: projectId,
+                installationId,
+              },
+              selectionSignal,
+            )
             .catch((error: unknown) => {
               if (error instanceof ConnectError && [Code.NotFound, Code.FailedPrecondition].includes(error.code))
                 throw new Error("CHAT_SKILL_SELECTION_INVALID")
@@ -108,7 +178,10 @@ export async function chatMessageRoute(
         selectionSignal.throwIfAborted()
         return refs
       },
-      { signal: selectionAbort.signal, deadlineAt: performance.now() + CHAT_TURN_TOTAL_BUDGET_MS },
+      {
+        signal: selectionAbort.signal,
+        deadlineAt: performance.now() + CHAT_TURN_TOTAL_BUDGET_MS,
+      },
     )
     if (receipt === null) {
       fail(404, "session_not_found", "Session was not found")

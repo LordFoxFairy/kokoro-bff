@@ -12,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "0b4b6c4fe9a1319922e9f61344200cba74e5b9d8"
+const ownerCommit = "55beed29a541dff25d18055571f89dd72a05c48a"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "873da626bd2924c494a1c885d7bdad248f85498b639439d9852e5f24dfa084ba"
-const provenanceDigest = "05ee7d2f406a41bf6a451f22e60906559fa87a120adbacca20ad2e907cf9e700"
-const ownerContractVersion = "8.13.0"
+const ownerDigest = "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424"
+const provenanceDigest = "0617aa718b2e32f2d2fef01e0e6cb05f86c08de36d33a143c43b752d3823c35e"
+const ownerContractVersion = "8.14.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -134,7 +134,63 @@ export function restoreAgent85ActionDisplayRaw(source) {
   }
   return source
 }
+const agent813ResourceRefs = {
+  type: "array",
+  maxItems: 16,
+  uniqueItems: true,
+  "x-kokoro-json-byte-limit": 4096,
+  description:
+    "Opaque owner references selected for this Run. Only asset/artifact IDs and an optional version ID are accepted; URLs, content, identities and digests are forbidden. Omission or [] selects none.",
+  items: {
+    type: "object",
+    additionalProperties: false,
+    required: ["kind", "resource_id"],
+    properties: {
+      kind: {
+        type: "string",
+        enum: ["asset", "artifact"],
+      },
+      resource_id: {
+        type: "string",
+        minLength: 1,
+        maxLength: 191,
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])",
+      },
+      version_id: {
+        type: "string",
+        minLength: 1,
+        maxLength: 191,
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])",
+      },
+    },
+  },
+}
+export function restoreAgent813CanonicalResourcesRaw(source) {
+  if (!source.includes('"version": "8.14.0"')) return source
+  assert.equal(sha256(source), "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424", "Agent8.14 canonical resources child drift")
+  const match = source.match(/          "selected_resource_refs": \{[\s\S]*?          \},\n          "personal_context": \{/u)
+  assert.equal(match?.length, 1, "Agent8.14 canonical resources delta drift")
+  source = source
+    .replace(
+      match[0],
+      '          "selected_resource_refs": {\n            "type": "array",\n            "maxItems": 16,\n            "uniqueItems": true,\n            "x-kokoro-json-byte-limit": 4096,\n            "description": "Opaque owner references selected for this Run. Only asset/artifact IDs and an optional version ID are accepted; URLs, content, identities and digests are forbidden. Omission or [] selects none.",\n            "items": {\n              "type": "object",\n              "additionalProperties": false,\n              "required": [\n                "kind",\n                "resource_id"\n              ],\n              "properties": {\n                "kind": {\n                  "type": "string",\n                  "enum": [\n                    "asset",\n                    "artifact"\n                  ]\n                },\n                "resource_id": {\n                  "type": "string",\n                  "minLength": 1,\n                  "maxLength": 191,\n                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\\\s\\\\S])"\n                },\n                "version_id": {\n                  "type": "string",\n                  "minLength": 1,\n                  "maxLength": 191,\n                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\\\s\\\\S])"\n                }\n              }\n            }\n          },\n          "personal_context": {',
+    )
+    .replace('"version": "8.14.0"', '"version": "8.13.0"')
+  assert.equal(sha256(source), "873da626bd2924c494a1c885d7bdad248f85498b639439d9852e5f24dfa084ba", "Agent8.13 canonical resources parent drift")
+  return source
+}
+
+export function restoreAgent813CanonicalResourcesContract(document) {
+  if (document.info?.version !== "8.14.0") return document
+  const parent = structuredClone(document)
+  parent.components.schemas.LaunchRequest.properties.selected_resource_refs = structuredClone(agent813ResourceRefs)
+  parent.info.version = "8.13.0"
+  assert.equal(sha256(JSON.stringify(parent)), "df135b9477972cef9c1b58af1b7f3d5c1813e867e0ab7e9e902363941a37daf9", "Agent8.13 canonical resources parent drift")
+  return parent
+}
+
 export function restoreAgent812ResourceRefsRaw(source) {
+  source = restoreAgent813CanonicalResourcesRaw(source)
   if (!source.includes('"version": "8.13.0"')) return source
   const match = source.match(/          "selected_resource_refs": \{[\s\S]*?          \},\n          "personal_context": \{/u)
   assert.equal(match?.length, 1, "Agent8.13 resource refs delta drift")
@@ -148,18 +204,23 @@ export function restoreAgent811ProjectInstructionRaw(source) {
   if (!source.includes('"version": "8.12.0"')) return source
   const match = source.match(/          "project_instruction": \{\n[\s\S]*?          \}\n/u)
   assert.equal(match?.length, 1, "Agent8.12 project instruction delta drift")
-  source = source.replace(match[0], "").replace('          },\n        },', '          }\n        },')
+  source = source.replace(match[0], "").replace("          },\n        },", "          }\n        },")
   source = source.replace('"version": "8.12.0"', '"version": "8.11.0"')
   assert.equal(sha256(source), "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b", "Agent8.11 project instruction parent drift")
   return source
 }
 
 export function restoreAgent811ProjectInstructionContract(document) {
+  document = restoreAgent813CanonicalResourcesContract(document)
   if (document.info?.version === "8.13.0") {
     const resourceParent = structuredClone(document)
     delete resourceParent.components.schemas.LaunchRequest.properties.selected_resource_refs
     resourceParent.info.version = "8.12.0"
-    assert.equal(sha256(JSON.stringify(resourceParent)), "51722eb1c75be7c5f61c3d55db5a0c21dfdc574d919f4fda55600b538e706d9c", "Agent8.12 resource refs parent drift")
+    assert.equal(
+      sha256(JSON.stringify(resourceParent)),
+      "51722eb1c75be7c5f61c3d55db5a0c21dfdc574d919f4fda55600b538e706d9c",
+      "Agent8.12 resource refs parent drift",
+    )
     document = resourceParent
   }
   if (document.info?.version !== "8.12.0") return document
@@ -896,12 +957,48 @@ async function generateCustomApiSelectionValidator(directory, document) {
   await writeFile(file, source)
 }
 
+// Hey API strips closed nested objects and does not enforce the owner array's identity/byte bounds.
+// Compile this small published canonical graph directly, retaining escaped owner patterns exactly.
+function canonicalResourceSchemaZod(schema) {
+  if (schema.const !== undefined) return `z.literal(${JSON.stringify(schema.const)})`
+  if (schema.enum) return `z.enum(${JSON.stringify(schema.enum)})`
+  if (schema.oneOf) return `z.union([${schema.oneOf.map(canonicalResourceSchemaZod).join(",")}])`
+  if (schema.type === "string") {
+    let expression = `z.string().min(${schema.minLength}).max(${schema.maxLength})`
+    if (schema.pattern) expression += `.regex(new RegExp(${JSON.stringify(schema.pattern)}, "u"))`
+    if (schema.not?.enum) expression += `.refine(value => !${JSON.stringify(schema.not.enum)}.includes(value))`
+    return expression
+  }
+  assert.equal(schema.type, "object", "canonical resource schema node drifted")
+  assert.equal(schema.additionalProperties, false, "canonical resource object must be closed")
+  assert.deepEqual(Object.keys(schema.properties).sort(), schema.required.slice().sort(), "canonical resource fields must be required")
+  return `z.object({${Object.entries(schema.properties)
+    .map(([key, value]) => `${JSON.stringify(key)}:${canonicalResourceSchemaZod(value)}`)
+    .join(",")}}).strict()`
+}
+
+async function generateCanonicalResourceValidator(directory, document) {
+  const schema = document.components.schemas.LaunchRequest.properties.selected_resource_refs
+  assert.equal(schema.type, "array")
+  assert.equal(schema.maxItems, 16)
+  assert.equal(schema.uniqueItems, true)
+  assert.equal(schema["x-kokoro-json-byte-limit"], 32768)
+  const file = path.join(directory, "zod.gen.ts")
+  let source = await readFile(file, "utf8")
+  const property = /^[ \t]*selected_resource_refs:[\s\S]*?(?=^[ \t]*personal_context:)/gmu
+  assert.equal([...source.matchAll(property)].length, 1, "generated exact canonical resource property drifted")
+  const expression = `selected_resource_refs: z.array(${canonicalResourceSchemaZod(schema.items)}).max(${schema.maxItems}).refine(values => new Set(values.map(value => value.kind + ":" + value.resource_id)).size === values.length && Array.from(JSON.stringify(values)).reduce((size, char) => size + (char.charCodeAt(0) > 127 ? char.length * 6 : 1), 0) <= ${schema["x-kokoro-json-byte-limit"]} && values.every(value => value.kind !== "asset" || value.resource_id === value.asset_id)).optional(),\n`
+  source = source.replace(property, () => expression)
+  await writeFile(file, source)
+}
+
 async function normalizeProjectInstructionPattern(directory, document) {
   // Hey API emits the ECMAScript trim-whitespace exclusion as a literal control-character class,
   // which is not valid TypeScript. Preserve the owner pattern through RegExp construction.
   const pattern = document.components.schemas.LaunchRequest.properties.project_instruction.pattern
-  const malformed = pattern.replace(/\\u(?:0009|000a|000b|000c|000d|0020|0085|00a0|1680|2000|2001|2002|2003|2004|2005|2006|2007|2008|2009|200a|2028|2029|202f|205f|3000)/gu, (value) =>
-    String.fromCodePoint(Number.parseInt(value.slice(2), 16)),
+  const malformed = pattern.replace(
+    /\\u(?:0009|000a|000b|000c|000d|0020|0085|00a0|1680|2000|2001|2002|2003|2004|2005|2006|2007|2008|2009|200a|2028|2029|202f|205f|3000)/gu,
+    (value) => String.fromCodePoint(Number.parseInt(value.slice(2), 16)),
   )
   assert.notEqual(malformed, pattern, "Agent 8.12 project instruction pattern must need normalization")
   await normalizeFile(directory, "zod.gen.ts", [
@@ -942,6 +1039,7 @@ async function generate(directory) {
   await generateDecodedValidators(directory, ownerDocument)
   await generateMcpSelectionValidator(directory, ownerDocument)
   await generateCustomApiSelectionValidator(directory, ownerDocument)
+  await generateCanonicalResourceValidator(directory, ownerDocument)
   await normalizePersonalContextPatterns(directory, ownerDocument)
   await normalizeProjectInstructionPattern(directory, ownerDocument)
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")

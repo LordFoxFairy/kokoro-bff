@@ -1,3 +1,5 @@
+import type { QueryResult, QueryResultRow } from "pg"
+import { withMessageReadClient } from "./message-parts-read.js"
 import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
 import type { ArtifactAssociation, ArtifactLibraryRepository, ArtifactPosition } from "../../application/account/artifact-library-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
@@ -24,9 +26,42 @@ function association(row: AssociationRow): ArtifactAssociation {
   }
 }
 
+export type SelectedArtifactInput = Readonly<{
+  tenantId: string
+  subjectId: string
+  artifactId: string
+  projectId: string | null
+}>
+
+/** Exact BFF relationship only; the caller still obtains fresh Storage metadata. */
+export async function selectedArtifactInTransaction(
+  client: {
+    query: <Row extends QueryResultRow = QueryResultRow>(sql: string, values?: unknown[]) => Promise<QueryResult<Row>>
+  },
+  input: SelectedArtifactInput,
+  lockForCommit = false,
+): Promise<ArtifactAssociation | null> {
+  const result = await client.query<AssociationRow>(
+    `SELECT a.conversation_id,a.artifact_id,a.run_id,a.source_asset_id,a.source_artifact_kind,a.source_content_sha256,a.delivered_at
+       FROM bff_conversation_artifact a
+       JOIN bff_conversation c ON c.tenant_id=a.tenant_id AND c.conversation_id=a.conversation_id
+      WHERE a.tenant_id=$1 AND c.owner_id=$2 AND c.status='active' AND a.artifact_id=$3 AND a.source_owner='kokoro-agent'
+        AND (c.project_ref IS NULL OR EXISTS (
+          SELECT 1 FROM bff_project p WHERE p.tenant_id=c.tenant_id AND p.owner_id=c.owner_id AND p.deleted_at IS NULL
+            AND (p.project_id=c.project_ref OR p.slug=c.project_ref) AND p.project_id=$4
+        )) LIMIT 2${lockForCommit ? " FOR SHARE OF c,a NOWAIT" : ""}`,
+    [input.tenantId, input.subjectId, input.artifactId, input.projectId],
+  )
+  return result.rows.length === 1 ? association(result.rows[0]!) : null
+}
+
 /** BFF-owned relationship reads; Storage remains the only Artifact metadata owner. */
 export class PostgresConversationArtifactLibrary implements ArtifactLibraryRepository {
   public constructor(private readonly database: PostgresBffDatabase) {}
+
+  public findSelectedCandidate(input: SelectedArtifactInput, lifetime: { signal: AbortSignal; deadlineAt: number }): Promise<ArtifactAssociation | null> {
+    return withMessageReadClient(this.database.pool, lifetime, (client) => selectedArtifactInTransaction(client, input))
+  }
 
   public async listCandidates(tenantId: string, subjectId: string, position: ArtifactPosition | null, limit: number): Promise<readonly ArtifactAssociation[]> {
     const result = await this.database.pool.query<AssociationRow>(
@@ -87,7 +122,13 @@ export class PostgresConversationArtifactLibrary implements ArtifactLibraryRepos
   }
   public async findSkillHandoff(tenantId: string, subjectId: string, conversationId: string, artifactId: string): Promise<SkillAiAssociation | null> {
     const result = await this.database.pool.query<
-      AssociationRow & { source_event_id: string; source_sequence: string; source_digest: string; source_size_bytes: string; source_mime: string }
+      AssociationRow & {
+        source_event_id: string
+        source_sequence: string
+        source_digest: string
+        source_size_bytes: string
+        source_mime: string
+      }
     >(
       `SELECT a.conversation_id, a.artifact_id, a.run_id, a.source_asset_id, a.source_artifact_kind,
               a.source_content_sha256, a.delivered_at, a.source_event_id, a.source_sequence::text,

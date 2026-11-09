@@ -60,6 +60,7 @@
     "test:project-pin:integration": "node --import tsx --test --test-concurrency=1 test/project-pin.integration.mjs",
     "test:chat-composer-selection:integration": "node --import tsx --test test/chat-composer-selection.integration.mjs",
     "test:message-feedback:integration": "node --import tsx --test test/message-feedback.integration.mjs",
+    "test:message-resource-selection:integration": "pnpm build && node --import tsx --test test/message-resource-selection.integration.mjs",
     "test:message-regeneration:integration": "node --import tsx --test test/message-regeneration.integration.mjs",
     "test:nest-architecture": "pnpm build && node --test --test-concurrency=1 test/nest-runtime-architecture.test.ts test/nest-feature-architecture.test.ts"
   },

@@ -1,3 +1,9 @@
+## 2026-11-09 A-08 canonical 输入冻结（未提交候选）
+
+基线 `5226ccd`；正规消费 Agent `55beed29` / HTTP8.14 和 Storage `c31a0657`，Public28.24 保留 opaque `{kind,resource_id}` 并明确拒绝无 owner 语义的 `version_id`。唯一 Chat turn 先检查重放，在事务外有界解析 owner 元数据，最后事务复核当前 Project 与本人源 Artifact 关系并原子冻结 canonical manifest。源关系以 `FOR SHARE OF c,a NOWAIT` 核验，争用立即回滚，不引入反向阻塞；不在 PG 行锁内调用 owner 网络。regenerate 复用原 manifest，不重新解析。
+
+停写后主控类型/build、76 项相关定向及真实 Nest/隔离 PG 8 项均 PASS（0 SKIP），测试库已回收；覆盖三种源、重放、regenerate、scope/association 变化与源行争用。Storage 元数据为明确 Connect fixture，未称真实 Storage/浏览器组合通过。writer 正规生成、lint、格式与契约 lint/semantic 通过；默认广套件最终主控复跑中，既有 SQL inverse/worker 失败另列，不冒全绿。Agent runtime 与 App/Root 精确组合、真实附件旅程仍待。
+
 ## 2026-11-09 A‑12 正式 Chat 接线候选
 
 本片以46c061f为父：Scheduled activation与普通Conversation/双Message/outbox/AG‑UI注册同事务提交，普通dispatcher唯一发送；专用scheduled发送/terminal consumer/source ledger已退休。真实source exhausted才释放后继，不把submitted或Scheduler exhausted当执行成功。Public28.23增加execution分页投影和任务Project过滤，结果复用正式私有会话。

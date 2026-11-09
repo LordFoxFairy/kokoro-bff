@@ -1,3 +1,9 @@
+## A‑08 canonical 资源冻结（零 DDL）
+
+继续使用现 `bff_agent_dispatch_outbox.payload` JSONB 与原 Message/Run事务，不增加表、列、索引、grant或登记记录。请求摘要绑定公共有序opaque选择；唯一launch内保存owner核验后的canonical manifest，空选择省略以保持既有字节。source_scope属于冻结的来源事实，consumer run_id仍由现outbox/Run身份拥有；Artifact source_run_id不充当consumer身份。
+
+本人Artifact来源复用现 `bff_conversation_artifact` 与active Conversation/Project；事务外有限读取后，在最终锁内重验exact source conversation/run/asset/hash与当前资格。重新生成原sourceFingerprint覆盖整个旧payload，原manifest原样承接，不重新解析或改写历史。Storage仍独占对象/扫描/撤销事实，执行读取时再次校验；本片不操作正常资源或schema。
+
 ## 2026-11-08 · A‑12 定时执行接入正式会话（实施门）
 
 当前态：scheduled scope/dispatch/source 独立派发 Agent，未建立普通 Conversation、Message 或 immutable Chat submission；因此普通模型准入与终稿读取不能以这些内部记录证明提交。目标仍是原 A‑12 的到点执行、执行记录和会话结果，不新增 owner/服务/认证协议。

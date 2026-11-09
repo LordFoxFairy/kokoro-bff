@@ -23,7 +23,8 @@ test("both current generator modes reject a full legacy owner blob rather than p
       join(dir, "scripts/agent-final-answer-contract.mjs"),
       await readFile(new URL("../scripts/agent-final-answer-contract.mjs", import.meta.url)),
     )
-    const dest = join(dir, "contract/vendor/kokoro-agent/92e235e782178b7002f0bd68daa143b507db870d")
+    const current = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
+    const dest = join(dir, `contract/vendor/kokoro-agent/${current.owner.repository_commit}`)
     await mkdir(dest, { recursive: true })
     await writeFile(join(dir, "scripts/generate-agent-http-client.mjs"), await readFile(new URL("../scripts/generate-agent-http-client.mjs", import.meta.url)))
     await writeFile(

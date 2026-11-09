@@ -2,7 +2,12 @@ import { parseCustomApiProfileSelection, type SelectedCustomApiProfile } from ".
 import { parseMcpConnectionSelection } from "./mcp-connection-selection.js"
 import { isRecord } from "../json.js"
 import { parseSkillSourceSelection } from "./skill-source-selection.js"
-import { parseResourceReferenceSelection, type SelectedResourceRef } from "./resource-reference-selection.js"
+import {
+  parseResourceReferenceSelection,
+  parseCanonicalResourceReferences,
+  type CanonicalResourceRef,
+  type SelectedResourceRef,
+} from "./resource-reference-selection.js"
 
 export const AGENT_DISPATCH_SCHEMA_VERSION = 3 as const
 
@@ -18,7 +23,7 @@ export type AgentLaunchBody = {
   selected_skill_source_refs: string[]
   selected_mcp_connection_ids?: string[]
   selected_custom_api_profiles?: SelectedCustomApiProfile[]
-  selected_resource_refs?: SelectedResourceRef[]
+  selected_resource_refs?: CanonicalResourceRef[]
   requested_model_label?: string
   trace: {
     source: "kokoro-bff"
@@ -155,17 +160,38 @@ export function agentDispatchRequestMaterial(input: AgentDispatchInput): string 
     input.selectedSkillSourceRefs ?? null,
     null, // Retired trace-only mcp_servers position; preserve old unselected digests.
   ]
-  if (input.selectedMcpConnectionIds?.length) material.push({ selected_mcp_connection_ids: input.selectedMcpConnectionIds })
+  if (input.selectedMcpConnectionIds?.length)
+    material.push({
+      selected_mcp_connection_ids: input.selectedMcpConnectionIds,
+    })
   if (input.selectedCustomApiProfiles?.length)
     material.push({
-      selected_custom_api_profiles: input.selectedCustomApiProfiles.map(({ profile_id, expected_state_version }) => ({ profile_id, expected_state_version })),
+      selected_custom_api_profiles: input.selectedCustomApiProfiles.map(({ profile_id, expected_state_version }) => ({
+        profile_id,
+        expected_state_version,
+      })),
     })
-  if (input.selectedResourceRefs?.length) material.push({ selected_resource_refs: input.selectedResourceRefs.map((ref) => ({ ...ref })) })
+  if (input.selectedResourceRefs?.length)
+    material.push({
+      selected_resource_refs: input.selectedResourceRefs.map((ref) => ({
+        ...ref,
+      })),
+    })
   return JSON.stringify(input.interruptRunId === undefined ? material : ["message.interrupt:v1", input.interruptRunId, material])
 }
 
-export function buildAgentDispatchPayload(input: AgentDispatchInput, ids: { runId: string; userMessageId: string }): AgentDispatchPayload {
+export function buildAgentDispatchPayload(
+  input: AgentDispatchInput,
+  ids: { runId: string; userMessageId: string },
+  canonicalResourceRefs?: readonly CanonicalResourceRef[],
+): AgentDispatchPayload {
   assertAgentDispatchInput(input)
+  const resources = parseCanonicalResourceReferences(canonicalResourceRefs ?? [])
+  if (
+    resources === null ||
+    JSON.stringify(resources.map(({ kind, resource_id }) => ({ kind, resource_id }))) !== JSON.stringify(input.selectedResourceRefs ?? [])
+  )
+    throw new Error("CHAT_RESOURCE_SELECTION_INVALID")
   const trace: AgentLaunchBody["trace"] = {
     source: "kokoro-bff",
     ...(input.projectRef === undefined ? {} : { project_ref: input.projectRef }),
@@ -184,8 +210,12 @@ export function buildAgentDispatchPayload(input: AgentDispatchInput, ids: { runI
       project_ref: input.projectRef ?? null,
       selected_skill_source_refs: [...(input.selectedSkillSourceRefs ?? [])],
       ...(input.selectedMcpConnectionIds?.length ? { selected_mcp_connection_ids: [...input.selectedMcpConnectionIds] } : {}),
-      ...(input.selectedCustomApiProfiles?.length ? { selected_custom_api_profiles: input.selectedCustomApiProfiles.map((profile) => ({ ...profile })) } : {}),
-      ...(input.selectedResourceRefs?.length ? { selected_resource_refs: input.selectedResourceRefs.map((ref) => ({ ...ref })) } : {}),
+      ...(input.selectedCustomApiProfiles?.length
+        ? {
+            selected_custom_api_profiles: input.selectedCustomApiProfiles.map((profile) => ({ ...profile })),
+          }
+        : {}),
+      ...(resources.length ? { selected_resource_refs: resources } : {}),
       ...(input.model === undefined ? {} : { requested_model_label: input.model }),
       trace,
     },
@@ -201,9 +231,8 @@ export function bindAgentDispatchPayloadProjectScope(
   const payload = parseAgentDispatchPayload(value)
   if (payload.launch.project_instruction !== undefined) throw new Error("AGENT_DISPATCH_LINEAGE_MISMATCH")
   const { project_ref: _callerProjectRef, ...trace } = payload.launch.trace
-  const projectInstruction = canonicalProjectId !== null && currentInstruction !== null && /\P{White_Space}/u.test(currentInstruction)
-    ? currentInstruction
-    : undefined
+  const projectInstruction =
+    canonicalProjectId !== null && currentInstruction !== null && /\P{White_Space}/u.test(currentInstruction) ? currentInstruction : undefined
   return {
     ...payload,
     launch: {
@@ -251,9 +280,12 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
   const projectInstruction = launchValue.project_instruction
   if (
     projectInstruction !== undefined &&
-    (executionProject === null || typeof projectInstruction !== "string" || !/\P{White_Space}/u.test(projectInstruction) ||
+    (executionProject === null ||
+      typeof projectInstruction !== "string" ||
+      !/\P{White_Space}/u.test(projectInstruction) ||
       /[\u0000\p{Surrogate}]/u.test(projectInstruction))
-  ) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
+  )
+    throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const traceValue = launchValue.trace
   if (Object.keys(traceValue).some((key) => !["source", "project_ref", "agent", "thinking", "mcp_servers"].includes(key)))
     throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
@@ -270,7 +302,8 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
   const selectedCustomApiProfiles =
     launchValue.selected_custom_api_profiles === undefined ? undefined : parseCustomApiProfileSelection(launchValue.selected_custom_api_profiles)
   if (selectedCustomApiProfiles === null) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
-  const selectedResourceRefs = launchValue.selected_resource_refs === undefined ? undefined : parseResourceReferenceSelection(launchValue.selected_resource_refs)
+  const selectedResourceRefs =
+    launchValue.selected_resource_refs === undefined ? undefined : parseCanonicalResourceReferences(launchValue.selected_resource_refs)
   if (selectedResourceRefs === null) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const thinking = traceValue.thinking
   if (thinking !== undefined && typeof thinking !== "boolean") throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")

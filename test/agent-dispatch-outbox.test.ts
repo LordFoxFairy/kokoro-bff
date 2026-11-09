@@ -155,7 +155,7 @@ it("inherits exact project defaults only for omitted selection and freezes the o
   await service.submit(input, resolver)
   await service.submit({ ...input, selectedSkillSourceRefs: [] }, resolver)
   assert.equal(resolved, 1)
-  assert.equal(preparations.length, 1)
+  assert.equal(preparations.length, 2)
   assert.deepEqual(repository.commits[0].payload.launch.selected_skill_source_refs, ["skill:version_a"])
   assert.deepEqual(repository.commits[0].skillSelection, { projectId: "project_fixture", installationIds: ["installation_a"] })
   assert.deepEqual(repository.commits[1].payload.launch.selected_skill_source_refs, [])
@@ -359,8 +359,8 @@ it("freezes ordered Skill selection in v3 payload and digest, rejecting old dura
   assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical", null).launch.trace.project_ref, "project-canonical")
   assert.equal(
     Object.hasOwn(
-      bindAgentDispatchPayloadProjectScope({ ...empty, launch: { ...empty.launch, trace: { ...empty.launch.trace, project_ref: "caller-slug" } } }, null, null).launch
-        .trace,
+      bindAgentDispatchPayloadProjectScope({ ...empty, launch: { ...empty.launch, trace: { ...empty.launch.trace, project_ref: "caller-slug" } } }, null, null)
+        .launch.trace,
       "project_ref",
     ),
     false,
@@ -842,7 +842,7 @@ it("expired or pre-aborted prepare performs no checkout and no SQL", async () =>
   assert.equal(checkouts, 0)
 })
 
-it("freezes opaque resource references in launch and digest without admitting content", async () => {
+it("freezes owner canonical resource references in launch while the digest binds opaque intent", async () => {
   const { agentDispatchRequestMaterial, buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/domain/chat/agent-dispatch.js")
   const input = {
     tenantId: "tenant",
@@ -855,26 +855,86 @@ it("freezes opaque resource references in launch and digest without admitting co
   }
   const refs = [
     { kind: "asset" as const, resource_id: "asset-1" },
-    { kind: "artifact" as const, resource_id: "artifact-1", version_id: "v1" },
+    { kind: "artifact" as const, resource_id: "artifact-1" },
   ]
   const selected = { ...input, selectedResourceRefs: refs }
-  const payload = buildAgentDispatchPayload(selected, { runId: "run", userMessageId: "message" })
+  const canonical = refs.map((ref) => ({
+    ...ref,
+    asset_id: "asset-1",
+    content_sha256: "a".repeat(64),
+    size_bytes: "5",
+    mime_type: "text/plain",
+    filename: "input.txt",
+    source_scope: ref.kind === "artifact" ? { kind: "conversation" as const, id: "source-session" } : { kind: "personal" as const, id: "subject" },
+    ...(ref.kind === "artifact" ? { source_run_id: "source-run" } : {}),
+  }))
+  const payload = buildAgentDispatchPayload(selected, { runId: "run", userMessageId: "message" }, canonical)
+  const expected = structuredClone(canonical)
   refs[0].resource_id = "asset-mutated"
-  assert.deepEqual(payload.launch.selected_resource_refs, [
-    { kind: "asset", resource_id: "asset-1" },
-    { kind: "artifact", resource_id: "artifact-1", version_id: "v1" },
-  ])
+  canonical[0].source_scope.id = "mutated"
+  assert.deepEqual(payload.launch.selected_resource_refs, expected)
   assert.deepEqual(parseAgentDispatchPayload(JSON.parse(JSON.stringify(payload))), payload)
   assert.notEqual(agentDispatchRequestMaterial(selected), agentDispatchRequestMaterial(input))
   for (const invalid of [
     null,
     [{ kind: "asset", resource_id: "asset-1", url: "https://example.invalid" }],
     [{ kind: "asset", resource_id: "asset-1", content_sha256: "a".repeat(64) }],
-    [{ kind: "asset", resource_id: "asset-1" }, { kind: "asset", resource_id: "asset-1" }],
+    [
+      { kind: "asset", resource_id: "asset-1" },
+      { kind: "asset", resource_id: "asset-1" },
+    ],
   ]) {
     assert.throws(
       () => parseAgentDispatchPayload({ ...payload, launch: { ...payload.launch, selected_resource_refs: invalid } }),
       /AGENT_DISPATCH_PAYLOAD_INVALID/,
     )
   }
+})
+
+it("resource resolution follows prepare replay even with explicit Skills and freezes independent owner material", async () => {
+  const repository = new RecordingRepository()
+  const input = {
+    tenantId: "tenant",
+    subjectId: "subject",
+    actorId: "subject",
+    conversationId: "session",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+    selectedSkillSourceRefs: [],
+    selectedResourceRefs: [{ kind: "asset" as const, resource_id: "asset-1" }],
+  }
+  let resolutions = 0
+  const canonical = [
+    {
+      kind: "asset" as const,
+      resource_id: "asset-1",
+      asset_id: "asset-1",
+      content_sha256: "a".repeat(64),
+      size_bytes: "5",
+      mime_type: "text/plain",
+      filename: "input.txt",
+      source_scope: { kind: "personal" as const, id: "subject" },
+    },
+  ]
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator(), async (selected, lifetime) => {
+    resolutions++
+    assert.deepEqual(selected.refs, input.selectedResourceRefs)
+    assert.equal(selected.projectId, null)
+    assert.ok(lifetime.deadlineAt > performance.now())
+    return canonical
+  })
+  repository.prepareChatTurnSelection = async () => ({ kind: "replay", receipt: { run_id: "old", user_message_id: "user", assistant_message_id: "answer" } })
+  assert.equal((await service.submit(input))?.run_id, "old")
+  assert.equal(resolutions, 0)
+  assert.equal(repository.commits.length, 0)
+  repository.prepareChatTurnSelection = async () => ({ kind: "new", projectId: null, installationIds: ["must-not-inherit"] })
+  await service.submit(input, async () => {
+    throw new Error("explicit Skills must not resolve defaults")
+  })
+  assert.equal(resolutions, 1)
+  assert.deepEqual(repository.commits[0]?.payload.launch.selected_skill_source_refs, [])
+  assert.deepEqual(repository.commits[0]?.payload.launch.selected_resource_refs, canonical)
+  canonical[0].source_scope.id = "mutated-after-resolution"
+  assert.equal(repository.commits[0]?.payload.launch.selected_resource_refs?.[0]?.source_scope.id, "subject")
 })

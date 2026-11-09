@@ -16,6 +16,18 @@ const frozen = {
     selected_skill_source_refs: ["skill:pinned"],
     selected_mcp_connection_ids: ["connection:original"],
     selected_custom_api_profiles: [{ profile_id: "api:original", expected_state_version: 3 }],
+    selected_resource_refs: [
+      {
+        kind: "asset" as const,
+        resource_id: "asset-old",
+        asset_id: "asset-old",
+        content_sha256: "a".repeat(64),
+        size_bytes: "17",
+        mime_type: "text/plain",
+        filename: "old.txt",
+        source_scope: { kind: "personal" as const, id: "owner" },
+      },
+    ],
     requested_model_label: "model:original",
     trace: { source: "kokoro-bff" as const, agent: "deep", thinking: true, mcp_servers: ["diagnostic-only"] },
   },
@@ -37,7 +49,9 @@ test("regeneration copies only frozen execution choices and creates distinct nat
       return { run_id: command.runId, user_message_id: command.userMessageId, assistant_message_id: command.assistantMessageId }
     },
   } as never
-  const service = new ChatTurnApplicationService(repository, { generate: (material) => createHash("sha256").update(material).digest("hex") })
+  const service = new ChatTurnApplicationService(repository, { generate: (material) => createHash("sha256").update(material).digest("hex") }, async () => {
+    throw new Error("regeneration must not resolve the original resources again")
+  })
   const result = await service.regenerate({
     tenantId: "tenant",
     subjectId: "owner",
@@ -60,6 +74,7 @@ test("regeneration copies only frozen execution choices and creates distinct nat
   assert.deepEqual(command.payload.launch.selected_skill_source_refs, ["skill:pinned"])
   assert.deepEqual(command.payload.launch.selected_mcp_connection_ids, ["connection:original"])
   assert.deepEqual(command.payload.launch.selected_custom_api_profiles, [{ profile_id: "api:original", expected_state_version: 3 }])
+  assert.deepEqual(command.payload.launch.selected_resource_refs, frozen.launch.selected_resource_refs)
   assert.equal(command.payload.launch.requested_model_label, "model:original")
   assert.equal(command.payload.launch.trace.mcp_servers, undefined)
   assert.equal(command.payload.launch.project_ref, null)

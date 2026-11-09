@@ -61,22 +61,79 @@ export const zLaunchRequest = z.object({
     .optional(),
   selected_resource_refs: z
     .array(
-      z.object({
-        kind: z.enum(["asset", "artifact"]),
-        resource_id: z
-          .string()
-          .min(1)
-          .max(191)
-          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/),
-        version_id: z
-          .string()
-          .min(1)
-          .max(191)
-          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/)
-          .optional(),
-      }),
+      z.union([
+        z
+          .object({
+            kind: z.literal("asset"),
+            resource_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            asset_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            content_sha256: z.string().min(64).max(64).regex(new RegExp("^[a-f0-9]{64}(?![\\s\\S])", "u")),
+            size_bytes: z
+              .string()
+              .min(1)
+              .max(20)
+              .regex(
+                new RegExp(
+                  "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4]|18446744073709551615)(?![\\s\\S])",
+                  "u",
+                ),
+              ),
+            mime_type: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9_.+-]+/[A-Za-z0-9_.+-]+(?![\\s\\S])", "u")),
+            filename: z
+              .string()
+              .min(1)
+              .max(255)
+              .regex(new RegExp("^[^\\u0000-\\u001f\\u007f/\\\\\\uD800-\\uDFFF]+(?![\\s\\S])", "u"))
+              .refine((value) => ![".", ".."].includes(value)),
+            source_scope: z
+              .object({
+                kind: z.enum(["personal", "project"]),
+                id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+              })
+              .strict(),
+          })
+          .strict(),
+        z
+          .object({
+            kind: z.literal("artifact"),
+            resource_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            asset_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            content_sha256: z.string().min(64).max(64).regex(new RegExp("^[a-f0-9]{64}(?![\\s\\S])", "u")),
+            size_bytes: z
+              .string()
+              .min(1)
+              .max(20)
+              .regex(
+                new RegExp(
+                  "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4]|18446744073709551615)(?![\\s\\S])",
+                  "u",
+                ),
+              ),
+            mime_type: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9_.+-]+/[A-Za-z0-9_.+-]+(?![\\s\\S])", "u")),
+            filename: z
+              .string()
+              .min(1)
+              .max(255)
+              .regex(new RegExp("^[^\\u0000-\\u001f\\u007f/\\\\\\uD800-\\uDFFF]+(?![\\s\\S])", "u"))
+              .refine((value) => ![".", ".."].includes(value)),
+            source_scope: z
+              .object({
+                kind: z.enum(["conversation"]),
+                id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+              })
+              .strict(),
+            source_run_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+          })
+          .strict(),
+      ]),
     )
     .max(16)
+    .refine(
+      (values) =>
+        new Set(values.map((value) => value.kind + ":" + value.resource_id)).size === values.length &&
+        Array.from(JSON.stringify(values)).reduce((size, char) => size + (char.charCodeAt(0) > 127 ? char.length * 6 : 1), 0) <= 32768 &&
+        values.every((value) => value.kind !== "asset" || value.resource_id === value.asset_id),
+    )
     .optional(),
   personal_context: z
     .object({

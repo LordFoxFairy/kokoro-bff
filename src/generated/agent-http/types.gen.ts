@@ -49,13 +49,37 @@ export type LaunchRequest = {
     expected_state_version: number
   }>
   /**
-   * Opaque owner references selected for this Run. Only asset/artifact IDs and an optional version ID are accepted; URLs, content, identities and digests are forbidden. Omission or [] selects none.
+   * Private owner-resolved inputs frozen by BFF, unique by kind/resource_id in original order. Asset resource_id equals asset_id; personal source scope matches the trusted user subject, project source scope matches launch project_ref. Artifact source conversation and source_run_id are provenance, not the consumer run_id or authority. No version_id, URL or content. Omission or [] preserves prior request bytes. Canonical ASCII JSON is limited to 32768 bytes.
    */
-  selected_resource_refs?: Array<{
-    kind: "asset" | "artifact"
-    resource_id: string
-    version_id?: string
-  }>
+  selected_resource_refs?: Array<
+    | {
+        kind: "asset"
+        resource_id: string
+        asset_id: string
+        content_sha256: string
+        size_bytes: string
+        mime_type: string
+        filename: string
+        source_scope: {
+          kind: "personal" | "project"
+          id: string
+        }
+      }
+    | {
+        kind: "artifact"
+        resource_id: string
+        asset_id: string
+        content_sha256: string
+        size_bytes: string
+        mime_type: string
+        filename: string
+        source_scope: {
+          kind: "conversation"
+          id: string
+        }
+        source_run_id: string
+      }
+  >
   /**
    * Private BFF-owned personal snapshot bound to the trusted human actor and tenant. Omitted/null preserves pre-8.11 request bytes; knowledge items have unique knowledge_id values. Not public display or tool authority.
    */
