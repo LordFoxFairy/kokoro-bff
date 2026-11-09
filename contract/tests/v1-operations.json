@@ -1015,6 +1015,11 @@
       "method": "GET",
       "path": "/v1/sessions/{id}/runs/{runId}/display",
       "operation_id": "getSessionRunDisplay"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/scheduled-tasks/executions",
+      "operation_id": "listScheduledTaskExecutions"
     }
   ]
 }

@@ -165,7 +165,6 @@ test("unmatched Product routes keep the BFF error envelope without calling any o
     SESSION_ADMISSION,
     SCHEDULED_TASK_DISPATCHER,
     SCHEDULED_AGENT_DISPATCHER,
-    SCHEDULED_AGENT_TERMINAL_CONSUMER,
     SKILL_AUTHORIZATION,
   } = await import("../dist/common/tokens.js")
   let ownerCalls = 0
@@ -222,7 +221,6 @@ test("unmatched Product routes keep the BFF error envelope without calling any o
     PROJECT_SCOPE_RELEASE_DISPATCHER,
     SCHEDULED_TASK_DISPATCHER,
     SCHEDULED_AGENT_DISPATCHER,
-    SCHEDULED_AGENT_TERMINAL_CONSUMER,
   ])
     builder.overrideProvider(token).useValue(null)
   const module = await builder.compile()
@@ -363,7 +361,6 @@ test("production Nest listener begins worker drain during an active request and 
     BFF_DATABASE,
     PROJECT_SCOPE_RELEASE_DISPATCHER,
     SCHEDULED_AGENT_DISPATCHER,
-    SCHEDULED_AGENT_TERMINAL_CONSUMER,
     SCHEDULED_TASK_DISPATCHER,
   } = await import("../dist/common/tokens.js")
   const config = loadConfig({
@@ -435,7 +432,6 @@ test("production Nest listener begins worker drain during an active request and 
         AGUI_PROJECTOR,
         PROJECT_SCOPE_RELEASE_DISPATCHER,
         SCHEDULED_AGENT_DISPATCHER,
-        SCHEDULED_AGENT_TERMINAL_CONSUMER,
         SCHEDULED_TASK_DISPATCHER,
       ].map((token) => ({
         token,
@@ -680,7 +676,6 @@ test("production Nest retires AG-UI transports before worker drain while retaini
         tokens.AGUI_PROJECTOR,
         tokens.PROJECT_SCOPE_RELEASE_DISPATCHER,
         tokens.SCHEDULED_AGENT_DISPATCHER,
-        tokens.SCHEDULED_AGENT_TERMINAL_CONSUMER,
         tokens.SCHEDULED_TASK_DISPATCHER,
       ].map((token) => ({
         token,
@@ -1183,7 +1178,6 @@ test("production Nest collects finite shutdown failures without skipping cleanup
     BFF_DATABASE,
     PROJECT_SCOPE_RELEASE_DISPATCHER,
     SCHEDULED_AGENT_DISPATCHER,
-    SCHEDULED_AGENT_TERMINAL_CONSUMER,
     SCHEDULED_TASK_DISPATCHER,
   } = await import("../dist/common/tokens.js")
   const config = loadConfig({
@@ -1195,7 +1189,7 @@ test("production Nest collects finite shutdown failures without skipping cleanup
   })
   const scenarios = [
     { name: "Agent cancellation synchronous throw", token: AGENT_CANCELLATION_DISPATCHER, synchronous: true, category: "bff_agent_dispatch_shutdown_failed" },
-    { name: "Scheduled terminal rejection", token: SCHEDULED_AGENT_TERMINAL_CONSUMER, synchronous: false, category: "bff_scheduled_task_shutdown_failed" },
+    { name: "Scheduled activation rejection", token: SCHEDULED_AGENT_DISPATCHER, synchronous: false, category: "bff_scheduled_task_shutdown_failed" },
     { name: "AG-UI projector rejection", token: AGUI_PROJECTOR, synchronous: false, category: "bff_agui_projector_shutdown_failed" },
     {
       name: "Project scope-release rejection",
@@ -1237,7 +1231,6 @@ test("production Nest collects finite shutdown failures without skipping cleanup
         AGUI_PROJECTOR,
         PROJECT_SCOPE_RELEASE_DISPATCHER,
         SCHEDULED_AGENT_DISPATCHER,
-        SCHEDULED_AGENT_TERMINAL_CONSUMER,
         SCHEDULED_TASK_DISPATCHER,
       ].map((token) => ({
         token,
@@ -1280,9 +1273,7 @@ test("production Nest collects finite shutdown failures without skipping cleanup
               .filter((worker) => worker.stop.mock.callCount() !== 1)
               .map((worker) => ({ token: String(worker.token), calls: worker.stop.mock.callCount() })),
             agentStopOrder: stopEvents.filter(({ token }) => token === AGENT_CANCELLATION_DISPATCHER || token === AGENT_DISPATCH_DISPATCHER),
-            scheduledStopOrder: stopEvents.filter(
-              ({ token }) => token === SCHEDULED_AGENT_TERMINAL_CONSUMER || token === SCHEDULED_AGENT_DISPATCHER || token === SCHEDULED_TASK_DISPATCHER,
-            ),
+            scheduledStopOrder: stopEvents.filter(({ token }) => token === SCHEDULED_AGENT_DISPATCHER || token === SCHEDULED_TASK_DISPATCHER),
             poolEndCalls: poolEnd.mock.callCount(),
             redisCloseCalls: redisClose.mock.callCount(),
             redisDestroyCalls: redisDestroy.mock.callCount(),
@@ -1298,7 +1289,7 @@ test("production Nest collects finite shutdown failures without skipping cleanup
               { token, phase: "called" },
               { token, phase: "settled" },
             ]),
-            scheduledStopOrder: [SCHEDULED_AGENT_TERMINAL_CONSUMER, SCHEDULED_AGENT_DISPATCHER, SCHEDULED_TASK_DISPATCHER].flatMap((token) => [
+            scheduledStopOrder: [SCHEDULED_AGENT_DISPATCHER, SCHEDULED_TASK_DISPATCHER].flatMap((token) => [
               { token, phase: "called" },
               { token, phase: "settled" },
             ]),

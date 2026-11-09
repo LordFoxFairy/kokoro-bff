@@ -386,8 +386,7 @@ describe("Agent HTTP7 frozen BFF project projection", () => {
       const url = `http://127.0.0.1:${server.address().port}`
       const config = { agentEnabled: true, upstreams: { agents: url }, domain: "fixture.invalid", upstreamSecret: "fixture-secret" }
       const { AgentOutboxDelivery } = await import("../dist/infrastructure/clients/agent/outbox-delivery.js")
-      const { ScheduledAgentDispatchDelivery } = await import("../dist/infrastructure/clients/agent/scheduled-dispatch-delivery.js")
-      await exercise(received, new AgentOutboxDelivery(config), new ScheduledAgentDispatchDelivery(config))
+      await exercise(received, new AgentOutboxDelivery(config))
     } finally {
       server.closeAllConnections()
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
@@ -418,12 +417,9 @@ describe("Agent HTTP7 frozen BFF project projection", () => {
       payload,
     }
   }
-  it("sends explicit nullable scope for Chat and Scheduled without rewriting the frozen command", async () => {
-    await peer(async (received, chat, scheduled) => {
-      for (const [delivery, source] of [
-        [chat, "kokoro-bff"],
-        [scheduled, "kokoro-bff-scheduler"],
-      ]) {
+  it("sends explicit nullable scope through the sole ordinary dispatcher without rewriting the frozen command", async () => {
+    await peer(async (received, chat) => {
+      for (const [delivery, source] of [[chat, "kokoro-bff"]]) {
         for (const project of [undefined, "project_frozen_original"]) {
           const launch = saved(source, project)
           if (delivery === chat) launch.project_ref = project ?? null
@@ -439,15 +435,12 @@ describe("Agent HTTP7 frozen BFF project projection", () => {
           assert.deepEqual(wire.body.selected_skill_source_refs, [])
         }
       }
-      assert.equal(received.length, 4)
+      assert.equal(received.length, 2)
     })
   })
   it("rejects forged or malformed saved scopes before any owner request", async () => {
-    await peer(async (received, chat, scheduled) => {
-      for (const [delivery, source] of [
-        [chat, "kokoro-bff"],
-        [scheduled, "kokoro-bff-scheduler"],
-      ]) {
+    await peer(async (received, chat) => {
+      for (const [delivery, source] of [[chat, "kokoro-bff"]]) {
         const base = saved(source, "project_frozen_original")
         for (const launch of [
           { ...base, project_ref: "project_forged" },
@@ -461,10 +454,6 @@ describe("Agent HTTP7 frozen BFF project projection", () => {
         }
       }
       const canonical = { ...saved("kokoro-bff", "observational-project"), project_ref: "project_canonical" }
-      assert.deepEqual(await scheduled.deliver(command({ ...saved("kokoro-bff-scheduler"), personal_context: null }), 2000), {
-        outcome: "not_admitted",
-        errorCode: "agent_launch_invalid",
-      })
       assert.deepEqual(
         await chat.deliver(
           { ...command({ schema_version: 3, launch: { ...canonical, personal_context: null } }), executionProjectRef: "project_canonical" },

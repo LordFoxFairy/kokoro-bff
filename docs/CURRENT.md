@@ -1,3 +1,9 @@
+## 2026-11-09 A‑12 正式 Chat 接线候选
+
+本片以46c061f为父：Scheduled activation与普通Conversation/双Message/outbox/AG‑UI注册同事务提交，普通dispatcher唯一发送；专用scheduled发送/terminal consumer/source ledger已退休。真实source exhausted才释放后继，不把submitted或Scheduler exhausted当执行成功。Public28.23增加execution分页投影和任务Project过滤，结果复用正式私有会话。
+
+主控fresh隔离PG 9/9通过（0skip，schema回收），包含queued后继结果ID pair-null回归；类型/build/lint通过，独审未见剩余确定阻断。当前完整default实际2403PASS/10FAIL/2条件SKIP、contract实际1347PASS/8FAIL；其中新增版本负控硬码已修并定向通过，其余失败按父基线核对，未删有效断言或改历史hash。完整格式有5个未改文件既有告警，变更路径单独格式通过。未称完整门全绿；原PR交付候选用于后续App固定来源和真实到点浏览器验收，尚非A‑12产品闭环，未merge/main部署，正常数据未改。
+
 ## A‑03：打断并发送（BFF owner 候选）
 
 Public 28.21 给既有 Message Create 加 exact `interrupt_run_id`。正常 FIFO、成功三 ID 和原摘要保持；取消和后继同事务，不改 canonical SQL 或 Agent wire。真实 Nest/PG 在旧路由复现 400；候选下两新键等同一个 Conversation 锁，放锁后仅一笔 202、一笔 409，取消和后继各一，同键跨 head 回原三 ID，陈旧目标零写，原租约不越过真正终态。隔离资源已回收。该验收用实际 BFF projector 的 owner terminal 输入，未运行 Agent Worker 或 App，后续分别补齐，不冒称取消已完成。

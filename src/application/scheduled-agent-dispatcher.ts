@@ -92,6 +92,7 @@ export class ScheduledAgentDispatcher {
   }
   private async execute() {
     if (Date.now() < this.nextAttemptAt) return 0
+    await this.repository.reconcileActive()
     const results = await Promise.allSettled(Array.from({ length: this.options.concurrency ?? 4 }, () => this.executeOne()))
     if (results.some((result) => result.status === "rejected")) throw new Error("SCHEDULED_AGENT_DISPATCH_CYCLE_FAILED")
     this.failureCount = 0
@@ -130,9 +131,8 @@ export class ScheduledAgentDispatcher {
       }
     }
     const delay = this.retryDelay(command.attemptCount)
-    if (result.outcome === "admitted") await this.repository.markAdmitted(lease)
-    else if (result.outcome === "unknown") await this.repository.markUnknown(lease, delay, result.errorCode)
-    else await this.repository.markNotAdmitted(lease, delay, result.errorCode)
+    if (result.outcome === "unknown") await this.repository.markUnknown(lease, delay, result.errorCode)
+    else if (result.outcome === "not_admitted") await this.repository.markNotAdmitted(lease, delay, result.errorCode)
     return 1
   }
   private observeFailure(_error: unknown): void {

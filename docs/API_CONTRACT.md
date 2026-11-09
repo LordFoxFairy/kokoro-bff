@@ -1,3 +1,11 @@
+## A‑12 执行记录读面（Public28.23，实施中）
+
+`GET /v1/scheduled-tasks/executions` 只读当前 tenant/subject 的执行记录；可按 `task_id`、`project_id` 精确过滤。`limit` 默认20、1～50；不透明 `cursor` 绑定当前身份与过滤条件，按冻结 occurrence 和 execution ID 降序翻页。分页不是历史快照；后续状态读取当前事实。
+
+响应 `data={executions,next_cursor}`；execution 包含 `execution_id/task_id/task_title/occurrence_at/state/conversation_id/project_id/run_id/assistant_message_id/completed_at`。`state` 为 queued/admitted/streaming/completed/failed/cancelled；本地 submitted 仍是 queued，完成和取消来自正式 Message/owner terminal。Conversation 尚未建立、删除或不可见时两个结果链接ID为空；不在列表复制终稿。结果仍使用既有私有会话 reader。Scheduler exhausted 只表示排程结束，不等于执行成功。
+
+原任务列表新增可选 `project_id` 精确过滤；创建上下文与筛选分离。查询拒绝重复、空值和未知字段；执行读不修改 Scheduler 或重派 Run。无新增表、权限协议或兼容读路径。
+
 ## A‑03：同 Run 补充消息（Public 28.22 候选）
 
 沿原 `POST /v1/sessions/{id}/runs/{runId}/control`，仅 `run.steer` 的 202 回执新增 `message_id`（BFF 的 canonical user Message，非客户端输入标识）。输入、取消/继续回执、端点及 Share 形状不变。首次提交在 BFF 持久接纳后返回 `pending`，不表示已注入。使用相同 Run、键和原 body 重放会读最新状态；已授权的原命令可在原 Run 结束后读回，同键改意图返回 409。现私有会话读取按原 Message status 承接 `pending` / `completed` / `failed`，不增加状态接口或 SSE 帧。

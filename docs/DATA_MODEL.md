@@ -1,3 +1,17 @@
+## 2026-11-08 · A‑12 定时执行接入正式会话（实施门）
+
+当前态：scheduled scope/dispatch/source 独立派发 Agent，未建立普通 Conversation、Message 或 immutable Chat submission；因此普通模型准入与终稿读取不能以这些内部记录证明提交。目标仍是原 A‑12 的到点执行、执行记录和会话结果，不新增 owner/服务/认证协议。
+
+实施决定：保留 Scheduler callback 的冻结 occurrence、幂等 202 与每 task 的排序门。accept 时冻结由 tenant/task 确定性派生的 `conv_<uuid>`；activation 按 occurrence 固定当前项后，调用现有原子 Chat turn 提交，以原 occurrence Run 和稳定消息/key 建立 Conversation、双 Message、普通 outbox 与标准 AG‑UI consumer。消息序号在 activation 分配。**普通 dispatcher 是唯一 POST Agent 的发送者**，删除 scheduled 的直连实现及独立 source consumer/ledger，模型提交者证明和终稿读取复用普通链。
+
+内部提交与 Agent 接纳分开：`submitted` 仅表示普通 Chat turn 已持久排队；普通 outbox 的真实 admission 才结算为 admitted，明确未接纳失败才标 failed。标准 AG‑UI 投影在同事务关联 terminal，只有同 session 连续 source 已 exhausted 才释放 scheduled active gate。失败/取消沿真实 terminal 分类，不以 terminal 代替成功。
+
+Chat 提交的内部 `scheduledActivation` 证明绑定 tenant/task/dispatch/run/owner/token/fence，创建前在同事务核数据库 lease 和 active；它不进入任何 HTTP DTO。锁序沿现 Chat 的 Project→Conversation→stream，再核 scheduled scope/dispatch；禁止持 scheduled 锁调用另开事务的 Chat 提交。提交未知/进程崩溃重放同 Run/key，过期 worker 不新增 turn；已 202 occurrence 在任务暂停/删除后继续按冻结 snapshot 恢复，Conversation 墓碑不复活。旧 `scheduled:` 私有 scope 不做 alias/双读，fresh schema 验证新组合；不操作现持久数据。
+
+写区仅 BFF scheduled activation/装配、Chat turn 内部输入及事务、标准 AG‑UI progress、唯一 canonical SQL 和直接行为回归。删除专用 delivery/terminal/source-digest 与仅服务旧结构的测试；有效重放、FIFO、取消/删除恢复与租户断言由新生产链承接。公开执行记录读面及 App Updates/结果链接在此基础上后继交付，按 BFF canonical OpenAPI→App 固定消费顺序，不暴露原始内部事件。
+
+最低充分验收：现 scheduled 与 Chat/AG‑UI 真实 PG 集成承接排序、双 worker fencing、提交前后未知重放、任务删除后的已接纳恢复、Conversation 墓碑和 terminal 非 exhausted；再一次真实到点→模型正式准入→标准 final segment→浏览器执行记录/结果及刷新。现 HTTP/Worker+确定性模型验收只说明对应片，不能代替正式 BFF 模型准入或完整 A‑12。
+
 ## A‑03：同 Run 补充消息（候选）
 
 唯一 `database/schema.sql` 新增 `bff_run_steer`：按可信 tenant、subject、Conversation 和原幂等键摘要定位，指纹区分原 Run、客户端消息标识和完整内容。持久记录只保存原目标、身份、稳定 Agent 命令 ID、Message ID、投递进度及已确认的安全失败码；正文只存同事务的一条 `bff_message` user 行。按 Project → Conversation → AG-UI stream 锁序校验当前已开始的 Run；同键先回读原记录，不替换 Run。投递记录的唯一 Message ID 使补充消息不影响启动消息的 MCP/API 选择。

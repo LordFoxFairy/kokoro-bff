@@ -115,7 +115,7 @@ async function runSignalChild(signal: NodeJS.Signals | null, scenario: SignalSce
     const workerNames = [
       "AGENT_DISPATCH_DISPATCHER", "AGENT_CANCELLATION_DISPATCHER", "AGUI_PROJECTOR",
       "PROJECT_SCOPE_RELEASE_DISPATCHER", "SCHEDULED_AGENT_DISPATCHER",
-      "SCHEDULED_AGENT_TERMINAL_CONSUMER", "SCHEDULED_TASK_DISPATCHER",
+      "SCHEDULED_TASK_DISPATCHER",
     ];
     const workers = workerNames.map((name) => ({ name, token: tokens[name],
       start() {
@@ -273,8 +273,8 @@ function childEvents(child: ChildResult, event: string): FixtureEvent[] {
 
 function assertIndependentCleanup(child: ChildResult): void {
   const stops = childEvents(child, "worker_stop_started")
-  assert.equal(stops.length, 7, "one real application close must invoke each of the seven worker boundaries once")
-  assert.equal(new Set(stops.map((event) => event.name)).size, 7)
+  assert.equal(stops.length, 6, "one real application close must invoke each of the six current worker boundaries once")
+  assert.equal(new Set(stops.map((event) => event.name)).size, 6)
   for (const event of ["pool_close_started", "pool_closed", "redis_close_started", "redis_closed"]) assert.equal(childEvents(child, event).length, 1)
   assert.doesNotMatch(child.stderr, /SENSITIVE_|postgresql:\/\//u)
 }
@@ -286,7 +286,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     assert.equal(child.signal, null)
     assert.deepEqual(childEvents(child, "ready"), [{ event: "ready", health: 200, ready: 200 }])
     assert.equal(childEvents(child, "listener_closed").length, 1)
-    assert.equal(childEvents(child, "worker_stopped").length, 7)
+    assert.equal(childEvents(child, "worker_stopped").length, 6)
     assertIndependentCleanup(child)
     assert.equal(child.stderr, "")
   })
@@ -297,7 +297,7 @@ test("main preserves a nonzero shutdown outcome after a real Nest worker throw a
   assert.equal(child.code, 1)
   assert.equal(child.signal, null)
   assertIndependentCleanup(child)
-  assert.equal(childEvents(child, "worker_stopped").length, 6)
+  assert.equal(childEvents(child, "worker_stopped").length, 5)
   assert.match(child.stderr, /bff_agent_dispatch_shutdown_failed/u)
   assert.doesNotMatch(child.stderr, /shutdown deadline exceeded/u)
 })
@@ -329,14 +329,14 @@ for (const scenario of ["worker_hang", "pool_hang", "redis_hang"] as const) {
       assert.equal(childEvents(child, "redis_close_started").length, 0)
     } else if (scenario === "pool_hang") {
       assert.deepEqual(childEvents(child, "pool_close_started"), [
-        { event: "pool_close_started", listener_listening: false, settled_workers: 7, control_channel_open: false },
+        { event: "pool_close_started", listener_listening: false, settled_workers: 6, control_channel_open: false },
       ])
       assert.equal(childEvents(child, "pool_closed").length, 0)
       assert.equal(childEvents(child, "redis_close_started").length, 0)
     } else {
       assert.equal(childEvents(child, "pool_closed").length, 1)
       assert.deepEqual(childEvents(child, "redis_close_started"), [
-        { event: "redis_close_started", listener_listening: false, settled_workers: 7, control_channel_open: false },
+        { event: "redis_close_started", listener_listening: false, settled_workers: 6, control_channel_open: false },
       ])
       assert.equal(childEvents(child, "redis_closed").length, 0)
     }

@@ -9,7 +9,7 @@ import type {
   SchedulerDispatchResponse,
   SchedulerDispatchReceiptRepository,
 } from "../../application/scheduled/scheduler-dispatch-receipt-repository.js"
-import { buildScheduledAgentLaunch } from "../../infrastructure/clients/agent/index.js"
+import { buildScheduledAgentLaunch, scheduledConversationId } from "../../infrastructure/clients/agent/index.js"
 import { schedulerDispatchDigest, schedulerDispatchScope, schedulerOccurrenceIdentity } from "../../infrastructure/clients/scheduler/dispatch-identity.js"
 import { schedulerScheduleName } from "../../infrastructure/clients/scheduler/schedule.js"
 import { parseSchedulerDispatchWebhook } from "../../infrastructure/clients/scheduler/webhook-contract.js"
@@ -195,7 +195,7 @@ export async function schedulerDispatch(
     const launch = buildScheduledAgentLaunch({
       identity,
       requestId: wire.requestId,
-      sessionId: `scheduled:${taskId}`,
+      sessionId: scheduledConversationId(wire.tenantId, taskId),
       occurrenceIdentity: schedulerOccurrenceIdentity({ tenantId: wire.tenantId, schedule: wire.schedule, occurrence: wire.occurrence }),
       content: record.task.prompt,
       ...(record.task.projectId === undefined ? {} : { projectRef: record.task.projectId }),

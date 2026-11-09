@@ -1,3 +1,21 @@
+### A‑12 执行读投影
+
+执行记录直接投影本 owner 的 scheduled dispatch/scope、当前 Task、普通 Conversation/Message 与既有 durable Run terminal；不新增执行事实库或第二个终稿 reader。当前项目可见性和墓碑约束控制结果链接；分页绑定身份/过滤且排序使用冻结 occurrence，不随状态更新时间重排。Web Updates 通过同源 adapter 消费公开只读接口，结果链接复用正式会话页。
+
+## 2026-11-08 · A‑12 定时执行接入正式会话（实施门）
+
+当前态：scheduled scope/dispatch/source 独立派发 Agent，未建立普通 Conversation、Message 或 immutable Chat submission；因此普通模型准入与终稿读取不能以这些内部记录证明提交。目标仍是原 A‑12 的到点执行、执行记录和会话结果，不新增 owner/服务/认证协议。
+
+实施决定：保留 Scheduler callback 的冻结 occurrence、幂等 202 与每 task 的排序门。accept 时冻结由 tenant/task 确定性派生的 `conv_<uuid>`；activation 按 occurrence 固定当前项后，调用现有原子 Chat turn 提交，以原 occurrence Run 和稳定消息/key 建立 Conversation、双 Message、普通 outbox 与标准 AG‑UI consumer。消息序号在 activation 分配。**普通 dispatcher 是唯一 POST Agent 的发送者**，删除 scheduled 的直连实现及独立 source consumer/ledger，模型提交者证明和终稿读取复用普通链。
+
+内部提交与 Agent 接纳分开：`submitted` 仅表示普通 Chat turn 已持久排队；普通 outbox 的真实 admission 才结算为 admitted，明确未接纳失败才标 failed。标准 AG‑UI 投影在同事务关联 terminal，只有同 session 连续 source 已 exhausted 才释放 scheduled active gate。失败/取消沿真实 terminal 分类，不以 terminal 代替成功。
+
+Chat 提交的内部 `scheduledActivation` 证明绑定 tenant/task/dispatch/run/owner/token/fence，创建前在同事务核数据库 lease 和 active；它不进入任何 HTTP DTO。锁序沿现 Chat 的 Project→Conversation→stream，再核 scheduled scope/dispatch；禁止持 scheduled 锁调用另开事务的 Chat 提交。提交未知/进程崩溃重放同 Run/key，过期 worker 不新增 turn；已 202 occurrence 在任务暂停/删除后继续按冻结 snapshot 恢复，Conversation 墓碑不复活。旧 `scheduled:` 私有 scope 不做 alias/双读，fresh schema 验证新组合；不操作现持久数据。
+
+写区仅 BFF scheduled activation/装配、Chat turn 内部输入及事务、标准 AG‑UI progress、唯一 canonical SQL 和直接行为回归。删除专用 delivery/terminal/source-digest 与仅服务旧结构的测试；有效重放、FIFO、取消/删除恢复与租户断言由新生产链承接。公开执行记录读面及 App Updates/结果链接在此基础上后继交付，按 BFF canonical OpenAPI→App 固定消费顺序，不暴露原始内部事件。
+
+最低充分验收：现 scheduled 与 Chat/AG‑UI 真实 PG 集成承接排序、双 worker fencing、提交前后未知重放、任务删除后的已接纳恢复、Conversation 墓碑和 terminal 非 exhausted；再一次真实到点→模型正式准入→标准 final segment→浏览器执行记录/结果及刷新。现 HTTP/Worker+确定性模型验收只说明对应片，不能代替正式 BFF 模型准入或完整 A‑12。
+
 ## A‑07：Project Todo（D0，待实现与验收）
 
 BFF Projects 继续唯一拥有手动项目待办。替换现只有读的 task 路由接线为同一 `/v1/projects/{projectId}/tasks` 资源读写；沿原 Projects module 和当前用户准入，不加全局 dispatcher、SDK、缓存或独立服务。复用原表、现有回执和父 Project 行锁。项目所有者（可信 tenant + subject、未墓碑）才能读写；不新增 IAM action，不把团队、Agent Run Todo、ScheduledTask 或 Conversation 当此资源。

@@ -482,11 +482,13 @@ export async function commitChatTurn(
       const project =
         scope.canonicalProjectId === null
           ? null
-          : (await query<{ instruction: string | null; selected_skill_installation_ids: string[] }>(
-              `SELECT instruction, selected_skill_installation_ids
+          : (
+              await query<{ instruction: string | null; selected_skill_installation_ids: string[] }>(
+                `SELECT instruction, selected_skill_installation_ids
                  FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
-              [command.tenantId, command.subjectId, scope.canonicalProjectId],
-            )).rows[0]
+                [command.tenantId, command.subjectId, scope.canonicalProjectId],
+              )
+            ).rows[0]
       if (project === undefined) throw new Error("CHAT_TURN_PROJECT_NOT_FOUND")
       if (command.skillSelection !== undefined) {
         if (command.skillSelection.projectId !== scope.canonicalProjectId) throw new Error("CHAT_SKILL_SELECTION_CHANGED")
@@ -501,6 +503,40 @@ export async function commitChatTurn(
       const registered = await query(registration.text, registration.values)
       if (registered.rowCount !== 1) throw new Error("AGENT_DISPATCH_CONSUMER_REGISTRATION_FAILED")
       await query("SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE", [command.tenantId, command.conversationId])
+      if (command.scheduledActivation !== undefined) {
+        const activation = command.scheduledActivation
+        if (activation.tenantId !== command.tenantId || activation.runId !== command.runId) throw new Error("SCHEDULED_ACTIVATION_LOST")
+        // Parent Project / Conversation / stream are locked before the scheduled gate.
+        await query("SELECT 1 FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE", [activation.tenantId, activation.taskId])
+        const active = await query(
+          `SELECT 1 FROM bff_scheduled_agent_dispatch dispatch,bff_scheduled_agent_scope scope
+            WHERE dispatch.tenant_id=$1 AND dispatch.task_id=$2 AND dispatch.dispatch_id=$3 AND dispatch.run_id=$4
+              AND dispatch.lease_owner=$5 AND dispatch.lease_token=$6 AND dispatch.fence=$7
+              AND dispatch.status='leased' AND dispatch.lease_until>clock_timestamp()
+              AND dispatch.subject_id=$8 AND dispatch.idempotency_key=$9 AND dispatch.request_digest=$10
+              AND dispatch.user_message_id=$11 AND dispatch.assistant_message_id=$12
+              AND scope.tenant_id=dispatch.tenant_id AND scope.task_id=dispatch.task_id
+              AND scope.session_id=$13 AND scope.subject_id=$8
+              AND scope.active_dispatch_id=dispatch.dispatch_id AND scope.active_run_id=dispatch.run_id
+            FOR UPDATE OF dispatch`,
+          [
+            activation.tenantId,
+            activation.taskId,
+            activation.dispatchId,
+            activation.runId,
+            activation.leaseOwner,
+            activation.leaseToken,
+            activation.fence,
+            command.subjectId,
+            command.idempotencyKey,
+            command.requestDigest,
+            command.userMessageId,
+            command.assistantMessageId,
+            command.conversationId,
+          ],
+        )
+        if (active.rowCount !== 1) throw new Error("SCHEDULED_ACTIVATION_LOST")
+      }
       if (command.interruptRunId !== undefined) {
         // The stream lock fences owner terminal/head changes; the unique cancellation
         // record also excludes a different command from claiming the same Run.
@@ -577,6 +613,17 @@ export async function commitChatTurn(
         ],
       )
       if (inserted.rowCount !== 2) throw new Error("CHAT_MESSAGE_INSERT_FAILED")
+      if (command.scheduledActivation !== undefined) {
+        const activation = command.scheduledActivation
+        const submitted = await query(
+          `UPDATE bff_scheduled_agent_dispatch SET status='submitted',lease_owner=NULL,lease_token=NULL,lease_until=NULL,
+              last_error_code=NULL,last_error_at=NULL,updated_at=clock_timestamp()
+            WHERE tenant_id=$1 AND task_id=$2 AND dispatch_id=$3 AND run_id=$4
+              AND status='leased' AND lease_owner=$5 AND lease_token=$6 AND fence=$7 AND lease_until>clock_timestamp()`,
+          [activation.tenantId, activation.taskId, activation.dispatchId, activation.runId, activation.leaseOwner, activation.leaseToken, activation.fence],
+        )
+        if (submitted.rowCount !== 1) throw new Error("SCHEDULED_ACTIVATION_LOST")
+      }
       const queuedCursor = await startWithin(
         deadline,
         "CHAT_TURN_BUDGET_EXHAUSTED",

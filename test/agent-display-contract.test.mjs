@@ -52,7 +52,7 @@ test("Public tool adjunct delta restores every original Public28.10 byte, includ
     raw + "\n",
     raw.replace("getMessageFeedback", "changedFeedback"),
     raw.replace("maxItems: 128", "maxItems: 129"),
-    raw.replace("  version: 28.22.0", "  version: 28.20.0"),
+    raw.replace(/^  version: [0-9.]+$/mu, "  version: 28.20.0"),
   ]) {
     assert.notEqual(bad, raw)
     assert.throws(() => restorePublic2810ToolFactsContract(bad), /drift/)

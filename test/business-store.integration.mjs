@@ -125,7 +125,7 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
   let app
   try {
     await pool.query(
-      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project CASCADE",
+      "DROP TABLE IF EXISTS bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
@@ -300,7 +300,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
   }
   try {
     await schemaPool.query(
-      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project CASCADE",
+      "DROP TABLE IF EXISTS bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project CASCADE",
     )
     await schemaPool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
@@ -387,7 +387,13 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
           assertion: request.headers["x-kokoro-identity-assertion-ref"],
         })
         response.setHeader("content-type", "application/json")
-        response.end(JSON.stringify({ data: { run_id: body.run_id }, meta: { request_id: request.headers["x-kokoro-request-id"] } }))
+        response.statusCode = 202
+        response.end(
+          JSON.stringify({
+            data: { run_id: body.run_id, session_id: body.session_id, replayed: false },
+            meta: { request_id: request.headers["x-request-id"] },
+          }),
+        )
       })
     })
     agentBase = await listen(agent)
@@ -1142,7 +1148,6 @@ async function r237Fixture(t, lane) {
       BFF_DATABASE,
       PROJECT_SCOPE_RELEASE_DISPATCHER,
       SCHEDULED_AGENT_DISPATCHER,
-      SCHEDULED_AGENT_TERMINAL_CONSUMER,
       SCHEDULED_TASK_DISPATCHER,
       SESSION_ADMISSION,
     } = await import("../dist/common/tokens.js")
@@ -1161,7 +1166,6 @@ async function r237Fixture(t, lane) {
       AGUI_PROJECTOR,
       PROJECT_SCOPE_RELEASE_DISPATCHER,
       SCHEDULED_AGENT_DISPATCHER,
-      SCHEDULED_AGENT_TERMINAL_CONSUMER,
       SCHEDULED_TASK_DISPATCHER,
     ]) {
       builder.overrideProvider(token).useValue(r237IdleWorker)

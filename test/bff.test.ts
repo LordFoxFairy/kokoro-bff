@@ -1189,7 +1189,6 @@ describe("kokoro-bff versioned HTTP contracts", () => {
       MCP_AUTHORIZATION,
       PROJECT_SCOPE_RELEASE_DISPATCHER,
       SCHEDULED_AGENT_DISPATCHER,
-      SCHEDULED_AGENT_TERMINAL_CONSUMER,
       SCHEDULED_TASK_DISPATCHER,
       SESSION_ADMISSION,
     } = await import("../dist/common/tokens.js")
@@ -1256,7 +1255,6 @@ describe("kokoro-bff versioned HTTP contracts", () => {
       AGUI_PROJECTOR,
       PROJECT_SCOPE_RELEASE_DISPATCHER,
       SCHEDULED_AGENT_DISPATCHER,
-      SCHEDULED_AGENT_TERMINAL_CONSUMER,
       SCHEDULED_TASK_DISPATCHER,
     ])
       builder.overrideProvider(token).useValue(null)

@@ -1,5 +1,6 @@
 // Build/test-only exact additive private snapshot change; no runtime downgrade.
 import { createHash } from "node:crypto"
+import { restorePublic2822ScheduledExecutionsContract } from "./scheduled-executions-public-contract.mjs"
 import { restorePublic2819ProjectTasksContract } from "./project-tasks-public-contract.mjs"
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
@@ -7,9 +8,11 @@ const accountProfileCurrentSha256 = "35a86f91e44beb1aeb6b17eca41d3bfdc79f11a4363
 const accountProfileParentSha256 = "ea0031103488daa1fcc0cca45fdd13f4d4061546ac4525c745ec47105649f7e7"
 
 export function restorePublic2821SteerContract(source) {
+  source = restorePublic2822ScheduledExecutionsContract(source)
   if (!/^  version: 28\.22\.0$/mu.test(source)) return source
   if (hash(source) !== "a3d71aa845265084f7965c06dc903e2a5bf24c47d23bceb9a19bcd5d991c08b4") throw Error("Steer Public28.22 child drift")
-  const field = "        message_id:\n          type: string\n          minLength: 1\n          description: Only present for run.steer; the BFF-owned user Message ID, not the client intent ID. Pending does not prove injection.\n"
+  const field =
+    "        message_id:\n          type: string\n          minLength: 1\n          description: Only present for run.steer; the BFF-owned user Message ID, not the client intent ID. Pending does not prove injection.\n"
   if (source.split(field).length !== 2) throw Error("Steer Public28.22 exact delta drift")
   const parent = source.replace(field, "").replace("  version: 28.22.0\n", "  version: 28.21.0\n")
   if (hash(parent) !== "a5ea4bb0ef1458a536e3b54e01049267aec2913d147f2ad7bb99a481197d0525") throw Error("Steer Public28.21 parent drift")
@@ -20,7 +23,8 @@ export function restorePublic2820InterruptContract(source) {
   source = restorePublic2821SteerContract(source)
   if (!/^  version: 28\.21\.0$/mu.test(source)) return source
   if (hash(source) !== "a5ea4bb0ef1458a536e3b54e01049267aec2913d147f2ad7bb99a481197d0525") throw Error("Interrupt Public28.21 child drift")
-  const field = "        interrupt_run_id:\n          type: string\n          minLength: 1\n          maxLength: 191\n          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])'\n          description: >-\n            For an existing session, name its exact active Run to cancel while accepting this\n            FIFO successor. The same key and input return the original receipt. A stale target\n            or a Run already claimed by another interrupt returns 409 run_delivery_conflict\n            without accepting a new message. Acceptance does not prove cancellation or bypass FIFO.\n"
+  const field =
+    "        interrupt_run_id:\n          type: string\n          minLength: 1\n          maxLength: 191\n          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])'\n          description: >-\n            For an existing session, name its exact active Run to cancel while accepting this\n            FIFO successor. The same key and input return the original receipt. A stale target\n            or a Run already claimed by another interrupt returns 409 run_delivery_conflict\n            without accepting a new message. Acceptance does not prove cancellation or bypass FIFO.\n"
   if (source.split(field).length !== 2) throw Error("Interrupt Public28.21 exact delta drift")
   const parent = source.replace(field, "").replace("  version: 28.21.0\n", "  version: 28.20.0\n")
   if (hash(parent) !== "c5fc7225901fa5b815cdb7ee5286354d7c4cabed9919676e6e86651fb9910783") throw Error("Interrupt Public28.20 parent drift")

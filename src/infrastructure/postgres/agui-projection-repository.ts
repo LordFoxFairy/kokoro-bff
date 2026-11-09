@@ -1,3 +1,4 @@
+import { projectScheduledChatTerminal } from "./scheduled-chat-progress.js"
 import { randomUUID } from "node:crypto"
 import { agUiReplayPayload } from "./agui-replay-payload.js"
 import {
@@ -449,7 +450,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
                WHERE dispatch.tenant_id=$1 AND dispatch.conversation_id=$2 AND dispatch.run_id=$3 AND message.role='assistant'`,
               [command.tenantId, command.sessionId, source.sourceRunId],
             )
-            const incoming = source.assistantUpdate.kind === "complete" ? source.assistantUpdate.finalSegmentId ?? null : null
+            const incoming = source.assistantUpdate.kind === "complete" ? (source.assistantUpdate.finalSegmentId ?? null) : null
             if ((stored.rows[0]?.final_segment_id ?? null) !== incoming) throw new AgUiSourceIdentityConflictError()
           }
           continue
@@ -624,6 +625,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
           [command.tenantId, command.sessionId, command.terminalRunId, stream.consumer_subject_id],
         )
         if (terminal.rowCount !== 1) throw new Error("AGUI_TERMINAL_DISPATCH_MISSING")
+        await projectScheduledChatTerminal(client, command.tenantId, command.sessionId, command.terminalRunId!)
       }
 
       const updated = await client.query(

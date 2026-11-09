@@ -2,13 +2,13 @@ import { BeforeApplicationShutdown, Inject, Injectable, Module, MiddlewareConsum
 import { DatabaseModule } from "../../common/database/database.module.js"
 import {
   BFF_CONFIG,
+  AGENT_DISPATCH_OUTBOX,
   BFF_DATABASE,
   BFF_POOL,
   SCHEDULER_DISPATCH_RECEIPTS,
   SCHEDULED_TASK_IDEMPOTENCY,
   SCHEDULED_AGENT_DISPATCHER,
   SCHEDULED_AGENT_DISPATCH_REPOSITORY,
-  SCHEDULED_AGENT_TERMINAL_CONSUMER,
   SCHEDULED_TASK_DISPATCHER,
   SCHEDULED_TASK_OUTBOX,
   SCHEDULED_TASK_READ_SERVICE,
@@ -17,6 +17,7 @@ import {
 import type { BffConfig } from "../../config/runtime.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import { PostgresScheduledTaskRepository } from "../../infrastructure/postgres/scheduled-task-repository.js"
+import { PostgresScheduledTaskExecutionReader } from "../../infrastructure/postgres/scheduled-task-execution-reader.js"
 import { SchedulerControlClient } from "../../infrastructure/clients/scheduler/control-client.js"
 import { SchedulerTaskStateReader } from "../../infrastructure/clients/scheduler/task-state-reader.js"
 import { ScheduledTaskReadService, type ScheduledTaskSnapshots } from "../../application/scheduled-task-read-service.js"
@@ -26,9 +27,9 @@ import type { ScheduledTaskOutboxRepository } from "../../application/scheduled/
 import type { ScheduledAgentDispatchRepository } from "../../application/scheduled/scheduled-agent-dispatch-repository.js"
 import { PostgresScheduledAgentDispatchRepository } from "../../infrastructure/postgres/scheduled-agent-dispatch-repository.js"
 import { ScheduledAgentDispatcher } from "../../application/scheduled-agent-dispatcher.js"
-import { ScheduledAgentTerminalConsumer } from "../../application/scheduled-agent-terminal-consumer.js"
-import { ScheduledAgentDispatchDelivery } from "../../infrastructure/clients/agent/scheduled-dispatch-delivery.js"
-import { ScheduledAgentTerminalSource } from "../../infrastructure/clients/agent/scheduled-terminal-source.js"
+import { ScheduledChatSubmission } from "../../infrastructure/postgres/scheduled-chat-submission.js"
+import { AgentDispatchModule } from "../agent-dispatch/agent-dispatch.module.js"
+import type { AgentDispatchOutboxRepository } from "../../application/agent-dispatch/agent-dispatch-outbox-repository.js"
 import { AgentRunsModule } from "../agent-runs/agent-runs.module.js"
 import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { ProjectAccessModule } from "../projects/project-access.module.js"
@@ -53,22 +54,15 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, BeforeApplicationShu
   public constructor(
     @Inject(SCHEDULED_TASK_DISPATCHER) private readonly dispatcher: ScheduledTaskOutboxDispatcher | null,
     @Inject(SCHEDULED_AGENT_DISPATCHER) private readonly agentDispatcher: ScheduledAgentDispatcher | null,
-    @Inject(SCHEDULED_AGENT_TERMINAL_CONSUMER) private readonly terminalConsumer: ScheduledAgentTerminalConsumer | null,
   ) {}
 
   public onModuleInit(): void {
     this.dispatcher?.start()
     this.agentDispatcher?.start()
-    this.terminalConsumer?.start()
   }
 
   public async beforeApplicationShutdown(): Promise<void> {
     let failed = false
-    try {
-      await this.terminalConsumer?.stop()
-    } catch {
-      failed = true
-    }
     try {
       await this.agentDispatcher?.stop()
     } catch {
@@ -87,9 +81,14 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, BeforeApplicationShu
 }
 
 @Module({
-  imports: [AuthenticationModule, ProjectAccessModule, AgentRunsModule, DatabaseModule],
+  imports: [AuthenticationModule, ProjectAccessModule, AgentRunsModule, AgentDispatchModule, DatabaseModule],
   providers: [
     ScheduledTaskReadMiddleware,
+    {
+      provide: PostgresScheduledTaskExecutionReader,
+      inject: [BFF_POOL],
+      useFactory: (pool: Pool): PostgresScheduledTaskExecutionReader => new PostgresScheduledTaskExecutionReader(pool),
+    },
     SchedulerDispatchMiddleware,
     ScheduledTaskMutationMiddleware,
     {
@@ -157,26 +156,12 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, BeforeApplicationShu
     },
     {
       provide: SCHEDULED_AGENT_DISPATCHER,
-      inject: [SCHEDULED_AGENT_DISPATCH_REPOSITORY, BFF_CONFIG],
-      useFactory: (repository: ScheduledAgentDispatchRepository, config: BffConfig): ScheduledAgentDispatcher | null => {
+      inject: [SCHEDULED_AGENT_DISPATCH_REPOSITORY, BFF_CONFIG, AGENT_DISPATCH_OUTBOX],
+      useFactory: (repository: ScheduledAgentDispatchRepository, config: BffConfig, chat: AgentDispatchOutboxRepository): ScheduledAgentDispatcher | null => {
         const baseUrl = config.upstreams.agents ?? null
         if (!config.agentEnabled || baseUrl === null) return null
-        return new ScheduledAgentDispatcher(repository, new ScheduledAgentDispatchDelivery(config), {
+        return new ScheduledAgentDispatcher(repository, new ScheduledChatSubmission(chat), {
           workerId: `bff-scheduled-agent-${process.pid}-${randomUUID()}`,
-          concurrency: 4,
-          settlementReserveMs: 500,
-          onError: scheduledWorkerLog,
-        })
-      },
-    },
-    {
-      provide: SCHEDULED_AGENT_TERMINAL_CONSUMER,
-      inject: [SCHEDULED_AGENT_DISPATCH_REPOSITORY, BFF_CONFIG],
-      useFactory: (repository: ScheduledAgentDispatchRepository, config: BffConfig): ScheduledAgentTerminalConsumer | null => {
-        const baseUrl = config.upstreams.agents ?? null
-        if (!config.agentEnabled || baseUrl === null) return null
-        return new ScheduledAgentTerminalConsumer(repository, new ScheduledAgentTerminalSource(config, baseUrl), {
-          workerId: `bff-scheduled-terminal-${process.pid}-${randomUUID()}`,
           concurrency: 4,
           settlementReserveMs: 500,
           onError: scheduledWorkerLog,
@@ -193,7 +178,6 @@ class ScheduledTaskWorkerLifecycle implements OnModuleInit, BeforeApplicationShu
     SCHEDULED_TASK_DISPATCHER,
     SCHEDULED_AGENT_DISPATCH_REPOSITORY,
     SCHEDULED_AGENT_DISPATCHER,
-    SCHEDULED_AGENT_TERMINAL_CONSUMER,
   ],
 })
 export class ScheduledTasksModule implements NestModule {

@@ -371,17 +371,15 @@ test("Scheduled Agent and Scheduler receipt ports are feature-local", async () =
     "src/application/scheduled/stable-id-generator.ts",
   ])
     assert.equal(await fileExists(file), false, `${file} must stay deleted`)
-  const [moduleSource, dispatcher, terminal, schedulerRoute, delivery, chatTurn] = await Promise.all([
+  const [moduleSource, dispatcher, schedulerRoute, delivery, chatTurn] = await Promise.all([
     readFile(path.join(root, "src/modules/scheduled-tasks/scheduled-tasks.module.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled-agent-dispatcher.ts"), "utf8"),
-    readFile(path.join(root, "src/application/scheduled-agent-terminal-consumer.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/scheduler.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/clients/agent/scheduled-dispatch-delivery.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/scheduled-chat-submission.ts"), "utf8"),
     readFile(path.join(root, "src/application/chat-turn-service.ts"), "utf8"),
   ])
   assert.match(moduleSource, /application\/scheduled\/(?:scheduled-agent-dispatch|scheduler-dispatch-receipt)-repository\.js/u)
   assert.match(dispatcher, /scheduled\/scheduled-agent-dispatch-(?:delivery|repository)\.js/u)
-  assert.match(terminal, /scheduled\/scheduled-agent-dispatch-repository\.js/u)
   assert.match(schedulerRoute, /application\/scheduled\/(?:scheduled-agent-dispatch|scheduler-dispatch-receipt)-repository\.js/u)
   assert.match(delivery, /application\/scheduled\/scheduled-agent-dispatch-delivery\.js/u)
   assert.doesNotMatch(chatTurn, /from\s+["']\.\/scheduled\//u, "ChatTurn must not depend on ScheduledTask application ports")
@@ -410,7 +408,8 @@ test("ScheduledTasksModule owns the scheduled outbox worker lifecycle", async ()
   assert.match(scheduledModule, /ScheduledTaskWorkerLifecycle/u)
   assert.match(scheduledModule, /provide: SCHEDULED_AGENT_DISPATCH_REPOSITORY/u)
   assert.match(scheduledModule, /provide: SCHEDULED_AGENT_DISPATCHER/u)
-  assert.match(scheduledModule, /provide: SCHEDULED_AGENT_TERMINAL_CONSUMER/u)
+  assert.doesNotMatch(scheduledModule, /SCHEDULED_AGENT_TERMINAL_CONSUMER|ScheduledAgentTerminalSource/u)
+  assert.match(scheduledModule, /ScheduledChatSubmission/u)
 })
 
 test("Scheduler dispatch shares the feature-owned entrypoint with the raw compatibility chain", async () => {

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.22.0
+  version: 28.23.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -7288,6 +7288,11 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: scheduled_task.read
       summary: List scheduled tasks
+      parameters:
+        - in: query
+          name: project_id
+          description: Exact visible Project filter; omitted lists the current subject's tasks.
+          schema: { type: string, minLength: 1, maxLength: 191 }
       responses:
         '200':
           description: Scheduled task list
@@ -7350,6 +7355,45 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/scheduled-tasks/executions:
+    get:
+      tags: [Scheduled]
+      operationId: listScheduledTaskExecutions
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: scheduled_task.read
+      summary: List current subject scheduled executions
+      description: >-
+        Owner-scoped current execution projection. Local submission is queued, not Agent admission or success.
+        Results are ordered by frozen occurrence and execution ID descending. Cursor binds identity and filters;
+        pages are not a historical snapshot. Deleted or unavailable Conversations have null result link IDs.
+        Unknown, empty or repeated query parameters return 400. No Run is dispatched by this read.
+      parameters:
+        - in: query
+          name: task_id
+          schema: { type: string, minLength: 1, maxLength: 191 }
+        - in: query
+          name: project_id
+          schema: { type: string, minLength: 1, maxLength: 191 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - in: query
+          name: cursor
+          schema: { type: string, minLength: 1, maxLength: 1024 }
+      responses:
+        '200':
+          description: Current execution page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScheduledTaskExecutionListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/scheduled-tasks/{id}:
     parameters:
@@ -23709,6 +23753,36 @@ components:
       uniqueItems: true
       items: { type: integer, minimum: 1, maximum: 31 }
       description: Selected days of month; missing dates are skipped, not moved to month end.
+    ScheduledTaskExecution:
+      type: object
+      additionalProperties: false
+      required: [execution_id, task_id, task_title, occurrence_at, state, conversation_id, project_id, run_id, assistant_message_id, completed_at]
+      properties:
+        execution_id: { type: string, minLength: 1 }
+        task_id: { type: string, minLength: 1 }
+        task_title: { type: string, minLength: 1 }
+        occurrence_at: { type: string, format: date-time }
+        state: { type: string, enum: [queued, admitted, streaming, completed, failed, cancelled] }
+        conversation_id: { type: [string, 'null'] }
+        project_id: { type: [string, 'null'] }
+        run_id: { type: string, minLength: 1 }
+        assistant_message_id: { type: [string, 'null'] }
+        completed_at: { type: [string, 'null'], format: date-time }
+    ScheduledTaskExecutionListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [executions, next_cursor]
+          properties:
+            executions:
+              type: array
+              maxItems: 50
+              items: { $ref: '#/components/schemas/ScheduledTaskExecution' }
+            next_cursor: { type: [string, 'null'] }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     ScheduledTaskLocalDate:
       type: string
       format: date

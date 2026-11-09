@@ -1,3 +1,7 @@
+A‑12 执行读：`src/contracts/scheduled-executions.ts` 定义分页wire/身份过滤绑定，`src/infrastructure/postgres/scheduled-task-execution-reader.ts` 投影正式本owner事实；现scheduled native读入口承接execution GET和Project筛选。Updates只链接可用普通会话，终稿仍归现私有reader。
+
+A‑12 定时 activation：`scheduled-chat-submission.ts` 用冻结 occurrence 身份调用原子 Chat 提交；普通 dispatcher 是唯一 Agent launch 发送者。`scheduled-chat-progress.ts` 仅关联标准 AG‑UI terminal 与有效 exhausted，已退休专用 source reader/consumer/ledger。正式执行记录与 App 结果链接仍属后继范围。
+
 A‑07 Project Todo：`src/http/routes/project-tasks.ts` 唯一 HTTP 读写，`src/infrastructure/postgres/project-tasks.ts` 唯一任务投影／事务／强 revision 与回执；Projects 当前 owner 与父删除锁不变。非 Run Todo、Conversation 或 ScheduledTask。
 
 ## 原 Run Skill／文件展示（2026-10-28，候选）

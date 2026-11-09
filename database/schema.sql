@@ -466,13 +466,6 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_scope (
   subject_id TEXT NOT NULL,
   active_dispatch_id TEXT,
   active_run_id TEXT,
-  source_high_watermark BIGINT NOT NULL DEFAULT 0,
-  consumer_next_poll_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  consumer_lease_owner TEXT,
-  consumer_lease_token TEXT,
-  consumer_lease_until TIMESTAMPTZ(3),
-  consumer_fence BIGINT NOT NULL DEFAULT 0,
-  consumer_failure_count BIGINT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (tenant_id, task_id),
@@ -484,11 +477,6 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_scope (
   CONSTRAINT ck_bff_scheduled_agent_scope_active CHECK (
     (active_dispatch_id IS NULL AND active_run_id IS NULL)
     OR (active_dispatch_id IS NOT NULL AND active_run_id IS NOT NULL)
-  ),
-  CONSTRAINT ck_bff_scheduled_agent_scope_source CHECK (source_high_watermark >= 0),
-  CONSTRAINT ck_bff_scheduled_agent_scope_consumer CHECK (
-    (consumer_lease_owner IS NULL AND consumer_lease_token IS NULL AND consumer_lease_until IS NULL)
-    OR (consumer_lease_owner IS NOT NULL AND consumer_lease_token IS NOT NULL AND consumer_lease_until IS NOT NULL)
   )
 );
 
@@ -505,6 +493,8 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_dispatch (
   run_id TEXT NOT NULL,
   identity_assertion_ref TEXT NOT NULL,
   payload JSONB NOT NULL,
+  user_message_id TEXT NOT NULL,
+  assistant_message_id TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   admission_unknown_seen BOOLEAN NOT NULL DEFAULT FALSE,
   attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -525,7 +515,7 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_dispatch (
   CONSTRAINT ck_bff_scheduled_agent_dispatch_order CHECK (occurrence_order_key ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{9}Z$'),
   CONSTRAINT ck_bff_scheduled_agent_dispatch_digest CHECK (request_digest ~ '^[0-9a-f]{64}$'),
   CONSTRAINT ck_bff_scheduled_agent_dispatch_payload CHECK (jsonb_typeof(payload) = 'object'),
-  CONSTRAINT ck_bff_scheduled_agent_dispatch_status CHECK (status IN ('pending','leased','retryable','admitted','terminal','failed')),
+  CONSTRAINT ck_bff_scheduled_agent_dispatch_status CHECK (status IN ('pending','leased','retryable','submitted','admitted','terminal','failed')),
   CONSTRAINT ck_bff_scheduled_agent_dispatch_lease CHECK (
     (status='leased' AND lease_owner IS NOT NULL AND lease_token IS NOT NULL AND lease_until IS NOT NULL)
     OR (status<>'leased' AND lease_owner IS NULL AND lease_token IS NULL AND lease_until IS NULL)
@@ -534,7 +524,7 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_dispatch (
     (status='admitted' AND admitted_at IS NOT NULL AND completed_at IS NULL)
     OR (status='terminal' AND admitted_at IS NOT NULL AND completed_at IS NOT NULL)
     OR (status='failed' AND admitted_at IS NULL AND completed_at IS NOT NULL AND admission_unknown_seen=FALSE)
-    OR (status IN ('pending','leased','retryable') AND admitted_at IS NULL AND completed_at IS NULL)
+    OR (status IN ('pending','leased','retryable','submitted') AND admitted_at IS NULL AND completed_at IS NULL)
   )
 );
 CREATE INDEX IF NOT EXISTS ix_bff_scheduled_agent_dispatch_ready
@@ -545,27 +535,6 @@ CREATE INDEX IF NOT EXISTS ix_bff_scheduled_agent_dispatch_lease
   WHERE status='leased';
 CREATE INDEX IF NOT EXISTS ix_bff_scheduled_agent_dispatch_head
   ON bff_scheduled_agent_dispatch (tenant_id,task_id,occurrence_order_key,dispatch_id);
-
-CREATE TABLE IF NOT EXISTS bff_scheduled_agent_source_event (
-  tenant_id TEXT NOT NULL,
-  task_id TEXT NOT NULL,
-  source_sequence BIGINT NOT NULL,
-  source_event_id TEXT NOT NULL,
-  source_run_id TEXT NOT NULL,
-  source_owner TEXT NOT NULL,
-  source_digest TEXT NOT NULL,
-  source_occurred_at TIMESTAMPTZ(3) NOT NULL,
-  event_type TEXT NOT NULL,
-  source_payload JSONB NOT NULL,
-  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (tenant_id,task_id,source_sequence),
-  UNIQUE (tenant_id,task_id,source_event_id),
-  CONSTRAINT ck_bff_scheduled_agent_source_identity CHECK (
-    source_sequence >= 1 AND length(btrim(source_event_id)) > 0
-    AND length(btrim(source_run_id)) > 0 AND source_owner='kokoro-agent'
-    AND source_digest ~ '^[0-9a-f]{64}$' AND jsonb_typeof(source_payload)='object'
-  )
-);
 
 -- A deleted conversation must compensate every launch that may already have
 -- crossed the Agent boundary. These run.cancel commands are committed in the

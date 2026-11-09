@@ -2,6 +2,16 @@ import type { RegenerateMessageInput, RegenerationSource } from "../chat/message
 import type { AgentDispatchCommand, AgentDispatchLease, AgentDispatchPayload, AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
 
 export type CommitChatTurn = {
+  /** Internal activation fence, never accepted from an HTTP DTO. */
+  scheduledActivation?: Readonly<{
+    tenantId: string
+    taskId: string
+    dispatchId: string
+    runId: string
+    leaseOwner: string
+    leaseToken: string
+    fence: number
+  }>
   regeneration?: Readonly<{ sourceMessageId: string; originalUserMessageId: string; sourceRunId: string; sourceFingerprint: string }>
   lifetime?: Readonly<{ signal: AbortSignal; deadlineAt: number }>
   outboxId: string

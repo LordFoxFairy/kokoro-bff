@@ -1,3 +1,4 @@
+import { releaseExhaustedScheduledChat } from "./scheduled-chat-progress.js"
 import { randomUUID } from "node:crypto"
 
 import type {
@@ -399,6 +400,8 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
           values.sourceExhausted ?? false,
         ],
       )
+      if (result.rowCount === 1 && values.sourceExhausted === true && values.state === "active")
+        await releaseExhaustedScheduledChat(client, lease.tenantId, lease.sessionId)
       await client.query("COMMIT")
       return result.rowCount === 1
     } catch (error) {

@@ -5,6 +5,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ScheduledTaskReadService } from "../../application/scheduled-task-read-service.js"
 import { handleScheduledTaskReadRequest } from "../../http/routes/scheduled-task-native.js"
+import { PostgresScheduledTaskExecutionReader } from "../../infrastructure/postgres/scheduled-task-execution-reader.js"
 
 @Injectable()
 export class ScheduledTaskReadMiddleware implements NestMiddleware {
@@ -12,10 +13,11 @@ export class ScheduledTaskReadMiddleware implements NestMiddleware {
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(SCHEDULED_TASK_READ_SERVICE) private readonly reader: ScheduledTaskReadService,
+    private readonly executions: PostgresScheduledTaskExecutionReader,
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
-    void handleScheduledTaskReadRequest(request, response, this.config, this.admission, this.reader)
+    void handleScheduledTaskReadRequest(request, response, this.config, this.admission, this.reader, this.executions)
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

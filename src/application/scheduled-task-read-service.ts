@@ -3,7 +3,7 @@ import type { ScheduledTaskOwnerScope, ScheduledTaskReadSnapshot } from "./sched
 import type { ScheduledTaskStateReader, ScheduledTaskSchedulingState } from "../modules/scheduled-tasks/scheduled-task-state-reader.js"
 import type { ScheduledTaskFact } from "../domain/scheduled-task/task.js"
 
-export type ScheduledTaskReadOptions = Readonly<{ taskId?: string; revalidate?: () => Promise<void>; deadline?: number }>
+export type ScheduledTaskReadOptions = Readonly<{ taskId?: string; projectId?: string; revalidate?: () => Promise<void>; deadline?: number }>
 export type ScheduledTaskCurrentView = Readonly<{ task: ScheduledTaskFact; state: ScheduledTaskSchedulingState; nextRunAt: Date | null }>
 export type ScheduledTaskSnapshots = { snapshots(scope: ScheduledTaskOwnerScope, signal: AbortSignal, taskId?: string): Promise<ScheduledTaskReadSnapshot[]> }
 /** Bounded parallel reads; all rows or an explicit error, never a partially fresh list. */
@@ -24,7 +24,9 @@ export class ScheduledTaskReadService {
       if (options.deadline !== undefined && performance.now() >= options.deadline) throw Error("scheduled_task_read_deadline")
     }
     check()
-    const snapshots = await this.source.snapshots(scope, signal, options.taskId)
+    const filter = (rows: ScheduledTaskReadSnapshot[]): ScheduledTaskReadSnapshot[] =>
+      options.projectId === undefined ? rows : rows.filter((row) => row.task.projectId === options.projectId)
+    const snapshots = filter(await this.source.snapshots(scope, signal, options.taskId))
     check()
     const cancelled = new AbortController()
     const combined = AbortSignal.any([signal, cancelled.signal])
@@ -58,7 +60,7 @@ export class ScheduledTaskReadService {
     if (failure !== undefined) throw failure
     await options.revalidate?.()
     check()
-    const after = await this.source.snapshots(scope, signal, options.taskId)
+    const after = filter(await this.source.snapshots(scope, signal, options.taskId))
     check()
     if (!isDeepStrictEqual(snapshots, after)) throw Error("scheduled_task_read_changed")
     return views

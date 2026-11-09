@@ -2,7 +2,6 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import { scheduledOccurrenceOrderKey } from "../dist/domain/scheduled-task/agent-dispatch.js"
 import { ScheduledAgentDispatcher } from "../dist/application/scheduled-agent-dispatcher.js"
-import { ScheduledAgentTerminalConsumer } from "../dist/application/scheduled-agent-terminal-consumer.js"
 
 describe("Scheduled Agent terminal-gated dispatch", () => {
   it("orders RFC3339Nano instants without truncating precision", () => {
@@ -31,8 +30,8 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
     }
     const repository = {
       claim: async () => command,
-      markAdmitted: async () => {
-        calls.push("admitted")
+      reconcileActive: async () => {
+        calls.push("observe")
         return true
       },
       markUnknown: async () => false,
@@ -41,7 +40,7 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
     const delivery = {
       deliver: async () => {
         calls.push("deliver")
-        return { outcome: "admitted" as const }
+        return { outcome: "submitted" as const }
       },
     }
     const runner = new ScheduledAgentDispatcher(repository as never, delivery, {
@@ -50,7 +49,7 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
       concurrency: 1,
     })
     assert.equal(await runner.runOnce(), 1)
-    assert.deepEqual(calls, ["deliver", "admitted"])
+    assert.deepEqual(calls, ["observe", "deliver"])
   })
   for (const [name, remaining, elapsed] of [
     ["performs no delivery after the observed lease budget is exhausted", 400, 10],
@@ -78,7 +77,7 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
           leaseRemainingMs: remaining,
           leaseObservedAt: performance.now() - elapsed,
         }),
-        markAdmitted: async () => true,
+        reconcileActive: async () => true,
         releaseNeverSent: async () => {
           releases += 1
           return true
@@ -87,7 +86,7 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
       const delivery = {
         deliver: async () => {
           deliveries += 1
-          return { outcome: "admitted" as const }
+          return { outcome: "submitted" as const }
         },
       }
       const runner = new ScheduledAgentDispatcher(repository as never, delivery, {
@@ -129,7 +128,7 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
         claims += 1
         return claims === 1 ? command("slow") : claims === 2 ? command("fast") : null
       },
-      markAdmitted: async () => true,
+      reconcileActive: async () => true,
     }
     const runner = new ScheduledAgentDispatcher(
       repository as never,
@@ -137,7 +136,7 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
         deliver: async (value) => {
           if (value.taskId === "slow") await slow
           delivered.push(value.taskId)
-          return { outcome: "admitted" as const }
+          return { outcome: "submitted" as const }
         },
       },
       { workerId: "w", concurrency: 2 },
@@ -149,7 +148,7 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
     assert.equal(await cycle, 2)
     assert.deepEqual(delivered, ["fast", "slow"])
   })
-  it("uses bounded exponential retry delays for dispatch and source failures", async () => {
+  it("uses bounded exponential retry delays for unknown local submissions", async () => {
     let dispatchDelay = 0
     const command = {
       tenantId: "t",
@@ -170,6 +169,7 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
       leaseObservedAt: performance.now(),
     }
     const dispatchRepository = {
+      reconcileActive: async () => false,
       claim: async () => command,
       markUnknown: async (_lease: unknown, delay: number) => {
         dispatchDelay = delay
@@ -190,118 +190,15 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
     await dispatcher.runOnce()
     assert.equal(dispatchDelay, 5000)
 
-    let sourceDelay = 0
-    const lease = {
-      tenantId: "t",
-      taskId: "task",
-      sessionId: "scheduled:task",
-      subjectId: "u",
-      leaseOwner: "w",
-      leaseToken: "x",
-      fence: 1,
-      sourceHighWatermark: 0,
-      failureCount: 3,
-      leaseRemainingMs: 5000,
-      leaseObservedAt: performance.now(),
-    }
-    const sourceRepository = {
-      claimConsumer: async () => lease,
-      releaseConsumer: async (_lease: unknown, delay: number) => {
-        sourceDelay = delay
-        return true
-      },
-    }
-    const consumer = new ScheduledAgentTerminalConsumer(
-      sourceRepository as never,
-      {
-        read: async () => {
-          throw new Error("source")
-        },
-      },
-      {
-        workerId: "w",
-        retryBaseMs: 1000,
-        retryMaxMs: 5000,
-        retryJitterPercent: 20,
-        random: () => 1,
-      },
-    )
-    await assert.rejects(consumer.runOnce(), /TERMINAL_CYCLE_FAILED/)
-    assert.equal(sourceDelay, 5000)
     assert.throws(
-      () => new ScheduledAgentDispatcher(dispatchRepository as never, { deliver: async () => ({ outcome: "admitted" }) }, { workerId: "w", retryBaseMs: 0 }),
+      () => new ScheduledAgentDispatcher(dispatchRepository as never, { deliver: async () => ({ outcome: "submitted" }) }, { workerId: "w", retryBaseMs: 0 }),
       /RETRY_OPTIONS_INVALID/,
     )
-    assert.throws(
-      () =>
-        new ScheduledAgentTerminalConsumer(
-          sourceRepository as never,
-          {
-            read: async () => ({
-              events: [],
-              nextSequence: 0,
-              exhausted: true,
-            }),
-          },
-          { workerId: "w", retryJitterPercent: Number.NaN },
-        ),
-      /RETRY_OPTIONS_INVALID/,
-    )
-  })
-  it("performs no source network I/O when the consumer claim loses its locked revalidation", async () => {
-    let reads = 0
-    const consumer = new ScheduledAgentTerminalConsumer(
-      { claimConsumer: async () => null } as never,
-      {
-        read: async () => {
-          reads += 1
-          return { events: [], nextSequence: 0, exhausted: true }
-        },
-      },
-      { workerId: "w" },
-    )
-    assert.equal(await consumer.runOnce(), 0)
-    assert.equal(reads, 0)
-  })
-  it("releases an exhausted committed consumer lease without source network I/O", async () => {
-    let reads = 0
-    let releases = 0
-    const consumer = new ScheduledAgentTerminalConsumer(
-      {
-        claimConsumer: async () => ({
-          tenantId: "t",
-          taskId: "task",
-          sessionId: "scheduled:task",
-          subjectId: "u",
-          leaseOwner: "w",
-          leaseToken: "x",
-          fence: 1,
-          sourceHighWatermark: 0,
-          failureCount: 0,
-          leaseRemainingMs: 400,
-          leaseObservedAt: performance.now(),
-        }),
-        releaseConsumer: async () => {
-          releases += 1
-          return true
-        },
-      } as never,
-      {
-        read: async () => {
-          reads += 1
-          return { events: [], nextSequence: 0, exhausted: true }
-        },
-      },
-      { workerId: "w", concurrency: 1, settlementReserveMs: 500 },
-    )
-    assert.equal(await consumer.runOnce(), 0)
-    assert.equal(reads, 0)
-    assert.equal(releases, 1)
   })
   it("rejects non-finite and out-of-range worker options", () => {
     const repository = {} as never
     const delivery = {
-      deliver: async () => ({ outcome: "admitted" as const }),
+      deliver: async () => ({ outcome: "submitted" as const }),
     }
     assert.throws(
       () =>
@@ -328,21 +225,6 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
         }),
       /WORKER_OPTIONS_INVALID/,
     )
-    assert.throws(
-      () =>
-        new ScheduledAgentTerminalConsumer(
-          repository,
-          {
-            read: async () => ({
-              events: [],
-              nextSequence: 0,
-              exhausted: true,
-            }),
-          },
-          { workerId: "w", pageSize: 0 },
-        ),
-      /WORKER_OPTIONS_INVALID/,
-    )
   })
   it("reports repository cycle failures with bounded backoff and drains on stop", async () => {
     let report!: (value: { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }) => void
@@ -357,11 +239,12 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
     })
     const runner = new ScheduledAgentDispatcher(
       {
+        reconcileActive: async () => false,
         claim: async () => {
           throw new Error("repository_down")
         },
       } as never,
-      { deliver: async () => ({ outcome: "admitted" as const }) },
+      { deliver: async () => ({ outcome: "submitted" as const }) },
       {
         workerId: "w",
         concurrency: 1,
@@ -409,18 +292,19 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
     }
     const runner = new ScheduledAgentDispatcher(
       {
+        reconcileActive: async () => false,
         claim: async () => {
           claimCount += 1
           if (claimCount === 1) throw new Error("repository_down")
           return command
         },
-        markAdmitted: async () => true,
+        reconcileActive: async () => true,
       } as never,
       {
         deliver: async () => {
           await slow
           slowFinished = true
-          return { outcome: "admitted" as const }
+          return { outcome: "submitted" as const }
         },
       },
       { workerId: "w", concurrency: 2 },
@@ -434,106 +318,81 @@ describe("Scheduled Agent terminal-gated dispatch", () => {
     await stopping
     assert.equal(slowFinished, true)
   })
-  it("reports terminal repository failures using a stable safe code", async () => {
-    let report!: (value: { errorCode: string }) => void
-    const reported = new Promise<{ errorCode: string }>((resolve) => {
-      report = resolve
-    })
-    const consumer = new ScheduledAgentTerminalConsumer(
-      {
-        claimConsumer: async () => {
-          throw new Error("secret database detail")
-        },
-      } as never,
-      { read: async () => ({ events: [], nextSequence: 0, exhausted: true }) },
-      {
-        workerId: "w",
-        concurrency: 1,
-        pollIntervalMs: 60000,
-        onError: report as never,
-      },
-    )
-    consumer.start()
-    assert.equal((await reported).errorCode, "scheduled_agent_terminal_cycle_failed")
-    await consumer.stop()
+})
+
+describe("Scheduled activation uses the ordinary Chat transaction", () => {
+  it("derives a stable ordinary conversation per tenant/task without crossing tenant boundaries", async () => {
+    const { scheduledConversationId } = await import("../dist/infrastructure/clients/agent/launch.js")
+    const { isClientCreatedConversationId } = await import("../dist/domain/chat/conversation.js")
+    const conversation = scheduledConversationId("tenant", "task")
+    assert.equal(isClientCreatedConversationId(conversation), true)
+    assert.equal(scheduledConversationId("tenant", "task"), conversation)
+    assert.notEqual(scheduledConversationId("other", "task"), conversation)
+    assert.notEqual(scheduledConversationId("tenant", "other-task"), conversation)
   })
-  it("waits for every consumer scope when one parallel source or commit fails", async () => {
-    let claims = 0
-    let releaseSlow!: () => void
-    let slowCommitted = false
-    const slow = new Promise<void>((resolve) => {
-      releaseSlow = resolve
+  it("reports durable queue submission separately from Agent admission and forwards the activation fence", async () => {
+    const { ScheduledChatSubmission } = await import("../dist/infrastructure/postgres/scheduled-chat-submission.js")
+    const { buildScheduledAgentLaunch, scheduledConversationId } = await import("../dist/infrastructure/clients/agent/launch.js")
+    const launch = buildScheduledAgentLaunch({
+      identity: { namespace: "tenant", userId: "owner" },
+      requestId: "request",
+      sessionId: scheduledConversationId("tenant", "task"),
+      occurrenceIdentity: "a".repeat(64),
+      content: "go",
+      projectRef: "project",
     })
-    const lease = (taskId: string) => ({
-      tenantId: "t",
-      taskId,
-      sessionId: `scheduled:${taskId}`,
-      subjectId: "u",
-      leaseOwner: "w",
-      leaseToken: `token-${taskId}`,
-      fence: 1,
-      sourceHighWatermark: 0,
-      failureCount: 0,
-      leaseRemainingMs: 5000,
-      leaseObservedAt: performance.now(),
-    })
-    const consumer = new ScheduledAgentTerminalConsumer(
-      {
-        claimConsumer: async () => {
-          claims += 1
-          return claims === 1 ? lease("broken") : lease("slow")
-        },
-        commitSourcePage: async (value: { taskId: string }) => {
-          if (value.taskId === "broken") throw new Error("commit detail")
-          slowCommitted = true
-          return true
-        },
-        releaseConsumer: async () => true,
-      } as never,
-      {
-        read: async (value) => {
-          if (value.taskId === "slow") await slow
-          return { events: [], nextSequence: 0, exhausted: true }
-        },
-      },
-      { workerId: "w", concurrency: 2 },
-    )
-    const cycle = consumer.runOnce()
-    const stopping = consumer.stop()
-    await new Promise<void>((resolve) => setImmediate(resolve))
-    assert.equal(slowCommitted, false)
-    releaseSlow()
-    await assert.rejects(cycle, /TERMINAL_CYCLE_FAILED/)
-    await stopping
-    assert.equal(slowCommitted, true)
-  })
-  it("surfaces a consumer release repository failure to cycle observability", async () => {
-    const consumer = new ScheduledAgentTerminalConsumer(
-      {
-        claimConsumer: async () => ({
-          tenantId: "t",
+    const command = {
+      tenantId: "tenant",
+      taskId: "task",
+      conversationId: launch.body.session_id,
+      runId: launch.receipt.run_id,
+      userMessageId: launch.receipt.user_message_id,
+      assistantMessageId: launch.receipt.assistant_message_id,
+      subjectId: "owner",
+      dispatchId: "dispatch",
+      leaseOwner: "worker",
+      leaseToken: "token",
+      fence: 7,
+      payload: launch.body,
+      requestId: "request",
+      idempotencyKey: "key",
+      requestDigest: "b".repeat(64),
+      identityAssertionRef: launch.identityAssertionRef,
+    }
+    const submission = new ScheduledChatSubmission({
+      commitChatTurn: async (value) => {
+        assert.equal(value.conversationId, command.conversationId)
+        assert.equal(value.runId, command.runId)
+        assert.equal(value.payload.schema_version, 3)
+        assert.equal(value.payload.launch.project_ref, "project")
+        assert.equal(value.payload.launch.trace.source, "kokoro-bff")
+        assert.deepEqual(value.scheduledActivation, {
+          tenantId: "tenant",
           taskId: "task",
-          sessionId: "scheduled:task",
-          subjectId: "u",
-          leaseOwner: "w",
+          dispatchId: "dispatch",
+          runId: command.runId,
+          leaseOwner: "worker",
           leaseToken: "token",
-          fence: 1,
-          sourceHighWatermark: 0,
-          failureCount: 0,
-          leaseRemainingMs: 5000,
-          leaseObservedAt: performance.now(),
-        }),
-        releaseConsumer: async () => {
-          throw new Error("release detail")
-        },
-      } as never,
-      {
-        read: async () => {
-          throw new Error("source detail")
-        },
+          fence: 7,
+        })
+        return launch.receipt
       },
-      { workerId: "w", concurrency: 1 },
-    )
-    await assert.rejects(consumer.runOnce(), /TERMINAL_CYCLE_FAILED/)
+    })
+    assert.deepEqual(await submission.deliver(command as never, 1000), { outcome: "submitted" })
+    const unknown = new ScheduledChatSubmission({
+      commitChatTurn: async () => {
+        throw new Error("CHAT_TURN_COMMIT_UNKNOWN")
+      },
+    })
+    assert.deepEqual(await unknown.deliver(command as never, 1000), { outcome: "unknown", errorCode: "scheduled_chat_submission_unknown" })
+    const invalid = new ScheduledChatSubmission({
+      commitChatTurn: async () => {
+        assert.fail("invalid frozen payload must not enter Chat")
+      },
+    })
+    assert.deepEqual(await invalid.deliver({ ...command, payload: { ...launch.body, personal_context: {} } } as never, 1000), {
+      outcome: "not_admitted",
+      errorCode: "scheduled_snapshot_invalid",
+    })
   })
 })
