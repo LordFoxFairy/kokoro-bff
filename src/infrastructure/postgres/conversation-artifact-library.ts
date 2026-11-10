@@ -1,8 +1,15 @@
 import type { QueryResult, QueryResultRow } from "pg"
 import { withMessageReadClient } from "./message-parts-read.js"
 import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
-import type { ArtifactAssociation, ArtifactLibraryRepository, ArtifactPosition } from "../../application/account/artifact-library-repository.js"
+import type {
+  ArtifactAssociation,
+  ArtifactDetailCandidate,
+  ArtifactLibraryRepository,
+  ArtifactPosition,
+} from "../../application/account/artifact-library-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
+
+const CANONICAL_PROJECT_ID = /^project_[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}(?![\s\S])/u
 
 type AssociationRow = {
   conversation_id: string
@@ -93,32 +100,44 @@ export class PostgresConversationArtifactLibrary implements ArtifactLibraryRepos
     return result.rows.map(association)
   }
 
-  public async findCandidate(tenantId: string, subjectId: string, conversationId: string, artifactId: string): Promise<ArtifactAssociation | null> {
-    const result = await this.database.pool.query<AssociationRow>(
+  public async findCandidate(tenantId: string, subjectId: string, conversationId: string, artifactId: string): Promise<ArtifactDetailCandidate | null> {
+    const result = await this.database.pool.query<AssociationRow & { direct_source: boolean; canonical_project_ref: string | null }>(
       `SELECT association.conversation_id, association.artifact_id, association.run_id,
               association.source_asset_id, association.source_artifact_kind,
-              association.source_content_sha256, association.delivered_at
+              association.source_content_sha256, association.delivered_at,
+              conversation.project_ref IS NULL AS direct_source,
+              CASE WHEN projects.candidate_count = 1 AND projects.project_id = conversation.project_ref
+                   THEN projects.project_id END AS canonical_project_ref
          FROM bff_conversation_artifact AS association
          JOIN bff_conversation AS conversation
            ON conversation.tenant_id = association.tenant_id
           AND conversation.conversation_id = association.conversation_id
+         LEFT JOIN LATERAL (
+           SELECT count(*) AS candidate_count, min(candidate.project_id) AS project_id
+             FROM (
+               SELECT project.project_id FROM bff_project AS project
+                WHERE project.deleted_at IS NULL AND project.tenant_id = conversation.tenant_id
+                  AND project.owner_id = conversation.owner_id
+                  AND (project.project_id = conversation.project_ref OR project.slug = conversation.project_ref)
+                LIMIT 2
+             ) AS candidate
+         ) AS projects ON conversation.project_ref IS NOT NULL
         WHERE association.tenant_id = $1
           AND conversation.owner_id = $2
           AND conversation.status = 'active'
           AND association.conversation_id = $3 AND association.artifact_id = $4
-          AND (
-            conversation.project_ref IS NULL
-            OR EXISTS (
-              SELECT 1 FROM bff_project AS project
-               WHERE project.deleted_at IS NULL AND project.tenant_id = conversation.tenant_id
-                 AND project.owner_id = conversation.owner_id
-                 AND (project.project_id = conversation.project_ref OR project.slug = conversation.project_ref)
-            )
-          )
+          AND (conversation.project_ref IS NULL OR projects.candidate_count > 0)
         LIMIT 1`,
       [tenantId, subjectId, conversationId, artifactId],
     )
-    return result.rows[0] === undefined ? null : association(result.rows[0])
+    const row = result.rows[0]
+    if (!row) return null
+    const projectRef = row.direct_source
+      ? null
+      : row.canonical_project_ref !== null && CANONICAL_PROJECT_ID.test(row.canonical_project_ref)
+        ? row.canonical_project_ref
+        : undefined
+    return { ...association(row), ...(projectRef === undefined ? {} : { projectRef }) }
   }
   public async findSkillHandoff(tenantId: string, subjectId: string, conversationId: string, artifactId: string): Promise<SkillAiAssociation | null> {
     const result = await this.database.pool.query<

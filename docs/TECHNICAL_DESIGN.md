@@ -1,3 +1,13 @@
+## A‑09 — Library Artifact source navigation
+
+BFF reads the exact admitted owner association and resolves the Project in the same
+read, without changing the conversation-scoped Storage operation. The navigation
+projection does not grant access or change eligibility for listing/downloading
+an existing valid Artifact. Current Chat/Move write canonical Project IDs. Old
+or ambiguous bindings may retain detail/bytes but expose no navigation hint.
+App navigates only using a matching detail; the normal Project/Chat reads then
+apply current authority. No data-model, service authentication or storage change.
+
 ## A‑09 — Personal Library file search
 
 Native admission stays per page. BFF validates the public bounds and routes file queries to

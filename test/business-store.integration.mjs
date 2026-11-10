@@ -1728,11 +1728,24 @@ async function r237Artifact(f, conversation) {
 
 integrationTest("R237 Artifact relationship list and detail enforce Project eligibility before Storage", async (t) => {
   const f = await r237Fixture(t, "library")
-  const direct = await f.conversation()
   const active = await f.project()
-  const permitted = await f.conversation(active.id)
-  const directArtifact = await r237Artifact(f, direct)
-  const activeArtifact = await r237Artifact(f, permitted)
+  const ambiguous = await f.project()
+  const shadow = await f.project()
+  await f.pool.query("UPDATE bff_project SET slug=$2 WHERE project_id=$1", [shadow.id, ambiguous.id])
+  const legacy = await f.project()
+  const legacyId = `legacy_${randomUUID()}`
+  await f.pool.query("UPDATE bff_project SET project_id=$2 WHERE project_id=$1", [legacy.id, legacyId])
+  const visible = []
+  for (const [ref, projectedRef] of [
+    [null, null],
+    [active.id, active.id],
+    [active.slug, undefined],
+    [ambiguous.id, undefined],
+    [legacyId, undefined],
+  ]) {
+    const id = await f.conversation(ref)
+    visible.push([id, await r237Artifact(f, id), projectedRef])
+  }
   const hidden = []
   for (const kind of ["deleted", "owner", "tenant"]) {
     const project = await f.project(kind)
@@ -1743,19 +1756,24 @@ integrationTest("R237 Artifact relationship list and detail enforce Project elig
   }
   const before = await f.facts()
   const candidates = await f.artifactLibrary.listCandidates(f.tenant, f.owner, null, 100)
-  assert.deepEqual(candidates.map((item) => item.artifactId).sort(), [directArtifact, activeArtifact].sort())
+  assert.deepEqual(candidates.map((item) => item.artifactId).sort(), visible.map(([, artifact]) => artifact).sort())
+  assert.ok(candidates.every((item) => !Object.hasOwn(item, "projectRef")))
   for (const [id, artifact] of hidden) {
     assert.equal(await f.artifactLibrary.findCandidate(f.tenant, f.owner, id, artifact), null)
     await f.deny(() => f.request(`library/artifacts/${id}/${artifact}`), 404, "library_artifact_not_found")
   }
-  for (const [id, artifact] of [
-    [direct, directArtifact],
-    [permitted, activeArtifact],
-  ])
-    assert.equal((await f.artifactLibrary.findCandidate(f.tenant, f.owner, id, artifact)).artifactId, artifact)
+  for (const [id, artifact, projectRef] of visible) {
+    const candidate = await f.artifactLibrary.findCandidate(f.tenant, f.owner, id, artifact)
+    assert.equal(candidate?.artifactId, artifact)
+    assert.equal(Object.hasOwn(candidate, "projectRef"), projectRef !== undefined)
+    assert.equal(candidate.projectRef, projectRef)
+  }
   assert.deepEqual(await f.facts(), before)
-  // Remove only this fixture's two allowed associations: empty HTTP library must not contact Storage.
-  await f.pool.query("DELETE FROM bff_conversation_artifact WHERE tenant_id=$1 AND artifact_id=ANY($2::text[])", [f.tenant, [directArtifact, activeArtifact]])
+  // Remove only this fixture's allowed associations: empty HTTP library must not contact Storage.
+  await f.pool.query("DELETE FROM bff_conversation_artifact WHERE tenant_id=$1 AND artifact_id=ANY($2::text[])", [
+    f.tenant,
+    visible.map(([, artifact]) => artifact),
+  ])
   const emptyBefore = await f.facts()
   const empty = await f.request("library?kind=artifact")
   assert.equal(empty.status, 200, JSON.stringify(empty.body))

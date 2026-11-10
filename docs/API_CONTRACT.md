@@ -1,3 +1,11 @@
+## A‑09 — Library Artifact source (Public 28.28)
+
+`GET /v1/library/artifacts/{conversation_id}/{artifact_id}` retains its exact selector
+and FINAL/CLEAN metadata. Detail `data.project_ref` is a canonical Project ID only
+when the current owned source association establishes it, `null` only for a direct
+Conversation, and absent if no canonical destination is established. Clients must
+not interpret absence as direct. No change to list, cursor or content responses.
+
 ## A‑09 — Personal Library file search (Public 28.27)
 
 On the existing `GET /v1/library?kind=file`, optional `q` is a literal search over filename

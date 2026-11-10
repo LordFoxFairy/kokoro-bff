@@ -698,6 +698,8 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
   let ownerCalls = 0
   let repoCalls = 0
   let admissions = 0
+  const projectId = "project_00000000-0000-0000-0000-000000000001"
+  let projectRef = projectId
   try {
     const objectOrigin = await listen(
       createServer((_request, response) => {
@@ -760,7 +762,7 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
       },
       async findCandidate(_tenant, subject, conversationId, artifactId) {
         repoCalls++
-        return subject === "subject-1" && conversationId === "conversation-1" && artifactId === "artifact-1" ? association : null
+        return subject === "subject-1" && conversationId === "conversation-1" && artifactId === "artifact-1" ? { ...association, projectRef } : null
       },
     }
     const config = loadConfig({
@@ -802,16 +804,22 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
       })
     const page = await get("/v1/library?kind=artifact")
     assert.equal(page.status, 200)
-    assert.equal((await page.json()).data.items[0].artifact_id, "artifact-1")
+    const listed = (await page.json()).data.items[0]
+    assert.equal(listed.artifact_id, "artifact-1")
+    assert.equal(Object.hasOwn(listed, "project_ref"), false)
     const filtered = await get("/v1/library?kind=artifact&q=REPORT.TXT&type=documents")
     assert.equal(filtered.status, 200)
     assert.equal((await filtered.json()).data.items[0].artifact_id, "artifact-1")
     const excluded = await get("/v1/library?kind=artifact&q=report&type=images")
     assert.equal(excluded.status, 200)
     assert.deepEqual((await excluded.json()).data, { items: [], next_cursor: null })
-    const item = await get("/v1/library/artifacts/conversation-1/artifact-1")
-    assert.equal(item.status, 200)
-    assert.equal((await item.json()).data.source_run_id, "run-1")
+    const detailPath = "/v1/library/artifacts/conversation-1/artifact-1"
+    for (const target of [projectId, null, undefined]) {
+      projectRef = target
+      const item = await get(detailPath)
+      assert.equal(item.status, 200)
+      assert.deepEqual((await item.json()).data, target === undefined ? listed : { ...listed, project_ref: target })
+    }
     const download = await get("/v1/library/artifacts/conversation-1/artifact-1/content")
     assert.equal(download.status, 200)
     assert.deepEqual(Buffer.from(await download.arrayBuffer()), bytes)
@@ -832,7 +840,7 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
     assert.equal(crossed.status, 403)
     assert.equal((await crossed.json()).error.code, "product_tenant_forbidden")
     assert.equal(repoCalls, beforeCrossTenant)
-    assert.equal(admissions, 8)
+    assert.equal(admissions, 10)
   } finally {
     try {
       await app?.close()

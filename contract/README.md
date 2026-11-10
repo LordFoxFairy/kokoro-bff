@@ -1,3 +1,9 @@
+## A‑09 — Public 28.28 Artifact source destination
+
+The sole OpenAPI adds the detail-only optional `project_ref` on `getLibraryArtifact`;
+205 operations and the exact build-time inverse to Public 28.27 are retained. The
+actual list and binary responses do not carry navigation context.
+
 ## A‑09 — Public 28.27 personal file filters
 
 The sole OpenAPI adds file q/type semantics to the existing `listLibrary` operation. It keeps

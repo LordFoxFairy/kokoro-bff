@@ -10,7 +10,10 @@ export type ArtifactAssociation = Readonly<{
 
 export type ArtifactPosition = Readonly<{ deliveredAt: string; conversationId: string; artifactId: string }>
 
+/** Omitted means no verified navigation target; explicit null is a direct Conversation. */
+export type ArtifactDetailCandidate = ArtifactAssociation & Readonly<{ projectRef?: string | null }>
+
 export interface ArtifactLibraryRepository {
   listCandidates(tenantId: string, subjectId: string, position: ArtifactPosition | null, limit: number): Promise<readonly ArtifactAssociation[]>
-  findCandidate(tenantId: string, subjectId: string, conversationId: string, artifactId: string): Promise<ArtifactAssociation | null>
+  findCandidate(tenantId: string, subjectId: string, conversationId: string, artifactId: string): Promise<ArtifactDetailCandidate | null>
 }

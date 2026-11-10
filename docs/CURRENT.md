@@ -1,3 +1,12 @@
+## 2026-11-10 A‑09 Library Artifact source
+
+Public 28.28 adds only the optional source `project_ref` on Artifact detail. A current
+canonical Project association is projected; an explicitly direct source is null.
+An ambiguous/old destination stays absent without changing already-authorized
+detail or binary behavior. No Storage or data-model change. Live Nest/Connect
+regression, real isolated PG relationship test, lint/build and semantic contract
+checks passed. The exact Chromium evidence is recorded by Root.
+
 ## 2026-11-10 A‑09 personal Library file search
 
 Public 28.27 adds optional file filters to the existing listLibrary operation; 205 operation

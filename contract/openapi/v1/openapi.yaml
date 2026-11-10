@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.27.0
+  version: 28.28.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -7904,6 +7904,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: storage.library.read
       summary: Read one delivered Artifact from the current subject's active Conversation
+      description: The detail identifies the source Conversation's canonical Project ID, or null only for a direct Conversation. If the canonical source destination is not established, project_ref is omitted. The project reference is not an access grant.
       parameters:
         - name: conversation_id
           in: path
@@ -21186,6 +21187,10 @@ components:
         content_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
         source_run_id: { type: string, minLength: 1, maxLength: 191 }
         delivered_at: { type: string, format: date-time }
+        project_ref:
+          description: Detail-only canonical source Project ID, null for a direct Conversation, or absent when the canonical destination is not established.
+          type: [string, 'null']
+          pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\s\S])'
     LibraryArtifactResponse:
       type: object
       additionalProperties: false

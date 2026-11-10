@@ -31,7 +31,7 @@ export async function readPrivateArtifact(
   artifactId: string,
   signal: AbortSignal,
   clientFactory: FinalArtifactFactory,
-): Promise<{ item: FinalArtifact; client: Pick<FinalArtifactClient, "get" | "downloadReference"> }> {
+): Promise<{ item: FinalArtifact; client: Pick<FinalArtifactClient, "get" | "downloadReference">; projectRef: string | null | undefined }> {
   if (repository === undefined || config.storage === undefined) throw new ProjectResourceError("artifact_library_unavailable", 503, true)
   const tenantId = context.identity.namespace
   const subjectId = context.identity.userId
@@ -43,8 +43,9 @@ export async function readPrivateArtifact(
   }
   if (association === null) throw new ProjectResourceError("library_artifact_not_found", 404)
   const client = clientFactory(config.storage, { tenantId, subjectId, conversationId, requestId: context.requestId })
-  const item = await client.get(association, signal)
-  return { item, client }
+  const { projectRef, ...artifact } = association
+  const item = await client.get(artifact, signal)
+  return { item, client, projectRef }
 }
 
 export async function libraryArtifactRoute(
@@ -67,8 +68,8 @@ export async function libraryArtifactRoute(
   response.setHeader("x-request-id", context.requestId)
   try {
     validateArtifactSelector(request, conversationId, artifactId)
-    const { item } = await readPrivateArtifact(config, context, repository, conversationId, artifactId, signal, clientFactory)
-    if (!response.destroyed) send(response, 200, ok(item, context.requestId))
+    const { item, projectRef } = await readPrivateArtifact(config, context, repository, conversationId, artifactId, signal, clientFactory)
+    if (!response.destroyed) send(response, 200, ok(projectRef === undefined ? item : { ...item, project_ref: projectRef }, context.requestId))
   } catch (error) {
     if (response.destroyed) return
     const known = error instanceof ProjectResourceError ? error : new ProjectResourceError("storage_unavailable", 503, true)
