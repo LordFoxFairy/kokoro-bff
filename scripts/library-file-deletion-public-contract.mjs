@@ -3,7 +3,21 @@ import { createHash } from "node:crypto"
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
+export function restorePublic2829DeliveryDisplayPathContract(source) {
+  if (!/^  version: 28\.30\.0$/mu.test(source)) return source
+  if (hash(source) !== "2e459bd39f73686ac6d458011b777f08ea17b79a1467e563cdbb299e044a3cf9") throw Error("Artifact display path Public28.30 child drift")
+  const parent = source
+    .replace(/(^    PrivateSessionSnapshotResponse:[\s\S]*?items: \{ \$ref: '#\/components\/schemas\/)PrivateDelivery/mu, "$1Delivery")
+    .replace(/^    PrivateDelivery:\n[\s\S]*?(?=^    MessageCreateRequest:)/mu, "")
+    .replace("        kokoro.delivery.created:\n          $ref: '#/components/schemas/ChatDeliveryCreated'\n", "")
+    .replace(/^    ChatDeliveryCreated:\n[\s\S]*?(?=^    FinalAnswerResult:)/mu, "")
+    .replace("  version: 28.30.0\n", "  version: 28.29.0\n")
+  if (hash(parent) !== "be6473bfa58332dee9f0417a10f6b21c8320efa79802151fe5b13f93753d4504") throw Error("Artifact display path complete Public28.29 parent drift")
+  return parent
+}
+
 export function restorePublic2828LibraryArtifactCommandsContract(source) {
+  source = restorePublic2829DeliveryDisplayPathContract(source)
   if (!/^  version: 28\.29\.0$/mu.test(source)) return source
   if (hash(source) !== "be6473bfa58332dee9f0417a10f6b21c8320efa79802151fe5b13f93753d4504") throw Error("Library Artifact commands Public28.29 child drift")
   const parent = source

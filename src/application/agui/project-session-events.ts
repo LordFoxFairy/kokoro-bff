@@ -131,6 +131,7 @@ function artifactDelivery(event: ChatEvent): AgUiArtifactDelivery {
     title: required(payload.title),
     mime: required(payload.mime),
     size,
+    ...(typeof payload.display_path === "string" ? { displayPath: payload.display_path } : {}),
   }
 }
 

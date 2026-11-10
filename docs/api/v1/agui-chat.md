@@ -33,6 +33,7 @@ data: {"type":"TEXT_MESSAGE_CONTENT", ...}
 | `tool.returned` | `TOOL_CALL_END` + `TOOL_CALL_RESULT` | 结果使用 tool message 语义 |
 | `run.completed` | `RUN_FINISHED` | 可选 usage 使用 AG-UI token 字段 |
 | `run.failed` | `RUN_ERROR` | 稳定 `code`，不透传 provider 原文 |
+| `delivery.created` | `CUSTOM` (`kokoro.delivery.created`) | 私有 live/replay 同一交付帧；`value.display_path` 仅在 Agent 证明安全虚拟来源时出现，不是读取选择器。 |
 | 业务扩展 | `CUSTOM` | 名称使用 `kokoro.<context>.<event>` |
 
 Web 端先按 AG-UI schema 校验，再投影到纯 reducer 使用的 `SessionEvent`；preview fixture 仍可直接产生内部事件，因此本地开发无需启动 Agent。

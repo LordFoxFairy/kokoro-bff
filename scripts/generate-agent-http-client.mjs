@@ -12,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "9d53f36fb549c49b8bc7a05b07776df5cb000698"
+const ownerCommit = "e27cd7ad79e6d3d0fb588328733cccd0598f1a3d"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81"
-const provenanceDigest = "fe3a0bfa5ddab06f2e968b835c3f9dcdd151e70033ba5c7ec2ea48defa478d1f"
-const ownerContractVersion = "8.15.0"
+const ownerDigest = "e303dfadfccd3a86c3cd47542f751868394d269fd584c70cfd9c801eaa618958"
+const provenanceDigest = "ab107cec312331eb09cd73b6327a63cd172230bf60e98c6821d7dcbcfc774841"
+const ownerContractVersion = "8.16.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -171,7 +171,27 @@ const agent815ResourceDescription = agent814ResourceDescription.replace(
   "No version_id, URL or content.",
   "Asset and artifact have no inline content. Final answer is only for a user chat Run and resource_id is its source assistant Message ID; exact source conversation, Run, final segment and revision are provenance, not the consumer identity. Its unmodified UTF-8 text, size and SHA-256 must agree. No version_id, URL or additional identity.",
 )
+function restoreAgent815DeliveryPathRaw(source) {
+  if (!source.includes('"version": "8.16.0"')) return source
+  assert.equal(sha256(source), ownerDigest, "Agent8.16 delivery child drift")
+  const parent = source
+    .replace(',\n            "delivery": "#/components/schemas/ChatDelivery"', "")
+    .replace(/,\n      "ChatDelivery": \{[\s\S]*?\n      \}(?=\n    \},\n    "responses")/u, "")
+    .replace('"version": "8.16.0"', '"version": "8.15.0"')
+  assert.equal(sha256(parent), "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81", "Agent8.15 raw delivery parent drift")
+  return parent
+}
+function restoreAgent815DeliveryPathContract(document) {
+  if (document.info?.version !== "8.16.0") return document
+  const parent = structuredClone(document)
+  delete parent.components.schemas.ChatDelivery
+  delete parent.components.schemas.ChatEvent["x-kokoro-decoded-payloads"].mapping.delivery
+  parent.info.version = "8.15.0"
+  assert.equal(sha256(JSON.stringify(parent)), "c7c0af91761cd36db21738141d57c8341e39e3edc83dc83fd2197eb4baa085ff", "Agent8.15 parsed delivery parent drift")
+  return parent
+}
 export function restoreAgent814FinalAnswerResourceRaw(source) {
+  source = restoreAgent815DeliveryPathRaw(source)
   if (!source.includes('"version": "8.15.0"')) return source
   assert.equal(sha256(source), "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81", "Agent8.15 child drift")
   const start =
@@ -187,6 +207,7 @@ export function restoreAgent814FinalAnswerResourceRaw(source) {
   return parent
 }
 export function restoreAgent814FinalAnswerResourceContract(document) {
+  document = restoreAgent815DeliveryPathContract(document)
   if (document.info?.version !== "8.15.0") return document
   const parent = structuredClone(document)
   const refs = parent.components.schemas.LaunchRequest.properties.selected_resource_refs
@@ -704,6 +725,13 @@ export function parseAgentFailure(value: unknown): AgentFailureProfile | null {
 
 function processProfileSource(document) {
   const schemas = assertInteractionContractSchema(document)
+  assert.equal(schemas.ChatEvent["x-kokoro-decoded-payloads"].mapping.delivery, "#/components/schemas/ChatDelivery")
+  const delivery = schemas.ChatDelivery
+  assert.equal(delivery.additionalProperties, false)
+  assert.ok(!delivery.required.includes("display_path"))
+  const deliveryDisplayPath = delivery.properties.display_path
+  assert.equal(deliveryDisplayPath.type, "string")
+  assert.equal(deliveryDisplayPath["x-kokoro-utf8-byte-limit"], deliveryDisplayPath.maxLength)
   const todo = schemas.ChatTodo
   const todoItems = todo.properties.todos
   const todoContent = todoItems.items.properties.content
@@ -725,6 +753,7 @@ function processProfileSource(document) {
       virtualPath: tool.properties.display_detail.properties.virtual_path,
     },
     actionTitle: tool.properties.action_title,
+    deliveryDisplayPath,
     toolDetail: {
       minScalars: detailName.minLength,
       maxScalars: detailName.maxLength,

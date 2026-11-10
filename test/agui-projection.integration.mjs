@@ -205,13 +205,15 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     })
     assert.equal(firstClaim.runId, firstRun.run_id)
     assert.equal(await agentDispatchOutbox.markAgentDispatchAdmitted(firstClaim), true)
+    const displayPath = "/reports/report.md"
     const payload = (artifactId, hash = "a".repeat(64)) => ({
       tool_call_id: "tool_artifact",
       artifact_id: artifactId,
       asset_id: `asset_${artifactId}`,
       artifact_kind: "document",
       content_hash: hash,
-      path: "/report.md",
+      path: displayPath,
+      display_path: displayPath,
       title: "Report",
       mime: "text/markdown",
       size: 12,
@@ -231,7 +233,7 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     const linked = async () =>
       (
         await pool.query(
-          "SELECT artifact_id, run_id, source_event_id, source_artifact_kind, source_content_sha256, source_title, source_mime, source_size_bytes FROM bff_conversation_artifact WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY artifact_id",
+          "SELECT artifact_id, run_id, source_event_id, source_artifact_kind, source_content_sha256, source_title, source_mime, source_size_bytes, source_display_path FROM bff_conversation_artifact WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY artifact_id",
           [tenantId, sessionId],
         )
       ).rows
@@ -245,6 +247,7 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
         source_title: "Report",
         source_mime: "text/markdown",
         source_size_bytes: "12",
+        source_display_path: displayPath,
       },
     ])
     const snapshot = await chatService.snapshot(tenantId, ownerId, sessionId, undefined)
@@ -259,10 +262,17 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
         size: 12,
         run_id: firstRun.run_id,
         created_at: first.sourceOccurredAt,
+        display_path: displayPath,
       },
     ])
     assert.equal(snapshot.deliveries_has_more, false)
     assert.equal(snapshot.event_watermark, (await agUi.status(tenantId, sessionId)).currentCursor)
+    const replay = await agUi.replay(tenantId, sessionId, null, 100)
+    assert.equal(replay.kind, "page")
+    const deliveryFrames = replay.frames.filter((frame) => frame.payload.name === "kokoro.delivery.created")
+    assert.equal(deliveryFrames.length, 1)
+    assert.equal(deliveryFrames[0].payload.value.artifact_id, "artifact_first")
+    assert.equal(deliveryFrames[0].payload.value.display_path, displayPath)
     assert.equal(await chatService.snapshot(tenantId, "other_member", sessionId, undefined), null)
     const secondConversation = "session_artifact_second"
     await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, 'Second conversation')", [
@@ -279,6 +289,9 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
                'Second report', 'text/markdown', 12, $4)`,
       [tenantId, secondConversation, "b".repeat(64), new Date(1000)],
     )
+    const legacy = await chatService.snapshot(tenantId, ownerId, secondConversation, undefined)
+    assert.equal(legacy.deliveries[0].artifact_id, "artifact_second")
+    assert.equal(Object.hasOwn(legacy.deliveries[0], "display_path"), false)
     const candidates = await artifactLibrary.listCandidates(tenantId, ownerId, null, 2)
     assert.deepEqual(
       candidates.map(({ conversationId, artifactId }) => [conversationId, artifactId]),
@@ -330,6 +343,7 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     assert.equal((await linked()).length, 1)
     await pool.query("DELETE FROM bff_agui_event WHERE tenant_id = $1 AND session_id = $2", [tenantId, sessionId])
     assert.equal((await linked()).length, 1)
+    assert.equal((await chatService.snapshot(tenantId, ownerId, sessionId, undefined)).deliveries[0].display_path, displayPath)
 
     // The first source/frame/link in this page must roll back when the second
     // source reuses an already associated Artifact identity.

@@ -1,3 +1,9 @@
+## A‑10 — 已交付成果树
+
+只接 Agent HTTP 8.16 的可选 `display_path`。正式 Agent 来源解析要求它等于原 `path`，并校验 UTF‑8、NFC、绝对虚拟路径、隐藏段及敏感名；缺失或异常只省略展示字段，仍保原交付事实。沿现 `kokoro.delivery.created` 帧与同一事务持久化，私有 snapshot 在原 Repeatable Read 边界读取同一关联，不查 Agent 或 Storage 取路径、不从旧路径猜测。
+
+目录只是展示，读取和下载继续由当前授权的 Conversation/Artifact 与现 Storage exact 关系决定。匿名 Share、未交付文件、`files: []`、既有源事件/重放 cursor 不变。
+
 ## A‑09 — Library Artifact favorites
 
 Native admission supplies the only tenant and subject. The desired-state write first confirms the exact owned association against Storage FINAL/CLEAN, outside any database lock. One short BFF statement rechecks active Conversation/Project and exact source Run/asset/hash, locks Conversation then association, and returns the resulting favorite state. Busy rows fail without a false acknowledgement; the same explicit target may be retried. No receipt store or extra authority is introduced.

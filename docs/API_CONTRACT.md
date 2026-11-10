@@ -1,3 +1,7 @@
+## A‑10 — 私有交付展示路径（Public 28.30）
+
+私有会话 snapshot 的 `deliveries[].display_path` 及原 AG‑UI `kokoro.delivery.created` 的 `value.display_path` 可选，使用同一展示域。只有 Agent 已证明并与原路径相等的安全虚拟绝对路径才可出现，UTF‑8 不超过 4096 bytes；没有证据时省略，不发送 `null`。匿名 snapshot、正式读取选择器、现操作与 cursor 均不变。
+
 ## A‑09 — Library Artifact commands (Public 28.29)
 
 `PUT /v1/library/artifacts/{conversation_id}/{artifact_id}/favorite` sets the supplied boolean

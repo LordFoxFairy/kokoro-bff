@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.29.0
+  version: 28.30.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -23179,7 +23179,7 @@ components:
               items: { $ref: '#/components/schemas/WorkspaceFile' }
             deliveries:
               type: array
-              items: { $ref: '#/components/schemas/Delivery' }
+              items: { $ref: '#/components/schemas/PrivateDelivery' }
             deliveries_has_more: { type: boolean }
             event_watermark: { $ref: '#/components/schemas/EventWatermark' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
@@ -23274,6 +23274,29 @@ components:
         size: { type: integer, minimum: 0, maximum: 9007199254740991 }
         run_id: { type: string }
         created_at: { type: string, format: date-time }
+    PrivateDelivery:
+      type: object
+      required: [conversation_id, artifact_id, asset_id, artifact_kind, title, mime, size, run_id, created_at]
+      additionalProperties: false
+      properties:
+        conversation_id: { type: string }
+        artifact_id: { type: string }
+        asset_id: { type: string }
+        artifact_kind: { type: string, enum: [document, code, image, audio, video, data, archive, other] }
+        title: { type: string }
+        mime: { type: string }
+        size: { type: integer, minimum: 0, maximum: 9007199254740991 }
+        run_id: { type: string }
+        created_at: { type: string, format: date-time }
+        display_path: { $ref: '#/components/schemas/DeliveredArtifactDisplayPath' }
+    DeliveredArtifactDisplayPath:
+      type: string
+      minLength: 1
+      maxLength: 4096
+      x-kokoro-utf8-byte-limit: 4096
+      x-kokoro-unicode-domain: NFC Unicode scalars; no Cc, Cf or Cs
+      x-kokoro-binding: Equal to the exact Agent-attested source path; only a proven virtual workspace path, without hidden segments or sensitive names.
+      description: Display only for this delivered Artifact version. Not a read selector or an access grant. Omitted when not attested.
     MessageCreateRequest:
       type: object
       required: [content]
@@ -23506,12 +23529,31 @@ components:
       x-kokoro-custom-event-values:
         kokoro.interaction.state:
           $ref: '#/components/schemas/ChatInteractionState'
+        kokoro.delivery.created:
+          $ref: '#/components/schemas/ChatDeliveryCreated'
       example: |-
         id: agui_0123456789abcdef0123456789abcdef
         data: {"type":"CUSTOM","name":"kokoro.interaction.state","timestamp":1767225604000,"value":{"interaction_revision":1,"pause_revision":1,"pause_ref":"pause_01J","phase":"waiting","groups":[{"group_id":"group_01J","items":[{"item_id":"item_01J","request_id":"request_01J","kind":"tool_approval","allowed_decisions":["approve","reject"],"display":{"name":"Review","description":"Approve this action","editable":false,"input_schema":{"type":"object"}}}]}],"action_result":null},"metadata":{"kokoro":{"event_id":"agent_event_4","seq":4,"public_sequence":"7","session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:04.000Z"}}}
 
         id: agui_abcdef0123456789abcdef0123456789ab
         data: {"type":"RUN_FINISHED","timestamp":1767225605000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_5","seq":5,"public_sequence":"8","session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:05.000Z"}}}
+    ChatDeliveryCreated:
+      type: object
+      additionalProperties: false
+      required: [tool_call_id, artifact_id, asset_id, artifact_kind, path, title, mime, size, content_hash]
+      description: Existing private delivery frame. The optional display_path is identical to the source path when attested; path alone does not establish a tree location or permission.
+      properties:
+        tool_call_id: { type: string, minLength: 1 }
+        artifact_id: { type: string, minLength: 1 }
+        asset_id: { type: string, minLength: 1 }
+        artifact_kind: { type: string, enum: [document, code, image, audio, video, data, archive, other] }
+        path: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        mime: { type: string, minLength: 1 }
+        size: { type: integer, minimum: 0, maximum: 9007199254740991 }
+        content_hash: { type: string, pattern: '^[a-f0-9]{64}(?![\s\S])' }
+        note: { type: string }
+        display_path: { $ref: '#/components/schemas/DeliveredArtifactDisplayPath' }
     FinalAnswerResult:
       type: object
       additionalProperties: false

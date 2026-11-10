@@ -32,6 +32,7 @@ type ArtifactDeliveryRow = {
   source_title: string
   source_mime: string
   source_size_bytes: string
+  source_display_path: string | null
   run_id: string
   delivered_at: Date | string
 }
@@ -49,6 +50,7 @@ function artifactDeliveryFromRow(row: ArtifactDeliveryRow): ChatArtifactDelivery
     size,
     runId: row.run_id,
     deliveredAt: instant(row.delivered_at),
+    ...(row.source_display_path === null ? {} : { displayPath: row.source_display_path }),
   }
 }
 
@@ -131,7 +133,7 @@ export class PostgresChatSessionStore {
       )
       const deliveries = await client.query<ArtifactDeliveryRow>(
         `SELECT conversation_id, artifact_id, source_asset_id, source_artifact_kind,
-                source_title, source_mime, source_size_bytes, run_id, delivered_at
+                source_title, source_mime, source_size_bytes, source_display_path, run_id, delivered_at
            FROM bff_conversation_artifact
           WHERE tenant_id = $1 AND conversation_id = $2
           ORDER BY delivered_at DESC, artifact_id ASC

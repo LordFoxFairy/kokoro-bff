@@ -60,6 +60,7 @@ export type ChatArtifactDelivery = {
   size: number
   runId: string
   deliveredAt: Date
+  displayPath?: string
 }
 
 export type MoveConversationReceipt = Readonly<{ data: Readonly<{ session_id: string; project_ref: string | null }> }>

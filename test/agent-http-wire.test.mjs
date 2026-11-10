@@ -20,6 +20,28 @@ const event = {
 }
 const page = { data: { events: [event], next_seq: 1, watermark: 1 }, meta: { request_id: "request_1" } }
 
+it("projects only an exact safe Agent delivery display path, never inferring it from an old source path", () => {
+  const path = "/reports/é.md"
+  const base = { tool_call_id: "tool_1", artifact_id: "artifact_1", asset_id: "asset_1", artifact_kind: "document", title: "Report", mime: "text/markdown", size: 12, content_hash: "a".repeat(64) }
+  const map = (source, displayPath) => mapAgentEvent({
+    ...event,
+    event_type: "delivery",
+    payload_json: JSON.stringify({ ...base, path: source, ...(displayPath === undefined ? {} : { display_path: displayPath }) }),
+  })
+  assert.deepEqual(map(path, path).payload, { ...base, path, display_path: path })
+  for (const [source, displayPath] of [
+    [path, undefined],
+    [path, "/reports/other.md"],
+    [path, null],
+    ["/reports/.inputs/0", "/reports/.inputs/0"],
+    ["/home/user/report.md", "/home/user/report.md"],
+  ]) {
+    const result = map(source, displayPath)
+    assert.equal(result.kind, "delivery.created")
+    assert.deepEqual(result.payload, { ...base, path: source })
+  }
+})
+
 describe("Agent event-protocol provenance", () => {
   it("repins HTTP failure ownership and published provenance without reading an unfixed vendor path", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
@@ -33,19 +55,19 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "9d53f36fb549c49b8bc7a05b07776df5cb000698",
-        contract_version: "8.15.0",
+        repository_commit: "e27cd7ad79e6d3d0fb588328733cccd0598f1a3d",
+        contract_version: "8.16.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81",
+        contract_sha256: "e303dfadfccd3a86c3cd47542f751868394d269fd584c70cfd9c801eaa618958",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "fe3a0bfa5ddab06f2e968b835c3f9dcdd151e70033ba5c7ec2ea48defa478d1f",
+        provenance_sha256: "ab107cec312331eb09cd73b6327a63cd172230bf60e98c6821d7dcbcfc774841",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81",
+        source_sha256: "e303dfadfccd3a86c3cd47542f751868394d269fd584c70cfd9c801eaa618958",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
@@ -55,18 +77,18 @@ describe("Agent event-protocol provenance", () => {
   it("uses one HTTP8 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "9d53f36fb549c49b8bc7a05b07776df5cb000698")
+    assert.equal(manifest.owner.repository_commit, "e27cd7ad79e6d3d0fb588328733cccd0598f1a3d")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81",
+      "e303dfadfccd3a86c3cd47542f751868394d269fd584c70cfd9c801eaa618958",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/9d53f36fb549c49b8bc7a05b07776df5cb000698/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/e27cd7ad79e6d3d0fb588328733cccd0598f1a3d/openapi.json", import.meta.url), "utf8"),
     )
     assert.deepEqual(owner.components.schemas.ChatActivity.oneOf[0].properties.display_code, {
       type: "string",

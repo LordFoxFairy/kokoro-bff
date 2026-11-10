@@ -332,6 +332,15 @@ export const AGENT_PROCESS_CONSTRAINTS = {
     description:
       "Public intent of this exact model tool call, bound before approval edits. Not reasoning, capability documentation, execution status or authority. No surrounding whitespace, control/format/surrogate characters or private text. Omitted when absent or mismatched; never inferred from adjacent prose.",
   },
+  deliveryDisplayPath: {
+    type: "string",
+    minLength: 1,
+    maxLength: 4096,
+    "x-kokoro-utf8-byte-limit": 4096,
+    "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",
+    "x-kokoro-binding": "Equal to the exact source path; only a proven virtual workspace path, without hidden segments or sensitive names.",
+    description: "Display-only path of this already delivered Artifact version. Not a read selector. Omitted when unproven.",
+  },
   toolDetail: {
     minScalars: 1,
     maxScalars: 120,

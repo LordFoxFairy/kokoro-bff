@@ -1,3 +1,7 @@
+## 2026-11-10 A‑10 已交付成果树候选
+
+Public 28.30 与 Agent HTTP 8.16 `e27cd7ad79e6d3d0fb588328733cccd0598f1a3d` 精确配对。已证明的可选展示路径从原私有 AG‑UI delivery 进入既有 Artifact 关联和 snapshot，旧产物无目录、不补造。匿名 Share、内容权限、未交付工作区和其他 owner 不变；跨仓浏览器验收由 Root 记录。
+
 ## 2026-11-10 A‑09 Library Artifact commands
 
 Public 28.29 pairs the existing Library Artifact relation's persistent favorite and the

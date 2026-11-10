@@ -42,6 +42,7 @@ export type AgUiArtifactDelivery = {
   title: string
   mime: string
   size: number
+  displayPath?: string
 }
 
 export type AgUiSourceProjection = {

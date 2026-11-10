@@ -69,6 +69,7 @@ export function createChatSessionReads(source: ChatSessionReadSource) {
           size: delivery.size,
           run_id: delivery.runId,
           created_at: delivery.deliveredAt.toISOString(),
+          ...(delivery.displayPath === undefined ? {} : { display_path: delivery.displayPath }),
         })),
         deliveries_has_more: deliveriesHasMore,
         event_watermark: eventWatermark,

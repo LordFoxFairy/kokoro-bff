@@ -158,8 +158,9 @@ export type ChatComposerSelection = Readonly<{
   selected_mcp_connection_ids: string[]
   selected_custom_api_profiles?: SelectedCustomApiProfile[]
 }>
-export type PrivateChatSessionDetail = Omit<ChatSessionDetail, "messages"> & {
+export type PrivateChatSessionDetail = Omit<ChatSessionDetail, "messages" | "deliveries"> & {
   messages?: ChatMessageRead[]
+  deliveries: Array<Delivery & { display_path?: string }>
   composer_selection?: ChatComposerSelection
 }
 

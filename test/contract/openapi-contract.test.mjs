@@ -28,6 +28,28 @@ const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.me
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 
+test("Public28.30 shares one optional Artifact display path domain only between private snapshot and existing AG-UI delivery", async () => {
+  const { load } = await import("js-yaml")
+  const { restorePublic2829DeliveryDisplayPathContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const source = await readFile(currentOpenapiUrl, "utf8")
+  const { info, paths, components } = load(source)
+  const s = components.schemas
+  const domain = { $ref: "#/components/schemas/DeliveredArtifactDisplayPath" }
+  assert.equal(info.version, "28.30.0")
+  assert.equal(s.PrivateSessionSnapshotResponse.properties.data.properties.deliveries.items.$ref, "#/components/schemas/PrivateDelivery")
+  assert.equal(s.SessionSnapshotResponse.properties.data.properties.deliveries.items.$ref, "#/components/schemas/Delivery")
+  assert.equal(s.SessionEventStream["x-kokoro-custom-event-values"]["kokoro.delivery.created"].$ref, "#/components/schemas/ChatDeliveryCreated")
+  for (const shape of [s.PrivateDelivery, s.ChatDeliveryCreated]) {
+    assert.equal(shape.additionalProperties, false)
+    assert.equal(shape.required.includes("display_path"), false)
+    assert.deepEqual(shape.properties.display_path, domain)
+  }
+  assert.equal(s.DeliveredArtifactDisplayPath["x-kokoro-utf8-byte-limit"], 4096)
+  const parent = load(restorePublic2829DeliveryDisplayPathContract(source))
+  assert.deepEqual(parent.components.schemas.Delivery, s.Delivery)
+  assert.deepEqual(parent.paths, paths)
+})
+
 test("Public17 publishes explicit calendar selections and preserves the complete Public16.2 parent", async () => {
   const { load } = await import("js-yaml")
   const source = restorePublic17LibraryFilterContract(restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")))

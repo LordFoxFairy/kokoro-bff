@@ -1,3 +1,7 @@
+## A‑10 — 私有交付展示路径
+
+既有 `bff_conversation_artifact.source_display_path TEXT` 可空、无默认值，随交付 source/frame 在原事务中一次写入。旧行保持 NULL，无历史推断、回填、索引或新表；仍由既有 `(tenant_id, conversation_id, artifact_id)` 确定关系。V1 canonical 安装只用于空 owner schema；存量环境如需升级，在独立上线步骤内先扩这一列，不重建、不触及其他 owner。
+
 ## A‑09 — Library Artifact favorites
 
 `bff_conversation_artifact.favorited_at` is nullable `TIMESTAMPTZ(3)` with no default. A row has one private owner through its current active Conversation; no ownership transfer exists. NULL means not favorited. Favoriting changes only this column, preserves immutable delivery identity, and an already-satisfied target does not rewrite the row. Existing Conversation cleanup removes its relationship and favorite together. Storage continues to own Artifact lifecycle and bytes.
