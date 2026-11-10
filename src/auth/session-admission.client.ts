@@ -23,6 +23,7 @@ const responseSchema = z
   })
   .nullable()
 const membershipSchema = zCheckAuthorizationResponse.extend({ data: zCheckAuthorizationResponse.shape.data.strict() }).strict()
+const nativeRateLimitSchema = z.strictObject({ message: z.string().min(1) })
 export type SessionAdmissionClientOptions = Readonly<{
   baseUrl: string | null
   credentialFile?: string | null | undefined
@@ -45,7 +46,7 @@ function safeCookies(headers: Headers, origin: string): string[] {
     return attributes.every((value) => /^(?:HttpOnly|Secure|Path=\/|SameSite=(?:Lax|Strict|None)|Max-Age=-?\d+|Expires=[\x20-\x7e]+)$/iu.test(value))
   })
 }
-function limited(headers: Headers): SessionAdmissionResult {
+function limited(headers: Headers): Extract<SessionAdmissionResult, { ok: false }> {
   const after = headers.get("retry-after")
   return {
     ok: false,
@@ -84,15 +85,19 @@ export class SessionAdmissionClient implements SessionAdmission {
       input.signal.throwIfAborted()
       const response = await this.transport.requestSession({ ...input, requestId })
       input.signal.throwIfAborted()
-      if (response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") return dependencyUnavailable()
+      const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase()
+      const rateLimit = response.status === 429 ? limited(response.headers) : null
+      // Better Auth's native limiter returns JSON as text/plain; IAM ingress exposes its delay as Retry-After.
+      if (mediaType !== "application/json" && (mediaType !== "text/plain" || rateLimit?.retryAfter === undefined)) return dependencyUnavailable()
       const raw = strictParseRawJson(response.body)
+      if (mediaType === "text/plain" && !nativeRateLimitSchema.safeParse(raw).success) return dependencyUnavailable()
       setCookies = safeCookies(response.headers, this.webOrigin)
       if (response.status === 401) {
         // Better Auth's human authentication failure, not a private service credential response.
         if (!z.strictObject({ message: z.string(), code: z.string().optional() }).safeParse(raw).success) return dependencyUnavailable()
         return { ok: false, status: 401, code: "session_invalid", setCookies }
       }
-      if (response.status === 429) return { ...limited(response.headers), setCookies }
+      if (rateLimit !== null) return { ...rateLimit, setCookies }
       if (response.status !== 200) return dependencyUnavailable()
       const parsed = responseSchema.safeParse(raw)
       if (!parsed.success) return dependencyUnavailable()

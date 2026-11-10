@@ -198,6 +198,31 @@ test("official human401 requires its declared shape; arbitrary401 is not a logou
   }
 })
 
+test("native Better Auth text/plain rate limiting is preserved without membership or retry", async () => {
+  const message = JSON.stringify({ message: "Too many requests. Please try again later." })
+  const unavailable = { ok: false, status: 503, code: "iam_admission_unavailable" }
+  const cases = [
+    { status: 429, retryAfter: "19", body: message, expected: { ok: false, status: 429, code: "session_rate_limited", retryAfter: "19", setCookies: [] } },
+    { status: 429, retryAfter: "86401", body: message, expected: unavailable },
+    { status: 429, retryAfter: "19", body: '{"error":"unexpected peer response"}', expected: unavailable },
+    { status: 200, retryAfter: "19", body: JSON.stringify(nativeSession()), expected: unavailable },
+  ]
+  for (const entry of cases) {
+    await withPeer(
+      (_request, response) => {
+        response.statusCode = entry.status
+        response.setHeader("content-type", "text/plain;charset=UTF-8")
+        response.setHeader("retry-after", entry.retryAfter)
+        response.end(entry.body)
+      },
+      async (client, requests) => {
+        assert.deepEqual(await client.verify(input()), entry.expected)
+        assert.deepEqual(requests, ["/iam/get-session?disableCookieCache=true&disableRefresh=true"])
+      },
+    )
+  }
+})
+
 test("native transport bounds raw bytes, cancellation and redirects without a late success or retry", async () => {
   await withPeer(
     (_request, response) => {
