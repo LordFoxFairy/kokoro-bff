@@ -92,10 +92,10 @@ CREATE TABLE IF NOT EXISTS bff_project_deletion (
 CREATE TABLE IF NOT EXISTS bff_project_scope_release_outbox (
   command_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
-  project_id TEXT NOT NULL,
+  project_id TEXT,
   owner_subject_id TEXT NOT NULL,
   actor_id TEXT NOT NULL,
-  scope_kind TEXT NOT NULL CONSTRAINT ck_bff_project_release_scope_kind CHECK (scope_kind IN ('project','conversation')),
+  scope_kind TEXT NOT NULL CONSTRAINT ck_bff_project_release_scope_kind CHECK (scope_kind IN ('project','conversation','conversation_workspace')),
   scope_id TEXT NOT NULL,
   request_digest TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'pending' CONSTRAINT ck_bff_project_release_state CHECK (state IN ('pending','leased','released','blocked')),
@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS bff_project_scope_release_outbox (
   CONSTRAINT uq_bff_project_release_scope UNIQUE (tenant_id, project_id, scope_kind, scope_id),
   CONSTRAINT ck_bff_project_release_actor CHECK (actor_id = owner_subject_id),
   CONSTRAINT ck_bff_project_release_project_scope CHECK (scope_kind <> 'project' OR scope_id = project_id),
+  CONSTRAINT ck_bff_project_release_parent_kind CHECK ((scope_kind = 'conversation_workspace') = (project_id IS NULL)),
   CONSTRAINT ck_bff_project_release_digest CHECK (length(request_digest) = 64 AND request_digest COLLATE "C" !~ '[^0-9a-f]'),
   CONSTRAINT ck_bff_project_release_lease CHECK (
     (state = 'leased' AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL)

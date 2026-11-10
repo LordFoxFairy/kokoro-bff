@@ -9,11 +9,7 @@ export type VerifiedDownloadTimings = Readonly<{ totalMs: number; idleMs: number
 const DEFAULT_TIMINGS: VerifiedDownloadTimings = { totalMs: 28 * 60_000, idleMs: 25_000 }
 const SYSTEM_CLOCK: DeadlineClock = { schedule: (callback, milliseconds) => setTimeout(callback, milliseconds), clear: (timer) => clearTimeout(timer) }
 function safeDisposition(filename: string): string {
-  const cleaned =
-    filename
-      .replace(/[\u0000-\u001f\u007f/\\]/gu, "_")
-      .replace(/^\.+/u, "_")
-      .slice(0, 255) || "download"
+  const cleaned = [...filename.replace(/[\u0000-\u001f\u007f/\\]/gu, "_").replace(/^\.+/u, "_")].slice(0, 255).join("") || "download"
   const fallback = cleaned.replace(/[^\x20-\x7e]/gu, "_").replace(/[";]/gu, "_")
   const encoded = encodeURIComponent(cleaned).replace(/['()*]/gu, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`

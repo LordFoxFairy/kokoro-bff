@@ -28,10 +28,18 @@ const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.me
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 
-test("Public28.32 separates admitted user commands from the Telegram callback", async () => {
+test("Public28.33 adds exact workspace bytes and preserves the complete Telegram parent", async () => {
   const { load } = await import("js-yaml")
-  const source = await readFile(currentOpenapiUrl, "utf8")
-  const { restorePublic2831AgentConnectionContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const { restorePublic2832WorkspaceOutputsContract, restorePublic2831AgentConnectionContract } =
+    await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const child = await readFile(currentOpenapiUrl, "utf8")
+  const active = load(child)
+  const output = active.components.schemas.RunWorkspaceOutputVersion
+  assert.deepEqual(output.required, ["version_id", "virtual_path", "content_sha256", "size_bytes", "mime_type"])
+  assert.equal(output.additionalProperties, false)
+  assert.equal(active.components.schemas.RunDisplay.required.includes("workspace_outputs"), false)
+  assert.ok(active.paths["/v1/sessions/{id}/runs/{runId}/workspace-outputs/{versionId}/content"].get.responses[200].content["text/markdown"])
+  const source = restorePublic2832WorkspaceOutputsContract(child)
   const parent = restorePublic2831AgentConnectionContract(source)
   assert.equal(createHash("sha256").update(parent).digest("hex"), "9fea8041e3eac479e5ea008e120729fb37637636bb6bf3ad8b94ac161ac8a88c")
   const { info, paths, components } = load(source)

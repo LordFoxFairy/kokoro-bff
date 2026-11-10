@@ -7,10 +7,14 @@ import type { AgentRunsReader } from "../../infrastructure/postgres/project-exec
 import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
 import type { RunFinalAnswerLookup } from "../../infrastructure/postgres/run-final-answer-read.js"
 import { messageFeedbackId } from "../../application/chat/message-feedback-input.js"
-import { readAgentRunDisplay } from "../../infrastructure/clients/agent/run-display.js"
+import { readAgentRunDisplay, workspaceOutputVersionId } from "../../infrastructure/clients/agent/run-display.js"
+import { readWorkspaceOutputBytes } from "../../infrastructure/clients/storage/workspace-output-download.js"
+import type { VerifiedArtifactSpool } from "../../infrastructure/clients/storage/artifact-download-transfer.js"
+import { ProjectResourceError } from "../../application/project-resource.error.js"
 import { failure } from "../../contracts/index.js"
 import { pathOf, requestId } from "../request.js"
 import { send } from "../response.js"
+import { writeVerifiedDownload } from "../verified-download.js"
 export class RunDisplayAdmissionError extends Error {
   constructor(
     public readonly status: number,
@@ -66,20 +70,32 @@ export async function runDisplayRoute(
   const fail = (status: number, code: string, retryAfter?: string) => {
     if (!response.destroyed && !response.writableEnded) send(response, status, failure(code, "Run display read failed", context.requestId), retryAfter)
   }
+  let spool: VerifiedArtifactSpool | undefined
   try {
     const url = new URL(request.url ?? "", "http://bff.invalid"),
       sessionId = path[1],
       runId = path[3]
+    const display = path.length === 5 && path[4] === "display"
+    const version = path.length === 7 && path[4] === "workspace-outputs" && path[6] === "content" ? path[5] : undefined
     if (
-      path.length !== 5 ||
+      (!display && (version === undefined || !workspaceOutputVersionId.safeParse(version).success)) ||
       path[0] !== "sessions" ||
       path[2] !== "runs" ||
-      path[4] !== "display" ||
       !messageFeedbackId(sessionId) ||
       !messageFeedbackId(runId) ||
-      url.pathname !== `/v1/sessions/${encodeURIComponent(sessionId)}/runs/${encodeURIComponent(runId)}/display` ||
+      url.pathname !==
+        `/v1/sessions/${encodeURIComponent(sessionId)}/runs/${encodeURIComponent(runId)}/${display ? "display" : `workspace-outputs/${version}/content`}` ||
       url.search ||
-      ["content-length", "transfer-encoding", "content-type", "content-encoding", "idempotency-key", "if-match"].some((k) => request.headers[k] !== undefined)
+      url.hash ||
+      [
+        "content-length",
+        "transfer-encoding",
+        "content-type",
+        "content-encoding",
+        "idempotency-key",
+        "if-match",
+        ...(display ? [] : ["range", "if-range", "if-none-match", "if-modified-since", "if-unmodified-since"]),
+      ].some((k) => request.headers[k] !== undefined)
     ) {
       fail(400, "invalid_run_display_request")
       return
@@ -90,8 +106,7 @@ export async function runDisplayRoute(
     }
     if (!store) throw Error("run_display_unavailable")
     const checkedStore = store
-    const check = async () => {
-      await within(() => currentAdmission(controller.signal))
+    const checkOwned = async () => {
       const run = await within(() =>
         checkedStore.submittedAgentRuns!.readSubmittedAgentRun({ tenantId: context.identity.namespace, runId, signal: controller.signal }),
       )
@@ -111,8 +126,30 @@ export async function runDisplayRoute(
       )
       if (!owned) throw Error("run_display_not_found")
     }
-    await check()
-    const { final_message_id, ...facts } = await within(() => readAgentRunDisplay(config, context, runId, controller.signal))
+    // The enclosing handler just admitted the user. Repeat that admission
+    // after owner I/O, not twice in a row before the first read.
+    await checkOwned()
+    const { final_message_id, workspace_outputs, ...facts } = await within(() => readAgentRunDisplay(config, context, runId, controller.signal))
+    if (version !== undefined) {
+      const file = workspace_outputs?.find((candidate) => candidate.version_id === version)
+      if (!file) throw new ProjectResourceError("workspace_output_not_found", 404)
+      if (!config.storage) throw new ProjectResourceError("storage_unavailable", 503, true)
+      spool = await readWorkspaceOutputBytes(config.storage, context, sessionId, file, controller.signal)
+      await within(() => currentAdmission(controller.signal))
+      await checkOwned()
+      controller.signal.throwIfAborted()
+      await writeVerifiedDownload(
+        response,
+        spool,
+        {
+          filename: file.virtual_path.split("/").at(-1)!,
+          mimeType: file.mime_type,
+          requestId: context.requestId,
+        },
+        controller.signal,
+      )
+      return
+    }
     const finalAnswer = final_message_id
       ? await within(() =>
           checkedStore.readRunFinalAnswer({
@@ -126,13 +163,31 @@ export async function runDisplayRoute(
           }),
         )
       : null
-    const data = finalAnswer ? { ...facts, final_answer: finalAnswer } : facts
-    await check()
+    const data = {
+      ...facts,
+      ...(finalAnswer ? { final_answer: finalAnswer } : {}),
+      ...(workspace_outputs
+        ? {
+            workspace_outputs: workspace_outputs.map(({ version_id, virtual_path, content_sha256, size_bytes, mime_type }) => ({
+              version_id,
+              virtual_path,
+              content_sha256,
+              size_bytes,
+              mime_type,
+            })),
+          }
+        : {}),
+    }
+    await within(() => currentAdmission(controller.signal))
+    await checkOwned()
     controller.signal.throwIfAborted()
     if (Buffer.byteLength(JSON.stringify({ data })) > 1048576) throw Error("run_display_response_invalid")
     if (!response.destroyed && !response.writableEnded) send(response, 200, { data })
   } catch (error) {
-    if (error instanceof RunDisplayAdmissionError) fail(error.status, error.code, error.retryAfter)
+    if (response.headersSent) {
+      if (!response.writableFinished && !response.destroyed) response.destroy()
+    } else if (error instanceof ProjectResourceError) fail(error.status, error.code)
+    else if (error instanceof RunDisplayAdmissionError) fail(error.status, error.code, error.retryAfter)
     else if (error instanceof Error && error.message === "run_display_not_found") fail(404, "run_not_found")
     else if (error instanceof Error && error.message === "run_display_response_invalid") fail(502, "run_display_response_invalid")
     else fail(503, "run_display_unavailable")
@@ -141,12 +196,13 @@ export async function runDisplayRoute(
     controller.abort()
     request.removeListener("aborted", abort)
     response.removeListener("close", abort)
+    await spool?.cleanup()
   }
 }
 
 export function isRunDisplayRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
-  return /^\/v1\/sessions\/[^/]+\/runs\/[^/]+\/display$/u.test(path)
+  return /^\/v1\/sessions\/[^/]+\/runs\/[^/]+\/(?:display|workspace-outputs\/[^/]+\/content)$/u.test(path)
 }
 
 /** AgentRuns/AG-UI-owned run display adapter with fresh human admission before and after owner reads. */

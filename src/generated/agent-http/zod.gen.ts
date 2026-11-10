@@ -307,6 +307,24 @@ export const zSkillDisplay = z
   .object({ source_ref: z.string().min(7), name: z.string().min(1), virtual_path: z.string().min(1), revision: z.string().optional() })
   .strict()
 
+export const zWorkspaceOutputVersion = z
+  .object({
+    version_id: z.string().regex(/^wsv_[0-9a-f]{64}(?![\s\S])/),
+    virtual_path: z
+      .string()
+      .min(10)
+      .max(4096)
+      .regex(/^\/outputs\//),
+    asset_id: z.string().min(1).max(255),
+    content_sha256: z.string().regex(/^[0-9a-f]{64}(?![\s\S])/),
+    size_bytes: z.int().gte(0).lte(8388608),
+    mime_type: z.enum(["text/plain", "text/markdown", "text/csv", "application/json"]),
+  })
+  .strict()
+
+/**
+ * Recovered safe display facts only. Missing facts remain unknown; source events and execution authority are unchanged. No completeness assertion.
+ */
 export const zRunDisplay = z
   .object({
     run_id: z.string().min(1),
@@ -354,6 +372,7 @@ export const zRunDisplay = z
       )
       .max(128),
     final_message_id: z.string().optional(),
+    workspace_outputs: z.array(zWorkspaceOutputVersion).min(1).max(128).optional(),
   })
   .strict()
 

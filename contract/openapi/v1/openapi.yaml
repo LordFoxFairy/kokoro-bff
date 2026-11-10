@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.32.0
+  version: 28.33.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -15792,6 +15792,71 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /v1/sessions/{id}/runs/{runId}/workspace-outputs/{versionId}/content:
+    get:
+      tags: [Chat]
+      operationId: getSessionRunWorkspaceOutputContent
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: chat.read
+      summary: Download one published process file version of the exact owned Run
+      description: No query, body, Range or conditional request. An opaque version must be present in the exact original Run display. The current admitted user must still own the active Conversation and its Project, if any, before bytes are sent. Returns verified original bytes, never a Storage ID or transfer URL. Not a Share, Artifact or arbitrary path API.
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: versionId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^wsv_[0-9a-f]{64}(?![\s\S])' }
+      responses:
+        '200':
+          description: Original, verified private process output
+          headers:
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+            Content-Length: { required: true, schema: { type: integer, minimum: 0, maximum: 8388608 } }
+            Content-Disposition: { required: true, schema: { type: string } }
+            x-request-id: { required: true, schema: { type: string, minLength: 1 } }
+            x-content-type-options: { required: true, schema: { type: string, const: nosniff } }
+            Referrer-Policy: { required: true, schema: { type: string, const: no-referrer } }
+          content:
+            text/plain: { schema: { type: string, format: binary } }
+            text/markdown: { schema: { type: string, format: binary } }
+            text/csv: { schema: { type: string, format: binary } }
+            application/json: { schema: { type: string, format: binary } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405':
+          description: Only GET is allowed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After: { schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Owner metadata or content did not verify
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   # AGENT-DISPLAY-PATHS-END
   # MESSAGE-FEEDBACK-PATHS-BEGIN
   /v1/sessions/{id}/messages/{messageId}/feedback:
@@ -16541,6 +16606,22 @@ components:
       additionalProperties: false
       x-kokoro-binding: virtual_path must equal /.skills/{base64url(ASCII source_ref suffix)}/SKILL.md; revision only from this Run exact ResolvedSkill, absent
         if unproven
+    RunWorkspaceOutputVersion:
+      type: object
+      additionalProperties: false
+      required: [version_id, virtual_path, content_sha256, size_bytes, mime_type]
+      properties:
+        version_id: { type: string, pattern: '^wsv_[0-9a-f]{64}(?![\s\S])' }
+        virtual_path:
+          type: string
+          pattern: '^/outputs/'
+          minLength: 10
+          maxLength: 4096
+          x-kokoro-utf8-byte-limit: 4096
+          description: Safe NFC virtual path within the frozen Run output root; display only, never a content selector.
+        content_sha256: { type: string, pattern: '^[0-9a-f]{64}(?![\s\S])' }
+        size_bytes: { type: integer, minimum: 0, maximum: 8388608 }
+        mime_type: { type: string, enum: [text/plain, text/markdown, text/csv, application/json] }
     RunDisplay:
       type: object
       required:
@@ -16553,6 +16634,12 @@ components:
         run_id:
           type: string
           minLength: 1
+        workspace_outputs:
+          type: array
+          maxItems: 128
+          x-kokoro-unique-by: version_id
+          items: { $ref: '#/components/schemas/RunWorkspaceOutputVersion' }
+          description: Published immutable process output versions for this exact Run; omitted when there are no published versions. Never included in snapshots, Share or Library.
         final_answer:
           type: object
           required: [segment_id, revision]

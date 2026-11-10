@@ -45,6 +45,9 @@ export class PostgresBffDatabase implements OnApplicationShutdown {
       `SELECT current_schema() AS schema,
               to_regclass('kokoro_bff.bff_agent_connection') IS NOT NULL
               AND to_regclass('kokoro_bff.uq_bff_agent_connection_bound_identity') IS NOT NULL
+              AND EXISTS (SELECT 1 FROM pg_constraint
+                WHERE conrelid=to_regclass('kokoro_bff.bff_project_scope_release_outbox')
+                  AND conname='ck_bff_project_release_parent_kind' AND convalidated)
               AND to_regclass('kokoro_bff.bff_project') IS NOT NULL
               AND (SELECT count(*)=2 FROM pg_attribute
                 WHERE attrelid=to_regclass('kokoro_bff.bff_project') AND attnotnull AND atthasdef AND NOT attisdropped

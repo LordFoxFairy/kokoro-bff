@@ -301,6 +301,16 @@ export const AGENT_PROCESS_CONSTRAINTS = {
           description:
             "Optional private read-only proof of a completed legacy Run's final public assistant message identity. Derived from a bounded reviewed native terminal and exact same-Run public body; never inferred from public ordering, never written back to historical events, and not an execution authority. Omitted when unproven. Consumers must bind their own exact ordered parts and revision before display.",
         },
+        workspace_outputs: {
+          type: "array",
+          minItems: 1,
+          maxItems: 128,
+          items: {
+            $ref: "#/components/schemas/WorkspaceOutputVersion",
+          },
+          "x-kokoro-unique-by": "version_id",
+          description: "Published, CLEAN versions from this exact Run only. Omitted when no version has been published; path is display only.",
+        },
       },
       additionalProperties: false,
       description:

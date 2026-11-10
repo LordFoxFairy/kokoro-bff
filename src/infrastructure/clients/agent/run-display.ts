@@ -1,11 +1,12 @@
 import { AGENT_PROCESS_CONSTRAINTS } from "../../../generated/agent-http/process-profile.gen.js"
 import type { BffConfig } from "../../../config/runtime.js"
-import { zRunDisplayEnvelope } from "../../../generated/agent-http/zod.gen.js"
+import { zRunDisplayEnvelope, zWorkspaceOutputVersion } from "../../../generated/agent-http/zod.gen.js"
 import { agentIdentityHeaders } from "./identity.js"
-import { safeActivityDetails, safeSkillDisplays, safeToolFacts, safeVirtualPath } from "./display-safety.js"
+import { safeActivityDetails, safeDeliveryDisplayPath, safeSkillDisplays, safeToolFacts, safeVirtualPath } from "./display-safety.js"
 import { strictParseRawJson } from "../../raw-json.js"
 import type { RequestContext } from "../../../domain/request-context.js"
 const activityIdPattern = new RegExp(AGENT_PROCESS_CONSTRAINTS.activityId.pattern, "u")
+export const workspaceOutputVersionId = zWorkspaceOutputVersion.shape.version_id
 export async function readAgentRunDisplay(config: BffConfig, context: RequestContext, runId: string, signal: AbortSignal) {
   const base = config.upstreams.agents
   if (!config.agentEnabled || !base || !config.upstreamSecret) throw Error("run_display_unavailable")
@@ -61,13 +62,16 @@ export async function readAgentRunDisplay(config: BffConfig, context: RequestCon
   const parsed = zRunDisplayEnvelope.safeParse(raw)
   if (!parsed.success) throw Error("run_display_response_invalid")
   const data = parsed.data.data
+  const outputs = data.workspace_outputs ?? []
   if (
     data.run_id !== runId ||
     !safeSkillDisplays(data.display_skills) ||
     !safeToolFacts(data.tool_facts) ||
     !safeActivityDetails(data.activity_details) ||
     new Set(data.tool_paths.map((item) => item.activity_id)).size !== data.tool_paths.length ||
-    data.tool_paths.some((item) => !activityIdPattern.test(item.activity_id) || !safeVirtualPath(item.virtual_path))
+    data.tool_paths.some((item) => !activityIdPattern.test(item.activity_id) || !safeVirtualPath(item.virtual_path)) ||
+    new Set(outputs.map((item) => item.version_id)).size !== outputs.length ||
+    outputs.some((item) => !safeDeliveryDisplayPath(item.virtual_path) || [...item.virtual_path.split("/").at(-1)!].length > 255)
   )
     throw Error("run_display_response_invalid")
   return data

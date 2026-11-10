@@ -1,9 +1,9 @@
-export type ProjectScopeReleaseKind = "project" | "conversation"
+export type ProjectScopeReleaseKind = "project" | "conversation" | "conversation_workspace"
 
 export type ProjectScopeReleaseCommand = Readonly<{
   commandId: string
   tenantId: string
-  projectId: string
+  projectId: string | null
   ownerSubjectId: string
   actorId: string
   scopeKind: ProjectScopeReleaseKind

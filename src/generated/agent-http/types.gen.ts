@@ -304,11 +304,30 @@ export type RunDisplay = {
    * Optional private read-only proof of a completed legacy Run's final public assistant message identity. Derived from a bounded reviewed native terminal and exact same-Run public body; never inferred from public ordering, never written back to historical events, and not an execution authority. Omitted when unproven. Consumers must bind their own exact ordered parts and revision before display.
    */
   final_message_id?: string
+  /**
+   * Published, CLEAN versions from this exact Run only. Omitted when no version has been published; path is display only.
+   */
+  workspace_outputs?: Array<WorkspaceOutputVersion>
 }
 
 export type RunDisplayEnvelope = {
   data: RunDisplay
   meta: Meta
+}
+
+export type WorkspaceOutputVersion = {
+  version_id: string
+  /**
+   * Exact safe virtual output path; never a host path, URL, secret or private mount.
+   */
+  virtual_path: string
+  /**
+   * Private Storage exact reference. Never sent to browsers as an authorization token.
+   */
+  asset_id: string
+  content_sha256: string
+  size_bytes: number
+  mime_type: "text/plain" | "text/markdown" | "text/csv" | "application/json"
 }
 
 /**

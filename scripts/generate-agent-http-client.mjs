@@ -12,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "e27cd7ad79e6d3d0fb588328733cccd0598f1a3d"
+const ownerCommit = "7bfbf5ef3febaad710007fcd88992f44333d4740"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "e303dfadfccd3a86c3cd47542f751868394d269fd584c70cfd9c801eaa618958"
-const provenanceDigest = "ab107cec312331eb09cd73b6327a63cd172230bf60e98c6821d7dcbcfc774841"
-const ownerContractVersion = "8.16.0"
+const ownerDigest = "c471094369efa80f1182e41c67ef8150835a4544c283fd8d2d4e689707a51aad"
+const provenanceDigest = "227015d780a9d9dbb93e5746690fc200bca4663bcf7736fe7b984e5bb9d08832"
+const ownerContractVersion = "8.17.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -171,9 +171,29 @@ const agent815ResourceDescription = agent814ResourceDescription.replace(
   "No version_id, URL or content.",
   "Asset and artifact have no inline content. Final answer is only for a user chat Run and resource_id is its source assistant Message ID; exact source conversation, Run, final segment and revision are provenance, not the consumer identity. Its unmodified UTF-8 text, size and SHA-256 must agree. No version_id, URL or additional identity.",
 )
+function restoreAgent816WorkspaceOutputsRaw(source) {
+  if (!source.includes('"version": "8.17.0"')) return source
+  assert.equal(sha256(source), ownerDigest, "Agent8.17 workspace output child drift")
+  const parent = source
+    .replace(/,\n          "workspace_outputs": \{[\s\S]*?\n          \}(?=\n        \},\n        "additionalProperties": false)/u, "")
+    .replace(/,\n      "WorkspaceOutputVersion": \{[\s\S]*?\n      \}(?=\n    \},\n    "responses")/u, "")
+    .replace('"version": "8.17.0"', '"version": "8.16.0"')
+  assert.equal(sha256(parent), "e303dfadfccd3a86c3cd47542f751868394d269fd584c70cfd9c801eaa618958", "Agent8.16 raw workspace output parent drift")
+  return parent
+}
+function restoreAgent816WorkspaceOutputsContract(document) {
+  if (document.info?.version !== "8.17.0") return document
+  const parent = structuredClone(document)
+  delete parent.components.schemas.RunDisplay.properties.workspace_outputs
+  delete parent.components.schemas.WorkspaceOutputVersion
+  parent.info.version = "8.16.0"
+  assert.equal(sha256(JSON.stringify(parent)), "9ec3bb6b1b0c19a32cfa2d58074a2ba7aba6f3ca90ea7353bf96ac5f71851976", "Agent8.16 parsed workspace output parent drift")
+  return parent
+}
 function restoreAgent815DeliveryPathRaw(source) {
+  source = restoreAgent816WorkspaceOutputsRaw(source)
   if (!source.includes('"version": "8.16.0"')) return source
-  assert.equal(sha256(source), ownerDigest, "Agent8.16 delivery child drift")
+  assert.equal(sha256(source), "e303dfadfccd3a86c3cd47542f751868394d269fd584c70cfd9c801eaa618958", "Agent8.16 delivery child drift")
   const parent = source
     .replace(',\n            "delivery": "#/components/schemas/ChatDelivery"', "")
     .replace(/,\n      "ChatDelivery": \{[\s\S]*?\n      \}(?=\n    \},\n    "responses")/u, "")
@@ -182,6 +202,7 @@ function restoreAgent815DeliveryPathRaw(source) {
   return parent
 }
 function restoreAgent815DeliveryPathContract(document) {
+  document = restoreAgent816WorkspaceOutputsContract(document)
   if (document.info?.version !== "8.16.0") return document
   const parent = structuredClone(document)
   delete parent.components.schemas.ChatDelivery
@@ -937,7 +958,7 @@ async function normalizeGeneratorCompatibility(directory) {
   ])
   const zodPath = path.join(directory, "zod.gen.ts")
   let zodSource = await readFile(zodPath, "utf8")
-  for (const schema of ["Meta", "Error", "ErrorEnvelope", "LaunchReceipt", "LaunchReceiptEnvelope", "ChatEvent", "ReplayPage", "ReplayPageEnvelope"]) {
+  for (const schema of ["Meta", "Error", "ErrorEnvelope", "LaunchReceipt", "LaunchReceiptEnvelope", "ChatEvent", "ReplayPage", "ReplayPageEnvelope", "WorkspaceOutputVersion"]) {
     const expression = new RegExp(`(export const z${schema} = z\\.object\\(\\{[\\s\\S]*?\\n)\\}\\);`)
     assert.match(zodSource, expression, `${schema} generated object was not found`)
     zodSource = zodSource.replace(expression, "$1}).strict();")

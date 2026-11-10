@@ -1043,6 +1043,11 @@
     },
     {
       "method": "GET",
+      "path": "/v1/sessions/{id}/runs/{runId}/workspace-outputs/{versionId}/content",
+      "operation_id": "getSessionRunWorkspaceOutputContent"
+    },
+    {
+      "method": "GET",
       "path": "/v1/scheduled-tasks/executions",
       "operation_id": "listScheduledTaskExecutions"
     },

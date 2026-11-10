@@ -50,7 +50,7 @@ export class StorageScopeReleaseClient implements ProjectScopeReleaseClient {
       "x-kokoro-tenant-id": command.tenantId,
       "x-kokoro-subject-id": command.ownerSubjectId,
       "x-kokoro-request-id": command.commandId,
-      "x-kokoro-scope-kind": command.scopeKind,
+      "x-kokoro-scope-kind": command.scopeKind === "conversation_workspace" ? "conversation" : command.scopeKind,
       "x-kokoro-scope-id": command.scopeId,
     }
     try {
@@ -58,10 +58,13 @@ export class StorageScopeReleaseClient implements ProjectScopeReleaseClient {
       const response =
         command.scopeKind === "project"
           ? await this.client.releaseProjectScope(input, { headers, signal, timeoutMs })
-          : await this.client.releaseConversationScope(input, { headers, signal, timeoutMs })
+          : command.scopeKind === "conversation_workspace"
+            ? await this.client.releaseConversationWorkspaceOutputs(input, { headers, signal, timeoutMs })
+            : await this.client.releaseConversationScope(input, { headers, signal, timeoutMs })
+      const released = "workspaceOutputsReleased" in response ? response.workspaceOutputsReleased : response.scopeReleased
       if (
         response.$unknown?.length ||
-        response.scopeReleased !== true ||
+        released !== true ||
         typeof response.replayed !== "boolean" ||
         typeof response.abortedUploadCount !== "bigint" ||
         typeof response.releasedAssetCount !== "bigint" ||

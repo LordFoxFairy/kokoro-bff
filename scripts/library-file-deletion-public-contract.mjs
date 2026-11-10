@@ -3,7 +3,20 @@ import { createHash } from "node:crypto"
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
+export function restorePublic2832WorkspaceOutputsContract(source) {
+  if (!/^  version: 28\.33\.0$/mu.test(source)) return source
+  if (hash(source) !== "03d4add75d31c6c4dd22e7fcb3b4269556ad3ced87d29a5640976bc74f39810f") throw Error("Workspace outputs Public28.33 child drift")
+  const parent = source
+    .replace(/^  \/v1\/sessions\/\{id\}\/runs\/\{runId\}\/workspace-outputs\/\{versionId\}\/content:\n[\s\S]*?(?=^  # AGENT-DISPLAY-PATHS-END)/mu, "")
+    .replace(/^    RunWorkspaceOutputVersion:\n[\s\S]*?(?=^    RunDisplay:)/mu, "")
+    .replace(/(^    RunDisplay:\n[\s\S]*?)^        workspace_outputs:\n[\s\S]*?(?=^        final_answer:)/mu, "$1")
+    .replace("  version: 28.33.0\n", "  version: 28.32.0\n")
+  if (hash(parent) !== "e12a8078f5ecaa741c255a3bcec032d398d35309d845d3cf736dc764a0287d33") throw Error("Workspace outputs complete Public28.32 parent drift")
+  return parent
+}
+
 export function restorePublic2831AgentConnectionContract(source) {
+  source = restorePublic2832WorkspaceOutputsContract(source)
   if (!/^  version: 28\.32\.0$/mu.test(source)) return source
   if (hash(source) !== "e12a8078f5ecaa741c255a3bcec032d398d35309d845d3cf736dc764a0287d33") throw Error("Telegram Public28.32 child drift")
   const parent = source
@@ -120,6 +133,12 @@ export function restorePublic2825LibraryFileDeletionContract(source) {
 }
 
 export function libraryFileDeletionParentInventory(inventory) {
+  const workspaceOperations = inventory.filter((item) => item.operation_id === "getSessionRunWorkspaceOutputContent")
+  if (workspaceOperations.length) {
+    const expected = { method: "GET", path: "/v1/sessions/{id}/runs/{runId}/workspace-outputs/{versionId}/content", operation_id: "getSessionRunWorkspaceOutputContent" }
+    if (JSON.stringify(workspaceOperations) !== JSON.stringify([expected])) throw Error("Workspace outputs Public28.33 inventory drift")
+    inventory = inventory.filter((item) => !workspaceOperations.includes(item))
+  }
   const agentOperations = [
     { method: "POST", path: "/v1/agents/connections/setup", operation_id: "changeAgentConnection" },
     { method: "POST", path: "/v1/agents/connections/telegram/webhook", operation_id: "acceptTelegramConnectionUpdate" },

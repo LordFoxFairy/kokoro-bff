@@ -11,6 +11,7 @@ import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Share } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
 import { deleteLockedConversationFacts } from "./conversation-delete.js"
+import { enqueueStorageScopeRelease } from "./project-scope-release-outbox-repository.js"
 import {
   conversationColumns,
   conversationFromRow,
@@ -320,6 +321,7 @@ export class PostgresChatSessionStore {
         return false
       }
       await deleteLockedConversationFacts(client, tenantId, subjectId, conversationId, requestId)
+      await enqueueStorageScopeRelease(client, { tenantId, subjectId }, null, "conversation_workspace", conversationId)
       await client.query("COMMIT")
       return true
     } catch (error) {

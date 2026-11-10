@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { createServer } from "node:http"
+import { connectNodeAdapter } from "@connectrpc/connect-node"
 import { test } from "node:test"
 import "reflect-metadata"
 import { Test } from "@nestjs/testing"
@@ -17,6 +19,7 @@ import {
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
 import { AgentRunsModule } from "../dist/modules/agent-runs/agent-runs.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
+import { ScanState, StorageService } from "../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 const activityId = `act_${"a".repeat(64)}`
 const display = {
@@ -26,7 +29,7 @@ const display = {
   tool_facts: [],
   activity_details: [],
 }
-async function fixture(t) {
+async function fixture(t, storage) {
   const calls = [],
     finalReads = []
   let finalProof = null
@@ -63,6 +66,7 @@ async function fixture(t) {
     redisUrl: null,
     agUi: DEFAULT_AGUI_CONFIG,
     upstreams: { agents: `http://127.0.0.1:${owner.address().port}` },
+    ...(storage === undefined ? {} : { storage }),
   }
   const admission = new SessionAdmissionDouble({ "display-session": { namespace: "tenant", userId: "subject" } })
   const reader = {
@@ -115,7 +119,8 @@ async function fixture(t) {
         ...headers,
       },
     })
-    return { status: r.status, body: await r.json(), headers: r.headers }
+    const downloaded = r.ok && r.headers.has("content-disposition")
+    return { status: r.status, body: downloaded ? Buffer.from(await r.arrayBuffer()) : await r.json(), headers: r.headers }
   }
   return {
     request,
@@ -128,6 +133,73 @@ async function fixture(t) {
     setSubmitted: (v) => (submitted = v),
   }
 }
+test("workspace output bytes require published exact Run version and current Conversation at handoff", async (t) => {
+  const bytes = Buffer.from("# Exact original bytes — 测试\n")
+  const versionId = `wsv_${"b".repeat(64)}`
+  const otherVersionId = `wsv_${"c".repeat(64)}`
+  const privateAsset = "asset-private-output"
+  const sha = createHash("sha256").update(bytes).digest("hex")
+  const output = { version_id: versionId, virtual_path: "/outputs/report.md", content_sha256: sha, size_bytes: bytes.length, mime_type: "text/markdown" }
+  const calls = []
+  let releaseDuringGet = () => {}
+  const connect = connectNodeAdapter({
+    routes: (router) =>
+      router.service(StorageService, {
+        getDownloadReference(req, context) {
+          calls.push({
+            asset: req.assetId,
+            sha: req.contentSha256,
+            consumerRunId: req.consumerRunId,
+            scope: context.requestHeader.get("x-kokoro-scope-id"),
+            kind: context.requestHeader.get("x-kokoro-scope-kind"),
+            subject: context.requestHeader.get("x-kokoro-subject-id"),
+          })
+          return {
+            assetId: privateAsset,
+            contentSha256: sha,
+            sizeBytes: BigInt(bytes.length),
+            mimeType: "text/markdown",
+            scanState: ScanState.CLEAN,
+            downloadReference: { url: origin + "/blob?private_reference=1", method: "GET", expiresAt: { seconds: BigInt(Math.floor(Date.now() / 1000) + 60) } },
+          }
+        },
+      }),
+  })
+  const server = createServer((request, response) => {
+    if (request.url === "/blob?private_reference=1") {
+      releaseDuringGet()
+      response.writeHead(200, { "content-length": bytes.length }).end(bytes)
+    } else connect(request, response)
+  })
+  t.after(async () => {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  })
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const origin = `http://127.0.0.1:${server.address().port}`
+  const f = await fixture(t, { baseUrl: origin, objectOrigin: origin, secret: "storage-fixture" })
+  f.setBody({ data: { ...display, workspace_outputs: [{ ...output, asset_id: privateAsset }] }, meta: { request_id: "agent-request" } })
+  const facts = await f.request()
+  assert.equal(facts.status, 200)
+  assert.deepEqual(facts.body.data.workspace_outputs, [output])
+  const content = (version) => `/v1/sessions/session/runs/run/workspace-outputs/${version}/content`
+  assert.equal((await f.request(content(otherVersionId))).status, 404)
+  assert.deepEqual(calls, [])
+  const admissionBeforeDownload = f.admission.calls.length
+  const result = await f.request(content(versionId))
+  assert.equal(result.status, 200)
+  assert.equal(f.admission.calls.length - admissionBeforeDownload, 2)
+  assert.deepEqual(result.body, bytes)
+  assert.equal(result.headers.get("content-type"), "text/markdown")
+  assert.equal(result.headers.get("cache-control"), "no-store")
+  assert.equal(result.headers.get("location"), null)
+  assert.deepEqual(calls, [{ asset: privateAsset, sha, consumerRunId: "", scope: "session", kind: "conversation", subject: "subject" }])
+  releaseDuringGet = () => f.setVisible(false)
+  const late = await f.request(content(versionId))
+  assert.equal(late.status, 404)
+  assert.equal(late.body.data, undefined)
+  assert.equal(calls.length, 2)
+})
 test("exact owned Run display is an on-demand read of original facts, not current catalog or snapshot enrichment", async (t) => {
   const f = await fixture(t),
     r = await f.request()

@@ -1,3 +1,7 @@
+## A‑10 — Run process-output consumption (Public 28.33)
+
+Private Run display now projects only published Agent process-output versions. A private exact-version GET reads and verifies original Storage bytes; no Asset ID, transfer reference, snapshot enrichment or Share access. Ordinary Conversation deletion writes the narrow workspace-output release into the existing durable outbox, without changing FINAL or Project aggregate cleanup. Agent HTTP 8.17 and Storage v3 are pinned to the exact owner publications. This is the BFF component change; real native Chromium/Worker pairing and backend coverage are tracked by Root.
+
 ## A‑13 — Telegram connection owner (Public 28.32)
 
 BFF now owns Telegram setup, confirmation, durable binding and disconnect on the existing Agents API; the unused Agent upstream setup relay is removed. GET does not create or send. A verified private Telegram callback reserves one proof; only the admitted Kokoro user who started that exact attempt can confirm it. LINE and Slack remain explicitly unavailable in this slice. The controller verified the formal Nest routes against isolated fresh PostgreSQL: no-write GET, verified private callback with one send attempt, proof digest, original-user confirmation, unique binding, cancellation, expiry and unlink passed; the database was dropped. Telegram transport and IAM admission were explicit doubles. No existing database was migrated. App must use matching Public 28.32; live Telegram application/account/callback and browser acceptance are not evidenced here.
