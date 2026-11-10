@@ -1,3 +1,11 @@
+## 2026-11-10 A‑09 Library Artifact commands
+
+Public 28.29 pairs the existing Library Artifact relation's persistent favorite and the
+Storage exact single-FINAL retirement command from `ebd6e3b`. The list filters favorites
+before paging; the original delete key recovers an uncertain result without re-fetching a
+hidden FINAL. A new Chat selection of a retired Artifact returns `invalid_resource_selection`.
+Targeted Nest/Connect and isolated PG checks passed. The App/Worker journey remains for Root.
+
 ## 2026-11-10 A‑09 Library Artifact source
 
 Public 28.28 adds only the optional source `project_ref` on Artifact detail. A current

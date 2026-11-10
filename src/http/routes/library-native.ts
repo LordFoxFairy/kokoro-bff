@@ -24,6 +24,7 @@ export function libraryRequest(request: IncomingMessage): boolean {
     if (request.method === "GET" && path.length === 1) return true
     if (request.method === "GET" && path.length === 4 && path[1] === "artifacts") return true
     if (request.method === "GET" && path.length === 5 && path[1] === "artifacts" && path[4] === "content") return true
+    if (request.method === "PUT" && path.length === 5 && path[1] === "artifacts" && path[4] === "favorite") return true
     if (request.method === "GET" && path.length === 4 && path[1] === "files" && path[3] === "content") return true
     return request.method === "POST" && path.length === 2 && path[1] === "files"
   } catch {
@@ -45,7 +46,7 @@ export async function handleLibraryRequest(
     await libraryFileListRoute(request, response, config, context, undefined, provider.artifactLibrary)
     return true
   }
-  if (path.length === 4 && path[1] === "artifacts") {
+  if (path[1] === "artifacts" && (path.length === 4 || (request.method === "PUT" && path.length === 5 && path[4] === "favorite"))) {
     await libraryArtifactRoute(request, response, config, context, provider.artifactLibrary, path[2] ?? "", path[3] ?? "")
     return true
   }

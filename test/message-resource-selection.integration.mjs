@@ -32,6 +32,7 @@ integration(
     const calls = []
     let afterRead = async () => undefined
     let scan = ScanState.CLEAN
+    let artifactFailure
     const metadata = {
       filename: "input.txt",
       mimeType: "text/plain",
@@ -82,6 +83,7 @@ integration(
                 calls.push(["artifact", request.artifactId])
                 assert.equal(context.requestHeader.get("x-kokoro-scope-kind"), "conversation")
                 assert.equal(context.requestHeader.get("x-kokoro-scope-id"), sourceConversation)
+                if (artifactFailure !== undefined) throw new ConnectError("private fixture diagnostic", artifactFailure)
                 await afterRead()
                 return {
                   item: {
@@ -191,6 +193,19 @@ integration(
       })
       const count = async () =>
         Number((await pool.query("SELECT count(*) AS count FROM bff_agent_dispatch_outbox WHERE tenant_id=$1", [tenantId])).rows[0].count)
+      await t.test("retired FINAL cannot create a new selection, while an outage stays a dependency failure", async () => {
+        const before = await count()
+        const selection = [{ kind: "artifact", resource_id: "artifact-old" }]
+        try {
+          artifactFailure = Code.NotFound
+          await assert.rejects(service.submit(input("retired-artifact", selection)), /CHAT_RESOURCE_SELECTION_INVALID/)
+          artifactFailure = Code.Unavailable
+          await assert.rejects(service.submit(input("artifact-dependency", selection)), /storage_unavailable/)
+          assert.equal(await count(), before)
+        } finally {
+          artifactFailure = undefined
+        }
+      })
       await t.test("Project changed during owner read is rejected before any new command facts", async () => {
         const before = await count()
         afterRead = async () => {

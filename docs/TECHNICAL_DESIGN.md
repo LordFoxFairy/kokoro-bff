@@ -1,3 +1,9 @@
+## A‑09 — Library Artifact favorites
+
+Native admission supplies the only tenant and subject. The desired-state write first confirms the exact owned association against Storage FINAL/CLEAN, outside any database lock. One short BFF statement rechecks active Conversation/Project and exact source Run/asset/hash, locks Conversation then association, and returns the resulting favorite state. Busy rows fail without a false acknowledgement; the same explicit target may be retried. No receipt store or extra authority is introduced.
+
+The same Artifact list filters BFF candidates before the existing keyset and limit, then still checks each candidate against current Storage. The favorites-only condition is bound to the cursor; omitted/false keeps the original cursor bytes. Favorites never grant read or download access. Retired/missing Storage items remain unavailable even if historical BFF relationships remain.
+
 ## A‑09 — Library Artifact source navigation
 
 BFF reads the exact admitted owner association and resolves the Project in the same

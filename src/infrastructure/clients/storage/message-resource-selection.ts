@@ -7,6 +7,7 @@ import { StorageService, UploadPurpose, ScanState, AssetOrigin } from "../../../
 import type { PostgresBffDatabase } from "../../postgres/client.js"
 import { PostgresConversationArtifactLibrary } from "../../postgres/conversation-artifact-library.js"
 import { FinalArtifactClient } from "./final-artifact.js"
+import { ProjectResourceError } from "../../../application/project-resource.error.js"
 
 /** Resolve metadata only; the Agent later reads exact bytes under its own consumer lease. */
 export function createMessageResourceResolver(config: BffConfig, database: PostgresBffDatabase, transport?: Transport): ResolveSelectedResources {
@@ -55,7 +56,13 @@ export function createMessageResourceResolver(config: BffConfig, database: Postg
             conversationId: association.conversationId,
           },
           transport,
-        ).get(association, signal)
+        )
+          .get(association, signal)
+          .catch((error: unknown) => {
+            if (error instanceof ProjectResourceError && error.status === 404 && error.code === "library_artifact_not_found")
+              throw new Error("CHAT_RESOURCE_SELECTION_INVALID")
+            throw error
+          })
         refs.push({
           kind: "artifact",
           resource_id: ref.resource_id,

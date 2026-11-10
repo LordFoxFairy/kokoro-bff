@@ -3,7 +3,23 @@ import { createHash } from "node:crypto"
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
+export function restorePublic2828LibraryArtifactCommandsContract(source) {
+  if (!/^  version: 28\.29\.0$/mu.test(source)) return source
+  if (hash(source) !== "be6473bfa58332dee9f0417a10f6b21c8320efa79802151fe5b13f93753d4504") throw Error("Library Artifact commands Public28.29 child drift")
+  const parent = source
+    .replace(/^    delete:\n(?=      tags: \[Library\]\n      operationId: deleteLibraryArtifact\n)[\s\S]*?(?=^  \/v1\/library\/artifacts\/\{conversation_id\}\/\{artifact_id\}\/content:)/mu, "")
+    .replace(/^    LibraryArtifactDeletionResponse:\n[\s\S]*?(?=^    LibraryArtifactItem:)/mu, "")
+    .replace("      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. File search filters current authorized Storage files before the stable keyset and limit; only a matching file may occupy a page slot. Artifact favorites-only filtering runs on the owned BFF relationship before its keyset; it never grants visibility. Artifact search matches current authorized FINAL metadata, not unverified delivery claims. Artifact-only q is a case-insensitive NFC substring over title or filename; type uses the documented product taxonomy. Cursors bind kind, tenant, subject, limit and the normalized complete filter tuple. Each Artifact request scans at most min(500, limit * 5) authorized candidates within the existing 30-second deadline; a sparse page may be empty and still have next_cursor. Only next_cursor=null means exhausted. Delivery keyset order is preserved, without relevance ranking or snapshot isolation. Public18 invalidates prior Artifact cursors; clients must restart the query. A cursor never grants access.", "      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. File search filters current authorized Storage files before the stable keyset and limit; only a matching file may occupy a page slot. Artifact search matches current authorized FINAL metadata, not unverified delivery claims. Artifact-only q is a case-insensitive NFC substring over title or filename; type uses the documented product taxonomy. Cursors bind kind, tenant, subject, limit and the normalized complete filter tuple. Each Artifact request scans at most min(500, limit * 5) authorized candidates within the existing 30-second deadline; a sparse page may be empty and still have next_cursor. Only next_cursor=null means exhausted. Delivery keyset order is preserved, without relevance ranking or snapshot isolation. Public18 invalidates prior Artifact cursors; clients must restart the query. A cursor never grants access.")
+    .replace("        - name: favorites_only\n          in: query\n          description: Artifact only. True selects only the current subject's favorited Artifacts; false or absent keeps the ordinary cursor shape. File requests reject this parameter.\n          schema: { type: boolean, default: false }\n", "")
+    .replace("required: [kind, conversation_id, artifact_id, asset_id, artifact_kind, title, filename, mime_type, size_bytes, content_sha256, source_run_id, delivered_at, favorited]", "required: [kind, conversation_id, artifact_id, asset_id, artifact_kind, title, filename, mime_type, size_bytes, content_sha256, source_run_id, delivered_at]")
+    .replace("        favorited: { type: boolean }\n        project_ref:\n          description: Detail-only canonical source Project ID", "        project_ref:\n          description: Detail-only canonical source Project ID")
+    .replace("  version: 28.29.0\n", "  version: 28.28.0\n")
+  if (hash(parent) !== "495afa65989a1308194910b0b5ece62b4f9db0c84f8dc34e7e0f3b00f7c5294f") throw Error("Library Artifact commands complete Public28.28 parent drift")
+  return parent
+}
+
 export function restorePublic2827LibraryArtifactSourceContract(source) {
+  source = restorePublic2828LibraryArtifactCommandsContract(source)
   if (!/^  version: 28\.28\.0$/mu.test(source)) return source
   if (hash(source) !== "495afa65989a1308194910b0b5ece62b4f9db0c84f8dc34e7e0f3b00f7c5294f") throw Error("Library artifact source Public28.28 child drift")
   const parent = source
@@ -44,6 +60,14 @@ export function restorePublic2825LibraryFileDeletionContract(source) {
 }
 
 export function libraryFileDeletionParentInventory(inventory) {
+  const artifactCommands = new Set(["deleteLibraryArtifact", "setLibraryArtifactFavorite"])
+  if (inventory.some((item) => artifactCommands.has(item.operation_id))) {
+    if (hash(JSON.stringify(inventory)) !== "01ca0295d4bd270fe39ba2dbc87608fe42bb6bfe8dc162d2c32b15723546fbe0")
+      throw Error("Library Artifact commands Public28.29 inventory drift")
+    inventory = inventory.filter((item) => !artifactCommands.has(item.operation_id))
+    if (hash(JSON.stringify(inventory)) !== "c802b2b89eda5f1b9b7128e5ed9305cdbf648d71a549f08afeb7e90ef71fd97a")
+      throw Error("Library Artifact commands Public28.28 inventory drift")
+  }
   if (!inventory.some((item) => item.operation_id === "deleteLibraryFile")) return inventory
   if (hash(JSON.stringify(inventory)) !== "c802b2b89eda5f1b9b7128e5ed9305cdbf648d71a549f08afeb7e90ef71fd97a")
     throw Error("Library file deletion Public28.26 inventory drift")

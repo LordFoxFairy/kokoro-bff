@@ -7,13 +7,13 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "0f91535a488a45379b567efd378c6cb4808f1206"
+const ownerCommit = "ebd6e3b8d9c7e0a12ea5fe7767c8328bee3c7db2"
 const vendor = `contract/vendor/kokoro-storage/${ownerCommit}/proto`
 const output = path.join(root, "src/generated/storage-connect")
 const manifestPath = path.join(root, "contract/dependencies/storage-connect.json")
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd",
-  "kokoro/storage/v3/storage.proto": "e2538646c2c0b94091e46b8e14e91aa43f7028d585633f0409fae9a4fcdd2cb0",
+  "kokoro/storage/v3/storage.proto": "ba5a79f4f6a82003b88f8b62ba4ca4c395a7a6d4d7d771053f16d0bbfa3adfa8",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/storage", "kokoro/storage/v3"]
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
@@ -110,7 +110,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-storage",
       repository_commit: ownerCommit,
-      published_combined_sha256: "6267053089767691f9a0da3e12cbc5012a703c0c6948f1307ef38b165c8e7e3b",
+      published_combined_sha256: "310ce534ca77a60cc25817203be4f0ea3ba35999fcdd82f3942ffa3b19d29b4c",
       package_name: "kokoro.storage.v3",
       sources: Object.entries(sourceDigests).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
     },

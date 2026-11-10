@@ -1736,15 +1736,21 @@ integrationTest("R237 Artifact relationship list and detail enforce Project elig
   const legacyId = `legacy_${randomUUID()}`
   await f.pool.query("UPDATE bff_project SET project_id=$2 WHERE project_id=$1", [legacy.id, legacyId])
   const visible = []
-  for (const [ref, projectedRef] of [
+  for (const [index, [ref, projectedRef]] of [
     [null, null],
     [active.id, active.id],
     [active.slug, undefined],
     [ambiguous.id, undefined],
     [legacyId, undefined],
-  ]) {
+  ].entries()) {
     const id = await f.conversation(ref)
-    visible.push([id, await r237Artifact(f, id), projectedRef])
+    const artifact = await r237Artifact(f, id)
+    await f.pool.query("UPDATE bff_conversation_artifact SET delivered_at=$3 WHERE tenant_id=$1 AND artifact_id=$2", [
+      f.tenant,
+      artifact,
+      new Date(Date.UTC(2026, 9, 1, 0, 0, 5 - index)),
+    ])
+    visible.push([id, artifact, projectedRef])
   }
   const hidden = []
   for (const kind of ["deleted", "owner", "tenant"]) {
@@ -1758,6 +1764,7 @@ integrationTest("R237 Artifact relationship list and detail enforce Project elig
   const candidates = await f.artifactLibrary.listCandidates(f.tenant, f.owner, null, 100)
   assert.deepEqual(candidates.map((item) => item.artifactId).sort(), visible.map(([, artifact]) => artifact).sort())
   assert.ok(candidates.every((item) => !Object.hasOwn(item, "projectRef")))
+  assert.ok(candidates.every((item) => item.favorited === false))
   for (const [id, artifact] of hidden) {
     assert.equal(await f.artifactLibrary.findCandidate(f.tenant, f.owner, id, artifact), null)
     await f.deny(() => f.request(`library/artifacts/${id}/${artifact}`), 404, "library_artifact_not_found")
@@ -1767,8 +1774,60 @@ integrationTest("R237 Artifact relationship list and detail enforce Project elig
     assert.equal(candidate?.artifactId, artifact)
     assert.equal(Object.hasOwn(candidate, "projectRef"), projectRef !== undefined)
     assert.equal(candidate.projectRef, projectRef)
+    assert.equal(candidate.favorited, false)
   }
   assert.deepEqual(await f.facts(), before)
+
+  const command = ([conversationId, artifactId], extras = {}) => ({
+    tenantId: f.tenant,
+    subjectId: f.owner,
+    conversationId,
+    artifactId,
+    runId: "r237-run",
+    sourceAssetId: "r237-asset",
+    sourceContentSha256: "a".repeat(64),
+    favorited: true,
+    signal: AbortSignal.timeout(4000),
+    ...extras,
+  })
+  const favorite = (item, extras) => f.artifactLibrary.setFavorite(command(item, extras))
+  const stored = async ([, artifact]) =>
+    (await f.pool.query("SELECT favorited_at,xmin::text FROM bff_conversation_artifact WHERE tenant_id=$1 AND artifact_id=$2", [f.tenant, artifact])).rows[0]
+  const first = visible[1]
+  const second = visible[2]
+  assert.equal(await favorite(first, { subjectId: "other_owner" }), null)
+  assert.equal(await favorite(first, { sourceAssetId: "substitute-asset" }), null)
+  assert.equal(await favorite(hidden[0]), null)
+  assert.equal((await stored(first)).favorited_at, null)
+  assert.equal(await favorite(first), true)
+  const originalStar = await stored(first)
+  assert.ok(originalStar.favorited_at instanceof Date)
+  assert.equal((await f.artifactLibrary.findCandidate(f.tenant, f.owner, first[0], first[1])).favorited, true)
+  assert.equal(await favorite(first), true)
+  assert.deepEqual(await stored(first), originalStar, "same target must not rewrite the tuple or timestamp")
+  assert.equal(await favorite(second), true)
+  const favoritePage = await f.artifactLibrary.listCandidates(f.tenant, f.owner, null, 1, true)
+  assert.deepEqual(favoritePage.map((item) => [item.artifactId, item.favorited]), [[first[1], true]])
+  const next = await f.artifactLibrary.listCandidates(f.tenant, f.owner, favoritePage[0], 1, true)
+  assert.deepEqual(next.map((item) => [item.artifactId, item.favorited]), [[second[1], true]])
+  assert.deepEqual(await f.artifactLibrary.listCandidates(f.tenant, "other_owner", null, 100, true), [])
+  assert.equal(await favorite(second, { favorited: false }), false)
+
+  const blocker = await f.pool.connect()
+  try {
+    await blocker.query("BEGIN")
+    await blocker.query("SELECT 1 FROM bff_conversation_artifact WHERE tenant_id=$1 AND artifact_id=$2 FOR UPDATE", [f.tenant, first[1]])
+    await assert.rejects(favorite(first, { favorited: false }), { code: "55P03" })
+  } finally {
+    await blocker.query("ROLLBACK")
+    blocker.release()
+  }
+  assert.deepEqual(await stored(first), originalStar, "contended intent did not overwrite an acknowledged state")
+  await f.pool.query("UPDATE bff_project SET deleted_at=$2 WHERE project_id=$1", [active.id, r237Tombstone])
+  assert.equal(await favorite(first, { favorited: false }), null, "the write rechecks Project after the earlier candidate was visible")
+  assert.deepEqual(await f.artifactLibrary.listCandidates(f.tenant, f.owner, null, 100, true), [])
+  assert.deepEqual(await stored(first), originalStar, "the ineligible row stayed hidden, not overwritten")
+
   // Remove only this fixture's allowed associations: empty HTTP library must not contact Storage.
   await f.pool.query("DELETE FROM bff_conversation_artifact WHERE tenant_id=$1 AND artifact_id=ANY($2::text[])", [
     f.tenant,

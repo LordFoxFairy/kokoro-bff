@@ -791,6 +791,7 @@ CREATE TABLE IF NOT EXISTS bff_conversation_artifact (
   source_mime TEXT NOT NULL,
   source_size_bytes BIGINT NOT NULL,
   delivered_at TIMESTAMPTZ(3) NOT NULL,
+  favorited_at TIMESTAMPTZ(3),
   CONSTRAINT pk_bff_conversation_artifact PRIMARY KEY (tenant_id, conversation_id, artifact_id),
   CONSTRAINT uq_bff_conversation_artifact_source UNIQUE (tenant_id, conversation_id, source_owner, source_event_id),
   CONSTRAINT ck_bff_conversation_artifact_identity CHECK (

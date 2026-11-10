@@ -51,6 +51,10 @@ export class PostgresBffDatabase implements OnApplicationShutdown {
               AND to_regclass('kokoro_bff.bff_message_feedback') IS NOT NULL
               AND to_regclass('kokoro_bff.ix_bff_message_feedback_parent_cleanup') IS NOT NULL
               AND to_regclass('kokoro_bff.bff_conversation') IS NOT NULL
+              AND EXISTS (SELECT 1 FROM pg_attribute
+                WHERE attrelid=to_regclass('kokoro_bff.bff_conversation_artifact')
+                  AND attname='favorited_at' AND format_type(atttypid,atttypmod)='timestamp(3) with time zone'
+                  AND NOT attnotnull AND NOT atthasdef AND NOT attisdropped)
               AND to_regclass('kokoro_bff.bff_run_steer') IS NOT NULL
               AND to_regclass('kokoro_bff.ix_bff_run_steer_pending') IS NOT NULL
               AND to_regclass('kokoro_bff.bff_scheduled_task') IS NOT NULL

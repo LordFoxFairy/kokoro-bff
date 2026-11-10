@@ -1,3 +1,10 @@
+## A‑09 — Public 28.29 Artifact favorite and retirement
+
+The sole OpenAPI adds the desired-state favorite and exact retirement commands (207 operations).
+The build-only inverse restores Public 28.28 and its operation inventory. Storage Connect
+generation uses the owner commit `ebd6e3b8d9c7e0a12ea5fe7767c8328bee3c7db2`; it is not a second
+runtime contract.
+
 ## A‑09 — Public 28.28 Artifact source destination
 
 The sole OpenAPI adds the detail-only optional `project_ref` on `getLibraryArtifact`;

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.28.0
+  version: 28.29.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -7574,7 +7574,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: storage.library.read
       summary: List private library files or delivered Artifacts
-      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. File search filters current authorized Storage files before the stable keyset and limit; only a matching file may occupy a page slot. Artifact search matches current authorized FINAL metadata, not unverified delivery claims. Artifact-only q is a case-insensitive NFC substring over title or filename; type uses the documented product taxonomy. Cursors bind kind, tenant, subject, limit and the normalized complete filter tuple. Each Artifact request scans at most min(500, limit * 5) authorized candidates within the existing 30-second deadline; a sparse page may be empty and still have next_cursor. Only next_cursor=null means exhausted. Delivery keyset order is preserved, without relevance ranking or snapshot isolation. Public18 invalidates prior Artifact cursors; clients must restart the query. A cursor never grants access.
+      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. File search filters current authorized Storage files before the stable keyset and limit; only a matching file may occupy a page slot. Artifact favorites-only filtering runs on the owned BFF relationship before its keyset; it never grants visibility. Artifact search matches current authorized FINAL metadata, not unverified delivery claims. Artifact-only q is a case-insensitive NFC substring over title or filename; type uses the documented product taxonomy. Cursors bind kind, tenant, subject, limit and the normalized complete filter tuple. Each Artifact request scans at most min(500, limit * 5) authorized candidates within the existing 30-second deadline; a sparse page may be empty and still have next_cursor. Only next_cursor=null means exhausted. Delivery keyset order is preserved, without relevance ranking or snapshot isolation. Public18 invalidates prior Artifact cursors; clients must restart the query. A cursor never grants access.
       parameters:
         - name: kind
           in: query
@@ -7594,6 +7594,10 @@ paths:
           in: query
           description: Kind-specific type. Files accept all, documents, images, media (audio/video), and other based on MIME. Artifacts retain all, slides, documents, spreadsheets, images, video, audio, and other based on current FINAL MIME/title. Other combinations are invalid.
           schema: { type: string, enum: [all, slides, documents, spreadsheets, images, video, audio, other, media], default: all }
+        - name: favorites_only
+          in: query
+          description: Artifact only. True selects only the current subject's favorited Artifacts; false or absent keeps the ordinary cursor shape. File requests reject this parameter.
+          schema: { type: boolean, default: false }
       responses:
         '200':
           description: Bounded private file or Artifact page, selected by kind
@@ -7937,6 +7941,192 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+    delete:
+      tags: [Library]
+      operationId: deleteLibraryArtifact
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: storage.library.delete
+      summary: Logically retire one private FINAL Library Artifact
+      description: Fresh native Product Session rechecks the owned source Conversation. No query, body or conditional write headers. Use the original key and exact Artifact on an unknown result; same key with another Artifact in the same Conversation conflicts. Storage confirms logical retirement only, not physical cleanup or revocation of already issued URLs.
+      parameters:
+        - { name: conversation_id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' } }
+        - { name: artifact_id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' } }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Exactly one printable ASCII key without whitespace or comma, reused only for this original Artifact retirement.
+          schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x2b\x2d-\x7e]{1,191}(?![\s\S])' }
+      responses:
+        '200':
+          description: Storage confirmed logical deletion with the exact original Conversation and Artifact and timestamp
+          headers: &LibraryArtifactDeletionHeaders
+            x-request-id: { schema: { type: string, minLength: 1, maxLength: 191 } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LibraryArtifactDeletionResponse' }
+        '400':
+          description: Malformed delete request or missing/invalid command key
+          headers: *LibraryArtifactDeletionHeaders
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/LibraryArtifactDeletionError'
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, enum: [invalid_artifact_delete_request, invalid_idempotency_key] }
+                          retryable: { type: boolean, const: false }
+        '401':
+          description: Current native Session is missing or invalid
+          headers: *LibraryArtifactDeletionHeaders
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/LibraryArtifactDeletionError'
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, enum: [session_authentication_required, session_invalid] }
+                          retryable: { type: boolean, const: false }
+        '403':
+          description: Current service, tenant or Session is forbidden
+          headers: *LibraryArtifactDeletionHeaders
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/LibraryArtifactDeletionError'
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, enum: [service_auth_failed, product_tenant_forbidden, session_forbidden] }
+                          retryable: { type: boolean, const: false }
+        '404':
+          description: Exact private FINAL Artifact not found, not visible, or previously deleted by another command
+          headers: *LibraryArtifactDeletionHeaders
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/LibraryArtifactDeletionError'
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, enum: [library_artifact_not_found] }
+                          retryable: { type: boolean, const: false }
+        '409':
+          description: Different command intent, Artifact conflict, or failed owner precondition
+          headers: *LibraryArtifactDeletionHeaders
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/LibraryArtifactDeletionError'
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, enum: [idempotency_conflict, artifact_delete_conflict, artifact_delete_precondition_failed] }
+        '429':
+          description: Current Session admission or Storage capacity is rate limited
+          headers:
+            <<: *LibraryArtifactDeletionHeaders
+            Retry-After: { schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/LibraryArtifactDeletionError'
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, enum: [session_rate_limited, storage_rate_limited] }
+                          retryable: { type: boolean, const: true }
+        '502':
+          description: Unverifiable Storage result; never a confirmed deletion
+          headers: *LibraryArtifactDeletionHeaders
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/LibraryArtifactDeletionError'
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, enum: [storage_response_invalid] }
+                          retryable: { type: boolean, const: false }
+        '503':
+          description: Admission or Storage is unavailable; a submitted command may already have committed
+          headers: *LibraryArtifactDeletionHeaders
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/LibraryArtifactDeletionError'
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, storage_unavailable, business_store_unavailable] }
+                          retryable: { type: boolean, const: true }
+  /v1/library/artifacts/{conversation_id}/{artifact_id}/favorite:
+    put:
+      tags: [Library]
+      operationId: setLibraryArtifactFavorite
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: storage.library.write
+      summary: Set one currently visible private FINAL Artifact's favorite state
+      description: A repeated identical target state is idempotent. Current native Product Session and the exact source Conversation and Storage FINAL/CLEAN relationship are rechecked on every write.
+      parameters:
+        - { name: conversation_id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' } }
+        - { name: artifact_id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [favorited]
+              properties:
+                favorited: { type: boolean }
+      responses:
+        '200':
+          description: The current confirmed favorite state of the exact Artifact
+          headers: *LibraryArtifactDeletionHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LibraryArtifactFavoriteResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/library/artifacts/{conversation_id}/{artifact_id}/content:
@@ -21170,10 +21360,51 @@ components:
         content_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
         scan_state: { type: string, enum: [clean] }
         created_at: { type: string, format: date-time }
+    LibraryArtifactDeletionResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [conversation_id, artifact_id, deleted_at, replayed]
+          properties:
+            conversation_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+            artifact_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+            deleted_at: { type: string, format: date-time, pattern: 'Z$' }
+            replayed: { type: boolean }
+    LibraryArtifactDeletionError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string, enum: [invalid_artifact_delete_request, invalid_idempotency_key, session_authentication_required, session_invalid, service_auth_failed, product_tenant_forbidden, session_forbidden, library_artifact_not_found, idempotency_conflict, artifact_delete_conflict, artifact_delete_precondition_failed, session_rate_limited, storage_rate_limited, storage_response_invalid, product_tenant_not_configured, iam_admission_unavailable, storage_unavailable, business_store_unavailable] }
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean }
+    LibraryArtifactFavoriteResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [conversation_id, artifact_id, favorited]
+          properties:
+            conversation_id: { type: string, minLength: 1, maxLength: 191 }
+            artifact_id: { type: string, minLength: 1, maxLength: 191 }
+            favorited: { type: boolean }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     LibraryArtifactItem:
       type: object
       additionalProperties: false
-      required: [kind, conversation_id, artifact_id, asset_id, artifact_kind, title, filename, mime_type, size_bytes, content_sha256, source_run_id, delivered_at]
+      required: [kind, conversation_id, artifact_id, asset_id, artifact_kind, title, filename, mime_type, size_bytes, content_sha256, source_run_id, delivered_at, favorited]
       properties:
         kind: { type: string, enum: [artifact] }
         conversation_id: { type: string, minLength: 1, maxLength: 191 }
@@ -21187,6 +21418,7 @@ components:
         content_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
         source_run_id: { type: string, minLength: 1, maxLength: 191 }
         delivered_at: { type: string, format: date-time }
+        favorited: { type: boolean }
         project_ref:
           description: Detail-only canonical source Project ID, null for a direct Conversation, or absent when the canonical destination is not established.
           type: [string, 'null']

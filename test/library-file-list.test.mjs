@@ -15,6 +15,8 @@ test("Library requires explicit file or artifact kind and bounded single-valued 
     query: "",
     type: "all",
   })
+  assert.deepEqual(libraryFileListInput(new URLSearchParams("kind=artifact&favorites_only=false")), libraryFileListInput(new URLSearchParams("kind=artifact")))
+  assert.equal(libraryFileListInput(new URLSearchParams("kind=artifact&favorites_only=true")).favoritesOnly, true)
   assert.deepEqual(libraryFileListInput(new URLSearchParams("kind=artifact&q=%20Re%CC%81SUME%CC%81%20&type=documents")), {
     kind: "artifact",
     limit: 50,
@@ -39,6 +41,9 @@ test("Library requires explicit file or artifact kind and bounded single-valued 
     "kind=file&q=x&q=y",
     "kind=file&q=%00",
     "kind=file&type=video",
+    "kind=file&favorites_only=false",
+    "kind=artifact&favorites_only=true&favorites_only=false",
+    "kind=artifact&favorites_only=1",
     "kind=artifact&type=media",
     "kind=artifact&q=x&q=y",
     "kind=artifact&type=all&type=all",
@@ -608,14 +613,15 @@ test("Artifact Library scans only bounded authorized candidates and binds keyset
     sourceArtifactKind: "document",
     sourceContentSha256: "a".repeat(64),
     deliveredAt: `2023-11-14T22:13:2${2 - index}.000Z`,
+    favorited: index > 0,
   }))
   const repository = {
-    async listCandidates(tenant, subject, position, limit) {
+    async listCandidates(tenant, subject, position, limit, favoritesOnly) {
       seen.push({ tenant, subject, position, limit })
-      return associations.filter((item) => !position || item.deliveredAt < position.deliveredAt)
+      return associations.filter((item) => (!favoritesOnly || item.favorited) && (!position || item.deliveredAt < position.deliveredAt))
     },
   }
-  const invoke = async (cursor = "", subjectId = "subject-1", repo = repository) => {
+  const invoke = async (cursor = "", subjectId = "subject-1", repo = repository, favoritesOnly) => {
     const request = new EventEmitter()
     request.headers = {}
     const response = new EventEmitter()
@@ -636,7 +642,7 @@ test("Artifact Library scans only bounded authorized candidates and binds keyset
       response,
       { storage },
       { requestId: "req-1", identity: { namespace: "tenant-1", userId: subjectId } },
-      { kind: "artifact", limit: 1, cursor, query: "", type: "all" },
+      { kind: "artifact", limit: 1, cursor, query: "", type: "all", ...(favoritesOnly ? { favoritesOnly } : {}) },
       repo,
       (_storage, scope) => ({
         async get(item) {
@@ -655,6 +661,10 @@ test("Artifact Library scans only bounded authorized candidates and binds keyset
     ["artifact-1"],
   )
   assert.ok(first.body.data.next_cursor)
+  assert.equal(first.body.data.next_cursor, `art2_${Buffer.from(JSON.stringify({
+    kind: "artifact", tenantId: "tenant-1", subjectId: "subject-1", limit: 1, query: "", type: "all",
+    deliveredAt: associations[1].deliveredAt, conversationId: associations[1].conversationId, artifactId: associations[1].artifactId,
+  })).toString("base64url")}`)
   assert.equal(seen[0].limit, 6)
   const second = await invoke(first.body.data.next_cursor)
   assert.equal(second.status, 200)
@@ -669,10 +679,16 @@ test("Artifact Library scans only bounded authorized candidates and binds keyset
   assert.equal(crossed.body.error.code, "invalid_library_page")
   const missing = await invoke("", "subject-1", null)
   assert.equal(missing.status, 503)
+  const favoritePage = await invoke("", "subject-1", repository, true)
+  assert.equal(favoritePage.status, 200)
+  assert.deepEqual(favoritePage.body.data.items, [{ kind: "artifact", artifact_id: "artifact-1", favorited: true }])
+  assert.equal((await invoke(first.body.data.next_cursor, "subject-1", repository, true)).status, 400)
+  assert.equal((await invoke(favoritePage.body.data.next_cursor)).status, 400)
 })
 
 test("private Artifact Product HTTP list, item and download keep original bytes behind current admission", async () => {
   const { createServer } = await import("node:http")
+  const { Code, ConnectError } = await import("@connectrpc/connect")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const { StorageService, ArtifactKind } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
@@ -700,6 +716,9 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
   let admissions = 0
   const projectId = "project_00000000-0000-0000-0000-000000000001"
   let projectRef = projectId
+  let favorited = false
+  let favoriteWrites = 0
+  let ownerMissing = false
   try {
     const objectOrigin = await listen(
       createServer((_request, response) => {
@@ -718,6 +737,7 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
                 assert.equal(ctx.requestHeader.get("x-kokoro-scope-id"), "conversation-1")
                 assert.equal(ctx.requestHeader.get("x-kokoro-subject-id"), "subject-1")
                 assert.equal(req.artifactId, "artifact-1")
+                if (ownerMissing) throw new ConnectError("owner item not found", Code.NotFound)
                 return {
                   item: {
                     artifactId: "artifact-1",
@@ -756,13 +776,22 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
       ),
     )
     const repository = {
-      async listCandidates(_tenant, subject) {
+      async listCandidates(_tenant, subject, _position, _limit, favoritesOnly) {
         repoCalls++
-        return subject === "subject-1" ? [association] : []
+        return subject === "subject-1" && (!favoritesOnly || favorited) ? [{ ...association, favorited }] : []
       },
       async findCandidate(_tenant, subject, conversationId, artifactId) {
         repoCalls++
-        return subject === "subject-1" && conversationId === "conversation-1" && artifactId === "artifact-1" ? { ...association, projectRef } : null
+        return subject === "subject-1" && conversationId === "conversation-1" && artifactId === "artifact-1" ? { ...association, projectRef, favorited } : null
+      },
+      async setFavorite(input) {
+        favoriteWrites++
+        assert.equal(input.tenantId, "tenant-1")
+        assert.equal(input.subjectId, "subject-1")
+        assert.equal(input.artifactId, association.artifactId)
+        assert.equal(input.conversationId, association.conversationId)
+        favorited = input.favorited
+        return favorited
       },
     }
     const config = loadConfig({
@@ -790,8 +819,9 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
       repository,
     )
     const bff = app.base
-    const get = (path, token = "user") =>
+    const get = (path, token = "user", body) =>
       fetch(`${bff}${path}`, {
+        ...(body === undefined ? {} : { method: "PUT", body: JSON.stringify(body) }),
         headers: {
           cookie: `kokoro-issuer.session_token=${token}`,
           origin: "https://web.example.test",
@@ -800,12 +830,31 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
           "x-kokoro-request-id": "artifact-http",
           "x-kokoro-subject-id": "forged",
           "x-kokoro-scope-id": "forged",
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
         },
       })
+    const detailPath = "/v1/library/artifacts/conversation-1/artifact-1"
+    const favoritePath = `${detailPath}/favorite`
+    const ack = await get(favoritePath, "user", { favorited: true })
+    assert.equal(ack.status, 200)
+    assert.deepEqual((await ack.json()).data, { conversation_id: "conversation-1", artifact_id: "artifact-1", favorited: true })
+    const bad = await get(favoritePath, "user", { favorited: false, subject_id: "forged" })
+    assert.equal(bad.status, 400)
+    const denied = await get(favoritePath, "other", { favorited: false })
+    assert.equal(denied.status, 404)
+    assert.equal(favoriteWrites, 1)
+    assert.equal(ownerCalls, 1)
+    ownerMissing = true
+    const missing = await get(favoritePath, "user", { favorited: false })
+    assert.equal(missing.status, 404)
+    assert.equal((await missing.json()).error.code, "library_artifact_not_found")
+    assert.equal(favoriteWrites, 1)
+    ownerMissing = false
     const page = await get("/v1/library?kind=artifact")
     assert.equal(page.status, 200)
     const listed = (await page.json()).data.items[0]
     assert.equal(listed.artifact_id, "artifact-1")
+    assert.equal(listed.favorited, true)
     assert.equal(Object.hasOwn(listed, "project_ref"), false)
     const filtered = await get("/v1/library?kind=artifact&q=REPORT.TXT&type=documents")
     assert.equal(filtered.status, 200)
@@ -813,7 +862,6 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
     const excluded = await get("/v1/library?kind=artifact&q=report&type=images")
     assert.equal(excluded.status, 200)
     assert.deepEqual((await excluded.json()).data, { items: [], next_cursor: null })
-    const detailPath = "/v1/library/artifacts/conversation-1/artifact-1"
     for (const target of [projectId, null, undefined]) {
       projectRef = target
       const item = await get(detailPath)
@@ -840,7 +888,13 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
     assert.equal(crossed.status, 403)
     assert.equal((await crossed.json()).error.code, "product_tenant_forbidden")
     assert.equal(repoCalls, beforeCrossTenant)
-    assert.equal(admissions, 10)
+    const unstar = await get(favoritePath, "user", { favorited: false })
+    assert.equal(unstar.status, 200)
+    assert.equal((await unstar.json()).data.favorited, false)
+    const only = await get("/v1/library?kind=artifact&favorites_only=true")
+    assert.equal(only.status, 200)
+    assert.deepEqual((await only.json()).data, { items: [], next_cursor: null })
+    assert.equal(admissions, 16)
   } finally {
     try {
       await app?.close()
@@ -861,6 +915,7 @@ test("Artifact filters use current FINAL metadata across bounded candidate windo
     sourceArtifactKind: "document",
     sourceContentSha256: "a".repeat(64),
     deliveredAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 20 - i)).toISOString(),
+    favorited: false,
   }))
   const calls = [],
     positions = []

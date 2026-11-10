@@ -1,3 +1,13 @@
+## A‑09 — Library Artifact commands (Public 28.29)
+
+`PUT /v1/library/artifacts/{conversation_id}/{artifact_id}/favorite` sets the supplied boolean
+on the owned, current Artifact; repeated same-value writes are no-ops. Artifact list/detail
+carry `favorited`; `favorites_only=true` selects favorites before paging. `DELETE` on the
+Artifact detail path uses an empty request and one original `Idempotency-Key`. Its header-only
+request ID and exact `conversation_id/artifact_id/deleted_at/replayed` response follow the
+existing personal-file delete convention. No scope release, object cleanup status, or
+immediate revocation of previously issued short-lived download URLs is implied.
+
 ## A‑09 — Library Artifact source (Public 28.28)
 
 `GET /v1/library/artifacts/{conversation_id}/{artifact_id}` retains its exact selector

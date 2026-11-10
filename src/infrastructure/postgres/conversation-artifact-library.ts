@@ -1,11 +1,14 @@
-import type { QueryResult, QueryResultRow } from "pg"
+import { once } from "node:events"
+import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 import { withMessageReadClient } from "./message-parts-read.js"
 import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
 import type {
   ArtifactAssociation,
   ArtifactDetailCandidate,
+  ArtifactLibraryCandidate,
   ArtifactLibraryRepository,
   ArtifactPosition,
+  SetArtifactFavorite,
 } from "../../application/account/artifact-library-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
 
@@ -20,6 +23,8 @@ type AssociationRow = {
   source_content_sha256: string
   delivered_at: Date | string
 }
+
+type LibraryRow = AssociationRow & { favorited: boolean }
 
 function association(row: AssociationRow): ArtifactAssociation {
   return {
@@ -70,11 +75,17 @@ export class PostgresConversationArtifactLibrary implements ArtifactLibraryRepos
     return withMessageReadClient(this.database.pool, lifetime, (client) => selectedArtifactInTransaction(client, input))
   }
 
-  public async listCandidates(tenantId: string, subjectId: string, position: ArtifactPosition | null, limit: number): Promise<readonly ArtifactAssociation[]> {
-    const result = await this.database.pool.query<AssociationRow>(
+  public async listCandidates(
+    tenantId: string,
+    subjectId: string,
+    position: ArtifactPosition | null,
+    limit: number,
+    favoritesOnly = false,
+  ): Promise<readonly ArtifactLibraryCandidate[]> {
+    const result = await this.database.pool.query<LibraryRow>(
       `SELECT association.conversation_id, association.artifact_id, association.run_id,
               association.source_asset_id, association.source_artifact_kind,
-              association.source_content_sha256, association.delivered_at
+              association.source_content_sha256, association.delivered_at, association.favorited_at IS NOT NULL AS favorited
          FROM bff_conversation_artifact AS association
          JOIN bff_conversation AS conversation
            ON conversation.tenant_id = association.tenant_id
@@ -82,6 +93,7 @@ export class PostgresConversationArtifactLibrary implements ArtifactLibraryRepos
         WHERE association.tenant_id = $1
           AND conversation.owner_id = $2
           AND conversation.status = 'active'
+          AND (NOT $7::boolean OR association.favorited_at IS NOT NULL)
           AND (
             conversation.project_ref IS NULL
             OR EXISTS (
@@ -95,16 +107,17 @@ export class PostgresConversationArtifactLibrary implements ArtifactLibraryRepos
                OR (association.delivered_at = $3 AND (association.conversation_id, association.artifact_id) > ($4, $5)))
         ORDER BY association.delivered_at DESC, association.conversation_id ASC, association.artifact_id ASC
         LIMIT $6`,
-      [tenantId, subjectId, position?.deliveredAt ?? null, position?.conversationId ?? null, position?.artifactId ?? null, limit],
+      [tenantId, subjectId, position?.deliveredAt ?? null, position?.conversationId ?? null, position?.artifactId ?? null, limit, favoritesOnly],
     )
-    return result.rows.map(association)
+    return result.rows.map((row) => ({ ...association(row), favorited: row.favorited }))
   }
 
   public async findCandidate(tenantId: string, subjectId: string, conversationId: string, artifactId: string): Promise<ArtifactDetailCandidate | null> {
-    const result = await this.database.pool.query<AssociationRow & { direct_source: boolean; canonical_project_ref: string | null }>(
+    const result = await this.database.pool.query<LibraryRow & { direct_source: boolean; canonical_project_ref: string | null }>(
       `SELECT association.conversation_id, association.artifact_id, association.run_id,
               association.source_asset_id, association.source_artifact_kind,
               association.source_content_sha256, association.delivered_at,
+              association.favorited_at IS NOT NULL AS favorited,
               conversation.project_ref IS NULL AS direct_source,
               CASE WHEN projects.candidate_count = 1 AND projects.project_id = conversation.project_ref
                    THEN projects.project_id END AS canonical_project_ref
@@ -137,7 +150,77 @@ export class PostgresConversationArtifactLibrary implements ArtifactLibraryRepos
       : row.canonical_project_ref !== null && CANONICAL_PROJECT_ID.test(row.canonical_project_ref)
         ? row.canonical_project_ref
         : undefined
-    return { ...association(row), ...(projectRef === undefined ? {} : { projectRef }) }
+    return { ...association(row), favorited: row.favorited, ...(projectRef === undefined ? {} : { projectRef }) }
+  }
+
+  public async setFavorite(input: SetArtifactFavorite): Promise<boolean | null> {
+    const signal = AbortSignal.any([input.signal, AbortSignal.timeout(4_500)])
+    signal.throwIfAborted()
+    const waiting = new AbortController()
+    const stopped = once(signal, "abort", { signal: waiting.signal }).then(() => {
+      throw signal.reason
+    })
+    const checkout = this.database.pool.connect()
+    let client: PoolClient | undefined
+    try {
+      try {
+        client = await Promise.race([checkout, stopped])
+      } catch (error) {
+        // The pool has no per-waiter cancellation; a late connection never starts SQL.
+        void checkout.then(
+          (late) => late.release(),
+          () => undefined,
+        )
+        throw error
+      }
+      signal.throwIfAborted()
+      const result = await Promise.race([
+        client.query<{ favorited: boolean }>(
+          `WITH active_conversation AS MATERIALIZED (
+             SELECT c.tenant_id,c.conversation_id
+               FROM bff_conversation c
+              WHERE c.tenant_id=$1 AND c.owner_id=$2 AND c.conversation_id=$3 AND c.status='active'
+                AND (c.project_ref IS NULL OR EXISTS (
+                  SELECT 1 FROM bff_project p WHERE p.tenant_id=c.tenant_id AND p.owner_id=c.owner_id AND p.deleted_at IS NULL
+                    AND (p.project_id=c.project_ref OR p.slug=c.project_ref)
+                ))
+              FOR SHARE OF c NOWAIT
+           ), target AS MATERIALIZED (
+             SELECT a.tenant_id,a.conversation_id,a.artifact_id,a.favorited_at
+               FROM active_conversation c
+               JOIN bff_conversation_artifact a ON a.tenant_id=c.tenant_id AND a.conversation_id=c.conversation_id
+              WHERE a.artifact_id=$4 AND a.run_id=$5 AND a.source_asset_id=$6 AND a.source_content_sha256=$7
+              FOR UPDATE OF a NOWAIT
+           ), changed AS (
+             UPDATE bff_conversation_artifact a
+                SET favorited_at=CASE WHEN $8::boolean THEN CURRENT_TIMESTAMP(3) END
+               FROM target t
+              WHERE a.tenant_id=t.tenant_id AND a.conversation_id=t.conversation_id AND a.artifact_id=t.artifact_id
+                AND (t.favorited_at IS NOT NULL) <> $8::boolean
+             RETURNING a.favorited_at IS NOT NULL AS favorited
+           )
+           SELECT favorited FROM changed
+           UNION ALL
+           SELECT t.favorited_at IS NOT NULL AS favorited FROM target t
+            WHERE (t.favorited_at IS NOT NULL) = $8::boolean`,
+          [
+            input.tenantId,
+            input.subjectId,
+            input.conversationId,
+            input.artifactId,
+            input.runId,
+            input.sourceAssetId,
+            input.sourceContentSha256,
+            input.favorited,
+          ],
+        ),
+        stopped,
+      ])
+      return result.rows[0]?.favorited ?? null
+    } finally {
+      waiting.abort()
+      client?.release(signal.aborted)
+    }
   }
   public async findSkillHandoff(tenantId: string, subjectId: string, conversationId: string, artifactId: string): Promise<SkillAiAssociation | null> {
     const result = await this.database.pool.query<

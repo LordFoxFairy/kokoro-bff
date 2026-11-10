@@ -2,11 +2,13 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
-import { deletePersonalFile, PersonalFileDeletionError } from "../../infrastructure/clients/storage/personal-file-delete.js"
+import type { ArtifactLibraryRepository } from "../../application/account/artifact-library-repository.js"
+import { deletePersonalFile, LibraryDeletionError, retireLibraryArtifact } from "../../infrastructure/clients/storage/library-deletion.js"
 import { requestId } from "../request.js"
 import { send } from "../response.js"
 
-const path = /^\/v1\/library\/files\/([^/?]+)(?![\s\S])/u
+const filePath = /^\/v1\/library\/files\/([^/?]+)(?![\s\S])/u
+const artifactPath = /^\/v1\/library\/artifacts\/([^/?]+)\/([^/?]+)(?![\s\S])/u
 const identifier = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/u
 const commandKey = /^[\x21-\x2b\x2d-\x7e]{1,191}(?![\s\S])/u
 const rejectedHeaders = ["transfer-encoding", "content-encoding", "if-match", "if-none-match", "if-unmodified-since", "if-modified-since", "if-range"]
@@ -17,27 +19,33 @@ const nativeFailures = {
   503: ["product_tenant_not_configured", "iam_admission_unavailable"],
 }
 
-export function personalFileDeleteRequest(request: IncomingMessage): boolean {
-  return request.method === "DELETE" && path.test(request.url?.split("?", 1)[0] ?? "")
+export function libraryDeleteRequest(request: IncomingMessage): boolean {
+  const pathname = request.url?.split("?", 1)[0] ?? ""
+  return request.method === "DELETE" && (filePath.test(pathname) || artifactPath.test(pathname))
 }
 
-function canonicalAssetId(request: IncomingMessage): string | null {
-  const segment = path.exec(request.url ?? "")?.[1]
+function canonicalIdentifier(segment: string | undefined): string | null {
   if (segment === undefined) return null
   try {
-    const asset = decodeURIComponent(segment)
-    return identifier.test(asset) && encodeURIComponent(asset) === segment ? asset : null
+    const id = decodeURIComponent(segment)
+    return identifier.test(id) && encodeURIComponent(id) === segment ? id : null
   } catch {
     return null
   }
 }
 
-export async function handlePersonalFileDeleteRequest(
+export async function handleLibraryDeleteRequest(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
   admission: SessionAdmission,
+  repository: ArtifactLibraryRepository,
 ): Promise<void> {
+  const url = request.url ?? ""
+  const artifact = artifactPath.test(url.split("?", 1)[0] ?? "")
+  const segments = (artifact ? artifactPath : filePath).exec(url)
+  const conversationId = artifact ? canonicalIdentifier(segments?.[1]) : null
+  const targetId = canonicalIdentifier(segments?.[artifact ? 2 : 1])
   const id = requestId(request)
   response.setHeader("x-request-id", id)
   const disconnected = new AbortController()
@@ -49,18 +57,29 @@ export async function handlePersonalFileDeleteRequest(
   const signal = AbortSignal.any([disconnected.signal, AbortSignal.timeout(Math.min(10_000, config.upstreamTimeoutMs))])
   const fail = (status: number, code: string, retryable = false, retryAfter?: string) => {
     if (!response.destroyed && !response.writableEnded && !disconnected.signal.aborted)
-      send(response, status, { error: { code, message: "Personal library file deletion could not be confirmed", retryable } }, retryAfter)
+      send(
+        response,
+        status,
+        {
+          error: {
+            code,
+            message: artifact ? "Library Artifact retirement could not be confirmed" : "Personal library file deletion could not be confirmed",
+            retryable,
+          },
+        },
+        retryAfter,
+      )
   }
   try {
-    const assetId = canonicalAssetId(request)
     const lengths = request.headersDistinct["content-length"] ?? []
     if (
-      assetId === null ||
+      targetId === null ||
+      (artifact && conversationId === null) ||
       lengths.length > 1 ||
       (lengths.length === 1 && lengths[0] !== "0") ||
       rejectedHeaders.some((header) => request.headers[header] !== undefined)
     ) {
-      fail(400, "invalid_file_delete_request")
+      fail(400, artifact ? "invalid_artifact_delete_request" : "invalid_file_delete_request")
       return
     }
     const keys = request.headersDistinct["idempotency-key"] ?? []
@@ -83,11 +102,34 @@ export async function handlePersonalFileDeleteRequest(
       return
     }
     const { namespace: tenantId, userId: subjectId } = admitted.context.identity
-    const data = await deletePersonalFile(config.storage, { tenantId, subjectId, requestId: id }, assetId, key, signal)
+    const ownerContext = { tenantId, subjectId, requestId: id }
+    let data
+    if (artifact && conversationId !== null) {
+      let association
+      try {
+        association = await repository.findCandidate(tenantId, subjectId, conversationId, targetId)
+      } catch {
+        fail(503, "business_store_unavailable", true)
+        return
+      }
+      signal.throwIfAborted()
+      if (association === null) {
+        fail(404, "library_artifact_not_found")
+        return
+      }
+      if (association.conversationId !== conversationId || association.artifactId !== targetId) {
+        fail(503, "business_store_unavailable", true)
+        return
+      }
+      // An exact owner command also recovers a lost ACK after the FINAL is hidden.
+      data = await retireLibraryArtifact(config.storage, ownerContext, association, key, signal)
+    } else {
+      data = await deletePersonalFile(config.storage, ownerContext, targetId, key, signal)
+    }
     signal.throwIfAborted()
     if (!response.destroyed && !response.writableEnded) send(response, 200, { data })
   } catch (error) {
-    if (error instanceof PersonalFileDeletionError) fail(error.status, error.code, error.retryable, error.retryAfter)
+    if (error instanceof LibraryDeletionError) fail(error.status, error.code, error.retryable, error.retryAfter)
     else fail(503, "storage_unavailable", true)
   } finally {
     request.off("aborted", cancel)

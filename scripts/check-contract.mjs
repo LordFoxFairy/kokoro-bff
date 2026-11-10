@@ -114,6 +114,12 @@ function expectedIdempotency(operation) {
     return "natural"
   if (operation.method === "PUT" && operation.path === "/v1/projects/{projectId}/pin" && operation.fields.get("operationId") === "setProjectPin")
     return "natural"
+  if (
+    operation.method === "PUT" &&
+    operation.path === "/v1/library/artifacts/{conversation_id}/{artifact_id}/favorite" &&
+    operation.fields.get("operationId") === "setLibraryArtifactFavorite"
+  )
+    return "natural"
   if (TEAM_OWNER_DELEGATED_MUTATIONS.has(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)) return "none"
   if (
     operation.method === "PUT" &&

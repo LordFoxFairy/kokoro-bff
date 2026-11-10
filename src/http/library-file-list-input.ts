@@ -3,13 +3,13 @@ import { LIBRARY_FILE_TYPES, type PersonalFilePageInput } from "../application/l
 import type { ProjectResourcePageInput } from "../application/project-resource-list.types.js"
 import { ProjectResourceError } from "../application/project-resource.error.js"
 
-export type ArtifactLibraryPageInput = ProjectResourcePageInput & { kind: "artifact" } & LibraryArtifactFilter
+export type ArtifactLibraryPageInput = ProjectResourcePageInput & { kind: "artifact"; favoritesOnly?: true } & LibraryArtifactFilter
 
 export function libraryFileListInput(query: URLSearchParams): (PersonalFilePageInput & { kind: "file" }) | ArtifactLibraryPageInput {
   const kind = query.getAll("kind")
   if (kind.length !== 1 || (kind[0] !== "file" && kind[0] !== "artifact")) throw new ProjectResourceError("invalid_library_kind", 400)
   for (const key of query.keys()) {
-    if (!["kind", "limit", "cursor", "q", "type"].includes(key) || query.getAll(key).length !== 1)
+    if ((!(kind[0] === "artifact" && key === "favorites_only") && !["kind", "limit", "cursor", "q", "type"].includes(key)) || query.getAll(key).length !== 1)
       throw new ProjectResourceError("invalid_library_page", 400)
   }
   const limit = query.get("limit") ?? "50"
@@ -27,5 +27,14 @@ export function libraryFileListInput(query: URLSearchParams): (PersonalFilePageI
   }
   const type = LIBRARY_ARTIFACT_TYPES.find((candidate) => candidate === requestedType)
   if (type === undefined) throw new ProjectResourceError("invalid_library_page", 400)
-  return { kind: "artifact", limit: Number(limit), cursor, query: normalizeLibraryQuery(rawQuery), type }
+  const favoritesOnly = query.get("favorites_only")
+  if (favoritesOnly !== null && favoritesOnly !== "true" && favoritesOnly !== "false") throw new ProjectResourceError("invalid_library_page", 400)
+  return {
+    kind: "artifact",
+    limit: Number(limit),
+    cursor,
+    query: normalizeLibraryQuery(rawQuery),
+    type,
+    ...(favoritesOnly === "true" ? { favoritesOnly: true } : {}),
+  }
 }

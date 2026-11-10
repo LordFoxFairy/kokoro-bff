@@ -1,3 +1,9 @@
+## A‑09 — Library Artifact favorites
+
+`bff_conversation_artifact.favorited_at` is nullable `TIMESTAMPTZ(3)` with no default. A row has one private owner through its current active Conversation; no ownership transfer exists. NULL means not favorited. Favoriting changes only this column, preserves immutable delivery identity, and an already-satisfied target does not rewrite the row. Existing Conversation cleanup removes its relationship and favorite together. Storage continues to own Artifact lifecycle and bytes.
+
+The only canonical DDL is `database/schema.sql`. Fresh installations use the existing installer; the checked prior schema differs by this one nullable column. For an existing owned database, apply only the checked additive column in a bounded owner transaction with the existing advisory lock, then check its exact type, nullability and absence of default. Do not re-run the fresh installer against populated data or backfill. The prior binary can run with the new column left in place; rollback does not drop favorite data. Shared database evolution is a separate approved operation.
+
 ## A‑09 — Personal Library file deletion
 
 No BFF schema or data changes. Storage owns the logical deletion, command receipt and eventual
