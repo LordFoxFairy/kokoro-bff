@@ -1,6 +1,6 @@
 import "reflect-metadata"
 import { Test } from "@nestjs/testing"
-import { BFF_CONFIG, BFF_DATABASE, PROJECT_LOOKUP, PROJECT_PINS, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_CONFIG, BFF_DATABASE, PROJECT_LOOKUP, PROJECT_MUTATIONS, PROJECT_PINS, PROJECT_READS, SESSION_ADMISSION } from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
 import { ProjectsModule } from "../dist/modules/projects/projects.module.js"
 import assert from "node:assert/strict"
@@ -23,7 +23,7 @@ const headers = {
   origin: "https://web.example.test",
   "x-kokoro-request-id": "pin-test",
 }
-async function fixture(t) {
+async function fixture(t, websiteStores) {
   const calls = []
   let saved = null
   const projects = {
@@ -60,7 +60,7 @@ async function fixture(t) {
     upstreams: {},
   }
   const admission = new SessionAdmissionDouble({ "pin-session": { namespace: "tenant", userId: "subject" } })
-  const module = await Test.createTestingModule({ imports: [ProjectsModule] })
+  const builder = Test.createTestingModule({ imports: [ProjectsModule] })
     .overrideProvider(BFF_CONFIG)
     .useValue(config)
     .overrideProvider(BFF_DATABASE)
@@ -74,7 +74,11 @@ async function fixture(t) {
     .useValue({ find: () => assert.fail("pin requests must use the scoped pin owner methods") })
     .overrideProvider(SESSION_ADMISSION)
     .useValue(admission)
-    .compile()
+  if (websiteStores !== undefined) {
+    builder.overrideProvider(PROJECT_READS).useValue(websiteStores)
+    builder.overrideProvider(PROJECT_MUTATIONS).useValue(websiteStores)
+  }
+  const module = await builder.compile()
   const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
   t.after(() => app.close())
   await app.listen(0, "127.0.0.1")
@@ -94,6 +98,56 @@ async function fixture(t) {
   }
   return { calls, request, admission, projects }
 }
+
+test("A06 formal Projects route returns scoped websites and normalizes URLs before any write", async (t) => {
+  const id = "project_11111111-1111-4111-8111-111111111111"
+  const path = `/v1/projects/${id}/websites`
+  const reads = [],
+    writes = []
+  const f = await fixture(t, {
+    readWebsites: async (query) => {
+      reads.push(query)
+      return { project_id: id, websites: [], state_version: "1" }
+    },
+    replaceWebsites: async (query) => {
+      writes.push(query)
+      return { kind: "replaced", data: { project_id: id, websites: query.websites, state_version: "2" } }
+    },
+  })
+  const before = await f.request(path)
+  assert.equal(before.status, 200)
+  assert.equal(before.headers.get("cache-control"), "no-store")
+  assert.deepEqual(before.body, { data: { project_id: id, websites: [], state_version: "1" } })
+  const body = { websites: ["HTTPS://Example.test:443/a/../docs?tab=1#details", "http://z.example.test"], expected_state_version: "1" }
+  const written = await f.request(path, body)
+  assert.equal(written.status, 200)
+  assert.deepEqual(written.body, {
+    data: { project_id: id, websites: ["http://z.example.test/", "https://example.test/docs?tab=1#details"], state_version: "2" },
+  })
+  for (const websites of [
+    ["https://alice:private@example.test/"],
+    ["https://@example.test/"],
+    ["https:///example.test/"],
+    ["javascript:alert(1)"],
+    ["https://example.test/\nextra"],
+    ["https://example.test/a\\b"],
+    ["https://example.test", "https://EXAMPLE.test:443/"],
+    ["https://example.test/" + "a".repeat(2048)],
+    Array.from({ length: 17 }, (_, index) => `https://example.test/${index}`),
+  ]) {
+    const invalid = await f.request(path, { ...body, websites })
+    assert.equal(invalid.status, 400)
+    assert.deepEqual(invalid.body.error.code, "invalid_project_websites_request")
+    assert.ok(!JSON.stringify(invalid.body).includes("alice:private"))
+  }
+  assert.equal((await f.request(path, '{"websites":[],"websites":[],"expected_state_version":"1"}')).status, 400)
+  assert.equal((await f.request(path, { ...body, expected_state_version: "2147483648" })).status, 400)
+  assert.equal((await f.request(path + "?tenant_id=foreign")).status, 400)
+  assert.equal((await f.request(path, body, { "idempotency-key": "not-an-operation-receipt" })).status, 400)
+  assert.equal(reads.length, 1)
+  assert.equal(writes.length, 1)
+  for (const query of [...reads, ...writes]) assert.deepEqual([query.tenantId, query.subjectId, query.projectId], ["tenant", "subject", id])
+})
 test("formal bootstrap exposes scoped pin GET and naturally idempotent PUT with no command receipt", async (t) => {
   const f = await fixture(t)
   assert.equal((await f.request("/v1/self/project-pins")).status, 200)

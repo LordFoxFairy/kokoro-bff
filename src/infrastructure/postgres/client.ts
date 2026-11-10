@@ -44,6 +44,10 @@ export class PostgresBffDatabase implements OnApplicationShutdown {
     const result = await this.pool.query(
       `SELECT current_schema() AS schema,
               to_regclass('kokoro_bff.bff_project') IS NOT NULL
+              AND (SELECT count(*)=2 FROM pg_attribute
+                WHERE attrelid=to_regclass('kokoro_bff.bff_project') AND attnotnull AND atthasdef AND NOT attisdropped
+                  AND ((attname='website_urls' AND atttypid='jsonb'::regtype)
+                    OR (attname='websites_state_version' AND atttypid='integer'::regtype)))
               AND to_regclass('kokoro_bff.bff_project_pin') IS NOT NULL
               AND to_regclass('kokoro_bff.ix_bff_project_pin_subject_list') IS NOT NULL
               AND to_regclass('kokoro_bff.ix_bff_project_pin_parent_cleanup') IS NOT NULL

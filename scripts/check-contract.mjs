@@ -114,6 +114,8 @@ function expectedIdempotency(operation) {
     return "natural"
   if (operation.method === "PUT" && operation.path === "/v1/projects/{projectId}/pin" && operation.fields.get("operationId") === "setProjectPin")
     return "natural"
+  if (operation.method === "PUT" && operation.path === "/v1/projects/{project_id}/websites" && operation.fields.get("operationId") === "replaceProjectWebsites")
+    return "natural"
   if (
     operation.method === "PUT" &&
     operation.path === "/v1/library/artifacts/{conversation_id}/{artifact_id}/favorite" &&

@@ -1035,6 +1035,16 @@
       "method": "GET",
       "path": "/v1/scheduled-tasks/executions",
       "operation_id": "listScheduledTaskExecutions"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{project_id}/websites",
+      "operation_id": "getProjectWebsites"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/{project_id}/websites",
+      "operation_id": "replaceProjectWebsites"
     }
   ]
 }

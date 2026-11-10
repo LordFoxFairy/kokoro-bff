@@ -7,6 +7,7 @@ import {
   PROJECT_TASKS,
   PROJECT_LOOKUP,
   PROJECT_READS,
+  PROJECT_MUTATIONS,
   PROJECT_RENAME,
   PROJECT_DELETION,
   PROJECT_SKILL_SELECTION_PROVIDER,
@@ -21,9 +22,10 @@ import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/ide
 import type { ProjectLookup } from "../../application/projects/types.js"
 import type { ProjectDeletion, ProjectRenamer } from "../../application/projects/commands.js"
 import type { ProjectPinProvider } from "../../infrastructure/postgres/project-pin.js"
-import type { ProjectReadStore } from "../../infrastructure/postgres/project-store.js"
+import type { ProjectMutationStore, ProjectReadStore } from "../../infrastructure/postgres/project-store.js"
 import type { ProjectTasks } from "../../infrastructure/postgres/project-tasks.js"
 import { handleProjectTaskRequest } from "../../http/routes/project-tasks.js"
+import { handleProjectWebsitesRequest } from "../../http/routes/project-websites.js"
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import {
   handleProjectSkillSelectionRequest,
@@ -54,6 +56,7 @@ export class ProjectPinMiddleware implements NestMiddleware {
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(PROJECT_LOOKUP) private readonly lookup: ProjectLookup,
     @Inject(PROJECT_READS) private readonly reads: ProjectReadStore,
+    @Inject(PROJECT_MUTATIONS) private readonly mutations: ProjectMutationStore,
     @Inject(PROJECT_RENAME) private readonly rename: ProjectRenamer,
     @Inject(PROJECT_DELETION) private readonly deletion: ProjectDeletion,
     @Inject(PROJECT_PINS) private readonly pins: ProjectPinProvider,
@@ -90,6 +93,7 @@ export class ProjectPinMiddleware implements NestMiddleware {
       .then((handled) => handled || handleProjectResourceReadRequest(request, response, this.config, this.admission, this.lookup))
       .then((handled) => handled || handleProjectResourceListRequest(request, response, this.config, this.admission, this.lookup))
       .then((handled) => handled || handleProjectTaskRequest(request, response, this.config, this.admission, this.tasks))
+      .then((handled) => handled || handleProjectWebsitesRequest(request, response, this.config, this.admission, this.reads, this.mutations))
       .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.reads, this.lookup))
       .then((handled) => handled || handleProjectPinRequest(request, response, this.config, this.admission, this.pins))
       .then((handled) => {

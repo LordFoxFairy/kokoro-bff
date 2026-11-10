@@ -1,3 +1,7 @@
+## A‑06 — 项目网站引用
+
+现 `bff_project` 增 `website_urls JSONB NOT NULL DEFAULT '[]'`（仅有界数组）及独立 `websites_state_version INTEGER NOT NULL DEFAULT 1`。同一行保存 canonical URL 集，当前版本和实质变更原子更新；按 tenant/owner/ID/active 锁定，与现项目墓碑同锁。删除同一提交清集合，不产生 Storage release 或新 receipt。存量行缺列时按 owner 既有 DDL 发布边界只扩这两列；canonical 安装仍只用于空 schema。
+
 ## A‑10 — 私有交付展示路径
 
 既有 `bff_conversation_artifact.source_display_path TEXT` 可空、无默认值，随交付 source/frame 在原事务中一次写入。旧行保持 NULL，无历史推断、回填、索引或新表；仍由既有 `(tenant_id, conversation_id, artifact_id)` 确定关系。V1 canonical 安装只用于空 owner schema；存量环境如需升级，在独立上线步骤内先扩这一列，不重建、不触及其他 owner。

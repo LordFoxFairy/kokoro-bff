@@ -1,3 +1,7 @@
+## A‑06 — Public 28.31 Project website references
+
+Two scoped Project operations read and conditionally replace stored URL references. Public 28.30's byte-identical parent and operation inventory are retained by the build-only inverse. No runtime legacy route, deployment, lookup or execution authority is introduced.
+
 ## A‑10 — Public 28.30 private Artifact display path
 
 The sole Public OpenAPI adds optional `display_path` to the private snapshot and existing AG-UI delivery value. Both use one path domain; the anonymous shape and operation inventory are unchanged. Build-only inverse restores exact Public 28.29 bytes. Agent HTTP 8.16 is generated from owner `e27cd7ad79e6d3d0fb588328733cccd0598f1a3d`; the path conveys no read authority.

@@ -28,10 +28,43 @@ const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.me
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 
+test("Public28.31 adds only the closed owned Project website GET and conditional natural PUT", async () => {
+  const { load } = await import("js-yaml")
+  const { restorePublic2830ProjectWebsitesContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const source = await readFile(currentOpenapiUrl, "utf8")
+  const { info, paths, components } = load(source)
+  const route = "/v1/projects/{project_id}/websites"
+  const { parameters, get, put } = paths[route]
+  const schemas = components.schemas
+  assert.equal(info.version, "28.31.0")
+  assert.equal(parameters.length, 1)
+  assert.equal(parameters[0].name, "project_id")
+  assert.equal(get.operationId, "getProjectWebsites")
+  assert.equal(get["x-kokoro-permission"], "project.read")
+  assert.equal(put.operationId, "replaceProjectWebsites")
+  assert.equal(put["x-kokoro-idempotency"], "natural")
+  assert.equal(put["x-kokoro-permission"], "project.update")
+  assert.ok(put.responses[412])
+  assert.equal(get.responses[200].$ref, put.responses[200].$ref)
+  assert.deepEqual(schemas.ReplaceProjectWebsitesRequest.required, ["websites", "expected_state_version"])
+  assert.equal(schemas.ReplaceProjectWebsitesRequest.additionalProperties, false)
+  assert.deepEqual(schemas.ProjectWebsitesResponse.properties.data.required, ["project_id", "websites", "state_version"])
+  assert.equal(schemas.ProjectWebsitesResponse.properties.data.additionalProperties, false)
+  assert.equal(schemas.ProjectWebsiteUrls.maxItems, 16)
+  assert.equal(schemas.ProjectWebsiteUrls.uniqueItems, true)
+  assert.equal(schemas.ProjectWebsiteUrls.items["x-kokoro-utf8-byte-limit"], 2048)
+  const parent = load(restorePublic2830ProjectWebsitesContract(source))
+  const { [route]: added, ...unchanged } = paths
+  assert.ok(added)
+  assert.deepEqual(unchanged, parent.paths)
+  assert.deepEqual(schemas.Project, parent.components.schemas.Project)
+  assert.deepEqual(schemas.PrivateSessionSnapshotResponse, parent.components.schemas.PrivateSessionSnapshotResponse)
+})
+
 test("Public28.30 shares one optional Artifact display path domain only between private snapshot and existing AG-UI delivery", async () => {
   const { load } = await import("js-yaml")
-  const { restorePublic2829DeliveryDisplayPathContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
-  const source = await readFile(currentOpenapiUrl, "utf8")
+  const { restorePublic2829DeliveryDisplayPathContract, restorePublic2830ProjectWebsitesContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const source = restorePublic2830ProjectWebsitesContract(await readFile(currentOpenapiUrl, "utf8"))
   const { info, paths, components } = load(source)
   const s = components.schemas
   const domain = { $ref: "#/components/schemas/DeliveredArtifactDisplayPath" }

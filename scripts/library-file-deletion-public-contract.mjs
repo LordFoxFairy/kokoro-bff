@@ -3,7 +3,20 @@ import { createHash } from "node:crypto"
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
+export function restorePublic2830ProjectWebsitesContract(source) {
+  if (!/^  version: 28\.31\.0$/mu.test(source)) return source
+  if (hash(source) !== "9fea8041e3eac479e5ea008e120729fb37637636bb6bf3ad8b94ac161ac8a88c") throw Error("Project websites Public28.31 child drift")
+  const parent = source
+    .replace(/^  \/v1\/projects\/\{project_id\}\/websites:\n[\s\S]*?(?=^  \/v1\/projects\/\{projectId\}:)/mu, "")
+    .replace(/^    ProjectWebsitesProjectId:\n[\s\S]*?(?=^    Project:)/mu, "")
+    .replace(/^    ProjectWebsitesSuccess:\n[\s\S]*?(?=^    PersonalizationReadSuccess:)/mu, "")
+    .replace("  version: 28.31.0\n", "  version: 28.30.0\n")
+  if (hash(parent) !== "2e459bd39f73686ac6d458011b777f08ea17b79a1467e563cdbb299e044a3cf9") throw Error("Project websites complete Public28.30 parent drift")
+  return parent
+}
+
 export function restorePublic2829DeliveryDisplayPathContract(source) {
+  source = restorePublic2830ProjectWebsitesContract(source)
   if (!/^  version: 28\.30\.0$/mu.test(source)) return source
   if (hash(source) !== "2e459bd39f73686ac6d458011b777f08ea17b79a1467e563cdbb299e044a3cf9") throw Error("Artifact display path Public28.30 child drift")
   const parent = source
@@ -74,6 +87,16 @@ export function restorePublic2825LibraryFileDeletionContract(source) {
 }
 
 export function libraryFileDeletionParentInventory(inventory) {
+  const websiteOperations = [
+    { method: "GET", path: "/v1/projects/{project_id}/websites", operation_id: "getProjectWebsites" },
+    { method: "PUT", path: "/v1/projects/{project_id}/websites", operation_id: "replaceProjectWebsites" },
+  ]
+  if (inventory.some((item) => websiteOperations.some((expected) => item.operation_id === expected.operation_id))) {
+    if (JSON.stringify(inventory.slice(-2)) !== JSON.stringify(websiteOperations)) throw Error("Project websites Public28.31 inventory drift")
+    inventory = inventory.slice(0, -2)
+    if (hash(JSON.stringify(inventory)) !== "01ca0295d4bd270fe39ba2dbc87608fe42bb6bfe8dc162d2c32b15723546fbe0")
+      throw Error("Project websites Public28.30 inventory drift")
+  }
   const artifactCommands = new Set(["deleteLibraryArtifact", "setLibraryArtifactFavorite"])
   if (inventory.some((item) => artifactCommands.has(item.operation_id))) {
     if (hash(JSON.stringify(inventory)) !== "01ca0295d4bd270fe39ba2dbc87608fe42bb6bfe8dc162d2c32b15723546fbe0")

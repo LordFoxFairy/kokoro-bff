@@ -1,3 +1,7 @@
+## A‑06 — 项目网站引用（Public 28.31）
+
+`GET/PUT /v1/projects/{project_id}/websites` 仅访问当前已准入本人、租户、有效 canonical Project。成功为 `{data:{project_id,websites,state_version}}`；request ID 仅 header，`no-store`。PUT 闭合 `{websites,expected_state_version}`，匹配版本同值不写，过期返回 412；`[]` 解除所有引用。无幂等键、自动重试、查询参数或条件头。未知结果先读当前事实。最多 16 个无凭据的绝对 HTTP(S) URL，各 2048 UTF‑8 字节，采用 WHATWG 规范化、拒绝规范化重复并按规范 URL 排序。关联不抓取网页、不验证所有权或发布站点。
+
 ## A‑10 — 私有交付展示路径（Public 28.30）
 
 私有会话 snapshot 的 `deliveries[].display_path` 及原 AG‑UI `kokoro.delivery.created` 的 `value.display_path` 可选，使用同一展示域。只有 Agent 已证明并与原路径相等的安全虚拟绝对路径才可出现，UTF‑8 不超过 4096 bytes；没有证据时省略，不发送 `null`。匿名 snapshot、正式读取选择器、现操作与 cursor 均不变。

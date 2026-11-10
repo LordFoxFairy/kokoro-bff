@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.30.0
+  version: 28.31.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -4548,6 +4548,63 @@ paths:
         '409': { $ref: '#/components/responses/RenameProjectConflict' }
         '429': { $ref: '#/components/responses/RenameProjectRateLimited' }
         '503': { $ref: '#/components/responses/RenameProjectUnavailable' }
+  /v1/projects/{project_id}/websites:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/ProjectWebsitesProjectId' }
+    get:
+      tags: [Projects]
+      operationId: getProjectWebsites
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.read
+      summary: Read the owned active Project's current website references
+      description: Stored addresses only. No site lookup, fetch, verification, or publication. No query or body; missing, foreign and deleted Projects are not visible.
+      responses:
+        '200': { $ref: '#/components/responses/ProjectWebsitesSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/ProjectWebsitesRateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+    put:
+      tags: [Projects]
+      operationId: replaceProjectWebsites
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: project.update
+      summary: Conditionally replace the owned active Project's website references
+      description: >-
+        One JSON body of at most 65536 bytes; no query, Idempotency-Key or HTTP conditional headers.
+        The current state version is required. A stale version returns 412 even if the desired value matches.
+        With a matching version, the same canonical set is a no-op; only a real change advances the version.
+        An empty set unlinks all addresses. After an unknown result, read the current value before another explicit write.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplaceProjectWebsitesRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ProjectWebsitesSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412':
+          description: Current website state no longer matches the precondition (`project_websites_precondition_failed`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/ProjectWebsitesRateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/projects/{projectId}:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -23745,6 +23802,48 @@ components:
         mode:
           type: string
           enum: [mock, live]
+    ProjectWebsitesProjectId:
+      type: string
+      pattern: '^project_[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}(?![\s\S])'
+    ProjectWebsitesStateVersion:
+      type: string
+      pattern: '^[1-9][0-9]{0,9}(?![\s\S])'
+      x-kokoro-decimal-maximum: '2147483647'
+      description: Positive decimal Project website collection version, at most 2147483647.
+    ProjectWebsiteUrls:
+      type: array
+      maxItems: 16
+      uniqueItems: true
+      description: >-
+        A set of absolute HTTP(S) addresses. Canonical WHATWG URL serialization is sorted by ASCII code point;
+        duplicates after canonicalization are invalid. No credentials, backslashes, whitespace, control or formatting characters.
+        Each submitted and canonical URL is at most 2048 UTF-8 bytes. No network lookup is performed.
+      items:
+        type: string
+        minLength: 1
+        maxLength: 2048
+        x-kokoro-utf8-byte-limit: 2048
+        pattern: '^[Hh][Tt][Tt][Pp][Ss]?://'
+    ReplaceProjectWebsitesRequest:
+      type: object
+      additionalProperties: false
+      required: [websites, expected_state_version]
+      properties:
+        websites: { $ref: '#/components/schemas/ProjectWebsiteUrls' }
+        expected_state_version: { $ref: '#/components/schemas/ProjectWebsitesStateVersion' }
+    ProjectWebsitesResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [project_id, websites, state_version]
+          properties:
+            project_id: { $ref: '#/components/schemas/ProjectWebsitesProjectId' }
+            websites: { $ref: '#/components/schemas/ProjectWebsiteUrls' }
+            state_version: { $ref: '#/components/schemas/ProjectWebsitesStateVersion' }
     Project:
       type: object
       required: [id, name, slug, description, created_at, updated_at]
@@ -28396,6 +28495,21 @@ components:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     ServiceUnavailable:
       description: A required BFF fact store or owner source is not configured
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ProjectWebsitesSuccess:
+      description: Current stored website references and version
+      headers:
+        x-request-id: { required: true, schema: { type: string } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ProjectWebsitesResponse' }
+    ProjectWebsitesRateLimited:
+      description: Current session admission is rate limited
+      headers:
+        Retry-After: { schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' } }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }

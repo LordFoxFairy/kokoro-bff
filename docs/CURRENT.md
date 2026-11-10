@@ -1,3 +1,7 @@
+## A‑06 项目网站引用候选
+
+Public 28.31 在原 Projects 模块中提供已准入本人项目的 URL 保存、回读和解除。GET/PUT 只维护现项目行，不查询网页、不发布站点。普通 Project/Chat schema 和 Storage/Agent 不变；真实隔离 PG 与 Chromium 证据由 Root 记录。
+
 ## 2026-11-10 A‑10 已交付成果树候选
 
 Public 28.30 与 Agent HTTP 8.16 `e27cd7ad79e6d3d0fb588328733cccd0598f1a3d` 精确配对。已证明的可选展示路径从原私有 AG‑UI delivery 进入既有 Artifact 关联和 snapshot，旧产物无目录、不补造。匿名 Share、内容权限、未交付工作区和其他 owner 不变；跨仓浏览器验收由 Root 记录。

@@ -1,8 +1,14 @@
-import type { Pool } from "pg"
+import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg"
 import { randomUUID } from "node:crypto"
 
 import type { Project, ProjectInstructionRevision } from "../../contracts/index.js"
 import type { ProjectLookup, ProjectOwnerScope } from "../../application/projects/types.js"
+import {
+  maxProjectWebsitesStateVersion,
+  normalizeProjectWebsiteUrls,
+  validProjectWebsitesStateVersion,
+  type ProjectWebsites,
+} from "../../domain/project/website-urls.js"
 
 type ProjectRow = {
   project_id: string
@@ -65,7 +71,7 @@ export function createProjectLookup(pool: Pick<Pool, "query">): ProjectLookup {
   return { find: (scope, idOrSlug) => findOwnedProject(pool, scope, idOrSlug) }
 }
 
-export function createProjectReadStore(pool: Pick<Pool, "query">) {
+export function createProjectReadStore(pool: Pick<Pool, "query" | "connect">) {
   async function list(scope: ProjectOwnerScope): Promise<Project[]> {
     const result = await pool.query<ProjectRow>(
       `SELECT project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at
@@ -96,7 +102,7 @@ export function createProjectReadStore(pool: Pick<Pool, "query">) {
     return result.rows.map(revisionFromRow)
   }
 
-  return { list, revisions }
+  return { list, revisions, readWebsites: (input: WebsiteQuery) => readProjectWebsites(pool, input) }
 }
 
 export type ProjectReadStore = ReturnType<typeof createProjectReadStore>
@@ -161,10 +167,127 @@ export function createProjectMutationStore(pool: Pick<Pool, "query" | "connect">
     }
   }
 
-  return { create, updateInstruction }
+  return { create, updateInstruction, replaceWebsites: (input: WebsiteWrite) => replaceProjectWebsites(pool, input) }
 }
 
 export type ProjectMutationStore = ReturnType<typeof createProjectMutationStore>
+
+type WebsiteQuery = ProjectOwnerScope & { projectId: string; signal: AbortSignal }
+type WebsiteWrite = WebsiteQuery & { websites: string[]; expectedStateVersion: string }
+type WebsiteRow = { project_id: string; website_urls: unknown; websites_state_version: number }
+type WebsiteWriteResult = { kind: "replaced"; data: ProjectWebsites } | { kind: "not_found" } | { kind: "precondition_failed" }
+const websiteScope = "tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL"
+const websiteColumns = "project_id,website_urls,websites_state_version"
+
+function websiteState(row: WebsiteRow): ProjectWebsites {
+  const websites = normalizeProjectWebsiteUrls(row.website_urls)
+  const stateVersion = String(row.websites_state_version)
+  if (!websites || !validProjectWebsitesStateVersion(stateVersion) || JSON.stringify(websites) !== JSON.stringify(row.website_urls))
+    throw new Error("PROJECT_WEBSITES_INVALID_STATE")
+  return { project_id: row.project_id, websites, state_version: stateVersion }
+}
+
+/** One checked-out client, retired on request cancellation even while waiting for the Project lock. */
+async function websiteTransaction<T>(
+  pool: Pick<Pool, "connect">,
+  signal: AbortSignal,
+  write: boolean,
+  work: (query: <Row extends QueryResultRow>(sql: string, params?: unknown[]) => Promise<QueryResult<Row>>) => Promise<T>,
+): Promise<T> {
+  signal.throwIfAborted()
+  let client: PoolClient | undefined,
+    retired = false,
+    open = false,
+    committing = false
+  let interrupt!: (error: Error) => void
+  const interrupted = new Promise<never>((_, reject) => {
+    interrupt = reject
+  })
+  const release = (destroy: boolean): void => {
+    if (!client) return
+    const lease = client
+    client = undefined
+    lease.removeListener("error", stop)
+    lease.release(destroy)
+  }
+  const stop = (): void => {
+    if (retired) return
+    retired = true
+    interrupt(new Error("PROJECT_WEBSITES_UNAVAILABLE"))
+    release(true)
+  }
+  const query = <Row extends QueryResultRow>(sql: string, params?: unknown[]) => {
+    signal.throwIfAborted()
+    if (!client || retired) throw new Error("PROJECT_WEBSITES_UNAVAILABLE")
+    return Promise.race([client.query<Row>(sql, params), interrupted])
+  }
+  signal.addEventListener("abort", stop, { once: true })
+  try {
+    await Promise.race([
+      pool.connect().then((lease) => {
+        if (retired || signal.aborted) {
+          lease.release()
+          return
+        }
+        client = lease
+        client.on("error", stop)
+      }),
+      interrupted,
+    ])
+    await query(write ? "BEGIN" : "BEGIN READ ONLY")
+    open = true
+    await query("SELECT set_config('statement_timeout','5000',true),set_config('lock_timeout','1000',true)")
+    const result = await work(query)
+    committing = true
+    await query("COMMIT")
+    signal.throwIfAborted()
+    return result
+  } catch (error) {
+    if (open && !committing && client) {
+      try {
+        await query("ROLLBACK")
+      } catch {
+        release(true)
+      }
+    } else release(true)
+    throw error
+  } finally {
+    signal.removeEventListener("abort", stop)
+    release(false)
+  }
+}
+
+async function readProjectWebsites(pool: Pick<Pool, "connect">, input: WebsiteQuery): Promise<ProjectWebsites | null> {
+  return websiteTransaction(pool, input.signal, false, async (query) => {
+    const result = await query<WebsiteRow>(`SELECT ${websiteColumns} FROM bff_project WHERE ${websiteScope}`, [
+      input.tenantId,
+      input.subjectId,
+      input.projectId,
+    ])
+    return result.rows[0] ? websiteState(result.rows[0]) : null
+  })
+}
+
+async function replaceProjectWebsites(pool: Pick<Pool, "connect">, input: WebsiteWrite): Promise<WebsiteWriteResult> {
+  return websiteTransaction(pool, input.signal, true, async (query) => {
+    const scope = [input.tenantId, input.subjectId, input.projectId]
+    const locked = await query<WebsiteRow>(`SELECT ${websiteColumns} FROM bff_project WHERE ${websiteScope} FOR UPDATE`, scope)
+    const row = locked.rows[0]
+    if (!row) return { kind: "not_found" }
+    const current = websiteState(row)
+    if (current.state_version !== input.expectedStateVersion) return { kind: "precondition_failed" }
+    const value = JSON.stringify(input.websites)
+    if (JSON.stringify(current.websites) === value) return { kind: "replaced", data: current }
+    if (row.websites_state_version >= maxProjectWebsitesStateVersion) return { kind: "precondition_failed" }
+    const result = await query<WebsiteRow>(
+      `UPDATE bff_project SET website_urls=$4::jsonb,websites_state_version=websites_state_version+1,updated_at=CURRENT_TIMESTAMP(3)
+        WHERE ${websiteScope} RETURNING ${websiteColumns}`,
+      [...scope, value],
+    )
+    if (!result.rows[0]) throw new Error("PROJECT_WEBSITES_UPDATE_LOST")
+    return { kind: "replaced", data: websiteState(result.rows[0]) }
+  })
+}
 
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "23505"
