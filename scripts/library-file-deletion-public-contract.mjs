@@ -3,7 +3,23 @@ import { createHash } from "node:crypto"
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
+export function restorePublic2826LibraryFileSearchContract(source) {
+  if (!/^  version: 28\.27\.0$/mu.test(source)) return source
+  if (hash(source) !== "52b59b49be42bc3c1126b6fc94b1d88c440b7ac911c2631e8a0305f43f96bd08") throw Error("Library file search Public28.27 child drift")
+  const parent = source
+    .replace("enum: [all, slides, documents, spreadsheets, images, video, audio, other, media]", "enum: [all, slides, documents, spreadsheets, images, video, audio, other]")
+    .replace("Kind-specific type. Files accept all, documents, images, media (audio/video), and other based on MIME. Artifacts retain all, slides, documents, spreadsheets, images, video, audio, and other based on current FINAL MIME/title. Other combinations are invalid.", "Artifact-only product type, matched against current FINAL MIME/title according to the Library API taxonomy; file queries reject this parameter.")
+    .replace("Literal text search, at most 200 Unicode code points before normalization. C0 controls and DEL are rejected; empty after trim means no text filter. Files match filename or MIME using NFC and case-insensitive PostgreSQL text semantics. Artifacts match title or filename with trim, NFC and locale-independent lowercase.", "Artifact-only search, at most 200 Unicode code points before normalization; trim, NFC and locale-independent lowercase are applied. C0 control characters and DEL are rejected. Empty means no text filter; file queries reject this parameter.")
+    .replace("Each Artifact request scans at most min(500, limit * 5) authorized candidates", "Each request scans at most min(500, limit * 5) authorized candidates")
+    .replace("File search filters current authorized Storage files before the stable keyset and limit; only a matching file may occupy a page slot. Artifact search matches current authorized FINAL metadata", "Artifact search matches current authorized FINAL metadata")
+    .replace("  version: 28.27.0\n", "  version: 28.26.0\n")
+  if (hash(parent) !== "c80d5aaba1732eca0fb7bc8f32f500adef99e7d884f579cfb7944b8b11e8901a")
+    throw Error("Library file search complete Public28.26 parent drift")
+  return parent
+}
+
 export function restorePublic2825LibraryFileDeletionContract(source) {
+  source = restorePublic2826LibraryFileSearchContract(source)
   if (!/^  version: 28\.26\.0$/mu.test(source)) return source
   if (hash(source) !== "c80d5aaba1732eca0fb7bc8f32f500adef99e7d884f579cfb7944b8b11e8901a") throw Error("Library file deletion Public28.26 child drift")
   const parent = source

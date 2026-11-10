@@ -1,3 +1,12 @@
+## A‑09 — Personal Library file search (Public 28.27)
+
+On the existing `GET /v1/library?kind=file`, optional `q` is a literal search over filename
+or MIME (raw maximum 200 Unicode code points, no C0/DEL); `type` is one of
+`all/documents/images/media/other`. File search uses Storage's documented NFC/case-insensitive
+matching before the page limit. Change of the active filter invalidates its cursor. Wrong
+kind/type, invalid query, and stale filter cursor return `400 invalid_library_page`.
+Response and Artifact search semantics are unchanged; no new operation or identity.
+
 ## A‑09 — Personal Library file deletion (Public 28.26)
 
 `deleteLibraryFile` is the single `DELETE /v1/library/files/{asset_id}` operation. The canonical

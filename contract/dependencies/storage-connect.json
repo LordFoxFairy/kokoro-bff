@@ -3,8 +3,8 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-storage",
-    "repository_commit": "c31a065708ce3a0f2713efd29f064f63eb9d44c9",
-    "published_combined_sha256": "57e1b5a490345834aab87026dc3dbe785f4cbf7b292fa2cb801b7e68bd6b9bd9",
+    "repository_commit": "0f91535a488a45379b567efd378c6cb4808f1206",
+    "published_combined_sha256": "6267053089767691f9a0da3e12cbc5012a703c0c6948f1307ef38b165c8e7e3b",
     "package_name": "kokoro.storage.v3",
     "sources": [
       {
@@ -13,7 +13,7 @@
       },
       {
         "path": "contract/proto/kokoro/storage/v3/storage.proto",
-        "sha256": "cf84f2b18202708a978e9f2ee75efc80ae251c4dac28f3d0d9c96931be2dcdbf"
+        "sha256": "e2538646c2c0b94091e46b8e14e91aa43f7028d585633f0409fae9a4fcdd2cb0"
       }
     ]
   },
@@ -29,14 +29,14 @@
     "configs": [
       {
         "path": "buf.storage.json",
-        "sha256": "6ec97b5a28754a1d76f753248b4cc74ba99ff32c34904e03ad0fe5e1bd671183"
+        "sha256": "ac8f812af9ff3a8ea9bdbfd02d84143822f8c6c2317571b40d40592aa0901079"
       },
       {
         "path": "buf.storage.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "1af5e2d34d5c6f7e4731fe99e11b731595df1db268bb1ef2bc4aedd091eab332",
+    "script_sha256": "d1c620983d5e4bb5bbaf0282e7ef23af37f51d97d315ea2c502580d127621068",
     "formatting": {
       "package": "prettier",
       "version": "3.9.6",
@@ -72,7 +72,7 @@
     },
     {
       "path": "kokoro/storage/v3/storage_pb.ts",
-      "sha256": "d7aa012e4a0826b99d4915cde50ecb0092e00bd8c8539262238f94eff0151044"
+      "sha256": "0337d3576300a8b2e4aea4ebc59cce4bb4c4fbfa2dd69debfe646307775c74ad"
     }
   ]
 }

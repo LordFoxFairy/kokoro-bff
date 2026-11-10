@@ -1,3 +1,11 @@
+## A‑09 — Personal Library file search
+
+Native admission stays per page. BFF validates the public bounds and routes file queries to
+the admitted subject's existing Storage `ListAssets`; the original query reaches Storage
+for owner normalization and matching. BFF neither scans earlier pages nor runs a second
+filter or cursor decoder. Project assets and the BFF FINAL Artifact projection are unchanged.
+No data-model change.
+
 ## A‑09 — Personal Library file deletion
 
 The native Library admission validates the existing Web service envelope and current Session

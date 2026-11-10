@@ -1,3 +1,13 @@
+## 2026-11-10 A‑09 personal Library file search
+
+Public 28.27 adds optional file filters to the existing listLibrary operation; 205 operation
+metadata entries and the complete Public 28.26 parent are preserved. The current trusted
+personal scope uses generated Storage v3 from `0f91535`; no new authorization or database
+schema. The isolated native-admission Nest/Connect regression returned 400 on the parent,
+then accepted the bounded filters and sent the exact trusted Storage request. BFF build,
+public semantics, repeatable Storage generation, and 38 relevant tests passed.
+The cross-repository Chromium acceptance is recorded in Root's single TODO when run.
+
 ## 2026-11-10 A‑09 personal Library file deletion
 
 Public 28.26 adds only `deleteLibraryFile`; it uses current native Session admission and the

@@ -7,7 +7,7 @@ const storage = { baseUrl: "http://storage.test", secret: "storage-secret", obje
 
 test("Library requires explicit file or artifact kind and bounded single-valued page query", async () => {
   const { libraryFileListInput } = await import("../dist/http/library-file-list-input.js")
-  assert.deepEqual(libraryFileListInput(new URLSearchParams("kind=file")), { kind: "file", limit: 50, cursor: "" })
+  assert.deepEqual(libraryFileListInput(new URLSearchParams("kind=file")), { kind: "file", limit: 50, cursor: "", query: "", type: "all" })
   assert.deepEqual(libraryFileListInput(new URLSearchParams("kind=artifact&limit=100&cursor=opaque.token")), {
     kind: "artifact",
     limit: 100,
@@ -36,8 +36,10 @@ test("Library requires explicit file or artifact kind and bounded single-valued 
   ])
     assert.equal(libraryArtifactType(mime, title), type)
   for (const query of [
-    "kind=file&q=x",
-    "kind=file&type=all",
+    "kind=file&q=x&q=y",
+    "kind=file&q=%00",
+    "kind=file&type=video",
+    "kind=artifact&type=media",
     "kind=artifact&q=x&q=y",
     "kind=artifact&type=all&type=all",
     "kind=artifact&type=unknown",
@@ -90,7 +92,7 @@ test("personal Connect list sends only admitted identity and validates CLEAN ASS
     }),
   )
   const client = new PersonalFileListClient(storage, { tenantId: "tenant-1", subjectId: "subject-1", requestId: "request-1" }, transport)
-  assert.deepEqual(await client.listAssets({ limit: 1, cursor: "previous" }, AbortSignal.timeout(5000)), {
+  assert.deepEqual(await client.listAssets({ limit: 1, cursor: "previous", query: "", type: "all" }, AbortSignal.timeout(5000)), {
     items: [
       {
         kind: "file",
@@ -119,22 +121,22 @@ test("personal Connect list sends only admitted identity and validates CLEAN ASS
     assert.equal(calls[0].ctx.requestHeader.get(key), value)
   assert.equal(calls[0].ctx.requestHeader.get("authorization"), null)
   reply = () => ({ items: [{ ...item, scanState: 3 }] })
-  await assert.rejects(client.listAssets({ limit: 1, cursor: "" }, AbortSignal.timeout(5000)), (error) => error.status === 502)
+  await assert.rejects(client.listAssets({ limit: 1, cursor: "", query: "", type: "all" }, AbortSignal.timeout(5000)), (error) => error.status === 502)
   reply = () => ({ items: [{ ...item, uploadPurpose: 1 }] })
-  await assert.rejects(client.listAssets({ limit: 1, cursor: "" }, AbortSignal.timeout(5000)), (error) => error.status === 502)
+  await assert.rejects(client.listAssets({ limit: 1, cursor: "", query: "", type: "all" }, AbortSignal.timeout(5000)), (error) => error.status === 502)
   const { ConnectError, Code } = await import("@connectrpc/connect")
   reply = () => {
     throw new ConnectError("private cursor", Code.InvalidArgument)
   }
   await assert.rejects(
-    client.listAssets({ limit: 1, cursor: "foreign" }, AbortSignal.timeout(5000)),
+    client.listAssets({ limit: 1, cursor: "foreign", query: "", type: "all" }, AbortSignal.timeout(5000)),
     (error) => error.status === 400 && error.code === "invalid_library_page",
   )
   reply = () => {
     throw new ConnectError("private details", Code.Unavailable)
   }
   await assert.rejects(
-    client.listAssets({ limit: 1, cursor: "" }, AbortSignal.timeout(5000)),
+    client.listAssets({ limit: 1, cursor: "", query: "", type: "all" }, AbortSignal.timeout(5000)),
     (error) => error.status === 503 && !error.message.includes("private"),
   )
 })
@@ -382,6 +384,8 @@ test("live Product HTTP re-admits each page and calls personal Storage Connect w
                   kind: ctx.requestHeader.get("x-kokoro-scope-kind"),
                   tenant: ctx.requestHeader.get("x-kokoro-tenant-id"),
                   cursor: req.cursor,
+                  query: req.query,
+                  fileType: req.fileType,
                 })
                 if (subject !== scope || ctx.requestHeader.get("x-kokoro-scope-kind") !== "personal") throw new ConnectError("forbidden", Code.PermissionDenied)
                 if (req.cursor && subject !== "subject-1") throw new ConnectError("cross-subject cursor", Code.InvalidArgument)
@@ -448,11 +452,16 @@ test("live Product HTTP re-admits each page and calls personal Storage Connect w
     assert.equal(crossed.status, 400)
     assert.equal(crossed.body.error.code, "invalid_library_page")
     assert.equal(crossed.requestId, "library-http")
-    assert.equal(admissions, 3)
+    const filtered = await get("?kind=file&limit=1&q=%20Re%CC%81SUME%CC%81%25_%20&type=documents")
+    assert.equal(filtered.status, 200, JSON.stringify(filtered))
+    assert.equal(filtered.body.data.next_cursor, "page-2")
+    assert.equal((await get("?kind=file&q=fox&type=video")).status, 400)
+    assert.equal(admissions, 5)
     assert.deepEqual(calls, [
-      { subject: "subject-1", scope: "subject-1", kind: "personal", tenant: "tenant-1", cursor: "" },
-      { subject: "subject-1", scope: "subject-1", kind: "personal", tenant: "tenant-1", cursor: "page-2" },
-      { subject: "subject-2", scope: "subject-2", kind: "personal", tenant: "tenant-1", cursor: "page-2" },
+      { subject: "subject-1", scope: "subject-1", kind: "personal", tenant: "tenant-1", cursor: "", query: "", fileType: 0 },
+      { subject: "subject-1", scope: "subject-1", kind: "personal", tenant: "tenant-1", cursor: "page-2", query: "", fileType: 0 },
+      { subject: "subject-2", scope: "subject-2", kind: "personal", tenant: "tenant-1", cursor: "page-2", query: "", fileType: 0 },
+      { subject: "subject-1", scope: "subject-1", kind: "personal", tenant: "tenant-1", cursor: "", query: " Re\u0301SUME\u0301%_ ", fileType: 1 },
     ])
   } finally {
     try {

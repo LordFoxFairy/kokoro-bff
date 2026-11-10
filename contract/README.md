@@ -1,3 +1,9 @@
+## A‑09 — Public 28.27 personal file filters
+
+The sole OpenAPI adds file q/type semantics to the existing `listLibrary` operation. It keeps
+205 operations and the existing response. The build/test-only inverse restores the exact
+Public 28.26 parent; it is not a runtime compatibility path.
+
 ## T‑09：Agent 8.11 安全终态配对
 
 唯一 Public 28.19 只扩两个现有 failure code 枚举；其余 OpenAPI 字节可用 build/test inverse 还原为原 28.18。Agent HTTP 8.11 vendored OpenAPI/provenance 取自 `40effb2`，只有一个当前 pin，BFF 不启用 `personal_context`。
