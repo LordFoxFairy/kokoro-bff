@@ -60,6 +60,21 @@ export const DEFAULT_AGUI_CONFIG: AgUiConfig = {
   cursorTombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
 }
 
+export type TelegramConnectionConfig = Readonly<{ botId: string; username: string; token: string; webhookSecret: string }>
+
+export function telegramConnectionConfig(env: NodeJS.ProcessEnv): TelegramConnectionConfig | null {
+  const token = env.KOKORO_TELEGRAM_BOT_TOKEN
+  const username = env.KOKORO_TELEGRAM_BOT_USERNAME
+  const webhookSecret = env.KOKORO_TELEGRAM_WEBHOOK_SECRET
+  if (!token && !username && !webhookSecret) return null
+  const botId = /^([1-9][0-9]{0,15}):[A-Za-z0-9_-]{20,128}$/u.exec(token ?? "")?.[1]
+  if (!botId || Number(botId) > 2 ** 52 - 1 || !token || !username || !/^[A-Za-z][A-Za-z0-9_]{1,28}bot$/iu.test(username) ||
+      !webhookSecret || !/^[A-Za-z0-9_-]{32,256}$/u.test(webhookSecret) || webhookSecret === token) {
+    throw new Error("Telegram connection configuration is incomplete or invalid")
+  }
+  return { botId, username, token, webhookSecret }
+}
+
 export type BffConfig = {
   host: string
   port: number
@@ -87,6 +102,7 @@ export type BffConfig = {
   billingOperatorProxySecret?: string | null
   upstreamTimeoutMs: number
   upstreamMaxResponseBytes: number
+  telegramConnection?: TelegramConnectionConfig | null
   schedulerServiceToken: string | null
   schedulerTargetUrl: string | null
   agentEnabled: boolean
@@ -417,6 +433,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
       "KOKORO_UPSTREAM_MAX_RESPONSE_BYTES",
       DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES,
     ),
+    telegramConnection: telegramConnectionConfig(env),
     schedulerServiceToken: env.KOKORO_SCHEDULER_SERVICE_TOKEN?.trim() || null,
     schedulerTargetUrl: optionalUrl(env.KOKORO_SCHEDULER_TARGET_URL),
     agentEnabled: booleanFlag(env.KOKORO_AGENT_ENABLED, false),

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.31.0
+  version: 28.32.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -7598,7 +7598,8 @@ paths:
       x-kokoro-stability: beta
       x-kokoro-idempotency: none
       x-kokoro-permission: agent.connection.read
-      summary: Get agent connection setup
+      summary: Read the admitted user’s external connection or setup state
+      description: This read never starts setup or calls Telegram. A binding can still be read after bot configuration is removed. LINE and Slack are not available through this operation yet.
       parameters:
         - $ref: '#/components/parameters/Platform'
       responses:
@@ -7620,6 +7621,76 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+    post:
+      tags: [Agents]
+      operationId: changeAgentConnection
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: agent.connection.write
+      summary: Start, cancel, confirm, or disconnect an owned external connection
+      description: Commands are scoped to the admitted tenant and user. A stale revision returns 412; read the current state instead of automatically resending. Cancel with the same setup ID also accepts the immediately previous revision when a Telegram callback has only advanced that exact setup to awaiting_confirmation; it never cancels a binding. Confirm requires the secret received in private Telegram chat, not merely opening the link. LINE and Slack are not available through this operation yet.
+      parameters:
+        - $ref: '#/components/parameters/Platform'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgentConnectionCommand' }
+      responses:
+        '200':
+          description: Current owned state after the command
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentConnectionSetupResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412':
+          description: The expected state revision is stale
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/agents/connections/telegram/webhook:
+    post:
+      tags: [Agents]
+      operationId: acceptTelegramConnectionUpdate
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: agent.connection.telegram_webhook
+      summary: Accept a Telegram Bot API update for the configured bot
+      description: Provider-only callback. One authenticated private start update may claim one unexpired setup and dispatch one proof message. Repeats and late or unrelated valid updates are acknowledged without sending. A 204 does not attest delivery and never creates a Kokoro binding.
+      security:
+        - TelegramWebhookSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [update_id]
+              additionalProperties: true
+              properties:
+                update_id: { type: integer, minimum: 0, maximum: 9007199254740991 }
+      responses:
+        '204':
+          description: Update acknowledged; no binding or delivery result
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/library:
     get:
@@ -15974,6 +16045,10 @@ paths:
   # MESSAGE-REGENERATION-PATHS-END
 components:
   securitySchemes:
+    TelegramWebhookSecret:
+      type: apiKey
+      in: header
+      name: X-Telegram-Bot-Api-Secret-Token
     serviceHeader:
       type: apiKey
       in: header
@@ -24766,22 +24841,89 @@ components:
               items: { $ref: '#/components/schemas/McpServerProjection' }
             next_cursor:
               type: string
+    AgentConnectionStateVersion:
+      type: string
+      pattern: '^[1-9][0-9]{0,9}$'
+      description: Owner revision (decimal integer between 1 and 2147483647).
+    AgentConnectionSetupId:
+      type: string
+      pattern: '^[A-Za-z0-9_-]{32}$'
+    AgentConnectionCommand:
+      oneOf:
+        - type: object
+          required: [action, expected_state_version]
+          additionalProperties: false
+          properties:
+            action: { type: string, const: start }
+            expected_state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+        - type: object
+          required: [action, expected_state_version, setup_id]
+          additionalProperties: false
+          properties:
+            action: { type: string, const: cancel }
+            expected_state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+        - type: object
+          required: [action, expected_state_version, setup_id, proof]
+          additionalProperties: false
+          properties:
+            action: { type: string, const: confirm }
+            expected_state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+            proof: { type: string, pattern: '^[A-Za-z0-9_-]{22}$', writeOnly: true }
+        - type: object
+          required: [action, expected_state_version]
+          additionalProperties: false
+          properties:
+            action: { type: string, const: disconnect }
+            expected_state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
     AgentConnectionSetup:
-      type: object
-      required: [platform, status, qr_value, continue_url, expires_at]
-      properties:
-        platform:
-          type: string
-          enum: [telegram, line, slack]
-        status:
-          type: string
-          enum: [disconnected, pending, connected, expired]
-        qr_value: { type: string }
-        continue_url: { type: string }
-        expires_at: { type: string, format: date-time }
+      oneOf:
+        - type: object
+          required: [platform, status, state_version]
+          additionalProperties: false
+          properties:
+            platform: { type: string, const: telegram }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            status: { type: string, const: disconnected }
+        - type: object
+          required: [platform, status, state_version, setup_id, expires_at, continue_url]
+          additionalProperties: false
+          properties:
+            platform: { type: string, const: telegram }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            status: { type: string, const: awaiting_telegram }
+            setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+            expires_at: { type: string, format: date-time }
+            continue_url: { type: string, format: uri, pattern: '^https://t[.]me/' }
+        - type: object
+          required: [platform, status, state_version, setup_id, expires_at]
+          additionalProperties: false
+          properties:
+            platform: { type: string, const: telegram }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            status: { type: string, const: awaiting_confirmation }
+            setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+            expires_at: { type: string, format: date-time }
+        - type: object
+          required: [platform, status, state_version]
+          additionalProperties: false
+          properties:
+            platform: { type: string, const: telegram }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            status: { type: string, const: expired }
+        - type: object
+          required: [platform, status, state_version, connected_at]
+          additionalProperties: false
+          properties:
+            platform: { type: string, const: telegram }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            status: { type: string, const: connected }
+            connected_at: { type: string, format: date-time }
     AgentConnectionSetupResponse:
       type: object
       required: [data, meta]
+      additionalProperties: false
       properties:
         data: { $ref: '#/components/schemas/AgentConnectionSetup' }
         meta: { $ref: '#/components/schemas/RequestMeta' }

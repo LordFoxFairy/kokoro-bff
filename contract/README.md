@@ -1,3 +1,7 @@
+## A‑13 — Public 28.32 Telegram connection
+
+Active schema: `contract/openapi/v1/openapi.yaml`. Existing owner GET now reads an owned closed state; POST is an explicit revision-bound lifecycle command. Telegram callback has its own provider-secret security scheme. No browser credential or Agent upstream is used for provider callbacks. `test/agent-connection.integration.mjs` verifies the official HTTP routes against an explicitly dedicated fresh PostgreSQL fixture and a Telegram protocol double; it does not contact the live platform. Historical parent bytes remain pinned by the build-time inverse.
+
 ## A‑06 — Public 28.31 Project website references
 
 Two scoped Project operations read and conditionally replace stored URL references. Public 28.30's byte-identical parent and operation inventory are retained by the build-only inverse. No runtime legacy route, deployment, lookup or execution authority is introduced.

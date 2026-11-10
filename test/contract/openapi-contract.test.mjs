@@ -28,10 +28,40 @@ const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.me
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 
+test("Public28.32 separates admitted user commands from the Telegram callback", async () => {
+  const { load } = await import("js-yaml")
+  const source = await readFile(currentOpenapiUrl, "utf8")
+  const { restorePublic2831AgentConnectionContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const parent = restorePublic2831AgentConnectionContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "9fea8041e3eac479e5ea008e120729fb37637636bb6bf3ad8b94ac161ac8a88c")
+  const { info, paths, components } = load(source)
+  const { get, post } = paths["/v1/agents/connections/setup"]
+  const callback = paths["/v1/agents/connections/telegram/webhook"].post
+  assert.equal(info.version, "28.32.0")
+  assert.equal(get.operationId, "getAgentConnectionSetup")
+  assert.equal(get.requestBody, undefined)
+  assert.equal(get["x-kokoro-idempotency"], "none")
+  assert.equal(post["x-kokoro-idempotency"], "natural")
+  assert.ok(post.responses[412])
+  assert.deepEqual(callback.security, [{ TelegramWebhookSecret: [] }])
+  assert.equal(components.securitySchemes.TelegramWebhookSecret.name, "X-Telegram-Bot-Api-Secret-Token")
+  assert.ok(callback.responses[204])
+  const commands = Object.fromEntries(components.schemas.AgentConnectionCommand.oneOf.map(row => [row.properties.action.const, row]))
+  assert.deepEqual(Object.keys(commands), ["start", "cancel", "confirm", "disconnect"])
+  assert.ok(Object.values(commands).every(row => row.additionalProperties === false))
+  assert.equal(commands.confirm.properties.proof.writeOnly, true)
+  assert.deepEqual(commands.cancel.required, ["action", "expected_state_version", "setup_id"])
+  const states = Object.fromEntries(components.schemas.AgentConnectionSetup.oneOf.map(row => [row.properties.status.const, row]))
+  assert.deepEqual(Object.keys(states), ["disconnected", "awaiting_telegram", "awaiting_confirmation", "expired", "connected"])
+  assert.ok(Object.values(states).every(row => row.additionalProperties === false && !row.properties.proof && !row.properties.qr_value))
+  assert.ok(states.awaiting_telegram.properties.continue_url)
+  assert.ok(!states.awaiting_confirmation.properties.continue_url && !states.connected.properties.expires_at)
+})
+
 test("Public28.31 adds only the closed owned Project website GET and conditional natural PUT", async () => {
   const { load } = await import("js-yaml")
-  const { restorePublic2830ProjectWebsitesContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
-  const source = await readFile(currentOpenapiUrl, "utf8")
+  const { restorePublic2830ProjectWebsitesContract, restorePublic2831AgentConnectionContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const source = restorePublic2831AgentConnectionContract(await readFile(currentOpenapiUrl, "utf8"))
   const { info, paths, components } = load(source)
   const route = "/v1/projects/{project_id}/websites"
   const { parameters, get, put } = paths[route]

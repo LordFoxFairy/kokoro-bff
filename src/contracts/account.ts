@@ -1,11 +1,3 @@
-export type AgentConnectionSetup = {
-  platform: "telegram" | "line" | "slack"
-  status: "disconnected" | "pending" | "connected" | "expired"
-  qr_value: string
-  continue_url: string
-  expires_at: string
-}
-
 export type BillingSummary = {
   credit_account_id: string
   status: "active" | "disabled"

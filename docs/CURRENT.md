@@ -1,3 +1,7 @@
+## A‑13 — Telegram connection owner (Public 28.32)
+
+BFF now owns Telegram setup, confirmation, durable binding and disconnect on the existing Agents API; the unused Agent upstream setup relay is removed. GET does not create or send. A verified private Telegram callback reserves one proof; only the admitted Kokoro user who started that exact attempt can confirm it. LINE and Slack remain explicitly unavailable in this slice. The controller verified the formal Nest routes against isolated fresh PostgreSQL: no-write GET, verified private callback with one send attempt, proof digest, original-user confirmation, unique binding, cancellation, expiry and unlink passed; the database was dropped. Telegram transport and IAM admission were explicit doubles. No existing database was migrated. App must use matching Public 28.32; live Telegram application/account/callback and browser acceptance are not evidenced here.
+
 ## A‑06 项目网站引用候选
 
 Public 28.31 在原 Projects 模块中提供已准入本人项目的 URL 保存、回读和解除。GET/PUT 只维护现项目行，不查询网页、不发布站点。普通 Project/Chat schema 和 Storage/Agent 不变；真实隔离 PG 与 Chromium 证据由 Root 记录。

@@ -1,3 +1,7 @@
+## A‑13 Telegram owner slot
+
+Canonical `bff_agent_connection` has one row per tenant/subject/provider. Before first explicit start no row is written; read projects revision 1. A setup has a 24-byte random URL-safe identifier and ten-minute expiry. An authenticated exact callback advances the same revision once and records only the SHA-256 of a 16-byte random proof plus the Telegram update/recipient identity. Confirm atomically checks the live claimed setup, revision and digest, then clears setup/proof/update fields. Binding persists independently with `connected_at`; the partial unique index ensures the same provider + Bot ID + external user belongs to at most one current connection. Disconnect clears the binding in place and preserves the monotonic revision, so old attempts cannot be restored. Cancel clears transient state; expired state is projected without GET writes, and a new start replaces expired fields. One fresh-only canonical schema, no generic provider receipt or external credential table.
+
 ## A‑06 — 项目网站引用
 
 现 `bff_project` 增 `website_urls JSONB NOT NULL DEFAULT '[]'`（仅有界数组）及独立 `websites_state_version INTEGER NOT NULL DEFAULT 1`。同一行保存 canonical URL 集，当前版本和实质变更原子更新；按 tenant/owner/ID/active 锁定，与现项目墓碑同锁。删除同一提交清集合，不产生 Storage release 或新 receipt。存量行缺列时按 owner 既有 DDL 发布边界只扩这两列；canonical 安装仍只用于空 schema。

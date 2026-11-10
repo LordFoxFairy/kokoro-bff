@@ -3,7 +3,40 @@ import { createHash } from "node:crypto"
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
+export function restorePublic2831AgentConnectionContract(source) {
+  if (!/^  version: 28\.32\.0$/mu.test(source)) return source
+  if (hash(source) !== "e12a8078f5ecaa741c255a3bcec032d398d35309d845d3cf736dc764a0287d33") throw Error("Telegram Public28.32 child drift")
+  const parent = source
+    .replace(/^    post:\n(?=      tags: \[Agents\]\n      operationId: changeAgentConnection\n)[\s\S]*?(?=^  \/v1\/library:)/mu, "")
+    .replace("      summary: Read the admitted user’s external connection or setup state\n      description: This read never starts setup or calls Telegram. A binding can still be read after bot configuration is removed. LINE and Slack are not available through this operation yet.\n", "      summary: Get agent connection setup\n")
+    .replace(/^    TelegramWebhookSecret:\n[\s\S]*?(?=^    [A-Za-z]+:)/mu, "")
+    .replace(/^    AgentConnectionStateVersion:\n[\s\S]*?(?=^    RuntimeManifest:)/mu, `    AgentConnectionSetup:
+      type: object
+      required: [platform, status, qr_value, continue_url, expires_at]
+      properties:
+        platform:
+          type: string
+          enum: [telegram, line, slack]
+        status:
+          type: string
+          enum: [disconnected, pending, connected, expired]
+        qr_value: { type: string }
+        continue_url: { type: string }
+        expires_at: { type: string, format: date-time }
+    AgentConnectionSetupResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/AgentConnectionSetup' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+`)
+    .replace("  version: 28.32.0\n", "  version: 28.31.0\n")
+  if (hash(parent) !== "9fea8041e3eac479e5ea008e120729fb37637636bb6bf3ad8b94ac161ac8a88c") throw Error("Telegram complete Public28.31 parent drift")
+  return parent
+}
+
 export function restorePublic2830ProjectWebsitesContract(source) {
+  source = restorePublic2831AgentConnectionContract(source)
   if (!/^  version: 28\.31\.0$/mu.test(source)) return source
   if (hash(source) !== "9fea8041e3eac479e5ea008e120729fb37637636bb6bf3ad8b94ac161ac8a88c") throw Error("Project websites Public28.31 child drift")
   const parent = source
@@ -87,6 +120,15 @@ export function restorePublic2825LibraryFileDeletionContract(source) {
 }
 
 export function libraryFileDeletionParentInventory(inventory) {
+  const agentOperations = [
+    { method: "POST", path: "/v1/agents/connections/setup", operation_id: "changeAgentConnection" },
+    { method: "POST", path: "/v1/agents/connections/telegram/webhook", operation_id: "acceptTelegramConnectionUpdate" },
+  ]
+  const present = inventory.filter((item) => agentOperations.some((expected) => expected.operation_id === item.operation_id))
+  if (present.length) {
+    if (JSON.stringify(present) !== JSON.stringify(agentOperations)) throw Error("Telegram Public28.32 inventory drift")
+    inventory = inventory.filter((item) => !present.includes(item))
+  }
   const websiteOperations = [
     { method: "GET", path: "/v1/projects/{project_id}/websites", operation_id: "getProjectWebsites" },
     { method: "PUT", path: "/v1/projects/{project_id}/websites", operation_id: "replaceProjectWebsites" },

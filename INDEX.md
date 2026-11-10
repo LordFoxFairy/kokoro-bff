@@ -1,3 +1,5 @@
+A‑13 Telegram: `src/http/routes/agent-connection-setup-native.ts` handles the existing admitted GET, explicit POST and separate provider webhook; `src/infrastructure/postgres/agent-connection.ts` owns the bounded revision/claim and canonical slot. `src/infrastructure/clients/telegram-connection.ts` has the narrow private Bot API transport, with no retry or generic channel framework.
+
 A‑08 历史最终答复来源：`chat-turn-service.ts` 事务外只解析 Storage 子序列，`chat-turn-commit.ts` 沿现事务调用 `run-final-answer-read.ts` 的 `selectedFinalAnswerInTransaction`，保持 mixed 原序并冻结正式 Agent HTTP8.15 private launch。只用本人同 scope、exact assistant 与 durable final slot，不用 display、聚合正文或 Artifact；公共 28.25 只加 opaque kind。
 
 A‑12 执行读：`src/contracts/scheduled-executions.ts` 定义分页wire/身份过滤绑定，`src/infrastructure/postgres/scheduled-task-execution-reader.ts` 投影正式本owner事实；现scheduled native读入口承接execution GET和Project筛选。Updates只链接可用普通会话，终稿仍归现私有reader。

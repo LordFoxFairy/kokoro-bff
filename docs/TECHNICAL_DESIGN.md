@@ -1,3 +1,9 @@
+## Telegram connection lifecycle (A‑13)
+
+One BFF owner slot per admitted tenant/user/provider. The only supported provider in this cut is Telegram. User GET reads; explicit commands use the owner revision. Cancellation may cross the single webhook revision for the exact setup but never undo a confirmed binding. A callback authenticates one Telegram secret header before reading bounded JSON, checks a private non-bot sender matching the chat, and atomically claims the exact active setup for the configured tenant and Bot ID. Provider I/O never holds the row lock. There is one protected Bot API send attempt after claim, without redirects or automatic retry; Telegram may redeliver before a successful claim. After claim, an unknown result is not a delivery receipt; only knowledge of the private proof permits the original user to bind. Cancel/expiry retire the code and prevent late binding. No provider traffic creates Agent Runs and no external account token enters the browser.
+
+The configured variables are `KOKORO_TELEGRAM_BOT_TOKEN`, `KOKORO_TELEGRAM_BOT_USERNAME`, and `KOKORO_TELEGRAM_WEBHOOK_SECRET` (all unset or all present; secret independent). Registration is deployment configuration, not an application write; callback uses the fixed BFF route. Existing connected users can read or disconnect when Telegram is unconfigured. Other providers and external-platform acceptance remain open.
+
 ## A‑06 — 项目网站引用
 
 Project 已拥有当前主体与配置事实。URL 值集合由同一 `ProjectsModule` 和 Project 行维护；System Site 不是本人网站来源，Storage 也不拥有 URL 引用。使用相邻 Project 配置的条件 desired-state 写：先核现准入，原行锁内读当前、验证版本、同值 no-op、变化才写。原项目删除先得锁时读写都 404，不等对象释放。未知提交读回，不新建回执、缓存、服务或外链请求。URL 不进入 Agent prompt、普通 Project 或会话快照。

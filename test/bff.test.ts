@@ -159,7 +159,7 @@ describe("kokoro-bff versioned HTTP contracts", () => {
   async function startAgentRunsTestApp(
     t: import("node:test").TestContext,
     configValue: BffConfig,
-    query: () => never | Promise<never> = () => assert.fail("Agent setup must not access BFF storage"),
+    query: (...args: unknown[]) => unknown = () => assert.fail("Unexpected BFF storage access"),
   ) {
     await import("reflect-metadata")
     const { Test } = await import("@nestjs/testing")
@@ -186,125 +186,40 @@ describe("kokoro-bff versioned HTTP contracts", () => {
     return { base: await app.getUrl(), admission }
   }
 
-  it("keeps live Agent setup explicit and fail-closed when the owner is disabled", async (t) => {
-    const { base, admission } = await startAgentRunsTestApp(t, config())
-    const invalid = await fetch(`${base}/v1/agents/connections/setup?platform=irc`, { headers: authHeaders() })
-    assert.equal(invalid.status, 400)
-    assert.equal(((await invalid.json()) as { error: { code: string } }).error.code, "invalid_agent_platform")
-
-    const disabled = await fetch(`${base}/v1/agents/connections/setup?platform=telegram`, { headers: authHeaders() })
-    assert.equal(disabled.status, 503)
-    assert.equal(((await disabled.json()) as { error: { code: string } }).error.code, "agent_not_configured")
-    assert.equal(admission.calls.length, 1)
-  })
-
-  it("projects an enabled Agent setup response through the explicit owner adapter", async (t) => {
-    let ownerCalls = 0
-    let malformed = false
-    let setupStatus: "pending" | "disconnected" = "pending"
-    const agent = createServer((request, response) => {
-      ownerCalls++
-      assert.equal(request.method, "GET")
-      assert.equal(request.url, "/v1/agents/connections/setup?platform=telegram")
-      assert.equal(request.headers["x-kokoro-subject-ref"], "user_test")
-      assert.equal(request.headers["x-kokoro-actor-ref"], "user_test")
-      assert.equal(request.headers["x-kokoro-tenant-ref"], "ns_test")
-      assert.equal(request.headers["x-kokoro-identity-assertion-ref"], "bff:agent-connection-setup:agent-setup")
-      assert.equal(request.headers["x-kokoro-service"], "kokoro-bff")
-      assert.equal(request.headers.authorization, "Bearer bff-upstream-secret")
-      assert.equal(request.headers.cookie, undefined)
-      assert.equal(request.headers.origin, undefined)
-      response.setHeader("content-type", "application/json")
-      response.end(
-        JSON.stringify({
-          data: {
-            platform: "telegram",
-            status: setupStatus,
-            qr_value: "kokoro://connect/telegram/fixture",
-            continue_url: "https://dev.kokoro.localhost/app/agents?platform=telegram",
-            expires_at: "2026-11-01T00:15:00.000Z",
-            ...(malformed ? { private_owner_field: "owner-private-canary" } : {}),
-          },
-          meta: { request_id: "agent-owner-request" },
-        }),
-      )
+  it("reads owned channel setup without creating it or forwarding to Agent", async (t) => {
+    let agentCalls = 0
+    const agent = createServer((_request, response) => {
+      agentCalls++
+      response.writeHead(418).end()
     })
     const agentBase = await listen(agent)
-    const { base, admission } = await startAgentRunsTestApp(t, config({ agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } }))
-    const setup = `${base}/v1/agents/connections/setup?platform=telegram`
-    const headers = {
-      ...authHeaders(),
-      "x-request-id": "agent-setup",
-      "x-kokoro-tenant-ref": "untrusted-tenant",
-      "x-kokoro-actor-ref": "untrusted-actor",
-      "x-kokoro-subject-ref": "untrusted-subject",
-      "x-kokoro-identity-assertion-ref": "untrusted-assertion",
-    }
-    const response = await fetch(setup, { headers })
-    assert.equal(response.status, 200)
-    assert.deepEqual((await response.json()) as { data: { status: string } }, {
-      data: {
-        platform: "telegram",
-        status: "pending",
-        qr_value: "kokoro://connect/telegram/fixture",
-        continue_url: "https://dev.kokoro.localhost/app/agents?platform=telegram",
-        expires_at: "2026-11-01T00:15:00.000Z",
-      },
-      meta: { request_id: "agent-owner-request" },
-    })
-    assert.equal(ownerCalls, 1)
-    assert.equal(admission.calls.length, 1)
-
-    const { request } = await import("node:http")
-    const withBody = await new Promise<{ status: number | undefined; code: string }>((resolve, reject) => {
-      const outgoing = request(setup, { headers: { ...headers, "content-length": "1" } }, (incoming) => {
-        let body = ""
-        incoming.setEncoding("utf8").on("data", (chunk: string) => (body += chunk))
-        incoming.on("error", reject)
-        incoming.on("end", () => {
-          try {
-            resolve({ status: incoming.statusCode, code: (JSON.parse(body) as { error: { code: string } }).error.code })
-          } catch (error) {
-            reject(error)
-          }
-        })
-      })
-      outgoing.on("error", reject)
-      outgoing.end("x")
-    })
-    assert.deepEqual(withBody, { status: 400, code: "invalid_agent_request" })
-    const duplicate = await fetch(`${setup}&platform=slack`, { headers })
+    const reads: unknown[][] = []
+    const { base, admission } = await startAgentRunsTestApp(t, config({ agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } }),
+      (...args) => { reads.push(args); return { rows: [] } })
+    const path = `${base}/v1/agents/connections/setup?platform=telegram`
+    const headers = { ...authHeaders(), "x-request-id": "agent-setup-owner", "x-kokoro-subject-ref": "not-the-owner" }
+    const invalid = await fetch(path.replace("telegram", "irc"), { headers })
+    assert.equal(invalid.status, 400)
+    const duplicate = await fetch(`${path}&platform=slack`, { headers })
     assert.equal(duplicate.status, 400)
-    assert.equal(((await duplicate.json()) as { error: { code: string } }).error.code, "invalid_agent_platform")
-    const unknown = await fetch(`${base}/v1/agents/connections/unknown?platform=telegram`, { headers })
-    assert.equal(unknown.status, 404)
-    await unknown.arrayBuffer()
-    assert.equal(ownerCalls, 1)
-    assert.equal(admission.calls.length, 1)
-
-    const denied = await fetch(setup, { headers: { ...headers, cookie: "kokoro-issuer.session_token=unknown-session" } })
-    assert.equal(denied.status, 401)
-    assert.equal(((await denied.json()) as { error: { code: string } }).error.code, "session_invalid")
-    assert.equal(ownerCalls, 1)
-
-    malformed = true
-    const rejected = await fetch(setup, { headers })
-    assert.equal(rejected.status, 502)
-    const rejectedBody = (await rejected.json()) as { error: { code: string } }
-    assert.equal(rejectedBody.error.code, "upstream_response_invalid")
-    assert.doesNotMatch(JSON.stringify(rejectedBody), /owner-private-canary/u)
-    assert.equal(ownerCalls, 2)
-
-    malformed = false
-    setupStatus = "disconnected"
-    const disconnected = await fetch(setup, { headers })
-    assert.equal(disconnected.status, 200)
-    const disconnectedBody = (await disconnected.json()) as { data: { platform: string; status: string }; meta: { request_id: string } }
-    assert.equal(disconnectedBody.data.platform, "telegram")
-    assert.equal(disconnectedBody.data.status, "disconnected")
-    assert.equal(disconnectedBody.meta.request_id, "agent-owner-request")
-    assert.equal(ownerCalls, 3)
-    assert.equal(admission.calls.length, 4)
+    const disabled = await fetch(path, { headers })
+    assert.equal(disabled.status, 503)
+    assert.equal(disabled.headers.get("cache-control"), "no-store")
+    assert.deepEqual(await disabled.json(), {
+      error: { code: "agent_connection_provider_unavailable", message: "The external connection provider is unavailable" },
+      meta: { request_id: "agent-setup-owner" },
+    })
+    const line = await fetch(path.replace("telegram", "line"), { headers })
+    assert.equal(line.status, 503)
+    const start = await fetch(path, { method: "POST", headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ action: "start", expected_state_version: "1" }) })
+    assert.equal(start.status, 503)
+    assert.equal(reads.length, 1)
+    const read = reads[0]?.[0] as { text: string; values: unknown[] }
+    assert.match(read.text, /^SELECT/u)
+    assert.deepEqual(read.values, ["ns_test", "user_test"])
+    assert.equal(admission.calls.length, 3)
+    assert.equal(agentCalls, 0)
   })
 
   it("previews a GitHub skill without requiring Idempotency-Key", async () => {

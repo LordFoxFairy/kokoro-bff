@@ -43,7 +43,7 @@ export class AgentRunsMiddleware implements NestMiddleware {
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void handleAgentRunsInternalRequest(request, response, this.config, this.reader, this.reader)
-      .then((handled) => handled || handleAgentConnectionSetupRequest(request, response, this.config, this.admission))
+      .then((handled) => handled || handleAgentConnectionSetupRequest(request, response, this.config, this.admission, this.database.pool))
       .then((handled) => handled || handleRunDisplayRequest(request, response, this.config, this.admission, this.runDisplay))
       .then(
         (handled) =>

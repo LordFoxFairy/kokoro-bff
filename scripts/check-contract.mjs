@@ -116,6 +116,10 @@ function expectedIdempotency(operation) {
     return "natural"
   if (operation.method === "PUT" && operation.path === "/v1/projects/{project_id}/websites" && operation.fields.get("operationId") === "replaceProjectWebsites")
     return "natural"
+  if (operation.method === "POST" &&
+    ((operation.path === "/v1/agents/connections/setup" && operation.fields.get("operationId") === "changeAgentConnection") ||
+     (operation.path === "/v1/agents/connections/telegram/webhook" && operation.fields.get("operationId") === "acceptTelegramConnectionUpdate")))
+    return "natural"
   if (
     operation.method === "PUT" &&
     operation.path === "/v1/library/artifacts/{conversation_id}/{artifact_id}/favorite" &&

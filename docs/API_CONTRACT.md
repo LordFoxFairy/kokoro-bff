@@ -1,3 +1,9 @@
+## A‑13 Telegram connection (Public 28.32)
+
+`GET /v1/agents/connections/setup?platform=telegram` is read-only and no-store. The matching POST accepts the closed `start`, `cancel`, `confirm`, or `disconnect` command. Each uses `expected_state_version`; cancel/confirm bind the exact `setup_id`, and confirm needs the one-time proof received in private Telegram chat. A stale revision returns 412: read current state rather than replaying automatically. The exact same setup can be cancelled after only the webhook advances it one revision; a connected binding requires explicit disconnect. `awaiting_telegram` is the only state with a Telegram URL, and the client uses that same URL for the QR. No status response contains a private proof, external user ID, or bot credentials. Connected readback has its own timestamp, independent of setup expiry. Missing provider configuration is explicitly unavailable for setup; existing bindings remain readable/removable.
+
+`POST /v1/agents/connections/telegram/webhook` is authenticated by exactly one Telegram webhook secret header, not IAM or browser cookies. Valid repeats, late events, and unrelated updates can return 204; this confirms neither delivery nor binding. Proof send ambiguity is intentionally not retried. Telegram is the only supported provider in this slice; LINE and Slack are not redirected to Agent.
+
 ## A‑06 — 项目网站引用（Public 28.31）
 
 `GET/PUT /v1/projects/{project_id}/websites` 仅访问当前已准入本人、租户、有效 canonical Project。成功为 `{data:{project_id,websites,state_version}}`；request ID 仅 header，`no-store`。PUT 闭合 `{websites,expected_state_version}`，匹配版本同值不写，过期返回 412；`[]` 解除所有引用。无幂等键、自动重试、查询参数或条件头。未知结果先读当前事实。最多 16 个无凭据的绝对 HTTP(S) URL，各 2048 UTF‑8 字节，采用 WHATWG 规范化、拒绝规范化重复并按规范 URL 排序。关联不抓取网页、不验证所有权或发布站点。

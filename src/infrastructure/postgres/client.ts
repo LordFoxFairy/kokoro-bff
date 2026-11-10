@@ -43,7 +43,9 @@ export class PostgresBffDatabase implements OnApplicationShutdown {
   public async ready(): Promise<void> {
     const result = await this.pool.query(
       `SELECT current_schema() AS schema,
-              to_regclass('kokoro_bff.bff_project') IS NOT NULL
+              to_regclass('kokoro_bff.bff_agent_connection') IS NOT NULL
+              AND to_regclass('kokoro_bff.uq_bff_agent_connection_bound_identity') IS NOT NULL
+              AND to_regclass('kokoro_bff.bff_project') IS NOT NULL
               AND (SELECT count(*)=2 FROM pg_attribute
                 WHERE attrelid=to_regclass('kokoro_bff.bff_project') AND attnotnull AND atthasdef AND NOT attisdropped
                   AND ((attname='website_urls' AND atttypid='jsonb'::regtype)
