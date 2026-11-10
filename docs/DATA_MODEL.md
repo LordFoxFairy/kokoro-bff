@@ -1,3 +1,10 @@
+## A‑09 — Personal Library file deletion
+
+No BFF schema or data changes. Storage owns the logical deletion, command receipt and eventual
+object cleanup. The BFF command ID binds tenant, subject and the personal command key; its
+request digest additionally binds the exact Asset ID. BFF keeps no deletion tombstone or copy
+of the receipt.
+
 ## A‑08 canonical 资源冻结（零 DDL）
 
 继续使用现 `bff_agent_dispatch_outbox.payload` JSONB 与原 Message/Run事务，不增加表、列、索引、grant或登记记录。请求摘要绑定公共有序opaque选择；唯一launch内保存owner核验后的canonical manifest，空选择省略以保持既有字节。source_scope属于冻结的来源事实，consumer run_id仍由现outbox/Run身份拥有；Artifact source_run_id不充当consumer身份。

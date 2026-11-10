@@ -1,13 +1,12 @@
 import { createHash, randomUUID } from "node:crypto"
-import { toJson } from "@bufbuild/protobuf"
-import { TimestampSchema } from "@bufbuild/protobuf/wkt"
 import { createClient, ConnectError, Code, type Client, type Transport } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
 import { StorageService, UploadPurpose, ScanState, AssetOrigin } from "../../../generated/storage-connect/kokoro/storage/v3/storage_pb.js"
-import { ErrorCode, ErrorDetailSchema } from "../../../generated/storage-connect/kokoro/common/v1/common_pb.js"
+import { ErrorCode } from "../../../generated/storage-connect/kokoro/common/v1/common_pb.js"
 import { ProjectResourceError } from "../../../application/project-resource.error.js"
 import type { ProjectResourceContext } from "../../../application/project-resource.types.js"
 import { MAX_VERIFIED_DOWNLOAD_BYTES, type ArtifactDownloadReference } from "./artifact-download-transfer.js"
+import { assetDeletionError, assetDeletionReceipt, type AssetDeletionReceipt } from "./ordinary-asset-delete.js"
 
 export type ProjectResourceItem = Readonly<{
   asset_id: string
@@ -17,7 +16,7 @@ export type ProjectResourceItem = Readonly<{
   content_sha256: string
   scan_state: "clean"
 }>
-export type ProjectResourceDeletion = Readonly<{ asset_id: string; deleted_at: string; replayed: boolean }>
+export type ProjectResourceDeletion = AssetDeletionReceipt
 const identifier = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
 const hash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex")
 
@@ -136,35 +135,15 @@ export class ProjectResourceAccessClient {
     try {
       // Do not require GetAsset here: the original command must replay after deletion.
       const result = await this.client.deleteAsset({ command, assetId }, { headers: this.headers, signal })
-      const at = result.deletedAt
-      if (
-        result.$unknown?.length ||
-        result.assetId !== assetId ||
-        typeof result.replayed !== "boolean" ||
-        at === undefined ||
-        at.seconds < -62135596800n ||
-        at.seconds > 253402300799n ||
-        at.nanos < 0 ||
-        at.nanos > 999999999
-      )
-        throw new ProjectResourceError("storage_response_invalid", 502, true)
-      const deletedAt = toJson(TimestampSchema, at)
-      if (typeof deletedAt !== "string") throw new ProjectResourceError("storage_response_invalid", 502, true)
-      return { asset_id: assetId, deleted_at: deletedAt, replayed: result.replayed }
+      const receipt = assetDeletionReceipt(result, assetId)
+      if (receipt === null) throw new ProjectResourceError("storage_response_invalid", 502, true)
+      return receipt
     } catch (error) {
       if (error instanceof ProjectResourceError) throw error
       // Only the complete owner error profile can establish a terminal rejection.
       if (error instanceof ConnectError) {
-        const details = error.findDetails(ErrorDetailSchema)
-        const detail = details[0]
-        if (
-          details.length === 1 &&
-          detail?.requestId === this.context.requestId &&
-          error.metadata.get("x-request-id") === this.context.requestId &&
-          error.metadata.get("x-kokoro-error-code") === ErrorCode[detail.code] &&
-          error.metadata.get("x-kokoro-retryable") === String(detail.retryable) &&
-          detail.retryable === false
-        ) {
+        const detail = assetDeletionError(error, this.context.requestId)
+        if (detail?.retryable === false) {
           if (error.code === Code.NotFound && detail.code === ErrorCode.NOT_FOUND) throw new ProjectResourceError("project_resource_not_found", 404)
           if (error.code === Code.AlreadyExists && [ErrorCode.COMMAND_DIGEST_MISMATCH, ErrorCode.CONFLICT].includes(detail.code))
             throw new ProjectResourceError("project_resource_conflict", 409)

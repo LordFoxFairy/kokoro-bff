@@ -222,6 +222,136 @@ async function startLibraryTestApp(config, sessionAdmission, repository) {
   }
 }
 
+test("personal file DELETE uses native admission and the original Storage command after an uncertain result", async () => {
+  const { createServer } = await import("node:http")
+  const { create, toBinary } = await import("@bufbuild/protobuf")
+  const { Code, ConnectError } = await import("@connectrpc/connect")
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { loadConfig } = await import("../dist/config/runtime.js")
+  const { ErrorCode, ErrorDetailSchema } = await import("../dist/generated/storage-connect/kokoro/common/v1/common_pb.js")
+  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
+  const { once } = await import("node:events")
+  const calls = []
+  const committed = { assetId: "asset:one", deletedAt: { seconds: 1700000000n, nanos: 123000000 }, replayed: true }
+  let app
+  let admissions = 0
+  function error(ctx, status, code, retryable = false, extra = {}) {
+    const id = ctx.requestHeader.get("x-kokoro-request-id")
+    return new ConnectError("private owner diagnostic", status, {
+      "x-request-id": id, "x-kokoro-error-code": ErrorCode[code], "x-kokoro-retryable": String(retryable), ...extra,
+    }, [{ type: ErrorDetailSchema.typeName, value: toBinary(ErrorDetailSchema, create(ErrorDetailSchema, { code, requestId: id, retryable })) }])
+  }
+  const owner = createServer(connectNodeAdapter({
+    routes(router) {
+      router.service(StorageService, {
+        getAsset() { assert.fail("delete/recovery must not read GetAsset first") },
+        deleteAsset(req, ctx) {
+          const get = (key) => ctx.requestHeader.get(key)
+          assert.equal(get("x-kokoro-service"), "web-bff")
+          assert.equal(get("x-kokoro-internal-secret"), "storage-secret")
+          assert.equal(get("x-kokoro-tenant-id"), "tenant-1")
+          assert.equal(get("x-kokoro-scope-kind"), "personal")
+          assert.equal(get("x-kokoro-scope-id"), get("x-kokoro-subject-id"))
+          assert.equal(get("cookie"), null)
+          assert.equal(get("authorization"), null)
+          assert.ok(req.command)
+          calls.push({ command: req.command, subject: get("x-kokoro-subject-id"), asset: req.assetId })
+          if (get("x-kokoro-subject-id") === "other") throw error(ctx, Code.NotFound, ErrorCode.NOT_FOUND)
+          if (req.assetId === "asset:bad-ack") return { ...committed, assetId: "wrong-asset" }
+          if (req.assetId === "asset:limited") throw error(ctx, Code.ResourceExhausted, ErrorCode.RATE_LIMITED, true, { "retry-after": "17" })
+          if (req.assetId === "asset:bad-rate") throw error(ctx, Code.ResourceExhausted, ErrorCode.RATE_LIMITED)
+          if (req.assetId === "asset:inconsistent") throw error(ctx, Code.NotFound, ErrorCode.CONFLICT)
+          if (req.assetId === "asset:in-progress") throw error(ctx, Code.Aborted, ErrorCode.CONFLICT, true)
+          if (req.assetId === "asset:conflict") throw error(ctx, Code.AlreadyExists, ErrorCode.CONFLICT)
+          if (req.assetId === "asset:precondition") throw error(ctx, Code.FailedPrecondition, ErrorCode.PRECONDITION_FAILED)
+          if (calls.length === 1) throw new ConnectError("committed; lost ACK", Code.Unavailable)
+          if (req.command.commandId !== calls[0].command.commandId) throw error(ctx, Code.NotFound, ErrorCode.NOT_FOUND)
+          if (req.command.requestDigest !== calls[0].command.requestDigest) throw error(ctx, Code.AlreadyExists, ErrorCode.COMMAND_DIGEST_MISMATCH)
+          return committed
+        },
+      })
+    },
+  }))
+  try {
+    owner.listen(0, "127.0.0.1")
+    await once(owner, "listening")
+    app = await startLibraryTestApp(loadConfig({
+      KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
+      KOKORO_BFF_SHARED_SECRET: "web-secret",
+      KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
+      KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
+      KOKORO_STORAGE_RPC_BASE_URL: `http://127.0.0.1:${owner.address().port}`,
+      KOKORO_BFF_STORAGE_SECRET: "storage-secret",
+      KOKORO_STORAGE_OBJECT_ORIGIN: "http://objects.test",
+    }), { async verify({ cookie }) {
+      admissions++
+      const token = cookie.split("=")[1]
+      if (token === "revoked") return { ok: false, status: 401, code: "session_invalid" }
+      return { ok: true, identity: { namespace: token === "outside" ? "tenant-other" : "tenant-1", userId: token === "other" ? "other" : "subject-1" } }
+    } })
+    const drop = (path = "asset%3Aone", key = "original-key", token = "user", options = {}) =>
+      fetch(`${app.base}/v1/library/files/${path}`, { method: "DELETE", headers: {
+        cookie: `kokoro-issuer.session_token=${token}`, origin: "https://web.example.test",
+        "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret",
+        "x-kokoro-request-id": "delete-request",
+        "x-kokoro-subject-id": "forged", "x-kokoro-scope-id": "forged",
+        "idempotency-key": key, ...options.headers,
+      }, ...(options.body === undefined ? {} : { body: options.body }) })
+    const expectError = async (response, status, code, retryable = false) => {
+      assert.equal(response.status, status)
+      assert.equal(response.headers.get("cache-control"), "no-store")
+      assert.equal(response.headers.get("x-request-id"), "delete-request")
+      const body = await response.json()
+      assert.deepEqual(Object.keys(body), ["error"])
+      assert.deepEqual(Object.keys(body.error).sort(), ["code", "message", "retryable"])
+      assert.equal(body.error.code, code)
+      assert.equal(body.error.retryable, retryable)
+      assert.ok(!body.error.message.includes("diagnostic"))
+    }
+
+    await expectError(await drop(), 503, "storage_unavailable", true)
+    await expectError(await drop("asset%3Aone", "original-key", "revoked"), 401, "session_invalid")
+    assert.equal(calls.length, 1)
+    const replay = await drop()
+    assert.equal(replay.status, 200)
+    assert.equal(replay.headers.get("cache-control"), "no-store")
+    assert.equal(replay.headers.get("x-request-id"), "delete-request")
+    assert.deepEqual(await replay.json(), { data: { asset_id: "asset:one", deleted_at: "2023-11-14T22:13:20.123Z", replayed: true } })
+    assert.deepEqual(calls[1], calls[0])
+    assert.equal(calls[0].subject, "subject-1")
+    assert.equal(admissions, 3)
+    await expectError(await drop("asset%3Atwo"), 409, "idempotency_conflict")
+    assert.equal(calls[2].command.commandId, calls[0].command.commandId)
+    assert.notEqual(calls[2].command.requestDigest, calls[0].command.requestDigest)
+    await expectError(await drop("asset%3Aone", "new-key"), 404, "file_not_found")
+    assert.notEqual(calls[3].command.commandId, calls[0].command.commandId)
+    await expectError(await drop("asset%3Aone", "original-key", "other"), 404, "file_not_found")
+    assert.equal(calls[4].subject, "other")
+    assert.notEqual(calls[4].command.commandId, calls[0].command.commandId)
+    await expectError(await drop("asset%3Abad-ack"), 502, "storage_response_invalid")
+    await expectError(await drop("asset%3Ainconsistent"), 502, "storage_response_invalid")
+    const limited = await drop("asset%3Alimited")
+    assert.equal(limited.headers.get("retry-after"), "17")
+    await expectError(limited, 429, "storage_rate_limited", true)
+    await expectError(await drop("asset%3Abad-rate"), 502, "storage_response_invalid")
+    await expectError(await drop("asset%3Ain-progress"), 409, "file_delete_conflict", true)
+    await expectError(await drop("asset%3Aconflict"), 409, "file_delete_conflict")
+    await expectError(await drop("asset%3Aprecondition"), 409, "file_delete_precondition_failed")
+    const beforeRejected = calls.length
+    await expectError(await drop("asset%3Aone", "original-key", "outside"), 403, "product_tenant_forbidden")
+    await expectError(await drop("asset%3Aone?scope_id=other"), 400, "invalid_file_delete_request")
+    await expectError(await drop("asset%3Aone", "a,b"), 400, "invalid_idempotency_key")
+    await expectError(await drop("asset%3Aone", "original-key", "user", { body: "untrusted" }), 400, "invalid_file_delete_request")
+    await expectError(await drop("asset%3Aone", "original-key", "user", { headers: { "if-match": '"old"' } }), 400, "invalid_file_delete_request")
+    assert.equal(calls.length, beforeRejected)
+  } finally {
+    await app?.close()
+    owner.closeAllConnections()
+    await new Promise((resolve) => owner.close(resolve))
+  }
+})
+
 test("live Product HTTP re-admits each page and calls personal Storage Connect without trusting forged identity", async () => {
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")

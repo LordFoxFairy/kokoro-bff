@@ -1,3 +1,12 @@
+## A‑09 — Personal Library file deletion (Public 28.26)
+
+`deleteLibraryFile` is the single `DELETE /v1/library/files/{asset_id}` operation. The canonical
+OpenAPI defines its empty request, single `Idempotency-Key`, and closed receipt/errors. Request ID
+is header-only; confirmed logical deletion returns `asset_id`, `deleted_at`, `replayed`, not object
+cleanup status. The same key/asset recovers the original receipt; same key/another asset conflicts;
+a new key on an already deleted file is not found. Uncertain responses never assert success.
+The Project deletion operation and its existing command domain are unchanged.
+
 ## A‑08 Message 资源选择（Public28.25，实施中）
 
 唯一 public OpenAPI 的 `MessageCreateRequest.selected_resource_refs` 最多16项、有序去重、compact UTF‑8 JSON最多4096 bytes，每项严格 `{kind:asset|artifact|final_answer,resource_id}`。`final_answer.resource_id` 仅为 opaque assistant Message ID。省略/空数组均无输入；`version_id`、scope、segment、revision、digest、URL、身份和正文均不是公开输入。选择仅为意图；Storage 两类仍用原 metadata，历史答案由本人同范围的 BFF durable final 校验。不可见/失效选择拒绝且不提交空附件；依赖故障与既有提交竞争语义保持。同键同原意图重放原202，不重新解析。

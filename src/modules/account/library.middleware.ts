@@ -11,6 +11,7 @@ import { failure } from "../../contracts/index.js"
 import { readBody, requestId } from "../../http/request.js"
 import { send } from "../../http/response.js"
 import { handleLibraryRequest, libraryRequest } from "../../http/routes/library-native.js"
+import { handlePersonalFileDeleteRequest, personalFileDeleteRequest } from "../../http/routes/personal-file-delete.js"
 
 @Injectable()
 export class LibraryMiddleware implements NestMiddleware {
@@ -24,6 +25,10 @@ export class LibraryMiddleware implements NestMiddleware {
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
+    if (personalFileDeleteRequest(request)) {
+      void handlePersonalFileDeleteRequest(request, response, this.config, this.admission)
+      return
+    }
     if (!libraryRequest(request)) {
       next()
       return

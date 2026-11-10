@@ -1,3 +1,14 @@
+## 2026-11-10 A‑09 personal Library file deletion
+
+Public 28.26 adds only `deleteLibraryFile`; it uses current native Session admission and the
+already pinned Storage DeleteAsset operation. Personal scope is the admitted subject. A lost
+result is recoverable by the original key and Asset; a changed Asset with that key conflicts.
+No BFF schema, receipt or cache; Project command semantics are unchanged.
+
+The direct Nest/HTTP regression first returned 404 on the parent. The focused Library,
+personal file download and Project deletion tests then passed (28/28); Storage is a binary
+Connect fixture in these tests. Real Storage and browser acceptance remain with Root.
+
 ## 2026-11-09 A-08 canonical 输入冻结（未提交候选）
 
 基线 `5226ccd`；正规消费 Agent `55beed29` / HTTP8.14 和 Storage `c31a0657`，Public28.24 保留 opaque `{kind,resource_id}` 并明确拒绝无 owner 语义的 `version_id`。唯一 Chat turn 先检查重放，在事务外有界解析 owner 元数据，最后事务复核当前 Project 与本人源 Artifact 关系并原子冻结 canonical manifest。源关系以 `FOR SHARE OF c,a NOWAIT` 核验，争用立即回滚，不引入反向阻塞；不在 PG 行锁内调用 owner 网络。regenerate 复用原 manifest，不重新解析。

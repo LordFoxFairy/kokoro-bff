@@ -1,7 +1,9 @@
 // Build-time exact additive inverse; never a runtime downgrade.
 import { createHash } from "node:crypto"
+import { restorePublic2825LibraryFileDeletionContract } from "./library-file-deletion-public-contract.mjs"
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 export function restorePublic2824FinalAnswerResourceContract(source) {
+  source = restorePublic2825LibraryFileDeletionContract(source)
   if (!/^  version: 28\.25\.0$/mu.test(source)) return source
   if (hash(source) !== "008667f501044dc186e615b83370f96a7401de8027f25e7635248724fb165759") throw Error("Final-answer resource Public28.25 child drift")
   const parent = source

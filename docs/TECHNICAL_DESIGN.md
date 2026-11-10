@@ -1,3 +1,11 @@
+## A‑09 — Personal Library file deletion
+
+The native Library admission validates the existing Web service envelope and current Session
+on every attempt. Its trusted subject is the personal Storage scope. BFF issues only the fixed
+Storage `DeleteAsset` command, without a visibility GET, local receipt, retry loop or Project
+lookup. Use one request lifetime across admission and the owner RPC. Malformed owner ACK or
+error tuples fail closed; uncertain completion is recovered only by explicit same-key retry.
+
 ## A‑08 canonical 消息输入（实施中）
 
 历史最终答复沿同一 Chat 提交处理。公开输入只带 `final_answer` 和 exact assistant Message ID；同键 replay 在任何来源读取之前返回。新请求仅在事务外解析 Asset/Artifact 子序列，最终在现 Project/Conversation 事务锁内按原选择顺序合并历史答复，不在数据库行锁中访问 Storage。final-only 不依赖 Storage。私有 launch 只消费固定 Agent HTTP8.15.0（`9d53f36fb549c49b8bc7a05b07776df5cb000698`）三类 canonical refs，不加表、路由、身份或第二提交者。

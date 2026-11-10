@@ -1,4 +1,5 @@
 import { restorePublic2823MessageResourceContract } from "./message-resource-public-contract.mjs"
+import { libraryFileDeletionParentInventory } from "./library-file-deletion-public-contract.mjs"
 import { createHash } from "node:crypto"
 const hash = (value) => createHash("sha256").update(value).digest("hex")
 
@@ -19,6 +20,7 @@ export function restorePublic2822ScheduledExecutionsContract(source) {
 }
 
 export function scheduledExecutionsParentInventory(inventory) {
+  inventory = libraryFileDeletionParentInventory(inventory)
   if (!inventory.some((item) => item.operation_id === "listScheduledTaskExecutions")) return inventory
   if (hash(JSON.stringify(inventory)) !== "9d872bd30fe5a063ec2600d2e5beb59ae30c896fd607ee3eb1a278c95fbb7731")
     throw Error("Scheduled executions current inventory drift")
