@@ -617,6 +617,16 @@
       "operation_id": "acceptTelegramConnectionUpdate"
     },
     {
+      "method": "POST",
+      "path": "/v1/agents/connections/line/webhook",
+      "operation_id": "acceptLineConnectionEvent"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/connections/line/continue",
+      "operation_id": "continueLineConnection"
+    },
+    {
       "method": "GET",
       "path": "/v1/library",
       "operation_id": "listLibrary"

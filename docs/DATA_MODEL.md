@@ -1,3 +1,7 @@
+## A‑13 — LINE use of the existing slot
+
+`bff_agent_connection` remains keyed by tenant/subject/provider. LINE uses provider-specific exact Bot/User ID shapes; the same unique binding key includes provider and bot. A signed private message fills candidate identity and provider event, then the same admitted owner reserves a random nonce digest. An accepted signed callback clears transient evidence and retains the bound identity/time. Raw link tokens and nonces are not stored. The current installer remains fresh-only; old nonempty BFF schemas are not modified, and readiness rejects the Telegram-only catalog.
+
 ## A‑10 — Reuse of the Storage scope release outbox
 
 No new file, version, or cleanup table. The existing release outbox has a `conversation_workspace` purpose with no Project parent; the Project and conversation full-scope kinds still require one. A deterministic command ID and the existing lease, retry, and settlement fence apply. Only the existing standalone Conversation deletion transaction writes this kind; Project deletion uses the existing full-scope rows and aggregate. The canonical BFF installer remains fresh-only. Existing nonempty older BFF schemas are not upgraded in place; readiness rejects the incompatible catalog. No shared data is rebuilt or modified by this change.

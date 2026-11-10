@@ -61,6 +61,7 @@ export const DEFAULT_AGUI_CONFIG: AgUiConfig = {
 }
 
 export type TelegramConnectionConfig = Readonly<{ botId: string; username: string; token: string; webhookSecret: string }>
+export type LineConnectionConfig = Readonly<{ botId: string; accountId: string; accessToken: string; channelSecret: string; webOrigin: string }>
 
 export function telegramConnectionConfig(env: NodeJS.ProcessEnv): TelegramConnectionConfig | null {
   const token = env.KOKORO_TELEGRAM_BOT_TOKEN
@@ -73,6 +74,20 @@ export function telegramConnectionConfig(env: NodeJS.ProcessEnv): TelegramConnec
     throw new Error("Telegram connection configuration is incomplete or invalid")
   }
   return { botId, username, token, webhookSecret }
+}
+
+function lineConnectionConfig(env: NodeJS.ProcessEnv, webOrigin: string | null): LineConnectionConfig | null {
+  const botId = env.KOKORO_LINE_BOT_USER_ID
+  const accountId = env.KOKORO_LINE_OFFICIAL_ACCOUNT_ID
+  const accessToken = env.KOKORO_LINE_CHANNEL_ACCESS_TOKEN
+  const channelSecret = env.KOKORO_LINE_CHANNEL_SECRET
+  if (!botId && !accountId && !accessToken && !channelSecret) return null
+  if (!botId || !/^U[0-9a-f]{32}(?![\s\S])/u.test(botId) || !accountId || !/^@[A-Za-z0-9._-]{1,64}(?![\s\S])/u.test(accountId) ||
+      !accessToken || !/^[!-~]{16,4096}(?![\s\S])/u.test(accessToken) || !channelSecret ||
+      !/^[!-~]{32,256}(?![\s\S])/u.test(channelSecret) || accessToken === channelSecret || !webOrigin?.startsWith("https://")) {
+    throw new Error("LINE connection configuration is incomplete or invalid")
+  }
+  return { botId, accountId, accessToken, channelSecret, webOrigin }
 }
 
 export type BffConfig = {
@@ -103,6 +118,7 @@ export type BffConfig = {
   upstreamTimeoutMs: number
   upstreamMaxResponseBytes: number
   telegramConnection?: TelegramConnectionConfig | null
+  lineConnection?: LineConnectionConfig | null
   schedulerServiceToken: string | null
   schedulerTargetUrl: string | null
   agentEnabled: boolean
@@ -434,6 +450,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
       DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES,
     ),
     telegramConnection: telegramConnectionConfig(env),
+    lineConnection: lineConnectionConfig(env, iamWebOrigin),
     schedulerServiceToken: env.KOKORO_SCHEDULER_SERVICE_TOKEN?.trim() || null,
     schedulerTargetUrl: optionalUrl(env.KOKORO_SCHEDULER_TARGET_URL),
     agentEnabled: booleanFlag(env.KOKORO_AGENT_ENABLED, false),

@@ -214,10 +214,12 @@ describe("kokoro-bff versioned HTTP contracts", () => {
     const start = await fetch(path, { method: "POST", headers: { ...headers, "content-type": "application/json" },
       body: JSON.stringify({ action: "start", expected_state_version: "1" }) })
     assert.equal(start.status, 503)
-    assert.equal(reads.length, 1)
-    const read = reads[0]?.[0] as { text: string; values: unknown[] }
-    assert.match(read.text, /^SELECT/u)
-    assert.deepEqual(read.values, ["ns_test", "user_test"])
+    assert.equal(reads.length, 2)
+    for (const [index, platform] of ["telegram", "line"].entries()) {
+      const read = reads[index]?.[0] as { text: string; values: unknown[] }
+      assert.match(read.text, /^SELECT/u)
+      assert.deepEqual(read.values, ["ns_test", "user_test", platform])
+    }
     assert.equal(admission.calls.length, 3)
     assert.equal(agentCalls, 0)
   })

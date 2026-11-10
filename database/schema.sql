@@ -4,14 +4,14 @@
 CREATE TABLE IF NOT EXISTS bff_agent_connection (
   tenant_id TEXT NOT NULL,
   subject_id TEXT NOT NULL,
-  provider TEXT NOT NULL CHECK (provider = 'telegram'),
+  provider TEXT NOT NULL CONSTRAINT ck_bff_agent_connection_provider CHECK (provider IN ('telegram','line')),
   state_version INTEGER NOT NULL CHECK (state_version >= 1),
-  bot_id TEXT CHECK (bot_id ~ '^[1-9][0-9]{0,15}$'),
+  bot_id TEXT CHECK (CASE WHEN provider='telegram' THEN bot_id ~ '^[1-9][0-9]{0,15}$' ELSE bot_id ~ '^U[0-9a-f]{32}$' END),
   setup_id TEXT UNIQUE CHECK (setup_id ~ '^[A-Za-z0-9_-]{32}$'),
   setup_expires_at TIMESTAMPTZ(3),
   proof_digest TEXT CHECK (proof_digest ~ '^[0-9a-f]{64}$'),
-  provider_update_id TEXT CHECK (provider_update_id ~ '^[0-9]{1,16}$'),
-  external_user_id TEXT CHECK (external_user_id ~ '^[1-9][0-9]{0,15}$'),
+  provider_update_id TEXT CHECK (CASE WHEN provider='telegram' THEN provider_update_id ~ '^[0-9]{1,16}$' ELSE provider_update_id ~ '^[A-Za-z0-9_-]{1,128}$' END),
+  external_user_id TEXT CHECK (CASE WHEN provider='telegram' THEN external_user_id ~ '^[1-9][0-9]{0,15}$' ELSE external_user_id ~ '^U[0-9a-f]{32}$' END),
   connected_at TIMESTAMPTZ(3),
   PRIMARY KEY (tenant_id, subject_id, provider),
   CONSTRAINT ck_bff_agent_connection_shape CHECK (
@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS bff_agent_connection (
     OR
     (bot_id IS NOT NULL AND setup_id IS NOT NULL AND setup_expires_at IS NOT NULL AND connected_at IS NULL
       AND ((proof_digest IS NULL AND provider_update_id IS NULL AND external_user_id IS NULL)
-        OR (proof_digest IS NOT NULL AND provider_update_id IS NOT NULL AND external_user_id IS NOT NULL)))
+        OR (provider_update_id IS NOT NULL AND external_user_id IS NOT NULL
+          AND (proof_digest IS NOT NULL OR provider='line'))))
     OR
     (bot_id IS NOT NULL AND setup_id IS NULL AND setup_expires_at IS NULL AND proof_digest IS NULL
       AND provider_update_id IS NULL AND external_user_id IS NOT NULL AND connected_at IS NOT NULL)

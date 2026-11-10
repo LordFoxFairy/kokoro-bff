@@ -1,3 +1,7 @@
+## A‑13 — LINE account-link owner (Public 28.34)
+
+The existing connection setup now accepts LINE. BFF verifies the exact signed provider body, claims an active setup in a private LINE chat, and issues an official one-time link token. The current admitted Kokoro owner approves continuation, and only a successful signed account-link for the original private sender and nonce establishes a binding. GET is local/read-only; disconnect clears only this user's association. App exact consumer, live LINE provider and Slack remain separate acceptance/implementation items.
+
 ## A‑10 — Run process-output consumption (Public 28.33)
 
 Private Run display now projects only published Agent process-output versions. A private exact-version GET reads and verifies original Storage bytes; no Asset ID, transfer reference, snapshot enrichment or Share access. Ordinary Conversation deletion writes the narrow workspace-output release into the existing durable outbox, without changing FINAL or Project aggregate cleanup. Agent HTTP 8.17 and Storage v3 are pinned to the exact owner publications. This is the BFF component change; real native Chromium/Worker pairing and backend coverage are tracked by Root.

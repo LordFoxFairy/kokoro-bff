@@ -1,3 +1,7 @@
+## A‑13 — Public 28.34 LINE account link
+
+The existing setup operations add LINE states, a signed provider webhook, and a distinct admitted one-time continuation. No LINE private token or nonce appears in setup GET. The Public 28.33 inverse remains exact; Telegram wire and Slack availability are unchanged.
+
 ## A‑10 — Public 28.33 private Run output
 
 The current Run display adds only optional published process-version metadata and one exact content GET. Build-only inverse restores exact Public 28.32 bytes. Agent HTTP 8.17 source `7bfbf5ef3febaad710007fcd88992f44333d4740` and Storage v3 `b60931e9e4e92d596b0678cbdabd9116e898b432` come from committed owner blobs through the existing generators. No anonymous or alternate document source.

@@ -28,11 +28,20 @@ const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.me
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 
-test("Public28.33 adds exact workspace bytes and preserves the complete Telegram parent", async () => {
+test("Public28.34 separates LINE callbacks and admitted continuation, preserving exact parents", async () => {
   const { load } = await import("js-yaml")
-  const { restorePublic2832WorkspaceOutputsContract, restorePublic2831AgentConnectionContract } =
+  const { restorePublic2833LineConnectionContract, restorePublic2832WorkspaceOutputsContract, restorePublic2831AgentConnectionContract } =
     await import("../../scripts/library-file-deletion-public-contract.mjs")
-  const child = await readFile(currentOpenapiUrl, "utf8")
+  const latest = await readFile(currentOpenapiUrl, "utf8")
+  const line = load(latest)
+  assert.equal(line.info.version, "28.34.0")
+  assert.deepEqual(line.paths["/v1/agents/connections/line/webhook"].post.security, [{ LineWebhookSignature: [] }])
+  assert.equal(line.components.securitySchemes.LineWebhookSignature.name, "X-Line-Signature")
+  assert.equal(line.paths["/v1/agents/connections/line/continue"].post.security, undefined)
+  assert.equal(line.components.schemas.LineConnectionContinueRequest.properties.link_token.writeOnly, true)
+  const lineCallback = line.components.schemas.AgentConnectionSetup.oneOf.find(arm => arm.properties.status.const === "awaiting_line_callback")
+  assert.deepEqual(lineCallback.required, ["platform", "status", "state_version", "setup_id", "expires_at"])
+  const child = restorePublic2833LineConnectionContract(latest)
   const active = load(child)
   const output = active.components.schemas.RunWorkspaceOutputVersion
   assert.deepEqual(output.required, ["version_id", "virtual_path", "content_sha256", "size_bytes", "mime_type"])

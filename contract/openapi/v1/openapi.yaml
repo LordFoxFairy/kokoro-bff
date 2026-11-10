@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.33.0
+  version: 28.34.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -7599,7 +7599,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: agent.connection.read
       summary: Read the admitted user’s external connection or setup state
-      description: This read never starts setup or calls Telegram. A binding can still be read after bot configuration is removed. LINE and Slack are not available through this operation yet.
+      description: This read never starts setup or calls a provider. Telegram and LINE bindings can still be read after bot configuration is removed. Slack is not available through this operation yet.
       parameters:
         - $ref: '#/components/parameters/Platform'
       responses:
@@ -7631,7 +7631,7 @@ paths:
       x-kokoro-idempotency: natural
       x-kokoro-permission: agent.connection.write
       summary: Start, cancel, confirm, or disconnect an owned external connection
-      description: Commands are scoped to the admitted tenant and user. A stale revision returns 412; read the current state instead of automatically resending. Cancel with the same setup ID also accepts the immediately previous revision when a Telegram callback has only advanced that exact setup to awaiting_confirmation; it never cancels a binding. Confirm requires the secret received in private Telegram chat, not merely opening the link. LINE and Slack are not available through this operation yet.
+      description: Commands are scoped to the admitted tenant and user. A stale revision returns 412; read the current state instead of automatically resending. Cancel with the same setup ID also accepts the immediately previous revision when a Telegram callback has only advanced that exact setup to awaiting_confirmation; it never cancels a binding. The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack is not available through this operation yet.
       parameters:
         - $ref: '#/components/parameters/Platform'
       requestBody:
@@ -7691,6 +7691,79 @@ paths:
           description: Update acknowledged; no binding or delivery result
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/agents/connections/line/webhook:
+    post:
+      tags: [Agents]
+      operationId: acceptLineConnectionEvent
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: agent.connection.line_webhook
+      summary: Accept signed LINE Messaging API account-link events
+      description: Provider only. BFF verifies the signature against the original body and the expected bot destination. A private message can claim a live setup; an accountLink success must match the same LINE user and the nonce approved by the admitted Kokoro user. Replays and late events cannot establish a binding.
+      security:
+        - LineWebhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destination, events]
+              additionalProperties: true
+              properties:
+                destination: { type: string, pattern: '^U[0-9a-f]{32}(?![\s\S])' }
+                events: { type: array, maxItems: 32, items: { type: object, additionalProperties: true } }
+      responses:
+        '204':
+          description: Signed provider event acknowledged; no binding or delivery result
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/agents/connections/line/continue:
+    post:
+      tags: [Agents]
+      operationId: continueLineConnection
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: agent.connection.write
+      summary: Approve the exact privately claimed LINE setup as its admitted owner
+      description: The one-time LINE link token is never stored or returned by setup GET. Only the current admitted setup owner can reserve the nonce. The resulting official authorization URL is not a binding; after a successful signed accountLink event the owner GET can show connected. Never automatically replay a lost continuation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LineConnectionContinueRequest' }
+      responses:
+        '200':
+          description: One-time official LINE account-link URL
+          headers:
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+            Referrer-Policy: { required: true, schema: { type: string, const: no-referrer } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LineConnectionContinueResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412':
+          description: The expected state revision is stale
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/library:
     get:
@@ -16110,6 +16183,11 @@ paths:
   # MESSAGE-REGENERATION-PATHS-END
 components:
   securitySchemes:
+    LineWebhookSignature:
+      type: apiKey
+      in: header
+      name: X-Line-Signature
+      description: Base64 HMAC-SHA256 of the original request bytes with the configured channel secret.
     TelegramWebhookSecret:
       type: apiKey
       in: header
@@ -24970,7 +25048,7 @@ components:
           required: [platform, status, state_version]
           additionalProperties: false
           properties:
-            platform: { type: string, const: telegram }
+            platform: { type: string, enum: [telegram, line] }
             state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
             status: { type: string, const: disconnected }
         - type: object
@@ -24996,23 +25074,76 @@ components:
           required: [platform, status, state_version]
           additionalProperties: false
           properties:
-            platform: { type: string, const: telegram }
+            platform: { type: string, enum: [telegram, line] }
             state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
             status: { type: string, const: expired }
         - type: object
           required: [platform, status, state_version, connected_at]
           additionalProperties: false
           properties:
-            platform: { type: string, const: telegram }
+            platform: { type: string, enum: [telegram, line] }
             state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
             status: { type: string, const: connected }
             connected_at: { type: string, format: date-time }
+        - type: object
+          required: [platform, status, state_version, setup_id, expires_at, continue_url]
+          additionalProperties: false
+          properties:
+            platform: { type: string, const: line }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            status: { type: string, const: awaiting_line }
+            setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+            expires_at: { type: string, format: date-time }
+            continue_url: { type: string, format: uri, pattern: '^https://line[.]me/R/oaMessage/' }
+        - type: object
+          required: [platform, status, state_version, setup_id, expires_at]
+          additionalProperties: false
+          properties:
+            platform: { type: string, const: line }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            status: { type: string, const: awaiting_line_approval }
+            setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+            expires_at: { type: string, format: date-time }
+        - type: object
+          required: [platform, status, state_version, setup_id, expires_at]
+          additionalProperties: false
+          properties:
+            platform: { type: string, const: line }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            status: { type: string, const: awaiting_line_callback }
+            setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+            expires_at: { type: string, format: date-time }
     AgentConnectionSetupResponse:
       type: object
       required: [data, meta]
       additionalProperties: false
       properties:
         data: { $ref: '#/components/schemas/AgentConnectionSetup' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    LineConnectionContinueRequest:
+      type: object
+      additionalProperties: false
+      required: [setup_id, expected_state_version, link_token]
+      properties:
+        setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+        expected_state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+        link_token: { type: string, pattern: '^[!-~]{1,512}(?![\s\S])', writeOnly: true }
+    LineConnectionContinueResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [platform, status, setup_id, state_version, expires_at, continue_url]
+          properties:
+            platform: { type: string, const: line }
+            status: { type: string, const: awaiting_line_callback }
+            setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            expires_at: { type: string, format: date-time }
+            continue_url: { type: string, format: uri, pattern: '^https://access[.]line[.]me/dialog/bot/accountLink[?]' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
     RuntimeManifest:
       type: object

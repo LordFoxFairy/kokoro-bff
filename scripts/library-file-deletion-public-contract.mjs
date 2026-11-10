@@ -3,7 +3,24 @@ import { createHash } from "node:crypto"
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
+export function restorePublic2833LineConnectionContract(source) {
+  if (!/^  version: 28\.34\.0$/mu.test(source)) return source
+  if (hash(source) !== "ea0b6ff7b4ea4a0348a4dd579c2440dca32e58c5958b2374e8555e02b74382a6") throw Error("LINE Public28.34 child drift")
+  const parent = source
+    .replace(/^  \/v1\/agents\/connections\/line\/webhook:\n[\s\S]*?(?=^  \/v1\/library:)/mu, "")
+    .replace(/^    LineWebhookSignature:\n[\s\S]*?(?=^    TelegramWebhookSecret:)/mu, "")
+    .replace(/^        - type: object\n          required: \[platform, status, state_version, setup_id, expires_at, continue_url\]\n          additionalProperties: false\n          properties:\n            platform: \{ type: string, const: line \}[\s\S]*?(?=^    AgentConnectionSetupResponse:)/mu, "")
+    .replace(/^    LineConnectionContinueRequest:\n[\s\S]*?(?=^    RuntimeManifest:)/mu, "")
+    .replaceAll("            platform: { type: string, enum: [telegram, line] }\n", "            platform: { type: string, const: telegram }\n")
+    .replace("This read never starts setup or calls a provider. Telegram and LINE bindings can still be read after bot configuration is removed. Slack is not available through this operation yet.", "This read never starts setup or calls Telegram. A binding can still be read after bot configuration is removed. LINE and Slack are not available through this operation yet.")
+    .replace("The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack is not available through this operation yet.", "Confirm requires the secret received in private Telegram chat, not merely opening the link. LINE and Slack are not available through this operation yet.")
+    .replace("  version: 28.34.0\n", "  version: 28.33.0\n")
+  if (hash(parent) !== "03d4add75d31c6c4dd22e7fcb3b4269556ad3ced87d29a5640976bc74f39810f") throw Error("LINE complete Public28.33 parent drift")
+  return parent
+}
+
 export function restorePublic2832WorkspaceOutputsContract(source) {
+  source = restorePublic2833LineConnectionContract(source)
   if (!/^  version: 28\.33\.0$/mu.test(source)) return source
   if (hash(source) !== "03d4add75d31c6c4dd22e7fcb3b4269556ad3ced87d29a5640976bc74f39810f") throw Error("Workspace outputs Public28.33 child drift")
   const parent = source
@@ -133,6 +150,15 @@ export function restorePublic2825LibraryFileDeletionContract(source) {
 }
 
 export function libraryFileDeletionParentInventory(inventory) {
+  const lineOperations = [
+    { method: "POST", path: "/v1/agents/connections/line/webhook", operation_id: "acceptLineConnectionEvent" },
+    { method: "POST", path: "/v1/agents/connections/line/continue", operation_id: "continueLineConnection" },
+  ]
+  const line = inventory.filter((item) => lineOperations.some((expected) => expected.operation_id === item.operation_id))
+  if (line.length) {
+    if (JSON.stringify(line) !== JSON.stringify(lineOperations)) throw Error("LINE Public28.34 inventory drift")
+    inventory = inventory.filter((item) => !line.includes(item))
+  }
   const workspaceOperations = inventory.filter((item) => item.operation_id === "getSessionRunWorkspaceOutputContent")
   if (workspaceOperations.length) {
     const expected = { method: "GET", path: "/v1/sessions/{id}/runs/{runId}/workspace-outputs/{versionId}/content", operation_id: "getSessionRunWorkspaceOutputContent" }
