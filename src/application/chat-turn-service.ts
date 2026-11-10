@@ -1,4 +1,8 @@
-import { parseCanonicalResourceReferences, type CanonicalResourceRef, type SelectedResourceRef } from "../domain/chat/resource-reference-selection.js"
+import {
+  parseCanonicalResourceReferences,
+  type CanonicalStorageResourceRef,
+  type StorageSelectedResourceRef,
+} from "../domain/chat/resource-reference-selection.js"
 import type { RegenerateMessageInput, RegenerationReceipt } from "./chat/message-regeneration.js"
 import { parseSkillSourceSelection } from "../domain/chat/skill-source-selection.js"
 import {
@@ -19,10 +23,10 @@ export type ResolveSelectedResources = (
     subjectId: string
     requestId: string
     projectId: string | null
-    refs: readonly SelectedResourceRef[]
+    refs: readonly StorageSelectedResourceRef[]
   }>,
   lifetime: NonNullable<CommitChatTurn["lifetime"]>,
-) => Promise<CanonicalResourceRef[]>
+) => Promise<CanonicalStorageResourceRef[]>
 
 export class ChatTurnApplicationService {
   public constructor(
@@ -186,8 +190,10 @@ export class ChatTurnApplicationService {
             throw new Error("CHAT_SKILL_SELECTION_INVALID")
         }
       }
-      let resources: CanonicalResourceRef[] = []
-      if (input.selectedResourceRefs?.length) {
+      const requested = input.selectedResourceRefs ?? []
+      const storageRefs = requested.filter((ref) => ref.kind !== "final_answer")
+      let resources: CanonicalStorageResourceRef[] = []
+      if (storageRefs.length) {
         const resolve = this.resolveSelectedResources
         if (resolve === undefined) throw new Error("CHAT_RESOURCE_SELECTION_UNAVAILABLE")
         const resolved = await within(() =>
@@ -197,13 +203,17 @@ export class ChatTurnApplicationService {
               subjectId: input.subjectId,
               requestId: input.requestId,
               projectId: current.projectId,
-              refs: input.selectedResourceRefs!,
+              refs: storageRefs,
             },
             admissionLifetime,
           ),
         )
         const parsed = parseCanonicalResourceReferences(resolved)
-        if (parsed === null || JSON.stringify(parsed.map(({ kind, resource_id }) => ({ kind, resource_id }))) !== JSON.stringify(input.selectedResourceRefs))
+        if (
+          parsed === null ||
+          !parsed.every((ref) => ref.kind !== "final_answer") ||
+          JSON.stringify(parsed.map(({ kind, resource_id }) => ({ kind, resource_id }))) !== JSON.stringify(storageRefs)
+        )
           throw new Error("CHAT_RESOURCE_SELECTION_INVALID")
         resources = parsed
       }
@@ -228,8 +238,8 @@ export class ChatTurnApplicationService {
         identityAssertionRef: `bff:${suffix}`,
         content: input.content,
         ...(skillSelection === undefined ? {} : { skillSelection }),
-        ...(resources.length ? { resourceSelection: { projectId: current.projectId } } : {}),
-        payload: buildAgentDispatchPayload({ ...input, selectedSkillSourceRefs }, { runId, userMessageId }, resources),
+        ...(requested.length ? { resourceSelection: { projectId: current.projectId, refs: requested } } : {}),
+        payload: buildAgentDispatchPayload({ ...input, selectedSkillSourceRefs, selectedResourceRefs: storageRefs }, { runId, userMessageId }, resources),
       })
       check()
       return receipt

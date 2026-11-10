@@ -4,6 +4,8 @@
 
 本人Artifact来源复用现 `bff_conversation_artifact` 与active Conversation/Project；事务外有限读取后，在最终锁内重验exact source conversation/run/asset/hash与当前资格。重新生成原sourceFingerprint覆盖整个旧payload，原manifest原样承接，不重新解析或改写历史。Storage仍独占对象/扫描/撤销事实，执行读取时再次校验；本片不操作正常资源或schema。
 
+`final_answer` 的来源只有本库已存在的 `bff_message.final_segment_id`／`ordered_parts`／`parts_public_sequence` 与 exact Conversation／dispatch。原 Chat 提交事务共享锁锁定来源三行，按原 UTF‑8 计算长度和 SHA；私有 material 仅在原 outbox launch JSON 冻结，不复制到公开 Message/AG‑UI/Share，不读 aggregate `content`，不生成 Storage Artifact 或增加 Schema。新提交或新 regenerate 重新验证来源；已接受回执及 Run 的冻结字节保持不变。
+
 ## 2026-11-08 · A‑12 定时执行接入正式会话（实施门）
 
 当前态：scheduled scope/dispatch/source 独立派发 Agent，未建立普通 Conversation、Message 或 immutable Chat submission；因此普通模型准入与终稿读取不能以这些内部记录证明提交。目标仍是原 A‑12 的到点执行、执行记录和会话结果，不新增 owner/服务/认证协议。

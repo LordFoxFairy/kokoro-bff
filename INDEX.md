@@ -1,3 +1,5 @@
+A‑08 历史最终答复来源：`chat-turn-service.ts` 事务外只解析 Storage 子序列，`chat-turn-commit.ts` 沿现事务调用 `run-final-answer-read.ts` 的 `selectedFinalAnswerInTransaction`，保持 mixed 原序并冻结正式 Agent HTTP8.15 private launch。只用本人同 scope、exact assistant 与 durable final slot，不用 display、聚合正文或 Artifact；公共 28.25 只加 opaque kind。
+
 A‑12 执行读：`src/contracts/scheduled-executions.ts` 定义分页wire/身份过滤绑定，`src/infrastructure/postgres/scheduled-task-execution-reader.ts` 投影正式本owner事实；现scheduled native读入口承接execution GET和Project筛选。Updates只链接可用普通会话，终稿仍归现私有reader。
 
 A‑12 定时 activation：`scheduled-chat-submission.ts` 用冻结 occurrence 身份调用原子 Chat 提交；普通 dispatcher 是唯一 Agent launch 发送者。`scheduled-chat-progress.ts` 仅关联标准 AG‑UI terminal 与有效 exhausted，已退休专用 source reader/consumer/ledger。正式执行记录与 App 结果链接仍属后继范围。

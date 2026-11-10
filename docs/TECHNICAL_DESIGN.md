@@ -1,8 +1,12 @@
 ## A‑08 canonical 消息输入（实施中）
 
+历史最终答复沿同一 Chat 提交处理。公开输入只带 `final_answer` 和 exact assistant Message ID；同键 replay 在任何来源读取之前返回。新请求仅在事务外解析 Asset/Artifact 子序列，最终在现 Project/Conversation 事务锁内按原选择顺序合并历史答复，不在数据库行锁中访问 Storage。final-only 不依赖 Storage。私有 launch 只消费固定 Agent HTTP8.15.0（`9d53f36fb549c49b8bc7a05b07776df5cb000698`）三类 canonical refs，不加表、路由、身份或第二提交者。
+
+历史源必须为可信本人 active 同 direct 或同 canonical Project 会话、exact completed assistant 及其未退休投递。原事务以 `FOR SHARE OF c,m,d NOWAIT` 获取来源，校 durable marker 对应唯一已完成 ordered text、正版本、原 UTF‑8、长度和摘要；拒绝缺 marker、错误范围或坏字节，不走 display 或 aggregate fallback。单答复最多24 KiB，仍需通过整组32 KiB ASCII JSON/16项及最终1 MiB launch；不截断。再生成新 Run 在同事务重验与原冻结来源的版本及全部字节精确相等，既有 Run 和已提交同键仍沿原回执。私有正文不进入公开 Message／AG‑UI／Share／诊断。真实组合验收另行执行。
+
 公共选择只接受有限去重的 `{kind,resource_id}`，`version_id` 没有 owner 语义并明确拒绝。Chat 先沿现 prepare 返回同键回执；新请求在事务外通过正式 Storage 元数据和本人 Artifact 关联解析，再于原 Project/Conversation 锁内重验 scope/关联并冻结唯一 launch。显式 Skill 选择不继承默认。personal scope 固定可信 subject，Project Asset 必须属于当前 canonical Project，历史 Artifact 仅来自本人 active 源会话且不得跨项目。网络调用共享原总期限与取消，不持数据库锁调用 owner。
 
-Agent 内部 `selected_resource_refs` 替换 opaque 类型：共同字段为 kind/resource_id/asset_id/content_sha256/size_bytes（十进制字符串）/mime_type/filename/source_scope，Artifact 另含 source_run_id。BFF 只读 metadata，不下载正文或持久 signed URL；consumer Run 仍取顶层 run_id。重新生成保留原 canonical manifest，不重新 resolve；当前资格失效时拒绝，不重写原快照。空选择保持旧持久字节与摘要。已由原生成器固定消费正式 Agent HTTP8.14（55beed29）与 Storage（c31a0657）artifact；候选源码不作为来源。没有新认证、grant、表、SDK 或 service 层。
+Agent 内部 `selected_resource_refs` 的 Storage 两类共同字段为 kind/resource_id/asset_id/content_sha256/size_bytes（十进制字符串）/mime_type/filename/source_scope，Artifact 另含 source_run_id。BFF 只读 Storage metadata，不下载对象或持久 signed URL；consumer Run 仍取顶层 run_id。重新生成保留原 canonical manifest，不重复解析 Storage；当前资格失效时拒绝，不重写原快照。空选择保持旧持久字节与摘要。Storage 固定 `c31a0657`；历史 Agent HTTP8.14（`55beed29`）只作父版本证明。
 
 ### A‑12 执行读投影
 

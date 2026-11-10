@@ -2,7 +2,7 @@ import { createClient, Code, ConnectError, type Transport } from "@connectrpc/co
 import { createConnectTransport } from "@connectrpc/connect-node"
 import type { BffConfig } from "../../../config/runtime.js"
 import type { ResolveSelectedResources } from "../../../application/chat-turn-service.js"
-import { parseCanonicalResourceReferences, type CanonicalResourceRef } from "../../../domain/chat/resource-reference-selection.js"
+import { parseCanonicalResourceReferences, type CanonicalStorageResourceRef } from "../../../domain/chat/resource-reference-selection.js"
 import { StorageService, UploadPurpose, ScanState, AssetOrigin } from "../../../generated/storage-connect/kokoro/storage/v3/storage_pb.js"
 import type { PostgresBffDatabase } from "../../postgres/client.js"
 import { PostgresConversationArtifactLibrary } from "../../postgres/conversation-artifact-library.js"
@@ -32,7 +32,7 @@ export function createMessageResourceResolver(config: BffConfig, database: Postg
     const remaining = Math.floor(lifetime.deadlineAt - performance.now())
     if (remaining < 1) throw new Error("CHAT_TURN_BUDGET_EXHAUSTED")
     const signal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(remaining)])
-    const refs: CanonicalResourceRef[] = []
+    const refs: CanonicalStorageResourceRef[] = []
     for (const ref of input.refs) {
       signal.throwIfAborted()
       if (ref.kind === "artifact") {
@@ -72,11 +72,11 @@ export function createMessageResourceResolver(config: BffConfig, database: Postg
         })
         continue
       }
-      const scopes: CanonicalResourceRef["source_scope"][] = [
+      const scopes: CanonicalStorageResourceRef["source_scope"][] = [
         { kind: "personal", id: input.subjectId },
         ...(input.projectId === null ? [] : [{ kind: "project" as const, id: input.projectId }]),
       ]
-      let found: CanonicalResourceRef | undefined
+      let found: CanonicalStorageResourceRef | undefined
       for (const scope of scopes) {
         signal.throwIfAborted()
         let item
@@ -122,7 +122,7 @@ export function createMessageResourceResolver(config: BffConfig, database: Postg
     }
     signal.throwIfAborted()
     const canonical = parseCanonicalResourceReferences(refs)
-    if (canonical === null) throw new Error("CHAT_RESOURCE_SELECTION_UNAVAILABLE")
+    if (canonical === null || !canonical.every((ref) => ref.kind !== "final_answer")) throw new Error("CHAT_RESOURCE_SELECTION_UNAVAILABLE")
     return canonical
   }
 }

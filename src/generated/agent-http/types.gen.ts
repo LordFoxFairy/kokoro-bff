@@ -49,7 +49,7 @@ export type LaunchRequest = {
     expected_state_version: number
   }>
   /**
-   * Private owner-resolved inputs frozen by BFF, unique by kind/resource_id in original order. Asset resource_id equals asset_id; personal source scope matches the trusted user subject, project source scope matches launch project_ref. Artifact source conversation and source_run_id are provenance, not the consumer run_id or authority. No version_id, URL or content. Omission or [] preserves prior request bytes. Canonical ASCII JSON is limited to 32768 bytes.
+   * Private owner-resolved inputs frozen by BFF, unique by kind/resource_id in original order. Asset resource_id equals asset_id; personal source scope matches the trusted user subject, project source scope matches launch project_ref. Artifact source conversation and source_run_id are provenance, not the consumer run_id or authority. Asset and artifact have no inline content. Final answer is only for a user chat Run and resource_id is its source assistant Message ID; exact source conversation, Run, final segment and revision are provenance, not the consumer identity. Its unmodified UTF-8 text, size and SHA-256 must agree. No version_id, URL or additional identity. Omission or [] preserves prior request bytes. Canonical ASCII JSON is limited to 32768 bytes.
    */
   selected_resource_refs?: Array<
     | {
@@ -78,6 +78,20 @@ export type LaunchRequest = {
           id: string
         }
         source_run_id: string
+      }
+    | {
+        kind: "final_answer"
+        resource_id: string
+        source_scope: {
+          kind: "conversation"
+          id: string
+        }
+        source_run_id: string
+        source_final_segment_id: string
+        source_revision: string
+        content: string
+        content_sha256: string
+        size_bytes: string
       }
   >
   /**

@@ -12,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "55beed29a541dff25d18055571f89dd72a05c48a"
+const ownerCommit = "9d53f36fb549c49b8bc7a05b07776df5cb000698"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424"
-const provenanceDigest = "0617aa718b2e32f2d2fef01e0e6cb05f86c08de36d33a143c43b752d3823c35e"
-const ownerContractVersion = "8.14.0"
+const ownerDigest = "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81"
+const provenanceDigest = "fe3a0bfa5ddab06f2e968b835c3f9dcdd151e70033ba5c7ec2ea48defa478d1f"
+const ownerContractVersion = "8.15.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -165,7 +165,41 @@ const agent813ResourceRefs = {
     },
   },
 }
+const agent814ResourceDescription =
+  "Private owner-resolved inputs frozen by BFF, unique by kind/resource_id in original order. Asset resource_id equals asset_id; personal source scope matches the trusted user subject, project source scope matches launch project_ref. Artifact source conversation and source_run_id are provenance, not the consumer run_id or authority. No version_id, URL or content. Omission or [] preserves prior request bytes. Canonical ASCII JSON is limited to 32768 bytes."
+const agent815ResourceDescription = agent814ResourceDescription.replace(
+  "No version_id, URL or content.",
+  "Asset and artifact have no inline content. Final answer is only for a user chat Run and resource_id is its source assistant Message ID; exact source conversation, Run, final segment and revision are provenance, not the consumer identity. Its unmodified UTF-8 text, size and SHA-256 must agree. No version_id, URL or additional identity.",
+)
+export function restoreAgent814FinalAnswerResourceRaw(source) {
+  if (!source.includes('"version": "8.15.0"')) return source
+  assert.equal(sha256(source), "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81", "Agent8.15 child drift")
+  const start =
+    ',\n                {\n                  "type": "object",\n                  "additionalProperties": false,\n                  "required": [\n                    "kind",\n                    "resource_id",\n                    "source_scope",\n                    "source_run_id",\n                    "source_final_segment_id",'
+  const end = '\n                }\n              ]\n            }\n          },\n          "personal_context": {'
+  const offset = source.indexOf(start)
+  const stop = source.indexOf(end, offset)
+  assert.ok(offset >= 0 && stop > offset, "Agent8.15 exact union arm drift")
+  const parent = (source.slice(0, offset) + source.slice(stop + "\n                }".length))
+    .replace(agent815ResourceDescription, agent814ResourceDescription)
+    .replace('"version": "8.15.0"', '"version": "8.14.0"')
+  assert.equal(sha256(parent), "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424", "Agent8.14 raw parent drift")
+  return parent
+}
+export function restoreAgent814FinalAnswerResourceContract(document) {
+  if (document.info?.version !== "8.15.0") return document
+  const parent = structuredClone(document)
+  const refs = parent.components.schemas.LaunchRequest.properties.selected_resource_refs
+  assert.equal(refs.items.oneOf.length, 3, "Agent8.15 union width drift")
+  assert.equal(refs.items.oneOf.pop().properties.kind.const, "final_answer", "Agent8.15 union arm drift")
+  assert.equal(refs.description, agent815ResourceDescription)
+  refs.description = agent814ResourceDescription
+  parent.info.version = "8.14.0"
+  assert.equal(sha256(JSON.stringify(parent)), "255b0bf7d4cd13da708ed50f729ea44f70cd8ded8fedc6281b00d5cce909dd68", "Agent8.14 parsed parent drift")
+  return parent
+}
 export function restoreAgent813CanonicalResourcesRaw(source) {
+  source = restoreAgent814FinalAnswerResourceRaw(source)
   if (!source.includes('"version": "8.14.0"')) return source
   assert.equal(sha256(source), "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424", "Agent8.14 canonical resources child drift")
   const match = source.match(/          "selected_resource_refs": \{[\s\S]*?          \},\n          "personal_context": \{/u)
@@ -181,6 +215,7 @@ export function restoreAgent813CanonicalResourcesRaw(source) {
 }
 
 export function restoreAgent813CanonicalResourcesContract(document) {
+  document = restoreAgent814FinalAnswerResourceContract(document)
   if (document.info?.version !== "8.14.0") return document
   const parent = structuredClone(document)
   parent.components.schemas.LaunchRequest.properties.selected_resource_refs = structuredClone(agent813ResourceRefs)
@@ -964,9 +999,13 @@ function canonicalResourceSchemaZod(schema) {
   if (schema.enum) return `z.enum(${JSON.stringify(schema.enum)})`
   if (schema.oneOf) return `z.union([${schema.oneOf.map(canonicalResourceSchemaZod).join(",")}])`
   if (schema.type === "string") {
-    let expression = `z.string().min(${schema.minLength}).max(${schema.maxLength})`
+    let expression = "z.string()"
+    if (schema.minLength !== undefined) expression += `.min(${schema.minLength})`
+    if (schema.maxLength !== undefined) expression += `.max(${schema.maxLength})`
     if (schema.pattern) expression += `.regex(new RegExp(${JSON.stringify(schema.pattern)}, "u"))`
     if (schema.not?.enum) expression += `.refine(value => !${JSON.stringify(schema.not.enum)}.includes(value))`
+    if (schema["x-kokoro-utf8-max-bytes"] !== undefined)
+      expression += `.refine(value => new TextEncoder().encode(value).byteLength <= ${schema["x-kokoro-utf8-max-bytes"]})`
     return expression
   }
   assert.equal(schema.type, "object", "canonical resource schema node drifted")
@@ -987,7 +1026,7 @@ async function generateCanonicalResourceValidator(directory, document) {
   let source = await readFile(file, "utf8")
   const property = /^[ \t]*selected_resource_refs:[\s\S]*?(?=^[ \t]*personal_context:)/gmu
   assert.equal([...source.matchAll(property)].length, 1, "generated exact canonical resource property drifted")
-  const expression = `selected_resource_refs: z.array(${canonicalResourceSchemaZod(schema.items)}).max(${schema.maxItems}).refine(values => new Set(values.map(value => value.kind + ":" + value.resource_id)).size === values.length && Array.from(JSON.stringify(values)).reduce((size, char) => size + (char.charCodeAt(0) > 127 ? char.length * 6 : 1), 0) <= ${schema["x-kokoro-json-byte-limit"]} && values.every(value => value.kind !== "asset" || value.resource_id === value.asset_id)).optional(),\n`
+  const expression = `selected_resource_refs: z.array(${canonicalResourceSchemaZod(schema.items)}).max(${schema.maxItems}).refine(values => new Set(values.map(value => value.kind + ":" + value.resource_id)).size === values.length && Array.from(JSON.stringify(values)).reduce((size, char) => size + (char.charCodeAt(0) >= 127 ? char.length * 6 : 1), 0) <= ${schema["x-kokoro-json-byte-limit"]} && values.every(value => value.kind === "asset" ? value.resource_id === value.asset_id : value.kind !== "final_answer" || String(new TextEncoder().encode(value.content).byteLength) === value.size_bytes)).optional(),\n`
   source = source.replace(property, () => expression)
   await writeFile(file, source)
 }

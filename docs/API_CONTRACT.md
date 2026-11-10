@@ -1,8 +1,8 @@
-## A‑08 Message 资源选择（Public28.24，实施中）
+## A‑08 Message 资源选择（Public28.25，实施中）
 
-唯一 public OpenAPI 在 `MessageCreateRequest` 增可选 `selected_resource_refs`：最多16项、有序去重、compact UTF‑8 JSON最多4096 bytes，每项严格 `{kind:asset|artifact,resource_id}`。省略/空数组均无输入，`version_id`、scope、digest、URL、身份和正文均为400。选择仅为意图；BFF当前准入及canonical Project/本人源关联与Storage fresh ASSET/CLEAN或FINAL metadata共同决定读取资格。不可见/失效选择拒绝且不提交空附件；依赖故障保持503，提交竞争沿409。同键同原意图重放原202，不重新解析。
+唯一 public OpenAPI 的 `MessageCreateRequest.selected_resource_refs` 最多16项、有序去重、compact UTF‑8 JSON最多4096 bytes，每项严格 `{kind:asset|artifact|final_answer,resource_id}`。`final_answer.resource_id` 仅为 opaque assistant Message ID。省略/空数组均无输入；`version_id`、scope、segment、revision、digest、URL、身份和正文均不是公开输入。选择仅为意图；Storage 两类仍用原 metadata，历史答案由本人同范围的 BFF durable final 校验。不可见/失效选择拒绝且不提交空附件；依赖故障与既有提交竞争语义保持。同键同原意图重放原202，不重新解析。
 
-内部 Agent canonical launch 与公共 opaque 类型分开，正规消费HTTP8.14后携带精确字段；不公开canonical scope/digest/source Run或正文。显式regenerate沿原内部快照复制资源manifest，新的consumer Run不替换artifact provenance。无新增公开端点或认证方式。
+内部 Agent canonical launch 与公共 opaque 类型分开，正规消费 HTTP8.15；历史答复的原文、来源会话、Run、段、revision、SHA 与大小均不进入公开读写 DTO。新 regenerate 重验历史来源仍精确匹配原冻结 manifest 后复用；新的 consumer Run 不替换来源 provenance。无新增公开端点或认证方式。
 
 ## A‑12 执行记录读面（Public28.23，实施中）
 

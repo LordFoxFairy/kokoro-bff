@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { describe, it } from "node:test"
 import { load } from "js-yaml"
@@ -32,19 +33,19 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "55beed29a541dff25d18055571f89dd72a05c48a",
-        contract_version: "8.14.0",
+        repository_commit: "9d53f36fb549c49b8bc7a05b07776df5cb000698",
+        contract_version: "8.15.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424",
+        contract_sha256: "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "0617aa718b2e32f2d2fef01e0e6cb05f86c08de36d33a143c43b752d3823c35e",
+        provenance_sha256: "fe3a0bfa5ddab06f2e968b835c3f9dcdd151e70033ba5c7ec2ea48defa478d1f",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424",
+        source_sha256: "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
@@ -54,18 +55,18 @@ describe("Agent event-protocol provenance", () => {
   it("uses one HTTP8 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "55beed29a541dff25d18055571f89dd72a05c48a")
+    assert.equal(manifest.owner.repository_commit, "9d53f36fb549c49b8bc7a05b07776df5cb000698")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424",
+      "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/55beed29a541dff25d18055571f89dd72a05c48a/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/9d53f36fb549c49b8bc7a05b07776df5cb000698/openapi.json", import.meta.url), "utf8"),
     )
     assert.deepEqual(owner.components.schemas.ChatActivity.oneOf[0].properties.display_code, {
       type: "string",
@@ -727,7 +728,19 @@ it("Agent canonical resource launch keeps complete immutable owner material and 
     source_scope: { kind: "conversation", id: "source-session" },
     source_run_id: "source-run",
   }
-  const saved = { ...base, selected_resource_refs: [asset, artifact] }
+  const final = (content) => ({
+    kind: "final_answer",
+    resource_id: "assistant-message",
+    source_scope: { kind: "conversation", id: "source-session" },
+    source_run_id: "source-run",
+    source_final_segment_id: "final-segment",
+    source_revision: "9223372036854775807",
+    content,
+    content_sha256: createHash("sha256").update(content).digest("hex"),
+    size_bytes: String(Buffer.byteLength(content)),
+  })
+  const answer = final("  e\u0301 🧪\n ")
+  const saved = { ...base, selected_resource_refs: [asset, answer, artifact] }
   const wire = projectSavedAgentLaunch(saved)
   assert.deepEqual(wire, { ...saved, project_ref: "project-one" })
   assert.equal(wire.run_id, "consumer-run")
@@ -742,7 +755,19 @@ it("Agent canonical resource launch keeps complete immutable owner material and 
     [{ ...asset, size_bytes: "18446744073709551616" }],
     [{ ...asset, filename: "../input.txt" }],
     [asset, asset],
+    [{ ...answer, asset_id: "asset-one" }],
+    [{ ...answer, source_scope: { kind: "personal", id: "owner" } }],
+    [{ ...answer, source_revision: "9223372036854775808" }],
+    [{ ...answer, source_revision: "0" }],
+    [{ ...answer, size_bytes: "2" }],
+    [{ ...answer, content_sha256: "a".repeat(64) }],
+    [final("\u0000")],
+    [final("\ud800")],
+    [final("a".repeat(24577))],
+    [final("\x7f".repeat(6000))],
+    [final("a".repeat(24576)), { ...final("a".repeat(9000)), resource_id: "another" }],
   ])
     assert.equal(projectSavedAgentLaunch({ ...base, selected_resource_refs: refs }), null, JSON.stringify(refs))
+  assert.equal(projectSavedAgentLaunch({ ...base, trace: { source: "kokoro-bff-scheduler" }, selected_resource_refs: [answer] }), null)
   assert.equal(Object.hasOwn(projectSavedAgentLaunch(base), "selected_resource_refs"), false)
 })

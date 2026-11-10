@@ -1,6 +1,6 @@
 import "reflect-metadata"
 import assert from "node:assert/strict"
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { createServer } from "node:http"
 import { test } from "node:test"
 import pg from "pg"
@@ -249,6 +249,100 @@ integration(
         await assert.rejects(service.submit(input("foreign", [{ kind: "artifact", resource_id: "artifact-old" }])), /CHAT_RESOURCE_SELECTION_INVALID/)
         assert.equal(calls.length, reads)
         assert.equal(await count(), before)
+      })
+      await t.test("freezes a no-Artifact final answer in mixed order and revalidates fresh regeneration but never replays a source read", async () => {
+        const history = "answer-source-session",
+          consumer = "answer-consumer-session",
+          mixed = "answer-mixed-session"
+        const message = "assistant-source",
+          run = "answer-source-run",
+          segment = "answer-source-final"
+        const original = "  Exact e\u0301 🧪\nfinal answer\n"
+        await pool.query(
+          `INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title)
+           VALUES ($1,$4,$5,$6,'History'),($2,$4,$5,$6,'Consumer'),($3,$4,$5,$6,'Mixed')`,
+          [history, consumer, mixed, tenantId, subjectId, projectId],
+        )
+        await pool.query(
+          `INSERT INTO bff_message (message_id,tenant_id,conversation_id,run_id,role,content,ordered_parts,parts_format_version,parts_public_sequence,final_segment_id,status,message_seq)
+           VALUES ($1,$2,$3,$4,'assistant','Aggregate must not become input',$5::jsonb,1,12,$6,'completed',1)`,
+          [
+            message,
+            tenantId,
+            history,
+            run,
+            JSON.stringify([
+              {
+                kind: "text",
+                part_id: "text:" + segment,
+                segment_id: segment,
+                text: original,
+                completed: true,
+                first_sequence: "8",
+                latest_sequence: "10",
+              },
+            ]),
+            segment,
+          ],
+        )
+        await pool.query(
+          `INSERT INTO bff_agent_dispatch_outbox (outbox_id,tenant_id,conversation_id,conversation_dispatch_seq,subject_id,actor_id,request_id,idempotency_key,
+             request_digest,run_id,user_message_id,assistant_message_id,identity_assertion_ref,execution_project_ref,payload,status,admitted_at)
+           VALUES ('historical-source',$1,$2,1,$3,$3,'source','source',repeat('a',64),$4,'source-user',$5,'source-assertion',$6,'{}'::jsonb,'admitted',CURRENT_TIMESTAMP)`,
+          [tenantId, history, subjectId, run, message, projectId],
+        )
+        const selected = { kind: "final_answer", resource_id: message }
+        const final = {
+          ...selected,
+          source_scope: { kind: "conversation", id: history },
+          source_run_id: run,
+          source_final_segment_id: segment,
+          source_revision: "12",
+          content: original,
+          content_sha256: createHash("sha256").update(original).digest("hex"),
+          size_bytes: String(Buffer.byteLength(original)),
+        }
+        const request = { ...input("final-only", [selected]), conversationId: consumer }
+        const reads = calls.length
+        const accepted = await service.submit(request)
+        assert.ok(accepted)
+        assert.equal(calls.length, reads)
+        const frozen = (await payload(accepted.run_id)).launch
+        assert.equal(frozen.content, request.content)
+        assert.deepEqual(frozen.selected_resource_refs, [final])
+        const mixedInput = { ...input("mixed-final", [refs[0], selected, refs[1]]), conversationId: mixed }
+        const mixedAccepted = await service.submit(mixedInput)
+        const mixedFrozen = (await payload(mixedAccepted.run_id)).launch.selected_resource_refs
+        assert.deepEqual(mixedFrozen, [manifest[0], final, manifest[1]])
+        const mixedReads = calls.length
+        await pool.query(
+          "UPDATE bff_agent_dispatch_outbox SET status='terminal',admitted_at=CURRENT_TIMESTAMP,completed_at=CURRENT_TIMESTAMP WHERE run_id=$1",
+          [accepted.run_id],
+        )
+        await pool.query("UPDATE bff_message SET status='completed',content='consumer answer' WHERE message_id=$1", [accepted.assistant_message_id])
+        const regen = {
+          tenantId,
+          subjectId,
+          actorId: subjectId,
+          conversationId: consumer,
+          sourceMessageId: accepted.assistant_message_id,
+          requestId: "regen-final",
+          idempotencyKey: "regen-final",
+          signal: new AbortController().signal,
+          deadlineAt: performance.now() + 10000,
+        }
+        await pool.query("UPDATE bff_message SET parts_public_sequence=13 WHERE message_id=$1", [message])
+        const before = await count()
+        await assert.rejects(service.regenerate(regen), /CHAT_RESOURCE_SELECTION_CHANGED/)
+        assert.equal(await count(), before)
+        await pool.query("UPDATE bff_message SET parts_public_sequence=12 WHERE message_id=$1", [message])
+        const regenerated = await service.regenerate(regen)
+        assert.deepEqual((await payload(regenerated.run_id)).launch.selected_resource_refs, [final])
+        await pool.query("UPDATE bff_conversation SET status='deleted',deleted_at=CURRENT_TIMESTAMP WHERE conversation_id=$1", [history])
+        assert.deepEqual(await service.regenerate(regen), regenerated)
+        assert.deepEqual(await service.submit(request), accepted)
+        await assert.rejects(service.submit({ ...request, requestId: "fresh-final", idempotencyKey: "fresh-final" }), /CHAT_RESOURCE_SELECTION_INVALID/)
+        assert.equal(calls.length, mixedReads)
       })
     } finally {
       await module?.close()

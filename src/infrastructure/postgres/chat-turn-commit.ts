@@ -1,6 +1,13 @@
 import { selectedArtifactInTransaction } from "./conversation-artifact-library.js"
 import { regenerationSourceInTransaction } from "./message-regeneration.js"
+import { selectedFinalAnswerInTransaction } from "./run-final-answer-read.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
+import {
+  parseCanonicalResourceReferences,
+  parseResourceReferenceSelection,
+  type CanonicalFinalAnswerRef,
+  type CanonicalResourceRef,
+} from "../../domain/chat/resource-reference-selection.js"
 import { performance } from "node:perf_hooks"
 
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
@@ -522,10 +529,41 @@ export async function commitChatTurn(
         if (JSON.stringify(project?.selected_skill_installation_ids ?? []) !== JSON.stringify(command.skillSelection.installationIds))
           throw new Error("CHAT_SKILL_SELECTION_CHANGED")
       }
-      const resources = callerPayload.launch.selected_resource_refs ?? []
-      if (resources.length && command.regeneration === undefined && command.resourceSelection?.projectId !== scope.canonicalProjectId)
+      const frozen = callerPayload.launch.selected_resource_refs ?? []
+      const requested =
+        command.regeneration === undefined
+          ? parseResourceReferenceSelection(command.resourceSelection?.refs ?? [])
+          : frozen.map(({ kind, resource_id }) => ({ kind, resource_id }))
+      if (requested === null || (command.resourceSelection !== undefined && command.resourceSelection.projectId !== scope.canonicalProjectId))
         throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
-      for (const resource of resources) {
+      const resources: CanonicalResourceRef[] = []
+      let frozenIndex = 0
+      for (const intent of requested) {
+        if (intent.kind === "final_answer") {
+          if (command.scheduledActivation !== undefined) throw new Error("CHAT_RESOURCE_SELECTION_INVALID")
+          const answer = await selectedFinalAnswerInTransaction(
+            { query },
+            { tenantId: command.tenantId, subjectId: command.subjectId, messageId: intent.resource_id, projectId: scope.canonicalProjectId },
+          )
+          if (answer === null) throw new Error(command.regeneration === undefined ? "CHAT_RESOURCE_SELECTION_INVALID" : "CHAT_RESOURCE_SELECTION_CHANGED")
+          const final: CanonicalFinalAnswerRef = {
+            kind: "final_answer",
+            resource_id: answer.messageId,
+            source_scope: { kind: "conversation", id: answer.conversationId },
+            source_run_id: answer.runId,
+            source_final_segment_id: answer.finalSegmentId,
+            source_revision: answer.revision,
+            content: answer.content,
+            content_sha256: answer.contentSha256,
+            size_bytes: answer.sizeBytes,
+          }
+          if (command.regeneration !== undefined && JSON.stringify(frozen[frozenIndex++]) !== JSON.stringify(final))
+            throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
+          resources.push(final)
+          continue
+        }
+        const resource = frozen[frozenIndex++]
+        if (resource?.kind !== intent.kind || resource.resource_id !== intent.resource_id) throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
         const source = resource.source_scope
         if (resource.kind === "asset") {
           if ((source.kind === "personal" && source.id !== command.subjectId) || (source.kind === "project" && source.id !== scope.canonicalProjectId))
@@ -550,8 +588,16 @@ export async function commitChatTurn(
           )
             throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
         }
+        resources.push(resource)
       }
-      const payload = bindAgentDispatchPayloadProjectScope(callerPayload, scope.canonicalProjectId, project?.instruction ?? null)
+      if (frozenIndex !== frozen.length) throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
+      const canonical = parseCanonicalResourceReferences(resources)
+      if (canonical === null) throw new Error("CHAT_RESOURCE_SELECTION_INVALID")
+      const payload = bindAgentDispatchPayloadProjectScope(
+        canonical.length ? { ...callerPayload, launch: { ...callerPayload.launch, selected_resource_refs: canonical } } : callerPayload,
+        scope.canonicalProjectId,
+        project?.instruction ?? null,
+      )
       // Agent HTTP accepts at most 1 MiB; reject before any outbox/interrupt effects.
       if (Buffer.byteLength(JSON.stringify(payload.launch)) > 1024 * 1024) throw new Error("request_body_too_large")
       const registration = agUiConsumerRegistration(command.tenantId, command.conversationId, command.subjectId, undefined)

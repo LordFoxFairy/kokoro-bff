@@ -1,5 +1,6 @@
 import type { RegenerateMessageInput, RegenerationSource } from "../chat/message-regeneration.js"
 import type { AgentDispatchCommand, AgentDispatchLease, AgentDispatchPayload, AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
+import type { SelectedResourceRef } from "../../domain/chat/resource-reference-selection.js"
 
 export type CommitChatTurn = {
   /** Internal activation fence, never accepted from an HTTP DTO. */
@@ -34,7 +35,7 @@ export type CommitChatTurn = {
   assistantMessageId: string
   identityAssertionRef: string
   content: string
-  resourceSelection?: Readonly<{ projectId: string | null }>
+  resourceSelection?: Readonly<{ projectId: string | null; refs: readonly SelectedResourceRef[] }>
   skillSelection?: Readonly<{
     projectId: string | null
     installationIds: string[]

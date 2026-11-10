@@ -1,5 +1,6 @@
 import { zCreateRunResponse, zErrorEnvelope, zLaunchRequest, zReplaySessionEventsResponse } from "../../../generated/agent-http/zod.gen.js"
 import { isRecord } from "../../../domain/json.js"
+import { parseCanonicalResourceReferences } from "../../../domain/chat/resource-reference-selection.js"
 import type { LaunchRequest, LaunchReceiptEnvelope } from "../../../generated/agent-http/types.gen.js"
 
 const zSavedAgentLaunch = zLaunchRequest.omit({ personal_context: true }).strict()
@@ -43,6 +44,11 @@ export function projectSavedAgentLaunch(value: unknown): LaunchRequest | null {
   if (!projected.success) return null
   const { requested_model_label, project_instruction, trace, selected_mcp_connection_ids, selected_custom_api_profiles, selected_resource_refs, ...required } =
     projected.data
+  if (
+    selected_resource_refs?.some((ref) => ref.kind === "final_answer") &&
+    (value.trace.source !== "kokoro-bff" || parseCanonicalResourceReferences(selected_resource_refs) === null)
+  )
+    return null
   return {
     ...required,
     ...(requested_model_label === undefined ? {} : { requested_model_label }),

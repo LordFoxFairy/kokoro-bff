@@ -1,7 +1,19 @@
 // Build-time exact additive inverse; never a runtime downgrade.
 import { createHash } from "node:crypto"
 const hash = (source) => createHash("sha256").update(source).digest("hex")
+export function restorePublic2824FinalAnswerResourceContract(source) {
+  if (!/^  version: 28\.25\.0$/mu.test(source)) return source
+  if (hash(source) !== "008667f501044dc186e615b83370f96a7401de8027f25e7635248724fb165759") throw Error("Final-answer resource Public28.25 child drift")
+  const parent = source
+    .replace("  version: 28.25.0\n", "  version: 28.24.0\n")
+    .replace("              kind: { type: string, enum: [asset, artifact, final_answer] }\n", "              kind: { type: string, enum: [asset, artifact] }\n")
+    .replace(" For final_answer, resource_id is the opaque assistant Message ID; no text, scope, segment, revision or digest is accepted.", "")
+  if (hash(parent) !== "921c4b7273580a5c64cf6a220808472e828239d4abfbc7b5b93138ecc055a429")
+    throw Error("Final-answer resource complete Public28.24 parent drift")
+  return parent
+}
 export function restorePublic2823MessageResourceContract(source) {
+  source = restorePublic2824FinalAnswerResourceContract(source)
   if (!/^  version: 28\.24\.0$/mu.test(source)) return source
   if (hash(source) !== "921c4b7273580a5c64cf6a220808472e828239d4abfbc7b5b93138ecc055a429") throw Error("Message resources Public28.24 child drift")
   const field =

@@ -125,14 +125,54 @@ export const zLaunchRequest = z.object({
             source_run_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
           })
           .strict(),
+        z
+          .object({
+            kind: z.literal("final_answer"),
+            resource_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            source_scope: z
+              .object({
+                kind: z.enum(["conversation"]),
+                id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+              })
+              .strict(),
+            source_run_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            source_final_segment_id: z.string().min(1).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]{1,255}(?![\\s\\S])", "u")),
+            source_revision: z
+              .string()
+              .min(1)
+              .max(19)
+              .regex(
+                new RegExp(
+                  "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)(?![\\s\\S])",
+                  "u",
+                ),
+              ),
+            content: z
+              .string()
+              .min(1)
+              .max(24576)
+              .regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]+(?![\\s\\S])", "u"))
+              .refine((value) => new TextEncoder().encode(value).byteLength <= 24576),
+            content_sha256: z.string().min(64).max(64).regex(new RegExp("^[a-f0-9]{64}(?![\\s\\S])", "u")),
+            size_bytes: z
+              .string()
+              .min(1)
+              .max(5)
+              .regex(new RegExp("^(?:[1-9][0-9]{0,3}|1[0-9]{4}|2[0-3][0-9]{3}|24[0-4][0-9]{2}|245[0-6][0-9]{1}|2457[0-5]|24576)(?![\\s\\S])", "u")),
+          })
+          .strict(),
       ]),
     )
     .max(16)
     .refine(
       (values) =>
         new Set(values.map((value) => value.kind + ":" + value.resource_id)).size === values.length &&
-        Array.from(JSON.stringify(values)).reduce((size, char) => size + (char.charCodeAt(0) > 127 ? char.length * 6 : 1), 0) <= 32768 &&
-        values.every((value) => value.kind !== "asset" || value.resource_id === value.asset_id),
+        Array.from(JSON.stringify(values)).reduce((size, char) => size + (char.charCodeAt(0) >= 127 ? char.length * 6 : 1), 0) <= 32768 &&
+        values.every((value) =>
+          value.kind === "asset"
+            ? value.resource_id === value.asset_id
+            : value.kind !== "final_answer" || String(new TextEncoder().encode(value.content).byteLength) === value.size_bytes,
+        ),
     )
     .optional(),
   personal_context: z

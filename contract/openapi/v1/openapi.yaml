@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.24.0
+  version: 28.25.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -22932,13 +22932,13 @@ components:
           maxItems: 16
           uniqueItems: true
           x-kokoro-json-byte-limit: 4096
-          description: Ordered opaque resource intent for this message. Omission or [] selects none. Compact UTF-8 JSON is limited to 4096 bytes. Owner scope and exact bytes are resolved by BFF; version_id is not accepted.
+          description: Ordered opaque resource intent for this message. Omission or [] selects none. Compact UTF-8 JSON is limited to 4096 bytes. Owner scope and exact bytes are resolved by BFF; version_id is not accepted. For final_answer, resource_id is the opaque assistant Message ID; no text, scope, segment, revision or digest is accepted.
           items:
             type: object
             additionalProperties: false
             required: [kind, resource_id]
             properties:
-              kind: { type: string, enum: [asset, artifact] }
+              kind: { type: string, enum: [asset, artifact, final_answer] }
               resource_id:
                 type: string
                 minLength: 1

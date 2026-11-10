@@ -938,3 +938,39 @@ it("resource resolution follows prepare replay even with explicit Skills and fre
   canonical[0].source_scope.id = "mutated-after-resolution"
   assert.equal(repository.commits[0]?.payload.launch.selected_resource_refs?.[0]?.source_scope.id, "subject")
 })
+
+it("reserves ordered final-answer intent for commit without requiring the Storage resolver", async () => {
+  const repository = new RecordingRepository()
+  const final = { kind: "final_answer" as const, resource_id: "assistant-source" }
+  const input = {
+    tenantId: "tenant",
+    subjectId: "subject",
+    actorId: "subject",
+    conversationId: "session",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+    selectedResourceRefs: [final],
+  }
+  await new ChatTurnApplicationService(repository, new Sha256StableIdGenerator()).submit(input)
+  assert.deepEqual(repository.commits[0]?.resourceSelection, { projectId: null, refs: [final] })
+  assert.equal(repository.commits[0]?.payload.launch.selected_resource_refs, undefined)
+  const asset = { kind: "asset" as const, resource_id: "asset" }
+  const canonical = {
+    ...asset,
+    asset_id: "asset",
+    size_bytes: "3",
+    content_sha256: "a".repeat(64),
+    mime_type: "text/plain",
+    filename: "x",
+    source_scope: { kind: "personal" as const, id: "subject" },
+  }
+  const mixed = [final, asset]
+  const resolver = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator(), async ({ refs }) => {
+    assert.deepEqual(refs, [asset])
+    return [canonical]
+  })
+  await resolver.submit({ ...input, selectedResourceRefs: mixed })
+  assert.deepEqual(repository.commits[1]?.resourceSelection, { projectId: null, refs: mixed })
+  assert.deepEqual(repository.commits[1]?.payload.launch.selected_resource_refs, [canonical])
+})
