@@ -121,4 +121,3 @@ export async function handleBillingPersonalBusiness(
   }
   return false
 }
-

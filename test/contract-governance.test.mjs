@@ -170,7 +170,7 @@ function inspectLibraryFileContract(openapi) {
     "artifact_download_busy",
   ])
     if (!operation.includes(marker)) errors.push(`GET /v1/library missing ${marker}`)
-  const file = openapi.split("    LibraryFileItem:")[1]?.split("    LibraryArtifactItem:")[0] ?? ""
+  const file = openapi.match(/^    LibraryFileItem:\n(?:^ {6,}[^\n]*\n)*/mu)?.[0] ?? ""
   for (const marker of ["kind", "enum: [file]", "asset_id", "filename", "mime_type", "size_bytes", "content_sha256", "scan_state", "created_at"])
     if (!file.includes(marker)) errors.push(`LibraryFileItem missing ${marker}`)
   if (/artifact_id|session_id|download_url|upload_id/u.test(file))
