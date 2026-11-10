@@ -1,6 +1,7 @@
 import type { Pool } from "pg"
-import type { LineConnectionConfig, TelegramConnectionConfig } from "../../config/runtime.js"
+import type { LineConnectionConfig, SlackConnectionConfig, TelegramConnectionConfig } from "../../config/runtime.js"
 import { newAgentConnectionSetupId, proofDigest, secretMatches, type ConnectionCommand, type ConnectionProvider } from "../../domain/agent-connection.js"
+import { slackAuthorizationUrl } from "../clients/slack-connection.js"
 
 type Slot = {
   state_version: number
@@ -15,7 +16,7 @@ type Slot = {
 
 type Lifetime = { signal: AbortSignal; timeoutMs: number }
 type Scope = Lifetime & { tenantId: string; subjectId: string; platform: ConnectionProvider }
-type Bot = TelegramConnectionConfig | LineConnectionConfig
+type Bot = TelegramConnectionConfig | LineConnectionConfig | SlackConnectionConfig
 type Setup = { setup_id: string; expires_at: string }
 type State =
   | { platform: ConnectionProvider; state_version: string; status: "disconnected" | "expired" }
@@ -24,6 +25,8 @@ type State =
   | ({ platform: "telegram"; state_version: string; status: "awaiting_confirmation" } & Setup)
   | ({ platform: "line"; state_version: string; status: "awaiting_line"; continue_url: string } & Setup)
   | ({ platform: "line"; state_version: string; status: "awaiting_line_approval" | "awaiting_line_callback" } & Setup)
+  | ({ platform: "slack"; state_version: string; status: "awaiting_slack"; continue_url: string } & Setup)
+  | ({ platform: "slack"; state_version: string; status: "awaiting_slack_callback" } & Setup)
 type Failure = { kind: "stale" | "conflict" | "already_connected" | "proof_invalid" | "identity_in_use" | "provider_unavailable" }
 type Result = { kind: "state"; data: State } | Failure
 type LineContinuation = {
@@ -42,6 +45,7 @@ const ownership = "tenant_id=$1 AND subject_id=$2 AND provider=$3"
 const clearSetup = "setup_id=NULL,setup_expires_at=NULL,proof_digest=NULL,provider_update_id=NULL"
 const clearSlot = `${clearSetup},bot_id=NULL,external_user_id=NULL,connected_at=NULL`
 const ownerValues = (scope: Scope) => [scope.tenantId, scope.subjectId, scope.platform]
+const setupNamespace = (bot: Bot) => "appId" in bot ? bot.appId : bot.botId
 
 async function select(pool: Pool, text: string, values: unknown[], lifetime: Lifetime): Promise<Slot | null> {
   lifetime.signal.throwIfAborted()
@@ -56,8 +60,12 @@ function state(row: Slot | null, platform: ConnectionProvider, bot: Bot | null):
   const state_version = String(row?.state_version ?? 1)
   if (row?.connected_at) return { platform, state_version, status: "connected", connected_at: row.connected_at.toISOString() }
   if (!row?.setup_id || !row.setup_expires_at) return { platform, state_version, status: "disconnected" }
-  if (!row.setup_live || !bot || row.bot_id !== bot.botId) return { platform, state_version, status: "expired" }
+  if (!row.setup_live || !bot || row.bot_id !== setupNamespace(bot)) return { platform, state_version, status: "expired" }
   const setup = { setup_id: row.setup_id, expires_at: row.setup_expires_at.toISOString() }
+  if (platform === "slack" && "appId" in bot) {
+    if (row.proof_digest) return { platform, state_version, ...setup, status: "awaiting_slack_callback" }
+    return { platform, state_version, ...setup, status: "awaiting_slack", continue_url: slackAuthorizationUrl(bot, setup.setup_id) }
+  }
   if (platform === "line" && "accountId" in bot) {
     if (row.external_user_id === null)
       return {
@@ -99,8 +107,8 @@ export async function changeAgentConnection(pool: Pool, scope: Scope, bot: Bot |
   const expected = Number(command.expected_state_version)
   const current = state(row, scope.platform, bot)
   if (command.action === "cancel" && row?.connected_at) return { kind: "already_connected" }
-  const telegramCancel = command.action === "cancel" && scope.platform === "telegram"
-  const racedOnlyWithClaim = telegramCancel && row?.setup_id === command.setup_id && row.proof_digest !== null && revision === expected + 1
+  const canCancelClaim = command.action === "cancel" && (scope.platform === "telegram" || scope.platform === "slack")
+  const racedOnlyWithClaim = canCancelClaim && row?.setup_id === command.setup_id && row.proof_digest !== null && revision === expected + 1
   if (revision !== expected && !racedOnlyWithClaim) return { kind: "stale" }
 
   let set: string,
@@ -110,7 +118,7 @@ export async function changeAgentConnection(pool: Pool, scope: Scope, bot: Bot |
     case "start": {
       if (current.status !== "disconnected" && current.status !== "expired") return { kind: "conflict" }
       const setup = newAgentConnectionSetupId()
-      const botId = bot!.botId
+      const botId = setupNamespace(bot!)
       if (row === null) {
         const created = await select(
           pool,
@@ -141,7 +149,7 @@ export async function changeAgentConnection(pool: Pool, scope: Scope, bot: Bot |
       if (current.status !== "awaiting_confirmation" || row?.setup_id !== command.setup_id) return { kind: "conflict" }
       const digest = proofDigest(command.proof)
       if (!row.proof_digest || !secretMatches(row.proof_digest, digest)) return { kind: "proof_invalid" }
-      values.push(command.setup_id, bot!.botId, digest)
+      values.push(command.setup_id, setupNamespace(bot!), digest)
       set = `${clearSetup},connected_at=clock_timestamp()`
       guard = " AND setup_id=$5 AND bot_id=$6 AND proof_digest=$7 AND connected_at IS NULL AND setup_expires_at>clock_timestamp()"
       break
@@ -155,7 +163,7 @@ export async function changeAgentConnection(pool: Pool, scope: Scope, bot: Bot |
   }
 
   if (revision >= revisionLimit) return { kind: "stale" }
-  const revisionPredicate = telegramCancel ? "(state_version=$4 OR (state_version::bigint=$4::bigint+1 AND proof_digest IS NOT NULL))" : "state_version=$4"
+  const revisionPredicate = canCancelClaim ? "(state_version=$4 OR (state_version::bigint=$4::bigint+1 AND proof_digest IS NOT NULL))" : "state_version=$4"
   try {
     const updated = await select(
       pool,
@@ -169,6 +177,48 @@ export async function changeAgentConnection(pool: Pool, scope: Scope, bot: Bot |
       scope,
     )
     return updated ? { kind: "state", data: state(updated, scope.platform, bot) } : { kind: "stale" }
+  } catch (error) {
+    if (uniqueBoundIdentity(error)) return { kind: "identity_in_use" }
+    throw error
+  }
+}
+
+type SlackScope = Scope & { platform: "slack" }
+type SlackClaim = { setupId: string; appId: string; digest: string }
+
+export async function claimSlackSetup(pool: Pool, scope: SlackScope, attempt: SlackClaim): Promise<boolean> {
+  return !!await select(
+    pool,
+    `WITH locked AS MATERIALIZED (
+      SELECT tenant_id AS lock_tenant,subject_id AS lock_subject FROM bff_agent_connection
+      WHERE ${ownership} FOR UPDATE NOWAIT
+    ) UPDATE bff_agent_connection SET state_version=state_version+1,proof_digest=$6
+      FROM locked WHERE ${ownership} AND tenant_id=locked.lock_tenant AND subject_id=locked.lock_subject
+      AND setup_id=$4 AND bot_id=$5 AND proof_digest IS NULL AND connected_at IS NULL
+      AND setup_expires_at>clock_timestamp() AND state_version<${revisionLimit - 1} RETURNING ${columns}`,
+    [...ownerValues(scope), attempt.setupId, attempt.appId, attempt.digest],
+    scope,
+  )
+}
+
+export async function completeSlackSetup(
+  pool: Pool, scope: SlackScope, attempt: SlackClaim, identity: { namespace: string; externalUserId: string },
+): Promise<Result> {
+  try {
+    const updated = await select(
+      pool,
+      `WITH locked AS MATERIALIZED (
+        SELECT tenant_id AS lock_tenant,subject_id AS lock_subject FROM bff_agent_connection
+        WHERE ${ownership} FOR UPDATE NOWAIT
+      ) UPDATE bff_agent_connection SET state_version=state_version+1,${clearSetup},
+        bot_id=$7,external_user_id=$8,connected_at=clock_timestamp()
+        FROM locked WHERE ${ownership} AND tenant_id=locked.lock_tenant AND subject_id=locked.lock_subject
+        AND setup_id=$4 AND bot_id=$5 AND proof_digest=$6 AND connected_at IS NULL
+        AND setup_expires_at>clock_timestamp() AND state_version<${revisionLimit} RETURNING ${columns}`,
+      [...ownerValues(scope), attempt.setupId, attempt.appId, attempt.digest, identity.namespace, identity.externalUserId],
+      scope,
+    )
+    return updated ? { kind: "state", data: state(updated, "slack", null) } : { kind: "conflict" }
   } catch (error) {
     if (uniqueBoundIdentity(error)) return { kind: "identity_in_use" }
     throw error

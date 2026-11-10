@@ -1,3 +1,7 @@
+## A‑13 — Slack use of the existing slot
+
+Slack uses the same tenant/subject/provider slot. The pending namespace is the configured Slack app ID; the connected namespace is the app ID plus the verified workspace ID. The external user is the actual approving Slack member, not the workspace Bot user. The existing provider/namespace/user uniqueness applies. Claim advances the revision and stores only the code digest until the exact attempt completes, is canceled, or is replaced after expiry. Completion clears transient fields. The slot does not store Slack credentials, workspace details or any remote installation state. Schema installation remains fresh-only; older nonempty BFF schemas are not modified.
+
 ## A‑13 — LINE use of the existing slot
 
 `bff_agent_connection` remains keyed by tenant/subject/provider. LINE uses provider-specific exact Bot/User ID shapes; the same unique binding key includes provider and bot. A signed private message fills candidate identity and provider event, then the same admitted owner reserves a random nonce digest. An accepted signed callback clears transient evidence and retains the bound identity/time. Raw link tokens and nonces are not stored. The current installer remains fresh-only; old nonempty BFF schemas are not modified, and readiness rejects the Telegram-only catalog.

@@ -1,3 +1,7 @@
+## A‑13 — Slack personal association
+
+The existing setup GET is read-only. Explicit start projects `awaiting_slack` with the single official workspace authorization URL, the exact setup ID as state, and a ten-minute expiry. After a completion claims this attempt, GET projects `awaiting_slack_callback` without a URL. `POST /v1/agents/connections/slack/complete` accepts only `{state,code}` after existing user admission; it returns the ordinary connected receipt with no-store and no-referrer, or rejects invalid, wrong-owner, repeated, expired, canceled, or already-bound attempts. Only Telegram accepts the existing confirm command. A cancel may cross the one claim revision on the exact Slack setup, but never cancels a completed binding. Disconnect removes the personal Kokoro association only; it does not uninstall, revoke, or attest continued Slack workspace access.
+
 ## A‑13 — LINE account link
 
 Existing setup GET/POST accepts `platform=line`. Start returns a bounded setup ID, expiry and official LINE private-chat URL. The LINE-only `POST /v1/agents/connections/line/webhook` authenticates the original body with `X-Line-Signature` and checks the exact configured bot destination. The signed private sender claims one active setup. Signed duplicates, unrelated, failed, and late events cannot bind. The one-time LINE link token is returned to that private chat via a Kokoro continuation fragment, never in the public setup GET.

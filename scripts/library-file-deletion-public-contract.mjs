@@ -3,7 +3,23 @@ import { createHash } from "node:crypto"
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
+export function restorePublic2834SlackConnectionContract(source) {
+  if (!/^  version: 28\.35\.0$/mu.test(source)) return source
+  if (hash(source) !== "a26431d45ad96c4e80e6751d61e66a14b3933ae7c2ffb6f9e7df57fcc7e6808f") throw Error("Slack Public28.35 child drift")
+  const parent = source
+    .replace(/^  \/v1\/agents\/connections\/slack\/complete:\n[\s\S]*?(?=^  \/v1\/library:)/mu, "")
+    .replace(/^        - type: object\n          required: \[platform, status, state_version, setup_id, expires_at, continue_url\]\n          additionalProperties: false\n          properties:\n            platform: \{ type: string, const: slack \}[\s\S]*?(?=^    AgentConnectionSetupResponse:)/mu, "")
+    .replace(/^    SlackConnectionCompleteRequest:\n[\s\S]*?(?=^    RuntimeManifest:)/mu, "")
+    .replaceAll("            platform: { type: string, enum: [telegram, line, slack] }\n", "            platform: { type: string, enum: [telegram, line] }\n")
+    .replace("This read never starts setup or calls a provider. Established personal bindings can still be read after provider configuration is removed. Slack returns an authorization URL only before that exact attempt has claimed a completion.", "This read never starts setup or calls a provider. Telegram and LINE bindings can still be read after bot configuration is removed. Slack is not available through this operation yet.")
+    .replace("Cancel with the same setup ID also accepts the immediately previous revision when a Telegram private callback or Slack completion has only claimed that exact setup; it never cancels a binding. The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack uses the admitted completion; disconnect removes only the personal binding, not the workspace installation.", "Cancel with the same setup ID also accepts the immediately previous revision when a Telegram callback has only advanced that exact setup to awaiting_confirmation; it never cancels a binding. The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack is not available through this operation yet.")
+    .replace("  version: 28.35.0\n", "  version: 28.34.0\n")
+  if (hash(parent) !== "ea0b6ff7b4ea4a0348a4dd579c2440dca32e58c5958b2374e8555e02b74382a6") throw Error("Slack complete Public28.34 parent drift")
+  return parent
+}
+
 export function restorePublic2833LineConnectionContract(source) {
+  source = restorePublic2834SlackConnectionContract(source)
   if (!/^  version: 28\.34\.0$/mu.test(source)) return source
   if (hash(source) !== "ea0b6ff7b4ea4a0348a4dd579c2440dca32e58c5958b2374e8555e02b74382a6") throw Error("LINE Public28.34 child drift")
   const parent = source
@@ -150,6 +166,12 @@ export function restorePublic2825LibraryFileDeletionContract(source) {
 }
 
 export function libraryFileDeletionParentInventory(inventory) {
+  const slack = inventory.filter((item) => item.operation_id === "completeSlackConnection")
+  if (slack.length) {
+    const expected = { method: "POST", path: "/v1/agents/connections/slack/complete", operation_id: "completeSlackConnection" }
+    if (JSON.stringify(slack) !== JSON.stringify([expected])) throw Error("Slack Public28.35 inventory drift")
+    inventory = inventory.filter((item) => !slack.includes(item))
+  }
   const lineOperations = [
     { method: "POST", path: "/v1/agents/connections/line/webhook", operation_id: "acceptLineConnectionEvent" },
     { method: "POST", path: "/v1/agents/connections/line/continue", operation_id: "continueLineConnection" },

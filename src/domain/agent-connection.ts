@@ -15,9 +15,10 @@ export const connectionCommand = z.discriminatedUnion("action", [
 ])
 export type ConnectionCommand = z.infer<typeof connectionCommand>
 
-export type ConnectionProvider = "telegram" | "line"
+export type ConnectionProvider = "telegram" | "line" | "slack"
 export const lineLinkToken = z.string().regex(/^[!-~]{1,512}(?![\s\S])/u)
 export const lineContinueCommand = z.strictObject({ ...expected, setup_id: setupId, link_token: lineLinkToken })
+export const slackCompleteCommand = z.strictObject({ state: setupId, code: z.string().regex(/^[!-~]{1,512}(?![\s\S])/u) })
 
 export const newAgentConnectionSetupId = (): string => randomBytes(24).toString("base64url")
 export const newTelegramProof = (): string => randomBytes(16).toString("base64url")

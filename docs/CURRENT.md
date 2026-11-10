@@ -1,3 +1,7 @@
+## A‑13 — Slack personal connection owner (Public 28.35)
+
+The existing BFF setup adds explicit Slack authorization and an admitted completion. A one-time claim precedes the fixed Slack exchange and workspace verification, and a final guarded write binds the same Kokoro user. Bot credentials are discarded after verification. Readback and disconnect concern this personal association, not the shared remote installation. App exact pairing, authenticated browser evidence and the live provider remain separate gates.
+
 ## A‑13 — LINE account-link owner (Public 28.34)
 
 The existing connection setup now accepts LINE. BFF verifies the exact signed provider body, claims an active setup in a private LINE chat, and issues an official one-time link token. The current admitted Kokoro owner approves continuation, and only a successful signed account-link for the original private sender and nonce establishes a binding. GET is local/read-only; disconnect clears only this user's association. App exact consumer, live LINE provider and Slack remain separate acceptance/implementation items.

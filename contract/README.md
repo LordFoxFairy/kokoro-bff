@@ -1,3 +1,7 @@
+## A‑13 — Public 28.35 Slack completion
+
+The current setup adds Slack states and one admitted, single-use completion. Only pre-claim setup has the official Slack authorization URL; the credential-free success receipt is the ordinary connected state. The build-time inverse restores exact Public 28.34 bytes. LINE and Telegram wire are unchanged.
+
 ## A‑13 — Public 28.34 LINE account link
 
 The existing setup operations add LINE states, a signed provider webhook, and a distinct admitted one-time continuation. No LINE private token or nonce appears in setup GET. The Public 28.33 inverse remains exact; Telegram wire and Slack availability are unchanged.

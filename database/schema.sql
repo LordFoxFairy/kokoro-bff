@@ -4,14 +4,17 @@
 CREATE TABLE IF NOT EXISTS bff_agent_connection (
   tenant_id TEXT NOT NULL,
   subject_id TEXT NOT NULL,
-  provider TEXT NOT NULL CONSTRAINT ck_bff_agent_connection_provider CHECK (provider IN ('telegram','line')),
+  provider TEXT NOT NULL CONSTRAINT ck_bff_agent_connection_provider CHECK (provider IN ('telegram','line','slack')),
   state_version INTEGER NOT NULL CHECK (state_version >= 1),
-  bot_id TEXT CHECK (CASE WHEN provider='telegram' THEN bot_id ~ '^[1-9][0-9]{0,15}$' ELSE bot_id ~ '^U[0-9a-f]{32}$' END),
+  bot_id TEXT CHECK (CASE provider WHEN 'telegram' THEN bot_id ~ '^[1-9][0-9]{0,15}$' WHEN 'line' THEN bot_id ~ '^U[0-9a-f]{32}$'
+    WHEN 'slack' THEN bot_id ~ '^A[A-Z0-9]{1,63}(:T[A-Z0-9]{1,63})?$' END),
   setup_id TEXT UNIQUE CHECK (setup_id ~ '^[A-Za-z0-9_-]{32}$'),
   setup_expires_at TIMESTAMPTZ(3),
   proof_digest TEXT CHECK (proof_digest ~ '^[0-9a-f]{64}$'),
-  provider_update_id TEXT CHECK (CASE WHEN provider='telegram' THEN provider_update_id ~ '^[0-9]{1,16}$' ELSE provider_update_id ~ '^[A-Za-z0-9_-]{1,128}$' END),
-  external_user_id TEXT CHECK (CASE WHEN provider='telegram' THEN external_user_id ~ '^[1-9][0-9]{0,15}$' ELSE external_user_id ~ '^U[0-9a-f]{32}$' END),
+  provider_update_id TEXT CHECK (CASE provider WHEN 'telegram' THEN provider_update_id ~ '^[0-9]{1,16}$'
+    WHEN 'line' THEN provider_update_id ~ '^[A-Za-z0-9_-]{1,128}$' WHEN 'slack' THEN provider_update_id IS NULL END),
+  external_user_id TEXT CHECK (CASE provider WHEN 'telegram' THEN external_user_id ~ '^[1-9][0-9]{0,15}$'
+    WHEN 'line' THEN external_user_id ~ '^U[0-9a-f]{32}$' WHEN 'slack' THEN external_user_id ~ '^[UW][A-Z0-9]{1,63}$' END),
   connected_at TIMESTAMPTZ(3),
   PRIMARY KEY (tenant_id, subject_id, provider),
   CONSTRAINT ck_bff_agent_connection_shape CHECK (
@@ -19,12 +22,15 @@ CREATE TABLE IF NOT EXISTS bff_agent_connection (
       AND provider_update_id IS NULL AND external_user_id IS NULL AND connected_at IS NULL)
     OR
     (bot_id IS NOT NULL AND setup_id IS NOT NULL AND setup_expires_at IS NOT NULL AND connected_at IS NULL
-      AND ((proof_digest IS NULL AND provider_update_id IS NULL AND external_user_id IS NULL)
+      AND ((provider_update_id IS NULL AND external_user_id IS NULL AND (proof_digest IS NULL OR provider='slack'))
         OR (provider_update_id IS NOT NULL AND external_user_id IS NOT NULL
           AND (proof_digest IS NOT NULL OR provider='line'))))
     OR
     (bot_id IS NOT NULL AND setup_id IS NULL AND setup_expires_at IS NULL AND proof_digest IS NULL
       AND provider_update_id IS NULL AND external_user_id IS NOT NULL AND connected_at IS NOT NULL)
+  ),
+  CONSTRAINT ck_bff_agent_connection_slack_namespace CHECK (
+    provider<>'slack' OR bot_id IS NULL OR (strpos(bot_id, ':')>0)=(connected_at IS NOT NULL)
   )
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_agent_connection_bound_identity

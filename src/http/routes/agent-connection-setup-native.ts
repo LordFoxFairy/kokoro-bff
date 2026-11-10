@@ -4,7 +4,7 @@ import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
-import { connectionCommand, lineContinueCommand, newTelegramProof, secretMatches } from "../../domain/agent-connection.js"
+import { connectionCommand, lineContinueCommand, newTelegramProof, proofDigest, secretMatches, slackCompleteCommand } from "../../domain/agent-connection.js"
 import { sendTelegramProof, telegramStart, validTelegramUpdate } from "../../infrastructure/clients/telegram-connection.js"
 import {
   lineAccountLinkUrl,
@@ -13,12 +13,15 @@ import {
   matchesLineSignature,
   sendLineContinuation,
 } from "../../infrastructure/clients/line-connection.js"
+import { exchangeSlackConnection } from "../../infrastructure/clients/slack-connection.js"
 import {
   authorizeLineSetup,
   changeAgentConnection,
   claimLineSetup,
+  claimSlackSetup,
   claimTelegramSetup,
   completeLineSetup,
+  completeSlackSetup,
   readAgentConnection,
 } from "../../infrastructure/postgres/agent-connection.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
@@ -30,6 +33,7 @@ const setupPath = "/v1/agents/connections/setup"
 const webhookPath = "/v1/agents/connections/telegram/webhook"
 const lineWebhookPath = "/v1/agents/connections/line/webhook"
 const lineContinuePath = "/v1/agents/connections/line/continue"
+const slackCompletePath = "/v1/agents/connections/slack/complete"
 const telegramSecretHeader = "x-telegram-bot-api-secret-token"
 
 function platformOf(url: URL): "telegram" | "line" | "slack" | null {
@@ -74,11 +78,13 @@ export async function handleAgentConnectionSetupRequest(
   const webhook = rawPath === webhookPath && request.method === "POST"
   const lineWebhook = rawPath === lineWebhookPath && request.method === "POST"
   const lineContinue = rawPath === lineContinuePath && request.method === "POST"
+  const slackComplete = rawPath === slackCompletePath && request.method === "POST"
   const read = request.method === "GET"
-  if (!webhook && !lineWebhook && !lineContinue && (rawPath !== setupPath || (!read && request.method !== "POST"))) return false
+  if (!webhook && !lineWebhook && !lineContinue && !slackComplete && (rawPath !== setupPath || (!read && request.method !== "POST"))) return false
 
   const id = requestId(request)
   response.setHeader("x-request-id", id)
+  if (slackComplete) response.setHeader("referrer-policy", "no-referrer")
   const fail = (status: number, code: string, message: string, retryAfter?: string): true => {
     if (!response.writableEnded && !response.destroyed) send(response, status, failure(code, message, id), retryAfter)
     return true
@@ -102,6 +108,7 @@ export async function handleAgentConnectionSetupRequest(
   const signal = AbortSignal.any([cancel.signal, AbortSignal.timeout(timeoutMs)])
   const telegram = config.telegramConnection ?? null
   const line = config.lineConnection ?? null
+  const slack = config.slackConnection ?? null
   try {
     if (request.aborted || response.destroyed) return true
     if (webhook) {
@@ -170,11 +177,11 @@ export async function handleAgentConnectionSetupRequest(
       request.resume()
       return invalid()
     }
-    if (lineContinue && rawUrl !== lineContinuePath) {
+    if ((lineContinue && rawUrl !== lineContinuePath) || (slackComplete && rawUrl !== slackCompletePath)) {
       request.resume()
       return invalid()
     }
-    const platform = lineContinue ? "line" : platformOf(url)
+    const platform = lineContinue ? "line" : slackComplete ? "slack" : platformOf(url)
     if (platform === null) {
       request.resume()
       return fail(400, "invalid_agent_platform", "platform must be telegram, line, or slack")
@@ -185,13 +192,9 @@ export async function handleAgentConnectionSetupRequest(
       request.resume()
       return fail(admitted.status, admitted.code, "BFF user admission failed", admitted.retryAfter)
     }
-    if (platform === "slack") {
-      request.resume()
-      return unavailable()
-    }
     const { namespace: tenantId, userId: subjectId } = admitted.context.identity
     const scope = { tenantId, subjectId, platform, signal, timeoutMs }
-    const bot = platform === "telegram" ? telegram : line
+    const bot = platform === "telegram" ? telegram : platform === "line" ? line : slack
     let result
     if (lineContinue) {
       response.setHeader("referrer-policy", "no-referrer")
@@ -205,10 +208,31 @@ export async function handleAgentConnectionSetupRequest(
         send(response, 200, ok({ ...result.data, continue_url: lineAccountLinkUrl(link_token, result.nonce) }, id))
         return true
       }
+    } else if (slackComplete) {
+      if (slack === null) {
+        request.resume()
+        return unavailable()
+      }
+      const command = slackCompleteCommand.safeParse(parseJson(await jsonBytes(request, signal, 1024)))
+      signal.throwIfAborted()
+      if (!command.success) return invalid()
+      const slackScope = { ...scope, platform: "slack" as const }
+      const { state, code } = command.data
+      const attempt = { setupId: state, appId: slack.appId, digest: proofDigest(code) }
+      if (!await claimSlackSetup(pool, slackScope, attempt)) {
+        result = { kind: "conflict" as const }
+      } else {
+        // The claim is already durable and unlocked. No retries: Slack may
+        // have installed the workspace app even when the exchange is uncertain.
+        const identity = await exchangeSlackConnection(slack, code, signal)
+        signal.throwIfAborted()
+        result = identity === null ? { kind: "provider_unavailable" as const } :
+          await completeSlackSetup(pool, slackScope, attempt, identity)
+      }
     } else {
       const command = read ? null : connectionCommand.safeParse(parseJson(await jsonBytes(request, signal, 1024)))
       signal.throwIfAborted()
-      if (command !== null && (!command.success || (platform === "line" && command.data.action === "confirm"))) return invalid()
+      if (command !== null && (!command.success || (platform !== "telegram" && command.data.action === "confirm"))) return invalid()
       result = command === null ? await readAgentConnection(pool, scope, bot) : await changeAgentConnection(pool, scope, bot, command.data)
     }
     signal.throwIfAborted()

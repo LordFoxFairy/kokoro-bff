@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.34.0
+  version: 28.35.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -7599,7 +7599,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: agent.connection.read
       summary: Read the admitted user’s external connection or setup state
-      description: This read never starts setup or calls a provider. Telegram and LINE bindings can still be read after bot configuration is removed. Slack is not available through this operation yet.
+      description: This read never starts setup or calls a provider. Established personal bindings can still be read after provider configuration is removed. Slack returns an authorization URL only before that exact attempt has claimed a completion.
       parameters:
         - $ref: '#/components/parameters/Platform'
       responses:
@@ -7631,7 +7631,7 @@ paths:
       x-kokoro-idempotency: natural
       x-kokoro-permission: agent.connection.write
       summary: Start, cancel, confirm, or disconnect an owned external connection
-      description: Commands are scoped to the admitted tenant and user. A stale revision returns 412; read the current state instead of automatically resending. Cancel with the same setup ID also accepts the immediately previous revision when a Telegram callback has only advanced that exact setup to awaiting_confirmation; it never cancels a binding. The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack is not available through this operation yet.
+      description: Commands are scoped to the admitted tenant and user. A stale revision returns 412; read the current state instead of automatically resending. Cancel with the same setup ID also accepts the immediately previous revision when a Telegram private callback or Slack completion has only claimed that exact setup; it never cancels a binding. The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack uses the admitted completion; disconnect removes only the personal binding, not the workspace installation.
       parameters:
         - $ref: '#/components/parameters/Platform'
       requestBody:
@@ -7756,6 +7756,44 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/agents/connections/slack/complete:
+    post:
+      tags: [Agents]
+      operationId: completeSlackConnection
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: natural
+      x-kokoro-permission: agent.connection.write
+      summary: Complete the Slack workspace authorization for its admitted Kokoro setup owner
+      description: Exchange an exact unexpired one-time state and provider code after normal Kokoro user admission. One claim precedes the provider exchange; repeated, canceled, expired, wrong-owner, or already-bound attempts cannot connect. Only the verified Slack workspace and member identity are associated. Bot credentials are not stored or returned; disconnect does not uninstall or revoke the Slack app.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SlackConnectionCompleteRequest' }
+      responses:
+        '200':
+          description: The admitted user's connected state
+          headers:
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+            Referrer-Policy: { required: true, schema: { type: string, const: no-referrer } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SlackConnectionCompleteResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '429':
           description: IAM session admission is rate limited
           headers:
@@ -25048,7 +25086,7 @@ components:
           required: [platform, status, state_version]
           additionalProperties: false
           properties:
-            platform: { type: string, enum: [telegram, line] }
+            platform: { type: string, enum: [telegram, line, slack] }
             state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
             status: { type: string, const: disconnected }
         - type: object
@@ -25074,14 +25112,14 @@ components:
           required: [platform, status, state_version]
           additionalProperties: false
           properties:
-            platform: { type: string, enum: [telegram, line] }
+            platform: { type: string, enum: [telegram, line, slack] }
             state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
             status: { type: string, const: expired }
         - type: object
           required: [platform, status, state_version, connected_at]
           additionalProperties: false
           properties:
-            platform: { type: string, enum: [telegram, line] }
+            platform: { type: string, enum: [telegram, line, slack] }
             state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
             status: { type: string, const: connected }
             connected_at: { type: string, format: date-time }
@@ -25111,6 +25149,25 @@ components:
             platform: { type: string, const: line }
             state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
             status: { type: string, const: awaiting_line_callback }
+            setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+            expires_at: { type: string, format: date-time }
+        - type: object
+          required: [platform, status, state_version, setup_id, expires_at, continue_url]
+          additionalProperties: false
+          properties:
+            platform: { type: string, const: slack }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            status: { type: string, const: awaiting_slack }
+            setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+            expires_at: { type: string, format: date-time }
+            continue_url: { type: string, format: uri, pattern: '^https://slack[.]com/oauth/v2/authorize[?]' }
+        - type: object
+          required: [platform, status, state_version, setup_id, expires_at]
+          additionalProperties: false
+          properties:
+            platform: { type: string, const: slack }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            status: { type: string, const: awaiting_slack_callback }
             setup_id: { $ref: '#/components/schemas/AgentConnectionSetupId' }
             expires_at: { type: string, format: date-time }
     AgentConnectionSetupResponse:
@@ -25144,6 +25201,28 @@ components:
             state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
             expires_at: { type: string, format: date-time }
             continue_url: { type: string, format: uri, pattern: '^https://access[.]line[.]me/dialog/bot/accountLink[?]' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    SlackConnectionCompleteRequest:
+      type: object
+      additionalProperties: false
+      required: [state, code]
+      properties:
+        state: { $ref: '#/components/schemas/AgentConnectionSetupId' }
+        code: { type: string, pattern: '^[!-~]{1,512}(?![\s\S])', writeOnly: true }
+    SlackConnectionCompleteResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [platform, status, state_version, connected_at]
+          properties:
+            platform: { type: string, const: slack }
+            status: { type: string, const: connected }
+            state_version: { $ref: '#/components/schemas/AgentConnectionStateVersion' }
+            connected_at: { type: string, format: date-time }
         meta: { $ref: '#/components/schemas/RequestMeta' }
     RuntimeManifest:
       type: object

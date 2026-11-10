@@ -62,6 +62,7 @@ export const DEFAULT_AGUI_CONFIG: AgUiConfig = {
 
 export type TelegramConnectionConfig = Readonly<{ botId: string; username: string; token: string; webhookSecret: string }>
 export type LineConnectionConfig = Readonly<{ botId: string; accountId: string; accessToken: string; channelSecret: string; webOrigin: string }>
+export type SlackConnectionConfig = Readonly<{ appId: string; clientId: string; clientSecret: string; redirectUri: string }>
 
 export function telegramConnectionConfig(env: NodeJS.ProcessEnv): TelegramConnectionConfig | null {
   const token = env.KOKORO_TELEGRAM_BOT_TOKEN
@@ -88,6 +89,19 @@ function lineConnectionConfig(env: NodeJS.ProcessEnv, webOrigin: string | null):
     throw new Error("LINE connection configuration is incomplete or invalid")
   }
   return { botId, accountId, accessToken, channelSecret, webOrigin }
+}
+
+function slackConnectionConfig(env: NodeJS.ProcessEnv, webOrigin: string | null): SlackConnectionConfig | null {
+  const appId = env.KOKORO_SLACK_APP_ID
+  const clientId = env.KOKORO_SLACK_CLIENT_ID
+  const clientSecret = env.KOKORO_SLACK_CLIENT_SECRET
+  if (!appId && !clientId && !clientSecret) return null
+  if (!appId || !/^A[A-Z0-9]{1,63}(?![\s\S])/u.test(appId) ||
+      !clientId || !/^[0-9]{1,32}\.[0-9]{1,32}(?![\s\S])/u.test(clientId) ||
+      !clientSecret || !/^[!-~]{16,256}(?![\s\S])/u.test(clientSecret) || !webOrigin?.startsWith("https://")) {
+    throw new Error("Slack connection configuration is incomplete or invalid")
+  }
+  return { appId, clientId, clientSecret, redirectUri: webOrigin + "/api/agents/connections/slack/callback" }
 }
 
 export type BffConfig = {
@@ -119,6 +133,7 @@ export type BffConfig = {
   upstreamMaxResponseBytes: number
   telegramConnection?: TelegramConnectionConfig | null
   lineConnection?: LineConnectionConfig | null
+  slackConnection?: SlackConnectionConfig | null
   schedulerServiceToken: string | null
   schedulerTargetUrl: string | null
   agentEnabled: boolean
@@ -451,6 +466,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     ),
     telegramConnection: telegramConnectionConfig(env),
     lineConnection: lineConnectionConfig(env, iamWebOrigin),
+    slackConnection: slackConnectionConfig(env, iamWebOrigin),
     schedulerServiceToken: env.KOKORO_SCHEDULER_SERVICE_TOKEN?.trim() || null,
     schedulerTargetUrl: optionalUrl(env.KOKORO_SCHEDULER_TARGET_URL),
     agentEnabled: booleanFlag(env.KOKORO_AGENT_ENABLED, false),

@@ -120,7 +120,8 @@ function expectedIdempotency(operation) {
     ((operation.path === "/v1/agents/connections/setup" && operation.fields.get("operationId") === "changeAgentConnection") ||
      (operation.path === "/v1/agents/connections/telegram/webhook" && operation.fields.get("operationId") === "acceptTelegramConnectionUpdate") ||
      (operation.path === "/v1/agents/connections/line/webhook" && operation.fields.get("operationId") === "acceptLineConnectionEvent") ||
-     (operation.path === "/v1/agents/connections/line/continue" && operation.fields.get("operationId") === "continueLineConnection")))
+     (operation.path === "/v1/agents/connections/line/continue" && operation.fields.get("operationId") === "continueLineConnection") ||
+     (operation.path === "/v1/agents/connections/slack/complete" && operation.fields.get("operationId") === "completeSlackConnection")))
     return "natural"
   if (
     operation.method === "PUT" &&

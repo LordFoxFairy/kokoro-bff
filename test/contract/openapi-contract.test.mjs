@@ -28,11 +28,34 @@ const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.me
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 
+test("Public28.35 models Slack installation completion without exposing a credential", async () => {
+  const { load } = await import("js-yaml")
+  const latest = await readFile(currentOpenapiUrl, "utf8")
+  const active = load(latest)
+  assert.equal(active.info.version, "28.35.0")
+  const complete = active.paths["/v1/agents/connections/slack/complete"].post
+  assert.equal(complete.operationId, "completeSlackConnection")
+  assert.equal(complete.security, undefined)
+  assert.deepEqual(Object.keys(complete.responses).sort(), ["200", "400", "401", "403", "409", "429", "503"])
+  assert.equal(complete.responses[200].headers["Referrer-Policy"].schema.const, "no-referrer")
+  const { SlackConnectionCompleteRequest: command, SlackConnectionCompleteResponse: receipt, AgentConnectionSetup } = active.components.schemas
+  assert.deepEqual(command.required, ["state", "code"])
+  assert.equal(command.additionalProperties, false)
+  assert.equal(command.properties.code.writeOnly, true)
+  assert.deepEqual(Object.keys(receipt.properties.data.properties), ["platform", "status", "state_version", "connected_at"])
+  assert.equal(receipt.properties.data.properties.platform.const, "slack")
+  const [start, wait] = ["awaiting_slack", "awaiting_slack_callback"].map((status) =>
+    AgentConnectionSetup.oneOf.find((arm) => arm.properties.status.const === status))
+  assert.ok(start.required.includes("continue_url"))
+  assert.equal(wait.properties.continue_url, undefined)
+})
+
 test("Public28.34 separates LINE callbacks and admitted continuation, preserving exact parents", async () => {
   const { load } = await import("js-yaml")
-  const { restorePublic2833LineConnectionContract, restorePublic2832WorkspaceOutputsContract, restorePublic2831AgentConnectionContract } =
+  const { restorePublic2834SlackConnectionContract, restorePublic2833LineConnectionContract,
+    restorePublic2832WorkspaceOutputsContract, restorePublic2831AgentConnectionContract } =
     await import("../../scripts/library-file-deletion-public-contract.mjs")
-  const latest = await readFile(currentOpenapiUrl, "utf8")
+  const latest = restorePublic2834SlackConnectionContract(await readFile(currentOpenapiUrl, "utf8"))
   const line = load(latest)
   assert.equal(line.info.version, "28.34.0")
   assert.deepEqual(line.paths["/v1/agents/connections/line/webhook"].post.security, [{ LineWebhookSignature: [] }])
