@@ -2,7 +2,8 @@ import { performance } from "node:perf_hooks"
 import type { ScheduledAgentDispatchDeliveryPort, ScheduledAgentDeliveryResult } from "../../application/scheduled/scheduled-agent-dispatch-delivery.js"
 import type { AgentDispatchOutboxRepository } from "../../application/agent-dispatch/agent-dispatch-outbox-repository.js"
 import type { ScheduledAgentDispatchCommand } from "../../domain/scheduled-task/agent-dispatch.js"
-import { buildAgentDispatchPayload, parseAgentDispatchPayload, type AgentDispatchInput } from "../../domain/chat/agent-dispatch.js"
+import { type AgentDispatchInput } from "../../domain/chat/agent-dispatch.js"
+import { buildAgentDispatchPayload, parseAgentDispatchPayload } from "../../application/chat/agent-dispatch-payload.js"
 
 /** Scheduled activation only queues the ordinary Chat turn; it never sends Agent HTTP. */
 export class ScheduledChatSubmission implements ScheduledAgentDispatchDeliveryPort {

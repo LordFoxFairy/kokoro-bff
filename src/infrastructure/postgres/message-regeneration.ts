@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import type { QueryResult, QueryResultRow } from "pg"
 import type { RegenerateMessageInput, RegenerationSource } from "../../application/chat/message-regeneration.js"
 import type { PostgresBffDatabase } from "./client.js"
-import { parseAgentDispatchPayload } from "../../domain/chat/agent-dispatch.js"
+import { parseAgentDispatchPayload } from "../../application/chat/agent-dispatch-payload.js"
 import { withMessageReadClient } from "./message-parts-read.js"
 type SourceRow = {
   source_run_id: string

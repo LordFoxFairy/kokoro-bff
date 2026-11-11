@@ -1,9 +1,9 @@
+import { parseCanonicalResourceReferences } from "../../application/chat/resource-reference-manifest.js"
 import { selectedArtifactInTransaction } from "./conversation-artifact-library.js"
 import { regenerationSourceInTransaction } from "./message-regeneration.js"
 import { selectedFinalAnswerInTransaction } from "./run-final-answer-read.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
 import {
-  parseCanonicalResourceReferences,
   parseResourceReferenceSelection,
   type CanonicalFinalAnswerRef,
   type CanonicalResourceRef,
@@ -13,12 +13,8 @@ import { performance } from "node:perf_hooks"
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 
 import type { CommitChatTurn, ChatTurnSelectionInput, ChatTurnSelection } from "../../application/agent-dispatch/agent-dispatch-outbox-repository.js"
-import {
-  bindAgentDispatchPayloadProjectScope,
-  isInterruptRunId,
-  parseAgentDispatchPayload,
-  type AgentDispatchReceipt,
-} from "../../domain/chat/agent-dispatch.js"
+import { isInterruptRunId, type AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
+import { bindAgentDispatchPayloadProjectScope, parseAgentDispatchPayload } from "../../application/chat/agent-dispatch-payload.js"
 import { firstMessageConversationTitle, isClientCreatedConversationId } from "../../domain/chat/conversation.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
 import { AGUI_NOTIFICATION_DEADLINE_MS, type PostgresBffDatabase } from "./client.js"

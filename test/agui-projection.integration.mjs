@@ -554,7 +554,8 @@ integrationTest("reads Artifact deliveries and public watermark from one repeata
     await writer.query("BEGIN")
     await writer.query("SELECT 1 FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2 FOR UPDATE", [tenantId, sessionId])
     const { createHash } = await import("node:crypto")
-    const { buildAgentDispatchPayload, agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+    const { agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+    const { buildAgentDispatchPayload } = await import("../dist/application/chat/agent-dispatch-payload.js")
     const { PostgresAgentDispatchOutboxRepository } = await import("../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js")
     const { createAgUiProjectionState, projectChatEvent } = await import("../dist/application/agui/project-chat-event.js")
     const dispatchInput = {

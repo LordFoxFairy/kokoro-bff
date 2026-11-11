@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import type { PoolClient, QueryConfig, QueryResult, QueryResultRow } from "pg"
 
-import { parseAgentDispatchPayload } from "../../domain/chat/agent-dispatch.js"
+import { parseAgentDispatchPayload } from "../../application/chat/agent-dispatch-payload.js"
 import { parseSkillSourceSelection } from "../../domain/chat/skill-source-selection.js"
 import type { PostgresBffDatabase } from "./client.js"
 

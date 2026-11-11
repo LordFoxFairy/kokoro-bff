@@ -1,17 +1,12 @@
+import { parseCanonicalResourceReferences } from "./chat/resource-reference-manifest.js"
 import {
-  parseCanonicalResourceReferences,
   type CanonicalStorageResourceRef,
   type StorageSelectedResourceRef,
 } from "../domain/chat/resource-reference-selection.js"
 import type { RegenerateMessageInput, RegenerationReceipt } from "./chat/message-regeneration.js"
 import { parseSkillSourceSelection } from "../domain/chat/skill-source-selection.js"
-import {
-  agentDispatchIdentityMaterial,
-  agentDispatchRequestMaterial,
-  buildAgentDispatchPayload,
-  type AgentDispatchInput,
-  type AgentDispatchReceipt,
-} from "../domain/chat/agent-dispatch.js"
+import { agentDispatchIdentityMaterial, agentDispatchRequestMaterial, type AgentDispatchInput, type AgentDispatchReceipt } from "../domain/chat/agent-dispatch.js"
+import { buildAgentDispatchPayload } from "./chat/agent-dispatch-payload.js"
 import type { CommitChatTurn } from "./agent-dispatch/agent-dispatch-outbox-repository.js"
 import type { AgentDispatchOutboxRepository } from "./agent-dispatch/agent-dispatch-outbox-repository.js"
 

@@ -62,6 +62,8 @@ error tuples fail closed; uncertain completion is recovered only by explicit sam
 
 ## A‑08 canonical 消息输入（实施中）
 
+公开选择与派发身份规则仍在领域层；冻结 manifest、SHA‑256 字节校验与 durable launch 构建／读取属于应用层，由 Storage resolver、Chat 提交和 Agent 发送共用。公开协议、JSONB schema version、摘要输入和拒绝条件均不变。
+
 历史最终答复沿同一 Chat 提交处理。公开输入只带 `final_answer` 和 exact assistant Message ID；同键 replay 在任何来源读取之前返回。新请求仅在事务外解析 Asset/Artifact 子序列，最终在现 Project/Conversation 事务锁内按原选择顺序合并历史答复，不在数据库行锁中访问 Storage。final-only 不依赖 Storage。私有 launch 只消费固定 Agent HTTP8.15.0（`9d53f36fb549c49b8bc7a05b07776df5cb000698`）三类 canonical refs，不加表、路由、身份或第二提交者。
 
 历史源必须为可信本人 active 同 direct 或同 canonical Project 会话、exact completed assistant 及其未退休投递。原事务以 `FOR SHARE OF c,m,d NOWAIT` 获取来源，校 durable marker 对应唯一已完成 ordered text、正版本、原 UTF‑8、长度和摘要；拒绝缺 marker、错误范围或坏字节，不走 display 或 aggregate fallback。单答复最多24 KiB，仍需通过整组32 KiB ASCII JSON/16项及最终1 MiB launch；不截断。再生成新 Run 在同事务重验与原冻结来源的版本及全部字节精确相等，既有 Run 和已提交同键仍沿原回执。私有正文不进入公开 Message／AG‑UI／Share／诊断。真实组合验收另行执行。

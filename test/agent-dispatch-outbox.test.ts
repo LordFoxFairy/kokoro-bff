@@ -338,8 +338,8 @@ describe("Agent dispatch HTTP classification", () => {
 })
 
 it("freezes ordered Skill selection in v3 payload and digest, rejecting old durable payloads", async () => {
-  const { bindAgentDispatchPayloadProjectScope, buildAgentDispatchPayload, parseAgentDispatchPayload, agentDispatchRequestMaterial } =
-    await import("../dist/domain/chat/agent-dispatch.js")
+  const { agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { bindAgentDispatchPayloadProjectScope, buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/application/chat/agent-dispatch-payload.js")
   const input = {
     tenantId: "tenant",
     conversationId: "conversation",
@@ -380,7 +380,8 @@ it("freezes ordered Skill selection in v3 payload and digest, rejecting old dura
 })
 
 it("freezes exact MCP choice in launch rather than trace; empty choice retains the old digest", async () => {
-  const { agentDispatchRequestMaterial, buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/application/chat/agent-dispatch-payload.js")
   const input = {
     tenantId: "tenant",
     conversationId: "conversation",
@@ -496,7 +497,8 @@ it("snapshots MCP intent before awaiting project Skill defaults so the digest an
 })
 
 it("freezes Custom API profile versions with stable legacy empty digest and rejects malformed durable references", async () => {
-  const { agentDispatchRequestMaterial, buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/application/chat/agent-dispatch-payload.js")
   const input = {
     tenantId: "tenant",
     conversationId: "conversation",
@@ -843,7 +845,8 @@ it("expired or pre-aborted prepare performs no checkout and no SQL", async () =>
 })
 
 it("freezes owner canonical resource references in launch while the digest binds opaque intent", async () => {
-  const { agentDispatchRequestMaterial, buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/application/chat/agent-dispatch-payload.js")
   const input = {
     tenantId: "tenant",
     conversationId: "conversation",

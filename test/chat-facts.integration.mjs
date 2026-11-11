@@ -1928,7 +1928,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     const reopenedPool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
     try {
       const reopened = await reopenedPool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [tenant, mcpId])
-      const { parseAgentDispatchPayload } = await import("../dist/domain/chat/agent-dispatch.js")
+      const { parseAgentDispatchPayload } = await import("../dist/application/chat/agent-dispatch-payload.js")
       assert.deepEqual(parseAgentDispatchPayload(reopened.rows[0].payload).launch.selected_mcp_connection_ids, mcpBody.selected_mcp_connection_ids)
     } finally {
       await reopenedPool.end()

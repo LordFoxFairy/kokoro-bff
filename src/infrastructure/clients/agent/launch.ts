@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { buildAgentDispatchPayload } from "../../../domain/chat/agent-dispatch.js"
+import { buildAgentDispatchPayload } from "../../../application/chat/agent-dispatch-payload.js"
 import type { AgentLaunch, BffIdentity } from "./types.js"
 
 /** One ordinary, browser-addressable conversation per tenant/task; no private alias. */

@@ -1,6 +1,6 @@
 import { zCreateRunResponse, zErrorEnvelope, zLaunchRequest, zReplaySessionEventsResponse } from "../../../generated/agent-http/zod.gen.js"
 import { isRecord } from "../../../domain/json.js"
-import { parseCanonicalResourceReferences } from "../../../domain/chat/resource-reference-selection.js"
+import { parseCanonicalResourceReferences } from "../../../application/chat/resource-reference-manifest.js"
 import type { LaunchRequest, LaunchReceiptEnvelope } from "../../../generated/agent-http/types.gen.js"
 
 const zSavedAgentLaunch = zLaunchRequest.omit({ personal_context: true }).strict()

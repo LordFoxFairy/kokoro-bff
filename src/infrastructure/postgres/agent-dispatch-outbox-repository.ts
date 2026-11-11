@@ -12,13 +12,8 @@ import type {
   ChatTurnSelection,
 } from "../../application/agent-dispatch/agent-dispatch-outbox-repository.js"
 import { agentDispatchFailureProjection } from "../../application/agui/agent-dispatch-failure.js"
-import {
-  parseAgentDispatchPayload,
-  type AgentDispatchCommand,
-  type AgentDispatchLease,
-  type AgentDispatchReceipt,
-  type AgentDispatchStatus,
-} from "../../domain/chat/agent-dispatch.js"
+import { type AgentDispatchCommand, type AgentDispatchLease, type AgentDispatchReceipt, type AgentDispatchStatus } from "../../domain/chat/agent-dispatch.js"
+import { parseAgentDispatchPayload } from "../../application/chat/agent-dispatch-payload.js"
 import type { PoolClient } from "pg"
 import type { PostgresBffDatabase } from "./client.js"
 import { commitChatTurn, prepareChatTurnSelection } from "./chat-turn-commit.js"

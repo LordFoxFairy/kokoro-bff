@@ -8,7 +8,7 @@ import { join } from "node:path"
 import { agentModelAdmissionRoute } from "../dist/http/routes/model-admission.js"
 import { Pool } from "pg"
 import { createAgentRunsReader } from "../dist/infrastructure/postgres/project-execution-binding.js"
-import { buildAgentDispatchPayload } from "../dist/domain/chat/agent-dispatch.js"
+import { buildAgentDispatchPayload } from "../dist/application/chat/agent-dispatch-payload.js"
 
 // Real BFF repository + HTTP route; the named Billing peer is a wire fixture, not a money/model execution claim.
 async function recoverAndSettleRetiredSubmission(repository, tenant, runId, user) {
