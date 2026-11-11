@@ -24,10 +24,6 @@ function chatEventsPath(request: IncomingMessage): boolean {
   }
 }
 
-export function isChatEventsNativeRequest(request: IncomingMessage): boolean {
-  return chatEventsPath(request)
-}
-
 /** Chat-owned direct AG-UI events stream with feature-local projection and consumer providers. */
 export async function handleChatEventsRequest(
   request: IncomingMessage,

@@ -21,10 +21,6 @@ function chatMessagePath(request: IncomingMessage): boolean {
   }
 }
 
-export function isChatMessageNativeRequest(request: IncomingMessage): boolean {
-  return chatMessagePath(request)
-}
-
 /** Chat message submission with the canonical Agent outbox and Project/Skill owner rechecks. */
 export async function handleChatMessageRequest(
   request: IncomingMessage,
