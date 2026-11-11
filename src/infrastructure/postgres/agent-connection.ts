@@ -1,7 +1,8 @@
 import type { Pool } from "pg"
 import type { LineConnectionConfig, SlackConnectionConfig, TelegramConnectionConfig } from "../../config/runtime.js"
-import { newAgentConnectionSetupId, proofDigest, secretMatches, type ConnectionCommand, type ConnectionProvider } from "../../domain/agent-connection.js"
+import type { ConnectionCommand, ConnectionProvider } from "../../domain/agent-connection.js"
 import { slackAuthorizationUrl } from "../clients/slack-connection.js"
+import { newAgentConnectionSetupId, proofDigest, secretMatches } from "../identifiers/agent-connection-proof.js"
 
 type Slot = {
   state_version: number

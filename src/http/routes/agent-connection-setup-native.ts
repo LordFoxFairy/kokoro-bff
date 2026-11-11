@@ -4,7 +4,7 @@ import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
-import { connectionCommand, lineContinueCommand, newTelegramProof, proofDigest, secretMatches, slackCompleteCommand } from "../../domain/agent-connection.js"
+import { connectionCommand, lineContinueCommand, slackCompleteCommand } from "../../domain/agent-connection.js"
 import { sendTelegramProof, telegramStart, validTelegramUpdate } from "../../infrastructure/clients/telegram-connection.js"
 import {
   lineAccountLinkUrl,
@@ -14,6 +14,7 @@ import {
   sendLineContinuation,
 } from "../../infrastructure/clients/line-connection.js"
 import { exchangeSlackConnection } from "../../infrastructure/clients/slack-connection.js"
+import { newTelegramProof, proofDigest, secretMatches } from "../../infrastructure/identifiers/agent-connection-proof.js"
 import {
   authorizeLineSetup,
   changeAgentConnection,
