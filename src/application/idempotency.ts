@@ -60,6 +60,7 @@ export async function commitReceipt(
       await mutation.persistent.releaseReceipt(mutation.scope, mutation.fingerprint).catch(() => undefined)
       throw error
     }
+    return
   }
   idempotency.set(mutation.scope, { fingerprint: mutation.fingerprint, receipt: { status, body: structuredClone(body) } })
 }

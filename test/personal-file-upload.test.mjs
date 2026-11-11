@@ -332,10 +332,11 @@ test("personal Storage Connect adapter sends trusted personal scope, ASSET purpo
   await assert.rejects(client.getAsset("upload-1", "asset-1", input, AbortSignal.timeout(5000)), (error) => error.status === 503)
 })
 
-test("personal route claims after input validation, persists success, replays within subject and isolates other subjects", async () => {
+test("personal route keeps durable receipts without a duplicate memory cache, replays and rejects conflicting input within subject", async () => {
   const { personalFileUploadRoute } = await import("../dist/http/routes/personal-file-upload.js")
   const { EventEmitter } = await import("node:events")
   const f = fixture()
+  const memory = new Map()
   const form = new FormData()
   form.append("files", new File([input.bytes], input.filename, { type: input.mimeType }))
   const wire = new Request("http://bff.test", { method: "POST", body: form })
@@ -366,7 +367,7 @@ test("personal route claims after input validation, persists success, replays wi
       { identity: { namespace: "tenant-1", userId: subject }, requestId: "request-1" },
       payload,
       f.receipts,
-      new Map(),
+      memory,
       (_cfg, ctx) => {
         scopes.push(ctx)
         return f.storage
@@ -386,11 +387,18 @@ test("personal route claims after input validation, persists success, replays wi
     content_sha256: sha,
     scan_state: "clean",
   })
+  assert.equal(memory.size, 0, "durable success must not retain the response in the process cache")
   assert.equal((await invoke()).status, 200)
   assert.equal(scopes.length, 1, "same-subject durable public receipt replays before Storage")
+  const changedBody = Buffer.from(body.toString("utf8").replace('filename="fox.txt"', 'filename="other.txt"'))
+  const conflict = await invoke("subject-1", "/v1/library/files", changedBody)
+  assert.equal(conflict.status, 409)
+  assert.equal(conflict.body.error.code, "idempotency_conflict")
+  assert.equal(scopes.length, 1, "durable conflict does not reach Storage")
   assert.equal((await invoke("subject-2")).status, 200)
   assert.equal(scopes.length, 2, "other subject has its own receipt and Storage scope")
   assert.equal(scopes[1].subjectId, "subject-2")
+  assert.equal(memory.size, 0, "distinct durable receipt scopes must not grow the process cache")
   assert.equal((await invoke("subject-1", "/v1/library/files?subject_id=forged")).status, 400)
   assert.equal((await invoke("subject-1", "/v1/library/files", Buffer.from("broken"))).status, 400)
   for (const rawKeys of [["key-1", "key-2"], ["key-1,key-2"], [" key-1 "], ["  "]]) {
