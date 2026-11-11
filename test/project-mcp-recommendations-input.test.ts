@@ -1,3 +1,4 @@
+import { restoreTaskAHistoricalSchema } from "./contract/task-a-historical-schema.mjs"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
@@ -85,7 +86,7 @@ test("new canonical SQL and both current/old wire surfaces are independently pin
     recommendationsParentBaseline: census,
   } = await import("../scripts/project-mcp-recommendations-public-contract.mjs")
   const { createHash } = await import("node:crypto")
-  const schema = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
+  const schema = restoreTaskAHistoricalSchema(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
   assert.equal(createHash("sha256").update(sql(schema)).digest("hex"), "38f1dcf6ffbdba1fcd459ff78f8be0d3e870405c5eccb2160d8a4961433f1e24")
   for (const bad of [schema.replace("recommended_mcp_refs JSONB NOT NULL", "recommended_mcp_refs JSONB"), schema.replace("name TEXT NOT NULL", "name TEXT")])
     assert.throws(() => sql(bad), /drift/)

@@ -1,9 +1,17 @@
+import { restoreTaskAHistoricalSchema } from "./contract/task-a-historical-schema.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 test("canonical pin relation is one minimal subject association and restores the original whole owner schema", async () => {
-  const sql = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
+  const current = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
+  const sql = restoreTaskAHistoricalSchema(current)
+  const changed = current.replace(
+    "ck_bff_agent_connection_state_version CHECK (state_version >= 1)",
+    "ck_bff_agent_connection_state_version CHECK (state_version >= 2)",
+  )
+  assert.notEqual(changed, current)
+  assert.throws(() => restoreTaskAHistoricalSchema(changed), /Task A current SQL drift/)
   assert.match(sql, /CREATE TABLE IF NOT EXISTS bff_project_pin \(/u)
   const { restoreProjectPinSchema } = await import("../scripts/project-pin-public-contract.mjs")
   assert.equal(createHash("sha256").update(restoreProjectPinSchema(sql)).digest("hex"), "70f6933f3bf0542d4c8babc6ced7ab7f4c128c0cc0a570ab195309850373e993")

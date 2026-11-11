@@ -1,3 +1,4 @@
+import { restoreTaskAHistoricalSchema } from "./contract/task-a-historical-schema.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -29,7 +30,7 @@ test("message actions preserve complete Public28.9 and expose only exact feedbac
 })
 
 test("Message actions SQL and operation inventory inverse reject unrelated or partial child drift", async () => {
-  const sql = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
+  const sql = restoreTaskAHistoricalSchema(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
   const parent = restoreMessageActionsSchema(sql)
   assert.equal(createHash("sha256").update(parent).digest("hex"), "82b67bc5f8bb18deaa78821c9c4f59962f3d8ca5c986120544b84f9e9c8d13d0")
   for (const bad of [

@@ -1,3 +1,4 @@
+import { restoreTaskAHistoricalSchema } from "./contract/task-a-historical-schema.mjs"
 import { restoreProjectMcpRecommendationsSchema } from "../scripts/project-mcp-recommendations-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
@@ -50,7 +51,7 @@ test("the independent media publication leaves the full existing public, command
       path === "contract/openapi/v1/openapi.yaml"
         ? restorePublic27ToolDisplayContract(bytes.toString("utf8"))
         : path === "database/schema.sql"
-          ? restoreProjectMcpRecommendationsSchema(bytes.toString("utf8"))
+          ? restoreProjectMcpRecommendationsSchema(restoreTaskAHistoricalSchema(bytes.toString("utf8")))
           : bytes
     assert.equal(createHash("sha256").update(current).digest("hex"), createHash("sha256").update(parent).digest("hex"), path)
   }
