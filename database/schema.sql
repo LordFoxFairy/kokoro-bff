@@ -5,15 +5,15 @@ CREATE TABLE IF NOT EXISTS bff_agent_connection (
   tenant_id TEXT NOT NULL,
   subject_id TEXT NOT NULL,
   provider TEXT NOT NULL CONSTRAINT ck_bff_agent_connection_provider CHECK (provider IN ('telegram','line','slack')),
-  state_version INTEGER NOT NULL CHECK (state_version >= 1),
-  bot_id TEXT CHECK (CASE provider WHEN 'telegram' THEN bot_id ~ '^[1-9][0-9]{0,15}$' WHEN 'line' THEN bot_id ~ '^U[0-9a-f]{32}$'
+  state_version INTEGER NOT NULL CONSTRAINT ck_bff_agent_connection_state_version CHECK (state_version >= 1),
+  bot_id TEXT CONSTRAINT ck_bff_agent_connection_bot_id CHECK (CASE provider WHEN 'telegram' THEN bot_id ~ '^[1-9][0-9]{0,15}$' WHEN 'line' THEN bot_id ~ '^U[0-9a-f]{32}$'
     WHEN 'slack' THEN bot_id ~ '^A[A-Z0-9]{1,63}(:T[A-Z0-9]{1,63})?$' END),
-  setup_id TEXT UNIQUE CHECK (setup_id ~ '^[A-Za-z0-9_-]{32}$'),
+  setup_id TEXT CONSTRAINT uq_bff_agent_connection_setup_id UNIQUE CONSTRAINT ck_bff_agent_connection_setup_id CHECK (setup_id ~ '^[A-Za-z0-9_-]{32}$'),
   setup_expires_at TIMESTAMPTZ(3),
-  proof_digest TEXT CHECK (proof_digest ~ '^[0-9a-f]{64}$'),
-  provider_update_id TEXT CHECK (CASE provider WHEN 'telegram' THEN provider_update_id ~ '^[0-9]{1,16}$'
+  proof_digest TEXT CONSTRAINT ck_bff_agent_connection_proof_digest CHECK (proof_digest ~ '^[0-9a-f]{64}$'),
+  provider_update_id TEXT CONSTRAINT ck_bff_agent_connection_provider_update_id CHECK (CASE provider WHEN 'telegram' THEN provider_update_id ~ '^[0-9]{1,16}$'
     WHEN 'line' THEN provider_update_id ~ '^[A-Za-z0-9_-]{1,128}$' WHEN 'slack' THEN provider_update_id IS NULL END),
-  external_user_id TEXT CHECK (CASE provider WHEN 'telegram' THEN external_user_id ~ '^[1-9][0-9]{0,15}$'
+  external_user_id TEXT CONSTRAINT ck_bff_agent_connection_external_user_id CHECK (CASE provider WHEN 'telegram' THEN external_user_id ~ '^[1-9][0-9]{0,15}$'
     WHEN 'line' THEN external_user_id ~ '^U[0-9a-f]{32}$' WHEN 'slack' THEN external_user_id ~ '^[UW][A-Z0-9]{1,63}$' END),
   connected_at TIMESTAMPTZ(3),
   PRIMARY KEY (tenant_id, subject_id, provider),
