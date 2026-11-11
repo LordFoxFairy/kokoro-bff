@@ -9,7 +9,7 @@ import {
 } from "../../application/ports/idempotency-repository.js"
 
 export class PostgresIdempotencyRepository implements IdempotencyRepository {
-  public constructor(private readonly pool: Pool) {}
+  public constructor(private readonly pool: Pick<Pool, "query">) {}
 
   public async getReceipt(scope: string): Promise<PersistentReceipt | null> {
     const result = await this.pool.query<{ fingerprint: string; status: number; body: unknown }>(
