@@ -1,20 +1,34 @@
+import { parseCanonicalResourceReferences } from "../../application/chat/resource-reference-manifest.js"
+import { selectedArtifactInTransaction } from "./conversation-artifact-library.js"
+import { regenerationSourceInTransaction } from "./message-regeneration.js"
+import { selectedFinalAnswerInTransaction } from "./run-final-answer-read.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
+import {
+  parseResourceReferenceSelection,
+  type CanonicalFinalAnswerRef,
+  type CanonicalResourceRef,
+} from "../../domain/chat/resource-reference-selection.js"
 import { performance } from "node:perf_hooks"
 
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 
-import type { CommitChatTurn, ChatTurnSelectionInput, ChatTurnSelection } from "../../application/ports/agent-dispatch-outbox-repository.js"
-import { bindAgentDispatchPayloadProjectScope, parseAgentDispatchPayload, type AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
+import type { CommitChatTurn, ChatTurnSelectionInput, ChatTurnSelection } from "../../application/agent-dispatch/agent-dispatch-outbox-repository.js"
+import { isInterruptRunId, type AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
+import { bindAgentDispatchPayloadProjectScope, parseAgentDispatchPayload } from "../../application/chat/agent-dispatch-payload.js"
 import { firstMessageConversationTitle, isClientCreatedConversationId } from "../../domain/chat/conversation.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
 import { AGUI_NOTIFICATION_DEADLINE_MS, type PostgresBffDatabase } from "./client.js"
 
-const CHAT_TURN_TOTAL_BUDGET_MS = 4500
+import { CHAT_TURN_TOTAL_BUDGET_MS } from "../../application/chat-turn-service.js"
 const CHAT_TURN_LOCK_BUDGET_MS = 1000
 const CHAT_TURN_MAX_SCOPE_ATTEMPTS = 4
 
 type LockedChatScope =
-  | Readonly<{ kind: "locked"; canonicalProjectId: string | null; callerProjectId: string | null | undefined }>
+  | Readonly<{
+      kind: "locked"
+      canonicalProjectId: string | null
+      callerProjectId: string | null | undefined
+    }>
   | Readonly<{ kind: "retry" }>
   | Readonly<{ kind: "project_not_found" }>
   | Readonly<{ kind: "not_found" }>
@@ -28,6 +42,7 @@ type ExistingDispatchRow = {
 
 type QueuedHeadProjector = (client: PoolClient, tenantId: string, conversationId: string) => Promise<string | null>
 type DeadlineQuery = <Row extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]) => Promise<QueryResult<Row>>
+type ChatScopeInput = Pick<CommitChatTurn, "tenantId" | "subjectId" | "conversationId" | "projectRef" | "content">
 
 function requiredIdentity(value: string): void {
   if (value.trim() === "") throw new Error("CHAT_TURN_INPUT_INVALID")
@@ -45,14 +60,32 @@ function remainingMilliseconds(deadline: number, code = "CHAT_TURN_BUDGET_EXHAUS
   return remaining
 }
 
-async function startWithin<T>(deadline: number, code: string, start: () => Promise<T>, onTimeout?: () => void, maximumMs?: number): Promise<T> {
+async function startWithin<T>(
+  deadline: number,
+  code: string,
+  start: () => Promise<T>,
+  onTimeout?: () => void,
+  maximumMs?: number,
+  signal?: AbortSignal,
+): Promise<T> {
+  signal?.throwIfAborted()
   const milliseconds = Math.min(remainingMilliseconds(deadline, code), maximumMs ?? Number.MAX_SAFE_INTEGER)
   let timer: NodeJS.Timeout | undefined
-  let operation: Promise<T> | undefined
+  let onAbort: (() => void) | undefined
+  const interrupted = new Promise<never>((_resolve, reject) => {
+    if (signal !== undefined) {
+      onAbort = () => {
+        onTimeout?.()
+        reject(signal.reason)
+      }
+      signal.addEventListener("abort", onAbort, { once: true })
+    }
+  })
   try {
-    operation = start()
+    signal?.throwIfAborted()
     return await Promise.race([
-      operation,
+      start(),
+      interrupted,
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
           onTimeout?.()
@@ -62,17 +95,29 @@ async function startWithin<T>(deadline: number, code: string, start: () => Promi
     ])
   } finally {
     if (timer !== undefined) clearTimeout(timer)
+    if (onAbort !== undefined) signal?.removeEventListener("abort", onAbort)
   }
 }
 
-async function acquireClient(database: PostgresBffDatabase, deadline: number): Promise<PoolClient> {
-  const acquisition: { promise: Promise<PoolClient> | null } = { promise: null }
+async function acquireClient(database: PostgresBffDatabase, deadline: number, signal?: AbortSignal): Promise<PoolClient> {
+  const acquisition: { promise: Promise<PoolClient> | null } = {
+    promise: null,
+  }
   try {
-    return await startWithin(deadline, "CHAT_TURN_POOL_TIMEOUT", () => {
-      acquisition.promise = database.pool.connect()
-      return acquisition.promise
-    })
+    return await startWithin(
+      deadline,
+      "CHAT_TURN_POOL_TIMEOUT",
+      () => {
+        acquisition.promise = database.pool.connect()
+        return acquisition.promise
+      },
+      undefined,
+      undefined,
+      signal,
+    )
   } catch (error) {
+    // pg-pool does not expose cancellation of an individual queued checkout.
+    // Retire this waiter; release any clean late lease without starting SQL.
     if (acquisition.promise !== null) {
       void acquisition.promise.then(
         (lateClient) => lateClient.release(),
@@ -83,16 +128,32 @@ async function acquireClient(database: PostgresBffDatabase, deadline: number): P
   }
 }
 
+export { acquireClient as acquireChatClient, startWithin as startWithinChatDeadline }
+
 /** The pre-resolution read shares Chat's bounded checkout and late-client cleanup. */
 export async function prepareChatTurnSelection(database: PostgresBffDatabase, input: ChatTurnSelectionInput): Promise<ChatTurnSelection | null> {
-  const deadline = performance.now() + CHAT_TURN_TOTAL_BUDGET_MS
-  const client = await acquireClient(database, deadline)
+  const deadline = Math.min(performance.now() + CHAT_TURN_TOTAL_BUDGET_MS, input.lifetime?.deadlineAt ?? Infinity)
+  input.lifetime?.signal.throwIfAborted()
+  const client = await acquireClient(database, deadline, input.lifetime?.signal)
   let destroyClient = false
+  let leaseReleased = false
+  const onCallerAbort = (): void => {
+    destroyClient = true
+    if (!leaseReleased) {
+      leaseReleased = true
+      client.release(true)
+    }
+  }
   const onError = () => {
     destroyClient = true
   }
   client.on("error", onError)
+  input.lifetime?.signal.addEventListener("abort", onCallerAbort, {
+    once: true,
+  })
+  if (input.lifetime?.signal.aborted) onCallerAbort()
   try {
+    input.lifetime?.signal.throwIfAborted()
     type SelectionRow = {
       missing_project: boolean
       project_id: string | null
@@ -126,9 +187,9 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
         input.conversationId,
         input.idempotencyKey,
         input.projectRef ?? null,
-        isClientCreatedConversationId(input.conversationId),
+        input.interruptRunId === undefined && isClientCreatedConversationId(input.conversationId),
       ],
-      query_timeout: 4500,
+      query_timeout: remainingMilliseconds(deadline),
     }
     const result = await startWithin(
       deadline,
@@ -137,22 +198,34 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
       () => {
         destroyClient = true
       },
+      undefined,
+      input.lifetime?.signal,
     )
+    input.lifetime?.signal.throwIfAborted()
+    remainingMilliseconds(deadline)
     const row = result.rows[0]
     if (!row) return null
     if (row.missing_project) throw new Error("CHAT_TURN_PROJECT_NOT_FOUND")
     if (row.request_digest !== null) {
       if (row.request_digest !== input.requestDigest) throw new Error("CHAT_TURN_IDEMPOTENCY_CONFLICT")
       if (!row.run_id || !row.user_message_id || !row.assistant_message_id) throw new Error("AGENT_DISPATCH_LINEAGE_MISMATCH")
-      return { kind: "replay", receipt: { run_id: row.run_id, user_message_id: row.user_message_id, assistant_message_id: row.assistant_message_id } }
+      return {
+        kind: "replay",
+        receipt: {
+          run_id: row.run_id,
+          user_message_id: row.user_message_id,
+          assistant_message_id: row.assistant_message_id,
+        },
+      }
     }
     const ids = parseProjectSkillSelection(row.installation_ids)
     if (ids === null) throw new Error("CHAT_SKILL_SELECTION_INVALID")
     return { kind: "new", projectId: row.project_id, installationIds: ids }
   } finally {
     try {
-      client.release(destroyClient)
+      if (!leaseReleased) client.release(destroyClient)
     } finally {
+      input.lifetime?.signal.removeEventListener("abort", onCallerAbort)
       client.removeListener("error", onError)
     }
   }
@@ -168,13 +241,14 @@ async function resolveActiveProject(query: DeadlineQuery, tenantId: string, subj
   return result.rows[0]?.project_id ?? null
 }
 
-async function lockChatScope(query: DeadlineQuery, command: CommitChatTurn): Promise<LockedChatScope> {
+export async function lockChatScope(query: DeadlineQuery, command: ChatScopeInput, existingOnly: boolean): Promise<LockedChatScope> {
   const preRead = await query<{ project_ref: string | null }>(
     `SELECT project_ref FROM bff_conversation
       WHERE tenant_id=$1 AND conversation_id=$2 AND owner_id=$3 AND status='active'`,
     [command.tenantId, command.conversationId, command.subjectId],
   )
   const preReadRow = preRead.rows[0]
+  if (preReadRow === undefined && existingOnly) return { kind: "not_found" }
   const callerProjectId =
     command.projectRef === undefined ? undefined : await resolveActiveProject(query, command.tenantId, command.subjectId, command.projectRef)
 
@@ -209,7 +283,11 @@ async function lockChatScope(query: DeadlineQuery, command: CommitChatTurn): Pro
         FOR UPDATE`,
       [command.tenantId, command.conversationId, command.subjectId],
     )
-    return { kind: "locked", canonicalProjectId: callerProjectId ?? null, callerProjectId }
+    return {
+      kind: "locked",
+      canonicalProjectId: callerProjectId ?? null,
+      callerProjectId,
+    }
   }
 
   const canonicalProjectId =
@@ -242,7 +320,8 @@ export async function commitChatTurn(
   command: CommitChatTurn,
   projectQueuedHead: QueuedHeadProjector,
 ): Promise<AgentDispatchReceipt | null> {
-  const deadline = performance.now() + CHAT_TURN_TOTAL_BUDGET_MS
+  const deadline = Math.min(performance.now() + CHAT_TURN_TOTAL_BUDGET_MS, command.lifetime?.deadlineAt ?? Infinity)
+  command.lifetime?.signal.throwIfAborted()
   for (const value of [
     command.outboxId,
     command.tenantId,
@@ -259,6 +338,9 @@ export async function commitChatTurn(
   ])
     requiredIdentity(value)
   if (!/^[0-9a-f]{64}$/u.test(command.requestDigest)) throw new Error("CHAT_TURN_DIGEST_INVALID")
+  if (command.interruptRunId !== undefined && (!isInterruptRunId(command.interruptRunId) || command.regeneration !== undefined)) {
+    throw new Error("CHAT_TURN_INPUT_INVALID")
+  }
   const callerPayload = parseAgentDispatchPayload(command.payload)
   if (
     callerPayload.launch.request_id !== command.requestId ||
@@ -269,21 +351,39 @@ export async function commitChatTurn(
   )
     throw new Error("AGENT_DISPATCH_LINEAGE_MISMATCH")
 
-  const client = await acquireClient(database, deadline)
+  const client = await acquireClient(database, deadline, command.lifetime?.signal)
   let transactionOpen = false
   let destroyClient = false
+  let leaseReleased = false
+  const onCallerAbort = () => {
+    destroyClient = true
+    if (!leaseReleased) {
+      leaseReleased = true
+      client.release(true)
+    }
+  }
   const onLeaseClientError = (): void => {
     destroyClient = true
   }
   client.on("error", onLeaseClientError)
+  command.lifetime?.signal.addEventListener("abort", onCallerAbort, {
+    once: true,
+  })
+  if (command.lifetime?.signal.aborted) onCallerAbort()
   async function query<Row extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>> {
     return startWithin(
       deadline,
       "CHAT_TURN_BUDGET_EXHAUSTED",
-      () => client.query<Row>(text, values),
+      () => {
+        command.lifetime?.signal.throwIfAborted()
+        if (destroyClient) throw Error("CHAT_TURN_RETIRED")
+        return client.query<Row>(text, values)
+      },
       () => {
         destroyClient = true
       },
+      undefined,
+      command.lifetime?.signal,
     )
   }
   async function rollback(): Promise<void> {
@@ -310,12 +410,15 @@ export async function commitChatTurn(
         deadline,
         "CHAT_TURN_BUDGET_EXHAUSTED",
         () => {
+          command.lifetime?.signal.throwIfAborted()
           commitDispatched = true
           return client.query("COMMIT").then(() => undefined)
         },
         () => {
           destroyClient = true
         },
+        undefined,
+        command.lifetime?.signal,
       )
       transactionOpen = false
     } catch (error) {
@@ -334,7 +437,7 @@ export async function commitChatTurn(
         `${Math.min(CHAT_TURN_LOCK_BUDGET_MS, remaining)}ms`,
         `${remaining}ms`,
       ])
-      const scope = await lockChatScope(query, command)
+      const scope = await lockChatScope(query, command, command.interruptRunId !== undefined)
       if (scope.kind === "retry") {
         await rollback()
         continue
@@ -365,28 +468,196 @@ export async function commitChatTurn(
           assistant_message_id: existingRow.assistant_message_id,
         }
       }
-      if (command.skillSelection !== undefined) {
-        if (command.skillSelection.projectId !== scope.canonicalProjectId) throw new Error("CHAT_SKILL_SELECTION_CHANGED")
-        const defaults =
-          scope.canonicalProjectId === null
-            ? []
-            : (
-                await query<{ selected_skill_installation_ids: string[] }>(
-                  `SELECT selected_skill_installation_ids FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
-                  [command.tenantId, command.subjectId, scope.canonicalProjectId],
-                )
-              ).rows[0]?.selected_skill_installation_ids
-        if (JSON.stringify(defaults) !== JSON.stringify(command.skillSelection.installationIds)) throw new Error("CHAT_SKILL_SELECTION_CHANGED")
+      if (command.regeneration !== undefined) {
+        const original = await regenerationSourceInTransaction(
+          { query },
+          {
+            tenantId: command.tenantId,
+            subjectId: command.subjectId,
+            conversationId: command.conversationId,
+            sourceMessageId: command.regeneration.sourceMessageId,
+          },
+        )
+        if (original === null) {
+          await rollback()
+          return null
+        }
+        if (
+          original.sourceRunId !== command.regeneration.sourceRunId ||
+          original.originalUserMessageId !== command.regeneration.originalUserMessageId ||
+          original.sourceFingerprint !== command.regeneration.sourceFingerprint ||
+          original.content !== command.content
+        )
+          throw Error("MESSAGE_REGENERATION_SOURCE_CHANGED")
+        if (JSON.stringify(callerPayload.launch.selected_resource_refs ?? []) !== JSON.stringify(original.payload.launch.selected_resource_refs ?? []))
+          throw new Error("MESSAGE_REGENERATION_SOURCE_CHANGED")
+        const latest = await query<{ message_id: string }>(
+          `SELECT message_id FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant' ORDER BY message_seq DESC,message_id DESC LIMIT 1`,
+          [command.tenantId, command.conversationId],
+        )
+        const active = await query(
+          `SELECT run_id FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted') LIMIT 1`,
+          [command.tenantId, command.conversationId],
+        )
+        if (latest.rows[0]?.message_id !== command.regeneration.sourceMessageId || active.rows.length > 0) throw Error("MESSAGE_REGENERATION_NOT_READY")
       }
       if (command.projectRef !== undefined && (scope.callerProjectId === null || scope.callerProjectId !== scope.canonicalProjectId)) {
         await rollback()
         return null
       }
-      const payload = bindAgentDispatchPayloadProjectScope(callerPayload, scope.canonicalProjectId)
+      // Project is already locked in this transaction. Replays above never read a new revision.
+      const project =
+        scope.canonicalProjectId === null
+          ? null
+          : (
+              await query<{
+                instruction: string | null
+                selected_skill_installation_ids: string[]
+              }>(
+                `SELECT instruction, selected_skill_installation_ids
+                 FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
+                [command.tenantId, command.subjectId, scope.canonicalProjectId],
+              )
+            ).rows[0]
+      if (project === undefined) throw new Error("CHAT_TURN_PROJECT_NOT_FOUND")
+      if (command.skillSelection !== undefined) {
+        if (command.skillSelection.projectId !== scope.canonicalProjectId) throw new Error("CHAT_SKILL_SELECTION_CHANGED")
+        if (JSON.stringify(project?.selected_skill_installation_ids ?? []) !== JSON.stringify(command.skillSelection.installationIds))
+          throw new Error("CHAT_SKILL_SELECTION_CHANGED")
+      }
+      const frozen = callerPayload.launch.selected_resource_refs ?? []
+      const requested =
+        command.regeneration === undefined
+          ? parseResourceReferenceSelection(command.resourceSelection?.refs ?? [])
+          : frozen.map(({ kind, resource_id }) => ({ kind, resource_id }))
+      if (requested === null || (command.resourceSelection !== undefined && command.resourceSelection.projectId !== scope.canonicalProjectId))
+        throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
+      const resources: CanonicalResourceRef[] = []
+      let frozenIndex = 0
+      for (const intent of requested) {
+        if (intent.kind === "final_answer") {
+          if (command.scheduledActivation !== undefined) throw new Error("CHAT_RESOURCE_SELECTION_INVALID")
+          const answer = await selectedFinalAnswerInTransaction(
+            { query },
+            { tenantId: command.tenantId, subjectId: command.subjectId, messageId: intent.resource_id, projectId: scope.canonicalProjectId },
+          )
+          if (answer === null) throw new Error(command.regeneration === undefined ? "CHAT_RESOURCE_SELECTION_INVALID" : "CHAT_RESOURCE_SELECTION_CHANGED")
+          const final: CanonicalFinalAnswerRef = {
+            kind: "final_answer",
+            resource_id: answer.messageId,
+            source_scope: { kind: "conversation", id: answer.conversationId },
+            source_run_id: answer.runId,
+            source_final_segment_id: answer.finalSegmentId,
+            source_revision: answer.revision,
+            content: answer.content,
+            content_sha256: answer.contentSha256,
+            size_bytes: answer.sizeBytes,
+          }
+          if (command.regeneration !== undefined && JSON.stringify(frozen[frozenIndex++]) !== JSON.stringify(final))
+            throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
+          resources.push(final)
+          continue
+        }
+        const resource = frozen[frozenIndex++]
+        if (resource?.kind !== intent.kind || resource.resource_id !== intent.resource_id) throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
+        const source = resource.source_scope
+        if (resource.kind === "asset") {
+          if ((source.kind === "personal" && source.id !== command.subjectId) || (source.kind === "project" && source.id !== scope.canonicalProjectId))
+            throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
+        } else {
+          const association = await selectedArtifactInTransaction(
+            { query },
+            {
+              tenantId: command.tenantId,
+              subjectId: command.subjectId,
+              artifactId: resource.resource_id,
+              projectId: scope.canonicalProjectId,
+            },
+            true,
+          )
+          if (
+            association === null ||
+            association.conversationId !== source.id ||
+            association.runId !== resource.source_run_id ||
+            association.sourceAssetId !== resource.asset_id ||
+            association.sourceContentSha256 !== resource.content_sha256
+          )
+            throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
+        }
+        resources.push(resource)
+      }
+      if (frozenIndex !== frozen.length) throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
+      const canonical = parseCanonicalResourceReferences(resources)
+      if (canonical === null) throw new Error("CHAT_RESOURCE_SELECTION_INVALID")
+      const payload = bindAgentDispatchPayloadProjectScope(
+        canonical.length ? { ...callerPayload, launch: { ...callerPayload.launch, selected_resource_refs: canonical } } : callerPayload,
+        scope.canonicalProjectId,
+        project?.instruction ?? null,
+      )
+      // Agent HTTP accepts at most 1 MiB; reject before any outbox/interrupt effects.
+      if (Buffer.byteLength(JSON.stringify(payload.launch)) > 1024 * 1024) throw new Error("request_body_too_large")
       const registration = agUiConsumerRegistration(command.tenantId, command.conversationId, command.subjectId, undefined)
       const registered = await query(registration.text, registration.values)
       if (registered.rowCount !== 1) throw new Error("AGENT_DISPATCH_CONSUMER_REGISTRATION_FAILED")
       await query("SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE", [command.tenantId, command.conversationId])
+      if (command.scheduledActivation !== undefined) {
+        const activation = command.scheduledActivation
+        if (activation.tenantId !== command.tenantId || activation.runId !== command.runId) throw new Error("SCHEDULED_ACTIVATION_LOST")
+        // Parent Project / Conversation / stream are locked before the scheduled gate.
+        await query("SELECT 1 FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE", [activation.tenantId, activation.taskId])
+        const active = await query(
+          `SELECT 1 FROM bff_scheduled_agent_dispatch dispatch,bff_scheduled_agent_scope scope
+            WHERE dispatch.tenant_id=$1 AND dispatch.task_id=$2 AND dispatch.dispatch_id=$3 AND dispatch.run_id=$4
+              AND dispatch.lease_owner=$5 AND dispatch.lease_token=$6 AND dispatch.fence=$7
+              AND dispatch.status='leased' AND dispatch.lease_until>clock_timestamp()
+              AND dispatch.subject_id=$8 AND dispatch.idempotency_key=$9 AND dispatch.request_digest=$10
+              AND dispatch.user_message_id=$11 AND dispatch.assistant_message_id=$12
+              AND scope.tenant_id=dispatch.tenant_id AND scope.task_id=dispatch.task_id
+              AND scope.session_id=$13 AND scope.subject_id=$8
+              AND scope.active_dispatch_id=dispatch.dispatch_id AND scope.active_run_id=dispatch.run_id
+            FOR UPDATE OF dispatch`,
+          [
+            activation.tenantId,
+            activation.taskId,
+            activation.dispatchId,
+            activation.runId,
+            activation.leaseOwner,
+            activation.leaseToken,
+            activation.fence,
+            command.subjectId,
+            command.idempotencyKey,
+            command.requestDigest,
+            command.userMessageId,
+            command.assistantMessageId,
+            command.conversationId,
+          ],
+        )
+        if (active.rowCount !== 1) throw new Error("SCHEDULED_ACTIVATION_LOST")
+      }
+      if (command.interruptRunId !== undefined) {
+        // The stream lock fences owner terminal/head changes; the unique cancellation
+        // record also excludes a different command from claiming the same Run.
+        const cancellation = await query(
+          `WITH head AS (
+             SELECT outbox_id,tenant_id,conversation_id,conversation_dispatch_seq,run_id,subject_id,identity_assertion_ref
+               FROM bff_agent_dispatch_outbox
+              WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted')
+              ORDER BY conversation_dispatch_seq,outbox_id LIMIT 1
+           )
+           INSERT INTO bff_agent_cancellation_outbox
+             (cancellation_id,tenant_id,conversation_id,conversation_dispatch_seq,run_id,subject_id,actor_id,
+              request_id,command_id,identity_assertion_ref,payload,status,attempt_count,available_at,fence)
+           SELECT 'cancel_'||head.outbox_id,head.tenant_id,head.conversation_id,head.conversation_dispatch_seq,
+                  head.run_id,head.subject_id,$5,$6,'cancel_'||head.outbox_id,head.identity_assertion_ref,
+                  jsonb_build_object('kind','run.cancel','session_id',head.conversation_id),'cancel_requested',0,CURRENT_TIMESTAMP(3),0
+             FROM head JOIN bff_agui_stream stream ON stream.tenant_id=head.tenant_id AND stream.session_id=head.conversation_id
+            WHERE head.subject_id=$3 AND stream.consumer_subject_id=$3 AND head.run_id=$4
+              AND stream.expected_run_id=$4 AND stream.latest_run_id=$4 AND stream.terminal_run_id IS DISTINCT FROM $4
+           ON CONFLICT (tenant_id,run_id) DO NOTHING`,
+          [command.tenantId, command.conversationId, command.subjectId, command.interruptRunId, command.actorId, command.requestId],
+        )
+        if (cancellation.rowCount !== 1) throw new Error("CHAT_INTERRUPT_TARGET_NOT_CURRENT")
+      }
 
       const sequence = await query<{ next_seq: string | number }>(
         `SELECT COALESCE(MAX(message_seq),0)+1 AS next_seq FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2`,
@@ -420,8 +691,10 @@ export async function commitChatTurn(
       )
       if (outbox.rowCount !== 1) throw new Error("AGENT_DISPATCH_INSERT_FAILED")
       const inserted = await query(
-        `INSERT INTO bff_message (message_id,tenant_id,conversation_id,run_id,role,content,status,message_seq,selected_skill_source_refs)
-         VALUES ($1,$2,$3,$4,'user',$5,'completed',$6::bigint,$8::jsonb),($7,$2,$3,$4,'assistant','','pending',$6::bigint+1,'[]'::jsonb)`,
+        `INSERT INTO bff_message (message_id,tenant_id,conversation_id,run_id,role,content,status,message_seq,selected_skill_source_refs,
+            ordered_parts,parts_format_version,parts_public_sequence,origin,regenerated_from_message_id,regeneration_user_message_id)
+         VALUES ($1,$2,$3,$4,'user',$5,'completed',$6::bigint,$8::jsonb,NULL,NULL,NULL,CASE WHEN $9::boolean THEN 'regeneration_input' ELSE 'normal' END,$10,$11),
+                ($7,$2,$3,$4,'assistant','','pending',$6::bigint+1,'[]'::jsonb,'[]'::jsonb,1,0,CASE WHEN $9::boolean THEN 'regeneration_answer' ELSE 'normal' END,$10,$11)`,
         [
           command.userMessageId,
           command.tenantId,
@@ -431,9 +704,23 @@ export async function commitChatTurn(
           nextSequence,
           command.assistantMessageId,
           JSON.stringify(payload.launch.selected_skill_source_refs),
+          command.regeneration !== undefined,
+          command.regeneration?.sourceMessageId ?? null,
+          command.regeneration?.originalUserMessageId ?? null,
         ],
       )
       if (inserted.rowCount !== 2) throw new Error("CHAT_MESSAGE_INSERT_FAILED")
+      if (command.scheduledActivation !== undefined) {
+        const activation = command.scheduledActivation
+        const submitted = await query(
+          `UPDATE bff_scheduled_agent_dispatch SET status='submitted',lease_owner=NULL,lease_token=NULL,lease_until=NULL,
+              last_error_code=NULL,last_error_at=NULL,updated_at=clock_timestamp()
+            WHERE tenant_id=$1 AND task_id=$2 AND dispatch_id=$3 AND run_id=$4
+              AND status='leased' AND lease_owner=$5 AND lease_token=$6 AND fence=$7 AND lease_until>clock_timestamp()`,
+          [activation.tenantId, activation.taskId, activation.dispatchId, activation.runId, activation.leaseOwner, activation.leaseToken, activation.fence],
+        )
+        if (submitted.rowCount !== 1) throw new Error("SCHEDULED_ACTIVATION_LOST")
+      }
       const queuedCursor = await startWithin(
         deadline,
         "CHAT_TURN_BUDGET_EXHAUSTED",
@@ -441,6 +728,8 @@ export async function commitChatTurn(
         () => {
           destroyClient = true
         },
+        undefined,
+        command.lifetime?.signal,
       )
       await query("UPDATE bff_conversation SET updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND conversation_id=$2", [
         command.tenantId,
@@ -456,7 +745,11 @@ export async function commitChatTurn(
           AGUI_NOTIFICATION_DEADLINE_MS,
         ).catch(() => undefined)
       }
-      return { run_id: command.runId, user_message_id: command.userMessageId, assistant_message_id: command.assistantMessageId }
+      return {
+        run_id: command.runId,
+        user_message_id: command.userMessageId,
+        assistant_message_id: command.assistantMessageId,
+      }
     }
     throw new Error("CHAT_TURN_SCOPE_CHANGED")
   } catch (error) {
@@ -470,8 +763,9 @@ export async function commitChatTurn(
     throw error
   } finally {
     try {
-      client.release(destroyClient)
+      if (!leaseReleased) client.release(destroyClient)
     } finally {
+      command.lifetime?.signal.removeEventListener("abort", onCallerAbort)
       client.removeListener("error", onLeaseClientError)
     }
   }

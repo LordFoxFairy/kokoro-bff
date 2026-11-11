@@ -1,24 +1,18 @@
 import assert from "node:assert/strict"
-import { createHash } from "node:crypto"
+import { EventEmitter } from "node:events"
 import { describe, it } from "node:test"
 
 import { AgentDispatchOutboxDispatcher } from "../dist/application/agent-dispatch-outbox-dispatcher.js"
 import { ChatTurnApplicationService } from "../dist/application/chat-turn-service.js"
 import { classifyAgentDispatchAttempt } from "../dist/infrastructure/clients/agent/outbox-delivery.js"
-import type { AgentDispatchDeliveryPort } from "../dist/application/ports/agent-dispatch-delivery.js"
+import type { AgentDispatchDeliveryPort } from "../dist/application/agent-dispatch/agent-dispatch-delivery.js"
 import type {
   AgentDispatchOutboxClaimInput,
   AgentDispatchOutboxRepository,
   CommitChatTurn,
-} from "../dist/application/ports/agent-dispatch-outbox-repository.js"
-import type { StableIdGenerator } from "../dist/application/ports/stable-id-generator.js"
+} from "../dist/application/agent-dispatch/agent-dispatch-outbox-repository.js"
+import { Sha256StableIdGenerator } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
 import type { AgentDispatchCommand, AgentDispatchLease, AgentDispatchReceipt } from "../dist/domain/chat/agent-dispatch.js"
-
-class Sha256TestIdGenerator implements StableIdGenerator {
-  public generate(material: string): string {
-    return createHash("sha256").update(material).digest("hex")
-  }
-}
 
 class RecordingRepository implements AgentDispatchOutboxRepository {
   public readonly commits: CommitChatTurn[] = []
@@ -29,7 +23,7 @@ class RecordingRepository implements AgentDispatchOutboxRepository {
   public unknown: Array<{ lease: AgentDispatchLease; delayMs: number; errorCode: string }> = []
   public notAdmitted: Array<{ lease: AgentDispatchLease; errorCode: string }> = []
 
-  public async prepareChatTurnSelection(_input): Promise<import("../dist/application/ports/agent-dispatch-outbox-repository.js").ChatTurnSelection> {
+  public async prepareChatTurnSelection(_input): Promise<import("../dist/application/agent-dispatch/agent-dispatch-outbox-repository.js").ChatTurnSelection> {
     return { kind: "new", projectId: null, installationIds: [] }
   }
 
@@ -109,7 +103,7 @@ function command(attemptCount = 1, suffix = "fixture", leaseRemainingMs = 30_000
 describe("durable Chat turn admission", () => {
   it("derives stable execution identities separately from the request digest", async () => {
     const repository = new RecordingRepository()
-    const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+    const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
     const input = {
       tenantId: "tenant_fixture",
       conversationId: "conversation_fixture",
@@ -141,7 +135,7 @@ it("inherits exact project defaults only for omitted selection and freezes the o
     preparations.push(input)
     return { kind: "new", projectId: "project_fixture", installationIds: ["installation_a"] }
   }
-  const service = new ChatTurnApplicationService(repository, new Sha256TestIdGenerator())
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
   const input = {
     tenantId: "tenant_fixture",
     conversationId: "conversation_fixture",
@@ -161,7 +155,7 @@ it("inherits exact project defaults only for omitted selection and freezes the o
   await service.submit(input, resolver)
   await service.submit({ ...input, selectedSkillSourceRefs: [] }, resolver)
   assert.equal(resolved, 1)
-  assert.equal(preparations.length, 1)
+  assert.equal(preparations.length, 2)
   assert.deepEqual(repository.commits[0].payload.launch.selected_skill_source_refs, ["skill:version_a"])
   assert.deepEqual(repository.commits[0].skillSelection, { projectId: "project_fixture", installationIds: ["installation_a"] })
   assert.deepEqual(repository.commits[1].payload.launch.selected_skill_source_refs, [])
@@ -344,8 +338,8 @@ describe("Agent dispatch HTTP classification", () => {
 })
 
 it("freezes ordered Skill selection in v3 payload and digest, rejecting old durable payloads", async () => {
-  const { bindAgentDispatchPayloadProjectScope, buildAgentDispatchPayload, parseAgentDispatchPayload, agentDispatchRequestMaterial } =
-    await import("../dist/domain/chat/agent-dispatch.js")
+  const { agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { bindAgentDispatchPayloadProjectScope, buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/application/chat/agent-dispatch-payload.js")
   const input = {
     tenantId: "tenant",
     conversationId: "conversation",
@@ -360,13 +354,13 @@ it("freezes ordered Skill selection in v3 payload and digest, rejecting old dura
   assert.equal(empty.schema_version, 3)
   assert.deepEqual(empty.launch.selected_skill_source_refs, [])
   assert.equal(empty.launch.project_ref, null)
-  assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical").launch.project_ref, "project-canonical")
+  assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical", null).launch.project_ref, "project-canonical")
   assert.notEqual(agentDispatchRequestMaterial(input), agentDispatchRequestMaterial({ ...input, selectedSkillSourceRefs: [] }))
-  assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical").launch.trace.project_ref, "project-canonical")
+  assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical", null).launch.trace.project_ref, "project-canonical")
   assert.equal(
     Object.hasOwn(
-      bindAgentDispatchPayloadProjectScope({ ...empty, launch: { ...empty.launch, trace: { ...empty.launch.trace, project_ref: "caller-slug" } } }, null).launch
-        .trace,
+      bindAgentDispatchPayloadProjectScope({ ...empty, launch: { ...empty.launch, trace: { ...empty.launch.trace, project_ref: "caller-slug" } } }, null, null)
+        .launch.trace,
       "project_ref",
     ),
     false,
@@ -383,4 +377,603 @@ it("freezes ordered Skill selection in v3 payload and digest, rejecting old dura
     () => parseAgentDispatchPayload({ ...payload, launch: { ...payload.launch, trace: { source: "kokoro-bff", pinned_skills: [] } } }),
     /PAYLOAD_INVALID/,
   )
+})
+
+it("freezes exact MCP choice in launch rather than trace; empty choice retains the old digest", async () => {
+  const { agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/application/chat/agent-dispatch-payload.js")
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conversation",
+    subjectId: "subject",
+    actorId: "actor",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+  }
+  const legacy = JSON.stringify(["tenant", "conversation", null, "subject", "actor", "hello", null, null, null, null, null])
+  assert.equal(agentDispatchRequestMaterial(input), legacy)
+  assert.equal(agentDispatchRequestMaterial({ ...input, selectedMcpConnectionIds: [] }), legacy)
+  const ids = ["connection-b", "connection-a"]
+  const selected = { ...input, selectedMcpConnectionIds: ids }
+  const material = agentDispatchRequestMaterial(selected)
+  assert.notEqual(material, legacy)
+  assert.notEqual(
+    material,
+    JSON.stringify(["tenant", "conversation", null, "subject", "actor", "hello", null, null, null, null, ids]),
+    "old trace-only intent must not share new execution digest",
+  )
+  assert.notEqual(material, agentDispatchRequestMaterial({ ...selected, selectedMcpConnectionIds: [...ids].reverse() }))
+  const payload = buildAgentDispatchPayload(selected, { runId: "run", userMessageId: "message" })
+  ids.push("later-mutated-menu")
+  assert.deepEqual(payload.launch.selected_mcp_connection_ids, ["connection-b", "connection-a"])
+  assert.deepEqual(payload.launch.trace, { source: "kokoro-bff" })
+  assert.deepEqual(parseAgentDispatchPayload(JSON.parse(JSON.stringify(payload))), payload)
+  const historical = buildAgentDispatchPayload(input, { runId: "old-run", userMessageId: "old-message" })
+  historical.launch.trace.mcp_servers = ["historical-diagnostic"]
+  const parsedOld = parseAgentDispatchPayload(historical)
+  assert.deepEqual(parsedOld.launch.trace.mcp_servers, ["historical-diagnostic"])
+  assert.equal(parsedOld.launch.selected_mcp_connection_ids, undefined)
+  for (const invalid of [["x", "x"], ["x\n"], [true], null]) {
+    assert.throws(
+      () => parseAgentDispatchPayload({ ...payload, launch: { ...payload.launch, selected_mcp_connection_ids: invalid } }),
+      /AGENT_DISPATCH_PAYLOAD_INVALID/,
+    )
+  }
+})
+
+it("retains the original selected MCP IDs across a retry after unknown Agent admission", async () => {
+  const repository = new RecordingRepository()
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
+  const ids = ["connection-1"]
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conversation",
+    subjectId: "subject",
+    actorId: "actor",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+    selectedMcpConnectionIds: ids,
+    selectedCustomApiProfiles: [{ profile_id: "api-one", expected_state_version: 3 }],
+  }
+  await service.submit(input)
+  const saved = command(1)
+  saved.payload = repository.commits[0].payload
+  saved.executionProjectRef = null
+  const requests: string[] = []
+  const delivery: AgentDispatchDeliveryPort = {
+    async deliver(current) {
+      requests.push(JSON.stringify(current.payload.launch))
+      return requests.length === 1 ? { outcome: "unknown", errorCode: "transport_unknown" } : { outcome: "admitted" }
+    },
+  }
+  const dispatcher = new AgentDispatchOutboxDispatcher(repository, delivery, { workerId: "worker_fixture", maxClaimsPerTick: 1 })
+  repository.claims = [saved]
+  await dispatcher.runOnce()
+  assert.equal(repository.unknown.length, 1)
+  ids[0] = "connection-2"
+  input.selectedCustomApiProfiles[0].expected_state_version = 4
+  repository.claims = [{ ...saved, attemptCount: 2 }]
+  await dispatcher.runOnce()
+  assert.equal(repository.admitted.length, 1)
+  assert.equal(requests[0], requests[1])
+  assert.deepEqual(JSON.parse(requests[1]).selected_mcp_connection_ids, ["connection-1"])
+  assert.deepEqual(JSON.parse(requests[1]).selected_custom_api_profiles, [{ profile_id: "api-one", expected_state_version: 3 }])
+})
+
+it("snapshots MCP intent before awaiting project Skill defaults so the digest and payload cannot diverge", async () => {
+  const repository = new RecordingRepository()
+  let entered
+  let resume
+  const preparing = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const blocked = new Promise<void>((resolve) => {
+    resume = resolve
+  })
+  repository.prepareChatTurnSelection = async () => {
+    entered()
+    await blocked
+    return { kind: "new", projectId: null, installationIds: [] }
+  }
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conversation",
+    subjectId: "subject",
+    actorId: "actor",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+    selectedMcpConnectionIds: ["connection-1"],
+  }
+  const submitting = service.submit(input)
+  await preparing
+  input.selectedMcpConnectionIds[0] = "connection-2"
+  resume()
+  await submitting
+  assert.deepEqual(repository.commits[0].payload.launch.selected_mcp_connection_ids, ["connection-1"])
+})
+
+it("freezes Custom API profile versions with stable legacy empty digest and rejects malformed durable references", async () => {
+  const { agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/application/chat/agent-dispatch-payload.js")
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conversation",
+    subjectId: "subject",
+    actorId: "actor",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+  }
+  const ids = { runId: "run", userMessageId: "message" }
+  assert.equal(agentDispatchRequestMaterial({ ...input, selectedCustomApiProfiles: [] }), agentDispatchRequestMaterial(input))
+  assert.deepEqual(buildAgentDispatchPayload({ ...input, selectedCustomApiProfiles: [] }, ids), buildAgentDispatchPayload(input, ids))
+  const profiles = [{ profile_id: "profile-a", expected_state_version: 3 }]
+  const selected = { ...input, selectedCustomApiProfiles: profiles }
+  const digest = agentDispatchRequestMaterial(selected)
+  const payload = buildAgentDispatchPayload(selected, ids)
+  profiles[0].expected_state_version = 4
+  assert.notEqual(agentDispatchRequestMaterial(selected), digest)
+  assert.deepEqual(payload.launch.selected_custom_api_profiles, [{ profile_id: "profile-a", expected_state_version: 3 }])
+  assert.deepEqual(parseAgentDispatchPayload(JSON.parse(JSON.stringify(payload))), payload)
+  for (const invalid of [
+    null,
+    ["profile-a"],
+    [{ profile_id: "p", expected_state_version: 0 }],
+    [{ profile_id: "p", expected_state_version: 1, secret: "value" }],
+  ])
+    assert.throws(() => parseAgentDispatchPayload({ ...payload, launch: { ...payload.launch, selected_custom_api_profiles: invalid } }), /PAYLOAD_INVALID/)
+})
+
+it("snapshots Custom API objects before awaited defaults so mutation cannot split digest and durable payload", async () => {
+  const repository = new RecordingRepository()
+  let entered!: () => void, resume!: () => void
+  const preparing = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const blocked = new Promise<void>((resolve) => {
+    resume = resolve
+  })
+  repository.prepareChatTurnSelection = async () => {
+    entered()
+    await blocked
+    return { kind: "new", projectId: null, installationIds: [] }
+  }
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conversation",
+    subjectId: "subject",
+    actorId: "actor",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+    selectedCustomApiProfiles: [{ profile_id: "profile-a", expected_state_version: 3 }],
+  }
+  const submitting = service.submit(input)
+  await preparing
+  input.selectedCustomApiProfiles[0].expected_state_version = 4
+  input.selectedCustomApiProfiles.push({ profile_id: "profile-b", expected_state_version: 1 })
+  resume()
+  await submitting
+  assert.deepEqual(repository.commits[0].payload.launch.selected_custom_api_profiles, [{ profile_id: "profile-a", expected_state_version: 3 }])
+})
+
+it("one ChatTurn lifetime binds omitted-selection prepare, Skills resolver and canonical commit", async () => {
+  const repository = new RecordingRepository()
+  let prepared, resolved
+  repository.prepareChatTurnSelection = async (input) => {
+    prepared = input.lifetime
+    return { kind: "new", projectId: "project", installationIds: ["installation"] }
+  }
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
+  await service.submit(
+    { tenantId: "tenant", conversationId: "conv", subjectId: "subject", actorId: "subject", requestId: "request", idempotencyKey: "key", content: "hello" },
+    async (_project, _ids, lifetime) => {
+      resolved = lifetime
+      return ["skill:version"]
+    },
+  )
+  assert.ok(prepared, "prepare must receive the admission deadline and signal")
+  assert.equal(resolved?.deadlineAt, prepared.deadlineAt)
+  assert.equal(resolved?.signal, prepared.signal)
+  assert.equal(repository.commits[0].lifetime?.deadlineAt, prepared.deadlineAt)
+  assert.equal(repository.commits[0].lifetime?.signal, prepared.signal)
+})
+
+it("prepare queue abort retires the waiter and normally releases a late unused lease without SQL", async () => {
+  const { prepareChatTurnSelection } = await import("../dist/infrastructure/postgres/chat-turn-commit.js")
+  let deliver
+  const connected = new Promise((resolve) => {
+    deliver = resolve
+  })
+  const releases = [],
+    queries = []
+  const client = {
+    on() {},
+    removeListener() {},
+    release(value) {
+      releases.push(value)
+    },
+    async query(sql) {
+      queries.push(sql)
+      return { rows: [] }
+    },
+  }
+  const controller = new AbortController()
+  const pending = prepareChatTurnSelection({ pool: { connect: () => connected } } as never, {
+    tenantId: "tenant",
+    subjectId: "subject",
+    conversationId: "conv",
+    idempotencyKey: "key",
+    requestDigest: "a".repeat(64),
+    lifetime: { signal: controller.signal, deadlineAt: performance.now() + 1000 },
+  })
+  let retired = false
+  const outcome = pending.then(
+    () => {
+      retired = true
+    },
+    () => {
+      retired = true
+    },
+  )
+  controller.abort()
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 15))
+    assert.equal(retired, true, "caller abort must return without waiting for a PG pool slot")
+  } finally {
+    deliver(client)
+    await outcome
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(queries, [])
+  assert.deepEqual(releases, [undefined], "an unused clean late lease is not destroyed")
+})
+
+it("caller abort retires a suspended prepare or resolver without any late canonical commit", async () => {
+  for (const stage of ["prepare", "resolve"]) {
+    const repository = new RecordingRepository()
+    const controller = new AbortController()
+    let entered, release
+    const started = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    const blocked = new Promise((resolve) => {
+      release = resolve
+    })
+    repository.prepareChatTurnSelection = async () => {
+      if (stage === "prepare") {
+        entered()
+        await blocked
+        return { kind: "replay", receipt: { run_id: "late", user_message_id: "late-user", assistant_message_id: "late-assistant" } }
+      }
+      return { kind: "new", projectId: "project", installationIds: ["installation"] }
+    }
+    const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
+    const pending = service.submit(
+      { tenantId: "tenant", conversationId: "conv", subjectId: "subject", actorId: "subject", requestId: "request", idempotencyKey: "key", content: "hello" },
+      async (_project, _ids, lifetime) => {
+        assert.equal(lifetime.signal.aborted, false)
+        entered()
+        await blocked
+        return ["skill:version"]
+      },
+      { signal: controller.signal, deadlineAt: performance.now() + 1000 },
+    )
+    const rejected = assert.rejects(pending, /caller cancelled/)
+    try {
+      await started
+      controller.abort(new Error("caller cancelled"))
+      await rejected
+    } finally {
+      release()
+      await pending.catch(() => undefined)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.equal(repository.commits.length, 0)
+  }
+})
+
+it("resolver exhausts the original admission deadline and cannot restart a commit budget", async () => {
+  const repository = new RecordingRepository()
+  let release, resolvedLifetime
+  const blocked = new Promise((resolve) => {
+    release = resolve
+  })
+  repository.prepareChatTurnSelection = async () => ({ kind: "new", projectId: "project", installationIds: ["installation"] })
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
+  const deadlineAt = performance.now() + 80
+  const pending = service.submit(
+    { tenantId: "tenant", conversationId: "conv", subjectId: "subject", actorId: "subject", requestId: "request", idempotencyKey: "key", content: "hello" },
+    async (_project, _ids, lifetime) => {
+      resolvedLifetime = lifetime
+      await blocked
+      return ["skill:version"]
+    },
+    { signal: new AbortController().signal, deadlineAt },
+  )
+  try {
+    await assert.rejects(pending, /CHAT_TURN_BUDGET_EXHAUSTED/)
+    assert.equal(resolvedLifetime.deadlineAt, deadlineAt)
+    assert.equal(resolvedLifetime.signal.aborted, true)
+  } finally {
+    release()
+    await pending.catch(() => undefined)
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(repository.commits.length, 0)
+})
+
+it("canonical COMMIT unknown is never retried automatically and explicit recovery keeps the same key and digest", async () => {
+  const repository = new RecordingRepository()
+  let unknown = true
+  repository.commitChatTurn = async (command) => {
+    repository.commits.push(command)
+    if (unknown) throw new Error("CHAT_TURN_COMMIT_UNKNOWN")
+    return { run_id: command.runId, user_message_id: command.userMessageId, assistant_message_id: command.assistantMessageId }
+  }
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conv",
+    subjectId: "subject",
+    actorId: "subject",
+    requestId: "request",
+    idempotencyKey: "original-key",
+    content: "original body",
+    selectedSkillSourceRefs: [],
+  }
+  await assert.rejects(service.submit(input), /CHAT_TURN_COMMIT_UNKNOWN/)
+  assert.equal(repository.commits.length, 1)
+  unknown = false
+  await service.submit(input)
+  assert.equal(repository.commits.length, 2)
+  assert.equal(repository.commits[1].requestDigest, repository.commits[0].requestDigest)
+  assert.equal(repository.commits[1].idempotencyKey, "original-key")
+  assert.equal(repository.commits[1].runId, repository.commits[0].runId)
+})
+
+it("prepare checkout abort destroys exactly its controlled lease and discards a late SQL result", async () => {
+  const { prepareChatTurnSelection } = await import("../dist/infrastructure/postgres/chat-turn-commit.js")
+  let entered, finish
+  const started = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const answer = new Promise((resolve) => {
+    finish = resolve
+  })
+  const releases = []
+  const client = Object.assign(new EventEmitter(), {
+    async query() {
+      entered()
+      return answer
+    },
+    release(destroy) {
+      releases.push(destroy)
+    },
+  })
+  const controller = new AbortController()
+  const pending = prepareChatTurnSelection({ pool: { connect: async () => client } } as never, {
+    tenantId: "tenant",
+    subjectId: "subject",
+    conversationId: "conv",
+    idempotencyKey: "key",
+    requestDigest: "a".repeat(64),
+    lifetime: { signal: controller.signal, deadlineAt: performance.now() + 1000 },
+  })
+  const rejected = assert.rejects(pending, /caller cancelled/)
+  try {
+    await started
+    controller.abort(new Error("caller cancelled"))
+    await rejected
+  } finally {
+    finish({ rows: [] })
+    await pending.catch(() => undefined)
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(releases, [true])
+  assert.equal(client.listenerCount("error"), 0)
+})
+
+it("canonical owner COMMIT-unknown classification survives caller retirement without an outer race masking it", async () => {
+  const repository = new RecordingRepository()
+  const controller = new AbortController()
+  let entered
+  const started = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  repository.commitChatTurn = (command) =>
+    new Promise((_resolve, reject) => {
+      repository.commits.push(command)
+      command.lifetime.signal.addEventListener("abort", () => queueMicrotask(() => reject(new Error("CHAT_TURN_COMMIT_UNKNOWN"))), { once: true })
+      entered()
+    })
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator())
+  const pending = service.submit(
+    {
+      tenantId: "tenant",
+      conversationId: "conv",
+      subjectId: "subject",
+      actorId: "subject",
+      requestId: "request",
+      idempotencyKey: "key",
+      content: "hello",
+      selectedSkillSourceRefs: [],
+    },
+    undefined,
+    { signal: controller.signal, deadlineAt: performance.now() + 1000 },
+  )
+  const rejection = assert.rejects(pending, /CHAT_TURN_COMMIT_UNKNOWN/)
+  await started
+  controller.abort(new Error("caller retired"))
+  await rejection
+  assert.equal(repository.commits.length, 1)
+})
+
+it("expired or pre-aborted prepare performs no checkout and no SQL", async () => {
+  const { prepareChatTurnSelection } = await import("../dist/infrastructure/postgres/chat-turn-commit.js")
+  let checkouts = 0
+  const database = {
+    pool: {
+      connect: async () => {
+        checkouts++
+        throw Error("unexpected checkout")
+      },
+    },
+  }
+  const stopped = new AbortController()
+  stopped.abort(new Error("caller cancelled"))
+  for (const lifetime of [
+    { signal: new AbortController().signal, deadlineAt: performance.now() - 1 },
+    { signal: stopped.signal, deadlineAt: performance.now() + 1000 },
+  ])
+    await assert.rejects(
+      prepareChatTurnSelection(database as never, {
+        tenantId: "tenant",
+        subjectId: "subject",
+        conversationId: "conv",
+        idempotencyKey: "key",
+        requestDigest: "a".repeat(64),
+        lifetime,
+      }),
+    )
+  assert.equal(checkouts, 0)
+})
+
+it("freezes owner canonical resource references in launch while the digest binds opaque intent", async () => {
+  const { agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/application/chat/agent-dispatch-payload.js")
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conversation",
+    subjectId: "subject",
+    actorId: "actor",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+  }
+  const refs = [
+    { kind: "asset" as const, resource_id: "asset-1" },
+    { kind: "artifact" as const, resource_id: "artifact-1" },
+  ]
+  const selected = { ...input, selectedResourceRefs: refs }
+  const canonical = refs.map((ref) => ({
+    ...ref,
+    asset_id: "asset-1",
+    content_sha256: "a".repeat(64),
+    size_bytes: "5",
+    mime_type: "text/plain",
+    filename: "input.txt",
+    source_scope: ref.kind === "artifact" ? { kind: "conversation" as const, id: "source-session" } : { kind: "personal" as const, id: "subject" },
+    ...(ref.kind === "artifact" ? { source_run_id: "source-run" } : {}),
+  }))
+  const payload = buildAgentDispatchPayload(selected, { runId: "run", userMessageId: "message" }, canonical)
+  const expected = structuredClone(canonical)
+  refs[0].resource_id = "asset-mutated"
+  canonical[0].source_scope.id = "mutated"
+  assert.deepEqual(payload.launch.selected_resource_refs, expected)
+  assert.deepEqual(parseAgentDispatchPayload(JSON.parse(JSON.stringify(payload))), payload)
+  assert.notEqual(agentDispatchRequestMaterial(selected), agentDispatchRequestMaterial(input))
+  for (const invalid of [
+    null,
+    [{ kind: "asset", resource_id: "asset-1", url: "https://example.invalid" }],
+    [{ kind: "asset", resource_id: "asset-1", content_sha256: "a".repeat(64) }],
+    [
+      { kind: "asset", resource_id: "asset-1" },
+      { kind: "asset", resource_id: "asset-1" },
+    ],
+  ]) {
+    assert.throws(
+      () => parseAgentDispatchPayload({ ...payload, launch: { ...payload.launch, selected_resource_refs: invalid } }),
+      /AGENT_DISPATCH_PAYLOAD_INVALID/,
+    )
+  }
+})
+
+it("resource resolution follows prepare replay even with explicit Skills and freezes independent owner material", async () => {
+  const repository = new RecordingRepository()
+  const input = {
+    tenantId: "tenant",
+    subjectId: "subject",
+    actorId: "subject",
+    conversationId: "session",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+    selectedSkillSourceRefs: [],
+    selectedResourceRefs: [{ kind: "asset" as const, resource_id: "asset-1" }],
+  }
+  let resolutions = 0
+  const canonical = [
+    {
+      kind: "asset" as const,
+      resource_id: "asset-1",
+      asset_id: "asset-1",
+      content_sha256: "a".repeat(64),
+      size_bytes: "5",
+      mime_type: "text/plain",
+      filename: "input.txt",
+      source_scope: { kind: "personal" as const, id: "subject" },
+    },
+  ]
+  const service = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator(), async (selected, lifetime) => {
+    resolutions++
+    assert.deepEqual(selected.refs, input.selectedResourceRefs)
+    assert.equal(selected.projectId, null)
+    assert.ok(lifetime.deadlineAt > performance.now())
+    return canonical
+  })
+  repository.prepareChatTurnSelection = async () => ({ kind: "replay", receipt: { run_id: "old", user_message_id: "user", assistant_message_id: "answer" } })
+  assert.equal((await service.submit(input))?.run_id, "old")
+  assert.equal(resolutions, 0)
+  assert.equal(repository.commits.length, 0)
+  repository.prepareChatTurnSelection = async () => ({ kind: "new", projectId: null, installationIds: ["must-not-inherit"] })
+  await service.submit(input, async () => {
+    throw new Error("explicit Skills must not resolve defaults")
+  })
+  assert.equal(resolutions, 1)
+  assert.deepEqual(repository.commits[0]?.payload.launch.selected_skill_source_refs, [])
+  assert.deepEqual(repository.commits[0]?.payload.launch.selected_resource_refs, canonical)
+  canonical[0].source_scope.id = "mutated-after-resolution"
+  assert.equal(repository.commits[0]?.payload.launch.selected_resource_refs?.[0]?.source_scope.id, "subject")
+})
+
+it("reserves ordered final-answer intent for commit without requiring the Storage resolver", async () => {
+  const repository = new RecordingRepository()
+  const final = { kind: "final_answer" as const, resource_id: "assistant-source" }
+  const input = {
+    tenantId: "tenant",
+    subjectId: "subject",
+    actorId: "subject",
+    conversationId: "session",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+    selectedResourceRefs: [final],
+  }
+  await new ChatTurnApplicationService(repository, new Sha256StableIdGenerator()).submit(input)
+  assert.deepEqual(repository.commits[0]?.resourceSelection, { projectId: null, refs: [final] })
+  assert.equal(repository.commits[0]?.payload.launch.selected_resource_refs, undefined)
+  const asset = { kind: "asset" as const, resource_id: "asset" }
+  const canonical = {
+    ...asset,
+    asset_id: "asset",
+    size_bytes: "3",
+    content_sha256: "a".repeat(64),
+    mime_type: "text/plain",
+    filename: "x",
+    source_scope: { kind: "personal" as const, id: "subject" },
+  }
+  const mixed = [final, asset]
+  const resolver = new ChatTurnApplicationService(repository, new Sha256StableIdGenerator(), async ({ refs }) => {
+    assert.deepEqual(refs, [asset])
+    return [canonical]
+  })
+  await resolver.submit({ ...input, selectedResourceRefs: mixed })
+  assert.deepEqual(repository.commits[1]?.resourceSelection, { projectId: null, refs: mixed })
+  assert.deepEqual(repository.commits[1]?.payload.launch.selected_resource_refs, [canonical])
 })

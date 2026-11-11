@@ -1,0 +1,505 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kokoro BFF browser-private authentication status",
+    "version": "1.0.0"
+  },
+  "x-kokoro-auth-session-policy": {
+    "profile": "browser-auth-session",
+    "version": "1.0.0",
+    "path": "/browser/v1/auth/session",
+    "operation_id": "getBrowserAuthSession",
+    "refresh_default": true,
+    "refresh_false": {
+      "disableCookieCache": true,
+      "disableRefresh": true
+    },
+    "automatic_retries": false,
+    "errors": [
+      {
+        "status": 400,
+        "code": "auth_session_request_invalid",
+        "message": "Authentication status request is invalid",
+        "retryable": false
+      },
+      {
+        "status": 403,
+        "code": "service_auth_failed",
+        "message": "Trusted browser service is required",
+        "retryable": false
+      },
+      {
+        "status": 403,
+        "code": "product_tenant_forbidden",
+        "message": "Product tenant is not permitted",
+        "retryable": false
+      },
+      {
+        "status": 403,
+        "code": "session_forbidden",
+        "message": "Current Product qualification is required",
+        "retryable": false
+      },
+      {
+        "status": 429,
+        "code": "session_rate_limited",
+        "message": "Authentication service is rate limited",
+        "retryable": true
+      },
+      {
+        "status": 503,
+        "code": "product_tenant_not_configured",
+        "message": "Product tenant is not configured",
+        "retryable": true
+      },
+      {
+        "status": 503,
+        "code": "iam_admission_unavailable",
+        "message": "Authentication service is unavailable",
+        "retryable": true
+      }
+    ]
+  },
+  "paths": {
+    "/browser/v1/auth/session": {
+      "get": {
+        "operationId": "getBrowserAuthSession",
+        "x-kokoro-owner": "kokoro-bff",
+        "x-kokoro-visibility": "browser-private",
+        "x-kokoro-stability": "beta",
+        "x-kokoro-idempotency": "none",
+        "x-kokoro-permission": "current_native_session_and_product_membership",
+        "description": "Explicit absent or invalid login is anonymous. Qualification denial and dependency failure remain errors. Only allowlisted framework Set-Cookie fields may be relayed individually; set-auth-jwt is never forwarded. RSC callers use refresh=false and do not claim cookie writes.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Safe current authentication observation",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "authenticated": {
+                              "type": "boolean",
+                              "const": false
+                            }
+                          },
+                          "required": [
+                            "authenticated"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "authenticated": {
+                              "type": "boolean",
+                              "const": true
+                            },
+                            "subject": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "tenant_id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "expires_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "required": [
+                            "authenticated",
+                            "subject",
+                            "tenant_id",
+                            "expires_at"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Closed safe error; request correlation only in the response header",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "const": "auth_session_request_invalid"
+                            },
+                            "message": {
+                              "type": "string",
+                              "const": "Authentication status request is invalid"
+                            },
+                            "retryable": {
+                              "type": "boolean",
+                              "const": false
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Closed safe error; request correlation only in the response header",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "const": "service_auth_failed"
+                            },
+                            "message": {
+                              "type": "string",
+                              "const": "Trusted browser service is required"
+                            },
+                            "retryable": {
+                              "type": "boolean",
+                              "const": false
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "const": "product_tenant_forbidden"
+                            },
+                            "message": {
+                              "type": "string",
+                              "const": "Product tenant is not permitted"
+                            },
+                            "retryable": {
+                              "type": "boolean",
+                              "const": false
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "const": "session_forbidden"
+                            },
+                            "message": {
+                              "type": "string",
+                              "const": "Current Product qualification is required"
+                            },
+                            "retryable": {
+                              "type": "boolean",
+                              "const": false
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Closed safe error; request correlation only in the response header",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              },
+              "retry-after": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,4}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "const": "session_rate_limited"
+                            },
+                            "message": {
+                              "type": "string",
+                              "const": "Authentication service is rate limited"
+                            },
+                            "retryable": {
+                              "type": "boolean",
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Closed safe error; request correlation only in the response header",
+            "headers": {
+              "cache-control": {
+                "required": true,
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "x-request-id": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "const": "product_tenant_not_configured"
+                            },
+                            "message": {
+                              "type": "string",
+                              "const": "Product tenant is not configured"
+                            },
+                            "retryable": {
+                              "type": "boolean",
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "const": "iam_admission_unavailable"
+                            },
+                            "message": {
+                              "type": "string",
+                              "const": "Authentication service is unavailable"
+                            },
+                            "retryable": {
+                              "type": "boolean",
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message",
+                            "retryable"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,9 +1,10 @@
-import { zChatEvent } from "../../../generated/agent-http/zod.gen.js"
+import { zChatEvent, zChatRunCompleted } from "../../../generated/agent-http/zod.gen.js"
 import { parseAgentInteractionState } from "./interaction-state.js"
 import type { ChatEvent, ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../../../contracts/index.js"
 import { parseAgentFailure } from "../../../generated/agent-http/failure-profile.gen.js"
 import type { AgentChatEvent, AgentChatMessage, AgentEventPage, BffIdentity } from "./types.js"
 import { parseAgentProcessPayload } from "./process-state.js"
+import { safeDeliveryDisplayPath } from "./display-safety.js"
 
 function recordPayload(event: AgentChatEvent): Record<string, unknown> {
   let parsed: unknown
@@ -82,24 +83,30 @@ export function mapAgentEvent(event: AgentChatEvent): ChatEvent {
       })
     case "interaction.state":
       return baseEvent(event, "interaction.state", parseAgentInteractionState(payload))
-    case "delivery":
+    case "delivery": {
+      const path = nonEmptyString(payload.path, "path")
       return baseEvent(event, "delivery.created", {
         tool_call_id: nonEmptyString(payload.tool_call_id, "tool_call_id"),
         artifact_id: nonEmptyString(payload.artifact_id, "artifact_id"),
         asset_id: nonEmptyString(payload.asset_id, "asset_id"),
         artifact_kind: artifactKind(payload.artifact_kind),
-        path: nonEmptyString(payload.path, "path"),
+        path,
         title: nonEmptyString(payload.title, "title"),
         mime: nonEmptyString(payload.mime, "mime"),
         size: deliverySize(payload.size),
         content_hash: contentHash(payload.content_hash),
         ...(typeof payload.note === "string" ? { note: payload.note } : {}),
+        ...(payload.display_path === path && safeDeliveryDisplayPath(path) ? { display_path: path } : {}),
       })
-    case "run.completed":
+    }
+    case "run.completed": {
+      const terminal = zChatRunCompleted.parse(payload)
       return baseEvent(event, "run.completed", {
-        status: payload.status === "cancelled" ? "cancelled" : "completed",
-        token_usage: payload.token_usage ?? null,
+        status: terminal.status,
+        token_usage: terminal.token_usage ?? null,
+        ...(terminal.final_message_id === undefined ? {} : { final_segment_id: terminal.final_message_id }),
       })
+    }
     case "run.failed": {
       const failure = parseAgentFailure(payload)
       if (failure === null) throw new Error("Agent run failure payload is invalid")

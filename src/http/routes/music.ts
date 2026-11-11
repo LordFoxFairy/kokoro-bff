@@ -10,7 +10,7 @@ import type { RequestContext } from "../../domain/request-context.js"
 import { reply } from "../response.js"
 import { normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
-import { liveOwnerRequest } from "./owner.js"
+import { liveOwnerRequest } from "./owner-request.js"
 
 export async function liveMoriBusiness(
   request: IncomingMessage,
@@ -49,6 +49,12 @@ export async function liveMoriBusiness(
     return
   }
 
+  const eventIds = request.headersDistinct["last-event-id"] ?? []
+  if (eventIds.length > 1) {
+    await reply(response, 400, failure("invalid_event_cursor", "Last-Event-ID must not appear more than once", context.requestId), context, idempotency, mutation)
+    return
+  }
+
   try {
     const upstream = await proxyUpstream(
       config,
@@ -60,6 +66,9 @@ export async function liveMoriBusiness(
       body,
       ownerIdentityHeaders(context),
       "web-bff",
+      undefined,
+      undefined,
+      eventIds[0] || undefined,
     )
     if (upstream.status >= 400) {
       const normalized = normalizeUpstreamResponse(upstream, context.requestId)

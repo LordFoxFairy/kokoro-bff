@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import type { SkillShareRepository, SkillShareScope } from "../../application/ports/skill-share-repository.js"
+import type { SkillShareRepository, SkillShareScope } from "../../application/skills/skill-share-repository.js"
 import type { SkillRevisionShare } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
 import { shareColumns, shareFromRow, type ShareRow } from "./chat-repository-mappers.js"

@@ -226,9 +226,14 @@ test("live Product HTTP re-admits every download and never returns another subje
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { ConnectError, Code } = await import("@connectrpc/connect")
   const { StorageService, UploadPurpose, ScanState } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
-  const { createBffServer } = await import("../dist/bootstrap/server.js")
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { AccountModule } = await import("../dist/modules/account/account.module.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const servers = []
+  let app
   const calls = []
   let admissions = 0
   let objectGets = 0
@@ -293,6 +298,7 @@ test("live Product HTTP re-admits every download and never returns another subje
     )
     const config = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -300,22 +306,31 @@ test("live Product HTTP re-admits every download and never returns another subje
       KOKORO_BFF_STORAGE_SECRET: "storage-secret",
       KOKORO_STORAGE_OBJECT_ORIGIN: objectOrigin,
     })
-    const bff = await listen(
-      createBffServer(config, {
-        readiness: async () => {},
-        businessStore: null,
-        sessionAdmission: {
-          async verify({ token }) {
-            admissions++
-            return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "subject-2" : "subject-1" } }
-          },
+    const databaseCall = () => {
+      throw new Error("Personal file HTTP fixture must not query PostgreSQL")
+    }
+    const module = await Test.createTestingModule({ imports: [AccountModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({ pool: { query: databaseCall, connect: databaseCall } })
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue({
+        async verify({ cookie }) {
+          const token = cookie.slice("kokoro-issuer.session_token=".length)
+          admissions++
+          return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "subject-2" : "subject-1" } }
         },
-      }),
-    )
+      })
+      .compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+    await app.listen(0, "127.0.0.1")
+    const bff = await app.getUrl()
     const get = async (token = "user", path = "/v1/library/files/asset-1/content") =>
       fetch(`${bff}${path}`, {
         headers: {
-          authorization: `Bearer ${token}`,
+          cookie: `kokoro-issuer.session_token=${token}`,
+          origin: "https://web.example.test",
           "x-kokoro-service": "web-bff",
           "x-kokoro-internal-secret": "web-secret",
           "x-kokoro-request-id": "download-http",
@@ -342,7 +357,7 @@ test("live Product HTTP re-admits every download and never returns another subje
       ["asset", "subject-2", "subject-2", "personal"],
     ])
   } finally {
-    await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
+    await Promise.all([app?.close(), ...servers.map((server) => new Promise((resolve) => server.close(resolve)))])
   }
 })
 

@@ -36,7 +36,7 @@ export const zMcpConnection = z.object({
     .max(191)
     .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
   provider_key: z.string().min(1).max(191),
-  transport: z.enum(["streamable_http"]),
+  transport: z.enum(["streamable_http", "sse_compat"]),
   status: z.enum(["active"]),
 })
 

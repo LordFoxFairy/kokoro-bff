@@ -1,10 +1,11 @@
+import { createHash } from "node:crypto"
 import { DatabaseError, type PoolClient, type QueryResult, type QueryResultRow } from "pg"
 
 import type {
   ProjectScopeReleaseCommand,
   ProjectScopeReleaseLease,
   ProjectScopeReleaseOutboxRepository,
-} from "../../application/ports/project-scope-release-outbox.js"
+} from "../../application/projects/project-scope-release-outbox.js"
 import type { PostgresBffDatabase } from "./client.js"
 
 type BoundedTransaction = Readonly<{
@@ -140,10 +141,10 @@ async function withBoundedTransaction<T>(
 type ReleaseRow = {
   command_id: string
   tenant_id: string
-  project_id: string
+  project_id: string | null
   owner_subject_id: string
   actor_id: string
-  scope_kind: "project" | "conversation"
+  scope_kind: ProjectScopeReleaseCommand["scopeKind"]
   scope_id: string
   request_digest: string
   state: string
@@ -168,11 +169,12 @@ function claimed(row: ReleaseRow, leaseObservedAtMs: number): ProjectScopeReleas
   if (row.state !== "leased" || row.lease_owner === null) throw new Error("PROJECT_SCOPE_RELEASE_LEASE_INVALID")
   if (row.actor_id !== row.owner_subject_id) throw new Error("PROJECT_SCOPE_RELEASE_ACTOR_INVALID")
   if (row.scope_kind === "project" && row.scope_id !== row.project_id) throw new Error("PROJECT_SCOPE_RELEASE_SCOPE_INVALID")
+  if ((row.scope_kind === "conversation_workspace") !== (row.project_id === null)) throw new Error("PROJECT_SCOPE_RELEASE_PARENT_INVALID")
   if (!/^[a-f0-9]{64}$/u.test(row.request_digest)) throw new Error("PROJECT_SCOPE_RELEASE_DIGEST_INVALID")
   return {
     commandId: identity(row.command_id, "PROJECT_SCOPE_RELEASE_COMMAND_INVALID"),
     tenantId: identity(row.tenant_id, "PROJECT_SCOPE_RELEASE_TENANT_INVALID"),
-    projectId: identity(row.project_id, "PROJECT_SCOPE_RELEASE_PROJECT_INVALID"),
+    projectId: row.project_id === null ? null : identity(row.project_id, "PROJECT_SCOPE_RELEASE_PROJECT_INVALID"),
     ownerSubjectId: identity(row.owner_subject_id, "PROJECT_SCOPE_RELEASE_SUBJECT_INVALID"),
     actorId: identity(row.actor_id, "PROJECT_SCOPE_RELEASE_ACTOR_INVALID"),
     scopeKind: row.scope_kind,
@@ -184,6 +186,38 @@ function claimed(row: ReleaseRow, leaseObservedAtMs: number): ProjectScopeReleas
     leaseObservedAtMs,
     leaseRemainingMs: safeInteger(row.lease_remaining_ms, "PROJECT_SCOPE_RELEASE_LEASE_BUDGET_INVALID"),
   }
+}
+
+export async function enqueueStorageScopeRelease(
+  client: Pick<PoolClient, "query">,
+  scope: { tenantId: string; subjectId: string },
+  projectId: string | null,
+  kind: ProjectScopeReleaseCommand["scopeKind"],
+  id: string,
+): Promise<void> {
+  const operations = {
+    project: "release_project_scope",
+    conversation: "release_conversation_scope",
+    conversation_workspace: "release_conversation_workspace_outputs",
+  } as const
+  const operation = `storage.${operations[kind]}:v1`
+  const hex = (value: unknown) => createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex")
+  const digest = hex([
+    "storage-command-v1",
+    scope.tenantId,
+    scope.subjectId,
+    scope.subjectId,
+    operation,
+    kind === "conversation_workspace" ? "conversation" : kind,
+    id,
+  ])
+  const commandId = `release_${hex([kind, scope.tenantId, id]).slice(0, 48)}`
+  await client.query(
+    `INSERT INTO bff_project_scope_release_outbox
+      (command_id,tenant_id,project_id,owner_subject_id,actor_id,scope_kind,scope_id,request_digest,state,attempt_count,available_at,fence)
+     VALUES ($1,$2,$3,$4,$4,$5,$6,$7,'pending',0,CURRENT_TIMESTAMP(3),0)`,
+    [commandId, scope.tenantId, projectId, scope.subjectId, kind, id, digest],
+  )
 }
 
 export class PostgresProjectScopeReleaseOutboxRepository implements ProjectScopeReleaseOutboxRepository {
@@ -277,23 +311,31 @@ export class PostgresProjectScopeReleaseOutboxRepository implements ProjectScope
     try {
       return await withBoundedTransaction(this.database, signal, timeoutMs, async (transaction) => {
         await transaction.begin()
-        const deletion = await transaction.query<{ release_command_count: number | string }>(
-          "SELECT release_command_count FROM bff_project_deletion WHERE tenant_id=$1 AND project_id=$2 FOR UPDATE",
-          [lease.tenantId, lease.projectId],
-        )
-        if (deletion.rows.length !== 1) throw new Error("PROJECT_SCOPE_RELEASE_AGGREGATE_MISSING")
+        const deletion =
+          lease.projectId === null
+            ? null
+            : await transaction.query<{ release_command_count: number | string }>(
+                "SELECT release_command_count FROM bff_project_deletion WHERE tenant_id=$1 AND project_id=$2 FOR UPDATE",
+                [lease.tenantId, lease.projectId],
+              )
+        if (deletion !== null && deletion.rows.length !== 1) throw new Error("PROJECT_SCOPE_RELEASE_AGGREGATE_MISSING")
         const update = await transaction.query(
           `UPDATE bff_project_scope_release_outbox
             SET state=$6,available_at=CASE WHEN $6='pending' THEN CURRENT_TIMESTAMP(3)+($8::double precision*INTERVAL '1 millisecond') ELSE available_at END,
                 last_error_code=$7,released_at=CASE WHEN $6='released' THEN CURRENT_TIMESTAMP(3) ELSE NULL END,
                 lease_owner=NULL,lease_expires_at=NULL,updated_at=CURRENT_TIMESTAMP(3)
-          WHERE command_id=$1 AND tenant_id=$2 AND project_id=$3 AND state='leased'
+          WHERE command_id=$1 AND tenant_id=$2 AND project_id IS NOT DISTINCT FROM $3 AND state='leased'
             AND lease_owner=$4 AND fence=$5 AND lease_expires_at>clock_timestamp()`,
           [lease.commandId, lease.tenantId, lease.projectId, lease.leaseOwner, lease.fence, state, errorCode, delayMs],
         )
         if (update.rowCount !== 1) {
           await transaction.rollback()
           return false
+        }
+        // An ordinary conversation deletion has no Project deletion aggregate.
+        if (deletion === null) {
+          await transaction.commit()
+          return true
         }
         const aggregate = await transaction.query<{
           total: number | string
@@ -377,7 +419,7 @@ export class PostgresProjectScopeReleaseOutboxRepository implements ProjectScope
   private assertLease(lease: ProjectScopeReleaseLease): void {
     identity(lease.commandId, "PROJECT_SCOPE_RELEASE_COMMAND_REQUIRED")
     identity(lease.tenantId, "PROJECT_SCOPE_RELEASE_TENANT_REQUIRED")
-    identity(lease.projectId, "PROJECT_SCOPE_RELEASE_PROJECT_REQUIRED")
+    if (lease.projectId !== null) identity(lease.projectId, "PROJECT_SCOPE_RELEASE_PROJECT_REQUIRED")
     identity(lease.leaseOwner, "PROJECT_SCOPE_RELEASE_LEASE_OWNER_REQUIRED")
     if (!Number.isSafeInteger(lease.fence) || lease.fence < 1) throw new Error("PROJECT_SCOPE_RELEASE_FENCE_INVALID")
   }

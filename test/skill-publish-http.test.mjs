@@ -4,7 +4,7 @@ import { request as httpRequest } from "node:http"
 import test from "node:test"
 import { Code, ConnectError } from "@connectrpc/connect"
 
-import { createLiveTestBffServer } from "./doubles/server.ts"
+import { startSkillDraftTestApp } from "./doubles/skill-draft-app.ts"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
 const config = {
@@ -14,6 +14,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -28,7 +29,8 @@ const config = {
   skillDraft: { enabled: false, platformBaseUrl: null, credentialFile: null, timeoutMs: 100 },
 }
 const headers = {
-  authorization: "Bearer session",
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
   "content-type": "application/json",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
@@ -43,17 +45,15 @@ const result = () => ({
   replayed: false,
 })
 async function withServer(client, run, admission = { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" } }) }) {
-  const server = createLiveTestBffServer(config, {
+  const app = await startSkillDraftTestApp(config, {
     skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: admission,
     skillDraftClient: client,
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
   try {
-    await run(`http://127.0.0.1:${server.address().port}`)
+    await run(app.base)
   } finally {
-    await new Promise((resolve) => server.close(resolve))
+    await app.close()
   }
 }
 const publishBody = JSON.stringify({ audience: "owner", expected_state_version: "5", expected_publication: null })

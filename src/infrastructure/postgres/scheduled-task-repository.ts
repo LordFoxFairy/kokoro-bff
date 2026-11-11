@@ -16,7 +16,7 @@ import {
   type ScheduledTaskOutboxTask,
 } from "../../domain/scheduled-task/outbox.js"
 import { utcDate, type ScheduledTaskFact } from "../../domain/scheduled-task/task.js"
-import type { ScheduledTaskOutboxClaimInput, ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
+import type { ScheduledTaskOutboxClaimInput, ScheduledTaskOutboxRepository } from "../../application/scheduled/scheduled-task-outbox-repository.js"
 import type {
   ScheduledTaskCreateInput,
   ScheduledTaskMutationLineage,
@@ -24,11 +24,9 @@ import type {
   ScheduledTaskPatch,
   ScheduledTaskRecord,
   ScheduledTaskReadSnapshot,
-  ScheduledTaskRepository,
-} from "../../application/ports/scheduled-task-repository.js"
+} from "../../application/scheduled/task-facts.js"
 import type { PostgresBffDatabase } from "./client.js"
-import type { StableIdGenerator } from "../../application/ports/stable-id-generator.js"
-import { scheduledTaskOutboxId, Sha256StableIdGenerator } from "../identifiers/scheduled-task-outbox-id.js"
+import { scheduledTaskOutboxId } from "../identifiers/scheduled-task-outbox-id.js"
 
 type ScheduledTaskRow = {
   task_id: string
@@ -142,7 +140,6 @@ async function insertScheduledTaskOutbox(
   operation: ScheduledTaskOutboxOperation,
   lineage: ScheduledTaskMutationLineage,
   row: ScheduledTaskRow,
-  stableIdGenerator: StableIdGenerator,
 ): Promise<void> {
   const payload = buildScheduledTaskOutboxPayload(operation, lineage, outboxTaskFromRow(row))
   const result = await client.query(
@@ -150,7 +147,7 @@ async function insertScheduledTaskOutbox(
       (outbox_id,tenant_id,task_id,command_type,aggregate_revision,payload,actor_id,request_id,idempotency_key,status,attempt_count,available_at,fence)
      VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,'pending',0,CURRENT_TIMESTAMP(3),0)`,
     [
-      scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, lineage.idempotencyKey, stableIdGenerator),
+      scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, lineage.idempotencyKey),
       row.tenant_id,
       row.task_id,
       commandType(operation),
@@ -175,7 +172,6 @@ export async function pauseProjectScheduledTasks(
     `SELECT ${TASK_COLUMNS} FROM bff_scheduled_task WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 ORDER BY task_id FOR UPDATE`,
     [scope.tenantId, scope.subjectId, projectId],
   )
-  const generator = new Sha256StableIdGenerator()
   for (const task of tasks.rows) {
     const updated = await client.query<ScheduledTaskRow>(
       `UPDATE bff_scheduled_task SET enabled=FALSE,status='paused',revision=revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND owner_id=$2 AND task_id=$3 RETURNING ${TASK_COLUMNS}`,
@@ -188,7 +184,6 @@ export async function pauseProjectScheduledTasks(
       "replace",
       { tenantId: scope.tenantId, actorId: scope.subjectId, requestId, idempotencyKey: `project-delete:${projectId}:${deletionKey}:${task.task_id}` },
       row,
-      generator,
     )
   }
 }
@@ -213,7 +208,7 @@ function validPositiveInteger(value: number, name: string): number {
   return value
 }
 
-function commandLineageMatches(row: ScheduledTaskOutboxRow, payload: ScheduledTaskOutboxPayload, stableIdGenerator: StableIdGenerator): boolean {
+function commandLineageMatches(row: ScheduledTaskOutboxRow, payload: ScheduledTaskOutboxPayload): boolean {
   const operation =
     row.command_type === "scheduler.register"
       ? "register"
@@ -231,16 +226,16 @@ function commandLineageMatches(row: ScheduledTaskOutboxRow, payload: ScheduledTa
     payload.lineage.idempotency_key === row.idempotency_key &&
     payload.task.task_id === row.task_id &&
     payload.task.revision === safeInteger(row.aggregate_revision, "SCHEDULED_TASK_OUTBOX_REVISION") &&
-    scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, row.idempotency_key, stableIdGenerator) === row.outbox_id
+    scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, row.idempotency_key) === row.outbox_id
   )
 }
 
-function claimedCommandFromRow(row: ScheduledTaskOutboxRow, stableIdGenerator: StableIdGenerator): ScheduledTaskOutboxCommand {
+function claimedCommandFromRow(row: ScheduledTaskOutboxRow): ScheduledTaskOutboxCommand {
   if (row.status !== "leased" || row.lease_owner === null || row.lease_token === null || row.lease_until === null) {
     throw new Error("SCHEDULED_TASK_OUTBOX_LEASE_INVALID")
   }
   const payload = parseScheduledTaskOutboxPayload(row.payload)
-  if (!commandLineageMatches(row, payload, stableIdGenerator)) throw new Error("SCHEDULED_TASK_OUTBOX_LINEAGE_MISMATCH")
+  if (!commandLineageMatches(row, payload)) throw new Error("SCHEDULED_TASK_OUTBOX_LINEAGE_MISMATCH")
   scheduledTaskOutboxTaskFromPayload(payload.task)
   return {
     outboxId: row.outbox_id,
@@ -263,10 +258,9 @@ function claimedCommandFromRow(row: ScheduledTaskOutboxRow, stableIdGenerator: S
   }
 }
 
-export class PostgresScheduledTaskRepository implements ScheduledTaskRepository, ScheduledTaskOutboxRepository {
+export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepository {
   public constructor(
     private readonly database: PostgresBffDatabase,
-    private readonly stableIdGenerator: StableIdGenerator = new Sha256StableIdGenerator(),
     private readonly clock: () => Date = () => new Date(),
   ) {}
 
@@ -321,17 +315,6 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
       if (cancel !== undefined) signal.removeEventListener("abort", cancel)
       release(signal.aborted)
     }
-  }
-
-  public async listScheduledTasks(scope: ScheduledTaskOwnerScope): Promise<ScheduledTaskFact[]> {
-    const result = await this.database.pool.query<ScheduledTaskRow>(
-      `SELECT ${TASK_COLUMNS}
-         FROM bff_scheduled_task
-        WHERE tenant_id = $1 AND owner_id = $2
-        ORDER BY created_at ASC, task_id ASC`,
-      [scope.tenantId, scope.subjectId],
-    )
-    return result.rows.map(scheduledTaskFromRow)
   }
 
   public async findScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string): Promise<ScheduledTaskFact | null> {
@@ -471,6 +454,10 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
     })
   }
 
+  public hasCommittedDelete(scope: ScheduledTaskOwnerScope, taskId: string, key: string): Promise<boolean> {
+    return this.outboxExists(this.database.pool, scope.tenantId, taskId, "delete", key, scope.subjectId)
+  }
+
   public async deleteScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean> {
     const taskLineage = requireLineage(scope, lineage)
     return this.transaction(async (client) => {
@@ -529,7 +516,7 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
                 claimed.last_error_code`,
       [now, limit, workerId, randomUUID(), leaseDurationMs],
     )
-    return result.rows.map((row) => claimedCommandFromRow(row, this.stableIdGenerator))
+    return result.rows.map((row) => claimedCommandFromRow(row))
   }
 
   public async markScheduledTaskOutboxSucceeded(lease: ScheduledTaskOutboxLease, completedAt: Date): Promise<boolean> {
@@ -662,7 +649,7 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
   }
 
   private async outboxExists(
-    client: PoolClient,
+    client: Pick<PoolClient, "query">,
     tenantId: string,
     taskId: string,
     operation: ScheduledTaskOutboxOperation,
@@ -684,7 +671,7 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
     lineage: ScheduledTaskMutationLineage,
     row: ScheduledTaskRow,
   ): Promise<void> {
-    await insertScheduledTaskOutbox(client, operation, lineage, row, this.stableIdGenerator)
+    await insertScheduledTaskOutbox(client, operation, lineage, row)
   }
 }
 

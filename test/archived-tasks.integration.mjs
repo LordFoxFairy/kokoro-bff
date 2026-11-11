@@ -1,9 +1,13 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
 import { randomUUID, createHash } from "node:crypto"
 import { test } from "node:test"
+import { Test } from "@nestjs/testing"
 import { Pool } from "pg"
-import { createBffServer } from "../dist/bootstrap/server.js"
-import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { DatabaseModule } from "../dist/common/database/database.module.js"
+import { AGENT_CANCELLATION_DISPATCHER, AGENT_DISPATCH_DISPATCHER, AGUI_PROJECTOR, BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { ProjectsModule } from "../dist/modules/projects/projects.module.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL,
   redisUrl = process.env.KOKORO_TEST_REDIS_URL
@@ -17,6 +21,7 @@ function config(tenantId = "tenant_test") {
     domain: "dev.kokoro.localhost",
     tenantId,
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -61,32 +66,56 @@ async function fixture(t, timeout = 5000) {
   const suffix = randomUUID().replaceAll("-", ""),
     tenant = `set47_${suffix}`,
     subject = `owner_${suffix}`
-  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const admission = new SessionAdmissionDouble(),
     scopes = new Set()
   const headers = (user = subject) => {
     const token = `set47_${user}`
     admission.allow(token, { namespace: tenant, userId: user })
-    return { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret", authorization: `Bearer ${token}` }
+    return {
+      "x-kokoro-service": "web-bff",
+      "x-kokoro-internal-secret": "web-secret",
+      cookie: `kokoro-issuer.session_token=${token}`,
+      origin: "https://web.example.test",
+    }
   }
-  const store = new PostgresBffRepositories(postgresUrl, redisUrl)
-  await store.ready()
   const cfg = config(tenant)
   cfg.agentEnabled = true
   cfg.upstreams.agents = "http://127.0.0.1:9"
   cfg.upstreamTimeoutMs = timeout
-  const server = createBffServer(cfg, {
-    businessStore: store,
-    sessionAdmission: admission,
-    agentDispatchDispatcher: idleWorker,
-    agentCancellationDispatcher: idleWorker,
-    agUiProjector: idleWorker,
-    scheduledTaskDispatcher: idleWorker,
-    scheduledAgentDispatcher: idleWorker,
-    scheduledAgentTerminalConsumer: idleWorker,
+  const builder = Test.createTestingModule({ imports: [ProjectsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(cfg)
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+  for (const token of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) builder.overrideProvider(token).useValue(idleWorker)
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  t.after(async () => {
+    try {
+      await app.close()
+      for (const scope of scopes) await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope])
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant])
+      for (const table of [
+        "bff_agent_cancellation_outbox",
+        "bff_share",
+        "bff_agui_event",
+        "bff_agui_stream",
+        "bff_agent_dispatch_outbox",
+        "bff_message",
+        "bff_conversation",
+        "bff_project_scope_release_outbox",
+        "bff_project_deletion",
+        "bff_project",
+      ])
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant])
+    } finally {
+      await pool.end()
+    }
   })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
-  const base = `http://127.0.0.1:${server.address().port}`
+  await module.select(DatabaseModule).get(BFF_DATABASE, { strict: true }).ready()
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
   const json = async (path, options = {}) => {
     const response = await fetch(base + path, { ...options, headers: { ...headers(), ...options.headers } })
     return { status: response.status, body: await response.json(), headers: response.headers }
@@ -122,27 +151,6 @@ async function fixture(t, timeout = 5000) {
     }
     return output
   }
-  t.after(async () => {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
-    await store.close()
-    for (const scope of scopes) await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope])
-    await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant])
-    for (const table of [
-      "bff_agent_cancellation_outbox",
-      "bff_share",
-      "bff_agui_event",
-      "bff_agui_stream",
-      "bff_agent_dispatch_outbox",
-      "bff_message",
-      "bff_conversation",
-      "bff_project_scope_release_outbox",
-      "bff_project_deletion",
-      "bff_project",
-    ])
-      await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant])
-    await pool.end()
-  })
   return { tenant, subject, pool, headers, json, command, create, facts, base }
 }
 integrationTest(

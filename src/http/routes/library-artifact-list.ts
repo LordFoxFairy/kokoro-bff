@@ -1,24 +1,24 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { ArtifactAssociation, ArtifactLibraryRepository, ArtifactPosition } from "../../application/ports/bff-business-store.js"
+import type { ArtifactAssociation, ArtifactLibraryRepository, ArtifactPosition } from "../../application/account/artifact-library-repository.js"
 import { ProjectResourceError } from "../../application/project-resource.error.js"
 import { FinalArtifactClient, type FinalArtifactContext, type FinalArtifact } from "../../infrastructure/clients/storage/final-artifact.js"
 import { failure, ok } from "../../contracts/index.js"
 import { send } from "../response.js"
 
 import type { ArtifactLibraryPageInput } from "../library-file-list-input.js"
-import { matchesLibraryArtifact, type LibraryArtifactFilter } from "../../application/library-artifact-filter.js"
+import { matchesLibraryArtifact } from "../../application/library-artifact-filter.js"
 
 function positionOf(association: ArtifactAssociation): ArtifactPosition {
   return { deliveredAt: association.deliveredAt, conversationId: association.conversationId, artifactId: association.artifactId }
 }
 
-function encodeCursor(tenantId: string, subjectId: string, limit: number, filter: LibraryArtifactFilter, position: ArtifactPosition): string {
-  return `art2_${Buffer.from(JSON.stringify({ kind: "artifact", tenantId, subjectId, limit, query: filter.query, type: filter.type, ...position })).toString("base64url")}`
+function encodeCursor(tenantId: string, subjectId: string, filter: ArtifactLibraryPageInput, position: ArtifactPosition): string {
+  return `art2_${Buffer.from(JSON.stringify({ kind: "artifact", tenantId, subjectId, limit: filter.limit, query: filter.query, type: filter.type, ...position, ...(filter.favoritesOnly ? { favoritesOnly: true } : {}) })).toString("base64url")}`
 }
 
-function decodeCursor(cursor: string, tenantId: string, subjectId: string, limit: number, filter: LibraryArtifactFilter): ArtifactPosition | null {
+function decodeCursor(cursor: string, tenantId: string, subjectId: string, filter: ArtifactLibraryPageInput): ArtifactPosition | null {
   if (cursor === "") return null
   if (!cursor.startsWith("art2_")) throw new ProjectResourceError("invalid_library_page", 400)
   const encoded = cursor.slice(5)
@@ -31,14 +31,18 @@ function decodeCursor(cursor: string, tenantId: string, subjectId: string, limit
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new ProjectResourceError("invalid_library_page", 400)
   const fields = value as Record<string, unknown>
+  const expectedFields = filter.favoritesOnly
+    ? "artifactId,conversationId,deliveredAt,favoritesOnly,kind,limit,query,subjectId,tenantId,type"
+    : "artifactId,conversationId,deliveredAt,kind,limit,query,subjectId,tenantId,type"
   if (
-    Object.keys(fields).sort().join(",") !== "artifactId,conversationId,deliveredAt,kind,limit,query,subjectId,tenantId,type" ||
+    Object.keys(fields).sort().join(",") !== expectedFields ||
     fields.kind !== "artifact" ||
     fields.tenantId !== tenantId ||
     fields.subjectId !== subjectId ||
-    fields.limit !== limit ||
+    fields.limit !== filter.limit ||
     fields.query !== filter.query ||
     fields.type !== filter.type ||
+    fields.favoritesOnly !== filter.favoritesOnly ||
     typeof fields.deliveredAt !== "string" ||
     !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/u.test(fields.deliveredAt) ||
     !Number.isFinite(Date.parse(fields.deliveredAt)) ||
@@ -74,31 +78,30 @@ export async function libraryArtifactListRoute(
     if (repository === undefined || config.storage === undefined) throw new ProjectResourceError("artifact_library_unavailable", 503, true)
     const tenantId = context.identity.namespace
     const subjectId = context.identity.userId
-    const position = decodeCursor(input.cursor, tenantId, subjectId, input.limit, input)
+    const position = decodeCursor(input.cursor, tenantId, subjectId, input)
     const budget = Math.min(500, input.limit * 5)
-    const candidates = await repository.listCandidates(tenantId, subjectId, position, budget + 1)
+    const candidates = await repository.listCandidates(tenantId, subjectId, position, budget + 1, input.favoritesOnly)
     if (candidates.length > budget + 1) throw new ProjectResourceError("business_store_unavailable", 503, true)
-    const items: FinalArtifact[] = []
+    const items: Array<FinalArtifact & { favorited: boolean }> = []
     let last: ArtifactAssociation | undefined
     for (const candidate of candidates.slice(0, budget)) {
       signal.throwIfAborted()
       last = candidate
       try {
+        const { favorited, ...association } = candidate
         const item = await clientFactory(config.storage, { tenantId, subjectId, conversationId: candidate.conversationId, requestId: context.requestId }).get(
-          candidate,
+          association,
           signal,
         )
         signal.throwIfAborted()
-        if (matchesLibraryArtifact({ title: item.title, filename: item.filename, mimeType: item.mime_type }, input)) items.push(item)
+        if (matchesLibraryArtifact({ title: item.title, filename: item.filename, mimeType: item.mime_type }, input)) items.push({ ...item, favorited })
       } catch (error) {
         if (!(error instanceof ProjectResourceError && error.status === 404)) throw error
       }
       if (items.length === input.limit) break
     }
     const nextCursor =
-      last !== undefined && (candidates.length > budget || candidates.at(-1) !== last)
-        ? encodeCursor(tenantId, subjectId, input.limit, input, positionOf(last))
-        : null
+      last !== undefined && (candidates.length > budget || candidates.at(-1) !== last) ? encodeCursor(tenantId, subjectId, input, positionOf(last)) : null
     send(response, 200, ok({ items, next_cursor: nextCursor }, context.requestId))
   } catch (error) {
     if (response.destroyed) return

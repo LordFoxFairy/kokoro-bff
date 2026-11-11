@@ -1,6 +1,6 @@
 import { agentDispatchRetryDelayMs, type AgentDispatchCommand, type AgentDispatchLease } from "../domain/chat/agent-dispatch.js"
-import type { AgentDispatchDeliveryPort } from "./ports/agent-dispatch-delivery.js"
-import type { AgentDispatchOutboxRepository } from "./ports/agent-dispatch-outbox-repository.js"
+import type { AgentDispatchDeliveryPort } from "./agent-dispatch/agent-dispatch-delivery.js"
+import type { AgentDispatchOutboxRepository } from "./agent-dispatch/agent-dispatch-outbox-repository.js"
 
 export type AgentDispatchOutboxDispatcherOptions = {
   workerId: string

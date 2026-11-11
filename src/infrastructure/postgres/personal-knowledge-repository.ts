@@ -8,7 +8,7 @@ import type {
   PersonalKnowledgeOutcome,
   PersonalKnowledgeUsage,
   PersonalKnowledgeRepository,
-} from "../../application/ports/personal-knowledge-repository.js"
+} from "../../application/account/personal-knowledge-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
 
 type Query = (sql: string, values?: unknown[]) => Promise<QueryResult>

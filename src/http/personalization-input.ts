@@ -1,4 +1,4 @@
-import type { PersonalizationReplacement } from "../application/ports/personalization-repository.js"
+import type { PersonalizationReplacement } from "../infrastructure/postgres/personalization-repository.js"
 import { strictParseRawJson } from "../infrastructure/raw-json.js"
 
 /** Raw JSON validation preserves text exactly and rejects ambiguous or lossy input. */

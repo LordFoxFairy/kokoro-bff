@@ -1,10 +1,11 @@
 import type { IncomingMessage } from "node:http"
 
 import { parseMessageCreateRequest } from "../../application/chat/message-create-input.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
-import type { ConversationCollectionFilter } from "../../application/ports/chat-repository.js"
+import type { ConversationCollectionFilter } from "../../application/chat/types.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { queryOf } from "../request.js"
+import type { ChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
+import type { ProjectLookup } from "../../application/projects/types.js"
 
 export type ChatAuthorization =
   | Readonly<{ ok: true; projectRef?: string; collectionFilter?: ConversationCollectionFilter }>
@@ -33,38 +34,41 @@ function privateChatQuery(request: IncomingMessage): PrivateChatQuery {
   return projectRef === undefined || projectRef === "" ? { ok: true, scope: scopeKind } : { ok: true, scope: scopeKind, projectRef }
 }
 
+/** Validate the command syntax only: locked ChatTurn admission owns current scope and canonical replay. */
+export function validateChatMessageRequest(request: IncomingMessage, json: Record<string, unknown>): ChatAuthorization {
+  const queryScope = privateChatQuery(request)
+  if (!queryScope.ok) return queryScope
+  const message = parseMessageCreateRequest(json, queryScope.projectRef)
+  if (message === null) return { ok: false, status: 400, code: "invalid_message", message: "Message request does not match the v1 contract" }
+  // An early Project lookup here would wrongly reject a canonical replay after a successful Move.
+  return message.projectRef === undefined ? { ok: true } : { ok: true, projectRef: message.projectRef }
+}
+
 /** Authorize a private Chat resource before generic mutation receipt admission or Agent I/O. */
 export async function authorizeChatRequest(
   request: IncomingMessage,
   context: RequestContext,
   businessPath: readonly string[],
-  json: Readonly<Record<string, unknown>>,
-  store: BffBusinessStore,
+  findConversation: ChatConversationLookup,
+  projects: ProjectLookup,
+  signal?: AbortSignal,
 ): Promise<ChatAuthorization | null> {
+  signal?.throwIfAborted()
   if (businessPath[0] !== "sessions") return null
   const queryScope = privateChatQuery(request)
   if (!queryScope.ok) return queryScope
 
-  let projectRef = queryScope.projectRef
+  const projectRef = queryScope.projectRef
   const isConversationCollection = request.method === "GET" && businessPath.length === 1
   if (isConversationCollection && queryScope.scope === "direct" && projectRef !== undefined) {
     return { ok: false, status: 400, code: "invalid_scope", message: "scope=direct cannot be combined with project_ref" }
   }
-  if (request.method === "POST" && businessPath.length === 3 && businessPath[2] === "messages") {
-    const message = parseMessageCreateRequest({ ...json }, projectRef)
-    if (message === null) {
-      return { ok: false, status: 400, code: "invalid_message", message: "Message request does not match the v1 contract" }
-    }
-    projectRef = message.projectRef
-    return projectRef === undefined ? { ok: true } : { ok: true, projectRef }
-  }
-
   const ownerScope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
-  // Existing Message resources are authorized by their current Conversation owner.
-  // The raw Project ref remains a new-command precondition in the locked repository;
-  // applying it here would reject an exact replay after a successful Move.
-  if (projectRef !== undefined && (await store.services.projects.find(ownerScope, projectRef)) === null) {
-    return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
+  if (projectRef !== undefined) {
+    signal?.throwIfAborted()
+    const project = await projects.find(ownerScope, projectRef)
+    signal?.throwIfAborted()
+    if (project === null) return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
   }
 
   if (isConversationCollection) {
@@ -74,10 +78,12 @@ export async function authorizeChatRequest(
 
   if (businessPath.length >= 2) {
     const conversationId = businessPath[1]
-    const currentConversation =
-      conversationId === undefined || conversationId === ""
-        ? null
-        : await store.services.chat.findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
+    let currentConversation = null
+    if (conversationId !== undefined && conversationId !== "") {
+      signal?.throwIfAborted()
+      currentConversation = await findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
+      signal?.throwIfAborted()
+    }
     if (conversationId === undefined || conversationId === "" || currentConversation === null) {
       return { ok: false, status: 404, code: "session_not_found", message: "Session was not found" }
     }

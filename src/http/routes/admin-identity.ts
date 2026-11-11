@@ -25,12 +25,17 @@ export async function liveAdminIdentityRead(
   response: ServerResponse,
   config: BffConfig,
   context: AdmittedUserRequestContext,
-  token: string,
   businessPath: readonly string[],
 ): Promise<void> {
   response.setHeader("x-request-id", context.requestId)
   const kind = businessPath[2]
-  if (request.method !== "GET" || businessPath.length !== 3 || businessPath[0] !== "admin" || businessPath[1] !== "identity" || !IDENTITY_KINDS.has(kind as TeamReadKind)) {
+  if (
+    request.method !== "GET" ||
+    businessPath.length !== 3 ||
+    businessPath[0] !== "admin" ||
+    businessPath[1] !== "identity" ||
+    !IDENTITY_KINDS.has(kind as TeamReadKind)
+  ) {
     send(response, 404, failure("admin_identity_route_not_found", "Administrator identity route was not found", context.requestId))
     return
   }
@@ -54,7 +59,8 @@ export async function liveAdminIdentityRead(
     const result = await readIamTeamPage({
       baseUrl: config.iamBaseUrl,
       tenantId: context.identity.namespace,
-      token,
+      credentialFile: config.iamUserContextServiceCredentialFile,
+      subjectId: context.identity.userId,
       kind: kind as TeamReadKind,
       ...page,
       requestId: context.requestId,

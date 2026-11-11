@@ -1,15 +1,25 @@
+import { iamUserContextHeaders } from "../../auth/iam-user-context.js"
 import { strictParseRawJson } from "../raw-json.js"
 import { isDeepStrictEqual } from "node:util"
 import { createClient } from "../../generated/iam-http/client/index.js"
-import { updateAccountProfile } from "../../generated/iam-http/sdk.gen.js"
-import { zApiErrorResponse, zUpdateAccountProfileResponse } from "../../generated/iam-http/zod.gen.js"
-import type { AccountProfileInput, AccountProfileResult } from "./iam-account-profile.types.js"
+import { readAccountProfile, updateAccountProfile } from "../../generated/iam-http/sdk.gen.js"
+import { zApiErrorResponse, zReadAccountProfileResponse, zUpdateAccountProfileResponse } from "../../generated/iam-http/zod.gen.js"
+import type { AccountProfileInput, AccountProfileReadInput, AccountProfileReadResult, AccountProfileResult } from "./iam-account-profile.types.js"
 
-/** One absolute request budget, including uncooperative transport and body reads. */
-export async function requestIamAccountProfile(input: AccountProfileInput): Promise<AccountProfileResult> {
-  const unavailable = (): AccountProfileResult => ({ ok: false, status: 503, code: "account_profile_unavailable" })
-  const invalid = (): AccountProfileResult => ({ ok: false, status: 502, code: "account_profile_response_invalid" })
-  if (input.baseUrl === null || input.signal.aborted || input.deadlineAt <= performance.now()) return unavailable()
+type AccountProfileTransportInput = Pick<
+  AccountProfileReadInput,
+  "baseUrl" | "credentialFile" | "tenantId" | "subjectId" | "requestId" | "signal" | "deadlineAt" | "maxResponseBytes"
+>
+
+type AccountProfileTransportResult<T> = Readonly<{ ok: true; value: AccountProfileOwnerResult<T> }> | Readonly<{ ok: false; reason: "unavailable" | "invalid" }>
+
+type AccountProfileOwnerResult<T> = { data: T; error: undefined; response?: Response } | { data: undefined; error: unknown; response?: Response }
+
+async function withAccountProfileTransport<T>(
+  input: AccountProfileTransportInput,
+  operation: (client: ReturnType<typeof createClient>) => Promise<AccountProfileOwnerResult<T>>,
+): Promise<AccountProfileTransportResult<T>> {
+  if (input.baseUrl === null || input.signal.aborted || input.deadlineAt <= performance.now()) return { ok: false, reason: "unavailable" }
   const controller = new AbortController()
   let retired = false
   let response: Response | undefined
@@ -84,48 +94,108 @@ export async function requestIamAccountProfile(input: AccountProfileInput): Prom
     return new Response(bytesBody, { status: fetched.status, headers })
   }
   try {
-    const operation = async (): Promise<AccountProfileResult> => {
-      const client = createClient({ baseUrl: input.baseUrl!, fetch: boundedFetch })
-      const headers = { authorization: `Bearer ${input.token}`, "x-request-id": input.requestId, accept: "application/json" }
-      // Override the generated validator at the official pre-strip boundary.
-      const responseValidator = async (raw: unknown) => {
-        const parsed = zUpdateAccountProfileResponse.safeParse(raw)
-        if (!parsed.success || !isDeepStrictEqual(raw, parsed.data)) throw new Error("account_profile_response")
-        return parsed.data
-      }
-      const result = await updateAccountProfile({ client, headers, body: { name: input.name, expected_name: input.expected_name }, responseValidator })
-      assertActive()
-      if (result.response === undefined) return response === undefined ? unavailable() : invalid()
-      const status = result.response.status
-      if (status === 200) {
-        const parsed = zUpdateAccountProfileResponse.safeParse(result.data)
-        if (!parsed.success || parsed.data.data.subject !== input.expectedSubject || parsed.data.data.name !== input.name) return invalid()
-        return { ok: true, data: parsed.data.data }
-      }
-      const parsed = zApiErrorResponse.safeParse(result.error)
-      if (!parsed.success || !isDeepStrictEqual(parsed.data, result.error)) return invalid()
-      const code = parsed.data.error.code
-      if (status === 400 && code === "INVALID_ARGUMENT") return { ok: false, status: 400, code: "account_profile_input_invalid" }
-      if (status === 401 && code === "UNAUTHENTICATED") return { ok: false, status: 401, code: "session_invalid" }
-      if (status === 403 && code === "PERMISSION_DENIED") return { ok: false, status: 403, code: "account_profile_forbidden" }
-      if (status === 404 && code === "TENANT_NOT_FOUND") return { ok: false, status: 403, code: "session_forbidden" }
-      if (status === 409 && code === "TENANT_DISABLED") return { ok: false, status: 403, code: "session_forbidden" }
-      if (status === 409 && code === "CONFLICT") return { ok: false, status: 409, code: "account_profile_conflict" }
-      if (status === 413 && code === "PAYLOAD_TOO_LARGE") return { ok: false, status: 413, code: "account_profile_request_too_large" }
-      if (status === 429 && code === "RATE_LIMITED") {
-        const retry = response?.headers.get("retry-after") ?? ""
-        if (!/^[1-9][0-9]{0,4}$/u.test(retry) || Number(retry) > 86400) return invalid()
-        return { ok: false, status: 429, code: "account_profile_rate_limited", retryAfter: retry }
-      }
-      if ((status === 500 && code === "INTERNAL") || (status === 503 && code === "DEPENDENCY_UNAVAILABLE")) return unavailable()
-      return invalid()
-    }
-    return await Promise.race([operation(), budget])
+    const client = createClient({ baseUrl: input.baseUrl, fetch: boundedFetch })
+    const result = await Promise.race([operation(client), budget])
+    assertActive()
+    return { ok: true, value: result.response === undefined && response !== undefined ? { ...result, response } : result }
   } catch {
-    return retired || input.signal.aborted || response === undefined ? unavailable() : invalid()
+    return { ok: false, reason: retired || input.signal.aborted || response === undefined ? "unavailable" : "invalid" }
   } finally {
     clearTimeout(timer)
     input.signal.removeEventListener("abort", interrupt)
     cancel()
   }
+}
+
+function mapAccountProfileError(
+  result: { response?: Response; error?: unknown },
+  unavailable: string,
+  invalid: string,
+): AccountProfileResult | AccountProfileReadResult {
+  if (result.response === undefined) return { ok: false, status: 503, code: unavailable }
+  const status = result.response.status
+  const parsed = zApiErrorResponse.safeParse(result.error)
+  if (!parsed.success || !isDeepStrictEqual(parsed.data, result.error)) return { ok: false, status: 502, code: invalid }
+  const code = parsed.data.error.code
+  if (status === 400 && code === "INVALID_ARGUMENT") return { ok: false, status: 400, code: "account_profile_input_invalid" }
+  if (status === 401 && (code === "UNAUTHENTICATED" || code === "bff_user_context_service_unauthenticated"))
+    return { ok: false, status: 503, code: unavailable }
+  if (status === 403 && code === "PERMISSION_DENIED") return { ok: false, status: 403, code: "account_profile_forbidden" }
+  if (status === 429 && code === "RATE_LIMITED") {
+    const retry = result.response.headers.get("retry-after") ?? ""
+    if (!/^[1-9][0-9]{0,4}$/u.test(retry) || Number(retry) > 86400) return { ok: false, status: 502, code: invalid }
+    return { ok: false, status: 429, code: "account_profile_rate_limited", retryAfter: retry }
+  }
+  if ((status === 500 && code === "INTERNAL") || (status === 503 && code === "DEPENDENCY_UNAVAILABLE")) return { ok: false, status: 503, code: unavailable }
+  return { ok: false, status: 502, code: invalid }
+}
+
+/** One absolute request budget, including uncooperative transport and body reads. */
+export async function requestIamAccountProfile(input: AccountProfileInput): Promise<AccountProfileResult> {
+  const transport = await withAccountProfileTransport(input, async (client) => {
+    const headers = {
+      ...(await iamUserContextHeaders(input)),
+      "x-request-id": input.requestId,
+      accept: "application/json",
+    }
+    // Override the generated validator at the official pre-strip boundary.
+    const responseValidator = async (raw: unknown) => {
+      const parsed = zUpdateAccountProfileResponse.safeParse(raw)
+      if (!parsed.success || !isDeepStrictEqual(raw, parsed.data)) throw new Error("account_profile_response")
+      return parsed.data
+    }
+    return updateAccountProfile({ client, headers, body: { name: input.name, expected_name: input.expected_name }, responseValidator })
+  })
+  if (!transport.ok)
+    return {
+      ok: false,
+      status: transport.reason === "unavailable" ? 503 : 502,
+      code: transport.reason === "unavailable" ? "account_profile_unavailable" : "account_profile_response_invalid",
+    }
+  const result = transport.value
+  if (result.response?.status === 200) {
+    const parsed = zUpdateAccountProfileResponse.safeParse(result.data)
+    if (!parsed.success || parsed.data.data.subject !== input.expectedSubject || parsed.data.data.name !== input.name)
+      return { ok: false, status: 502, code: "account_profile_response_invalid" }
+    return { ok: true, data: parsed.data.data }
+  }
+  const mapped = mapAccountProfileError(result, "account_profile_unavailable", "account_profile_response_invalid")
+  if (result.response?.status === 404 || result.response?.status === 409) {
+    const code = zApiErrorResponse.safeParse(result.error).success ? (result.error as { error: { code: string } }).error.code : ""
+    if (result.response.status === 404 && code === "TENANT_NOT_FOUND") return { ok: false, status: 403, code: "session_forbidden" }
+    if (result.response.status === 409 && code === "TENANT_DISABLED") return { ok: false, status: 403, code: "session_forbidden" }
+    if (result.response.status === 409 && code === "CONFLICT") return { ok: false, status: 409, code: "account_profile_conflict" }
+  }
+  if (result.response?.status === 413 && result.error && zApiErrorResponse.safeParse(result.error).success)
+    return { ok: false, status: 413, code: "account_profile_request_too_large" }
+  return mapped as AccountProfileResult
+}
+
+export async function requestIamAccountProfileRead(input: AccountProfileReadInput): Promise<AccountProfileReadResult> {
+  const transport = await withAccountProfileTransport(input, async (client) => {
+    const headers = {
+      ...(await iamUserContextHeaders(input)),
+      "x-request-id": input.requestId,
+      accept: "application/json",
+    }
+    const responseValidator = async (raw: unknown) => {
+      const parsed = zReadAccountProfileResponse.safeParse(raw)
+      if (!parsed.success || !isDeepStrictEqual(raw, parsed.data)) throw new Error("account_profile_response")
+      return parsed.data
+    }
+    return readAccountProfile({ client, headers, responseValidator })
+  })
+  if (!transport.ok)
+    return {
+      ok: false,
+      status: transport.reason === "unavailable" ? 503 : 502,
+      code: transport.reason === "unavailable" ? "account_profile_unavailable" : "account_profile_response_invalid",
+    }
+  const result = transport.value
+  if (result.response?.status === 200) {
+    const parsed = zReadAccountProfileResponse.safeParse(result.data)
+    if (!parsed.success || parsed.data.data.subject !== input.expectedSubject) return { ok: false, status: 502, code: "account_profile_response_invalid" }
+    return { ok: true, data: parsed.data.data }
+  }
+  return mapAccountProfileError(result, "account_profile_unavailable", "account_profile_response_invalid") as AccountProfileReadResult
 }

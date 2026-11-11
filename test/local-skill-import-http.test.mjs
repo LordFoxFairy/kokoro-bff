@@ -29,9 +29,7 @@ import {
   projectLocalImportFinalize,
   projectLocalImportGet,
 } from "../dist/infrastructure/clients/platform/local-skill-import-response.js"
-import { createLiveTestBffServer } from "./doubles/server.ts"
-import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
-import { createBffComposition } from "../dist/bootstrap/runtime.js"
+import { SessionAdmissionDouble, TEST_WEB_ORIGIN } from "./doubles/session-admission.ts"
 
 const config = {
   host: "127.0.0.1",
@@ -40,6 +38,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "123e4567-e89b-42d3-a456-426614174000",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -111,22 +110,68 @@ const currentSkillV2 = () => ({ ...skill(), skillId: { value: "skill-2" }, sourc
 const currentInstallationV2 = () => ({ ...installation(), sourceRef: { value: "skill:skill-2" }, revision: 2n })
 
 const headers = {
-  authorization: "Bearer current-session",
+  cookie: "kokoro-issuer.session_token=current-session",
+  origin: "https://web.example.test",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
   "content-type": "application/json",
   "idempotency-key": "local-import-begin-1",
 }
 
+async function compileLocalImportSkills(serverConfig, options = {}) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, SKILL_AUTHORIZATION, SKILL_LOCAL_IMPORT_CLIENT } = await import("../dist/common/tokens.js")
+  const { SkillsModule } = await import("../dist/modules/skills/skills.module.js")
+  const unexpectedIo = () => assert.fail("Local Skill import fixture must not access BFF database or Redis")
+  const database = {
+    pool: { query: unexpectedIo, connect: unexpectedIo, end: unexpectedIo },
+    redis: { connect: unexpectedIo, ping: unexpectedIo, close: unexpectedIo, destroy: unexpectedIo },
+    ready: unexpectedIo,
+    close: unexpectedIo,
+  }
+  const builder = Test.createTestingModule({ imports: [SkillsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(serverConfig)
+    .overrideProvider(BFF_DATABASE)
+    .useValue(database)
+  for (const [token, value] of [
+    [SESSION_ADMISSION, options.sessionAdmission],
+    [SKILL_AUTHORIZATION, options.skillAuthorization ?? undefined],
+    [SKILL_LOCAL_IMPORT_CLIENT, options.localSkillImportClient],
+  ]) {
+    if (value !== undefined) builder.overrideProvider(token).useValue(value)
+  }
+  return builder.compile()
+}
+
 async function withServer(options, run, serverConfig = config) {
-  const server = createLiveTestBffServer(serverConfig, options)
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const module = await compileLocalImportSkills(
+    {
+      ...serverConfig,
+      iamWebOrigin: serverConfig.iamWebOrigin === undefined ? (serverConfig.iamRelay?.webOrigin ?? TEST_WEB_ORIGIN) : serverConfig.iamWebOrigin,
+    },
+    {
+      ...options,
+      sessionAdmission:
+        options.sessionAdmission ??
+        new SessionAdmissionDouble({
+          "test-session": { namespace: "ns_test", userId: "user_test" },
+          "control-session": { namespace: "tenant_control", userId: "user_control" },
+        }),
+    },
+  )
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
   try {
-    await run(`http://127.0.0.1:${server.address().port}`)
+    await app.listen(0, "127.0.0.1")
+    await run(await app.getUrl())
   } finally {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
+    try {
+      app.getHttpServer().closeAllConnections()
+    } finally {
+      await app.close()
+    }
   }
 }
 
@@ -138,7 +183,8 @@ test("browser-private local import Begin performs fresh create_draft AND install
       sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
       skillAuthorization: {
         check: async (input) => {
-          actions.push({ token: input.token, tenantId: input.tenantId, subjectId: input.subjectId, action: input.action })
+          for (const key of ["token", "cookie", "origin"]) assert.equal(Object.hasOwn(input, key), false)
+          actions.push({ tenantId: input.tenantId, subjectId: input.subjectId, action: input.action })
           return { ok: true }
         },
       },
@@ -160,8 +206,8 @@ test("browser-private local import Begin performs fresh create_draft AND install
     },
   )
   assert.deepEqual(actions, [
-    { token: "current-session", tenantId: "123e4567-e89b-42d3-a456-426614174000", subjectId: "user", action: "create_draft" },
-    { token: "current-session", tenantId: "123e4567-e89b-42d3-a456-426614174000", subjectId: "user", action: "install" },
+    { tenantId: "123e4567-e89b-42d3-a456-426614174000", subjectId: "user", action: "create_draft" },
+    { tenantId: "123e4567-e89b-42d3-a456-426614174000", subjectId: "user", action: "install" },
   ])
   assert.equal(ownerCalls.length, 1)
 })
@@ -267,7 +313,7 @@ test("all four browser-private routes preserve exact method, body and fresh read
       assert.equal(finalize.status, 502)
       assert.equal((await finalize.json()).error.code, "local_skill_import_response_invalid")
       const get = await fetch(`${base}/browser/v1/skills/local-imports/intent-1`, {
-        headers: { authorization: headers.authorization, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
+        headers: { cookie: headers.cookie, origin: headers.origin, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
       })
       assert.equal(get.status, 200)
       assert.equal((await get.json()).data.phase, "uploaded")
@@ -277,9 +323,14 @@ test("all four browser-private routes preserve exact method, body and fresh read
 })
 
 test("production composition registers all four local-import owner methods only with the complete Platform credential set", async () => {
+  const { SKILL_LOCAL_IMPORT_CLIENT } = await import("../dist/common/tokens.js")
+  const { SkillsModule } = await import("../dist/modules/skills/skills.module.js")
+  const localImportClient = (module) => module.select(SkillsModule).get(SKILL_LOCAL_IMPORT_CLIENT, { strict: true })
+
   const complete = {
     ...config,
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     skillDraft: {
       enabled: true,
       platformBaseUrl: "https://platform.example",
@@ -292,28 +343,29 @@ test("production composition registers all four local-import owner methods only 
       timeoutMs: 100,
     },
   }
-  const options = {
-    businessStore: null,
-    readiness: async () => undefined,
-    sessionAdmission: new SessionAdmissionDouble(),
-    skillAuthorization: { check: async () => ({ ok: true }) },
+  const active = await compileLocalImportSkills(complete)
+  try {
+    const client = localImportClient(active)
+    assert.ok(client)
+    assert.deepEqual(
+      ["begin", "complete", "finalize", "get"].map((method) => typeof client[method]),
+      ["function", "function", "function", "function"],
+    )
+  } finally {
+    await active.close()
   }
-  const active = createBffComposition(complete, options)
-  assert.ok(active.localSkillImportClient)
-  assert.deepEqual(
-    ["begin", "complete", "finalize", "get"].map((method) => typeof active.localSkillImportClient[method]),
-    ["function", "function", "function", "function"],
-  )
-  await active.close()
 
   for (const [name, candidate] of [
     ["platform base URL", { ...complete, skillDraft: { ...complete.skillDraft, platformBaseUrl: null } }],
     ["catalog credential", { ...complete, skillDraft: { ...complete.skillDraft, credentialFile: null } }],
     ["projection credential", { ...complete, platformProjection: { ...complete.platformProjection, credentialFile: null } }],
   ]) {
-    const inactive = createBffComposition(candidate, options)
-    assert.equal(inactive.localSkillImportClient, undefined, name)
-    await inactive.close()
+    const inactive = await compileLocalImportSkills(candidate)
+    try {
+      assert.equal(localImportClient(inactive), undefined, name)
+    } finally {
+      await inactive.close()
+    }
     await withServer(
       {
         sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
@@ -431,6 +483,7 @@ test("complete production composition dispatches all four private routes through
   const live = {
     ...config,
     iamBaseUrl: `http://127.0.0.1:${iam.address().port}`,
+    iamWebOrigin: "https://web.example.test",
     skillDraft: { enabled: true, platformBaseUrl: `http://127.0.0.1:${owner.address().port}`, credentialFile: catalog, timeoutMs: 1000 },
     platformProjection: { baseUrl: `http://127.0.0.1:${owner.address().port}`, credentialFile: projection, timeoutMs: 1000 },
   }
@@ -453,7 +506,7 @@ test("complete production composition dispatches all four private routes through
         ]
         for (const [method, url, body] of requests) {
           const requestHeaders =
-            method === "GET" ? { authorization: headers.authorization, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" } : headers
+            method === "GET" ? { cookie: headers.cookie, origin: headers.origin, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" } : headers
           const response = await fetch(url, { method, headers: requestHeaders, body: body === null ? undefined : JSON.stringify(body) })
           assert.ok(response.ok, `${method} ${url}: ${response.status}`)
         }
@@ -661,7 +714,7 @@ test("Get binds completed top-level skill identity and optional installation to 
         },
         async (base) => {
           const response = await fetch(`${base}/browser/v1/skills/local-imports/intent-1`, {
-            headers: { authorization: headers.authorization, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
+            headers: { cookie: headers.cookie, origin: headers.origin, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
           })
           assert.equal(response.status, 502)
           assert.equal((await response.json()).error.code, "local_skill_import_response_invalid")
@@ -696,7 +749,7 @@ test("Get accepts a current revision whose exact skill id changed while the stab
         },
         async (base) => {
           const response = await fetch(`${base}/browser/v1/skills/local-imports/intent-1`, {
-            headers: { authorization: headers.authorization, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
+            headers: { cookie: headers.cookie, origin: headers.origin, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" },
           })
           assert.equal(response.status, 200)
           const payload = await response.json()

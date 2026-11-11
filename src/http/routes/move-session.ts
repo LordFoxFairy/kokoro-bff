@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { RequestContext } from "../../domain/request-context.js"
+import type { ChatMove } from "../../application/chat/move-conversation.js"
 import { isCanonicalMoveSessionId, parseMoveSessionInput, singleMoveSessionKey } from "../move-session-input.js"
 import { readBody } from "../request.js"
 import { send } from "../response.js"
@@ -13,7 +13,7 @@ export async function moveSessionRoute(
   response: ServerResponse,
   context: RequestContext,
   conversationId: string,
-  store: BffBusinessStore | null,
+  move: ChatMove,
 ): Promise<void> {
   response.setHeader("x-request-id", context.requestId)
   if (request.method !== "POST" || request.url !== `/v1/sessions/${conversationId}/move` || !isCanonicalMoveSessionId(conversationId)) {
@@ -42,10 +42,6 @@ export async function moveSessionRoute(
     send(response, 400, failure("invalid_move_request", "Move body is invalid"))
     return
   }
-  if (store === null) {
-    send(response, 503, failure("business_store_unavailable", "Conversation store is unavailable", true))
-    return
-  }
   const routeAbort = new AbortController()
   const abortRoute = (): void => routeAbort.abort()
   const onResponseClosed = (): void => {
@@ -55,7 +51,7 @@ export async function moveSessionRoute(
   response.once("close", onResponseClosed)
   if (request.aborted || response.destroyed) routeAbort.abort()
   try {
-    const result = await store.services.chat.moveConversation(context, conversationId, input.targetProjectId, key, routeAbort.signal)
+    const result = await move(context, conversationId, input.targetProjectId, key, routeAbort.signal)
     if (response.destroyed) return
     if (result.kind === "moved") send(response, 200, result.receipt)
     else if (result.kind === "not_found") send(response, 404, failure("session_not_found", "Conversation or Project was not found"))

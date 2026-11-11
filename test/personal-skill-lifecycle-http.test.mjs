@@ -5,7 +5,7 @@ import test from "node:test"
 import { Code, ConnectError } from "@connectrpc/connect"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
-import { createLiveTestBffServer } from "./doubles/server.ts"
+import { startSkillDraftTestApp } from "./doubles/skill-draft-app.ts"
 
 const config = {
   host: "127.0.0.1",
@@ -14,6 +14,7 @@ const config = {
   domain: "dev.kokoro.localhost",
   tenantId: "tenant-personal",
   iamBaseUrl: null,
+  iamWebOrigin: "https://web.example.test",
   sharedSecret: "secret",
   upstreamSecret: null,
   upstreamTimeoutMs: 100,
@@ -33,7 +34,8 @@ const config = {
   },
 }
 const baseHeaders = {
-  authorization: "Bearer session",
+  cookie: "kokoro-issuer.session_token=session",
+  origin: "https://web.example.test",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
   "content-type": "application/json",
@@ -69,17 +71,15 @@ const withdrawResult = (override = {}) => ({
 })
 
 async function withServer(client, run, sessionAdmission = admission) {
-  const server = createLiveTestBffServer(config, {
+  const { base, close } = await startSkillDraftTestApp(config, {
     skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission,
     skillDraftClient: client,
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
   try {
-    await run(`http://127.0.0.1:${server.address().port}`)
+    await run(base)
   } finally {
-    await new Promise((resolve) => server.close(resolve))
+    await close()
   }
 }
 
@@ -222,8 +222,10 @@ test("personal Skill lifecycle closes raw input, framing, key, UTF-8 and reason 
           headers: [
             "host",
             new URL(origin).host,
-            "authorization",
-            "Bearer session",
+            "cookie",
+            "kokoro-issuer.session_token=session",
+            "origin",
+            "https://web.example.test",
             "x-kokoro-service",
             "web-bff",
             "x-kokoro-internal-secret",
@@ -357,7 +359,7 @@ test("personal Skill lifecycle closes synchronous and asynchronous admission fai
     },
   ]) {
     let ownerCalls = 0
-    const server = createLiveTestBffServer(config, {
+    const { base, close } = await startSkillDraftTestApp(config, {
       skillAuthorization: { check: async () => ({ ok: true }) },
       sessionAdmission,
       skillDraftClient: {
@@ -367,12 +369,10 @@ test("personal Skill lifecycle closes synchronous and asynchronous admission fai
         },
       },
     })
-    server.listen(0, "127.0.0.1")
-    await once(server, "listening")
     try {
       let response
       try {
-        response = await fetch(`http://127.0.0.1:${server.address().port}/v1/self/skills/skill-base/withdraw`, {
+        response = await fetch(`${base}/v1/self/skills/skill-base/withdraw`, {
           method: "POST",
           headers: baseHeaders,
           body: JSON.stringify({ expected_state_version: "8", reason: "valid" }),
@@ -394,8 +394,7 @@ test("personal Skill lifecycle closes synchronous and asynchronous admission fai
       })
       assert.equal(ownerCalls, 0)
     } finally {
-      server.closeAllConnections()
-      await new Promise((resolve) => server.close(resolve))
+      await close()
     }
   }
 })
@@ -454,7 +453,7 @@ test("personal Skill lifecycle held admission is bounded by the single service d
     releaseAdmission = resolve
   })
   let ownerCalls = 0
-  const server = createLiveTestBffServer(config, {
+  const { base, close } = await startSkillDraftTestApp(config, {
     skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: {
       verify(input) {
@@ -469,11 +468,9 @@ test("personal Skill lifecycle held admission is bounded by the single service d
       },
     },
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
   const started = performance.now()
   try {
-    const pendingResponse = fetch(`http://127.0.0.1:${server.address().port}/v1/self/skills/skill-base/withdraw`, {
+    const pendingResponse = fetch(`${base}/v1/self/skills/skill-base/withdraw`, {
       method: "POST",
       headers: baseHeaders,
       body: JSON.stringify({ expected_state_version: "8", reason: "valid" }),
@@ -514,8 +511,7 @@ test("personal Skill lifecycle held admission is bounded by the single service d
       identity: { namespace: "tenant-personal", userId: "user-personal" },
       platformAdmin: false,
     })
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
+    await close()
   }
 })
 
@@ -563,7 +559,7 @@ test("personal Skill lifecycle rejects structural URL aliases while preserving a
 
 test("personal Skill lifecycle oversized declared body replies 413 then retires the incomplete upload socket", async () => {
   let ownerCalls = 0
-  const server = createLiveTestBffServer(config, {
+  const { base, close } = await startSkillDraftTestApp(config, {
     skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: admission,
     skillDraftClient: {
@@ -573,12 +569,10 @@ test("personal Skill lifecycle oversized declared body replies 413 then retires 
       },
     },
   })
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
   let request
   try {
     const socketClosed = new Promise((resolve) => {
-      request = httpRequest(`http://127.0.0.1:${server.address().port}/v1/self/skills/skill-base/withdraw`, {
+      request = httpRequest(`${base}/v1/self/skills/skill-base/withdraw`, {
         method: "POST",
         headers: {
           ...baseHeaders,
@@ -618,8 +612,7 @@ test("personal Skill lifecycle oversized declared body replies 413 then retires 
     assert.equal(ownerCalls, 0)
   } finally {
     request?.destroy()
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
+    await close()
   }
 })
 
@@ -657,7 +650,7 @@ test("personal Skill lifecycle retires incomplete upload sockets after every ear
   ]
   for (const scenario of cases) {
     let ownerCalls = 0
-    const server = createLiveTestBffServer(config, {
+    const { base, close } = await startSkillDraftTestApp(config, {
       skillAuthorization: { check: async () => ({ ok: true }) },
       sessionAdmission: scenario.admission,
       skillDraftClient: {
@@ -667,12 +660,10 @@ test("personal Skill lifecycle retires incomplete upload sockets after every ear
         },
       },
     })
-    server.listen(0, "127.0.0.1")
-    await once(server, "listening")
     let request
     try {
       const headers = Object.fromEntries(Object.entries(scenario.headers).filter(([, value]) => value !== undefined))
-      request = httpRequest(`http://127.0.0.1:${server.address().port}/v1/self/skills/skill-base/withdraw`, {
+      request = httpRequest(`${base}/v1/self/skills/skill-base/withdraw`, {
         method: "POST",
         headers: { ...headers, "content-length": "1000000" },
       })
@@ -704,8 +695,7 @@ test("personal Skill lifecycle retires incomplete upload sockets after every ear
       assert.equal(ownerCalls, 0, scenario.name)
     } finally {
       request?.destroy()
-      server.closeAllConnections()
-      await new Promise((resolve) => server.close(resolve))
+      await close()
     }
   }
 })
@@ -881,23 +871,22 @@ test("P4 owned Skills production HTTP forwards literal Unicode query and owner c
     calls.push(input.query)
     return { ok: true, status: 200, data: { skills: [], next_cursor: "owner_cursor" } }
   })
-  const server = createLiveTestBffServer(
+  const { base, close } = await startSkillDraftTestApp(
     {
       ...config,
       iamBaseUrl: "http://iam.test",
+      iamWebOrigin: "https://web.example.test",
       platformProjection: { baseUrl: "http://platform.test", credentialFile: "/unused-token-fixture", timeoutMs: 1000 },
     },
     { sessionAdmission: admission, skillAuthorization: { check: async () => ({ ok: true }) } },
   )
-  server.listen(0, "127.0.0.1")
-  await once(server, "listening")
   try {
     const headers = { ...baseHeaders }
     delete headers["content-type"]
     delete headers["idempotency-key"]
     for (const query of ["%_\\😀 exact", "😀".repeat(1024)]) {
       const response = await fetch(
-        `http://127.0.0.1:${server.address().port}/v1/self/skills?${new URLSearchParams({ query: "  " + query + "  ", source_kind: "personal", cursor: "owner_cursor", limit: "1" })}`,
+        `${base}/v1/self/skills?${new URLSearchParams({ query: "  " + query + "  ", source_kind: "personal", cursor: "owner_cursor", limit: "1" })}`,
         { headers },
       )
       assert.equal(response.status, 200)
@@ -906,11 +895,10 @@ test("P4 owned Skills production HTTP forwards literal Unicode query and owner c
       assert.equal(calls.at(-1).source_kind, "personal")
     }
     for (const suffix of ["query=", "query=%20", "query=x&query=y", "query=" + "x".repeat(1025), "source_kind=all&query=x"])
-      assert.equal((await fetch(`http://127.0.0.1:${server.address().port}/v1/self/skills?${suffix}`, { headers })).status, 400)
+      assert.equal((await fetch(`${base}/v1/self/skills?${suffix}`, { headers })).status, 400)
     assert.equal(calls.length, 2)
   } finally {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
+    await close()
   }
 })
 

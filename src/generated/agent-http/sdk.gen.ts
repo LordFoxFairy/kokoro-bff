@@ -9,11 +9,14 @@ import type {
   CreateRunData,
   CreateRunErrors,
   CreateRunResponses,
+  GetRunDisplayData,
+  GetRunDisplayErrors,
+  GetRunDisplayResponses,
   ReplaySessionEventsData,
   ReplaySessionEventsErrors,
   ReplaySessionEventsResponses,
 } from "./types.gen.js"
-import { zControlRunResponse, zCreateRunResponse, zReplaySessionEventsResponse } from "./zod.gen.js"
+import { zControlRunResponse, zCreateRunResponse, zGetRunDisplayResponse, zReplaySessionEventsResponse } from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
   TData,
@@ -95,5 +98,24 @@ export const replaySessionEvents = <ThrowOnError extends boolean = false>(
       },
     ],
     url: "/v1/sessions/{session_id}/events",
+    ...options,
+  })
+
+/**
+ * Read bounded identity-scoped Run display facts
+ */
+export const getRunDisplay = <ThrowOnError extends boolean = false>(
+  options: Options<GetRunDisplayData, ThrowOnError>,
+): RequestResult<GetRunDisplayResponses, GetRunDisplayErrors, ThrowOnError> =>
+  (options.client ?? client).get<GetRunDisplayResponses, GetRunDisplayErrors, ThrowOnError>({
+    responseValidator: async (data) => await zGetRunDisplayResponse.parseAsync(data),
+    security: [
+      {
+        key: "AgentServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/v1/runs/{run_id}/display",
     ...options,
   })

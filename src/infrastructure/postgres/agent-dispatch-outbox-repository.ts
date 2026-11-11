@@ -1,3 +1,5 @@
+import type { RegenerateMessageInput } from "../../application/chat/message-regeneration.js"
+import { readRegenerationSource } from "./message-regeneration.js"
 import { createHash, randomUUID } from "node:crypto"
 
 import { EventSchemas, EventType } from "@ag-ui/core"
@@ -8,22 +10,15 @@ import type {
   CommitChatTurn,
   ChatTurnSelectionInput,
   ChatTurnSelection,
-} from "../../application/ports/agent-dispatch-outbox-repository.js"
+} from "../../application/agent-dispatch/agent-dispatch-outbox-repository.js"
 import { agentDispatchFailureProjection } from "../../application/agui/agent-dispatch-failure.js"
-import {
-  parseAgentDispatchPayload,
-  type AgentDispatchCommand,
-  type AgentDispatchLease,
-  type AgentDispatchReceipt,
-  type AgentDispatchStatus,
-} from "../../domain/chat/agent-dispatch.js"
+import { type AgentDispatchCommand, type AgentDispatchLease, type AgentDispatchReceipt, type AgentDispatchStatus } from "../../domain/chat/agent-dispatch.js"
+import { parseAgentDispatchPayload } from "../../application/chat/agent-dispatch-payload.js"
 import type { PoolClient } from "pg"
 import type { PostgresBffDatabase } from "./client.js"
 import { commitChatTurn, prepareChatTurnSelection } from "./chat-turn-commit.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
 import { instant } from "./chat-repository-mappers.js"
-import type { ProjectExecutionBindingInput, ProjectExecutionBindingReader } from "../../application/ports/project-execution-binding-reader.js"
-import { readProjectExecutionBinding } from "./project-execution-binding.js"
 
 type AgentDispatchRow = {
   outbox_id: string
@@ -160,12 +155,8 @@ function claimedAgentDispatch(row: AgentDispatchRow): AgentDispatchCommand {
 }
 
 /** PostgreSQL transaction boundary for Chat admission and Agent delivery. */
-export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutboxRepository, ProjectExecutionBindingReader {
+export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutboxRepository {
   public constructor(private readonly database: PostgresBffDatabase) {}
-
-  public readProjectExecutionBinding(input: ProjectExecutionBindingInput) {
-    return readProjectExecutionBinding(this.database, input)
-  }
 
   /** Every batch locks all parent Conversations before entering any stream/tail. */
   public static async lockConversationsInTransaction(
@@ -282,6 +273,10 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     )
     if (advanced.rowCount !== 1) throw new Error("CHAT_QUEUED_CURSOR_ALLOCATION_FAILED")
     return cursor
+  }
+
+  public readRegenerationSource(input: RegenerateMessageInput) {
+    return readRegenerationSource(this.database, input)
   }
 
   public async prepareChatTurnSelection(input: ChatTurnSelectionInput): Promise<ChatTurnSelection | null> {

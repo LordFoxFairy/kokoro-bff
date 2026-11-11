@@ -1,3 +1,10 @@
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, PROJECT_SCOPE_RELEASE_DISPATCHER, PROJECT_LOOKUP, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { ProjectsModule } from "../dist/modules/projects/projects.module.js"
+import "./project-resource-access.test.mjs"
+import "./project-resource-delete.test.mjs"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
@@ -158,26 +165,76 @@ test("list query rejects unknown/duplicate/oversized pagination rather than forw
 })
 
 test("GET route checks current owner before Storage and binds every page to canonical project and subject", async () => {
-  const { projectResourceListRoute } = await import("../dist/http/routes/project-resource-list.js")
+  const { handleProjectResourceListRequest } = await import("../dist/http/routes/project-native.js")
   const { EventEmitter } = await import("node:events")
   let calls = 0
   const scopes = []
-  const store = {
-    services: {
-      projects: {
-        async find(scope, ref) {
-          scopes.push(scope)
-          return scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
-        },
-      },
+  const projects = {
+    async list() {
+      return []
+    },
+    async find(scope, ref) {
+      scopes.push(scope)
+      return scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
+    },
+    async revisions() {
+      return []
+    },
+    async deletion() {
+      return null
+    },
+    async rename() {
+      return { kind: "conflict" }
+    },
+    async delete() {
+      return { kind: "not_found" }
     },
   }
-  const config = { storage: storageConfig }
+  const config = {
+    storage: storageConfig,
+    tenantId: "tenant-1",
+    sharedSecret: "web-secret",
+    upstreamTimeoutMs: 5000,
+    iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
+  }
+  const admission = {
+    async verify({ cookie }) {
+      const token = cookie.slice("kokoro-issuer.session_token=".length)
+      const [namespace, userId] = token.split(":")
+      return { ok: true, identity: { namespace, userId } }
+    },
+  }
   const invoke = async (identity = { namespace: "tenant-1", userId: "subject-1" }, ref = "slug", query = "", factory) => {
     const req = new EventEmitter()
+    req.method = "GET"
     req.url = `/v1/projects/${ref}/resources${query}`
-    req.headers = {}
+    req.headers = {
+      cookie: `kokoro-issuer.session_token=${identity.namespace}:${identity.userId}`,
+      origin: "https://web.example.test",
+      "x-kokoro-service": "web-bff",
+      "x-kokoro-internal-secret": "web-secret",
+      "x-request-id": "req-list",
+    }
+    req.rawHeaders = [
+      "cookie",
+      req.headers.cookie,
+      "origin",
+      req.headers.origin,
+      "x-kokoro-service",
+      "web-bff",
+      "x-kokoro-internal-secret",
+      "web-secret",
+      "x-request-id",
+      "req-list",
+    ]
     const res = new EventEmitter()
+    res.destroyed = false
+    res.writableEnded = false
+    res.setHeader = (name, value) => {
+      res.headers ??= {}
+      res.headers[name.toLowerCase()] = value
+    }
     res.writeHead = (status, headers) => {
       res.status = status
       res.headers = headers
@@ -186,13 +243,12 @@ test("GET route checks current owner before Storage and binds every page to cano
       res.body = JSON.parse(data)
       res.writableEnded = true
     }
-    await projectResourceListRoute(
+    await handleProjectResourceListRequest(
       req,
       res,
       config,
-      { requestId: "req-list", identity },
-      ref,
-      store,
+      admission,
+      projects,
       factory ??
         ((_cfg, ctx) => {
           calls++
@@ -214,12 +270,12 @@ test("GET route checks current owner before Storage and binds every page to cano
   assert.equal(res.status, 200)
   assert.equal(res.body.data.next_cursor, null)
   assert.equal(calls, 2)
-  for (const [identity, ref] of [
-    [{ namespace: "other", userId: "subject-1" }, "slug"],
-    [{ namespace: "tenant-1", userId: "other" }, "slug"],
-    [undefined, "other-project"],
+  for (const [identity, ref, expected] of [
+    [{ namespace: "other", userId: "subject-1" }, "slug", 403],
+    [{ namespace: "tenant-1", userId: "other" }, "slug", 404],
+    [undefined, "other-project", 404],
   ])
-    assert.equal((await invoke(identity, ref)).status, 404)
+    assert.equal((await invoke(identity, ref)).status, expected)
   assert.equal(calls, 2, "unauthorized projects never create a Storage transport")
   assert.equal((await invoke(undefined, "slug", "?subject_id=forged")).status, 400)
   assert.equal(calls, 2)
@@ -238,10 +294,10 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { ConnectError, Code } = await import("@connectrpc/connect")
-  const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const servers = []
+  let app
   let calls = 0
   let unavailable = false
   const listen = async (server) => {
@@ -287,6 +343,7 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
     )
     const config = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -294,29 +351,40 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
       KOKORO_BFF_STORAGE_SECRET: "storage-secret",
       KOKORO_STORAGE_OBJECT_ORIGIN: "http://objects.test",
     })
-    const bff = await listen(
-      createBffServer(config, {
-        readiness: async () => {},
-        businessStore: {
-          services: {
-            projects: {
-              async find(scope, ref) {
-                return scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
-              },
-            },
-          },
-        },
-        sessionAdmission: {
-          async verify({ token }) {
-            return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "other" : "subject-1" } }
-          },
-        },
-      }),
-    )
+    const projectService = {
+      async find(scope, ref) {
+        return scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
+      },
+    }
+    const admission = {
+      async verify({ cookie }) {
+        const token = cookie.slice("kokoro-issuer.session_token=".length)
+        return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "other" : "subject-1" } }
+      },
+    }
+    const module = await Test.createTestingModule({ imports: [ProjectsModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue(config)
+      .overrideProvider(BFF_DATABASE)
+      .useValue({
+        pool: { query: () => assert.fail("unexpected Project database query"), connect: () => assert.fail("unexpected Project database connection") },
+        redis: Object.freeze({}),
+      })
+      .overrideProvider(PROJECT_LOOKUP)
+      .useValue(projectService)
+      .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
+      .useValue(null)
+      .overrideProvider(SESSION_ADMISSION)
+      .useValue(admission)
+      .compile()
+    app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+    await app.listen(0, "127.0.0.1")
+    const bff = await app.getUrl()
     const get = async (path, token = "user") => {
       const response = await fetch(`${bff}/v1/projects/${path}`, {
         headers: {
-          authorization: `Bearer ${token}`,
+          cookie: `kokoro-issuer.session_token=${token}`,
+          origin: "https://web.example.test",
           "x-kokoro-service": "web-bff",
           "x-kokoro-internal-secret": "web-secret",
           "x-request-id": "request-list",
@@ -348,9 +416,13 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
     assert.equal(result.body.data, undefined)
     assert.ok(!JSON.stringify(result.body).includes("private"))
   } finally {
-    for (const server of servers.reverse()) {
-      server.closeAllConnections()
-      await new Promise((resolve) => server.close(resolve))
+    try {
+      await app?.close()
+    } finally {
+      for (const server of servers.reverse()) {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
     }
   }
 })

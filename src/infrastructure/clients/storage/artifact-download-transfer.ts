@@ -12,7 +12,7 @@ export type DeadlineClock = Readonly<{
 }>
 export type ArtifactSpoolTimings = Readonly<{ totalMs: number; idleMs: number; clock?: DeadlineClock }>
 
-const MAX_ARTIFACT_BYTES = 1_073_741_824
+export const MAX_VERIFIED_DOWNLOAD_BYTES = 1_073_741_824
 const MAX_ACTIVE_SPOOLS = 2
 const DEFAULT_TIMINGS: ArtifactSpoolTimings = { totalMs: 7 * 60_000, idleMs: 45_000 }
 const SYSTEM_CLOCK: DeadlineClock = { schedule: (callback, milliseconds) => setTimeout(callback, milliseconds), clear: (timer) => clearTimeout(timer) }
@@ -59,7 +59,7 @@ export async function spoolVerifiedArtifact(
     reference.expiresAt > Date.now() + 301_000 ||
     !Number.isSafeInteger(expectedSize) ||
     expectedSize < 0 ||
-    expectedSize > MAX_ARTIFACT_BYTES ||
+    expectedSize > MAX_VERIFIED_DOWNLOAD_BYTES ||
     !/^[0-9a-f]{64}$/u.test(expectedSha256)
   )
     throw new ProjectResourceError("storage_response_invalid", 502)
@@ -130,7 +130,7 @@ export async function spoolVerifiedArtifact(
         transferSignal.throwIfAborted()
         if (done) break
         length += value.byteLength
-        if (length > expectedSize || length > MAX_ARTIFACT_BYTES) throw new ProjectResourceError("storage_response_invalid", 502)
+        if (length > expectedSize || length > MAX_VERIFIED_DOWNLOAD_BYTES) throw new ProjectResourceError("storage_response_invalid", 502)
         digest.update(value)
         let written = 0
         while (written < value.byteLength) {

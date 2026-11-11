@@ -21,8 +21,15 @@ export type AgUiStreamState = {
 }
 
 export type AgUiAssistantUpdate =
-  | { runId: string; kind: "replace" | "append"; content: string }
-  | { runId: string; kind: "complete" | "cancel" }
+  | {
+      runId: string
+      kind: "replace" | "append"
+      segmentId: string
+      completed: boolean
+      content: string
+    }
+  | { runId: string; kind: "complete"; finalSegmentId?: string }
+  | { runId: string; kind: "cancel" }
   | { runId: string; kind: "fail"; failure: AgentFailureProfile }
 
 export type AgUiArtifactDelivery = {
@@ -35,6 +42,7 @@ export type AgUiArtifactDelivery = {
   title: string
   mime: string
   size: number
+  displayPath?: string
 }
 
 export type AgUiSourceProjection = {
@@ -137,7 +145,7 @@ export interface AgUiProjectionConsumerRepository {
   seedConsumers(limit: number): Promise<number>
   claimConsumers(input: AgUiConsumerClaimInput): Promise<AgUiConsumerLease[]>
   renewConsumerLease(lease: AgUiConsumerLease, now: string, leaseUntil: string): Promise<boolean>
-  markConsumerProgress(lease: AgUiConsumerLease, nextPollAt: string, now: string): Promise<boolean>
+  markConsumerProgress(lease: AgUiConsumerLease, nextPollAt: string, now: string, sourceExhausted?: boolean): Promise<boolean>
   markConsumerRetryable(lease: AgUiConsumerLease, nextPollAt: string, errorCode: string, now: string): Promise<boolean>
   markConsumerBlocked(lease: AgUiConsumerLease, errorCode: string, now: string): Promise<boolean>
   releaseConsumer(lease: AgUiConsumerLease, now: string): Promise<boolean>

@@ -10,9 +10,9 @@ import {
 } from "../dist/domain/scheduled-task/outbox.js"
 import { scheduledTaskOutboxId } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
 import { ScheduledTaskOutboxDispatcher } from "../dist/application/scheduled-task-outbox-dispatcher.js"
-import type { ScheduledTaskOutboxRepository } from "../dist/application/ports/scheduled-task-outbox-repository.js"
+import type { ScheduledTaskOutboxRepository } from "../dist/application/scheduled/scheduled-task-outbox-repository.js"
 import type { ScheduledTaskOutboxCommand, ScheduledTaskOutboxLease } from "../dist/domain/scheduled-task/outbox.js"
-import type { ScheduledTaskOutboxDeliveryPort, ScheduledTaskOutboxDeliveryResult } from "../dist/application/ports/scheduled-task-outbox-delivery.js"
+import type { ScheduledTaskOutboxDeliveryPort, ScheduledTaskOutboxDeliveryResult } from "../dist/application/scheduled/scheduled-task-outbox-delivery.js"
 import { SchedulerOutboxDelivery } from "../dist/infrastructure/clients/scheduler/outbox-delivery.js"
 import { buildSchedulerSchedule } from "../dist/infrastructure/clients/scheduler/schedule.js"
 

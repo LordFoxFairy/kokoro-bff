@@ -5,6 +5,9 @@ import { createConnectTransport } from "@connectrpc/connect-node"
 import {
   InspectPersonalSkillInstallationPackageRequestSchema,
   InspectPersonalSkillPackageRequestSchema,
+  InspectProjectSkillInstallationPackageRequestSchema,
+  GetProjectSkillInstallationPackageDownloadRequestSchema,
+  ProductProjectSkillInstallationContentService,
   ProductSkillInstallationPackageInspectionService,
   ProductSkillPackageInspectionService,
   SkillIdSchema,
@@ -12,9 +15,12 @@ import {
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 
+type ProjectContent = Readonly<{ projectId: string; installationId: string }>
 type Common = Readonly<{ requestId: string; tenant: string; subject: string; filePath?: string }>
 export type SkillPackageInspectionInput =
-  (Common & Readonly<{ operation: "managed"; skillId: string }>) | (Common & Readonly<{ operation: "installation"; installationId: string }>)
+  | (Common & Readonly<{ operation: "managed"; skillId: string }>)
+  | (Common & Readonly<{ operation: "installation"; installationId: string }>)
+  | (Common & ProjectContent & Readonly<{ operation: "project" }>)
 
 export class SkillPackageInspectionHeaderError extends Error {
   constructor() {
@@ -31,6 +37,7 @@ export class SkillPackageInspectionDependencyError extends Error {
 export class SkillPackageInspectionConnectClient {
   readonly #managed
   readonly #installation
+  readonly #project
   readonly #tokens: PlatformServiceCredentialSource
 
   constructor(
@@ -47,10 +54,11 @@ export class SkillPackageInspectionConnectClient {
     })
     this.#managed = createClient(ProductSkillPackageInspectionService, transport)
     this.#installation = createClient(ProductSkillInstallationPackageInspectionService, transport)
+    this.#project = createClient(ProductProjectSkillInstallationContentService, transport)
     this.#tokens = new PlatformServiceCredentialSource(credentialFile, "projection")
   }
 
-  async inspect(input: SkillPackageInspectionInput, signal: AbortSignal, deadlineAt: number) {
+  private async options(input: Common & Readonly<{ projectId?: string }>, signal: AbortSignal, deadlineAt: number) {
     signal.throwIfAborted()
     let token: string
     try {
@@ -68,14 +76,24 @@ export class SkillPackageInspectionConnectClient {
       timeoutMs: remaining,
       headers: {
         authorization: `Bearer ${token}`,
-        "x-tenant-ref": input.tenant,
         "x-kokoro-subject": input.subject,
+        ...(input.projectId === undefined ? { "x-tenant-ref": input.tenant } : { "x-kokoro-tenant": input.tenant, "x-kokoro-project-ref": input.projectId }),
       },
       onHeader: (headers: Headers): void => {
         responseRequestId = headers.get("x-kokoro-request-id")
         responseCacheControl = headers.get("cache-control")
       },
     }
+    return {
+      options,
+      validate: () => {
+        if (responseRequestId !== input.requestId || responseCacheControl !== "no-store") throw new SkillPackageInspectionHeaderError()
+      },
+    }
+  }
+
+  async inspect(input: SkillPackageInspectionInput, signal: AbortSignal, deadlineAt: number) {
+    const { options, validate } = await this.options(input, signal, deadlineAt)
     const response =
       input.operation === "managed"
         ? await this.#managed.inspectPersonalSkillPackage(
@@ -86,15 +104,37 @@ export class SkillPackageInspectionConnectClient {
             }),
             options,
           )
-        : await this.#installation.inspectPersonalSkillInstallationPackage(
-            create(InspectPersonalSkillInstallationPackageRequestSchema, {
-              requestId: input.requestId,
-              installationId: create(SkillInstallationIdSchema, { value: input.installationId }),
-              ...(input.filePath === undefined ? {} : { filePath: input.filePath }),
-            }),
-            options,
-          )
-    if (responseRequestId !== input.requestId || responseCacheControl !== "no-store") throw new SkillPackageInspectionHeaderError()
+        : input.operation === "project"
+          ? await this.#project.inspectProjectSkillInstallationPackage(
+              create(InspectProjectSkillInstallationPackageRequestSchema, {
+                requestId: input.requestId,
+                installationId: create(SkillInstallationIdSchema, { value: input.installationId }),
+                ...(input.filePath === undefined ? {} : { filePath: input.filePath }),
+              }),
+              options,
+            )
+          : await this.#installation.inspectPersonalSkillInstallationPackage(
+              create(InspectPersonalSkillInstallationPackageRequestSchema, {
+                requestId: input.requestId,
+                installationId: create(SkillInstallationIdSchema, { value: input.installationId }),
+                ...(input.filePath === undefined ? {} : { filePath: input.filePath }),
+              }),
+              options,
+            )
+    validate()
+    return response
+  }
+
+  async downloadProject(input: Common & ProjectContent, signal: AbortSignal, deadlineAt: number) {
+    const { options, validate } = await this.options(input, signal, deadlineAt)
+    const response = await this.#project.getProjectSkillInstallationPackageDownload(
+      create(GetProjectSkillInstallationPackageDownloadRequestSchema, {
+        requestId: input.requestId,
+        installationId: create(SkillInstallationIdSchema, { value: input.installationId }),
+      }),
+      options,
+    )
+    validate()
     return response
   }
 }

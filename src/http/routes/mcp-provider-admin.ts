@@ -1,9 +1,11 @@
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { authorizeMcpCatalogAction, authorizeUserRequest } from "../../auth/user-admission.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { McpAuthorizationClient } from "../../auth/mcp-authorization.client.js"
+import type { McpProviderAdminConnectClient } from "../../infrastructure/clients/platform/mcp-provider-admin-connect.js"
 import { mcpRequestRemaining } from "../mcp-request-budget.js"
 import { send } from "../response.js"
 import { parseMcpProviderAdminMutation, type McpProviderAdminMutation } from "../mcp-provider-admin-input.js"
@@ -13,6 +15,12 @@ const KEY = /^[a-z0-9][a-z0-9._-]{0,63}$/u
 const CURSOR = /^[A-Za-z0-9_-]{1,2048}$/u
 const COMMAND = /^[\x21-\x7e]{1,191}$/u
 const contentType = /^application\/json(?:;\s*charset=utf-8)?$/iu
+
+export type McpProviderAdminProvider = Readonly<{
+  sessionAdmission: SessionAdmission
+  mcpAuthorization: Pick<McpAuthorizationClient, "check">
+  mcpProviderAdminClient: Pick<McpProviderAdminConnectClient, "execute"> | null
+}>
 
 export function mcpProviderAdminOperation(path: string[], method: string): McpProviderAdminOperation | null {
   if (path[0] !== "admin" || path[1] !== "mcp" || path[2] !== "providers") return null
@@ -61,7 +69,7 @@ export async function mcpProviderAdminRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: McpProviderAdminProvider,
   requestId: string,
   path: string[],
 ): Promise<void> {
@@ -132,7 +140,7 @@ export async function mcpProviderAdminRoute(
         return
       }
     }
-    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal)
+    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal, response)
     if (!current.ok) {
       fail(response, current.status, current.code, current.status === 429 || current.status === 503)
       return

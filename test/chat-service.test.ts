@@ -1,11 +1,14 @@
+import "./chat-message-parts-read.test.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { EventEmitter } from "node:events"
 
-import { ChatApplicationService } from "../dist/application/chat-service.js"
+import { createChatSessionReads } from "../dist/application/chat/session-reads.js"
 import { authorizeChatRequest } from "../dist/http/routes/chat-authorization.js"
-import { liveChatBusiness } from "../dist/http/routes/chat.js"
-import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
-import type { ChatRepository, ConversationCollectionFilter, ConversationPage } from "../src/application/ports/chat-repository.ts"
+import { readChatBusiness } from "../dist/http/routes/chat.js"
+import type { ChatConversationLookup } from "../dist/infrastructure/postgres/chat-conversation-lookup.js"
+import { PostgresChatSessionStore } from "../dist/infrastructure/postgres/chat-session-store.js"
+import type { ConversationCollectionFilter, ConversationPage } from "../src/application/chat/types.ts"
 
 const collectionContext = { requestId: "request_collection_scope", identity: { namespace: "tenant_a", userId: "owner_a" } }
 
@@ -37,26 +40,18 @@ async function collectionRepositoryCall(query: string): Promise<{ calls: unknown
       return page
     },
   }
-  const chat = new ChatApplicationService(repository as never)
-  const store = {
-    services: {
-      chat,
-      projects: {
-        find: async () => {
-          projectReads += 1
-          return {}
-        },
-      },
+  const chat = createChatSessionReads(repository as never)
+  const projects = {
+    find: async () => {
+      projectReads += 1
+      return {}
     },
   } as never
   const request = collectionRequest(query)
-  const authorization = await authorizeChatRequest(request, collectionContext, ["sessions"], {}, store)
+  const authorization = await authorizeChatRequest(request, collectionContext, ["sessions"], () => assert.fail("Collection authorization must not look up a Conversation"), projects)
   assert.ok(authorization?.ok)
   const response = responseDouble()
-  assert.equal(
-    await liveChatBusiness(request, response.response, {} as never, collectionContext, ["sessions"], {}, null, new Map(), store, authorization),
-    true,
-  )
+  assert.equal(await readChatBusiness(request, response.response, collectionContext, ["sessions"], chat, authorization), true)
   return { calls, projectReads, responseHeaders: response.headers }
 }
 
@@ -78,14 +73,14 @@ test("passes the trusted subject through the private Chat application port", asy
     ],
     next_cursor: null,
   }
-  const repository: ChatRepository = {
+  const repository: Pick<Parameters<typeof createChatSessionReads>[0], "listConversations"> = {
     listConversations: async (tenantId, subjectId, filter, limit, cursor) => {
       calls.push([tenantId, subjectId, filter, limit, cursor])
       return page
     },
   }
 
-  const result = await new ChatApplicationService(repository).listConversations("tenant_a", "owner_a", { kind: "project", projectRef: "project_a" }, 20, null)
+  const result = await createChatSessionReads(repository as Parameters<typeof createChatSessionReads>[0]).listConversations("tenant_a", "owner_a", { kind: "project", projectRef: "project_a" }, 20, null)
 
   assert.deepEqual(result, { sessions: [{ session_id: "session_a", title: "A", updated_at: "2026-09-04T12:00:00.000Z" }], next_cursor: null })
   assert.deepEqual(calls, [["tenant_a", "owner_a", { kind: "project", projectRef: "project_a" }, 20, null]])
@@ -108,18 +103,15 @@ for (const [name, query, expectedFilter, expectedProjectReads] of [
 
 test("rejects direct plus project collection filters before Project lookup", async () => {
   let projectReads = 0
-  const store = {
-    services: {
-      projects: {
-        find: async () => {
-          projectReads += 1
-          return {}
-        },
-      },
+  const projects = {
+    find: async () => {
+      projectReads += 1
+      return {}
     },
   } as never
+  const chat = { findConversation: () => assert.fail("A rejected collection filter must not read a Conversation") }
 
-  const authorization = await authorizeChatRequest(collectionRequest("?scope=direct&project_ref=project_a"), collectionContext, ["sessions"], {}, store)
+  const authorization = await authorizeChatRequest(collectionRequest("?scope=direct&project_ref=project_a"), collectionContext, ["sessions"], chat.findConversation, projects)
 
   assert.deepEqual(
     {
@@ -133,29 +125,24 @@ test("rejects direct plus project collection filters before Project lookup", asy
 test("keeps direct plus project resource authorization on the existing project-bound path", async () => {
   let projectReads = 0
   let conversationReads = 0
-  const store = {
-    services: {
-      projects: {
-        find: async () => {
-          projectReads += 1
-          return {}
-        },
-      },
-      chat: {
-        findConversation: async () => {
-          conversationReads += 1
-          return {}
-        },
-      },
+  const projects = {
+    find: async () => {
+      projectReads += 1
+      return {}
     },
   } as never
+  const findConversation: ChatConversationLookup = async (tenantId, ownerId, conversationId, projectRef) => {
+    conversationReads += 1
+    const time = new Date("2026-01-01T00:00:00.000Z")
+    return { tenantId, ownerId, conversationId, projectRef: projectRef ?? null, title: "Scoped", status: "active", createdAt: time, updatedAt: time, deletedAt: null }
+  }
 
   const authorization = await authorizeChatRequest(
     collectionRequest("?scope=direct&project_ref=project_a"),
     collectionContext,
     ["sessions", "conversation_a"],
-    {},
-    store,
+    findConversation,
+    projects,
   )
 
   assert.deepEqual(
@@ -170,7 +157,7 @@ test("keeps direct plus project resource authorization on the existing project-b
 
 test("Conversation keyset advances ascending IDs when updated_at ties", async () => {
   const calls: Array<{ sql: string; values: unknown[] | undefined }> = []
-  const repository = new PostgresChatRepository({
+  const repository = new PostgresChatSessionStore({
     pool: {
       query: async (sql: string, values?: unknown[]) => {
         calls.push({ sql, values })
@@ -204,7 +191,7 @@ test("Conversation deletion removes Artifact links using only bound tenant and c
     },
     release() {},
   }
-  const repository = new PostgresChatRepository({ pool: { connect: async () => client } } as never)
+  const repository = new PostgresChatSessionStore({ pool: { connect: async () => client } } as never)
   assert.equal(await repository.deleteConversation("tenant_1", "owner_1", "conversation_1", "request_1"), true)
   const linkDelete = calls.find(({ sql }) => sql.includes("DELETE FROM bff_conversation_artifact"))
   assert.ok(linkDelete)
@@ -246,7 +233,7 @@ test("Chat snapshot exposes durable Artifact identity and bounded-history signal
       eventWatermark: "agui_0123456789abcdef0123456789abcdef",
     }),
   }
-  const result = await new ChatApplicationService(repository as never).snapshot("tenant_a", "owner_a", "session_a", undefined)
+  const result = await createChatSessionReads(repository as never).snapshot("tenant_a", "owner_a", "session_a", undefined)
   assert.deepEqual(result?.deliveries, [
     {
       conversation_id: "session_a",
@@ -286,7 +273,7 @@ test("Chat snapshot maps only a repository-proven active running Run", async () 
       executionHead: { runId: "run_current", state: "active", pendingPauses: [] },
     }),
   }
-  const result = await new ChatApplicationService(repository as never).snapshot("tenant_a", "owner_a", "session_running", undefined)
+  const result = await createChatSessionReads(repository as never).snapshot("tenant_a", "owner_a", "session_running", undefined)
   assert.deepEqual(result?.execution_head, { run_id: "run_current", state: "active", pending_pauses: [] })
 })
 
@@ -314,7 +301,7 @@ for (const dispatchStatus of ["pending", "leased", "retryable", "admitted"] as c
       }),
     }
 
-    const result = await new ChatApplicationService(repository as never).snapshot("tenant_a", "owner_a", conversation.conversationId, undefined)
+    const result = await createChatSessionReads(repository as never).snapshot("tenant_a", "owner_a", conversation.conversationId, undefined)
 
     const publicSnapshot = result as unknown as Record<string, unknown> | null
     assert.deepEqual(publicSnapshot?.execution_head, {
@@ -337,7 +324,7 @@ for (const [name, marker] of [
   test(`Chat snapshot rejects ${name} and rolls back and releases its connection`, async () => {
     const calls: Array<{ sql: string; values?: unknown[] }> = []
     let released = false
-    const client = {
+    const client = Object.assign(new EventEmitter(), {
       query: async (sql: string, values?: unknown[]) => {
         calls.push({ sql, values })
         if (sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1"))
@@ -362,8 +349,8 @@ for (const [name, marker] of [
       release: () => {
         released = true
       },
-    }
-    const repository = new PostgresChatRepository({ pool: { connect: async () => client } } as never)
+    })
+    const repository = new PostgresChatSessionStore({ pool: { connect: async () => client } } as never)
 
     await assert.rejects(repository.readSnapshot("tenant_a", "owner_a", "session_invalid", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
     const streamRead = calls.find(({ sql }) => sql.includes("FROM bff_agui_stream"))
@@ -376,7 +363,7 @@ for (const [name, marker] of [
 test("Chat snapshot performs no stream read when the Conversation ACL rejects access", async () => {
   const calls: string[] = []
   let released = false
-  const client = {
+  const client = Object.assign(new EventEmitter(), {
     query: async (sql: string) => {
       calls.push(sql)
       return { rows: [] }
@@ -384,8 +371,8 @@ test("Chat snapshot performs no stream read when the Conversation ACL rejects ac
     release: () => {
       released = true
     },
-  }
-  const repository = new PostgresChatRepository({ pool: { connect: async () => client } } as never)
+  })
+  const repository = new PostgresChatSessionStore({ pool: { connect: async () => client } } as never)
   assert.equal(await repository.readSnapshot("tenant_a", "other_subject", "session_hidden", undefined), null)
   assert.equal(
     calls.some((sql) => sql.includes("FROM bff_agui_stream")),
@@ -521,7 +508,7 @@ for (const state of ["queued", "active", "waiting", "resuming"] as const) {
         }
       },
     }
-    const actual = (await new ChatApplicationService(repository as never).snapshot("tenant_r57", "owner_r57", "session_r57", undefined)) as unknown as Record<
+    const actual = (await createChatSessionReads(repository as never).snapshot("tenant_r57", "owner_r57", "session_r57", undefined)) as unknown as Record<
       string,
       unknown
     >
@@ -546,7 +533,7 @@ test("R57 no-head snapshot omits execution head rather than fabricating a pause 
     deletedAt: null,
   }
   const repository = { readSnapshot: async () => ({ conversation, messages: [], deliveries: [], deliveriesHasMore: false, eventWatermark: null }) }
-  const actual = (await new ChatApplicationService(repository as never).snapshot("tenant_r57", "owner_r57", "session_r57", undefined)) as unknown as Record<
+  const actual = (await createChatSessionReads(repository as never).snapshot("tenant_r57", "owner_r57", "session_r57", undefined)) as unknown as Record<
     string,
     unknown
   >
@@ -590,22 +577,8 @@ test("R124 Chat snapshot always exposes nullable anchored process without chargi
       executionProcess: null,
     }),
   }
-  const result = await new ChatApplicationService(repository as never).snapshot("tenant_a", "owner_a", conversation.conversationId, undefined)
+  const result = await createChatSessionReads(repository as never).snapshot("tenant_a", "owner_a", conversation.conversationId, undefined)
   assert.equal(Object.hasOwn(result ?? {}, "execution_process"), true)
   assert.equal(result?.execution_process, null)
   assert.equal(result?.messages[0]?.content.length, longMessage.length)
-})
-
-test("shared tasks service forwards trusted owner, anchor and the original absolute lifetime", async () => {
-  const calls: unknown[][] = []
-  const result = { items: [], nextPosition: null }
-  const service = new ChatApplicationService({
-    async listOwnedSharedTasks(...args: unknown[]) {
-      calls.push(args)
-      return result
-    },
-  } as never)
-  const signal = new AbortController().signal
-  assert.equal(await service.listOwnedSharedTasks("tenant", "owner", 20, null, signal, 12345), result)
-  assert.deepEqual(calls, [["tenant", "owner", 20, null, signal, 12345]])
 })

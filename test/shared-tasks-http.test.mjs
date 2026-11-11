@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { request as nodeRequest } from "node:http"
 import test from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { startChatTaskHttpTestApp } from "./doubles/chat-task-http-app.mjs"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
@@ -9,22 +9,15 @@ const item = { session_id: "conv_owned", title: "本人分享", shared_at: "2026
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer shared-token",
+  cookie: "kokoro-issuer.session_token=shared-token",
+  origin: "https://web.example.test",
   "x-kokoro-request-id": "shared-http",
 }
 async function fixture(t, options = {}) {
   const reads = []
-  const businessStore = {
-    services: {
-      chat: {
-        async listOwnedSharedTasks(...args) {
-          reads.push(args)
-          return options.read ? options.read(...args) : { items: [item], nextPosition: null }
-        },
-      },
-    },
-    async ready() {},
-    async close() {},
+  const sharedTasks = async (...args) => {
+    reads.push(args)
+    return options.read ? options.read(...args) : { items: [item], nextPosition: null }
   }
   const config = {
     host: "127.0.0.1",
@@ -33,6 +26,7 @@ async function fixture(t, options = {}) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-verified",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: options.timeout ?? 1000,
@@ -46,28 +40,29 @@ async function fixture(t, options = {}) {
     upstreams: {},
   }
   const admission = options.admission ?? new SessionAdmissionDouble({ "shared-token": { namespace: "tenant-verified", userId: "user-one" } })
-  const server = createBffServer(config, { businessStore, readiness: async () => undefined, sessionAdmission: admission })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
-  t.after(async () => {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
-  })
-  return { base: `http://127.0.0.1:${server.address().port}`, reads }
+  return { base: await startChatTaskHttpTestApp(t, config, admission, { sharedTasks }), reads }
 }
 test("shared tasks canonical GET reads admitted owner and returns only four safe fields", async (t) => {
-  const { base, reads } = await fixture(t)
+  const { base, reads } = await fixture(t, {
+    read: async (_tenant, _subject, _limit, _anchor, signal, deadlineAt) => {
+      assert.ok(signal instanceof AbortSignal && !signal.aborted)
+      assert.ok(Number.isFinite(deadlineAt) && deadlineAt > performance.now())
+      return { items: [item], nextPosition: null }
+    },
+  })
   const response = await fetch(`${base}/v1/account/shared-tasks`, { headers })
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { data: { items: [item], next_cursor: null } })
   assert.equal(response.headers.get("cache-control"), "no-store")
   assert.equal(response.headers.get("x-request-id"), "shared-http")
   assert.equal(reads.length, 1)
-  assert.deepEqual(reads[0].slice(0, 2), ["tenant-verified", "user-one"])
+  const [tenant, subject, limit, anchor] = reads[0]
+  assert.deepEqual([tenant, subject, limit, anchor], ["tenant-verified", "user-one", 20, null])
   assert.deepEqual(Object.keys(item).sort(), ["expires_at", "session_id", "shared_at", "title"])
 })
 test("shared tasks anonymous request cannot reach owner read", async (t) => {
   const { base, reads } = await fixture(t)
-  const response = await fetch(`${base}/v1/account/shared-tasks`, { headers: { ...headers, authorization: "" } })
+  const response = await fetch(`${base}/v1/account/shared-tasks`, { headers: { ...headers, cookie: "", origin: "https://web.example.test" } })
   assert.equal(response.status, 401)
   assert.equal(reads.length, 0)
 })

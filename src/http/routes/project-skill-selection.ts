@@ -1,20 +1,95 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
+import type { BffConfig } from "../../config/runtime.js"
+import { authorizeUserRequest } from "../../auth/user-admission.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
+import type { IdempotencyRepository, PersistentReceipt } from "../../application/ports/idempotency-repository.js"
+import type { ProjectLookup } from "../../application/projects/types.js"
+import type { ProjectSkillSelectionOperations } from "../../infrastructure/postgres/project-skill-selection.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
 import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import { projectInstallation } from "../../infrastructure/clients/platform/skill-installation-response.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import { exactIdempotencyKey } from "../skill-installation-input.js"
+import { requestId } from "../request.js"
 import { runSkillRoute, readSkillBody } from "./skill-drafts.js"
 import { send } from "../response.js"
+
+export type ProjectSkillSelectionProvider = ProjectLookup & ProjectSkillSelectionOperations & Pick<IdempotencyRepository, "getReceipt">
+
+export function isProjectSkillSelectionRequest(request: IncomingMessage): boolean {
+  return ["GET", "PUT"].includes(request.method ?? "") && /^\/v1\/projects\/[^/]+\/skill-selection(?:\?|$)/u.test(request.url ?? "")
+}
+
+export async function handleProjectSkillSelectionRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  store: ProjectSkillSelectionProvider,
+  client: SkillInstallationConnectClient | null,
+): Promise<boolean> {
+  if (!isProjectSkillSelectionRequest(request)) return false
+  const id = requestId(request)
+  const signal = AbortSignal.timeout(10_000)
+  response.setHeader("x-request-id", id)
+  response.setHeader("cache-control", "no-store")
+  try {
+    const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)
+    if (!admitted.ok) {
+      send(
+        response,
+        admitted.status,
+        {
+          error: {
+            code: admitted.code,
+            message: "BFF user admission failed",
+            retryable: admitted.status === 429 || admitted.status === 503,
+          },
+        },
+        admitted.retryAfter,
+      )
+      return true
+    }
+    const context = admitted.context
+    const projectRef = /^\/v1\/projects\/([^/]+)\/skill-selection(?:\?|$)/u.exec(request.url ?? "")?.[1]
+    if (projectRef === undefined) throw new ConnectError("Project not found", Code.NotFound)
+    let decodedProjectRef: string
+    try {
+      decodedProjectRef = decodeURIComponent(projectRef)
+    } catch {
+      throw new ConnectError("Project not found", Code.NotFound)
+    }
+    await projectSkillSelectionRoute(request, response, context, store, client, async (projectSignal) => {
+      const fresh = await authorizeUserRequest(request, config, admission, id, projectSignal, response)
+      if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
+      if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+        throw new ConnectError("Project not found", Code.NotFound)
+      const project = await store.find({ tenantId: context.identity.namespace, subjectId: context.identity.userId }, decodedProjectRef)
+      projectSignal.throwIfAborted()
+      if (!project) throw new ConnectError("Project not found", Code.NotFound)
+      return project.id
+    })
+  } catch (error) {
+    if (response.writableEnded || response.destroyed) return true
+    const status = error instanceof ConnectError && error.code === Code.NotFound ? 404 : 503
+    send(response, status, {
+      error: {
+        code: status === 404 ? "project_not_found" : "skill_dependency_unavailable",
+        message: status === 404 ? "Project not found" : "Project Skill selection is unavailable",
+        retryable: status >= 500,
+      },
+    })
+  }
+  return true
+}
 
 export async function projectSkillSelectionRoute(
   request: IncomingMessage,
   response: ServerResponse,
   context: RequestContext,
-  store: BffBusinessStore | null,
+  store: ProjectSkillSelectionProvider,
   client: SkillInstallationConnectClient | null,
   projectAccess: (signal: AbortSignal) => Promise<string>,
 ): Promise<void> {
@@ -42,14 +117,13 @@ export async function projectSkillSelectionRoute(
       return
     }
     if (new URL(request.url ?? "", "http://bff.local").search) throw new ConnectError("Query is not accepted", Code.InvalidArgument)
-    if (!store) throw new ConnectError("Project store unavailable", Code.Unavailable)
     const projectId = await currentProject(signal)
     if (projectId === null) return
     const scope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
     if (request.method === "GET") {
       if (request.headers["idempotency-key"] !== undefined || (await readSkillBody(request, 1, signal)).length)
         throw new ConnectError("Read body invalid", Code.InvalidArgument)
-      const selected = await store.services.projects.skillSelection(scope, projectId)
+      const selected = await store.skillSelection(scope, projectId)
       const current = await currentProject(signal)
       if (current === null) return
       if (!selected || current !== projectId) {
@@ -83,7 +157,8 @@ export async function projectSkillSelectionRoute(
     if (ids === null) throw new ConnectError("Selection invalid", Code.InvalidArgument)
     const receiptScope = JSON.stringify([scope.tenantId, scope.subjectId, "project.skill-selection:v1", projectId, key])
     // Presence only skips external re-resolution. The locked repository validates the complete receipt before returning it.
-    if ((await store.getReceipt(receiptScope)) === null) {
+    const receipt: PersistentReceipt | null = await store.getReceipt(receiptScope)
+    if (receipt === null) {
       for (const installationId of ids) {
         if (!client) throw new ConnectError("Installation owner unavailable", Code.Unavailable)
         signal.throwIfAborted()
@@ -103,7 +178,7 @@ export async function projectSkillSelectionRoute(
       return
     }
     signal.throwIfAborted()
-    const result = await store.services.projects.replaceSkillSelection(scope, projectId, ids, key, signal)
+    const result = await store.replaceSkillSelection(scope, projectId, ids, key, signal)
     signal.throwIfAborted()
     if (result.kind === "not_found") fail(404, "project_not_found")
     else if (result.kind === "conflict") fail(409, "idempotency_conflict")

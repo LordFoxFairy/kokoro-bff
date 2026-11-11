@@ -3,7 +3,11 @@ import test from "node:test"
 import { createHash } from "node:crypto"
 import { create } from "@bufbuild/protobuf"
 import { timestampFromDate } from "@bufbuild/protobuf/wkt"
-import { createBffServer } from "../src/bootstrap/server.js"
+import "reflect-metadata"
+import { Test } from "@nestjs/testing"
+import { BFF_CONFIG, BFF_DATABASE, CUSTOM_API_CLIENT, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { McpModule } from "../dist/modules/mcp/mcp.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.js"
 import { bindCustomApiCommand } from "../src/infrastructure/clients/platform/custom-api-binding.js"
 import { projectCustomApiResponse } from "../src/infrastructure/clients/platform/custom-api-response.js"
@@ -38,7 +42,8 @@ const profile = {
 const browserHeaders = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer human-session",
+  cookie: "kokoro-issuer.session_token=human-session",
+  origin: "https://web.example.test",
   "x-request-id": "custom-api-http-1",
 }
 
@@ -50,6 +55,7 @@ async function customApiFixture(execute: (operation: string, input: Record<strin
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-server",
     iamBaseUrl: "http://iam.invalid",
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: "upstream-secret",
     upstreamTimeoutMs: 5_000,
@@ -69,29 +75,32 @@ async function customApiFixture(execute: (operation: string, input: Record<strin
       music: null,
     },
   }
-  const app = createBffServer(config, {
-    businessStore: null,
-    readiness: async () => undefined,
-    sessionAdmission: {
+  const unexpected = (): never => assert.fail("Custom API fixture must not access PostgreSQL")
+  const module = await Test.createTestingModule({ imports: [McpModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected }, ready: unexpected })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue({
       verify: async () => ({
         ok: true as const,
         identity: { namespace: "tenant-server", userId: "human-one" },
         platformAdmin: false,
       }),
-    },
-    customApiClient: {
-      execute: async (operation, input) => execute(operation, input as unknown as Record<string, unknown>),
-    },
-  })
-  await new Promise<void>((resolve) => app.listen(0, "127.0.0.1", resolve))
-  const address = app.address()
-  assert.ok(address && typeof address === "object")
-  return {
-    origin: `http://127.0.0.1:${address.port}`,
-    close: async () => {
-      app.closeAllConnections()
-      await new Promise<void>((resolve) => app.close(() => resolve()))
-    },
+    })
+    .overrideProvider(CUSTOM_API_CLIENT)
+    .useValue({
+      execute: async (operation: string, input: unknown) => execute(operation, input as Record<string, unknown>),
+    })
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  try {
+    await app.listen(0, "127.0.0.1")
+    return { origin: await app.getUrl(), close: () => app.close() }
+  } catch (error) {
+    await app.close()
+    throw error
   }
 }
 
@@ -266,5 +275,97 @@ test("Custom API HTTP distinguishes receipt recovery states without replaying or
     assert.equal((await response.json()).error.code, "custom_api_response_invalid")
   } finally {
     await fixture.close()
+  }
+})
+
+test("Custom API creation and icon-only edits forward the staged selector and clear, never browser identity", async () => {
+  const seen: Record<string, unknown>[] = []
+  const f = await customApiFixture(async (_operation, input) => {
+    seen.push(input)
+    return { custom_api: profile, replayed: false }
+  })
+  const icon = { intent_id: "12345678-1234-1234-1234-123456789abc", expected_state_version: "3" }
+  try {
+    for (const [method, path, body] of [
+      ["POST", "", { name: "API", environment: [], icon }],
+      ["PATCH", "/profile-one", { expected_state_version: "7", icon }],
+      ["PATCH", "/profile-one", { expected_state_version: "7", clear_icon: true }],
+    ] as const) {
+      const result = await fetch(`${f.origin}/browser/v1/connectors/custom-apis${path}`, {
+        method,
+        headers: { ...browserHeaders, "content-type": "application/json", "idempotency-key": "same-icon-original-key" },
+        body: JSON.stringify(body),
+      })
+      assert.equal(result.status, method === "POST" ? 201 : 200)
+      await result.arrayBuffer()
+    }
+    assert.deepEqual(seen[0]!.icon, { intentId: icon.intent_id, expectedStateVersion: "3" })
+    assert.deepEqual(seen[1]!.icon, seen[0]!.icon)
+    assert.equal(seen[2]!.clearIcon, true)
+    assert.equal(seen[1]!.tenant, "tenant-server")
+    for (const bad of [
+      { icon, clear_icon: true },
+      { clear_icon: false },
+      { icon: { ...icon, expected_state_version: 3 } },
+      { icon, subject_id: "someone-else" },
+    ]) {
+      const result = await fetch(`${f.origin}/browser/v1/connectors/custom-apis/profile-one`, {
+        method: "PATCH",
+        headers: { ...browserHeaders, "content-type": "application/json", "idempotency-key": "invalid-icon-key" },
+        body: JSON.stringify({ expected_state_version: "7", ...bad }),
+      })
+      assert.equal(result.status, 400)
+      await result.arrayBuffer()
+    }
+    assert.equal(seen.length, 3)
+  } finally {
+    await f.close()
+  }
+})
+
+test("invalid owner icon ACK is 502 inspect-owner, not a new browser error or retryable dependency failure", async () => {
+  const makeWire = () =>
+    create(CreatePersonalCustomApiResponseSchema, {
+      profile: create(PersonalCustomApiSchema, {
+        profileId: { value: "profile-one" },
+        name: "API",
+        stateVersion: 1n,
+        createdAt: timestampFromDate(new Date(profile.created_at)),
+        updatedAt: timestampFromDate(new Date(profile.updated_at)),
+        icon: {
+          intentId: "12345678-1234-1234-1234-123456789abc",
+          contentSha256: "a".repeat(64),
+          mimeType: "image/png",
+          sizeBytes: 1024n,
+          width: 24,
+          height: 24,
+        },
+      }),
+      replayed: false,
+    })
+  let wire = makeWire()
+  const f = await customApiFixture(async (operation, input) => projectCustomApiResponse(operation as "create", wire, input as typeof identity))
+  try {
+    for (const invalid of ["zero-width", "unknown-wire", "wrong-binding"]) {
+      wire = makeWire()
+      if (invalid === "zero-width") wire.profile!.icon!.width = 0
+      if (invalid === "unknown-wire") wire.profile!.icon!.$unknown = [{ no: 100, wireType: 2, data: new Uint8Array([0]) }]
+      const response = await fetch(`${f.origin}/browser/v1/connectors/custom-apis`, {
+        method: "POST",
+        headers: { ...browserHeaders, "content-type": "application/json", "idempotency-key": "exact-original-key" },
+        body: JSON.stringify({
+          name: "API",
+          environment: [],
+          icon: {
+            intent_id: invalid === "wrong-binding" ? "12345678-1234-1234-1234-123456789abd" : "12345678-1234-1234-1234-123456789abc",
+            expected_state_version: "2",
+          },
+        }),
+      })
+      assert.equal(response.status, 502)
+      assert.deepEqual((await response.json()).error, { code: "custom_api_response_invalid", message: "Custom API request failed", retryable: false })
+    }
+  } finally {
+    await f.close()
   }
 })

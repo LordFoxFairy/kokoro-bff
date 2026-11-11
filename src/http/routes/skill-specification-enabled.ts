@@ -2,17 +2,23 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import { authorizeUserRequest } from "../../auth/user-admission.js"
-import type { BffServerComposition } from "../../bootstrap/runtime.js"
+import type { SessionAdmission } from "../../auth/session-admission.types.js"
+import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import type { BffConfig } from "../../config/runtime.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import { setSkillEnabledDigest } from "../../infrastructure/clients/platform/skill-installation-projector.js"
 import { projectInstallationAck } from "../../infrastructure/clients/platform/skill-installation-response.js"
 import { exactIdempotencyKey, installationCommandId } from "../skill-installation-input.js"
 import { send } from "../response.js"
+import { requestId } from "../request.js"
 import { setSkillInstallationEnabledRequestSchema } from "../skill-specification-schema.js"
 import { readSkillBody, skillRequestRemaining, startSkillRequestBudget } from "./skill-drafts.js"
 
 const path = "/skill.v1.SkillOptionalService/SetSkillInstallationEnabled"
+type SkillEnabledComposition = {
+  sessionAdmission: SessionAdmission
+  installationClient: Pick<SkillInstallationConnectClient, "setEnabled"> | null
+}
 
 function idempotencyKey(request: IncomingMessage): string {
   const values = request.rawHeaders.flatMap((name, index) =>
@@ -61,7 +67,7 @@ export async function skillSpecificationEnabledRoute(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  composition: BffServerComposition,
+  composition: SkillEnabledComposition,
   requestId: string,
   pathname: string,
 ): Promise<boolean> {
@@ -98,7 +104,7 @@ export async function skillSpecificationEnabledRoute(
     } catch {
       throw new ConnectError("Skill installation request is invalid", Code.InvalidArgument)
     }
-    const admission = await within(authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal))
+    const admission = await within(authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal, response))
     if (!admission.ok) {
       if (admission.retryAfter !== undefined) response.setHeader("retry-after", admission.retryAfter)
       send(
@@ -148,4 +154,16 @@ export async function skillSpecificationEnabledRoute(
     response.removeListener("close", abort)
   }
   return true
+}
+
+export async function handleSkillSpecificationEnabledRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  admission: SessionAdmission,
+  installationClient: Pick<SkillInstallationConnectClient, "setEnabled"> | null,
+): Promise<boolean> {
+  const pathname = new URL(request.url ?? "/", "http://bff.local").pathname
+  if (pathname !== path) return false
+  return skillSpecificationEnabledRoute(request, response, config, { sessionAdmission: admission, installationClient }, requestId(request), pathname)
 }

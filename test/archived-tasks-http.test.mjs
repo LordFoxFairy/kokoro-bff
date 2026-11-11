@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { request as nodeRequest } from "node:http"
 import test from "node:test"
-import { createBffServer } from "../dist/bootstrap/server.js"
+import { startChatTaskHttpTestApp } from "./doubles/chat-task-http-app.mjs"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
@@ -9,34 +9,29 @@ const item = { session_id: "历史任务😀", title: "本人归档", archived_a
 const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "test-secret",
-  authorization: "Bearer shared-token",
+  cookie: "kokoro-issuer.session_token=shared-token",
+  origin: "https://web.example.test",
   "x-kokoro-request-id": "shared-http",
 }
 async function fixture(t, options = {}) {
   const reads = []
-  const businessStore = {
-    services: {
-      chat: {
-        async listOwnedArchivedTasks(query) {
-          reads.push(query)
-          return options.read ? options.read(query) : { items: [item], nextPosition: null }
-        },
-        async readArchiveState(query) {
-          reads.push(query)
-          return options.state ? options.state(query) : { session_id: query.conversationId, archived_at: null }
-        },
-        async changeArchiveState(command) {
-          reads.push(command)
-          if (options.change) return options.change(command)
-          return {
-            kind: "changed",
-            receipt: { data: { session_id: command.conversationId, archived_at: command.action === "archive" ? item.archived_at : null } },
-          }
-        },
-      },
+  const chatService = {
+    async listOwnedArchivedTasks(query) {
+      reads.push(query)
+      return options.read ? options.read(query) : { items: [item], nextPosition: null }
     },
-    async ready() {},
-    async close() {},
+    async readArchiveState(query) {
+      reads.push(query)
+      return options.state ? options.state(query) : { session_id: query.conversationId, archived_at: null }
+    },
+    async changeArchiveState(command) {
+      reads.push(command)
+      if (options.change) return options.change(command)
+      return {
+        kind: "changed",
+        receipt: { data: { session_id: command.conversationId, archived_at: command.action === "archive" ? item.archived_at : null } },
+      }
+    },
   }
   const config = {
     host: "127.0.0.1",
@@ -45,6 +40,7 @@ async function fixture(t, options = {}) {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant-verified",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "test-secret",
     upstreamSecret: null,
     upstreamTimeoutMs: options.timeout ?? 1000,
@@ -58,13 +54,7 @@ async function fixture(t, options = {}) {
     upstreams: {},
   }
   const admission = options.admission ?? new SessionAdmissionDouble({ "shared-token": { namespace: "tenant-verified", userId: "user-one" } })
-  const server = createBffServer(config, { businessStore, readiness: async () => undefined, sessionAdmission: admission })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
-  t.after(async () => {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
-  })
-  return { base: `http://127.0.0.1:${server.address().port}`, reads }
+  return { base: await startChatTaskHttpTestApp(t, config, admission, { archive: chatService }), reads }
 }
 
 for (const [method, path, body] of [
@@ -94,7 +84,7 @@ for (const [method, path, body] of [
 test("archive anonymous and invalid input never reach owner", async (t) => {
   const { base, reads } = await fixture(t)
   for (const path of ["/v1/account/archived-tasks", "/v1/sessions/a/archive"]) {
-    assert.equal((await fetch(base + path, { headers: { ...headers, authorization: "" } })).status, 401)
+    assert.equal((await fetch(base + path, { headers: { ...headers, cookie: "", origin: "https://web.example.test" } })).status, 401)
   }
   for (const path of [
     "/v1/account/archived-tasks?limit=0",

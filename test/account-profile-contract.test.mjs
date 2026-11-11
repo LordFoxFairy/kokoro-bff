@@ -1,44 +1,31 @@
-import { restoreClosureMainContract, closureMainBaseline } from "../scripts/verify-closure-integration-contract.mjs"
-import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "../scripts/archived-tasks-public-contract.mjs"
-import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "../scripts/shared-tasks-public-contract.mjs"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
-import { createHash } from "node:crypto"
 import test from "node:test"
-import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "../scripts/account-profile-public-contract.mjs"
-const currentSource = restoreClosureMainContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
-const currentBaseline = closureMainBaseline(JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations)
-const source = restorePublic152SharedTasksContract(restorePublic153ArchivedTasksContract(currentSource))
-const baseline = sharedTasksParentBaseline(archivedTasksParentBaseline(currentBaseline))
-const digest = (value) => createHash("sha256").update(value).digest("hex")
-test("profile additive release restores exact complete15.1 bytes and144 operations", () => {
-  assert.equal(digest(restorePublic151AccountProfileContract(source)), "5972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d")
-  assert.equal(accountProfileParentBaseline(baseline).length, 144)
+import { load } from "js-yaml"
+
+test("account profile public contract exposes the native-session read and existing CAS write", async () => {
+  const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const api = load(source)
+  const profile = api.paths["/v1/account/profile"]
+  assert.deepEqual(Object.keys(profile), ["get", "patch"])
+  assert.equal(profile.get.operationId, "readAccountProfile")
+  assert.equal(profile.get["x-kokoro-permission"], "iam:account-profile.read")
+  assert.equal(profile.get.requestBody, undefined)
+  assert.deepEqual(profile.get.responses["200"].content["application/json"].schema, { $ref: "#/components/schemas/AccountProfileReadResponse" })
+  assert.equal(profile.patch.operationId, "updateAccountProfile")
+  assert.equal(profile.patch["x-kokoro-permission"], "iam:account-profile.write")
+  const read = api.components.schemas.AccountProfileReadResponse
+  assert.deepEqual(read.required, ["data"])
+  assert.deepEqual(read.properties.data.required, ["subject", "name", "email", "email_verified"])
+  assert.equal(read.additionalProperties, false)
 })
-test("profile metadata, request, closed ACK, errors and response headers cannot drift", () => {
-  for (const [from, to] of [
-    ["iam:account-profile.write", "iam:account-profile.read"],
-    ["Update current Product user display name", "Changed"],
-    ["expected_name:", "expected_old:"],
-    ["AccountProfileError409:", "AccountProfileError410:"],
-    ["account_profile_conflict", "session_forbidden"],
-    ["Validated delta seconds from1 through86400.", "unbounded"],
-    ["  version: 15.2.0", "  version: 15.2.1"],
+
+test("account profile operation inventory keeps both methods and no duplicate operation ids", async () => {
+  const inventory = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+  const entries = inventory.filter((item) => item.path === "/v1/account/profile")
+  assert.deepEqual(entries, [
+    { method: "GET", path: "/v1/account/profile", operation_id: "readAccountProfile" },
+    { method: "PATCH", path: "/v1/account/profile", operation_id: "updateAccountProfile" },
   ])
-    assert.throws(() => {
-      const value = source.replace(from, to)
-      if (value === source) throw new Error("test mutation missed")
-      const parent = restorePublic151AccountProfileContract(value)
-      assert.notEqual(parent, value)
-    }, from)
-})
-test("inventory duplicate, omitted, extra, reordered and changed prior operations fail", () => {
-  for (const list of [
-    baseline.slice(1),
-    [...baseline, baseline[0]],
-    [...baseline.slice(1), baseline[0]],
-    baseline.map((x, i) => (i === 0 ? { ...x, operation_id: "changed" } : x)),
-    baseline.map((x) => (x.operation_id === "updateAccountProfile" ? { ...x, method: "POST" } : x)),
-  ])
-    assert.throws(() => accountProfileParentBaseline(list))
+  assert.equal(new Set(inventory.map((item) => item.operation_id)).size, inventory.length)
 })

@@ -36,6 +36,9 @@ import type {
   ListTenantRolesData,
   ListTenantRolesErrors,
   ListTenantRolesResponses,
+  ReadAccountProfileData,
+  ReadAccountProfileErrors,
+  ReadAccountProfileResponses,
   RejectTenantInvitationData,
   RejectTenantInvitationErrors,
   RejectTenantInvitationResponses,
@@ -63,9 +66,6 @@ import type {
   VerifyOpenAppManagementAuthorizationData,
   VerifyOpenAppManagementAuthorizationErrors,
   VerifyOpenAppManagementAuthorizationResponses,
-  VerifySessionAuthorizationData,
-  VerifySessionAuthorizationErrors,
-  VerifySessionAuthorizationResponses,
   VerifySkillListIdentityData,
   VerifySkillListIdentityErrors,
   VerifySkillListIdentityResponses,
@@ -82,6 +82,7 @@ import {
   zListTenantInvitationsResponse,
   zListTenantMembersResponse,
   zListTenantRolesResponse,
+  zReadAccountProfileResponse,
   zRejectTenantInvitationResponse,
   zRemoveTenantMemberResponse,
   zReplaceTenantMemberRolesResponse,
@@ -91,7 +92,6 @@ import {
   zRevokeAccountSessionResponse,
   zUpdateAccountProfileResponse,
   zVerifyOpenAppManagementAuthorizationResponse,
-  zVerifySessionAuthorizationResponse,
   zVerifySkillListIdentityResponse,
 } from "./zod.gen.js"
 
@@ -160,8 +160,34 @@ export const verifyOpenAppManagementAuthorization = <ThrowOnError extends boolea
         scheme: "bearer",
         type: "http",
       },
+      {
+        key: "bffUserContextServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
     ],
     url: "/internal/v1/open-app-registrations/{app_id}/management-authorizations/verify",
+    ...options,
+  })
+
+export const readAccountProfile = <ThrowOnError extends boolean = false>(
+  options?: Options<ReadAccountProfileData, ThrowOnError>,
+): RequestResult<ReadAccountProfileResponses, ReadAccountProfileErrors, ThrowOnError> =>
+  (options?.client ?? client).get<ReadAccountProfileResponses, ReadAccountProfileErrors, ThrowOnError>({
+    responseValidator: async (data) => await zReadAccountProfileResponse.parseAsync(data),
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        key: "bffUserContextServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/internal/v1/account/profile",
     ...options,
   })
 
@@ -176,6 +202,11 @@ export const updateAccountProfile = <ThrowOnError extends boolean = false>(
         scheme: "bearer",
         type: "http",
       },
+      {
+        key: "bffUserContextServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
     ],
     url: "/internal/v1/account/profile",
     ...options,
@@ -186,15 +217,20 @@ export const updateAccountProfile = <ThrowOnError extends boolean = false>(
   })
 
 export const listAccountSessions = <ThrowOnError extends boolean = false>(
-  options?: Options<ListAccountSessionsData, ThrowOnError>,
+  options: Options<ListAccountSessionsData, ThrowOnError>,
 ): RequestResult<ListAccountSessionsResponses, ListAccountSessionsErrors, ThrowOnError> =>
-  (options?.client ?? client).get<ListAccountSessionsResponses, ListAccountSessionsErrors, ThrowOnError>({
+  (options.client ?? client).get<ListAccountSessionsResponses, ListAccountSessionsErrors, ThrowOnError>({
     responseValidator: async (data) => await zListAccountSessionsResponse.parseAsync(data),
     security: [
       {
-        key: "internalBearer",
+        key: "accountSessionServiceBearer",
         scheme: "bearer",
         type: "http",
+      },
+      {
+        in: "cookie",
+        name: "kokoro-issuer.session_token",
+        type: "apiKey",
       },
     ],
     url: "/internal/v1/account/sessions",
@@ -208,9 +244,14 @@ export const revokeAccountSession = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) => await zRevokeAccountSessionResponse.parseAsync(data),
     security: [
       {
-        key: "internalBearer",
+        key: "accountSessionServiceBearer",
         scheme: "bearer",
         type: "http",
+      },
+      {
+        in: "cookie",
+        name: "kokoro-issuer.session_token",
+        type: "apiKey",
       },
     ],
     url: "/internal/v1/account/sessions/{session_id}",
@@ -255,6 +296,11 @@ export const listTenantMembers = <ThrowOnError extends boolean = false>(
         scheme: "bearer",
         type: "http",
       },
+      {
+        key: "bffUserContextServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
     ],
     url: "/internal/v1/tenants/{tenant_id}/members",
     ...options,
@@ -268,6 +314,11 @@ export const leaveTenant = <ThrowOnError extends boolean = false>(
     security: [
       {
         key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        key: "bffUserContextServiceBearer",
         scheme: "bearer",
         type: "http",
       },
@@ -287,6 +338,11 @@ export const removeTenantMember = <ThrowOnError extends boolean = false>(
         scheme: "bearer",
         type: "http",
       },
+      {
+        key: "bffUserContextServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
     ],
     url: "/internal/v1/tenants/{tenant_id}/members/{member_id}",
     ...options,
@@ -300,6 +356,11 @@ export const replaceTenantMemberRoles = <ThrowOnError extends boolean = false>(
     security: [
       {
         key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        key: "bffUserContextServiceBearer",
         scheme: "bearer",
         type: "http",
       },
@@ -323,6 +384,11 @@ export const listTenantRoles = <ThrowOnError extends boolean = false>(
         scheme: "bearer",
         type: "http",
       },
+      {
+        key: "bffUserContextServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
     ],
     url: "/internal/v1/tenants/{tenant_id}/roles",
     ...options,
@@ -339,6 +405,11 @@ export const listTenantInvitations = <ThrowOnError extends boolean = false>(
         scheme: "bearer",
         type: "http",
       },
+      {
+        key: "bffUserContextServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
     ],
     url: "/internal/v1/tenants/{tenant_id}/invitations",
     ...options,
@@ -352,6 +423,11 @@ export const createTenantInvitation = <ThrowOnError extends boolean = false>(
     security: [
       {
         key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        key: "bffUserContextServiceBearer",
         scheme: "bearer",
         type: "http",
       },
@@ -375,6 +451,11 @@ export const resendTenantInvitation = <ThrowOnError extends boolean = false>(
         scheme: "bearer",
         type: "http",
       },
+      {
+        key: "bffUserContextServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
     ],
     url: "/internal/v1/tenants/{tenant_id}/invitations/{invitation_id}/resend",
     ...options,
@@ -391,6 +472,11 @@ export const cancelTenantInvitation = <ThrowOnError extends boolean = false>(
         scheme: "bearer",
         type: "http",
       },
+      {
+        key: "bffUserContextServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
     ],
     url: "/internal/v1/tenants/{tenant_id}/invitations/{invitation_id}",
     ...options,
@@ -404,6 +490,11 @@ export const resolveTenantPublisherProfiles = <ThrowOnError extends boolean = fa
     security: [
       {
         key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        key: "bffUserContextServiceBearer",
         scheme: "bearer",
         type: "http",
       },
@@ -427,6 +518,11 @@ export const checkAuthorization = <ThrowOnError extends boolean = false>(
         scheme: "bearer",
         type: "http",
       },
+      {
+        key: "bffUserContextServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
     ],
     url: "/internal/v1/authorization/check",
     ...options,
@@ -434,22 +530,6 @@ export const checkAuthorization = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
-  })
-
-export const verifySessionAuthorization = <ThrowOnError extends boolean = false>(
-  options?: Options<VerifySessionAuthorizationData, ThrowOnError>,
-): RequestResult<VerifySessionAuthorizationResponses, VerifySessionAuthorizationErrors, ThrowOnError> =>
-  (options?.client ?? client).post<VerifySessionAuthorizationResponses, VerifySessionAuthorizationErrors, ThrowOnError>({
-    responseValidator: async (data) => await zVerifySessionAuthorizationResponse.parseAsync(data),
-    security: [
-      {
-        key: "internalBearer",
-        scheme: "bearer",
-        type: "http",
-      },
-    ],
-    url: "/internal/v1/session-authorizations/verify",
-    ...options,
   })
 
 export const checkTenantSkillAuthorization = <ThrowOnError extends boolean = false>(
@@ -460,6 +540,11 @@ export const checkTenantSkillAuthorization = <ThrowOnError extends boolean = fal
     security: [
       {
         key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        key: "bffUserContextServiceBearer",
         scheme: "bearer",
         type: "http",
       },

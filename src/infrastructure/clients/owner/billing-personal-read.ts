@@ -39,7 +39,7 @@ function u1(value: string, maxCodePoints: number): string | null {
   return `u1.${Buffer.from(value, "utf8").toString("base64url")}`
 }
 
-function identity(context: RequestContext): PersonalIdentity | null {
+export function billingPersonalIdentity(context: RequestContext): PersonalIdentity | null {
   const tenant = u1(context.identity.namespace, 191)
   const subject = u1(context.identity.userId, 255)
   return tenant === null || subject === null ? null : { tenant, subject }
@@ -101,7 +101,7 @@ async function request<T>(
   const baseUrl = config.upstreams.billing ?? null
   const serviceToken = config.billingServiceToken ?? null
   const internalSecret = config.upstreamSecret
-  const encoded = identity(context)
+  const encoded = billingPersonalIdentity(context)
   if (baseUrl === null || serviceToken === null || internalSecret === null || serviceToken === internalSecret || encoded === null || signal.aborted) {
     return unavailable()
   }

@@ -2,9 +2,10 @@ import { createHash } from "node:crypto"
 import { performance } from "node:perf_hooks"
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 
-import type { ProjectDeletionResource, ProjectOwnerScope } from "../../application/ports/project-repository.js"
+import type { ProjectDeletionResource, ProjectOwnerScope } from "../../application/projects/types.js"
 import type { PostgresBffDatabase } from "./client.js"
 import { deleteLockedConversationFacts } from "./conversation-delete.js"
+import { enqueueStorageScopeRelease } from "./project-scope-release-outbox-repository.js"
 import { pauseProjectScheduledTasks } from "./scheduled-task-repository.js"
 import { isRecord } from "../../domain/json.js"
 
@@ -24,24 +25,6 @@ type ConversationRow = {
 }
 
 const hex = (value: unknown): string => createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex")
-const commandId = (kind: string, tenant: string, scope: string): string => `release_${hex([kind, tenant, scope]).slice(0, 48)}`
-
-async function insertRelease(
-  client: import("pg").PoolClient,
-  scope: ProjectOwnerScope,
-  projectId: string,
-  kind: "project" | "conversation",
-  id: string,
-): Promise<void> {
-  const operation = kind === "project" ? "storage.release_project_scope:v1" : "storage.release_conversation_scope:v1"
-  const digest = hex(["storage-command-v1", scope.tenantId, scope.subjectId, scope.subjectId, operation, kind, id])
-  await client.query(
-    `INSERT INTO bff_project_scope_release_outbox
-      (command_id,tenant_id,project_id,owner_subject_id,actor_id,scope_kind,scope_id,request_digest,state,attempt_count,available_at,fence)
-     VALUES ($1,$2,$3,$4,$4,$5,$6,$7,'pending',0,CURRENT_TIMESTAMP(3),0)`,
-    [commandId(kind, scope.tenantId, id), scope.tenantId, projectId, scope.subjectId, kind, id, digest],
-  )
-}
 
 export async function deleteProjectAggregate(
   database: PostgresBffDatabase,
@@ -201,11 +184,13 @@ export async function deleteProjectAggregate(
         )
         await deleteLockedConversationFacts(bounded, scope.tenantId, scope.subjectId, conversation.conversation_id, requestId)
       }
-      await insertRelease(bounded, scope, projectId, "conversation", conversation.conversation_id)
+      await enqueueStorageScopeRelease(bounded, scope, projectId, "conversation", conversation.conversation_id)
     }
     await pauseProjectScheduledTasks(bounded, scope, projectId, requestId, key)
-    await insertRelease(bounded, scope, projectId, "project", projectId)
-    await query(`UPDATE bff_project SET deleted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3`, [
+    await enqueueStorageScopeRelease(bounded, scope, projectId, "project", projectId)
+    await query("DELETE FROM bff_project_pin WHERE tenant_id=$1 AND project_id=$2", [scope.tenantId, projectId])
+    await query("DELETE FROM bff_project_task WHERE tenant_id=$1 AND project_id=$2", [scope.tenantId, projectId])
+    await query(`UPDATE bff_project SET deleted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3),website_urls='[]'::jsonb WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3`, [
       scope.tenantId,
       scope.subjectId,
       projectId,

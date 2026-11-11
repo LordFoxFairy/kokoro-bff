@@ -3,7 +3,7 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import { sharedSkillSummarySchema } from "../skill-specification-schema.js"
 import type { SkillSpecificationSource } from "../../application/skill-specification.types.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { SkillShareRepository } from "../../application/ports/skill-share-repository.js"
+import type { SkillShareRepository } from "../../application/skills/skill-share-repository.js"
 import type { SkillProductConnectClient } from "../../infrastructure/clients/platform/skill-product-connect.js"
 import { projectSkillPackageInspectionResponse } from "../../infrastructure/clients/platform/skill-package-inspection-response.js"
 import { assertSkillWireKnown } from "../../infrastructure/clients/platform/skill-product-response.js"
@@ -14,7 +14,7 @@ import { send } from "../response.js"
 export async function skillShareRoute(
   request: IncomingMessage,
   response: ServerResponse,
-  context: RequestContext & { humanBearer?: string },
+  context: RequestContext,
   path: string[],
   repository: SkillShareRepository | undefined,
   client: SkillProductConnectClient | null,
@@ -37,7 +37,7 @@ export async function skillShareRoute(
     const readSummary = async (sourceRef: string) => {
       signal.throwIfAborted()
       if (!specification) throw new ConnectError("Share metadata unavailable", Code.Unavailable)
-      const raw = await specification.revisionSummary(sourceRef, { ...context, humanBearer: context.humanBearer ?? "" }, signal, deadlineAt)
+      const raw = await specification.revisionSummary(sourceRef, context, signal, deadlineAt)
       signal.throwIfAborted()
       const parsed = sharedSkillSummarySchema.safeParse(raw)
       if (!parsed.success || sourceRef !== `skill:${parsed.data.skill_id}`) throw new Error("skill_response_invalid")

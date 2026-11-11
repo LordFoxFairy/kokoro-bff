@@ -1,26 +1,38 @@
 import { isDeepStrictEqual } from "node:util"
 import type { z } from "zod"
 import { zApiErrorResponse, zVerifySkillListIdentityResponse } from "../generated/iam-http/zod.gen.js"
-import { strictParseRawJson } from "../infrastructure/raw-json.js"
-import { SessionAdmissionTransport, type SessionAdmissionTransportInput } from "./session-admission.transport.js"
+import { createIamHttpClient } from "../infrastructure/clients/iam-http-transport.js"
+import { verifySkillListIdentity } from "../generated/iam-http/sdk.gen.js"
 import type { SessionAdmissionClientOptions } from "./session-admission.client.js"
 
+export type SkillListIdentityInput = Readonly<{ token: string; requestId: string; signal: AbortSignal }>
 export type SkillListPrincipal = z.infer<typeof zVerifySkillListIdentityResponse>["data"]
 export type SkillListAdmissionResult =
   Readonly<{ ok: true; principal: SkillListPrincipal }> | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
-export type SkillListAdmission = Readonly<{ verify(input: SessionAdmissionTransportInput): Promise<SkillListAdmissionResult> }>
+export type SkillListAdmission = Readonly<{ verify(input: SkillListIdentityInput): Promise<SkillListAdmissionResult> }>
 const unavailable = (): SkillListAdmissionResult => ({ ok: false, status: 503, code: "iam_admission_unavailable" })
 
 /** Public skill.list only. No Product-session fallback or inferred App trust. */
 export class SkillListAdmissionClient implements SkillListAdmission {
-  private readonly transport: SessionAdmissionTransport | null
+  private readonly client: ReturnType<typeof createIamHttpClient> | null
   constructor(options: SessionAdmissionClientOptions) {
-    this.transport = options.baseUrl === null ? null : new SessionAdmissionTransport({ ...options, baseUrl: options.baseUrl })
+    this.client = options.baseUrl === null ? null : createIamHttpClient({ ...options, baseUrl: options.baseUrl })
   }
-  async verify(input: SessionAdmissionTransportInput): Promise<SkillListAdmissionResult> {
-    if (this.transport === null) return unavailable()
+  async verify(input: SkillListIdentityInput): Promise<SkillListAdmissionResult> {
+    if (this.client === null) return unavailable()
     try {
-      const response = await this.transport.requestSkillListIdentity(input)
+      const result = await verifySkillListIdentity({
+        client: this.client,
+        headers: { authorization: `Bearer ${input.token}`, accept: "application/json", "x-request-id": input.requestId },
+        signal: input.signal,
+        responseValidator: async (raw) => {
+          const parsed = zVerifySkillListIdentityResponse.parse(raw)
+          if (!isDeepStrictEqual(parsed, raw)) throw new Error("iam_identity_response_invalid")
+          return parsed
+        },
+      })
+      const response = result.response
+      if (response === undefined) return unavailable()
       input.signal.throwIfAborted()
       if (
         response.headers.get("x-request-id") !== input.requestId ||
@@ -28,7 +40,7 @@ export class SkillListAdmissionClient implements SkillListAdmission {
         response.headers.get("content-type")?.split(";", 1)[0] !== "application/json"
       )
         return unavailable()
-      const raw = strictParseRawJson(new TextDecoder("utf-8", { fatal: true }).decode(response.body))
+      const raw: unknown = response.status === 200 ? result.data : result.error
       if (response.status === 200) {
         const result = zVerifySkillListIdentityResponse.safeParse(raw)
         if (!result.success || !isDeepStrictEqual(result.data, JSON.parse(JSON.stringify(raw)))) return unavailable()

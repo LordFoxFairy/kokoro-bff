@@ -3,8 +3,8 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-storage",
-    "repository_commit": "d13f33acfc7a482d61ebffc58e7b2667b58ae197",
-    "published_combined_sha256": "47e2659f577cf5c0a5e44a9ee9165d0fee17471bb3d7abb80095a956f655c1f9",
+    "repository_commit": "b60931e9e4e92d596b0678cbdabd9116e898b432",
+    "published_combined_sha256": "3da3346a760a6275251aba56f75129189e06e3522e81b4c0b110386a4cdff02f",
     "package_name": "kokoro.storage.v3",
     "sources": [
       {
@@ -13,7 +13,7 @@
       },
       {
         "path": "contract/proto/kokoro/storage/v3/storage.proto",
-        "sha256": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9"
+        "sha256": "dbd622696f66817465f6481f86da03cfec871ade9960a8f4194d85631a9981df"
       }
     ]
   },
@@ -29,14 +29,14 @@
     "configs": [
       {
         "path": "buf.storage.json",
-        "sha256": "405c14f37384cac2a5bb3f3936ac22020e1f21cef7ae55b2c924a832a1291ca4"
+        "sha256": "f698b7e009327754bc957b36a5362563fcd4f72a9df798808d659ce040ea7afd"
       },
       {
         "path": "buf.storage.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "1b3fbf7e60eb53443b66d8edbf8134c00841cebeced9bc51af0ad67d93ff55b0",
+    "script_sha256": "f4f679b1b8f965cab8868d7b9d56435553e31a1d5a6615e0900b64ec0c01b0d8",
     "formatting": {
       "package": "prettier",
       "version": "3.9.6",
@@ -59,11 +59,11 @@
     ]
   },
   "runtime": {
-    "node": "22.22.2",
+    "node": "24.20.0",
     "pnpm": "11.25.0",
     "typescript": "5.9.3"
   },
-  "lockfile_sha256": "491c0325ad3d397a17979c1ee75315c407ec33c465117d135c509cca645e5028",
+  "lockfile_sha256": "a1ad899d8f43809ca95a975b65122e6352b30b90120db6e37adb7c511000f617",
   "build_policy_sha256": "b9cab84f3d70bbbd4712d0131e208eb8e267c154ed5879092d34bf0ccc3d2e9e",
   "generated": [
     {
@@ -72,7 +72,7 @@
     },
     {
       "path": "kokoro/storage/v3/storage_pb.ts",
-      "sha256": "77cd33b3002a7af50143366015c79b55ffe59fa68108ce5535c6d5eac5d99e70"
+      "sha256": "b18d4554dca8023bae3532006cf3cdd6cff00969a03255fde7066a08e1ecaf30"
     }
   ]
 }

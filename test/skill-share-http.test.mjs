@@ -11,6 +11,22 @@ import { create } from "@bufbuild/protobuf"
 import { ConnectError, Code } from "@connectrpc/connect"
 import { InspectSkillPackageResponseSchema } from "../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts"
 import { skillShareRoute } from "../src/http/routes/skill-share.ts"
+
+const summary = {
+  skill_id: "one",
+  series_id: "series",
+  revision: "1",
+  display_name: "Skill one",
+  description: "Description",
+  tags: [],
+  example_prompts: [],
+  category_keys: [],
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+  owner_type: "personal",
+  source_kind: "personal",
+}
+
 test("Skill Share HTTP requires current exact qualification before create and resolve while preserving creator revoke", async () => {
   let share = null,
     sourceStatus = "active",
@@ -25,20 +41,6 @@ test("Skill Share HTTP requires current exact qualification before create and re
     enterSummary,
     releaseSummary,
     observeAbort
-  const summary = {
-    skill_id: "one",
-    series_id: "series",
-    revision: "1",
-    display_name: "Skill one",
-    description: "Description",
-    tags: [],
-    example_prompts: [],
-    category_keys: [],
-    created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:00:00Z",
-    owner_type: "personal",
-    source_kind: "personal",
-  }
   const repository = {
     create: async (scope, sourceRef, urlFor, expiresAt) => {
       creates++
@@ -184,10 +186,89 @@ test("Skill Share HTTP requires current exact qualification before create and re
   }
 })
 
-test("Skill Share composition uses the validated browser origin, not an invented HTTPS domain", async () => {
-  const { readFile } = await import("node:fs/promises")
-  const source = await readFile(new URL("../src/bootstrap/server.ts", import.meta.url), "utf8")
-  assert.match(source, /composition\.skillProductClient,\s*config\.iamRelay\?\.webOrigin,/u)
+test("Skill Share composition uses the validated browser origin, not an invented HTTPS domain", async (t) => {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, SESSION_ADMISSION, SKILL_PRODUCT_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_SPECIFICATION_SOURCE } =
+    await import("../dist/common/tokens.js")
+  const { loadConfig } = await import("../dist/config/runtime.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { SkillsModule } = await import("../dist/modules/skills/skills.module.js")
+  const { SessionAdmissionDouble } = await import("./doubles/session-admission.ts")
+
+  const origin = "http://127.0.0.1:3310"
+  const config = loadConfig({
+    KOKORO_DOMAIN: "different-product.example.test",
+    KOKORO_TENANT_ID: "tenant",
+    KOKORO_IAM_WEB_ORIGIN: origin,
+    KOKORO_BFF_SHARED_SECRET: "fixture-secret",
+    KOKORO_BFF_POSTGRES_URL: "postgresql://db.invalid/fixture?schema=kokoro_bff",
+    KOKORO_BFF_REDIS_URL: "redis://cache.invalid/8",
+  })
+  const admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "creator" } })
+  const inspect = t.mock.fn(async (input) => create(InspectSkillPackageResponseSchema, { sourceRef: { value: input.sourceRef }, revision: 1n, files: [] }))
+  const revisionSummary = t.mock.fn(async () => summary)
+  const createShare = t.mock.fn(async (scope, sourceRef, urlFor, expiresAt) => ({
+    shareId: "share",
+    tenantId: scope.tenantId,
+    creatorSubjectId: scope.creatorSubjectId,
+    resourceKind: "skill_revision",
+    sourceRef,
+    url: urlFor("share"),
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    expiresAt,
+    revokedAt: null,
+  }))
+  const module = await Test.createTestingModule({ imports: [SkillsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: Object.freeze({}) })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+    .overrideProvider(SKILL_PRODUCT_CLIENT)
+    .useValue({ inspect })
+    .overrideProvider(SKILL_SHARE_REPOSITORY)
+    .useValue({ create: createShare })
+    .overrideProvider(SKILL_SPECIFICATION_SOURCE)
+    .useValue({ revisionSummary })
+    .compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  t.after(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  const base = await app.getUrl()
+  const post = (browserOrigin) =>
+    fetch(`${base}/v1/skill-shares`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "fixture-secret",
+        cookie: "kokoro-issuer.session_token=session",
+        origin: browserOrigin,
+        "x-forwarded-host": "untrusted-host.example.test",
+        "x-forwarded-proto": "https",
+      },
+      body: '{"source_ref":"skill:one"}',
+    })
+
+  const rejected = await post("https://untrusted-host.example.test")
+  assert.equal(rejected.status, 403)
+  assert.equal((await rejected.json()).error.code, "session_forbidden")
+  assert.equal(admission.calls.length, 0)
+  assert.equal(inspect.mock.callCount(), 0)
+  assert.equal(revisionSummary.mock.callCount(), 0)
+  assert.equal(createShare.mock.callCount(), 0)
+
+  const admitted = await post(origin)
+  assert.equal(admitted.status, 201)
+  assert.equal((await admitted.json()).data.url, "http://127.0.0.1:3310/skills/shared/share")
+  assert.deepEqual(
+    admission.calls.map((call) => call.origin),
+    [origin],
+  )
+  assert.equal(createShare.mock.callCount(), 1)
+  assert.deepEqual(createShare.mock.calls[0].arguments[0], { tenantId: "tenant", creatorSubjectId: "creator" })
 })
 
 test("Skill Share POST without a trusted public origin fails before owner inspection or share creation", async () => {

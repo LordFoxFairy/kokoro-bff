@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/iam-http")
 const manifestPath = path.join(root, "contract/dependencies/iam-http.json")
 const configPath = path.join(root, "openapi-ts.iam.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "4db7012a85752071f5fd30b9a5a3b4977e9dd4f3"
+const ownerCommit = "b6a9745b340149808afb1aae357574d0aa7bbad3"
 const vendorPath = path.join(root, `contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`)
-const ownerDigest = "db46bc6a3f0e821f0a6e94f7ee9f75a80d8e92cfbbe5ae5c1ca612d0b2754600"
+const ownerDigest = "d279907ae52e0f8594ee28a388f22c9d79e298e8e49caeb2efc3ca2291cdf0b9"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -149,16 +149,6 @@ async function normalizeGeneratorCompatibility(directory) {
       1,
       "strict IAM error envelope",
     ],
-    [
-      `        client_id: z.string().min(1)
-    })
-});`,
-      `        client_id: z.string().min(1)
-    }).strict()
-}).strict();`,
-      1,
-      "strict IAM admission response",
-    ],
   ])
 }
 
@@ -213,7 +203,7 @@ async function manifestFor(directory) {
   ])
   const packageJson = JSON.parse(packageDocument)
   assert.equal(sha256(vendor), ownerDigest, "vendored IAM contract digest drifted")
-  assert.equal(nodeVersion, "22.22.2\n", ".node-version must pin Node 22.22.2")
+  assert.equal(nodeVersion, "24.20.0\n", ".node-version must pin Node 24.20.0")
   assert.equal(packageJson.packageManager, "pnpm@11.25.0")
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
   assert.equal(packageJson.devDependencies.prettier, "3.9.6")
@@ -225,7 +215,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-iam",
       repository_commit: ownerCommit,
-      contract_version: "0.15.0",
+      contract_version: "0.21.0",
       contract_path: "contract/openapi/iam.internal.v1.json",
       contract_sha256: ownerDigest,
     },
@@ -235,7 +225,7 @@ async function manifestFor(directory) {
       config_path: "openapi-ts.iam.config.ts",
       config_sha256: sha256(config),
     },
-    runtime: { node: "22.22.2", pnpm: "11.25.0", zod: "4.5.4" },
+    runtime: { node: process.versions.node, pnpm: "11.25.0", zod: "4.5.4" },
     lockfile_sha256: sha256(lockfile),
     generated: await Promise.all(
       generatedFiles.map(async (file) => ({
@@ -249,6 +239,9 @@ async function manifestFor(directory) {
 async function main() {
   const mode = process.argv[2]
   assert.ok(mode === "--write" || mode === "--check", "expected --write or --check")
+  assert.equal(process.versions.node, "24.20.0", "Consumer generation requires pinned Node 24.20.0")
+  assert.equal(await readFile(path.join(root, ".node-version"), "utf8"), "24.20.0\n", ".node-version must pin Node 24.20.0")
+  await run(process.execPath, [path.join(root, "scripts/generate-iam-auth-client.mjs"), mode])
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "kokoro-iam-http-"))
   const temporaryOutput = path.join(temporaryRoot, "generated")
   const repeatedOutput = path.join(temporaryRoot, "generated-again")

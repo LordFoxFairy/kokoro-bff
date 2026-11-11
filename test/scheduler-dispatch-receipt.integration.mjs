@@ -1,15 +1,36 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { createServer } from "node:http"
 import { test } from "node:test"
 
+import { Test } from "@nestjs/testing"
 import { Pool } from "pg"
 
+import { scheduledConversationId } from "../dist/infrastructure/clients/agent/launch.js"
+import { ScheduledChatSubmission } from "../dist/infrastructure/postgres/scheduled-chat-submission.js"
+import { PostgresAgentDispatchOutboxRepository } from "../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js"
+import { ScheduledTaskService } from "../dist/application/scheduled-task-service.js"
+import {
+  AGENT_CANCELLATION_DISPATCHER,
+  AGENT_DISPATCH_DISPATCHER,
+  AGUI_PROJECTOR,
+  BFF_CONFIG,
+  BFF_DATABASE,
+  SCHEDULED_AGENT_DISPATCH_REPOSITORY,
+  SCHEDULED_AGENT_DISPATCHER,
+  SCHEDULED_TASK_DISPATCHER,
+  SCHEDULED_TASK_SERVICE,
+  SCHEDULER_DISPATCH_RECEIPTS,
+} from "../dist/common/tokens.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
-import { createBffServer } from "../dist/main.js"
 import { schedulerDispatchDigest, schedulerDispatchScope } from "../dist/infrastructure/clients/scheduler/dispatch-identity.js"
-import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { PostgresScheduledAgentDispatchRepository } from "../dist/infrastructure/postgres/scheduled-agent-dispatch-repository.js"
+import { PostgresScheduledTaskRepository } from "../dist/infrastructure/postgres/scheduled-task-repository.js"
 import { PostgresSchedulerDispatchReceiptRepository } from "../dist/infrastructure/postgres/scheduler-dispatch-receipt-repository.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { SCHEDULED_TASK_CALLBACK_LOOKUP } from "../dist/modules/scheduled-tasks/scheduled-task.providers.js"
+import { ScheduledTasksModule } from "../dist/modules/scheduled-tasks/scheduled-tasks.module.js"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const redisUrl = process.env.KOKORO_TEST_REDIS_URL
@@ -101,14 +122,46 @@ function receiverConfig(agentBase) {
   }
 }
 
-function receiverStore(store, receipts = store.schedulerDispatchReceipts, scheduledTasks = store.services.scheduledTasks) {
-  return {
-    services: { scheduledTasks },
-    agUi: store.agUi,
-    schedulerDispatchReceipts: receipts,
-    scheduledAgentDispatch: store.scheduledAgentDispatch,
-    ready: store.ready.bind(store),
-    close: async () => undefined,
+async function createSchedulerReceiver(agentBase, { holdAgentConsumption = false } = {}) {
+  const builder = Test.createTestingModule({ imports: [ScheduledTasksModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(receiverConfig(agentBase))
+  // Launch recovery uses the sole ordinary dispatcher. No source events are needed for this receipt fixture.
+  for (const token of [SCHEDULED_TASK_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) {
+    builder.overrideProvider(token).useValue(null)
+  }
+  if (holdAgentConsumption || agentBase === null) builder.overrideProvider(AGENT_DISPATCH_DISPATCHER).useValue(null)
+  if (holdAgentConsumption) {
+    builder.overrideProvider(SCHEDULED_AGENT_DISPATCHER).useValue(null)
+  }
+  const module = await builder.compile()
+  try {
+    const database = module.get(BFF_DATABASE)
+    const scheduledTasks = module.get(SCHEDULED_TASK_SERVICE)
+    const taskLookup = module.select(ScheduledTasksModule).get(SCHEDULED_TASK_CALLBACK_LOOKUP, { strict: true })
+    const receipts = module.get(SCHEDULER_DISPATCH_RECEIPTS)
+    const scheduledAgentDispatch = module.get(SCHEDULED_AGENT_DISPATCH_REPOSITORY)
+    const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+    let closing
+    return {
+      database,
+      scheduledTasks,
+      taskLookup,
+      receipts,
+      scheduledAgentDispatch,
+      listen: async () => {
+        await app.listen(0, "127.0.0.1")
+        return app.getUrl()
+      },
+      close: () => (closing ??= app.close()),
+    }
+  } catch (error) {
+    try {
+      await module.close()
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], "Scheduler receiver fixture setup failed")
+    }
+    throw error
   }
 }
 
@@ -393,21 +446,20 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
     request.on("end", () => {
       const launch = JSON.parse(Buffer.concat(chunks).toString("utf8"))
       agentCalls.push({ launch, requestId: request.headers["x-request-id"] })
-      response.setHeader("content-type", "application/json")
+      response.writeHead(202, { "content-type": "application/json" })
       response.end(
         JSON.stringify({
-          data: { run_id: launch.run_id },
+          data: { run_id: launch.run_id, session_id: launch.session_id, replayed: false },
           meta: { request_id: request.headers["x-request-id"] },
         }),
       )
     })
   })
-  let bff = null
-  let store = null
+  let receiver = null
   try {
     const agentBase = await listen(agent)
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
-    await store.services.scheduledTasks.create(
+    receiver = await createSchedulerReceiver(agentBase, { holdAgentConsumption: true })
+    await receiver.scheduledTasks.create(
       { tenantId: tenant, subjectId: owner },
       {
         title: "Receiver fixture",
@@ -426,27 +478,7 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
         idempotencyKey: `create-${suffix}`,
       },
     )
-    const durableReceipts = store.schedulerDispatchReceipts
-    const durableDispatch = store.scheduledAgentDispatch
-    const heldDispatch = {
-      accept: durableDispatch.accept.bind(durableDispatch),
-      claim: async () => null,
-      markAdmitted: durableDispatch.markAdmitted.bind(durableDispatch),
-      markUnknown: durableDispatch.markUnknown.bind(durableDispatch),
-      markNotAdmitted: durableDispatch.markNotAdmitted.bind(durableDispatch),
-      claimConsumer: async () => null,
-      commitSourcePage: durableDispatch.commitSourcePage.bind(durableDispatch),
-      releaseConsumer: durableDispatch.releaseConsumer.bind(durableDispatch),
-    }
-    bff = createBffServer(receiverConfig(agentBase), {
-      businessStore: {
-        ...receiverStore(store, durableReceipts),
-        scheduledAgentDispatch: heldDispatch,
-      },
-      readiness: async () => undefined,
-      close: async () => undefined,
-    })
-    let base = await listen(bff)
+    let base = await receiver.listen()
     const first = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
       method: "POST",
       headers: dispatchHeaders(tenant, schedule, occurrence, key, `transport-first-${suffix}`),
@@ -459,25 +491,15 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
     const frozenLaunch = persisted.rows[0].payload
 
     await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2", [tenant, taskId])
-    await bff.shutdown()
-    bff = null
-    await store.close()
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
-    bff = createBffServer(receiverConfig(agentBase), {
-      businessStore: receiverStore(store),
-      readiness: async () => undefined,
-      close: async () => undefined,
-    })
-    base = await listen(bff)
+    await receiver.close()
+    receiver = null
+    receiver = await createSchedulerReceiver(agentBase)
+    base = await receiver.listen()
     const deadline = Date.now() + 3000
     while (agentCalls.length === 0 && Date.now() < deadline) await delay(20)
     assert.equal(agentCalls.length, 1)
-    assert.equal(Object.hasOwn(frozenLaunch, "project_ref"), false, "durable internal v2 payload remains unchanged")
-    assert.deepEqual(
-      agentCalls[0].launch,
-      { ...frozenLaunch, project_ref: null },
-      "HTTP7 explicitly projects a null project without rewriting the durable launch",
-    )
+    assert.equal(frozenLaunch.project_ref, null)
+    assert.deepEqual(agentCalls[0].launch, frozenLaunch, "ordinary HTTP sends the canonical frozen launch")
     assert.equal(agentCalls[0].launch.request_id, `transport-first-${suffix}`)
     assert.equal(agentCalls[0].requestId, `transport-first-${suffix}`)
     const replay = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
@@ -488,20 +510,26 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
     assert.equal(replay.status, 202)
     assert.equal(agentCalls.length, 1)
   } finally {
-    if (bff !== null) await bff.shutdown().catch(() => undefined)
-    if (store !== null) await store.close().catch(() => undefined)
-    if (agent.listening) await new Promise((resolve) => agent.close(() => resolve()))
-    await pool.query("DELETE FROM bff_scheduled_agent_source_event WHERE tenant_id=$1 AND task_id=$2", [tenant, taskId]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1 AND task_id=$2", [tenant, taskId]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2", [tenant, taskId]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope LIKE $1", [`%${suffix}%`]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_scheduled_task_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id = $1", [tenant]).catch(() => undefined)
-    await pool.end()
+    try {
+      if (receiver !== null) await receiver.close()
+      for (const table of ["bff_agui_event", "bff_agui_source_event", "bff_agui_stream", "bff_agent_dispatch_outbox", "bff_message", "bff_conversation"])
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant])
+      await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1 AND task_id=$2", [tenant, taskId]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2", [tenant, taskId]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope LIKE $1", [`%${suffix}%`]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_scheduled_task_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    } finally {
+      try {
+        if (agent.listening) await new Promise((resolve) => agent.close(() => resolve()))
+      } finally {
+        await pool.end()
+      }
+    }
   }
 })
 
-receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalization and newly-created scope atomically", async () => {
+integrationTest("Scheduler enqueue conflict rolls back receipt finalization and newly-created scope atomically", async (t) => {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 16)
   const tenant = `scheduler-rollback-${suffix}`
   const owner = `owner-${suffix}`
@@ -513,10 +541,13 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
   })
-  let store
+  const ownerPool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 10 })
+  t.after(() => ownerPool.end())
+  const scheduledTasks = new ScheduledTaskService(new PostgresScheduledTaskRepository({ pool: ownerPool }))
+  const receipts = new PostgresSchedulerDispatchReceiptRepository(ownerPool)
+  const scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
   try {
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
-    await store.services.scheduledTasks.create(
+    await scheduledTasks.create(
       { tenantId: tenant, subjectId: owner },
       {
         title: "Rollback",
@@ -535,7 +566,7 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
         idempotencyKey: `create-${suffix}`,
       },
     )
-    const claimed = await store.schedulerDispatchReceipts.claim(scope, digest)
+    const claimed = await receipts.claim(scope, digest)
     assert.equal(claimed.outcome, "claimed")
     const preparedSnapshot = {
       tenantId: tenant,
@@ -550,7 +581,7 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
         body: {
           request_id: `request-${suffix}`,
           run_id: `run-${suffix}`,
-          session_id: `scheduled:${taskId}`,
+          session_id: scheduledConversationId(tenant, taskId),
           feature_key: "chat",
           message_id: `message-${suffix}`,
           content: "go",
@@ -565,13 +596,13 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
         },
       },
     }
-    const prepared = await store.schedulerDispatchReceipts.prepareSnapshot(claimed.claim, preparedSnapshot)
+    const prepared = await receipts.prepareSnapshot(claimed.claim, preparedSnapshot)
     await pool.query(
-      `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload) VALUES($1,$2,$3,$4,'2026-09-01T12:00:00.123456789Z',$5,'conflict-request','conflict-key',$6,'conflict-run','bff:conflict','{}')`,
+      `INSERT INTO bff_scheduled_agent_dispatch(dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,user_message_id,assistant_message_id) VALUES($1,$2,$3,$4,'2026-09-01T12:00:00.123456789Z',$5,'conflict-request','conflict-key',$6,'conflict-run','bff:conflict','{}','conflict-user','conflict-assistant')`,
       [`conflict-${suffix}`, tenant, taskId, occurrence, owner, "8".repeat(64)],
     )
     await assert.rejects(
-      store.scheduledAgentDispatch.accept({
+      scheduledAgentDispatch.accept({
         claim: { ...claimed.claim, ...prepared, snapshot: preparedSnapshot },
         snapshot: preparedSnapshot,
         rejections: r67AcceptanceRejections(`request-${suffix}`),
@@ -588,8 +619,6 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
       [{ request_digest: "8".repeat(64), run_id: "conflict-run" }],
     )
   } finally {
-    if (store) await store.close().catch(() => undefined)
-    await pool.query("DELETE FROM bff_scheduled_agent_source_event WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1 OR scope LIKE $2", [scope, `%${suffix}%`]).catch(() => undefined)
@@ -599,12 +628,18 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
   }
 })
 
-receiverIntegrationTest("Scheduler callback and physical task delete serialize with both lock winners", async () => {
+integrationTest("Scheduler callback and physical task delete serialize with both lock winners", async (t) => {
   const pool = new Pool({
     connectionString: postgresUrl,
     options: "-c search_path=kokoro_bff -c timezone=UTC",
     max: 12,
   })
+  t.after(() => pool.end())
+  const ownerPool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 10 })
+  t.after(() => ownerPool.end())
+  const scheduledTasks = new ScheduledTaskService(new PostgresScheduledTaskRepository({ pool: ownerPool }))
+  const receipts = new PostgresSchedulerDispatchReceiptRepository(ownerPool)
+  const scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository({ pool: ownerPool })
   for (const winner of ["callback", "delete"]) {
     const suffix = `${winner}-${randomUUID().replaceAll("-", "").slice(0, 12)}`
     const tenant = `scheduler-race-${suffix}`
@@ -613,13 +648,11 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
     const occurrence = "2026-09-01T12:00:00.123456789Z"
     const receiptScope = schedulerDispatchScope(tenant, `race-${suffix}`)
     const digest = (winner === "callback" ? "a" : "b").repeat(64)
-    let store
     let locker
     let acceptOperation
     let deleteOperation
     try {
-      store = new PostgresBffRepositories(postgresUrl, redisUrl)
-      await store.services.scheduledTasks.create(
+      await scheduledTasks.create(
         { tenantId: tenant, subjectId: owner },
         {
           title: "Race",
@@ -638,7 +671,7 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
           idempotencyKey: `create-${suffix}`,
         },
       )
-      const claimed = await store.schedulerDispatchReceipts.claim(receiptScope, digest)
+      const claimed = await receipts.claim(receiptScope, digest)
       assert.equal(claimed.outcome, "claimed")
       const frozen = {
         tenantId: tenant,
@@ -653,7 +686,7 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
           body: {
             request_id: `request-${suffix}`,
             run_id: `run-${suffix}`,
-            session_id: `scheduled:${taskId}`,
+            session_id: scheduledConversationId(tenant, taskId),
             feature_key: "chat",
             message_id: `message-${suffix}`,
             content: "go",
@@ -668,7 +701,7 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
           },
         },
       }
-      const observation = await store.schedulerDispatchReceipts.prepareSnapshot(claimed.claim, frozen)
+      const observation = await receipts.prepareSnapshot(claimed.claim, frozen)
       assert.ok(observation)
       const preparedClaim = {
         ...claimed.claim,
@@ -676,14 +709,14 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
         snapshot: frozen,
       }
       const accept = () =>
-        store.scheduledAgentDispatch.accept({
+        scheduledAgentDispatch.accept({
           claim: preparedClaim,
           snapshot: frozen,
           rejections: r67AcceptanceRejections(`request-${suffix}`),
           response: { status: 202, body: { data: { accepted: true } } },
         })
       const remove = () =>
-        store.services.scheduledTasks.delete({ tenantId: tenant, subjectId: owner }, taskId, {
+        scheduledTasks.delete({ tenantId: tenant, subjectId: owner }, taskId, {
           tenantId: tenant,
           actorId: owner,
           requestId: `delete-${suffix}`,
@@ -743,8 +776,6 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
         locker.release()
       }
       await Promise.allSettled([acceptOperation, deleteOperation].filter(Boolean))
-      if (store) await store.close().catch(() => undefined)
-      await pool.query("DELETE FROM bff_scheduled_agent_source_event WHERE tenant_id=$1", [tenant]).catch(() => undefined)
       await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1", [tenant]).catch(() => undefined)
       await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1", [tenant]).catch(() => undefined)
       await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1 OR scope LIKE $2", [receiptScope, `%${suffix}%`]).catch(() => undefined)
@@ -752,7 +783,6 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
       await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     }
   }
-  await pool.end()
 })
 
 // These lifecycle cases use the complete production launch and durable receipt APIs.
@@ -772,15 +802,17 @@ async function r66LifecycleFixture(context) {
   const body = { tenant_id: tenant, task_id: taskId, task_revision: 1, owner_id: owner, prompt: "go", auto_approve: false, timezone: "UTC" }
   const scopes = new Set()
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store = null
-  let bff = null
+  let receiver = null
   let base
   let requestSequence = 0
   const executionTables = [
-    "bff_scheduled_agent_source_event",
     "bff_scheduled_agent_dispatch",
     "bff_scheduled_agent_scope",
     "bff_agent_cancellation_outbox",
+    "bff_agui_event",
+    "bff_agui_source_event",
+    "bff_agui_stream",
+    "bff_agent_dispatch_outbox",
     "bff_message",
     "bff_conversation",
   ]
@@ -789,44 +821,37 @@ async function r66LifecycleFixture(context) {
     const clean = async (operation) => {
       try {
         await operation()
+        return true
       } catch (error) {
         failures.push(error)
+        return false
       }
     }
-    if (bff !== null) await clean(() => bff.shutdown())
-    if (store !== null) await clean(() => store.close())
-    for (const table of executionTables) await clean(() => pool.query(`DELETE FROM ${table} WHERE tenant_id = ANY($1::text[])`, [tenants]))
-    await clean(() => pool.query("DELETE FROM bff_idempotency_receipt WHERE scope = ANY($1::text[])", [[...scopes]]))
-    for (const table of ["bff_scheduled_task_outbox", "bff_scheduled_task"]) {
-      await clean(() => pool.query(`DELETE FROM ${table} WHERE tenant_id = ANY($1::text[])`, [tenants]))
+    if (receiver === null || (await clean(() => receiver.close()))) {
+      for (const table of executionTables) await clean(() => pool.query(`DELETE FROM ${table} WHERE tenant_id = ANY($1::text[])`, [tenants]))
+      await clean(() => pool.query("DELETE FROM bff_idempotency_receipt WHERE scope = ANY($1::text[])", [[...scopes]]))
+      for (const table of ["bff_scheduled_task_outbox", "bff_scheduled_task"]) {
+        await clean(() => pool.query(`DELETE FROM ${table} WHERE tenant_id = ANY($1::text[])`, [tenants]))
+      }
     }
     await clean(() => pool.end())
     if (failures.length > 0) throw new AggregateError(failures, "R66 lifecycle fixture cleanup failed")
   })
   const restart = async () => {
-    if (bff !== null) {
-      await bff.shutdown()
-      bff = null
+    if (receiver !== null) {
+      await receiver.close()
+      receiver = null
     }
-    if (store !== null) {
-      await store.close()
-      store = null
-    }
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
-    await store.ready()
-    bff = createBffServer(receiverConfig(null), {
-      businessStore: receiverStore(store),
-      readiness: async () => undefined,
-      close: async () => undefined,
-    })
-    base = await listen(bff)
+    receiver = await createSchedulerReceiver(null)
+    await receiver.database.ready()
+    base = await receiver.listen()
   }
   await restart()
   const lineage = () => {
     const requestId = `mutation-${suffix}-${++requestSequence}`
     return { tenantId: tenant, actorId: owner, requestId, idempotencyKey: requestId }
   }
-  await store.services.scheduledTasks.create(
+  await receiver.scheduledTasks.create(
     { tenantId: tenant, subjectId: owner },
     {
       title: "Lifecycle",
@@ -869,7 +894,7 @@ async function r66LifecycleFixture(context) {
     return { status: response.status, body: await response.json() }
   }
   const setActive = async (active) => {
-    const task = await store.services.scheduledTasks.update(
+    const task = await receiver.scheduledTasks.update(
       { tenantId: tenant, subjectId: owner },
       taskId,
       { enabled: active, status: active ? "active" : "paused" },
@@ -881,14 +906,14 @@ async function r66LifecycleFixture(context) {
     return task
   }
   const prepare = async () => {
-    const record = await store.services.scheduledTasks.findRecord(tenant, taskId)
+    const record = await receiver.taskLookup.findRecord(tenant, taskId)
     assert.ok(record !== null)
     assert.equal(record.task.projectId, undefined)
     const requestId = `prepared-${suffix}`
     const launch = buildScheduledAgentLaunch({
       identity: { namespace: tenant, userId: owner },
       requestId,
-      sessionId: `scheduled:${taskId}`,
+      sessionId: scheduledConversationId(tenant, taskId),
       occurrenceIdentity: schedulerOccurrenceIdentity({ tenantId: tenant, schedule, occurrence }),
       content: record.task.prompt,
     })
@@ -905,11 +930,11 @@ async function r66LifecycleFixture(context) {
     const scope = schedulerDispatchScope(tenant, key)
     scopes.add(scope)
     const digest = schedulerDispatchDigest({ tenantId: tenant, schedule, occurrence, body })
-    const claimed = await store.schedulerDispatchReceipts.claim(scope, digest)
+    const claimed = await receiver.receipts.claim(scope, digest)
     assert.equal(claimed.outcome, "claimed")
-    const prepared = await store.schedulerDispatchReceipts.prepareSnapshot(claimed.claim, preparedSnapshot)
+    const prepared = await receiver.receipts.prepareSnapshot(claimed.claim, preparedSnapshot)
     assert.ok(prepared !== null)
-    assert.equal(await store.schedulerDispatchReceipts.releaseRetryable({ ...claimed.claim, ...prepared, snapshot: preparedSnapshot }, "r66_restart", 0), true)
+    assert.equal(await receiver.receipts.releaseRetryable({ ...claimed.claim, ...prepared, snapshot: preparedSnapshot }, "r66_restart", 0), true)
     const persisted = await receipt()
     assert.equal(persisted.response_body.state, "retryable")
     assert.deepEqual(persisted.response_body.snapshot, preparedSnapshot)
@@ -931,8 +956,14 @@ async function r66LifecycleFixture(context) {
     callback,
     setActive,
     prepare,
-    get store() {
-      return store
+    get scheduledTasks() {
+      return receiver.scheduledTasks
+    },
+    get taskLookup() {
+      return receiver.taskLookup
+    },
+    get scheduledAgentDispatch() {
+      return receiver.scheduledAgentDispatch
     },
   }
 }
@@ -944,7 +975,7 @@ function r66AssertInactive(result) {
 
 receiverIntegrationTest("cadence-only change rejects unprepared old callbacks and accepts only the new frozen revision", async (context) => {
   const fixture = await r66LifecycleFixture(context)
-  const changed = await fixture.store.services.scheduledTasks.update(
+  const changed = await fixture.scheduledTasks.update(
     { tenantId: fixture.tenant, subjectId: fixture.owner },
     fixture.taskId,
     { frequency: "weekly", time: "08:00", timezone: "UTC", weekdays: [1] },
@@ -1021,8 +1052,7 @@ receiverIntegrationTest("R66 resume preserves old rejection while a new occurren
   assert.equal(admittedFacts.bff_scheduled_agent_dispatch.length, 1)
   assert.equal(admittedFacts.bff_scheduled_agent_dispatch[0].run_id, accepted.body.data.run_id)
   assert.equal(admittedFacts.bff_scheduled_agent_dispatch[0].occurrence, next.callbackOccurrence)
-  for (const table of ["bff_conversation", "bff_message", "bff_agent_cancellation_outbox", "bff_scheduled_agent_source_event"])
-    assert.deepEqual(admittedFacts[table], [])
+  for (const table of ["bff_conversation", "bff_message", "bff_agent_cancellation_outbox"]) assert.deepEqual(admittedFacts[table], [])
   await fixture.restart()
   assert.deepEqual(await fixture.callback(next), accepted)
   const redelivery = await fixture.callback({ ...next, callbackKey: `${fixture.key}-next-redelivery` })
@@ -1047,7 +1077,7 @@ receiverIntegrationTest("R66 accepted admitted head survives pause and restart w
     [fixture.tenant, fixture.taskId],
   )
   assert.equal(due.rowCount, 1)
-  const command = await fixture.store.scheduledAgentDispatch.claim({
+  const command = await fixture.scheduledAgentDispatch.claim({
     workerId: `r66-${fixture.taskId}`,
     leaseDurationMs: 5000,
     settlementReserveMs: 500,
@@ -1057,22 +1087,29 @@ receiverIntegrationTest("R66 accepted admitted head survives pause and restart w
   assert.equal(command.tenantId, fixture.tenant)
   assert.equal(command.taskId, fixture.taskId)
   assert.equal(command.runId, accepted.body.data.run_id)
-  assert.equal(await fixture.store.scheduledAgentDispatch.markAdmitted(command), true)
+  const ordinary = new PostgresAgentDispatchOutboxRepository({ pool: fixture.pool, notifyAgUiProjection: async () => undefined })
+  const submission = new ScheduledChatSubmission(ordinary)
+  assert.deepEqual(await submission.deliver(command, 4000), { outcome: "submitted" })
+  const [ordinaryLease] = await ordinary.claimAgentDispatchOutbox({ workerId: "r66-ordinary", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+  assert.equal(ordinaryLease.runId, command.runId)
+  assert.equal(await ordinary.markAgentDispatchAdmitted(ordinaryLease), true)
+  assert.equal(await fixture.scheduledAgentDispatch.reconcileActive(), true)
   const before = await fixture.facts()
   assert.equal(before.bff_scheduled_agent_dispatch.length, 1)
   assert.equal(before.bff_scheduled_agent_dispatch[0].status, "admitted")
   assert.equal(before.bff_scheduled_agent_scope.length, 1)
   assert.equal(before.bff_scheduled_agent_scope[0].active_dispatch_id, command.dispatchId)
   assert.equal(before.bff_scheduled_agent_scope[0].active_run_id, command.runId)
-  for (const table of ["bff_conversation", "bff_message", "bff_agent_cancellation_outbox", "bff_scheduled_agent_source_event"])
-    assert.deepEqual(before[table], [])
+  for (const table of ["bff_agent_cancellation_outbox"]) assert.deepEqual(before[table], [])
+  assert.equal(before.bff_conversation.length, 1)
+  assert.equal(before.bff_message.length, 2)
   const terminal = await fixture.receipt()
   await fixture.setActive(false)
   await fixture.restart()
   assert.deepEqual(await fixture.callback(), accepted)
   assert.deepEqual(await fixture.receipt(), terminal)
   assert.deepEqual(await fixture.facts(), before)
-  const task = await fixture.store.services.scheduledTasks.findRecord(fixture.tenant, fixture.taskId)
+  const task = await fixture.taskLookup.findRecord(fixture.tenant, fixture.taskId)
   assert.equal(task.task.status, "paused")
   assert.equal(task.task.enabled, false)
 })
@@ -1106,8 +1143,7 @@ receiverIntegrationTest("R66 prepared receipt rejects digest and identity confli
   assert.equal(after.bff_scheduled_agent_scope.length, 1)
   assert.equal(after.bff_scheduled_agent_dispatch[0].tenant_id, fixture.tenant)
   assert.equal(after.bff_scheduled_agent_dispatch[0].subject_id, fixture.owner)
-  for (const table of ["bff_conversation", "bff_message", "bff_agent_cancellation_outbox", "bff_scheduled_agent_source_event"])
-    assert.deepEqual(after[table], [])
+  for (const table of ["bff_conversation", "bff_message", "bff_agent_cancellation_outbox"]) assert.deepEqual(after[table], [])
 })
 
 function r67AcceptanceRejections(requestId) {
@@ -1125,7 +1161,7 @@ for (const invalidation of ["deleted", "owner_changed", "revision_changed"]) {
     await fixture.prepare()
     if (invalidation === "deleted") {
       assert.equal(
-        await fixture.store.services.scheduledTasks.delete({ tenantId: fixture.tenant, subjectId: fixture.owner }, fixture.taskId, {
+        await fixture.scheduledTasks.delete({ tenantId: fixture.tenant, subjectId: fixture.owner }, fixture.taskId, {
           tenantId: fixture.tenant,
           actorId: fixture.owner,
           requestId: `${fixture.key}-delete`,
@@ -1146,7 +1182,7 @@ for (const invalidation of ["deleted", "owner_changed", "revision_changed"]) {
         1,
       )
     } else {
-      const updated = await fixture.store.services.scheduledTasks.update(
+      const updated = await fixture.scheduledTasks.update(
         { tenantId: fixture.tenant, subjectId: fixture.owner },
         fixture.taskId,
         { prompt: "revised prompt" },

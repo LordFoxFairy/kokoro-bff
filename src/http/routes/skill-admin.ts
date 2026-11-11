@@ -43,6 +43,7 @@ export async function skillAdminRoute(
   path: string[],
   client: SkillAdminConnectClient | null,
   iamBaseUrl?: string | null,
+  credentialFile?: string | null,
 ) {
   await runSkillRoute(
     request,
@@ -51,9 +52,9 @@ export async function skillAdminRoute(
     async (signal, deadlineAt) => {
       if (!client) throw new ConnectError("Skills admin dependency missing", Code.Unavailable)
       const enrich = <T>(value: T) =>
-        new IamPublisherProfileClient(iamBaseUrl ?? "", 5000).enrich(
+        new IamPublisherProfileClient(iamBaseUrl ?? "", 5000, credentialFile ?? null).enrich(
           context.identity.namespace,
-          /^Bearer ([^\s,]+)$/iu.exec(request.headers.authorization ?? "")?.[1] ?? "",
+          context.identity.userId,
           context.requestId,
           value,
           signal,

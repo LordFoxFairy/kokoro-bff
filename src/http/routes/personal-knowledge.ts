@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { performance } from "node:perf_hooks"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
-import type { PersonalKnowledgeOutcome } from "../../application/ports/personal-knowledge-repository.js"
+import type { PersonalKnowledgeOutcome } from "../../application/account/personal-knowledge-repository.js"
+import type { PersonalKnowledgeRepository } from "../../application/account/personal-knowledge-repository.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { KNOWLEDGE_ID_PATTERN, knowledgeText, parsePersonalKnowledgeBody } from "../personal-knowledge-input.js"
 import { send } from "../response.js"
@@ -53,7 +53,7 @@ export async function personalKnowledgeRoute(
   request: IncomingMessage,
   response: ServerResponse,
   context: RequestContext,
-  store: BffBusinessStore | null,
+  repository: PersonalKnowledgeRepository | null,
 ): Promise<void> {
   if (request.aborted || response.destroyed || response.writableEnded) return
   const controller = new AbortController(),
@@ -99,7 +99,6 @@ export async function personalKnowledgeRoute(
       fail(405, "method_not_allowed", "Method not allowed")
       return
     }
-    const repository = store?.services.personalKnowledge
     if (!repository) {
       fail(503, "knowledge_unavailable", "Knowledge store is unavailable", method === "GET")
       return

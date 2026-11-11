@@ -1,6 +1,42 @@
 -- kokoro-bff business facts and durable command receipts.
 -- This schema is owned by BFF. It is never joined from another repository.
 
+CREATE TABLE IF NOT EXISTS bff_agent_connection (
+  tenant_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  provider TEXT NOT NULL CONSTRAINT ck_bff_agent_connection_provider CHECK (provider IN ('telegram','line','slack')),
+  state_version INTEGER NOT NULL CONSTRAINT ck_bff_agent_connection_state_version CHECK (state_version >= 1),
+  bot_id TEXT CONSTRAINT ck_bff_agent_connection_bot_id CHECK (CASE provider WHEN 'telegram' THEN bot_id ~ '^[1-9][0-9]{0,15}$' WHEN 'line' THEN bot_id ~ '^U[0-9a-f]{32}$'
+    WHEN 'slack' THEN bot_id ~ '^A[A-Z0-9]{1,63}(:T[A-Z0-9]{1,63})?$' END),
+  setup_id TEXT CONSTRAINT uq_bff_agent_connection_setup_id UNIQUE CONSTRAINT ck_bff_agent_connection_setup_id CHECK (setup_id ~ '^[A-Za-z0-9_-]{32}$'),
+  setup_expires_at TIMESTAMPTZ(3),
+  proof_digest TEXT CONSTRAINT ck_bff_agent_connection_proof_digest CHECK (proof_digest ~ '^[0-9a-f]{64}$'),
+  provider_update_id TEXT CONSTRAINT ck_bff_agent_connection_provider_update_id CHECK (CASE provider WHEN 'telegram' THEN provider_update_id ~ '^[0-9]{1,16}$'
+    WHEN 'line' THEN provider_update_id ~ '^[A-Za-z0-9_-]{1,128}$' WHEN 'slack' THEN provider_update_id IS NULL END),
+  external_user_id TEXT CONSTRAINT ck_bff_agent_connection_external_user_id CHECK (CASE provider WHEN 'telegram' THEN external_user_id ~ '^[1-9][0-9]{0,15}$'
+    WHEN 'line' THEN external_user_id ~ '^U[0-9a-f]{32}$' WHEN 'slack' THEN external_user_id ~ '^[UW][A-Z0-9]{1,63}$' END),
+  connected_at TIMESTAMPTZ(3),
+  PRIMARY KEY (tenant_id, subject_id, provider),
+  CONSTRAINT ck_bff_agent_connection_shape CHECK (
+    (bot_id IS NULL AND setup_id IS NULL AND setup_expires_at IS NULL AND proof_digest IS NULL
+      AND provider_update_id IS NULL AND external_user_id IS NULL AND connected_at IS NULL)
+    OR
+    (bot_id IS NOT NULL AND setup_id IS NOT NULL AND setup_expires_at IS NOT NULL AND connected_at IS NULL
+      AND ((provider_update_id IS NULL AND external_user_id IS NULL AND (proof_digest IS NULL OR provider='slack'))
+        OR (provider_update_id IS NOT NULL AND external_user_id IS NOT NULL
+          AND (proof_digest IS NOT NULL OR provider='line'))))
+    OR
+    (bot_id IS NOT NULL AND setup_id IS NULL AND setup_expires_at IS NULL AND proof_digest IS NULL
+      AND provider_update_id IS NULL AND external_user_id IS NOT NULL AND connected_at IS NOT NULL)
+  ),
+  CONSTRAINT ck_bff_agent_connection_slack_namespace CHECK (
+    provider<>'slack' OR bot_id IS NULL OR (strpos(bot_id, ':')>0)=(connected_at IS NOT NULL)
+  )
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_agent_connection_bound_identity
+  ON bff_agent_connection (provider, bot_id, external_user_id)
+  WHERE connected_at IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS bff_project (
   project_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
@@ -9,7 +45,11 @@ CREATE TABLE IF NOT EXISTS bff_project (
   slug TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   instruction TEXT,
+  recommended_mcp_refs JSONB NOT NULL DEFAULT '[]'::jsonb CONSTRAINT ck_bff_project_mcp_refs CHECK (jsonb_typeof(recommended_mcp_refs) = 'array' AND jsonb_array_length(recommended_mcp_refs) <= 16),
+  mcp_recommendations_state_version INTEGER NOT NULL DEFAULT 1 CONSTRAINT ck_bff_project_mcp_version CHECK (mcp_recommendations_state_version >= 1),
   selected_skill_installation_ids TEXT[] NOT NULL DEFAULT '{}' CONSTRAINT ck_bff_project_skill_selection CHECK (cardinality(selected_skill_installation_ids) <= 16 AND array_position(selected_skill_installation_ids, NULL) IS NULL),
+  website_urls JSONB NOT NULL DEFAULT '[]'::jsonb CONSTRAINT ck_bff_project_website_urls CHECK (jsonb_typeof(website_urls) = 'array' AND jsonb_array_length(website_urls) <= 16),
+  websites_state_version INTEGER NOT NULL DEFAULT 1 CONSTRAINT ck_bff_project_websites_version CHECK (websites_state_version >= 1),
   deleted_at TIMESTAMPTZ(3),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
@@ -19,6 +59,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_project_owner_slug
 CREATE INDEX IF NOT EXISTS ix_bff_project_owner_list
   ON bff_project (tenant_id, owner_id, created_at ASC, project_id ASC)
   WHERE deleted_at IS NULL;
+
+-- PROJECT-PIN-SQL-BEGIN
+CREATE TABLE IF NOT EXISTS bff_project_pin (
+  tenant_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  pinned_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, subject_id, project_id)
+);
+CREATE INDEX IF NOT EXISTS ix_bff_project_pin_subject_list
+  ON bff_project_pin (tenant_id, subject_id, pinned_at DESC, project_id COLLATE "C" ASC);
+CREATE INDEX IF NOT EXISTS ix_bff_project_pin_parent_cleanup
+  ON bff_project_pin (tenant_id, project_id);
+-- PROJECT-PIN-SQL-END
 
 CREATE TABLE IF NOT EXISTS bff_project_deletion (
   tenant_id TEXT NOT NULL,
@@ -45,10 +99,10 @@ CREATE TABLE IF NOT EXISTS bff_project_deletion (
 CREATE TABLE IF NOT EXISTS bff_project_scope_release_outbox (
   command_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
-  project_id TEXT NOT NULL,
+  project_id TEXT,
   owner_subject_id TEXT NOT NULL,
   actor_id TEXT NOT NULL,
-  scope_kind TEXT NOT NULL CONSTRAINT ck_bff_project_release_scope_kind CHECK (scope_kind IN ('project','conversation')),
+  scope_kind TEXT NOT NULL CONSTRAINT ck_bff_project_release_scope_kind CHECK (scope_kind IN ('project','conversation','conversation_workspace')),
   scope_id TEXT NOT NULL,
   request_digest TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'pending' CONSTRAINT ck_bff_project_release_state CHECK (state IN ('pending','leased','released','blocked')),
@@ -64,6 +118,7 @@ CREATE TABLE IF NOT EXISTS bff_project_scope_release_outbox (
   CONSTRAINT uq_bff_project_release_scope UNIQUE (tenant_id, project_id, scope_kind, scope_id),
   CONSTRAINT ck_bff_project_release_actor CHECK (actor_id = owner_subject_id),
   CONSTRAINT ck_bff_project_release_project_scope CHECK (scope_kind <> 'project' OR scope_id = project_id),
+  CONSTRAINT ck_bff_project_release_parent_kind CHECK ((scope_kind = 'conversation_workspace') = (project_id IS NULL)),
   CONSTRAINT ck_bff_project_release_digest CHECK (length(request_digest) = 64 AND request_digest COLLATE "C" !~ '[^0-9a-f]'),
   CONSTRAINT ck_bff_project_release_lease CHECK (
     (state = 'leased' AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL)
@@ -232,8 +287,26 @@ CREATE TABLE IF NOT EXISTS bff_message (
   tenant_id TEXT NOT NULL,
   conversation_id TEXT NOT NULL,
   run_id TEXT,
+  -- MESSAGE-REGENERATION-COLUMNS-BEGIN
+  origin TEXT NOT NULL DEFAULT 'normal',
+  regenerated_from_message_id TEXT,
+  regeneration_user_message_id TEXT,
+  -- MESSAGE-REGENERATION-COLUMNS-END
   role TEXT NOT NULL CONSTRAINT ck_bff_message_role CHECK (role IN ('user', 'assistant')),
   content TEXT NOT NULL,
+  ordered_parts JSONB,
+  parts_format_version SMALLINT,
+  parts_public_sequence BIGINT,
+  -- MESSAGE-FINAL-ANSWER-COLUMN-BEGIN
+  final_segment_id TEXT CONSTRAINT ck_bff_message_final_answer CHECK (
+    final_segment_id IS NULL OR (
+      length(btrim(final_segment_id)) > 0 AND role='assistant' AND status='completed'
+      AND run_id IS NOT NULL AND ordered_parts IS NOT NULL
+      AND parts_format_version IS NOT NULL AND parts_format_version=1
+      AND parts_public_sequence IS NOT NULL AND parts_public_sequence>0
+    )
+  ),
+  -- MESSAGE-FINAL-ANSWER-COLUMN-END
   selected_skill_source_refs JSONB NOT NULL DEFAULT '[]'::jsonb CONSTRAINT ck_bff_message_skill_selection CHECK (jsonb_typeof(selected_skill_source_refs) = 'array' AND jsonb_array_length(selected_skill_source_refs) <= 16),
   status TEXT NOT NULL CONSTRAINT ck_bff_message_status CHECK (status IN ('pending', 'streaming', 'completed', 'failed')),
   agent_failure_code TEXT,
@@ -241,9 +314,29 @@ CREATE TABLE IF NOT EXISTS bff_message (
   message_seq BIGINT NOT NULL,
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  -- MESSAGE-REGENERATION-CONSTRAINT-BEGIN
+  CONSTRAINT ck_bff_message_regeneration CHECK (
+    (origin='normal' AND regenerated_from_message_id IS NULL AND regeneration_user_message_id IS NULL)
+    OR (origin='regeneration_input' AND role='user' AND run_id IS NOT NULL
+      AND regenerated_from_message_id IS NOT NULL AND length(btrim(regenerated_from_message_id))>0
+      AND regeneration_user_message_id IS NOT NULL AND length(btrim(regeneration_user_message_id))>0)
+    OR (origin='regeneration_answer' AND role='assistant' AND run_id IS NOT NULL
+      AND regenerated_from_message_id IS NOT NULL AND length(btrim(regenerated_from_message_id))>0
+      AND regeneration_user_message_id IS NOT NULL AND length(btrim(regeneration_user_message_id))>0)
+  ),
+  -- MESSAGE-REGENERATION-CONSTRAINT-END
   CONSTRAINT uq_bff_message_conversation_sequence UNIQUE (tenant_id, conversation_id, message_seq),
   CONSTRAINT ck_bff_message_identity CHECK (length(btrim(tenant_id)) > 0 AND length(btrim(conversation_id)) > 0),
   CONSTRAINT ck_bff_message_sequence CHECK (message_seq >= 1),
+  CONSTRAINT ck_bff_message_ordered_parts CHECK (
+    (ordered_parts IS NULL AND parts_format_version IS NULL AND parts_public_sequence IS NULL)
+    OR (
+      role = 'assistant' AND ordered_parts IS NOT NULL
+      AND jsonb_typeof(ordered_parts) = 'array'
+      AND parts_format_version IS NOT NULL AND parts_public_sequence IS NOT NULL
+      AND parts_format_version = 1 AND parts_public_sequence >= 0
+    )
+  ),
   CONSTRAINT ck_bff_message_agent_failure CHECK (
     (agent_failure_code IS NULL AND agent_failure_retryable IS NULL)
     OR (
@@ -259,7 +352,8 @@ CREATE TABLE IF NOT EXISTS bff_message (
         'internal_error',
         'model_unavailable',
         'dependency_unavailable',
-        'model_access_denied'
+        'model_access_denied', 'model_settlement_pending',
+        'context_window_exceeded'
       )
       AND (agent_failure_retryable = FALSE OR agent_failure_code IN ('model_unavailable', 'dependency_unavailable'))
       AND role = 'assistant'
@@ -272,8 +366,58 @@ CREATE TABLE IF NOT EXISTS bff_message (
 CREATE INDEX IF NOT EXISTS ix_bff_message_tenant_conversation_sequence
   ON bff_message (tenant_id, conversation_id, message_seq ASC, message_id ASC);
 
+-- Same-Run input is an independent command, not a Chat turn or a second copy
+-- of the Message. Its public outcome is the bound user Message's status.
+CREATE TABLE IF NOT EXISTS bff_run_steer (
+  tenant_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  idempotency_key_hash TEXT NOT NULL CONSTRAINT ck_bff_run_steer_key CHECK (idempotency_key_hash ~ '^[0-9a-f]{64}$'),
+  intent_digest TEXT NOT NULL CONSTRAINT ck_bff_run_steer_digest CHECK (intent_digest ~ '^sha256:[0-9a-f]{64}$'),
+  run_id TEXT NOT NULL,
+  message_id TEXT NOT NULL UNIQUE,
+  agent_command_id TEXT NOT NULL UNIQUE,
+  actor_id TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  identity_assertion_ref TEXT NOT NULL,
+  available_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  lease_token TEXT,
+  lease_until TIMESTAMPTZ(3),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CONSTRAINT ck_bff_run_steer_attempt_count CHECK (attempt_count BETWEEN 0 AND 8),
+  settled_at TIMESTAMPTZ(3),
+  error_code TEXT CONSTRAINT ck_bff_run_steer_error CHECK (error_code IS NULL OR (
+    settled_at IS NOT NULL AND error_code IN ('control_apply_failed', 'control_enqueue_failed', 'control_superseded')
+  )),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, subject_id, conversation_id, idempotency_key_hash),
+  CONSTRAINT ck_bff_run_steer_lease CHECK ((lease_token IS NULL AND lease_until IS NULL) OR (
+    settled_at IS NULL AND lease_token IS NOT NULL AND lease_until IS NOT NULL
+  ))
+);
+CREATE INDEX IF NOT EXISTS ix_bff_run_steer_pending
+  ON bff_run_steer (available_at, created_at, agent_command_id) WHERE settled_at IS NULL;
+
 -- Transactional Chat -> Agent command queue. A user message, its provisional
 -- assistant message, expected AG-UI run fence, and this row commit together.
+-- MESSAGE-FEEDBACK-SQL-BEGIN
+CREATE TABLE IF NOT EXISTS bff_message_feedback (
+  tenant_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  feedback TEXT NOT NULL CONSTRAINT ck_bff_message_feedback_value CHECK (feedback IN ('up', 'down')),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, subject_id, message_id),
+  CONSTRAINT ck_bff_message_feedback_identity CHECK (
+    length(btrim(tenant_id)) > 0 AND length(btrim(subject_id)) > 0
+    AND length(btrim(conversation_id)) > 0 AND length(btrim(message_id)) > 0
+  )
+);
+CREATE INDEX IF NOT EXISTS ix_bff_message_feedback_parent_cleanup
+  ON bff_message_feedback (tenant_id, conversation_id);
+-- MESSAGE-FEEDBACK-SQL-END
+
 CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
   outbox_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
@@ -361,13 +505,6 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_scope (
   subject_id TEXT NOT NULL,
   active_dispatch_id TEXT,
   active_run_id TEXT,
-  source_high_watermark BIGINT NOT NULL DEFAULT 0,
-  consumer_next_poll_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  consumer_lease_owner TEXT,
-  consumer_lease_token TEXT,
-  consumer_lease_until TIMESTAMPTZ(3),
-  consumer_fence BIGINT NOT NULL DEFAULT 0,
-  consumer_failure_count BIGINT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (tenant_id, task_id),
@@ -379,11 +516,6 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_scope (
   CONSTRAINT ck_bff_scheduled_agent_scope_active CHECK (
     (active_dispatch_id IS NULL AND active_run_id IS NULL)
     OR (active_dispatch_id IS NOT NULL AND active_run_id IS NOT NULL)
-  ),
-  CONSTRAINT ck_bff_scheduled_agent_scope_source CHECK (source_high_watermark >= 0),
-  CONSTRAINT ck_bff_scheduled_agent_scope_consumer CHECK (
-    (consumer_lease_owner IS NULL AND consumer_lease_token IS NULL AND consumer_lease_until IS NULL)
-    OR (consumer_lease_owner IS NOT NULL AND consumer_lease_token IS NOT NULL AND consumer_lease_until IS NOT NULL)
   )
 );
 
@@ -400,6 +532,8 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_dispatch (
   run_id TEXT NOT NULL,
   identity_assertion_ref TEXT NOT NULL,
   payload JSONB NOT NULL,
+  user_message_id TEXT NOT NULL,
+  assistant_message_id TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   admission_unknown_seen BOOLEAN NOT NULL DEFAULT FALSE,
   attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -420,7 +554,7 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_dispatch (
   CONSTRAINT ck_bff_scheduled_agent_dispatch_order CHECK (occurrence_order_key ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{9}Z$'),
   CONSTRAINT ck_bff_scheduled_agent_dispatch_digest CHECK (request_digest ~ '^[0-9a-f]{64}$'),
   CONSTRAINT ck_bff_scheduled_agent_dispatch_payload CHECK (jsonb_typeof(payload) = 'object'),
-  CONSTRAINT ck_bff_scheduled_agent_dispatch_status CHECK (status IN ('pending','leased','retryable','admitted','terminal','failed')),
+  CONSTRAINT ck_bff_scheduled_agent_dispatch_status CHECK (status IN ('pending','leased','retryable','submitted','admitted','terminal','failed')),
   CONSTRAINT ck_bff_scheduled_agent_dispatch_lease CHECK (
     (status='leased' AND lease_owner IS NOT NULL AND lease_token IS NOT NULL AND lease_until IS NOT NULL)
     OR (status<>'leased' AND lease_owner IS NULL AND lease_token IS NULL AND lease_until IS NULL)
@@ -429,7 +563,7 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_agent_dispatch (
     (status='admitted' AND admitted_at IS NOT NULL AND completed_at IS NULL)
     OR (status='terminal' AND admitted_at IS NOT NULL AND completed_at IS NOT NULL)
     OR (status='failed' AND admitted_at IS NULL AND completed_at IS NOT NULL AND admission_unknown_seen=FALSE)
-    OR (status IN ('pending','leased','retryable') AND admitted_at IS NULL AND completed_at IS NULL)
+    OR (status IN ('pending','leased','retryable','submitted') AND admitted_at IS NULL AND completed_at IS NULL)
   )
 );
 CREATE INDEX IF NOT EXISTS ix_bff_scheduled_agent_dispatch_ready
@@ -440,27 +574,6 @@ CREATE INDEX IF NOT EXISTS ix_bff_scheduled_agent_dispatch_lease
   WHERE status='leased';
 CREATE INDEX IF NOT EXISTS ix_bff_scheduled_agent_dispatch_head
   ON bff_scheduled_agent_dispatch (tenant_id,task_id,occurrence_order_key,dispatch_id);
-
-CREATE TABLE IF NOT EXISTS bff_scheduled_agent_source_event (
-  tenant_id TEXT NOT NULL,
-  task_id TEXT NOT NULL,
-  source_sequence BIGINT NOT NULL,
-  source_event_id TEXT NOT NULL,
-  source_run_id TEXT NOT NULL,
-  source_owner TEXT NOT NULL,
-  source_digest TEXT NOT NULL,
-  source_occurred_at TIMESTAMPTZ(3) NOT NULL,
-  event_type TEXT NOT NULL,
-  source_payload JSONB NOT NULL,
-  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (tenant_id,task_id,source_sequence),
-  UNIQUE (tenant_id,task_id,source_event_id),
-  CONSTRAINT ck_bff_scheduled_agent_source_identity CHECK (
-    source_sequence >= 1 AND length(btrim(source_event_id)) > 0
-    AND length(btrim(source_run_id)) > 0 AND source_owner='kokoro-agent'
-    AND source_digest ~ '^[0-9a-f]{64}$' AND jsonb_typeof(source_payload)='object'
-  )
-);
 
 -- A deleted conversation must compensate every launch that may already have
 -- crossed the Agent boundary. These run.cancel commands are committed in the
@@ -716,7 +829,9 @@ CREATE TABLE IF NOT EXISTS bff_conversation_artifact (
   source_title TEXT NOT NULL,
   source_mime TEXT NOT NULL,
   source_size_bytes BIGINT NOT NULL,
+  source_display_path TEXT,
   delivered_at TIMESTAMPTZ(3) NOT NULL,
+  favorited_at TIMESTAMPTZ(3),
   CONSTRAINT pk_bff_conversation_artifact PRIMARY KEY (tenant_id, conversation_id, artifact_id),
   CONSTRAINT uq_bff_conversation_artifact_source UNIQUE (tenant_id, conversation_id, source_owner, source_event_id),
   CONSTRAINT ck_bff_conversation_artifact_identity CHECK (

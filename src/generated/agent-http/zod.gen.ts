@@ -42,6 +42,180 @@ export const zLaunchRequest = z.object({
   requested_model_label: z.string().min(1).optional(),
   trace: z.record(z.string(), z.unknown()).optional(),
   project_ref: z.string().min(1).max(255).nullable(),
+  selected_mcp_connection_ids: z
+    .array(z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")))
+    .max(16)
+    .refine((values) => new Set(values).size === values.length && new TextEncoder().encode(JSON.stringify(values)).byteLength <= 4096)
+    .optional(),
+  selected_custom_api_profiles: z
+    .array(
+      z
+        .object({
+          profile_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+          expected_state_version: z.number().int().min(1).max(2147483647),
+        })
+        .strict(),
+    )
+    .max(32)
+    .refine((values) => new Set(values.map((value) => value.profile_id)).size === values.length)
+    .optional(),
+  selected_resource_refs: z
+    .array(
+      z.union([
+        z
+          .object({
+            kind: z.literal("asset"),
+            resource_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            asset_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            content_sha256: z.string().min(64).max(64).regex(new RegExp("^[a-f0-9]{64}(?![\\s\\S])", "u")),
+            size_bytes: z
+              .string()
+              .min(1)
+              .max(20)
+              .regex(
+                new RegExp(
+                  "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4]|18446744073709551615)(?![\\s\\S])",
+                  "u",
+                ),
+              ),
+            mime_type: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9_.+-]+/[A-Za-z0-9_.+-]+(?![\\s\\S])", "u")),
+            filename: z
+              .string()
+              .min(1)
+              .max(255)
+              .regex(new RegExp("^[^\\u0000-\\u001f\\u007f/\\\\\\uD800-\\uDFFF]+(?![\\s\\S])", "u"))
+              .refine((value) => ![".", ".."].includes(value)),
+            source_scope: z
+              .object({
+                kind: z.enum(["personal", "project"]),
+                id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+              })
+              .strict(),
+          })
+          .strict(),
+        z
+          .object({
+            kind: z.literal("artifact"),
+            resource_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            asset_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            content_sha256: z.string().min(64).max(64).regex(new RegExp("^[a-f0-9]{64}(?![\\s\\S])", "u")),
+            size_bytes: z
+              .string()
+              .min(1)
+              .max(20)
+              .regex(
+                new RegExp(
+                  "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4]|18446744073709551615)(?![\\s\\S])",
+                  "u",
+                ),
+              ),
+            mime_type: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9_.+-]+/[A-Za-z0-9_.+-]+(?![\\s\\S])", "u")),
+            filename: z
+              .string()
+              .min(1)
+              .max(255)
+              .regex(new RegExp("^[^\\u0000-\\u001f\\u007f/\\\\\\uD800-\\uDFFF]+(?![\\s\\S])", "u"))
+              .refine((value) => ![".", ".."].includes(value)),
+            source_scope: z
+              .object({
+                kind: z.enum(["conversation"]),
+                id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+              })
+              .strict(),
+            source_run_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+          })
+          .strict(),
+        z
+          .object({
+            kind: z.literal("final_answer"),
+            resource_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            source_scope: z
+              .object({
+                kind: z.enum(["conversation"]),
+                id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+              })
+              .strict(),
+            source_run_id: z.string().min(1).max(191).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])", "u")),
+            source_final_segment_id: z.string().min(1).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]{1,255}(?![\\s\\S])", "u")),
+            source_revision: z
+              .string()
+              .min(1)
+              .max(19)
+              .regex(
+                new RegExp(
+                  "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)(?![\\s\\S])",
+                  "u",
+                ),
+              ),
+            content: z
+              .string()
+              .min(1)
+              .max(24576)
+              .regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]+(?![\\s\\S])", "u"))
+              .refine((value) => new TextEncoder().encode(value).byteLength <= 24576),
+            content_sha256: z.string().min(64).max(64).regex(new RegExp("^[a-f0-9]{64}(?![\\s\\S])", "u")),
+            size_bytes: z
+              .string()
+              .min(1)
+              .max(5)
+              .regex(new RegExp("^(?:[1-9][0-9]{0,3}|1[0-9]{4}|2[0-3][0-9]{3}|24[0-4][0-9]{2}|245[0-6][0-9]{1}|2457[0-5]|24576)(?![\\s\\S])", "u")),
+          })
+          .strict(),
+      ]),
+    )
+    .max(16)
+    .refine(
+      (values) =>
+        new Set(values.map((value) => value.kind + ":" + value.resource_id)).size === values.length &&
+        Array.from(JSON.stringify(values)).reduce((size, char) => size + (char.charCodeAt(0) >= 127 ? char.length * 6 : 1), 0) <= 32768 &&
+        values.every((value) =>
+          value.kind === "asset"
+            ? value.resource_id === value.asset_id
+            : value.kind !== "final_answer" || String(new TextEncoder().encode(value.content).byteLength) === value.size_bytes,
+        ),
+    )
+    .optional(),
+  personal_context: z
+    .object({
+      schema_version: z.literal(1),
+      owner: z.object({
+        tenant_ref: z.string().min(1),
+        user_ref: z.string().min(1),
+      }),
+      profile: z
+        .object({
+          revision: z.int().gte(1).lte(9007199254740991),
+          nickname: z.string().max(128).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+          occupation: z.string().max(256).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+          about: z.string().max(2000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+          instructions: z.string().max(8000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+        })
+        .nullable(),
+      knowledge: z.intersection(
+        z.unknown(),
+        z.object({
+          usage_revision: z.int().gte(0).lte(9007199254740991),
+          enabled: z.boolean(),
+          items: z
+            .array(
+              z.object({
+                knowledge_id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\s\S])/),
+                revision: z.int().gte(1).lte(9007199254740991),
+                name: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                when_to_use: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                content: z.string().min(1).max(2000).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+              }),
+            )
+            .max(100),
+        }),
+      ),
+    })
+    .nullish(),
+  project_instruction: z
+    .string()
+    .min(1)
+    .regex(new RegExp("[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]", "u"))
+    .optional(),
 })
 
 export const zLaunchReceipt = z
@@ -129,9 +303,81 @@ export const zDataEnvelope = z.object({
   meta: zMeta,
 })
 
+export const zSkillDisplay = z
+  .object({ source_ref: z.string().min(7), name: z.string().min(1), virtual_path: z.string().min(1), revision: z.string().optional() })
+  .strict()
+
+export const zWorkspaceOutputVersion = z
+  .object({
+    version_id: z.string().regex(/^wsv_[0-9a-f]{64}(?![\s\S])/),
+    virtual_path: z
+      .string()
+      .min(10)
+      .max(4096)
+      .regex(/^\/outputs\//),
+    asset_id: z.string().min(1).max(255),
+    content_sha256: z.string().regex(/^[0-9a-f]{64}(?![\s\S])/),
+    size_bytes: z.int().gte(0).lte(8388608),
+    mime_type: z.enum(["text/plain", "text/markdown", "text/csv", "application/json"]),
+  })
+  .strict()
+
 /**
- * Caller correlation identifier. The Agent creates one when absent.
+ * Recovered safe display facts only. Missing facts remain unknown; source events and execution authority are unchanged. No completeness assertion.
  */
+export const zRunDisplay = z
+  .object({
+    run_id: z.string().min(1),
+    display_skills: z.array(zSkillDisplay).max(16),
+    tool_paths: z.array(z.object({ activity_id: z.string().min(68), virtual_path: z.string().min(1) }).strict()).max(128),
+    tool_facts: z
+      .array(
+        z
+          .object({
+            activity_id: z.string().min(68),
+            display_detail: z
+              .object({ kind: z.enum(["mcp_tool"]), name: z.string().min(1) })
+              .strict()
+              .optional(),
+            status: z.enum(["failed"]).optional(),
+          })
+          .strict()
+          .refine((value) => value.display_detail !== undefined || value.status !== undefined, "Tool fact requires proved detail or failure"),
+      )
+      .max(128),
+    activity_details: z
+      .array(
+        z
+          .object({
+            activity_id: z.string().min(68),
+            tool_name: z.string().min(1),
+            target: z
+              .object({ kind: z.enum(["file", "mcp_tool"]), name: z.string().min(1), virtual_path: z.string().min(1).optional() })
+              .strict()
+              .optional(),
+            input_preview: z
+              .object({ text: z.string().min(1), truncated: z.boolean(), redacted: z.boolean() })
+              .strict()
+              .optional(),
+            output_preview: z
+              .object({ text: z.string().min(1), truncated: z.boolean(), redacted: z.boolean() })
+              .strict()
+              .optional(),
+            tool_description: z
+              .object({ text: z.string().min(1), truncated: z.boolean(), redacted: z.boolean() })
+              .strict()
+              .optional(),
+          })
+          .strict(),
+      )
+      .max(128),
+    final_message_id: z.string().optional(),
+    workspace_outputs: z.array(zWorkspaceOutputVersion).min(1).max(128).optional(),
+  })
+  .strict()
+
+export const zRunDisplayEnvelope = z.object({ data: zRunDisplay, meta: zMeta }).strict()
+
 export const zRequestId = z.string().min(1)
 
 export const zTenantRef = z.string().min(1)
@@ -218,6 +464,25 @@ export const zReplaySessionEventsQuery = z.object({
  */
 export const zReplaySessionEventsResponse = zReplayPageEnvelope
 
+export const zGetRunDisplayHeaders = z.object({
+  "X-Request-Id": z.string().min(1).optional(),
+  "X-Kokoro-Tenant-Ref": z.string().min(1),
+  "X-Kokoro-Subject-Ref": z.string().min(1),
+  "X-Kokoro-Subject-Kind": z.enum(["user", "project", "service"]).optional().default("user"),
+  "X-Kokoro-Actor-Ref": z.string().min(1),
+  "X-Kokoro-Actor-Kind": z.enum(["user", "project", "service"]).optional().default("user"),
+  "X-Kokoro-Identity-Assertion-Ref": z.string().min(1),
+})
+
+export const zGetRunDisplayPath = z.object({
+  run_id: z.string().min(1),
+})
+
+/**
+ * Safe recovered display facts, at most 1MiB.
+ */
+export const zGetRunDisplayResponse = zRunDisplayEnvelope
+
 export const zInteractionValidation = z
   .object({ code: z.literal("json_schema_invalid"), instance_path: z.array(z.union([z.string(), z.number().int().max(Number.MAX_SAFE_INTEGER)])) })
   .strict()
@@ -277,7 +542,22 @@ export const zChatActivity = z.union([
       activity_id: z.string().min(68),
       segment_id: z.string().min(68),
       status: z.enum(["running", "completed", "failed"]),
-      display_code: z.literal("tool.execution"),
+      display_code: z.enum([
+        "tool.execution",
+        "tool.file.read",
+        "tool.mcp.discover",
+        "tool.mcp.describe",
+        "tool.mcp.call",
+        "tool.web.search",
+        "tool.web.fetch",
+        "tool.file.write",
+        "tool.file.deliver",
+      ]),
+      display_detail: z
+        .object({ kind: z.enum(["file", "mcp_tool"]), name: z.string().min(1), virtual_path: z.string().min(1).optional() })
+        .strict()
+        .optional(),
+      action_title: z.string().min(1).optional(),
     })
     .strict(),
   z
@@ -297,6 +577,19 @@ export const zChatActivity = z.union([
       source_refs: z.array(z.string().min(7)).min(1).max(16),
       phase: z.enum(["resolving", "loading", "ready", "failed"]),
       error_code: z.enum(["skill_resolve_failed", "skill_load_failed"]).optional(),
+      display_skills: z.array(zSkillDisplay).max(16).optional(),
     })
     .strict(),
 ])
+
+export const zChatRunCompleted = z
+  .object({
+    status: z.enum(["completed", "cancelled"]),
+    token_usage: z
+      .object({ input_tokens: z.number().int().max(Number.MAX_SAFE_INTEGER).min(0), output_tokens: z.number().int().max(Number.MAX_SAFE_INTEGER).min(0) })
+      .strict()
+      .optional(),
+    final_message_id: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine((value) => value.final_message_id === undefined || value.status === "completed", "Final answer requires completed run")

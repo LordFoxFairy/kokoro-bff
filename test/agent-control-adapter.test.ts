@@ -1,14 +1,32 @@
+import "reflect-metadata"
 import assert from "node:assert/strict"
 import { createServer, type Server } from "node:http"
 import { afterEach, test } from "node:test"
+import { Test } from "@nestjs/testing"
 
-import { AgUiSessionRuntime } from "../dist/application/agui/session-runtime.js"
+import type { ChatConversationLookup } from "../dist/infrastructure/postgres/chat-conversation-lookup.js"
+import type { AgUiRunControlReader } from "../dist/infrastructure/postgres/agui-run-state-read.js"
+import type { IdempotencyRepository } from "../dist/application/ports/idempotency-repository.js"
+import {
+  AGENT_CANCELLATION_DISPATCHER,
+  AGENT_CONTROL_IDEMPOTENCY,
+  AGENT_DISPATCH_DISPATCHER,
+  AGUI_PROJECTOR,
+  AGUI_RUN_CONTROL_READER,
+  BFF_CONFIG,
+  BFF_DATABASE,
+  CHAT_CONVERSATION_LOOKUP,
+  PROJECT_LOOKUP,
+  SESSION_ADMISSION,
+} from "../dist/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
+import { AgentRunsModule } from "../dist/modules/agent-runs/agent-runs.module.js"
 import { DEFAULT_AGUI_CONFIG, type BffConfig } from "../dist/config/runtime.js"
 import { parseAgentControlReceipt } from "../dist/infrastructure/clients/agent/control-receipt.js"
-import { liveAgentSession } from "../dist/http/routes/agent.js"
-import { createLiveTestBffServer } from "./doubles/server.ts"
+import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const servers: Server[] = []
+const closeApps: (() => Promise<void>)[] = []
 const canonicalDigest = "sha256:25f421bfa958a4ed2ee20e9f23f67881d6ebd0be17df1581c729b2527c50409c"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -34,6 +52,7 @@ function config(agentBase: string): BffConfig {
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_control",
     iamBaseUrl: null,
+    iamWebOrigin: "https://web.example.test",
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -63,44 +82,138 @@ function authHeaders(commandId: string): Record<string, string> {
     "idempotency-key": commandId,
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "web-secret",
-    authorization: "Bearer control-session",
+    cookie: "kokoro-issuer.session_token=control-session",
+    origin: "https://web.example.test",
   }
 }
 
-function bffServer(configValue: BffConfig, authorized = true): Server {
-  const runtime = new AgUiSessionRuntime({
-    connections: {
-      global: configValue.agUi.maxConnectionsGlobal,
-      perTenant: configValue.agUi.maxConnectionsPerTenant,
-      perSession: configValue.agUi.maxConnectionsPerSession,
-    },
-    ledgerWait: {
-      baseDelayMs: configValue.agUi.ledgerPollBaseDelayMs,
-      maxDelayMs: configValue.agUi.ledgerPollMaxDelayMs,
-      jitterRatio: configValue.agUi.ledgerPollJitterPercent / 100,
-    },
-    replayCacheTtlMs: configValue.agUi.replayCacheTtlMs,
-  })
-  return createLiveTestBffServer(configValue, {
-    routeHandler: ({ request, response, businessPath, context, json, mutation, idempotency }) => liveAgentSession(
-      request,
-      response,
-      configValue,
-      context,
-      businessPath,
-      json,
-      mutation,
-      idempotency,
-      null,
-      runtime,
-      false,
-      authorized ? { ok: true } : null,
-    ),
-  })
+type ControlReaders = { findConversation?: ChatConversationLookup; readControl?: AgUiRunControlReader }
+
+async function startAgentControlApp(
+  configValue: BffConfig,
+  authorized = true,
+  readers: ControlReaders = {},
+  receipts: IdempotencyRepository | null = null,
+): Promise<string> {
+  const admission = new SessionAdmissionDouble({ "control-session": { namespace: "tenant_control", userId: "user_control" } })
+  const findConversation: ChatConversationLookup =
+    readers.findConversation ?? (async (tenantId, subjectId, sessionId) => {
+      if (!authorized || tenantId !== "tenant_control" || subjectId !== "user_control") return null
+      return {
+        conversationId: sessionId,
+        tenantId,
+        title: "Agent control",
+        ownerId: subjectId,
+        projectRef: null,
+        status: "active",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        deletedAt: null,
+      }
+    })
+  const builder = Test.createTestingModule({ imports: [AgentRunsModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(configValue)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: Object.freeze({}), redis: Object.freeze({}) })
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(admission)
+    .overrideProvider(CHAT_CONVERSATION_LOOKUP)
+    .useValue(findConversation)
+    .overrideProvider(AGUI_RUN_CONTROL_READER)
+    .useValue(readers.readControl ?? (() => assert.fail("The control route must not read the execution head in this fixture")))
+    .overrideProvider(PROJECT_LOOKUP)
+    .useValue({ find: async () => null })
+    .overrideProvider(AGENT_CONTROL_IDEMPOTENCY)
+    .useValue(receipts)
+  for (const token of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) {
+    builder.overrideProvider(token).useValue(null)
+  }
+  const module = await builder.compile()
+  const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
+  closeApps.push(() => app.close())
+  await app.listen(0, "127.0.0.1")
+  return app.getUrl()
 }
 
+test("routes Agent control through the AgentRunsModule owner", async () => {
+  const observed: string[] = []
+  const agent = createServer((request, response) => {
+    observed.push(request.url ?? "")
+    response.writeHead(202, { "content-type": "application/json" })
+    response.end(
+      JSON.stringify({
+        data: {
+          command_id: "command_raw",
+          request_digest: canonicalDigest,
+          status: "pending",
+          replayed: false,
+        },
+        meta: { request_id: "agent_request" },
+      }),
+    )
+  })
+  const agentBase = await listen(agent)
+  const receipts = new Map<string, { fingerprint: string; status: number; body: unknown }>()
+  const controlReceipts = {
+    async claimReceipt(scope: string, fingerprint: string) {
+      const prior = receipts.get(scope)
+      if (prior !== undefined) return { claimed: false, receipt: prior }
+      const pending = { fingerprint, status: 102, body: {} }
+      receipts.set(scope, pending)
+      return { claimed: true, receipt: null }
+    },
+    async getReceipt(scope: string) {
+      return receipts.get(scope) ?? null
+    },
+    async putReceipt(scope: string, receipt: { fingerprint: string; status: number; body: unknown }) {
+      receipts.set(scope, receipt)
+    },
+    async compareAndSetReceipt() {
+      return { updated: false, receipt: null }
+    },
+    async releaseReceipt(scope: string) {
+      receipts.delete(scope)
+    },
+  }
+  const readers: ControlReaders = {
+    async findConversation() {
+      return {
+        conversationId: "session_control",
+        tenantId: "tenant_control",
+        title: "Raw",
+        ownerId: "user_control",
+        projectRef: null,
+        status: "active",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        deletedAt: null,
+      }
+    },
+  }
+  const base = await startAgentControlApp(config(agentBase), true, readers, controlReceipts)
+  const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
+    method: "POST",
+    headers: authHeaders("command_raw"),
+    body: JSON.stringify({ kind: "run.cancel" }),
+  })
+  assert.equal(response.status, 202)
+  assert.deepEqual((await response.json()).data, {
+    run_id: "run_control",
+    command_id: "command_raw",
+    request_digest: canonicalDigest,
+    status: "pending",
+    replayed: false,
+  })
+  assert.deepEqual(observed, ["/v1/runs/run_control/control"])
+})
+
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
+  try {
+    await Promise.all(closeApps.splice(0).map((close) => close()))
+  } finally {
+    await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
+  }
 })
 
 test("projects the canonical Agent receipt without trusting an upstream run_id", async () => {
@@ -115,19 +228,21 @@ test("projects the canonical Agent receipt without trusting an upstream run_id",
         headers: request.headers,
       })
       response.writeHead(202, { "content-type": "application/json" })
-      response.end(JSON.stringify({
-        data: {
-          command_id: "command_control",
-          request_digest: canonicalDigest,
-          status: "pending",
-          replayed: false,
-        },
-        meta: { request_id: "agent_request" },
-      }))
+      response.end(
+        JSON.stringify({
+          data: {
+            command_id: "command_control",
+            request_digest: canonicalDigest,
+            status: "pending",
+            replayed: false,
+          },
+          meta: { request_id: "agent_request" },
+        }),
+      )
     })
   })
   const agentBase = await listen(agent)
-  const base = await listen(bffServer(config(agentBase)))
+  const base = await startAgentControlApp(config(agentBase))
 
   const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
     method: "POST",
@@ -166,28 +281,33 @@ test("projects the canonical Agent receipt without trusting an upstream run_id",
 })
 
 test("rejects receipt identity drift and extra owner fields", async () => {
-  assert.equal(parseAgentControlReceipt({
-    command_id: "command_control",
-    request_digest: canonicalDigest,
-    status: "pending",
-    replayed: false,
-    run_id: "untrusted",
-  }), null)
+  assert.equal(
+    parseAgentControlReceipt({
+      command_id: "command_control",
+      request_digest: canonicalDigest,
+      status: "pending",
+      replayed: false,
+      run_id: "untrusted",
+    }),
+    null,
+  )
 
   const agent = createServer((_request, response) => {
     response.writeHead(202, { "content-type": "application/json" })
-    response.end(JSON.stringify({
-      data: {
-        command_id: "command_drift",
-        request_digest: "sha256:wrong",
-        status: "pending",
-        replayed: false,
-      },
-      meta: { request_id: "agent_request" },
-    }))
+    response.end(
+      JSON.stringify({
+        data: {
+          command_id: "command_drift",
+          request_digest: "sha256:wrong",
+          status: "pending",
+          replayed: false,
+        },
+        meta: { request_id: "agent_request" },
+      }),
+    )
   })
   const agentBase = await listen(agent)
-  const base = await listen(bffServer(config(agentBase)))
+  const base = await startAgentControlApp(config(agentBase))
 
   const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
     method: "POST",
@@ -208,7 +328,7 @@ test("does not call Agent control when private Chat authorization is absent", as
     response.writeHead(500).end()
   })
   const agentBase = await listen(agent)
-  const base = await listen(bffServer(config(agentBase), false))
+  const base = await startAgentControlApp(config(agentBase), false)
 
   const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
     method: "POST",
@@ -222,7 +342,6 @@ test("does not call Agent control when private Chat authorization is absent", as
   assert.equal(body.error.code, "session_not_found")
   assert.equal(calls, 0)
 })
-
 
 // R57: published Agent e977923 HTTP4; append-only behavior RED, no production substitutes.
 
@@ -389,4 +508,146 @@ test("R57 business dictionary nulls and decision order remain distinct owner dig
   const approveNull = { ...body, decisions: [{ type: "approve", item_id: "item_approve", args: { note: null } }] }
   const approveEmpty = { ...body, decisions: [{ type: "approve", item_id: "item_approve", args: {} }] }
   assert.notEqual(agentControlRequestDigest("run_hitl_1", approveNull), agentControlRequestDigest("run_hitl_1", approveEmpty))
+})
+
+test("immediate stop reaches the real Agent cancel path after its exact durable queued Run becomes visible", async () => {
+  const { agentControlRequestDigest } = await import("../dist/infrastructure/clients/agent/control-receipt.js")
+  const observed: { body: unknown; key: string | undefined }[] = []
+  let cancelled = false,
+    modelDispatches = 0
+  const agent = createServer((request, response) => {
+    const chunks: Buffer[] = []
+    request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+    request.on("end", () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString())
+      observed.push({ body, key: request.headers["idempotency-key"] as string | undefined })
+      if (observed.length === 1) {
+        response.writeHead(404, { "content-type": "application/json" })
+        response.end(JSON.stringify({ error: { code: "run_not_found", message: "Run was not found" } }))
+      } else {
+        cancelled = true
+        response.writeHead(202, { "content-type": "application/json" })
+        response.end(
+          JSON.stringify({
+            data: { command_id: "startup-stop", request_digest: agentControlRequestDigest("run_startup", body), status: "pending", replayed: false },
+          }),
+        )
+      }
+    })
+  })
+  const base = await listen(agent)
+  let reads = 0
+  const readers: ControlReaders = {
+    readControl: async (tenant: string, subject: string, session: string) => {
+      assert.equal(tenant, "tenant_control")
+      assert.equal(subject, "user_control")
+      assert.equal(session, "session_1")
+      reads++
+      return { executionHead: { runId: "run_startup", state: reads === 1 ? "queued" : "active", pendingPauses: [] } }
+    },
+  }
+  const bff = await startAgentControlApp(config(base), true, readers)
+  const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
+    method: "POST",
+    headers: authHeaders("startup-stop"),
+    body: JSON.stringify({ kind: "run.cancel" }),
+  })
+  assert.equal(response.status, 202)
+  const result = (await response.json()) as { data: { run_id: string; status: string } }
+  assert.equal(result.data.run_id, "run_startup")
+  assert.equal(result.data.status, "pending", "actual Agent receipt is not a cancelled terminal")
+  if (!cancelled) modelDispatches++
+  assert.equal(cancelled, true, "controlled Agent applies the actual cancel command")
+  assert.equal(modelDispatches, 0, "cancelled controlled Run never enters its model branch")
+  assert.ok(reads >= 1)
+  assert.equal(observed.length, 2)
+  assert.deepEqual(observed[0], observed[1], "same key and body, not a new control intent")
+})
+
+for (const [name, firstHead, nextHead, ownerCode] of [
+  ["missing head", undefined, undefined, "run_not_found"],
+  ["different Run", { runId: "other", state: "queued", pendingPauses: [] }, undefined, "run_not_found"],
+  ["already active first observation", { runId: "run_startup", state: "active", pendingPauses: [] }, undefined, "run_not_found"],
+  [
+    "head retires while waiting",
+    { runId: "run_startup", state: "queued", pendingPauses: [] },
+    { runId: "other", state: "queued", pendingPauses: [] },
+    "run_not_found",
+  ],
+  ["owner becomes unreadable", { runId: "run_startup", state: "queued", pendingPauses: [] }, "unreadable", "run_not_found"],
+  ["terminal while waiting", { runId: "run_startup", state: "queued", pendingPauses: [] }, undefined, "run_not_found"],
+  ["different owner 404", { runId: "run_startup", state: "queued", pendingPauses: [] }, undefined, "session_not_found"],
+] as const)
+  test(`startup cancel preserves original one-call rejection for ${name}`, async () => {
+    let calls = 0,
+      reads = 0
+    const agent = createServer((_request, response) => {
+      calls++
+      response.writeHead(404, { "content-type": "application/json" })
+      response.end(JSON.stringify({ error: { code: ownerCode, message: "Not found" } }))
+    })
+    const base = await listen(agent)
+    const readers: ControlReaders = {
+      readControl: async () => {
+        const head = reads++ === 0 ? firstHead : nextHead
+        return head === "unreadable" ? null : { executionHead: head && { ...head, pendingPauses: [] } }
+      },
+    }
+    const bff = await startAgentControlApp(config(base), true, readers)
+    const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
+      method: "POST",
+      headers: authHeaders(`reject-${name}`),
+      body: JSON.stringify({ kind: "run.cancel" }),
+    })
+    assert.equal(response.status, 404)
+    await response.arrayBuffer()
+    assert.equal(calls, 1)
+  })
+
+test("startup cancel stops waiting on caller abort without delivering a second control", async () => {
+  let calls = 0
+  const controller = new AbortController()
+  const agent = createServer((_request, response) => {
+    calls++
+    response.writeHead(404, { "content-type": "application/json" })
+    response.end(JSON.stringify({ error: { code: "run_not_found", message: "Run was not found" } }))
+  })
+  const base = await listen(agent)
+  const readers: ControlReaders = {
+    readControl: async () => {
+      setTimeout(() => controller.abort(), 5)
+      return { executionHead: { runId: "run_startup", state: "queued", pendingPauses: [] } }
+    },
+  }
+  const bff = await startAgentControlApp(config(base), true, readers)
+  await assert.rejects(
+    fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
+      method: "POST",
+      headers: authHeaders("abort-startup"),
+      body: JSON.stringify({ kind: "run.cancel" }),
+      signal: controller.signal,
+    }),
+  )
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  assert.equal(calls, 1)
+})
+
+test("startup cancel never renews its absolute request budget or invents a receipt", async () => {
+  let calls = 0
+  const agent = createServer((_request, response) => {
+    calls++
+    response.writeHead(404, { "content-type": "application/json" })
+    response.end(JSON.stringify({ error: { code: "run_not_found", message: "Run was not found" } }))
+  })
+  const base = await listen(agent)
+  const readers: ControlReaders = { readControl: async () => ({ executionHead: { runId: "run_startup", state: "queued", pendingPauses: [] } }) }
+  const bff = await startAgentControlApp({ ...config(base), upstreamTimeoutMs: 25 }, true, readers)
+  const response = await fetch(`${bff}/v1/sessions/session_1/runs/run_startup/control`, {
+    method: "POST",
+    headers: authHeaders("deadline-startup"),
+    body: JSON.stringify({ kind: "run.cancel" }),
+  })
+  assert.ok([404, 502].includes(response.status), "budget expiry never fabricates an accepted command")
+  await response.arrayBuffer()
+  assert.ok(calls >= 1 && calls <= 2, "the absolute budget is not renewed for each owner delivery")
 })

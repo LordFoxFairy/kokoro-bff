@@ -1,7 +1,7 @@
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import { authorizeUserRequest } from "../../auth/user-admission.js"
+import { authorizeUserRequest, authorizeSkillAction } from "../../auth/user-admission.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { AdmittedUserRequestContext } from "../../domain/request-context.js"
@@ -88,6 +88,10 @@ export async function withPersonalSkillLifecycle(
   config: BffConfig,
   admissionSource: SessionAdmission,
   requestId: string,
+  qualification: {
+    source: Pick<import("../../auth/skill-authorization.client.js").SkillAuthorizationClient, "check">
+    action: import("../../auth/skill-authorization.types.js").SkillAuthorizationInput["action"]
+  } | null,
   work: (scope: PersonalSkillLifecycleScope) => Promise<void>,
 ): Promise<void> {
   if (request.aborted || response.destroyed || response.writableEnded) return
@@ -120,7 +124,7 @@ export async function withPersonalSkillLifecycle(
     active()
     let admission: Awaited<ReturnType<typeof authorizeUserRequest>>
     try {
-      admission = await whileActive(authorizeUserRequest(request, config, admissionSource, requestId, controller.signal), controller.signal)
+      admission = await whileActive(authorizeUserRequest(request, config, admissionSource, requestId, controller.signal, response), controller.signal)
     } catch {
       if (controller.signal.aborted || request.aborted || response.destroyed || response.writableEnded) {
         if (timedOut && !request.aborted && !response.destroyed && !response.writableEnded) throw controller.signal.reason
@@ -153,6 +157,15 @@ export async function withPersonalSkillLifecycle(
         payload(requestId, admission.code, "BFF user admission failed"),
         admission.retryAfter,
       )
+      return
+    }
+    const checked =
+      qualification === null
+        ? { ok: true as const }
+        : await whileActive(authorizeSkillAction(qualification.source, admission, qualification.action, controller.signal), controller.signal)
+    active()
+    if (!checked.ok) {
+      replyPersonalSkillLifecycle(response, { active }, requestId, checked.status, payload(requestId, checked.code, "Current Skill action is required"))
       return
     }
     await whileActive(

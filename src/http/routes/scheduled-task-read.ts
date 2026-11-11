@@ -15,6 +15,7 @@ export async function scheduledTaskReadRoute(
   taskId: string | undefined,
   readmit: (signal: AbortSignal) => Promise<UserAdmissionResult>,
   timeoutMs: number,
+  projectId?: string,
 ): Promise<void> {
   const controller = new AbortController()
   const abort = (): void => controller.abort()
@@ -34,6 +35,7 @@ export async function scheduledTaskReadRoute(
     if (reader === null) throw Error("scheduler_current_unavailable")
     const views = await reader.read({ tenantId: context.identity.namespace, subjectId: context.identity.userId }, context.requestId, controller.signal, {
       ...(taskId === undefined ? {} : { taskId }),
+      ...(projectId === undefined ? {} : { projectId }),
       deadline,
       revalidate: async () => {
         const fresh = await readmit(controller.signal)

@@ -7,7 +7,7 @@ const storage = { baseUrl: "http://storage.test", secret: "storage-secret", obje
 
 test("Library requires explicit file or artifact kind and bounded single-valued page query", async () => {
   const { libraryFileListInput } = await import("../dist/http/library-file-list-input.js")
-  assert.deepEqual(libraryFileListInput(new URLSearchParams("kind=file")), { kind: "file", limit: 50, cursor: "" })
+  assert.deepEqual(libraryFileListInput(new URLSearchParams("kind=file")), { kind: "file", limit: 50, cursor: "", query: "", type: "all" })
   assert.deepEqual(libraryFileListInput(new URLSearchParams("kind=artifact&limit=100&cursor=opaque.token")), {
     kind: "artifact",
     limit: 100,
@@ -15,6 +15,8 @@ test("Library requires explicit file or artifact kind and bounded single-valued 
     query: "",
     type: "all",
   })
+  assert.deepEqual(libraryFileListInput(new URLSearchParams("kind=artifact&favorites_only=false")), libraryFileListInput(new URLSearchParams("kind=artifact")))
+  assert.equal(libraryFileListInput(new URLSearchParams("kind=artifact&favorites_only=true")).favoritesOnly, true)
   assert.deepEqual(libraryFileListInput(new URLSearchParams("kind=artifact&q=%20Re%CC%81SUME%CC%81%20&type=documents")), {
     kind: "artifact",
     limit: 50,
@@ -36,8 +38,13 @@ test("Library requires explicit file or artifact kind and bounded single-valued 
   ])
     assert.equal(libraryArtifactType(mime, title), type)
   for (const query of [
-    "kind=file&q=x",
-    "kind=file&type=all",
+    "kind=file&q=x&q=y",
+    "kind=file&q=%00",
+    "kind=file&type=video",
+    "kind=file&favorites_only=false",
+    "kind=artifact&favorites_only=true&favorites_only=false",
+    "kind=artifact&favorites_only=1",
+    "kind=artifact&type=media",
     "kind=artifact&q=x&q=y",
     "kind=artifact&type=all&type=all",
     "kind=artifact&type=unknown",
@@ -90,7 +97,7 @@ test("personal Connect list sends only admitted identity and validates CLEAN ASS
     }),
   )
   const client = new PersonalFileListClient(storage, { tenantId: "tenant-1", subjectId: "subject-1", requestId: "request-1" }, transport)
-  assert.deepEqual(await client.listAssets({ limit: 1, cursor: "previous" }, AbortSignal.timeout(5000)), {
+  assert.deepEqual(await client.listAssets({ limit: 1, cursor: "previous", query: "", type: "all" }, AbortSignal.timeout(5000)), {
     items: [
       {
         kind: "file",
@@ -119,22 +126,22 @@ test("personal Connect list sends only admitted identity and validates CLEAN ASS
     assert.equal(calls[0].ctx.requestHeader.get(key), value)
   assert.equal(calls[0].ctx.requestHeader.get("authorization"), null)
   reply = () => ({ items: [{ ...item, scanState: 3 }] })
-  await assert.rejects(client.listAssets({ limit: 1, cursor: "" }, AbortSignal.timeout(5000)), (error) => error.status === 502)
+  await assert.rejects(client.listAssets({ limit: 1, cursor: "", query: "", type: "all" }, AbortSignal.timeout(5000)), (error) => error.status === 502)
   reply = () => ({ items: [{ ...item, uploadPurpose: 1 }] })
-  await assert.rejects(client.listAssets({ limit: 1, cursor: "" }, AbortSignal.timeout(5000)), (error) => error.status === 502)
+  await assert.rejects(client.listAssets({ limit: 1, cursor: "", query: "", type: "all" }, AbortSignal.timeout(5000)), (error) => error.status === 502)
   const { ConnectError, Code } = await import("@connectrpc/connect")
   reply = () => {
     throw new ConnectError("private cursor", Code.InvalidArgument)
   }
   await assert.rejects(
-    client.listAssets({ limit: 1, cursor: "foreign" }, AbortSignal.timeout(5000)),
+    client.listAssets({ limit: 1, cursor: "foreign", query: "", type: "all" }, AbortSignal.timeout(5000)),
     (error) => error.status === 400 && error.code === "invalid_library_page",
   )
   reply = () => {
     throw new ConnectError("private details", Code.Unavailable)
   }
   await assert.rejects(
-    client.listAssets({ limit: 1, cursor: "" }, AbortSignal.timeout(5000)),
+    client.listAssets({ limit: 1, cursor: "", query: "", type: "all" }, AbortSignal.timeout(5000)),
     (error) => error.status === 503 && !error.message.includes("private"),
   )
 })
@@ -196,14 +203,170 @@ test("Library route builds personal scope anew, has response header, and never t
   assert.ok(!JSON.stringify(fault.body).includes("private owner details"))
 })
 
+async function startLibraryTestApp(config, sessionAdmission, repository) {
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG, BFF_DATABASE, LIBRARY_ARTIFACT_REPOSITORY, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
+  const { AccountModule } = await import("../dist/modules/account/account.module.js")
+  const unexpected = () => assert.fail("Library HTTP fixture must not use an unconfigured database")
+  const builder = Test.createTestingModule({ imports: [AccountModule] })
+    .overrideProvider(BFF_CONFIG)
+    .useValue(config)
+    .overrideProvider(SESSION_ADMISSION)
+    .useValue(sessionAdmission)
+    .overrideProvider(BFF_DATABASE)
+    .useValue({ pool: { query: unexpected, connect: unexpected }, ready: unexpected })
+  if (repository !== undefined) builder.overrideProvider(LIBRARY_ARTIFACT_REPOSITORY).useValue(repository)
+  const ref = await builder.compile()
+  const app = ref.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, abortOnError: false, logger: false })
+  try {
+    await app.listen(0, "127.0.0.1")
+    return { base: await app.getUrl(), close: () => app.close() }
+  } catch (error) {
+    await app.close()
+    throw error
+  }
+}
+
+test("personal file DELETE uses native admission and the original Storage command after an uncertain result", async () => {
+  const { createServer } = await import("node:http")
+  const { create, toBinary } = await import("@bufbuild/protobuf")
+  const { Code, ConnectError } = await import("@connectrpc/connect")
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { loadConfig } = await import("../dist/config/runtime.js")
+  const { ErrorCode, ErrorDetailSchema } = await import("../dist/generated/storage-connect/kokoro/common/v1/common_pb.js")
+  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
+  const { once } = await import("node:events")
+  const calls = []
+  const committed = { assetId: "asset:one", deletedAt: { seconds: 1700000000n, nanos: 123000000 }, replayed: true }
+  let app
+  let admissions = 0
+  function error(ctx, status, code, retryable = false, extra = {}) {
+    const id = ctx.requestHeader.get("x-kokoro-request-id")
+    return new ConnectError("private owner diagnostic", status, {
+      "x-request-id": id, "x-kokoro-error-code": ErrorCode[code], "x-kokoro-retryable": String(retryable), ...extra,
+    }, [{ type: ErrorDetailSchema.typeName, value: toBinary(ErrorDetailSchema, create(ErrorDetailSchema, { code, requestId: id, retryable })) }])
+  }
+  const owner = createServer(connectNodeAdapter({
+    routes(router) {
+      router.service(StorageService, {
+        getAsset() { assert.fail("delete/recovery must not read GetAsset first") },
+        deleteAsset(req, ctx) {
+          const get = (key) => ctx.requestHeader.get(key)
+          assert.equal(get("x-kokoro-service"), "web-bff")
+          assert.equal(get("x-kokoro-internal-secret"), "storage-secret")
+          assert.equal(get("x-kokoro-tenant-id"), "tenant-1")
+          assert.equal(get("x-kokoro-scope-kind"), "personal")
+          assert.equal(get("x-kokoro-scope-id"), get("x-kokoro-subject-id"))
+          assert.equal(get("cookie"), null)
+          assert.equal(get("authorization"), null)
+          assert.ok(req.command)
+          calls.push({ command: req.command, subject: get("x-kokoro-subject-id"), asset: req.assetId })
+          if (get("x-kokoro-subject-id") === "other") throw error(ctx, Code.NotFound, ErrorCode.NOT_FOUND)
+          if (req.assetId === "asset:bad-ack") return { ...committed, assetId: "wrong-asset" }
+          if (req.assetId === "asset:limited") throw error(ctx, Code.ResourceExhausted, ErrorCode.RATE_LIMITED, true, { "retry-after": "17" })
+          if (req.assetId === "asset:bad-rate") throw error(ctx, Code.ResourceExhausted, ErrorCode.RATE_LIMITED)
+          if (req.assetId === "asset:inconsistent") throw error(ctx, Code.NotFound, ErrorCode.CONFLICT)
+          if (req.assetId === "asset:in-progress") throw error(ctx, Code.Aborted, ErrorCode.CONFLICT, true)
+          if (req.assetId === "asset:conflict") throw error(ctx, Code.AlreadyExists, ErrorCode.CONFLICT)
+          if (req.assetId === "asset:precondition") throw error(ctx, Code.FailedPrecondition, ErrorCode.PRECONDITION_FAILED)
+          if (calls.length === 1) throw new ConnectError("committed; lost ACK", Code.Unavailable)
+          if (req.command.commandId !== calls[0].command.commandId) throw error(ctx, Code.NotFound, ErrorCode.NOT_FOUND)
+          if (req.command.requestDigest !== calls[0].command.requestDigest) throw error(ctx, Code.AlreadyExists, ErrorCode.COMMAND_DIGEST_MISMATCH)
+          return committed
+        },
+      })
+    },
+  }))
+  try {
+    owner.listen(0, "127.0.0.1")
+    await once(owner, "listening")
+    app = await startLibraryTestApp(loadConfig({
+      KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
+      KOKORO_BFF_SHARED_SECRET: "web-secret",
+      KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
+      KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
+      KOKORO_STORAGE_RPC_BASE_URL: `http://127.0.0.1:${owner.address().port}`,
+      KOKORO_BFF_STORAGE_SECRET: "storage-secret",
+      KOKORO_STORAGE_OBJECT_ORIGIN: "http://objects.test",
+    }), { async verify({ cookie }) {
+      admissions++
+      const token = cookie.split("=")[1]
+      if (token === "revoked") return { ok: false, status: 401, code: "session_invalid" }
+      return { ok: true, identity: { namespace: token === "outside" ? "tenant-other" : "tenant-1", userId: token === "other" ? "other" : "subject-1" } }
+    } })
+    const drop = (path = "asset%3Aone", key = "original-key", token = "user", options = {}) =>
+      fetch(`${app.base}/v1/library/files/${path}`, { method: "DELETE", headers: {
+        cookie: `kokoro-issuer.session_token=${token}`, origin: "https://web.example.test",
+        "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret",
+        "x-kokoro-request-id": "delete-request",
+        "x-kokoro-subject-id": "forged", "x-kokoro-scope-id": "forged",
+        "idempotency-key": key, ...options.headers,
+      }, ...(options.body === undefined ? {} : { body: options.body }) })
+    const expectError = async (response, status, code, retryable = false) => {
+      assert.equal(response.status, status)
+      assert.equal(response.headers.get("cache-control"), "no-store")
+      assert.equal(response.headers.get("x-request-id"), "delete-request")
+      const body = await response.json()
+      assert.deepEqual(Object.keys(body), ["error"])
+      assert.deepEqual(Object.keys(body.error).sort(), ["code", "message", "retryable"])
+      assert.equal(body.error.code, code)
+      assert.equal(body.error.retryable, retryable)
+      assert.ok(!body.error.message.includes("diagnostic"))
+    }
+
+    await expectError(await drop(), 503, "storage_unavailable", true)
+    await expectError(await drop("asset%3Aone", "original-key", "revoked"), 401, "session_invalid")
+    assert.equal(calls.length, 1)
+    const replay = await drop()
+    assert.equal(replay.status, 200)
+    assert.equal(replay.headers.get("cache-control"), "no-store")
+    assert.equal(replay.headers.get("x-request-id"), "delete-request")
+    assert.deepEqual(await replay.json(), { data: { asset_id: "asset:one", deleted_at: "2023-11-14T22:13:20.123Z", replayed: true } })
+    assert.deepEqual(calls[1], calls[0])
+    assert.equal(calls[0].subject, "subject-1")
+    assert.equal(admissions, 3)
+    await expectError(await drop("asset%3Atwo"), 409, "idempotency_conflict")
+    assert.equal(calls[2].command.commandId, calls[0].command.commandId)
+    assert.notEqual(calls[2].command.requestDigest, calls[0].command.requestDigest)
+    await expectError(await drop("asset%3Aone", "new-key"), 404, "file_not_found")
+    assert.notEqual(calls[3].command.commandId, calls[0].command.commandId)
+    await expectError(await drop("asset%3Aone", "original-key", "other"), 404, "file_not_found")
+    assert.equal(calls[4].subject, "other")
+    assert.notEqual(calls[4].command.commandId, calls[0].command.commandId)
+    await expectError(await drop("asset%3Abad-ack"), 502, "storage_response_invalid")
+    await expectError(await drop("asset%3Ainconsistent"), 502, "storage_response_invalid")
+    const limited = await drop("asset%3Alimited")
+    assert.equal(limited.headers.get("retry-after"), "17")
+    await expectError(limited, 429, "storage_rate_limited", true)
+    await expectError(await drop("asset%3Abad-rate"), 502, "storage_response_invalid")
+    await expectError(await drop("asset%3Ain-progress"), 409, "file_delete_conflict", true)
+    await expectError(await drop("asset%3Aconflict"), 409, "file_delete_conflict")
+    await expectError(await drop("asset%3Aprecondition"), 409, "file_delete_precondition_failed")
+    const beforeRejected = calls.length
+    await expectError(await drop("asset%3Aone", "original-key", "outside"), 403, "product_tenant_forbidden")
+    await expectError(await drop("asset%3Aone?scope_id=other"), 400, "invalid_file_delete_request")
+    await expectError(await drop("asset%3Aone", "a,b"), 400, "invalid_idempotency_key")
+    await expectError(await drop("asset%3Aone", "original-key", "user", { body: "untrusted" }), 400, "invalid_file_delete_request")
+    await expectError(await drop("asset%3Aone", "original-key", "user", { headers: { "if-match": '"old"' } }), 400, "invalid_file_delete_request")
+    assert.equal(calls.length, beforeRejected)
+  } finally {
+    await app?.close()
+    owner.closeAllConnections()
+    await new Promise((resolve) => owner.close(resolve))
+  }
+})
+
 test("live Product HTTP re-admits each page and calls personal Storage Connect without trusting forged identity", async () => {
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { ConnectError, Code } = await import("@connectrpc/connect")
-  const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const servers = []
+  let app
   const calls = []
   let admissions = 0
   const listen = async (server) => {
@@ -226,6 +389,8 @@ test("live Product HTTP re-admits each page and calls personal Storage Connect w
                   kind: ctx.requestHeader.get("x-kokoro-scope-kind"),
                   tenant: ctx.requestHeader.get("x-kokoro-tenant-id"),
                   cursor: req.cursor,
+                  query: req.query,
+                  fileType: req.fileType,
                 })
                 if (subject !== scope || ctx.requestHeader.get("x-kokoro-scope-kind") !== "personal") throw new ConnectError("forbidden", Code.PermissionDenied)
                 if (req.cursor && subject !== "subject-1") throw new ConnectError("cross-subject cursor", Code.InvalidArgument)
@@ -253,6 +418,7 @@ test("live Product HTTP re-admits each page and calls personal Storage Connect w
     )
     const config = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -260,22 +426,19 @@ test("live Product HTTP re-admits each page and calls personal Storage Connect w
       KOKORO_BFF_STORAGE_SECRET: "storage-secret",
       KOKORO_STORAGE_OBJECT_ORIGIN: "http://objects.test",
     })
-    const bff = await listen(
-      createBffServer(config, {
-        readiness: async () => {},
-        businessStore: null,
-        sessionAdmission: {
-          async verify({ token }) {
-            admissions++
-            return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "subject-2" : "subject-1" } }
-          },
-        },
-      }),
-    )
+    app = await startLibraryTestApp(config, {
+      async verify({ cookie }) {
+        const token = cookie.slice("kokoro-issuer.session_token=".length)
+        admissions++
+        return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "subject-2" : "subject-1" } }
+      },
+    })
+    const bff = app.base
     const get = async (query, token = "user") => {
       const response = await fetch(`${bff}/v1/library${query}`, {
         headers: {
-          authorization: `Bearer ${token}`,
+          cookie: `kokoro-issuer.session_token=${token}`,
+          origin: "https://web.example.test",
           "x-kokoro-service": "web-bff",
           "x-kokoro-internal-secret": "web-secret",
           "x-kokoro-request-id": "library-http",
@@ -294,14 +457,23 @@ test("live Product HTTP re-admits each page and calls personal Storage Connect w
     assert.equal(crossed.status, 400)
     assert.equal(crossed.body.error.code, "invalid_library_page")
     assert.equal(crossed.requestId, "library-http")
-    assert.equal(admissions, 3)
+    const filtered = await get("?kind=file&limit=1&q=%20Re%CC%81SUME%CC%81%25_%20&type=documents")
+    assert.equal(filtered.status, 200, JSON.stringify(filtered))
+    assert.equal(filtered.body.data.next_cursor, "page-2")
+    assert.equal((await get("?kind=file&q=fox&type=video")).status, 400)
+    assert.equal(admissions, 5)
     assert.deepEqual(calls, [
-      { subject: "subject-1", scope: "subject-1", kind: "personal", tenant: "tenant-1", cursor: "" },
-      { subject: "subject-1", scope: "subject-1", kind: "personal", tenant: "tenant-1", cursor: "page-2" },
-      { subject: "subject-2", scope: "subject-2", kind: "personal", tenant: "tenant-1", cursor: "page-2" },
+      { subject: "subject-1", scope: "subject-1", kind: "personal", tenant: "tenant-1", cursor: "", query: "", fileType: 0 },
+      { subject: "subject-1", scope: "subject-1", kind: "personal", tenant: "tenant-1", cursor: "page-2", query: "", fileType: 0 },
+      { subject: "subject-2", scope: "subject-2", kind: "personal", tenant: "tenant-1", cursor: "page-2", query: "", fileType: 0 },
+      { subject: "subject-1", scope: "subject-1", kind: "personal", tenant: "tenant-1", cursor: "", query: " Re\u0301SUME\u0301%_ ", fileType: 1 },
     ])
   } finally {
-    await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
+    try {
+      await app?.close()
+    } finally {
+      await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
+    }
   }
 })
 
@@ -441,14 +613,15 @@ test("Artifact Library scans only bounded authorized candidates and binds keyset
     sourceArtifactKind: "document",
     sourceContentSha256: "a".repeat(64),
     deliveredAt: `2023-11-14T22:13:2${2 - index}.000Z`,
+    favorited: index > 0,
   }))
   const repository = {
-    async listCandidates(tenant, subject, position, limit) {
+    async listCandidates(tenant, subject, position, limit, favoritesOnly) {
       seen.push({ tenant, subject, position, limit })
-      return associations.filter((item) => !position || item.deliveredAt < position.deliveredAt)
+      return associations.filter((item) => (!favoritesOnly || item.favorited) && (!position || item.deliveredAt < position.deliveredAt))
     },
   }
-  const invoke = async (cursor = "", subjectId = "subject-1", repo = repository) => {
+  const invoke = async (cursor = "", subjectId = "subject-1", repo = repository, favoritesOnly) => {
     const request = new EventEmitter()
     request.headers = {}
     const response = new EventEmitter()
@@ -469,7 +642,7 @@ test("Artifact Library scans only bounded authorized candidates and binds keyset
       response,
       { storage },
       { requestId: "req-1", identity: { namespace: "tenant-1", userId: subjectId } },
-      { kind: "artifact", limit: 1, cursor, query: "", type: "all" },
+      { kind: "artifact", limit: 1, cursor, query: "", type: "all", ...(favoritesOnly ? { favoritesOnly } : {}) },
       repo,
       (_storage, scope) => ({
         async get(item) {
@@ -488,6 +661,10 @@ test("Artifact Library scans only bounded authorized candidates and binds keyset
     ["artifact-1"],
   )
   assert.ok(first.body.data.next_cursor)
+  assert.equal(first.body.data.next_cursor, `art2_${Buffer.from(JSON.stringify({
+    kind: "artifact", tenantId: "tenant-1", subjectId: "subject-1", limit: 1, query: "", type: "all",
+    deliveredAt: associations[1].deliveredAt, conversationId: associations[1].conversationId, artifactId: associations[1].artifactId,
+  })).toString("base64url")}`)
   assert.equal(seen[0].limit, 6)
   const second = await invoke(first.body.data.next_cursor)
   assert.equal(second.status, 200)
@@ -502,17 +679,23 @@ test("Artifact Library scans only bounded authorized candidates and binds keyset
   assert.equal(crossed.body.error.code, "invalid_library_page")
   const missing = await invoke("", "subject-1", null)
   assert.equal(missing.status, 503)
+  const favoritePage = await invoke("", "subject-1", repository, true)
+  assert.equal(favoritePage.status, 200)
+  assert.deepEqual(favoritePage.body.data.items, [{ kind: "artifact", artifact_id: "artifact-1", favorited: true }])
+  assert.equal((await invoke(first.body.data.next_cursor, "subject-1", repository, true)).status, 400)
+  assert.equal((await invoke(favoritePage.body.data.next_cursor)).status, 400)
 })
 
 test("private Artifact Product HTTP list, item and download keep original bytes behind current admission", async () => {
   const { createServer } = await import("node:http")
+  const { Code, ConnectError } = await import("@connectrpc/connect")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const { StorageService, ArtifactKind } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const bytes = Buffer.from("hello")
   const digest = (await import("node:crypto")).createHash("sha256").update(bytes).digest("hex")
   const servers = []
+  let app
   const listen = async (server) => {
     servers.push(server)
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
@@ -531,6 +714,11 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
   let ownerCalls = 0
   let repoCalls = 0
   let admissions = 0
+  const projectId = "project_00000000-0000-0000-0000-000000000001"
+  let projectRef = projectId
+  let favorited = false
+  let favoriteWrites = 0
+  let ownerMissing = false
   try {
     const objectOrigin = await listen(
       createServer((_request, response) => {
@@ -549,6 +737,7 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
                 assert.equal(ctx.requestHeader.get("x-kokoro-scope-id"), "conversation-1")
                 assert.equal(ctx.requestHeader.get("x-kokoro-subject-id"), "subject-1")
                 assert.equal(req.artifactId, "artifact-1")
+                if (ownerMissing) throw new ConnectError("owner item not found", Code.NotFound)
                 return {
                   item: {
                     artifactId: "artifact-1",
@@ -587,17 +776,27 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
       ),
     )
     const repository = {
-      async listCandidates(_tenant, subject) {
+      async listCandidates(_tenant, subject, _position, _limit, favoritesOnly) {
         repoCalls++
-        return subject === "subject-1" ? [association] : []
+        return subject === "subject-1" && (!favoritesOnly || favorited) ? [{ ...association, favorited }] : []
       },
       async findCandidate(_tenant, subject, conversationId, artifactId) {
         repoCalls++
-        return subject === "subject-1" && conversationId === "conversation-1" && artifactId === "artifact-1" ? association : null
+        return subject === "subject-1" && conversationId === "conversation-1" && artifactId === "artifact-1" ? { ...association, projectRef, favorited } : null
+      },
+      async setFavorite(input) {
+        favoriteWrites++
+        assert.equal(input.tenantId, "tenant-1")
+        assert.equal(input.subjectId, "subject-1")
+        assert.equal(input.artifactId, association.artifactId)
+        assert.equal(input.conversationId, association.conversationId)
+        favorited = input.favorited
+        return favorited
       },
     }
     const config = loadConfig({
       KOKORO_TENANT_ID: "tenant-1",
+      KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",
       KOKORO_BFF_SHARED_SECRET: "web-secret",
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/app?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
@@ -605,44 +804,70 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
       KOKORO_BFF_STORAGE_SECRET: "storage-secret",
       KOKORO_STORAGE_OBJECT_ORIGIN: objectOrigin,
     })
-    const bff = await listen(
-      createBffServer(config, {
-        readiness: async () => {},
-        businessStore: { artifactLibrary: repository, ready: async () => {}, close: async () => {} },
-        sessionAdmission: {
-          async verify({ token }) {
-            admissions++
-            return {
-              ok: true,
-              identity: { namespace: token === "outside" ? "tenant-other" : "tenant-1", userId: token === "other" ? "subject-other" : "subject-1" },
-            }
-          },
+    app = await startLibraryTestApp(
+      config,
+      {
+        async verify({ cookie }) {
+          const token = cookie.slice("kokoro-issuer.session_token=".length)
+          admissions++
+          return {
+            ok: true,
+            identity: { namespace: token === "outside" ? "tenant-other" : "tenant-1", userId: token === "other" ? "subject-other" : "subject-1" },
+          }
         },
-      }),
+      },
+      repository,
     )
-    const get = (path, token = "user") =>
+    const bff = app.base
+    const get = (path, token = "user", body) =>
       fetch(`${bff}${path}`, {
+        ...(body === undefined ? {} : { method: "PUT", body: JSON.stringify(body) }),
         headers: {
-          authorization: `Bearer ${token}`,
+          cookie: `kokoro-issuer.session_token=${token}`,
+          origin: "https://web.example.test",
           "x-kokoro-service": "web-bff",
           "x-kokoro-internal-secret": "web-secret",
           "x-kokoro-request-id": "artifact-http",
           "x-kokoro-subject-id": "forged",
           "x-kokoro-scope-id": "forged",
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
         },
       })
+    const detailPath = "/v1/library/artifacts/conversation-1/artifact-1"
+    const favoritePath = `${detailPath}/favorite`
+    const ack = await get(favoritePath, "user", { favorited: true })
+    assert.equal(ack.status, 200)
+    assert.deepEqual((await ack.json()).data, { conversation_id: "conversation-1", artifact_id: "artifact-1", favorited: true })
+    const bad = await get(favoritePath, "user", { favorited: false, subject_id: "forged" })
+    assert.equal(bad.status, 400)
+    const denied = await get(favoritePath, "other", { favorited: false })
+    assert.equal(denied.status, 404)
+    assert.equal(favoriteWrites, 1)
+    assert.equal(ownerCalls, 1)
+    ownerMissing = true
+    const missing = await get(favoritePath, "user", { favorited: false })
+    assert.equal(missing.status, 404)
+    assert.equal((await missing.json()).error.code, "library_artifact_not_found")
+    assert.equal(favoriteWrites, 1)
+    ownerMissing = false
     const page = await get("/v1/library?kind=artifact")
     assert.equal(page.status, 200)
-    assert.equal((await page.json()).data.items[0].artifact_id, "artifact-1")
+    const listed = (await page.json()).data.items[0]
+    assert.equal(listed.artifact_id, "artifact-1")
+    assert.equal(listed.favorited, true)
+    assert.equal(Object.hasOwn(listed, "project_ref"), false)
     const filtered = await get("/v1/library?kind=artifact&q=REPORT.TXT&type=documents")
     assert.equal(filtered.status, 200)
     assert.equal((await filtered.json()).data.items[0].artifact_id, "artifact-1")
     const excluded = await get("/v1/library?kind=artifact&q=report&type=images")
     assert.equal(excluded.status, 200)
     assert.deepEqual((await excluded.json()).data, { items: [], next_cursor: null })
-    const item = await get("/v1/library/artifacts/conversation-1/artifact-1")
-    assert.equal(item.status, 200)
-    assert.equal((await item.json()).data.source_run_id, "run-1")
+    for (const target of [projectId, null, undefined]) {
+      projectRef = target
+      const item = await get(detailPath)
+      assert.equal(item.status, 200)
+      assert.deepEqual((await item.json()).data, target === undefined ? listed : { ...listed, project_ref: target })
+    }
     const download = await get("/v1/library/artifacts/conversation-1/artifact-1/content")
     assert.equal(download.status, 200)
     assert.deepEqual(Buffer.from(await download.arrayBuffer()), bytes)
@@ -663,9 +888,19 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
     assert.equal(crossed.status, 403)
     assert.equal((await crossed.json()).error.code, "product_tenant_forbidden")
     assert.equal(repoCalls, beforeCrossTenant)
-    assert.equal(admissions, 8)
+    const unstar = await get(favoritePath, "user", { favorited: false })
+    assert.equal(unstar.status, 200)
+    assert.equal((await unstar.json()).data.favorited, false)
+    const only = await get("/v1/library?kind=artifact&favorites_only=true")
+    assert.equal(only.status, 200)
+    assert.deepEqual((await only.json()).data, { items: [], next_cursor: null })
+    assert.equal(admissions, 16)
   } finally {
-    await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
+    try {
+      await app?.close()
+    } finally {
+      await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
+    }
   }
 })
 
@@ -680,6 +915,7 @@ test("Artifact filters use current FINAL metadata across bounded candidate windo
     sourceArtifactKind: "document",
     sourceContentSha256: "a".repeat(64),
     deliveredAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 20 - i)).toISOString(),
+    favorited: false,
   }))
   const calls = [],
     positions = []

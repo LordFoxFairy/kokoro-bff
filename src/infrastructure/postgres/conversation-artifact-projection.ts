@@ -37,8 +37,8 @@ export async function insertArtifactDelivery(
       `INSERT INTO bff_conversation_artifact
          (tenant_id, conversation_id, artifact_id, run_id, source_owner, source_event_id,
           source_sequence, source_digest, source_asset_id, source_artifact_kind,
-          source_content_sha256, source_title, source_mime, source_size_bytes, delivered_at)
-       SELECT $1, $2, $4, $3, $5, $6, $7, $8, $9, $10, $11, $14, $15, $16, $12
+          source_content_sha256, source_title, source_mime, source_size_bytes, source_display_path, delivered_at)
+       SELECT $1, $2, $4, $3, $5, $6, $7, $8, $9, $10, $11, $14, $15, $16, $17, $12
          FROM bff_agent_dispatch_outbox AS dispatch
         WHERE dispatch.tenant_id = $1
           AND dispatch.conversation_id = $2
@@ -63,6 +63,7 @@ export async function insertArtifactDelivery(
         delivery.title,
         delivery.mime,
         delivery.size,
+        delivery.displayPath ?? null,
       ],
     )
     if (inserted.rowCount !== 1) throw new Error("AGUI_ARTIFACT_BINDING_MISSING")

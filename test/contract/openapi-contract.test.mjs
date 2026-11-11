@@ -28,6 +28,131 @@ const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.me
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 
+test("Public28.35 models Slack installation completion without exposing a credential", async () => {
+  const { load } = await import("js-yaml")
+  const latest = await readFile(currentOpenapiUrl, "utf8")
+  const active = load(latest)
+  assert.equal(active.info.version, "28.35.0")
+  const complete = active.paths["/v1/agents/connections/slack/complete"].post
+  assert.equal(complete.operationId, "completeSlackConnection")
+  assert.equal(complete.security, undefined)
+  assert.deepEqual(Object.keys(complete.responses).sort(), ["200", "400", "401", "403", "409", "429", "503"])
+  assert.equal(complete.responses[200].headers["Referrer-Policy"].schema.const, "no-referrer")
+  const { SlackConnectionCompleteRequest: command, SlackConnectionCompleteResponse: receipt, AgentConnectionSetup } = active.components.schemas
+  assert.deepEqual(command.required, ["state", "code"])
+  assert.equal(command.additionalProperties, false)
+  assert.equal(command.properties.code.writeOnly, true)
+  assert.deepEqual(Object.keys(receipt.properties.data.properties), ["platform", "status", "state_version", "connected_at"])
+  assert.equal(receipt.properties.data.properties.platform.const, "slack")
+  const [start, wait] = ["awaiting_slack", "awaiting_slack_callback"].map((status) =>
+    AgentConnectionSetup.oneOf.find((arm) => arm.properties.status.const === status))
+  assert.ok(start.required.includes("continue_url"))
+  assert.equal(wait.properties.continue_url, undefined)
+})
+
+test("Public28.34 separates LINE callbacks and admitted continuation, preserving exact parents", async () => {
+  const { load } = await import("js-yaml")
+  const { restorePublic2834SlackConnectionContract, restorePublic2833LineConnectionContract,
+    restorePublic2832WorkspaceOutputsContract, restorePublic2831AgentConnectionContract } =
+    await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const latest = restorePublic2834SlackConnectionContract(await readFile(currentOpenapiUrl, "utf8"))
+  const line = load(latest)
+  assert.equal(line.info.version, "28.34.0")
+  assert.deepEqual(line.paths["/v1/agents/connections/line/webhook"].post.security, [{ LineWebhookSignature: [] }])
+  assert.equal(line.components.securitySchemes.LineWebhookSignature.name, "X-Line-Signature")
+  assert.equal(line.paths["/v1/agents/connections/line/continue"].post.security, undefined)
+  assert.equal(line.components.schemas.LineConnectionContinueRequest.properties.link_token.writeOnly, true)
+  const lineCallback = line.components.schemas.AgentConnectionSetup.oneOf.find(arm => arm.properties.status.const === "awaiting_line_callback")
+  assert.deepEqual(lineCallback.required, ["platform", "status", "state_version", "setup_id", "expires_at"])
+  const child = restorePublic2833LineConnectionContract(latest)
+  const active = load(child)
+  const output = active.components.schemas.RunWorkspaceOutputVersion
+  assert.deepEqual(output.required, ["version_id", "virtual_path", "content_sha256", "size_bytes", "mime_type"])
+  assert.equal(output.additionalProperties, false)
+  assert.equal(active.components.schemas.RunDisplay.required.includes("workspace_outputs"), false)
+  assert.ok(active.paths["/v1/sessions/{id}/runs/{runId}/workspace-outputs/{versionId}/content"].get.responses[200].content["text/markdown"])
+  const source = restorePublic2832WorkspaceOutputsContract(child)
+  const parent = restorePublic2831AgentConnectionContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "9fea8041e3eac479e5ea008e120729fb37637636bb6bf3ad8b94ac161ac8a88c")
+  const { info, paths, components } = load(source)
+  const { get, post } = paths["/v1/agents/connections/setup"]
+  const callback = paths["/v1/agents/connections/telegram/webhook"].post
+  assert.equal(info.version, "28.32.0")
+  assert.equal(get.operationId, "getAgentConnectionSetup")
+  assert.equal(get.requestBody, undefined)
+  assert.equal(get["x-kokoro-idempotency"], "none")
+  assert.equal(post["x-kokoro-idempotency"], "natural")
+  assert.ok(post.responses[412])
+  assert.deepEqual(callback.security, [{ TelegramWebhookSecret: [] }])
+  assert.equal(components.securitySchemes.TelegramWebhookSecret.name, "X-Telegram-Bot-Api-Secret-Token")
+  assert.ok(callback.responses[204])
+  const commands = Object.fromEntries(components.schemas.AgentConnectionCommand.oneOf.map(row => [row.properties.action.const, row]))
+  assert.deepEqual(Object.keys(commands), ["start", "cancel", "confirm", "disconnect"])
+  assert.ok(Object.values(commands).every(row => row.additionalProperties === false))
+  assert.equal(commands.confirm.properties.proof.writeOnly, true)
+  assert.deepEqual(commands.cancel.required, ["action", "expected_state_version", "setup_id"])
+  const states = Object.fromEntries(components.schemas.AgentConnectionSetup.oneOf.map(row => [row.properties.status.const, row]))
+  assert.deepEqual(Object.keys(states), ["disconnected", "awaiting_telegram", "awaiting_confirmation", "expired", "connected"])
+  assert.ok(Object.values(states).every(row => row.additionalProperties === false && !row.properties.proof && !row.properties.qr_value))
+  assert.ok(states.awaiting_telegram.properties.continue_url)
+  assert.ok(!states.awaiting_confirmation.properties.continue_url && !states.connected.properties.expires_at)
+})
+
+test("Public28.31 adds only the closed owned Project website GET and conditional natural PUT", async () => {
+  const { load } = await import("js-yaml")
+  const { restorePublic2830ProjectWebsitesContract, restorePublic2831AgentConnectionContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const source = restorePublic2831AgentConnectionContract(await readFile(currentOpenapiUrl, "utf8"))
+  const { info, paths, components } = load(source)
+  const route = "/v1/projects/{project_id}/websites"
+  const { parameters, get, put } = paths[route]
+  const schemas = components.schemas
+  assert.equal(info.version, "28.31.0")
+  assert.equal(parameters.length, 1)
+  assert.equal(parameters[0].name, "project_id")
+  assert.equal(get.operationId, "getProjectWebsites")
+  assert.equal(get["x-kokoro-permission"], "project.read")
+  assert.equal(put.operationId, "replaceProjectWebsites")
+  assert.equal(put["x-kokoro-idempotency"], "natural")
+  assert.equal(put["x-kokoro-permission"], "project.update")
+  assert.ok(put.responses[412])
+  assert.equal(get.responses[200].$ref, put.responses[200].$ref)
+  assert.deepEqual(schemas.ReplaceProjectWebsitesRequest.required, ["websites", "expected_state_version"])
+  assert.equal(schemas.ReplaceProjectWebsitesRequest.additionalProperties, false)
+  assert.deepEqual(schemas.ProjectWebsitesResponse.properties.data.required, ["project_id", "websites", "state_version"])
+  assert.equal(schemas.ProjectWebsitesResponse.properties.data.additionalProperties, false)
+  assert.equal(schemas.ProjectWebsiteUrls.maxItems, 16)
+  assert.equal(schemas.ProjectWebsiteUrls.uniqueItems, true)
+  assert.equal(schemas.ProjectWebsiteUrls.items["x-kokoro-utf8-byte-limit"], 2048)
+  const parent = load(restorePublic2830ProjectWebsitesContract(source))
+  const { [route]: added, ...unchanged } = paths
+  assert.ok(added)
+  assert.deepEqual(unchanged, parent.paths)
+  assert.deepEqual(schemas.Project, parent.components.schemas.Project)
+  assert.deepEqual(schemas.PrivateSessionSnapshotResponse, parent.components.schemas.PrivateSessionSnapshotResponse)
+})
+
+test("Public28.30 shares one optional Artifact display path domain only between private snapshot and existing AG-UI delivery", async () => {
+  const { load } = await import("js-yaml")
+  const { restorePublic2829DeliveryDisplayPathContract, restorePublic2830ProjectWebsitesContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const source = restorePublic2830ProjectWebsitesContract(await readFile(currentOpenapiUrl, "utf8"))
+  const { info, paths, components } = load(source)
+  const s = components.schemas
+  const domain = { $ref: "#/components/schemas/DeliveredArtifactDisplayPath" }
+  assert.equal(info.version, "28.30.0")
+  assert.equal(s.PrivateSessionSnapshotResponse.properties.data.properties.deliveries.items.$ref, "#/components/schemas/PrivateDelivery")
+  assert.equal(s.SessionSnapshotResponse.properties.data.properties.deliveries.items.$ref, "#/components/schemas/Delivery")
+  assert.equal(s.SessionEventStream["x-kokoro-custom-event-values"]["kokoro.delivery.created"].$ref, "#/components/schemas/ChatDeliveryCreated")
+  for (const shape of [s.PrivateDelivery, s.ChatDeliveryCreated]) {
+    assert.equal(shape.additionalProperties, false)
+    assert.equal(shape.required.includes("display_path"), false)
+    assert.deepEqual(shape.properties.display_path, domain)
+  }
+  assert.equal(s.DeliveredArtifactDisplayPath["x-kokoro-utf8-byte-limit"], 4096)
+  const parent = load(restorePublic2829DeliveryDisplayPathContract(source))
+  assert.deepEqual(parent.components.schemas.Delivery, s.Delivery)
+  assert.deepEqual(parent.paths, paths)
+})
+
 test("Public17 publishes explicit calendar selections and preserves the complete Public16.2 parent", async () => {
   const { load } = await import("js-yaml")
   const source = restorePublic17LibraryFilterContract(restoreClosureLocalContract(await readFile(currentOpenapiUrl, "utf8")))
@@ -2883,4 +3008,33 @@ test("personal series delete is additive and preserves the complete published co
   const inventory = JSON.parse(await readFile(baselineUrl, "utf8")).operations
   assert.equal(skillSeriesDeleteParentBaseline(inventory).length, 176)
   assert.throws(() => restoreSkillSeriesDeleteContract(source.replace("entire personal Skill series", "different personal Skill series")), /delete.*drift/u)
+})
+
+test("Project Todo publishes scoped, conditional and replayable writes on its existing collection", async () => {
+  const { load } = await import("js-yaml")
+  const document = load(await readFile(currentOpenapiUrl, "utf8"))
+  const collection = document.paths["/v1/projects/{projectId}/tasks"]
+  const member = document.paths["/v1/projects/{projectId}/tasks/{taskId}"]
+  assert.equal(collection.get.operationId, "listProjectTasks")
+  assert.equal(collection.post?.operationId, "createProjectTask")
+  assert.equal(member?.patch.operationId, "updateProjectTask")
+  assert.equal(member?.delete.operationId, "deleteProjectTask")
+  assert.ok(document.components.schemas.Task.required.includes("revision"))
+  for (const [operation, status] of [[collection.post, "201"], [member.patch, "200"], [member.delete, "204"]]) {
+    assert.equal(operation["x-kokoro-permission"], "project.write")
+    assert.ok(operation.parameters.some(({ $ref }) => $ref === "#/components/parameters/ProjectTaskIdempotencyKey"))
+    assert.ok(operation.responses[status])
+    assert.ok(operation.responses["404"])
+    assert.ok(operation.responses["409"])
+  }
+  for (const operation of [member.patch, member.delete]) {
+    assert.ok(operation.parameters.some(({ $ref }) => $ref === "#/components/parameters/ProjectTaskIfMatch"))
+    assert.ok(operation.responses["412"])
+    assert.ok(operation.responses["428"])
+  }
+  assert.ok(collection.post.responses["201"].headers.Location)
+  assert.ok(!Object.hasOwn(member.delete.responses["204"], "content"))
+  assert.deepEqual(document.components.schemas.ProjectTaskWriteReceipt.required, ["id", "project_id", "revision"])
+  assert.equal(document.components.schemas.UpdateProjectTaskRequest.additionalProperties, false)
+  assert.equal(document.components.schemas.UpdateProjectTaskRequest.minProperties, 1)
 })

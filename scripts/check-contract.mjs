@@ -106,7 +106,36 @@ function expectedIdempotency(operation) {
     )
   )
     return "none"
+  if (
+    operation.method === "PUT" &&
+    operation.path === "/v1/sessions/{id}/messages/{messageId}/feedback" &&
+    operation.fields.get("operationId") === "setMessageFeedback"
+  )
+    return "natural"
+  if (operation.method === "PUT" && operation.path === "/v1/projects/{projectId}/pin" && operation.fields.get("operationId") === "setProjectPin")
+    return "natural"
+  if (operation.method === "PUT" && operation.path === "/v1/projects/{project_id}/websites" && operation.fields.get("operationId") === "replaceProjectWebsites")
+    return "natural"
+  if (operation.method === "POST" &&
+    ((operation.path === "/v1/agents/connections/setup" && operation.fields.get("operationId") === "changeAgentConnection") ||
+     (operation.path === "/v1/agents/connections/telegram/webhook" && operation.fields.get("operationId") === "acceptTelegramConnectionUpdate") ||
+     (operation.path === "/v1/agents/connections/line/webhook" && operation.fields.get("operationId") === "acceptLineConnectionEvent") ||
+     (operation.path === "/v1/agents/connections/line/continue" && operation.fields.get("operationId") === "continueLineConnection") ||
+     (operation.path === "/v1/agents/connections/slack/complete" && operation.fields.get("operationId") === "completeSlackConnection")))
+    return "natural"
+  if (
+    operation.method === "PUT" &&
+    operation.path === "/v1/library/artifacts/{conversation_id}/{artifact_id}/favorite" &&
+    operation.fields.get("operationId") === "setLibraryArtifactFavorite"
+  )
+    return "natural"
   if (TEAM_OWNER_DELEGATED_MUTATIONS.has(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)) return "none"
+  if (
+    operation.method === "PUT" &&
+    operation.path === "/v1/projects/{projectId}/mcp-recommendations" &&
+    operation.fields.get("operationId") === "replaceProjectMcpRecommendations"
+  )
+    return "natural"
   if (
     operation.method === "PUT" &&
     operation.path === "/v1/preferences/personalization" &&
@@ -192,6 +221,7 @@ export function inspectOpenApiGovernance(source) {
     const formalIamPermission = new Map([
       ["GET /v1/account/sessions listAccountSessions", "iam:account-session.read"],
       ["DELETE /v1/account/sessions/{session_id} revokeAccountSession", "iam:account-session.revoke"],
+      ["GET /v1/account/profile readAccountProfile", "iam:account-profile.read"],
       ["PATCH /v1/account/profile updateAccountProfile", "iam:account-profile.write"],
     ]).get(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)
     if (permission !== undefined && permission !== formalIamPermission && !/^(?:anonymous|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/u.test(permission)) {

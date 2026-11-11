@@ -108,7 +108,7 @@ export async function localSkillImportRoute(
   request.once("aborted", cancelRequest)
   response.once("close", cancelResponse)
   try {
-    const admitted = await authorizeUserRequest(request, config, session, requestId, controller.signal)
+    const admitted = await authorizeUserRequest(request, config, session, requestId, controller.signal, response)
     controller.signal.throwIfAborted()
     if (!admitted.ok) {
       send(response, admitted.status, error(admitted.code, "Local Skill import admission failed"))

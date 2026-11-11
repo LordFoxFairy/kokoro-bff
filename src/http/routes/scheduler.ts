@@ -4,15 +4,31 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { failure, ok } from "../../contracts/index.js"
-import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
-import type { SchedulerDispatchClaim, SchedulerDispatchResponse } from "../../application/ports/scheduler-dispatch-receipt-repository.js"
-import { buildScheduledAgentLaunch } from "../../infrastructure/clients/agent/index.js"
+import type {
+  SchedulerDispatchClaim,
+  SchedulerDispatchResponse,
+  SchedulerDispatchReceiptRepository,
+} from "../../application/scheduled/scheduler-dispatch-receipt-repository.js"
+import { buildScheduledAgentLaunch, scheduledConversationId } from "../../infrastructure/clients/agent/index.js"
 import { schedulerDispatchDigest, schedulerDispatchScope, schedulerOccurrenceIdentity } from "../../infrastructure/clients/scheduler/dispatch-identity.js"
 import { schedulerScheduleName } from "../../infrastructure/clients/scheduler/schedule.js"
 import { parseSchedulerDispatchWebhook } from "../../infrastructure/clients/scheduler/webhook-contract.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
+import type { ScheduledTaskCallbackLookup } from "../../modules/scheduled-tasks/scheduled-task.providers.js"
+import type { ScheduledAgentDispatchRepository } from "../../application/scheduled/scheduled-agent-dispatch-repository.js"
 import { send } from "../response.js"
 import { headerString, readBody, requestBodyJson, requestId } from "../request.js"
+
+export type SchedulerDispatchProvider = Readonly<{
+  schedulerDispatchReceipts: SchedulerDispatchReceiptRepository
+  scheduledTasks: ScheduledTaskCallbackLookup
+  scheduledAgentDispatch?: ScheduledAgentDispatchRepository
+}>
+
+export function isSchedulerDispatchRequest(request: IncomingMessage): boolean {
+  const path = (request.url ?? "").split("?", 1)[0] ?? ""
+  return path === "/internal/bff/scheduled-tasks/dispatch"
+}
 
 export function scheduledTaskId(context: RequestContext, path: string, key: string): string {
   const material = JSON.stringify([context.identity.namespace, context.identity.userId, path, key])
@@ -22,7 +38,7 @@ export function scheduledTaskId(context: RequestContext, path: string, key: stri
 
 async function settle(
   response: ServerResponse,
-  store: NonNullable<BffBusinessStore["schedulerDispatchReceipts"]>,
+  store: SchedulerDispatchReceiptRepository,
   claim: SchedulerDispatchClaim,
   result: SchedulerDispatchResponse,
   requestIdentifier: string,
@@ -33,7 +49,7 @@ async function settle(
 
 async function releaseUnknown(
   response: ServerResponse,
-  store: NonNullable<BffBusinessStore["schedulerDispatchReceipts"]>,
+  store: SchedulerDispatchReceiptRepository,
   claim: SchedulerDispatchClaim,
   requestIdentifier: string,
   code: string,
@@ -47,10 +63,12 @@ export async function schedulerDispatch(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  businessStore: BffBusinessStore | null,
+  source: SchedulerDispatchProvider | null,
   _idempotency: Map<string, IdempotencyEntry>,
 ): Promise<boolean> {
+  if (!isSchedulerDispatchRequest(request)) return false
   const fallbackRequestId = requestId(request)
+  response.setHeader("x-request-id", fallbackRequestId)
   if (request.method !== "POST") {
     send(response, 405, failure("method_not_allowed", "Only POST is supported", fallbackRequestId))
     return true
@@ -60,8 +78,9 @@ export async function schedulerDispatch(
     send(response, 401, failure("service_auth_failed", "Scheduler dispatch authentication failed", fallbackRequestId))
     return true
   }
-  const receipts = businessStore?.schedulerDispatchReceipts
-  if (businessStore === null || receipts === undefined) {
+  const provider = source
+  const receipts = provider?.schedulerDispatchReceipts
+  if (provider === null || receipts === undefined) {
     send(response, 503, failure("business_store_not_configured", "BFF Scheduler receipt store is not configured", fallbackRequestId))
     return true
   }
@@ -121,7 +140,7 @@ export async function schedulerDispatch(
   if (snapshot === null) {
     let record
     try {
-      record = await businessStore.services.scheduledTasks.findRecord(wire.tenantId, taskId)
+      record = await provider.scheduledTasks.findRecord(wire.tenantId, taskId)
     } catch {
       await releaseUnknown(response, receipts, claim, responseRequestId, "business_store_unavailable", "The BFF business store is unavailable")
       return true
@@ -176,7 +195,7 @@ export async function schedulerDispatch(
     const launch = buildScheduledAgentLaunch({
       identity,
       requestId: wire.requestId,
-      sessionId: `scheduled:${taskId}`,
+      sessionId: scheduledConversationId(wire.tenantId, taskId),
       occurrenceIdentity: schedulerOccurrenceIdentity({ tenantId: wire.tenantId, schedule: wire.schedule, occurrence: wire.occurrence }),
       content: record.task.prompt,
       ...(record.task.projectId === undefined ? {} : { projectRef: record.task.projectId }),
@@ -210,7 +229,7 @@ export async function schedulerDispatch(
     return true
   }
 
-  const dispatch = businessStore.scheduledAgentDispatch
+  const dispatch = provider.scheduledAgentDispatch
   if (dispatch === undefined) {
     await releaseUnknown(response, receipts, claim, responseRequestId, "business_store_unavailable", "The BFF business store is unavailable")
     return true

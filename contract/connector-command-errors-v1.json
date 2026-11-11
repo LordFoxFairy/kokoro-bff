@@ -1,10 +1,24 @@
 {
   "profile": "connector-command-recovery-errors",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "owner": "kokoro-bff",
   "visibility": "browser-private",
   "automatic_retries": false,
   "new_command_authorized": false,
+  "prepare_inspection_recovery": {
+    "operation": "prepareServer",
+    "failure": "invalid",
+    "reads": [
+      "server",
+      "connector"
+    ],
+    "binding": "exact_server_connector",
+    "same_actor": true,
+    "server_version": "not_older_than_original",
+    "replay": "same_command",
+    "automatic_retries": false,
+    "new_command_authorized": false
+  },
   "mcp": {
     "in_progress": {
       "status": 409,

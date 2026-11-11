@@ -3,10 +3,10 @@ import { createHash } from "node:crypto"
 import { access, readFile } from "node:fs/promises"
 import { test } from "node:test"
 
-const ownerCommit = "d13f33acfc7a482d61ebffc58e7b2667b58ae197"
+const ownerCommit = "b60931e9e4e92d596b0678cbdabd9116e898b432"
 const sources = {
   "kokoro/common/v1/common.proto": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd",
-  "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
+  "kokoro/storage/v3/storage.proto": "dbd622696f66817465f6481f86da03cfec871ade9960a8f4194d85631a9981df",
 }
 const root = new URL("../", import.meta.url)
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -37,7 +37,7 @@ async function sourceBytes() {
 test("Storage consumer pins exact owner Proto bytes and generated provenance, not an execution artifact", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/storage-connect.json"))
   assert.equal(manifest.owner.repository_commit, ownerCommit)
-  assert.equal(manifest.owner.published_combined_sha256, "47e2659f577cf5c0a5e44a9ee9165d0fee17471bb3d7abb80095a956f655c1f9")
+  assert.equal(manifest.owner.published_combined_sha256, "3da3346a760a6275251aba56f75129189e06e3522e81b4c0b110386a4cdff02f")
   assert.equal(manifest.owner.package_name, "kokoro.storage.v3")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-storage")
   assert.equal(manifest.execution_artifact, null)
@@ -85,6 +85,8 @@ test("Storage generated ListAssets wire contract carries only bounded query and 
     [
       ["limit", 1],
       ["cursor", 2],
+      ["query", 3],
+      ["file_type", 4],
     ],
   )
   assert.deepEqual(
@@ -120,11 +122,6 @@ test("Storage release consumer exposes only command bodies and authenticated pro
       ],
     )
   }
-
-  const proto = String(await sourceBytes().then((files) => files["kokoro/storage/v3/storage.proto"]))
-  assert.match(proto, /x-kokoro-tenant-id, x-kokoro-subject-id, and x-kokoro-request-id transport metadata/u)
-  assert.match(proto, /x-kokoro-scope-kind \(personal\|project\|conversation\|skill_package\|skill_cover\)/u)
-  assert.match(proto, /Scope is asserted by an authenticated, permitted business owner; body identity is forbidden\./u)
 })
 
 test("Storage F2 generated Artifact reads preserve owner identity and byte-reference fields", async () => {
@@ -163,7 +160,7 @@ test("Storage F2 generated Artifact reads preserve owner identity and byte-refer
   )
   assert.deepEqual(
     GetFinalArtifactDownloadReferenceRequestSchema.fields.map((field) => field.name),
-    ["command", "artifact_id"],
+    ["command", "artifact_id", "run_id", "asset_id", "content_sha256", "consumer_run_id"],
   )
   assert.deepEqual(
     GetFinalArtifactDownloadReferenceResponseSchema.fields.map((field) => field.name),

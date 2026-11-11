@@ -50,28 +50,20 @@ function staticLiteralModuleSpecifiers(source: string): string[] {
   return specifiers
 }
 
+function importsRawBootstrap(relativePath: string, source: string): boolean {
+  return staticLiteralModuleSpecifiers(source).some((specifier) => {
+    const literalPath = specifier.split(/[?#]/u, 1)[0] ?? specifier
+    const resolvedPath = literalPath.startsWith(".") ? path.posix.normalize(path.posix.join(path.posix.dirname(relativePath), literalPath)) : literalPath
+    return /(?:^|\/)src\/bootstrap\/(?:server|runtime)\.[cm]?[jt]s$/u.test(resolvedPath)
+  })
+}
+
 function importsCanonicalSchemaInstaller(relativePath: string, source: string): boolean {
   return staticLiteralModuleSpecifiers(source).some((specifier) => {
     const literalPath = specifier.split(/[?#]/u, 1)[0] ?? specifier
     const resolvedPath = literalPath.startsWith(".") ? path.posix.normalize(path.posix.join(path.posix.dirname(relativePath), literalPath)) : literalPath
     return resolvedPath === canonicalInstaller.relativePath || resolvedPath.endsWith(`/${canonicalInstaller.relativePath}`)
   })
-}
-
-// ADR-003 permits these two read-only exports in this one operation, not the installer module as a whole.
-function isNamedPersonalizationSchemaReader(relativePath: string, source: string): boolean {
-  if (relativePath !== "scripts/personalization-schema-evolution.mjs") return false
-  const imports = [...source.matchAll(/^import\s+\{([^}]+)\}\s+from\s+["']\.\/apply-schema\.mjs["'];?[ \t]*$/gmu)]
-  if (imports.length !== 1) return false
-  const declaration = imports[0]
-  if (declaration === undefined || declaration.index === undefined) return false
-  const bindings = (declaration[1] ?? "")
-    .split(",")
-    .map((binding) => binding.trim())
-    .sort()
-  if (JSON.stringify(bindings) !== JSON.stringify(["assertBffSchemaUrl", "loadCanonicalSchema"])) return false
-  const remainder = source.slice(0, declaration.index) + source.slice(declaration.index + declaration[0].length)
-  return !importsCanonicalSchemaInstaller(relativePath, remainder)
 }
 
 function assertSingleSchemaInstaller(scripts: Record<string, string>, sourceFiles: SourceFile[]): void {
@@ -81,12 +73,7 @@ function assertSingleSchemaInstaller(scripts: Record<string, string>, sourceFile
     .map(({ relativePath }) => relativePath)
     .sort()
   const nonCanonicalInstallerImports = sourceFiles
-    .filter(
-      ({ relativePath, source }) =>
-        relativePath !== canonicalInstaller.relativePath &&
-        importsCanonicalSchemaInstaller(relativePath, source) &&
-        !isNamedPersonalizationSchemaReader(relativePath, source),
-    )
+    .filter(({ relativePath, source }) => relativePath !== canonicalInstaller.relativePath && importsCanonicalSchemaInstaller(relativePath, source))
     .map(({ relativePath }) => relativePath)
     .sort()
   const installer = sourceFiles.find(({ relativePath }) => relativePath === canonicalInstaller.relativePath)?.source ?? ""
@@ -102,11 +89,16 @@ function assertSingleSchemaInstaller(scripts: Record<string, string>, sourceFile
 async function readSchemaBoundarySources(): Promise<SourceFile[]> {
   const sources: SourceFile[] = []
   for (const relativeDirectory of ["src", "scripts"]) {
-    const files = await readdir(path.join(root, relativeDirectory), { recursive: true })
+    const files = await readdir(path.join(root, relativeDirectory), {
+      recursive: true,
+    })
     for (const file of files) {
       if (typeof file !== "string" || !/\.[cm]?[jt]s$/u.test(file)) continue
       const relativePath = `${relativeDirectory}/${file}`
-      sources.push({ relativePath, source: await readFile(path.join(root, relativePath), "utf8") })
+      sources.push({
+        relativePath,
+        source: await readFile(path.join(root, relativePath), "utf8"),
+      })
     }
   }
   return sources
@@ -123,8 +115,6 @@ async function exists(relativePath: string): Promise<boolean> {
 
 test("BFF keeps contract, application, client, and repository boundaries explicit", async () => {
   for (const relativePath of [
-    "src/bootstrap/runtime.ts",
-    "src/bootstrap/server.ts",
     "src/config/runtime.ts",
     "src/domain/json.ts",
     "src/domain/request-context.ts",
@@ -138,22 +128,22 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/contracts/index.ts",
     "src/contracts/mori.ts",
     "src/application/idempotency.ts",
-    "src/application/project-service.ts",
-    "src/application/chat-service.ts",
+    "src/application/projects/commands.ts",
+    "src/application/chat/session-reads.ts",
     "src/application/chat-turn-service.ts",
     "src/application/agent-dispatch-outbox-dispatcher.ts",
     "src/application/chat/mappers.ts",
     "src/application/scheduled-task-service.ts",
-    "src/application/services.ts",
     "src/application/ports/idempotency-repository.ts",
-    "src/application/ports/project-repository.ts",
-    "src/application/ports/chat-repository.ts",
-    "src/application/ports/agent-dispatch-outbox-repository.ts",
-    "src/application/ports/agent-dispatch-delivery.ts",
-    "src/application/ports/scheduled-task-repository.ts",
-    "src/application/ports/scheduled-task-outbox-repository.ts",
-    "src/application/ports/scheduled-task-outbox-delivery.ts",
-    "src/application/ports/scheduler-dispatch-receipt-repository.ts",
+    "src/application/account/artifact-library-repository.ts",
+    "src/application/projects/types.ts",
+    "src/application/chat/types.ts",
+    "src/application/agent-dispatch/agent-dispatch-outbox-repository.ts",
+    "src/application/agent-dispatch/agent-dispatch-delivery.ts",
+    "src/application/scheduled/task-facts.ts",
+    "src/application/scheduled/scheduled-task-outbox-repository.ts",
+    "src/application/scheduled/scheduled-task-outbox-delivery.ts",
+    "src/application/scheduled/scheduler-dispatch-receipt-repository.ts",
     "src/application/scheduled-task-outbox-dispatcher.ts",
     "src/application/scheduled/input.ts",
     "src/application/scheduled/mappers.ts",
@@ -165,23 +155,21 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/postgres/client.ts",
     "src/infrastructure/postgres/idempotency-repository.ts",
     "src/infrastructure/postgres/agui-projection-repository.ts",
-    "src/infrastructure/postgres/project-repository.ts",
-    "src/infrastructure/postgres/chat-repository.ts",
+    "src/infrastructure/postgres/project-store.ts",
+    "src/infrastructure/postgres/chat-session-store.ts",
     "src/infrastructure/postgres/conversation-move.ts",
     "src/infrastructure/postgres/conversation-move-lease.ts",
     "src/infrastructure/postgres/agent-dispatch-outbox-repository.ts",
     "src/infrastructure/postgres/agui-consumer-registration.ts",
     "src/infrastructure/postgres/scheduled-task-repository.ts",
-    "src/infrastructure/postgres/repositories.ts",
     "src/infrastructure/postgres/scheduler-dispatch-receipt-repository.ts",
     "src/http/routes/agent.ts",
     "src/http/routes/chat-authorization.ts",
     "src/http/routes/chat.ts",
-    "src/http/routes/live-bff.ts",
-    "src/http/routes/owner.ts",
+    "src/http/routes/scheduled-task-mutation-native.ts",
+    "src/http/routes/owner-request.ts",
     "src/http/routes/music.ts",
     "src/http/routes/scheduler.ts",
-    "src/http/routes/routing.ts",
     "src/infrastructure/clients/agent/index.ts",
     "src/infrastructure/clients/agent/types.ts",
     "src/infrastructure/clients/agent/launch.ts",
@@ -199,11 +187,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/http/routes/platform-projection.ts",
     "src/infrastructure/clients/platform/projection-http.ts",
     "src/interfaces/http/agui/sse.ts",
-    "test/doubles/bff-store.ts",
     "test/doubles/agui.ts",
-    "test/doubles/mori-store.ts",
-    "test/doubles/mock-route.ts",
-    "test/doubles/mori-route.ts",
   ]) {
     assert.equal(await exists(relativePath), true, relativePath)
   }
@@ -213,7 +197,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/store.ts",
     "src/migrate.ts",
     "src/adapters",
-    "src/modules",
+    "src/legacy-modules",
     "src/interfaces/http/agui/events.ts",
     "src/infrastructure/mock",
     "src/http/routes/mock.ts",
@@ -224,9 +208,9 @@ test("BFF keeps contract, application, client, and repository boundaries explici
 })
 
 test("Platform projection generated types stay behind one facade and old Capability transport is absent", async () => {
-  const ownerRoute = await readFile(path.join(root, "src/http/routes/owner.ts"), "utf8")
-  assert.match(ownerRoute, /livePlatformProjectionRead/u)
-  assert.doesNotMatch(ownerRoute, /requestCapability|capability-http/u)
+  const projectionRoute = await readFile(path.join(root, "src/http/routes/platform-projection.ts"), "utf8")
+  assert.match(projectionRoute, /livePlatformProjectionRead/u)
+  assert.doesNotMatch(projectionRoute, /requestCapability|capability-http/u)
   const sources = await readSchemaBoundarySources()
   const generatedImporters = sources
     .filter(({ relativePath, source }) => relativePath.startsWith("src/") && /generated\/platform-http/u.test(source))
@@ -246,30 +230,96 @@ test("Platform projection generated types stay behind one facade and old Capabil
   }
 })
 
-test("BFF composition root stays small and delegates resource routes", async () => {
+test("BFF production entrypoint stays small and excludes the temporary raw server", async () => {
   const main = await readFile(path.join(root, "src/main.ts"), "utf8")
-  const server = await readFile(path.join(root, "src/bootstrap/server.ts"), "utf8")
   assert.ok(main.split("\n").length < 80, "src/main.ts must remain a thin entry point")
-  assert.match(main, /bootstrap\/server\.js/)
-  assert.match(server, /routes\/agent\.js/)
-  assert.match(server, /routes\/owner\.js/)
-  assert.match(server, /routes\/scheduler\.js/)
-  assert.doesNotMatch(server, /routes\/mock\.js|MockBffStore|MoriMockBffStore/)
+  assert.equal(importsRawBootstrap("src/main.ts", main), false)
+})
+
+test("BFF feature HTTP adapters do not depend on the temporary raw composition", async () => {
+  for (const directory of ["src/http", "src/modules"]) {
+    const files = await readdir(path.join(root, directory), { recursive: true })
+    for (const file of files) {
+      if (!file.endsWith(".ts")) continue
+      const relativePath = `${directory}/${file}`
+      const source = await readFile(path.join(root, relativePath), "utf8")
+      assert.equal(importsRawBootstrap(relativePath, source), false, relativePath)
+    }
+  }
+})
+
+test("BFF raw composition boundary recognizes literal dependency forms and permits feature providers", () => {
+  const relativePath = "src/http/routes/example.ts"
+  for (const source of [
+    'import type { SessionAdmission } from "../../auth/session-admission.types.js"',
+    'import { Client } from "../../infrastructure/clients/owner.js"',
+    'const config = await import("../../config/runtime.js")',
+  ]) {
+    assert.equal(importsRawBootstrap(relativePath, source), false, source)
+  }
+  for (const source of [
+    'import type { BffServerComposition } from "../../bootstrap/runtime.js"',
+    'export { createBffServer } from "../../bootstrap/server.js"',
+    'import "../../bootstrap/server.js"',
+    'const runtime = await import("../../bootstrap/runtime.js")',
+    'const runtime = require("../../bootstrap/runtime.js")',
+    'import type { BffServerComposition } from /* boundary */ "../../bootstrap/runtime.js"',
+    'const runtime = import /* boundary */ ( /* literal */ "../../bootstrap/runtime.js")',
+    'import { createBffServer } from "../../bootstrap/../bootstrap/server.ts?test=1"',
+  ]) {
+    assert.equal(importsRawBootstrap(relativePath, source), true, source)
+  }
+})
+
+test("BFF standard test gates include each Nest architecture suite exactly once", async () => {
+  const { scripts } = JSON.parse(await readFile(path.join(root, "package.json"), "utf8")) as { scripts: Record<string, string> }
+  for (const gate of ["test", "test:architecture"]) {
+    const entries = (scripts[gate] ?? "").split(/\s+/u)
+    for (const suite of ["test/architecture.test.ts", "test/nest-runtime-architecture.test.ts", "test/nest-feature-architecture.test.ts"]) {
+      assert.equal(entries.filter((entry) => entry === suite).length, 1, `${gate} must run ${suite} once`)
+    }
+  }
+})
+
+test("global business store does not duplicate feature service providers", async () => {
+  // The compiled AppModule graph checks that the feature providers each have one real owner.
+  assert.equal(await exists("src/application/ports/bff-business-store.ts"), false)
+  assert.equal(await exists("src/application/services.ts"), false)
 })
 
 test("BFF production composition requires the live PostgreSQL and Redis runtime", async () => {
-  const [main, runtime, config] = await Promise.all([
-    readFile(path.join(root, "src/main.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
-    readFile(path.join(root, "src/config/runtime.ts"), "utf8"),
-  ])
+  const [main, config] = await Promise.all([readFile(path.join(root, "src/main.ts"), "utf8"), readFile(path.join(root, "src/config/runtime.ts"), "utf8")])
   assert.doesNotMatch(main, /infrastructure\/mock|new\s+(?:Mock|MoriMock)/u)
-  assert.match(runtime, /PostgresBffRepositories/u)
-  assert.match(runtime, /postgresUrl/u)
-  assert.match(runtime, /redisUrl/u)
-  assert.match(runtime, /required|not configured/u)
   assert.match(config, /mode:\s*"live"/u)
   assert.doesNotMatch(config, /mode:\s*"mock"|default.*mock/iu)
+  await import("reflect-metadata")
+  const { Test } = await import("@nestjs/testing")
+  const { BFF_CONFIG } = await import("../dist/common/tokens.js")
+  const { loadConfig } = await import("../dist/config/runtime.js")
+  const { DatabaseModule } = await import("../dist/common/database/database.module.js")
+  const configured = loadConfig({
+    KOKORO_BFF_SHARED_SECRET: "database-config-test-only",
+    KOKORO_BFF_POSTGRES_URL: "postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=kokoro_bff",
+    KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:1/8",
+  })
+  for (const missing of ["postgresUrl", "redisUrl"] as const) {
+    let compiled: import("@nestjs/testing").TestingModule | undefined
+    try {
+      // Compile the real provider graph without initializing a listener or opening a database connection.
+      await assert.rejects(
+        async () => {
+          compiled = await Test.createTestingModule({ imports: [DatabaseModule] })
+            .overrideProvider(BFF_CONFIG)
+            .useValue({ ...configured, [missing]: null })
+            .compile()
+        },
+        { message: "BFF database and Redis URLs are required for the Nest runtime" },
+        `the real DatabaseModule must reject missing ${missing}`,
+      )
+    } finally {
+      await compiled?.close()
+    }
+  }
 })
 
 test("BFF runtime delegates canonical schema installation to the single declared installer", async () => {
@@ -278,7 +328,9 @@ test("BFF runtime delegates canonical schema installation to the single declared
     readFile(path.join(root, "package.json"), "utf8"),
     readSchemaBoundarySources(),
   ])
-  const packageJson = JSON.parse(packageSource) as { scripts?: Record<string, string> }
+  const packageJson = JSON.parse(packageSource) as {
+    scripts?: Record<string, string>
+  }
 
   assert.equal(main.includes("ALTER TABLE"), false)
   assert.equal(main.includes("CREATE TABLE"), false)
@@ -430,27 +482,35 @@ test("stable ScheduledTask outbox identity keeps crypto behind an infrastructure
   assert.match(scheduledRepository, /scheduledTaskOutboxId/u)
 })
 
-test("BFF test doubles are outside production source and are explicitly assembled", async () => {
+test("BFF test doubles stay out of production and the raw fixture family is removed", async () => {
   const files = await import("node:fs/promises").then(({ readdir }) => readdir(path.join(root, "src"), { recursive: true }))
   for (const file of files) {
     if (typeof file !== "string" || !file.endsWith(".ts")) continue
     const source = await readFile(path.join(root, "src", file), "utf8")
     assert.doesNotMatch(source, /MockBffStore|MoriMockBffStore|routes\/mock\.js|routes\/mori\.js/u, `src/${file}`)
   }
-  const composition = await readFile(path.join(root, "test/doubles/server.ts"), "utf8")
-  assert.match(composition, /createBffServer/u)
-  assert.match(composition, /businessStore:\s*null/u)
-  assert.match(composition, /routeHandler/u)
+  for (const file of [
+    "src/bootstrap/server.ts",
+    "src/bootstrap/runtime.ts",
+    "src/infrastructure/postgres/repositories.ts",
+    "test/doubles/server.ts",
+    "test/doubles/bff-store.ts",
+    "test/doubles/mock-route.ts",
+    "test/doubles/mori-store.ts",
+    "test/doubles/mori-route.ts",
+    "test/doubles/helpers.ts",
+  ]) {
+    assert.equal(await exists(file), false, file)
+  }
 })
 
 test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and projected outside requests", async () => {
-  const [repository, consumerRepository, database, route, projector, composition, schema] = await Promise.all([
+  const [repository, consumerRepository, database, route, projector, schema] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/agui-projection-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/agui-consumer-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/client.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/agent.ts"), "utf8"),
     readFile(path.join(root, "src/application/agui/projector.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
 
@@ -472,7 +532,6 @@ test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and
   assert.match(projector, /projection\.ingest/u)
   assert.match(projector, /claimConsumers/u)
   assert.match(projector, /retryDelayMs\(lease\.failureCount\)/u)
-  assert.match(composition, /AgentAgUiSourceReader/u)
   assert.match(route, /projection\.replay/u)
   assert.doesNotMatch(route, /events\?after_seq/u)
   assert.equal(route.includes("createAgUiProjectionState"), false)
@@ -484,19 +543,21 @@ test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and
 })
 
 test("Chat admission commits messages, AG-UI lineage, and Agent delivery before asynchronous dispatch", async () => {
-  const [route, chatRepository, dispatchRepository, chatTurnCommit, registration, dispatcher, runtime, schema] = await Promise.all([
+  const [route, messageRoute, chatRepository, dispatchRepository, chatTurnCommit, registration, dispatcher, agentDispatchModule, schema] = await Promise.all([
     readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/chat-message.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-session-store.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/agent-dispatch-outbox-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/chat-turn-commit.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/agui-consumer-registration.ts"), "utf8"),
     readFile(path.join(root, "src/application/agent-dispatch-outbox-dispatcher.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/agent-dispatch/agent-dispatch.module.ts"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
 
-  assert.match(route, /services\.chatTurns\.submit/u)
-  assert.doesNotMatch(route, /callAgent|buildAgentLaunch/u)
+  // Canonical submission/replay is exercised by chat-business-native.test.mjs;
+  // real chat-facts.integration.mjs retains transaction, lease and unknown-result recovery evidence.
+  for (const handler of [route, messageRoute]) assert.doesNotMatch(handler, /callAgent|buildAgentLaunch/u)
   assert.doesNotMatch(chatRepository, /commitChatTurn|claimAgentDispatchOutbox/u)
   assert.equal(dispatchRepository.match(/return commitChatTurn\(/gu)?.length, 1)
   assert.doesNotMatch(dispatchRepository, /INSERT INTO bff_message/u)
@@ -518,10 +579,10 @@ test("Chat admission commits messages, AG-UI lineage, and Agent delivery before 
   assert.match(dispatcher, /markAgentDispatchUnknown/u)
   assert.match(dispatcher, /markAgentDispatchNotAdmitted/u)
   assert.match(dispatcher, /limit: 1/u)
-  assert.match(runtime, /AgentDispatchOutboxDispatcher/u)
-  assert.match(runtime, /AgentOutboxDelivery/u)
-  assert.match(runtime, /AgentCancellationOutboxDispatcher/u)
-  assert.match(runtime, /AgentCancellationDelivery/u)
+  assert.match(agentDispatchModule, /AgentDispatchOutboxDispatcher/u)
+  assert.match(agentDispatchModule, /AgentOutboxDelivery/u)
+  assert.match(agentDispatchModule, /AgentCancellationOutboxDispatcher/u)
+  assert.match(agentDispatchModule, /AgentCancellationDelivery/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox/u)
   assert.match(schema, /uq_bff_agent_dispatch_business/u)
   assert.match(schema, /ck_bff_agent_dispatch_lease/u)
@@ -530,11 +591,11 @@ test("Chat admission commits messages, AG-UI lineage, and Agent delivery before 
 })
 
 test("BFF Chat facts keep owner predicates and isolate public share capability reads", async () => {
-  const [repository, publicShareRepository, route, server, schema] = await Promise.all([
-    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+  const [repository, publicShareRepository, route, sharedRoute, schema] = await Promise.all([
+    readFile(path.join(root, "src/infrastructure/postgres/chat-session-store.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/public-share-repository.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/shared-native.ts"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
   assert.match(repository, /tenant_id = \$1/u)
@@ -548,26 +609,24 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
   assert.match(publicShareRepository, /Public share capability reads/u)
   assert.doesNotMatch(publicShareRepository, /subjectId/u)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
-  assert.match(route, /services\.chat/u)
   assert.match(route, /subjectId/u)
-  assert.match(route, /services\.chatTurns\.submit/u)
+  // Keep submission/replay coverage in the HTTP and real-PG suites, not a private call-expression lock.
   assert.doesNotMatch(route, /callAgent/u)
   assert.doesNotMatch(route, /Agent.*messages.*GET/u)
-  assert.match(server, /services\.publicShares/u)
-  assert.doesNotMatch(server, /services\.chat\.findActiveShare/u)
+  assert.match(sharedRoute, /publicShareSnapshot/u)
+  assert.doesNotMatch(sharedRoute, /services\.chat\.findActiveShare/u)
   assert.match(schema, /bff_conversation/u)
   assert.match(schema, /bff_message/u)
   assert.match(schema, /bff_share/u)
 })
 
 test("private BFF resources use named owner scopes before receipts and keep service capabilities separate", async () => {
-  const [projectPort, projectRepository, scheduledPort, scheduledRepository, chatAuthorization, server, client, openapi, schema] = await Promise.all([
-    readFile(path.join(root, "src/application/ports/project-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/project-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/application/ports/scheduled-task-repository.ts"), "utf8"),
+  const [projectPort, projectRepository, scheduledPort, scheduledRepository, chatAuthorization, client, openapi, schema] = await Promise.all([
+    readFile(path.join(root, "src/application/projects/types.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/project-store.ts"), "utf8"),
+    readFile(path.join(root, "src/application/scheduled/task-facts.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-authorization.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/client.ts"), "utf8"),
     readFile(path.join(root, "contract/openapi/v1/openapi.yaml"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
@@ -579,9 +638,7 @@ test("private BFF resources use named owner scopes before receipts and keep serv
   assert.match(scheduledRepository, /FOR SHARE/u)
   assert.doesNotMatch(client, /invalidateProjects|projects:\$\{tenant/u)
   assert.match(chatAuthorization, /scope must be omitted, empty, or direct/u)
-  assert.match(chatAuthorization, /services\.chat\.findConversation/u)
-  assert.ok(server.indexOf("authorizeChatRequest") < server.indexOf("mutationTicket("))
-  assert.ok(server.indexOf("authorizeLiveBffMutation") < server.indexOf("mutationTicket("))
+  assert.match(chatAuthorization, /await findConversation\(/u)
   assert.match(openapi, /DirectScopeQuery:[\s\S]*enum: \['', direct\]/u)
   assert.match(openapi, /ShareScopeQuery:[\s\S]*minLength: 1/u)
   assert.match(schema, /uq_bff_project_owner_slug/u)
@@ -592,17 +649,17 @@ test("private BFF resources use named owner scopes before receipts and keep serv
 
 test("Conversation collection filtering stays one BFF-owned discriminated path without resource authorization drift", async () => {
   const [port, authorization, route, service, repository, openapi] = await Promise.all([
-    readFile(path.join(root, "src/application/ports/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/chat/types.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-authorization.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
-    readFile(path.join(root, "src/application/chat-service.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/chat/session-reads.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-session-store.ts"), "utf8"),
     readFile(path.join(root, "contract/openapi/v1/openapi.yaml"), "utf8"),
   ])
 
   assert.match(port, /ConversationCollectionFilter[\s\S]*kind: "all"[\s\S]*kind: "direct"[\s\S]*kind: "project"; projectRef: string/u)
   assert.match(authorization, /isConversationCollection && queryScope\.scope === "direct" && projectRef !== undefined/u)
-  assert.ok(authorization.indexOf("scope=direct cannot be combined with project_ref") < authorization.indexOf("services.projects.find"))
+  assert.ok(authorization.indexOf("scope=direct cannot be combined with project_ref") < authorization.indexOf("await projects.find("))
   assert.match(authorization, /collectionFilter: ConversationCollectionFilter/u)
   assert.match(route, /authorization\.collectionFilter/u)
   assert.match(service, /filter: ConversationCollectionFilter/u)
@@ -621,20 +678,15 @@ test("Move input uses the neutral strict JSON decoder, not a Platform client dep
 
 test("Conversation Move keeps one PostgreSQL implementation and a bounded driver-only lease", async () => {
   const [repository, move, lease, mappers] = await Promise.all([
-    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-session-store.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/conversation-move.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/conversation-move-lease.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/chat-repository-mappers.ts"), "utf8"),
   ])
 
-  assert.ok(repository.trimEnd().split("\n").length <= 800, "Chat Repository must stay within the Root source-size gate")
+  assert.ok(repository.trimEnd().split("\n").length <= 800, "Chat Session Store must stay within the Root source-size gate")
   assert.ok(move.trimEnd().split("\n").length <= 800)
   assert.ok(lease.trimEnd().split("\n").length <= 800)
-  assert.match(repository, /from "\.\/conversation-move\.js"/u)
-  assert.match(
-    repository,
-    /public async moveConversation\(command: MoveConversationCommand\): Promise<MoveConversationResult> \{\s*return moveConversation\(this\.database, command\)\s*\}/u,
-  )
   assert.doesNotMatch(repository, /MOVE_BUDGET_MS|MOVE_LOCK_WAIT_MS|MoveSqlLease|acquireMoveLease|MOVE_RECEIPT_INVALID|INSERT INTO bff_idempotency_receipt/u)
   assert.match(move, /from "\.\/conversation-move-lease\.js"/u)
   assert.match(move, /from "\.\/chat-repository-mappers\.js"/u)
@@ -652,13 +704,13 @@ test("Conversation Move keeps one PostgreSQL implementation and a bounded driver
 })
 
 test("ScheduledTask mutations use an owner-scoped transactional outbox and fenced dispatcher", async () => {
-  const [scheduledRepository, outboxRepository, dispatcher, delivery, controlClient, liveRoute, schema] = await Promise.all([
+  const [scheduledRepository, outboxRepository, dispatcher, delivery, controlClient, mutationRoute, schema] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/application/ports/scheduled-task-outbox-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/scheduled/scheduled-task-outbox-repository.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled-task-outbox-dispatcher.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/clients/scheduler/outbox-delivery.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/clients/scheduler/control-client.ts"), "utf8"),
-    readFile(path.join(root, "src/http/routes/live-bff.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/scheduled-task-mutation-native.ts"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
   assert.match(scheduledRepository, /BEGIN/u)
@@ -674,8 +726,8 @@ test("ScheduledTask mutations use an owner-scoped transactional outbox and fence
   assert.match(delivery, /SchedulerControlClient/u)
   assert.match(controlClient, /generated\/scheduler\/sdk\.gen\.js/u)
   assert.match(controlClient, /Idempotency-Key/u)
-  assert.doesNotMatch(liveRoute, /reconcileSchedulerTask\(/u)
-  assert.match(liveRoute, /mutationLineage/u)
+  assert.doesNotMatch(mutationRoute, /reconcileSchedulerTask\(/u)
+  assert.match(mutationRoute, /mutationLineage/u)
   assert.match(schema, /CONSTRAINT uq_bff_scheduled_task_outbox_business UNIQUE/u)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
 })
@@ -686,7 +738,7 @@ test("BFF production code has one explicit owner boundary", async () => {
     if (typeof file !== "string" || !file.endsWith(".ts")) continue
     const source = await readFile(path.join(root, "src", file), "utf8")
     assert.equal(source.includes("/adapters/"), false, `src/${file}`)
-    assert.equal(source.includes("/modules/"), false, `src/${file}`)
+    assert.equal(source.includes("/legacy-modules/"), false, `src/${file}`)
   }
 })
 
@@ -761,12 +813,16 @@ test("BFF consumes the pinned Platform HTTP projection without owning its data",
   ])
   const manifest = JSON.parse(manifestSource) as {
     status: string
-    owner: { repository_commit: string; contract_version: string; contract_sha256: string }
+    owner: {
+      repository_commit: string
+      contract_version: string
+      contract_sha256: string
+    }
   }
   assert.equal(manifest.status, "generated")
-  assert.equal(manifest.owner.repository_commit, "efe1ed1a3f81e87df1edded53e6e796d20edea55")
-  assert.equal(manifest.owner.contract_version, "6.3.0")
-  assert.equal(manifest.owner.contract_sha256, "3a187ad6e98b1824cf8d8e50c80218e77c7f14f4eb2a5cfcfe8d4be97c677a08")
+  assert.equal(manifest.owner.repository_commit, "8cfead647856ef54ec851a3bebe169a3ca14d212")
+  assert.equal(manifest.owner.contract_version, "7.0.0")
+  assert.equal(manifest.owner.contract_sha256, "085e1367f69c34edc6b80cbfb448596f36039f9857cee3bd5a407befbc295361")
   assert.match(generatorConfig, /src\/generated\/platform-http/u)
   assert.match(generatorScript, /two byte-identical generations/u)
   assert.doesNotMatch(schema, /CREATE TABLE[^;]*capability/iu)
@@ -819,7 +875,9 @@ test("Scheduler control and receiver implement distinct owner boundaries and dur
   assert.match(config, /paramsStructure:\s*"grouped"/u)
   assert.match(config, /responseStyle:\s*"fields"/u)
   assert.match(config, /validator:\s*\{\s*response:\s*"zod"\s*\}/u)
-  for (const file of await readdir(path.join(root, "src"), { recursive: true })) {
+  for (const file of await readdir(path.join(root, "src"), {
+    recursive: true,
+  })) {
     if (!file.endsWith(".ts") || file.startsWith("generated/")) continue
     const source = await readFile(path.join(root, "src", file), "utf8")
     if (["infrastructure/clients/scheduler/control-client.ts", "infrastructure/clients/scheduler/webhook-contract.ts"].includes(file)) continue
@@ -847,35 +905,39 @@ test("BFF Library file slice uses personal Storage v3 without claiming Artifact 
 })
 
 test("BFF user identity crosses one pinned IAM admission boundary and service-only routes stay separate", async () => {
-  const [server, request, runtime, manifest, config, generatedSdk] = await Promise.all([
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+  const [accountNative, request, authenticationModule, manifest, config, generatedSdk] = await Promise.all([
+    readFile(path.join(root, "src/http/routes/account-native.ts"), "utf8"),
     readFile(path.join(root, "src/http/request.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/authentication/authentication.module.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/runtime-manifest.ts"), "utf8"),
     readFile(path.join(root, "openapi-ts.iam.config.ts"), "utf8"),
     readFile(path.join(root, "src/generated/iam-http/sdk.gen.ts"), "utf8"),
   ])
-  assert.match(server, /authorizeUserRequest/u)
+  assert.match(accountNative, /await authorizeUserRequest\(/u)
   assert.doesNotMatch(request, /export function authorize\(/u)
-  assert.match(runtime, /new SessionAdmissionClient/u)
-  assert.match(runtime, /sessionAdmission\?: SessionAdmission/u)
+  assert.match(authenticationModule, /new SessionAdmissionClient/u)
   assert.match(manifest, /authorizeServerOnly/u)
   assert.doesNotMatch(manifest, /authorizeUserRequest|userId:\s*["']runtime-manifest/u)
-  assert.match(config, /POST \/internal\/v1\/session-authorizations\/verify/u)
-  assert.match(generatedSdk, /export const verifySessionAuthorization/u)
+  assert.doesNotMatch(config, /POST \/internal\/v1\/(?:session-authorizations|native-sessions)\/verify/u)
+  const { SessionAdmissionClient } = await import("../dist/auth/session-admission.client.js")
+  const sdk = await import("../dist/generated/iam-http/sdk.gen.js")
+  const authentication = new SessionAdmissionClient({ baseUrl: null, timeoutMs: 1000, maxResponseBytes: 4096 })
+  assert.equal(typeof authentication.verify, "function")
+  assert.equal("verifyNative" in authentication, false)
+  assert.equal("legacyFallback" in authentication, false)
+  assert.equal("verifySessionAuthorization" in sdk, false)
+  assert.equal("verifyNativeSession" in sdk, false)
   assert.doesNotMatch(generatedSdk, /getMetrics|healthz|readyz/u)
 })
 
 test("Library file handling has no retired Storage HTTP or BFF shadow Asset table", async () => {
-  const [owner, projections, runtime, localEnv, prodEnv, account, mockRoute, mockStore, schema] = await Promise.all([
-    readFile(path.join(root, "src/http/routes/owner.ts"), "utf8"),
+  const [owner, projections, runtime, localEnv, prodEnv, account, schema] = await Promise.all([
+    readFile(path.join(root, "src/http/routes/owner-request.ts"), "utf8"),
     readFile(path.join(root, "src/application/projections.ts"), "utf8"),
     readFile(path.join(root, "src/config/runtime.ts"), "utf8"),
     readFile(path.join(root, ".env.local.example"), "utf8"),
     readFile(path.join(root, ".env.prod.example"), "utf8"),
     readFile(path.join(root, "src/contracts/account.ts"), "utf8"),
-    readFile(path.join(root, "test/doubles/mock-route.ts"), "utf8"),
-    readFile(path.join(root, "test/doubles/bff-store.ts"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
 
@@ -890,19 +952,16 @@ test("Library file handling has no retired Storage HTTP or BFF shadow Asset tabl
     assert.doesNotMatch(source, /\/internal\/bff\/library|KOKORO_STORAGE_BASE_URL|libraryData|libraryItemType/u, name)
   }
   assert.doesNotMatch(account, /\bLibraryItem\b/u)
-  assert.doesNotMatch(mockRoute, /\bLibraryItem\b|store\.library/u)
-  assert.match(mockRoute, /storage_integration_unavailable/u)
-  assert.doesNotMatch(mockStore, /\bLibraryItem\b|readonly library/u)
   assert.doesNotMatch(schema, /bff_(?:library|asset|artifact)/u)
 })
 
 test("current administrator qualification belongs only to admitted user context and the IAM boundary", async () => {
-  const [context, admissionTypes, admission, client, server] = await Promise.all([
+  const [context, admissionTypes, admission, client, accountNative] = await Promise.all([
     readFile(path.join(root, "src/domain/request-context.ts"), "utf8"),
     readFile(path.join(root, "src/auth/session-admission.types.ts"), "utf8"),
     readFile(path.join(root, "src/auth/user-admission.ts"), "utf8"),
     readFile(path.join(root, "src/auth/session-admission.client.ts"), "utf8"),
-    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/account-native.ts"), "utf8"),
   ])
   assert.doesNotMatch(context.split("export type AdmittedUserRequestContext")[0], /platformAdmin/u)
   assert.match(context, /AdmittedUserRequestContext = RequestContext & \{\s+platformAdmin: boolean\s+\}/u)
@@ -910,101 +969,31 @@ test("current administrator qualification belongs only to admitted user context 
   assert.doesNotMatch(admissionTypes, /platformAdmin\?/u)
   assert.match(admission, /context: AdmittedUserRequestContext/u)
   assert.match(admission, /platformAdmin: result\.platformAdmin/u)
-  assert.match(client, /platformAdmin: parsed\.data\.data\.platform_admin/u)
+  const { zUser } = await import("../dist/generated/iam-auth/zod.gen.js")
+  assert.equal(zUser.shape.platformAdmin.parse(true), true)
+  assert.equal(zUser.shape.platformAdmin.parse(false), false)
+  assert.equal(zUser.shape.platformAdmin.safeParse(undefined).success, false, "missing IAM administrator qualification cannot become a default false")
   assert.doesNotMatch(client, /platform_admin\s*\?\?|decodeJwt|jwtDecode/u)
-  assert.match(server, /platform_admin: context\.platformAdmin/u)
+  assert.match(accountNative, /platform_admin: admitted\.context\.platformAdmin/u)
 })
 
 test("R257 personalization stays caller-owned and bypasses generic receipt dispatch without another service", async () => {
   const route = await readFile(path.join(root, "src/http/routes/personalization.ts"), "utf8")
   const repository = await readFile(path.join(root, "src/infrastructure/postgres/personalization-repository.ts"), "utf8")
-  const port = await readFile(path.join(root, "src/application/ports/personalization-repository.ts"), "utf8")
-  const server = await readFile(path.join(root, "src/bootstrap/server.ts"), "utf8")
+  const provider = await readFile(path.join(root, "src/modules/account/personalization.provider.ts"), "utf8")
+  const [middleware, accountModule] = await Promise.all([
+    readFile(path.join(root, "src/modules/account/account.middleware.ts"), "utf8"),
+    readFile(path.join(root, "src/modules/account/account.module.ts"), "utf8"),
+  ])
   assert.match(route, /context\.identity\.namespace/u)
   assert.match(route, /context\.identity\.userId/u)
-  assert.doesNotMatch(route, /platformAdmin|ownerIdentityHeaders|localStorage|mutationTicket/u)
-  assert.doesNotMatch(port, /from ["'](?:pg|redis|node:http)["']/u)
+  assert.doesNotMatch(route, /BffBusinessStore|platformAdmin|ownerIdentityHeaders|localStorage|mutationTicket/u)
+  assert.doesNotMatch(provider, /export interface PersonalizationProvider/u, "Account must not retain a duplicate provider contract")
+  assert.match(provider, /PERSONALIZATION_PROVIDER/u)
+  assert.doesNotMatch(provider, /from ["'](?:pg|redis|node:http)["']/u)
   assert.doesNotMatch(repository, /bff_idempotency_receipt|kokoro_iam|kokoro_system|\.redis\./u)
-  assert.ok(server.indexOf("await personalizationRoute(") < server.indexOf("const mutationRequired ="))
-})
-
-test("R257 named evolution may import exactly the two approved canonical read helpers", () => {
-  const namedReader: SourceFile = {
-    relativePath: "scripts/personalization-schema-evolution.mjs",
-    source: 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"',
-  }
-  assert.doesNotThrow(() => assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [canonicalInstaller, namedReader]))
-})
-
-test("R257 named evolution exception rejects installer execution exports and alternate import forms", () => {
-  const approved = 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"'
-  for (const source of [
-    'import { applyCanonicalSchema } from "./apply-schema.mjs"',
-    'import { assertBffSchemaUrl, loadCanonicalSchema, applyCanonicalSchema } from "./apply-schema.mjs"',
-    'import { assertBffSchemaUrl, loadCanonicalSchema as applyCanonicalSchema } from "./apply-schema.mjs"',
-    'import * as installer from "./apply-schema.mjs"',
-    'import installer from "./apply-schema.mjs"',
-    'import "./apply-schema.mjs"',
-    'export { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"',
-    'const { assertBffSchemaUrl, loadCanonicalSchema } = require("./apply-schema.mjs")',
-    'const { assertBffSchemaUrl, loadCanonicalSchema } = await import("./apply-schema.mjs")',
-    'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs?mode=install"',
-    'import { loadCanonicalSchema } from "./apply-schema.mjs"',
-    `${approved}\n${approved}`,
-    `${approved}\nconst installer = require( /* alternate */ "./apply-schema.mjs")`,
-    `${approved}\nconst installer = await import( /* alternate */ "./apply-schema.mjs", { with: { type: "module" } })`,
-    `${approved}\nimport { applyCanonicalSchema } from "./apply-schema.mjs"`,
-  ]) {
-    assert.throws(
-      () =>
-        assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [
-          canonicalInstaller,
-          { relativePath: "scripts/personalization-schema-evolution.mjs", source },
-        ]),
-      /static schema installer import/u,
-      source,
-    )
-  }
-})
-
-test("R257 named read helpers do not admit other paths runtime loaders or another installer command", () => {
-  const source = 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"'
-  for (const relativePath of ["scripts/personalization-schema-catalog.mjs", "scripts/evolve-personalization-schema.mjs", "scripts/other-evolution.mjs"]) {
-    assert.throws(
-      () => assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [canonicalInstaller, { relativePath, source }]),
-      /static schema installer import/u,
-    )
-  }
-  assert.throws(
-    () =>
-      assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [
-        canonicalInstaller,
-        { relativePath: "src/database/setup.ts", source: source.replace("./apply-schema.mjs", "../../scripts/apply-schema.mjs") },
-      ]),
-    /static schema installer import/u,
-  )
-  assert.throws(
-    () =>
-      assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [
-        canonicalInstaller,
-        {
-          relativePath: "scripts/personalization-schema-evolution.mjs",
-          source: `${source}\nawait readFile(new URL("../database/schema.sql", import.meta.url))`,
-        },
-      ]),
-    /single schema installer/u,
-  )
-  assert.throws(
-    () =>
-      assertSingleSchemaInstaller(
-        {
-          "db:apply-schema": "node scripts/apply-schema.mjs",
-          "db:install:personalization": "node scripts/personalization-schema-evolution.mjs",
-        },
-        [canonicalInstaller, { relativePath: "scripts/personalization-schema-evolution.mjs", source }],
-      ),
-    /single schema installer/u,
-  )
+  assert.match(middleware, /handleAccountNativeRequest/u)
+  assert.match(accountModule, /AccountMiddleware/u)
 })
 
 test("shared tasks stays in the existing Chat owner without a new pool or capability projection", async () => {

@@ -1,3 +1,5 @@
+import { iamUserContextHeaders } from "../../auth/iam-user-context.js"
+import { strictParseRawJson } from "../raw-json.js"
 import { randomUUID } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 
@@ -22,7 +24,8 @@ export type TeamReadResult =
 export type TeamReadInput = Readonly<{
   baseUrl: string | null
   tenantId: string
-  token: string
+  credentialFile: string | null | undefined
+  subjectId: string
   kind: TeamReadKind
   limit: number
   cursor: string | null
@@ -86,12 +89,15 @@ async function boundedJson(response: Response, maxBytes: number): Promise<unknow
   } finally {
     await reader.cancel().catch(() => undefined)
   }
-  return JSON.parse(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8")) as unknown
+  const rawBytes = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
+  if (rawBytes[0] === 0xef && rawBytes[1] === 0xbb && rawBytes[2] === 0xbf) throw new Error("Invalid IAM response")
+  strictParseRawJson(rawBytes)
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(rawBytes)) as unknown
 }
 
 function mappedError(status: number, headers: Headers): TeamReadResult {
   if (status === 400) return { ok: false, status: 400, code: "team_query_invalid" }
-  if (status === 401) return { ok: false, status: 401, code: "session_invalid" }
+  if (status === 401) return { ok: false, status: 503, code: "team_owner_unavailable" }
   if (status === 403) return { ok: false, status: 403, code: "team_forbidden" }
   if (status === 404) return { ok: false, status: 404, code: "team_not_found" }
   if (status === 429) {
@@ -119,7 +125,11 @@ export async function readIamTeamPage(input: TeamReadInput): Promise<TeamReadRes
   try {
     const response = await fetch(target, {
       method: "GET",
-      headers: { accept: "application/json", authorization: `Bearer ${input.token}`, "x-request-id": requestId },
+      headers: {
+        accept: "application/json",
+        ...(await iamUserContextHeaders(input)),
+        "x-request-id": requestId,
+      },
       redirect: "manual",
       cache: "no-store",
       signal: abort.signal,
@@ -158,7 +168,8 @@ export type TeamWriteResult =
 export type TeamWriteInput = Readonly<{
   baseUrl: string | null
   tenantId: string
-  token: string
+  credentialFile: string | null | undefined
+  subjectId: string
   kind: TeamWriteKind
   resourceId: string | null
   body: Readonly<Record<string, unknown>> | null
@@ -202,7 +213,8 @@ function writeTarget(input: TeamWriteInput): { method: "POST" | "PUT" | "DELETE"
 function writeError(status: number, code: string, headers: Headers): TeamWriteResult {
   if ((status === 400 && code === "INVALID_ARGUMENT") || (status === 413 && code === "PAYLOAD_TOO_LARGE"))
     return { ok: false, status: 400, code: "team_input_invalid" }
-  if (status === 401 && code === "UNAUTHENTICATED") return { ok: false, status: 401, code: "session_invalid" }
+  if (status === 401 && (code === "UNAUTHENTICATED" || code === "bff_user_context_service_unauthenticated"))
+    return { ok: false, status: 503, code: "team_owner_unavailable" }
   if (status === 403 && code === "PERMISSION_DENIED") return { ok: false, status: 403, code: "team_forbidden" }
   if (status === 404) return NOT_FOUND_CODES.has(code) ? { ok: false, status: 404, code } : invalidOwnerResponse()
   if (status === 409) return CONFLICT_CODES.has(code) ? { ok: false, status: 409, code } : invalidOwnerResponse()
@@ -230,7 +242,7 @@ export async function writeIamTeam(input: TeamWriteInput): Promise<TeamWriteResu
       method: target.method,
       headers: {
         accept: "application/json",
-        authorization: `Bearer ${input.token}`,
+        ...(await iamUserContextHeaders(input)),
         "x-request-id": requestId,
         ...(input.body === null ? {} : { "content-type": "application/json" }),
       },

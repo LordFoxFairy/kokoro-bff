@@ -1,4 +1,4 @@
-export type ScheduledAgentDispatchStatus = "pending" | "leased" | "retryable" | "admitted" | "terminal" | "failed"
+export type ScheduledAgentDispatchStatus = "pending" | "leased" | "retryable" | "submitted" | "admitted" | "terminal" | "failed"
 
 export type ScheduledAgentDispatchLease = {
   tenantId: string
@@ -12,6 +12,10 @@ export type ScheduledAgentDispatchLease = {
 
 export type ScheduledAgentDispatchCommand = ScheduledAgentDispatchLease & {
   subjectId: string
+  conversationId: string
+  userMessageId: string
+  assistantMessageId: string
+  requestDigest: string
   requestId: string
   idempotencyKey: string
   identityAssertionRef: string
@@ -20,16 +24,6 @@ export type ScheduledAgentDispatchCommand = ScheduledAgentDispatchLease & {
   admissionUnknownSeen: boolean
   leaseRemainingMs: number
   leaseObservedAt: number
-}
-
-export type ScheduledAgentSourceEvent = {
-  sourceSequence: number
-  sourceEventId: string
-  sourceRunId: string
-  sourceDigest: string
-  sourceOccurredAt: string
-  eventType: string
-  sourcePayload: Record<string, unknown>
 }
 
 export function scheduledOccurrenceOrderKey(value: string): string {

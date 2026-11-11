@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
+import { nativeSessionCookie } from "../../auth/user-admission.js"
 import { failure } from "../../contracts/index.js"
 import { requestIamAccountSessions } from "../../infrastructure/clients/iam-account-sessions.js"
 import { parseAccountSessionInput } from "../account-session-input.js"
@@ -12,7 +13,6 @@ export async function accountSessionsRoute(
   response: ServerResponse,
   config: BffConfig,
   context: RequestContext,
-  token: string,
   path: readonly string[],
 ): Promise<void> {
   const deadlineAt = performance.now() + Math.min(config.upstreamTimeoutMs, 5000)
@@ -31,10 +31,17 @@ export async function accountSessionsRoute(
   response.once("close", onClose)
   if (request.aborted || response.destroyed) abort.abort()
   try {
+    const cookie = nativeSessionCookie(request)
+    const origin = config.iamWebOrigin ?? config.iamRelay?.webOrigin
+    if (cookie === null || origin === undefined || origin === null) {
+      send(response, 503, failure("account_sessions_unavailable", "account_sessions_unavailable", context.requestId))
+      return
+    }
+    const ownerAuth = { cookie, origin, credentialFile: config.iamAccountSessionsServiceCredentialFile, tenantId: context.identity.namespace }
     const result = await requestIamAccountSessions({
       ...input,
       baseUrl: config.iamBaseUrl,
-      token,
+      ...ownerAuth,
       requestId: context.requestId,
       signal: abort.signal,
       deadlineAt,

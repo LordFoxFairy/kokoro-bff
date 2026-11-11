@@ -1,3 +1,4 @@
+import { restoreAgent87FinalAnswerRaw, restoreAgent87FinalAnswerContract } from "./agent-final-answer-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
@@ -11,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "7104f3da6e812e1092866cf4e60e32826a8992c1"
+const ownerCommit = "7bfbf5ef3febaad710007fcd88992f44333d4740"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3"
-const provenanceDigest = "e87d077af7729317f8e20ad8423d6c96ac14ad46f002f410274401486a8bf8ec"
-const ownerContractVersion = "7.0.0"
+const ownerDigest = "c471094369efa80f1182e41c67ef8150835a4544c283fd8d2d4e689707a51aad"
+const provenanceDigest = "227015d780a9d9dbb93e5746690fc200bca4663bcf7736fe7b984e5bb9d08832"
+const ownerContractVersion = "8.17.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -28,6 +29,8 @@ const failureCodes = [
   "model_unavailable",
   "dependency_unavailable",
   "model_access_denied",
+  "model_settlement_pending",
+  "context_window_exceeded",
 ]
 const retryableFailureCodes = ["model_unavailable", "dependency_unavailable"]
 const generatedFiles = [
@@ -99,13 +102,369 @@ export function assertFailureContractSchema(document) {
     "#/components/schemas/ChatFailure",
     "ChatEvent run.failed mapping drifted",
   )
-  return { failureCodes: [...failureCodes], retryableFailureCodes: [...retryableFailureCodes] }
+  return {
+    failureCodes: [...failureCodes],
+    retryableFailureCodes: [...retryableFailureCodes],
+  }
 }
 
 // Decode only the published schema graph referenced by ChatEvent's payload mapping.
 // The generator does not follow extension refs; derive these validators from the pinned bytes,
 // rather than maintaining another editable schema or enabling every orphan owner component.
+// Build/test-only raw inverse retains numeric lexemes and numeric-key source order exactly.
+// Build/test-only exact action/capability deltas, preserving the published raw parent.
+const actionTitleDelta =
+  ',\n              "action_title": {\n                "type": "string",\n                "minLength": 1,\n                "maxLength": 256,\n                "x-kokoro-utf8-byte-limit": 256,\n                "description": "Public intent of this exact model tool call, bound before approval edits. Not reasoning, capability documentation, execution status or authority. No surrounding whitespace, control/format/surrogate characters or private text. Omitted when absent or mismatched; never inferred from adjacent prose."\n              }'
+const capabilityDescriptionDelta =
+  ',\n                "tool_description": {\n                  "type": "object",\n                  "required": [\n                    "text",\n                    "truncated",\n                    "redacted"\n                  ],\n                  "properties": {\n                    "text": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 1024,\n                      "x-kokoro-utf8-byte-limit": 1024\n                    },\n                    "truncated": {\n                      "type": "boolean"\n                    },\n                    "redacted": {\n                      "type": "boolean"\n                    }\n                  },\n                  "additionalProperties": false,\n                  "description": "Provider capability documentation observed in this Run, matched by connection and selector. Not a per-call purpose, execution result, title or authorization. Missing or conflicting evidence is omitted; private display only."\n                }'
+const capabilityConditionDelta =
+  ',\n              "allOf": [\n                {\n                  "if": {\n                    "required": [\n                      "tool_description"\n                    ]\n                  },\n                  "then": {\n                    "required": [\n                      "target"\n                    ],\n                    "properties": {\n                      "tool_name": {\n                        "enum": [\n                          "mcp_call",\n                          "mcp_describe_tool"\n                        ]\n                      },\n                      "target": {\n                        "properties": {\n                          "kind": {\n                            "const": "mcp_tool"\n                          }\n                        }\n                      }\n                    }\n                  }\n                }\n              ]'
+export function restoreAgent85ActionDisplayRaw(source) {
+  source = restoreAgent811ProjectInstructionRaw(source)
+  source = restoreAgent87FinalAnswerRaw(source)
+  if (source.includes('"version": "8.7.0"')) {
+    assert.equal(sha256(source), "74fb43159ba559fe049f027a5fe4877d29524f5a73eae88c8d15913760cfb9fc", "Agent8.7 action child drift")
+    source = source.replace(actionTitleDelta, "").replace('"version": "8.7.0"', '"version": "8.6.0"')
+    assert.equal(sha256(source), "de73c229a962e37afbf3f69aba160a8b6b9a56cd2603952a3d3d97f5a610b64b", "Agent8.6 action parent drift")
+  }
+  if (source.includes('"version": "8.6.0"')) {
+    assert.equal(sha256(source), "de73c229a962e37afbf3f69aba160a8b6b9a56cd2603952a3d3d97f5a610b64b", "Agent8.6 capability child drift")
+    source = source.replace(capabilityDescriptionDelta, "").replace(capabilityConditionDelta, "").replace('"version": "8.6.0"', '"version": "8.5.0"')
+    assert.equal(sha256(source), "b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897", "Agent8.5 capability parent drift")
+  }
+  return source
+}
+const agent813ResourceRefs = {
+  type: "array",
+  maxItems: 16,
+  uniqueItems: true,
+  "x-kokoro-json-byte-limit": 4096,
+  description:
+    "Opaque owner references selected for this Run. Only asset/artifact IDs and an optional version ID are accepted; URLs, content, identities and digests are forbidden. Omission or [] selects none.",
+  items: {
+    type: "object",
+    additionalProperties: false,
+    required: ["kind", "resource_id"],
+    properties: {
+      kind: {
+        type: "string",
+        enum: ["asset", "artifact"],
+      },
+      resource_id: {
+        type: "string",
+        minLength: 1,
+        maxLength: 191,
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])",
+      },
+      version_id: {
+        type: "string",
+        minLength: 1,
+        maxLength: 191,
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])",
+      },
+    },
+  },
+}
+const agent814ResourceDescription =
+  "Private owner-resolved inputs frozen by BFF, unique by kind/resource_id in original order. Asset resource_id equals asset_id; personal source scope matches the trusted user subject, project source scope matches launch project_ref. Artifact source conversation and source_run_id are provenance, not the consumer run_id or authority. No version_id, URL or content. Omission or [] preserves prior request bytes. Canonical ASCII JSON is limited to 32768 bytes."
+const agent815ResourceDescription = agent814ResourceDescription.replace(
+  "No version_id, URL or content.",
+  "Asset and artifact have no inline content. Final answer is only for a user chat Run and resource_id is its source assistant Message ID; exact source conversation, Run, final segment and revision are provenance, not the consumer identity. Its unmodified UTF-8 text, size and SHA-256 must agree. No version_id, URL or additional identity.",
+)
+function restoreAgent816WorkspaceOutputsRaw(source) {
+  if (!source.includes('"version": "8.17.0"')) return source
+  assert.equal(sha256(source), ownerDigest, "Agent8.17 workspace output child drift")
+  const parent = source
+    .replace(/,\n          "workspace_outputs": \{[\s\S]*?\n          \}(?=\n        \},\n        "additionalProperties": false)/u, "")
+    .replace(/,\n      "WorkspaceOutputVersion": \{[\s\S]*?\n      \}(?=\n    \},\n    "responses")/u, "")
+    .replace('"version": "8.17.0"', '"version": "8.16.0"')
+  assert.equal(sha256(parent), "e303dfadfccd3a86c3cd47542f751868394d269fd584c70cfd9c801eaa618958", "Agent8.16 raw workspace output parent drift")
+  return parent
+}
+function restoreAgent816WorkspaceOutputsContract(document) {
+  if (document.info?.version !== "8.17.0") return document
+  const parent = structuredClone(document)
+  delete parent.components.schemas.RunDisplay.properties.workspace_outputs
+  delete parent.components.schemas.WorkspaceOutputVersion
+  parent.info.version = "8.16.0"
+  assert.equal(sha256(JSON.stringify(parent)), "9ec3bb6b1b0c19a32cfa2d58074a2ba7aba6f3ca90ea7353bf96ac5f71851976", "Agent8.16 parsed workspace output parent drift")
+  return parent
+}
+function restoreAgent815DeliveryPathRaw(source) {
+  source = restoreAgent816WorkspaceOutputsRaw(source)
+  if (!source.includes('"version": "8.16.0"')) return source
+  assert.equal(sha256(source), "e303dfadfccd3a86c3cd47542f751868394d269fd584c70cfd9c801eaa618958", "Agent8.16 delivery child drift")
+  const parent = source
+    .replace(',\n            "delivery": "#/components/schemas/ChatDelivery"', "")
+    .replace(/,\n      "ChatDelivery": \{[\s\S]*?\n      \}(?=\n    \},\n    "responses")/u, "")
+    .replace('"version": "8.16.0"', '"version": "8.15.0"')
+  assert.equal(sha256(parent), "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81", "Agent8.15 raw delivery parent drift")
+  return parent
+}
+function restoreAgent815DeliveryPathContract(document) {
+  document = restoreAgent816WorkspaceOutputsContract(document)
+  if (document.info?.version !== "8.16.0") return document
+  const parent = structuredClone(document)
+  delete parent.components.schemas.ChatDelivery
+  delete parent.components.schemas.ChatEvent["x-kokoro-decoded-payloads"].mapping.delivery
+  parent.info.version = "8.15.0"
+  assert.equal(sha256(JSON.stringify(parent)), "c7c0af91761cd36db21738141d57c8341e39e3edc83dc83fd2197eb4baa085ff", "Agent8.15 parsed delivery parent drift")
+  return parent
+}
+export function restoreAgent814FinalAnswerResourceRaw(source) {
+  source = restoreAgent815DeliveryPathRaw(source)
+  if (!source.includes('"version": "8.15.0"')) return source
+  assert.equal(sha256(source), "7d9b9163a5f8bd5104e57376eda2afa748460e97708fb7cb38b6f9365fdf0a81", "Agent8.15 child drift")
+  const start =
+    ',\n                {\n                  "type": "object",\n                  "additionalProperties": false,\n                  "required": [\n                    "kind",\n                    "resource_id",\n                    "source_scope",\n                    "source_run_id",\n                    "source_final_segment_id",'
+  const end = '\n                }\n              ]\n            }\n          },\n          "personal_context": {'
+  const offset = source.indexOf(start)
+  const stop = source.indexOf(end, offset)
+  assert.ok(offset >= 0 && stop > offset, "Agent8.15 exact union arm drift")
+  const parent = (source.slice(0, offset) + source.slice(stop + "\n                }".length))
+    .replace(agent815ResourceDescription, agent814ResourceDescription)
+    .replace('"version": "8.15.0"', '"version": "8.14.0"')
+  assert.equal(sha256(parent), "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424", "Agent8.14 raw parent drift")
+  return parent
+}
+export function restoreAgent814FinalAnswerResourceContract(document) {
+  document = restoreAgent815DeliveryPathContract(document)
+  if (document.info?.version !== "8.15.0") return document
+  const parent = structuredClone(document)
+  const refs = parent.components.schemas.LaunchRequest.properties.selected_resource_refs
+  assert.equal(refs.items.oneOf.length, 3, "Agent8.15 union width drift")
+  assert.equal(refs.items.oneOf.pop().properties.kind.const, "final_answer", "Agent8.15 union arm drift")
+  assert.equal(refs.description, agent815ResourceDescription)
+  refs.description = agent814ResourceDescription
+  parent.info.version = "8.14.0"
+  assert.equal(sha256(JSON.stringify(parent)), "255b0bf7d4cd13da708ed50f729ea44f70cd8ded8fedc6281b00d5cce909dd68", "Agent8.14 parsed parent drift")
+  return parent
+}
+export function restoreAgent813CanonicalResourcesRaw(source) {
+  source = restoreAgent814FinalAnswerResourceRaw(source)
+  if (!source.includes('"version": "8.14.0"')) return source
+  assert.equal(sha256(source), "6d33f1110e354570ec2977d18b4620ba7e44be9174e1d8d6ceeb7234b76be424", "Agent8.14 canonical resources child drift")
+  const match = source.match(/          "selected_resource_refs": \{[\s\S]*?          \},\n          "personal_context": \{/u)
+  assert.equal(match?.length, 1, "Agent8.14 canonical resources delta drift")
+  source = source
+    .replace(
+      match[0],
+      '          "selected_resource_refs": {\n            "type": "array",\n            "maxItems": 16,\n            "uniqueItems": true,\n            "x-kokoro-json-byte-limit": 4096,\n            "description": "Opaque owner references selected for this Run. Only asset/artifact IDs and an optional version ID are accepted; URLs, content, identities and digests are forbidden. Omission or [] selects none.",\n            "items": {\n              "type": "object",\n              "additionalProperties": false,\n              "required": [\n                "kind",\n                "resource_id"\n              ],\n              "properties": {\n                "kind": {\n                  "type": "string",\n                  "enum": [\n                    "asset",\n                    "artifact"\n                  ]\n                },\n                "resource_id": {\n                  "type": "string",\n                  "minLength": 1,\n                  "maxLength": 191,\n                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\\\s\\\\S])"\n                },\n                "version_id": {\n                  "type": "string",\n                  "minLength": 1,\n                  "maxLength": 191,\n                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\\\s\\\\S])"\n                }\n              }\n            }\n          },\n          "personal_context": {',
+    )
+    .replace('"version": "8.14.0"', '"version": "8.13.0"')
+  assert.equal(sha256(source), "873da626bd2924c494a1c885d7bdad248f85498b639439d9852e5f24dfa084ba", "Agent8.13 canonical resources parent drift")
+  return source
+}
+
+export function restoreAgent813CanonicalResourcesContract(document) {
+  document = restoreAgent814FinalAnswerResourceContract(document)
+  if (document.info?.version !== "8.14.0") return document
+  const parent = structuredClone(document)
+  parent.components.schemas.LaunchRequest.properties.selected_resource_refs = structuredClone(agent813ResourceRefs)
+  parent.info.version = "8.13.0"
+  assert.equal(sha256(JSON.stringify(parent)), "df135b9477972cef9c1b58af1b7f3d5c1813e867e0ab7e9e902363941a37daf9", "Agent8.13 canonical resources parent drift")
+  return parent
+}
+
+export function restoreAgent812ResourceRefsRaw(source) {
+  source = restoreAgent813CanonicalResourcesRaw(source)
+  if (!source.includes('"version": "8.13.0"')) return source
+  const match = source.match(/          "selected_resource_refs": \{[\s\S]*?          \},\n          "personal_context": \{/u)
+  assert.equal(match?.length, 1, "Agent8.13 resource refs delta drift")
+  source = source.replace(match[0], '          "personal_context": {').replace('"version": "8.13.0"', '"version": "8.12.0"')
+  assert.equal(sha256(source), "94c497ea815eaccc545429756af9b8826d82c7f82a896d3a1fda972e03c71596", "Agent8.12 resource refs parent drift")
+  return source
+}
+
+export function restoreAgent811ProjectInstructionRaw(source) {
+  source = restoreAgent812ResourceRefsRaw(source)
+  if (!source.includes('"version": "8.12.0"')) return source
+  const match = source.match(/          "project_instruction": \{\n[\s\S]*?          \}\n/u)
+  assert.equal(match?.length, 1, "Agent8.12 project instruction delta drift")
+  source = source.replace(match[0], "").replace("          },\n        },", "          }\n        },")
+  source = source.replace('"version": "8.12.0"', '"version": "8.11.0"')
+  assert.equal(sha256(source), "ad34ba2c8080f6a459a52116f929ed2c5f017a742dcb5d17d0e165ac18f1772b", "Agent8.11 project instruction parent drift")
+  return source
+}
+
+export function restoreAgent811ProjectInstructionContract(document) {
+  document = restoreAgent813CanonicalResourcesContract(document)
+  if (document.info?.version === "8.13.0") {
+    const resourceParent = structuredClone(document)
+    delete resourceParent.components.schemas.LaunchRequest.properties.selected_resource_refs
+    resourceParent.info.version = "8.12.0"
+    assert.equal(
+      sha256(JSON.stringify(resourceParent)),
+      "51722eb1c75be7c5f61c3d55db5a0c21dfdc574d919f4fda55600b538e706d9c",
+      "Agent8.12 resource refs parent drift",
+    )
+    document = resourceParent
+  }
+  if (document.info?.version !== "8.12.0") return document
+  const parent = structuredClone(document)
+  delete parent.components.schemas.LaunchRequest.properties.project_instruction
+  parent.info.version = "8.11.0"
+  assert.equal(sha256(JSON.stringify(parent)), "bd241f7412be7bd194a6d06ac1c73559f01d6729980ed41350ee2fe9c4b78b11", "Agent8.11 project instruction parent drift")
+  return parent
+}
+
+export function restoreAgent85ActionDisplayContract(document) {
+  document = restoreAgent87FinalAnswerContract(document)
+  if (!["8.6.0", "8.7.0"].includes(document.info?.version)) return document
+  assert.equal(
+    sha256(JSON.stringify(document)),
+    document.info.version === "8.7.0"
+      ? "c4b3f7b6070bdcbf6acea505255abb1957e24941c2c78bb8f0ba4f786a5f6ce1"
+      : "f83500c445f6f45f1d297f37fcea7de71e1c6adad3282ce490eaf416ee4589ed",
+    "Agent action/capability complete child drift",
+  )
+  const parent = structuredClone(document)
+  delete parent.components.schemas.ChatActivity.oneOf[0].properties.action_title
+  const item = parent.components.schemas.RunDisplay.properties.activity_details.items
+  delete item.properties.tool_description
+  delete item.allOf
+  parent.info.version = "8.5.0"
+  assert.equal(
+    sha256(JSON.stringify(parent)),
+    "19858ea0a011017371361c7c952998714b639a5ad092272f271dd9c8de216adc",
+    "Agent8.5 complete action/capability parent drift",
+  )
+  return parent
+}
+
+export function restoreAgent84ActivityDetailsRaw(source) {
+  source = restoreAgent811ProjectInstructionRaw(source)
+  source = restoreAgent85ActionDisplayRaw(source)
+  assert.equal(sha256(source), "b000f24e88bf5e4f20718ae7f6b29c94ef96b2c6fe42f73ef7231695f438e897", "Agent8.5 complete raw child drift")
+  const replacements = [
+    ['    "version": "8.5.0"\n', '    "version": "8.4.0"\n'],
+    ['          "tool_facts",\n          "activity_details"\n', '          "tool_facts"\n'],
+    [
+      '          },\n          "activity_details": {\n            "type": "array",\n            "maxItems": 128,\n            "x-kokoro-unique-by": "activity_id",\n            "items": {\n              "type": "object",\n              "required": [\n                "activity_id",\n                "tool_name"\n              ],\n              "properties": {\n                "activity_id": {\n                  "type": "string",\n                  "minLength": 68,\n                  "maxLength": 68,\n                  "pattern": "^act_[0-9a-f]{64}(?![\\\\s\\\\S])"\n                },\n                "tool_name": {\n                  "type": "string",\n                  "minLength": 1,\n                  "maxLength": 120,\n                  "x-kokoro-utf8-byte-limit": 480,\n                  "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n                },\n                "target": {\n                  "type": "object",\n                  "required": [\n                    "kind",\n                    "name"\n                  ],\n                  "properties": {\n                    "kind": {\n                      "type": "string",\n                      "enum": [\n                        "file",\n                        "mcp_tool"\n                      ]\n                    },\n                    "name": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 120,\n                      "x-kokoro-utf8-byte-limit": 480,\n                      "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n                    },\n                    "virtual_path": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 4096,\n                      "x-kokoro-utf8-byte-limit": 4096,\n                      "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",\n                      "description": "Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument."\n                    }\n                  },\n                  "additionalProperties": false,\n                  "allOf": [\n                    {\n                      "if": {\n                        "properties": {\n                          "kind": {\n                            "const": "file"\n                          }\n                        }\n                      },\n                      "then": {\n                        "properties": {\n                          "name": {\n                            "pattern": "^(?!\\\\.{1,2}$)[^/\\\\\\\\:]+$"\n                          }\n                        }\n                      }\n                    },\n                    {\n                      "if": {\n                        "properties": {\n                          "kind": {\n                            "const": "mcp_tool"\n                          }\n                        }\n                      },\n                      "then": {\n                        "not": {\n                          "required": [\n                            "virtual_path"\n                          ]\n                        }\n                      }\n                    }\n                  ]\n                },\n                "input_preview": {\n                  "type": "object",\n                  "required": [\n                    "text",\n                    "truncated",\n                    "redacted"\n                  ],\n                  "properties": {\n                    "text": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 2048,\n                      "x-kokoro-utf8-byte-limit": 2048\n                    },\n                    "truncated": {\n                      "type": "boolean"\n                    },\n                    "redacted": {\n                      "type": "boolean"\n                    }\n                  },\n                  "additionalProperties": false\n                },\n                "output_preview": {\n                  "type": "object",\n                  "required": [\n                    "text",\n                    "truncated",\n                    "redacted"\n                  ],\n                  "properties": {\n                    "text": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 4096,\n                      "x-kokoro-utf8-byte-limit": 4096\n                    },\n                    "truncated": {\n                      "type": "boolean"\n                    },\n                    "redacted": {\n                      "type": "boolean"\n                    }\n                  },\n                  "additionalProperties": false\n                }\n              },\n              "additionalProperties": false\n            },\n            "description": "Private same-Run evidence-bound tool details only; missing fields remain unknown. Filtered bounded text is not a universal secret-free guarantee. Never Share, execution authority, HTML, autolinks or instructions."\n',
+      "",
+    ],
+  ]
+  for (const [from, to] of replacements) {
+    assert.equal(source.split(from).length - 1, 1, "Agent8.5 exact activity details delta drift")
+    source = source.replace(from, to)
+  }
+  assert.equal(sha256(source), "239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52", "Agent8.4 complete raw parent drift")
+  return source
+}
+export function restoreAgent83ToolFactsRaw(source) {
+  assert.equal(sha256(source), "239219e5a80427a74f8d89363c5a7a4fe2753f99c6b469b02bab7fba9ba44f52", "Agent8.4 complete raw child drift")
+  const replacements = [
+    [
+      '    "description": "Agent-owned execution admission, control, evidence and identity-scoped chat query boundary. The BFF consumes this contract; the Agent does not expose browser SSE or AG-UI.",\n    "version": "8.4.0"\n  },\n',
+      '    "description": "Agent-owned execution admission, control, evidence and identity-scoped chat query boundary. The BFF consumes this contract; the Agent does not expose browser SSE or AG-UI.",\n    "version": "8.3.0"\n  },\n',
+    ],
+    [
+      '          "display_skills",\n          "tool_paths",\n          "tool_facts"\n        ],\n',
+      '          "display_skills",\n          "tool_paths"\n        ],\n',
+    ],
+    [
+      '            }\n          },\n          "tool_facts": {\n            "type": "array",\n            "maxItems": 128,\n            "x-kokoro-unique-by": "activity_id",\n            "items": {\n              "type": "object",\n              "required": [\n                "activity_id"\n              ],\n              "properties": {\n                "activity_id": {\n                  "type": "string",\n                  "minLength": 68,\n                  "maxLength": 68,\n                  "pattern": "^act_[0-9a-f]{64}(?![\\\\s\\\\S])"\n                },\n                "display_detail": {\n                  "type": "object",\n                  "required": [\n                    "kind",\n                    "name"\n                  ],\n                  "properties": {\n                    "kind": {\n                      "type": "string",\n                      "enum": [\n                        "mcp_tool"\n                      ]\n                    },\n                    "name": {\n                      "type": "string",\n                      "minLength": 1,\n                      "maxLength": 120,\n                      "x-kokoro-utf8-byte-limit": 480,\n                      "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n                    }\n                  },\n                  "additionalProperties": false\n                },\n                "status": {\n                  "type": "string",\n                  "enum": [\n                    "failed"\n                  ]\n                }\n              },\n              "anyOf": [\n                {\n                  "required": [\n                    "display_detail"\n                  ]\n                },\n                {\n                  "required": [\n                    "status"\n                  ]\n                }\n              ],\n              "additionalProperties": false\n            },\n            "description": "Read-only exact original MCP activity facts: safe public names witnessed by successful same-Run calls, or independently proved failed journal outcomes. No source event or Run status mutation."\n          }\n',
+      "            }\n          }\n",
+    ],
+  ]
+  for (const [from, to] of replacements) {
+    assert.equal(source.split(from).length - 1, 1, "Agent8.4 exact tool facts delta drift")
+    source = source.replace(from, to)
+  }
+  assert.equal(sha256(source), "be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6", "Agent8.3 full raw parent drift")
+  return source
+}
+export function restoreAgent82DisplayRaw(source) {
+  assert.equal(sha256(source), "be642c2313fbaf447d4e37bda2a7920f867c3a06d39f7e0e82efaf212e7080d6", "Agent8.3 complete raw child drift")
+  const replacements = [
+    [
+      '      }\n    },\n    "/v1/runs/{run_id}/display": {\n      "get": {\n        "tags": [\n          "runs"\n        ],\n        "summary": "Read bounded identity-scoped Run display facts",\n        "operationId": "getRunDisplay",\n        "security": [\n          {\n            "AgentServiceBearer": []\n          }\n        ],\n        "parameters": [\n          {\n            "name": "run_id",\n            "in": "path",\n            "required": true,\n            "schema": {\n              "type": "string",\n              "minLength": 1\n            }\n          },\n          {\n            "$ref": "#/components/parameters/RequestId"\n          },\n          {\n            "$ref": "#/components/parameters/TenantRef"\n          },\n          {\n            "$ref": "#/components/parameters/SubjectRef"\n          },\n          {\n            "$ref": "#/components/parameters/SubjectKind"\n          },\n          {\n            "$ref": "#/components/parameters/ActorRef"\n          },\n          {\n            "$ref": "#/components/parameters/ActorKind"\n          },\n          {\n            "$ref": "#/components/parameters/AssertionRef"\n          }\n        ],\n        "x-kokoro-owner": "kokoro-agent",\n        "x-kokoro-visibility": "internal-owner",\n        "x-kokoro-stability": "stable",\n        "x-kokoro-idempotency": "read-only",\n        "x-kokoro-permission": "agent-service",\n        "responses": {\n          "200": {\n            "description": "Safe recovered display facts, at most 1MiB.",\n            "content": {\n              "application/json": {\n                "schema": {\n                  "$ref": "#/components/schemas/RunDisplayEnvelope"\n                }\n              }\n            }\n          },\n          "401": {\n            "$ref": "#/components/responses/Unauthorized"\n          },\n          "404": {\n            "$ref": "#/components/responses/NotFound"\n          },\n          "503": {\n            "$ref": "#/components/responses/Unavailable"\n          },\n          "400": {\n            "$ref": "#/components/responses/BadRequest"\n          }\n        },\n        "x-kokoro-read-budget": {\n          "total_timeout_seconds": 5,\n          "checkpoint_locators": 32,\n          "native_input_bytes": 8388608,\n          "query_body": "forbidden; Content-Length, Transfer-Encoding and Idempotency-Key forbidden"\n        }\n      }\n    }\n',
+      "      }\n    }\n",
+    ],
+    [
+      '            "$ref": "#/components/schemas/PreparedModelCallSnapshot"\n          },\n          "meta": {\n            "$ref": "#/components/schemas/Meta"\n          }\n        },\n        "additionalProperties": false\n      },\n      "SkillDisplay": {\n        "type": "object",\n        "required": [\n          "source_ref",\n          "name",\n          "virtual_path"\n        ],\n        "properties": {\n          "source_ref": {\n            "type": "string",\n            "minLength": 7,\n            "maxLength": 197,\n            "pattern": "^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\\\s\\\\S])"\n          },\n          "name": {\n            "type": "string",\n            "minLength": 1,\n            "maxLength": 120,\n            "x-kokoro-utf8-byte-limit": 480,\n            "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n          },\n          "virtual_path": {\n            "type": "string",\n            "minLength": 1,\n            "maxLength": 4096,\n            "x-kokoro-utf8-byte-limit": 4096,\n            "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",\n            "description": "Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument."\n          },\n          "revision": {\n            "type": "string",\n            "pattern": "^[1-9][0-9]{0,18}(?![\\\\s\\\\S])",\n            "x-kokoro-int64-decimal": true\n          }\n        },\n        "additionalProperties": false,\n        "x-kokoro-binding": "virtual_path must equal /.skills/{base64url(ASCII source_ref suffix)}/SKILL.md; revision only from this Run exact ResolvedSkill, absent if unproven"\n      },\n      "RunDisplay": {\n        "type": "object",\n        "required": [\n          "run_id",\n          "display_skills",\n          "tool_paths"\n        ],\n        "properties": {\n          "run_id": {\n            "type": "string",\n            "minLength": 1\n          },\n          "display_skills": {\n            "type": "array",\n            "maxItems": 16,\n            "items": {\n              "$ref": "#/components/schemas/SkillDisplay"\n            },\n            "x-kokoro-unique-by": "source_ref",\n            "x-kokoro-binding": "unique source_ref subset of original ready source_refs; no current catalog lookup"\n          },\n          "tool_paths": {\n            "type": "array",\n            "maxItems": 128,\n            "x-kokoro-unique-by": "activity_id",\n            "items": {\n              "type": "object",\n              "required": [\n                "activity_id",\n                "virtual_path"\n              ],\n              "properties": {\n                "activity_id": {\n                  "type": "string",\n                  "minLength": 68,\n                  "maxLength": 68,\n                  "pattern": "^act_[0-9a-f]{64}(?![\\\\s\\\\S])"\n                },\n                "virtual_path": {\n                  "type": "string",\n                  "minLength": 1,\n                  "maxLength": 4096,\n                  "x-kokoro-utf8-byte-limit": 4096,\n                  "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",\n                  "description": "Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument."\n                }\n              },\n              "additionalProperties": false\n            }\n          }\n        },\n        "additionalProperties": false,\n        "description": "Recovered safe display facts only. Missing facts remain unknown; source events and execution authority are unchanged. No completeness assertion."\n      },\n      "RunDisplayEnvelope": {\n        "type": "object",\n        "required": [\n          "data",\n          "meta"\n        ],\n        "properties": {\n          "data": {\n            "$ref": "#/components/schemas/RunDisplay"\n          },\n',
+      '            "$ref": "#/components/schemas/PreparedModelCallSnapshot"\n          },\n',
+    ],
+    [
+      '              }\n            },\n            "allOf": [\n              {\n                "if": {\n                  "required": [\n                    "display_skills"\n                  ]\n                },\n                "then": {\n                  "properties": {\n                    "phase": {\n                      "const": "ready"\n                    }\n                  }\n                }\n              }\n            ]\n          }\n',
+      "              }\n            }\n          }\n",
+    ],
+    [
+      '                ]\n              },\n              "display_skills": {\n                "type": "array",\n                "maxItems": 16,\n                "items": {\n                  "$ref": "#/components/schemas/SkillDisplay"\n                },\n                "x-kokoro-unique-by": "source_ref",\n                "x-kokoro-binding": "unique source_ref subset of original ready source_refs; no current catalog lookup"\n              }\n',
+      "                ]\n              }\n",
+    ],
+    [
+      '                      ]\n                    },\n                    "display_detail": {\n                      "not": {\n                        "required": [\n                          "virtual_path"\n                        ]\n                      }\n                    }\n',
+      "                      ]\n                    }\n",
+    ],
+    [
+      '                    "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n                  },\n                  "virtual_path": {\n                    "type": "string",\n                    "minLength": 1,\n                    "maxLength": 4096,\n                    "x-kokoro-utf8-byte-limit": 4096,\n                    "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",\n                    "description": "Validated absolute virtual backend path; never a host path, URL, secret or unproven raw argument."\n                  }\n',
+      '                    "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs"\n                  }\n',
+    ],
+    [
+      '    "description": "Agent-owned execution admission, control, evidence and identity-scoped chat query boundary. The BFF consumes this contract; the Agent does not expose browser SSE or AG-UI.",\n    "version": "8.3.0"\n  },\n',
+      '    "description": "Agent-owned execution admission, control, evidence and identity-scoped chat query boundary. The BFF consumes this contract; the Agent does not expose browser SSE or AG-UI.",\n    "version": "8.2.0"\n  },\n',
+    ],
+  ]
+  for (const [from, to] of replacements) {
+    assert.equal(source.split(from).length - 1, 1, "Agent8.3 exact raw delta drift")
+    source = source.replace(from, to)
+  }
+  assert.equal(sha256(source), "8a0b9973661205b8e29020934c39e5c7ab629b4c42db4e79c845a410d96efa2a", "Agent8.2 full raw parent drift")
+  return source
+}
+// Build/test-only strict full owner child inverse. Production generation requires the current exact blob above.
+export function restoreAgent84ActivityDetailsContract(document) {
+  document = restoreAgent811ProjectInstructionContract(document)
+  document = restoreAgent85ActionDisplayContract(document)
+  if (document.info?.version !== "8.5.0" && !document.components?.schemas?.RunDisplay?.properties?.activity_details) return document
+  assert.equal(
+    sha256(JSON.stringify(document)),
+    "19858ea0a011017371361c7c952998714b639a5ad092272f271dd9c8de216adc",
+    "Agent8.5 complete activity details child drift",
+  )
+  const parent = structuredClone(document)
+  delete parent.components.schemas.RunDisplay.properties.activity_details
+  parent.components.schemas.RunDisplay.required = ["run_id", "display_skills", "tool_paths", "tool_facts"]
+  parent.info.version = "8.4.0"
+  assert.equal(
+    sha256(JSON.stringify(parent)),
+    "aece8b1ea4d83f63b224f0b219afba99e1c5646f4b698d2257562e36e0c36528",
+    "Agent8.4 complete activity details parent drift",
+  )
+  return parent
+}
+export function restoreAgent83ToolFactsContract(document) {
+  document = restoreAgent84ActivityDetailsContract(document)
+  if (document.info?.version !== "8.4.0" && !document.components?.schemas?.RunDisplay?.properties?.tool_facts) return document
+  assert.equal(sha256(JSON.stringify(document)), "aece8b1ea4d83f63b224f0b219afba99e1c5646f4b698d2257562e36e0c36528", "Agent8.4 complete tool facts child drift")
+  const parent = structuredClone(document)
+  delete parent.components.schemas.RunDisplay.properties.tool_facts
+  parent.components.schemas.RunDisplay.required = ["run_id", "display_skills", "tool_paths"]
+  parent.info.version = "8.3.0"
+  assert.equal(sha256(JSON.stringify(parent)), "055f99061318807d48f2a53a8e6290edfc31442623908c145d5cd6b67f0f8188", "Agent8.3 complete tool facts parent drift")
+  return parent
+}
+export function restoreAgent82DisplayContract(document) {
+  document = restoreAgent83ToolFactsContract(document)
+  if (document.info?.version !== "8.3.0" && !document.components?.schemas?.RunDisplay) return document
+  assert.equal(sha256(JSON.stringify(document)), "055f99061318807d48f2a53a8e6290edfc31442623908c145d5cd6b67f0f8188", "Agent8.3 complete display child drift")
+  const parent = structuredClone(document),
+    schemas = parent.components.schemas
+  delete parent.paths["/v1/runs/{run_id}/display"]
+  for (const name of ["SkillDisplay", "RunDisplay", "RunDisplayEnvelope"]) delete schemas[name]
+  delete schemas.ChatActivity.oneOf[0].properties.display_detail.properties.virtual_path
+  delete schemas.ChatActivity.oneOf[0].allOf[1].then.properties.display_detail
+  delete schemas.ChatActivity.oneOf[2].properties.display_skills
+  delete schemas.ChatActivity.oneOf[2].allOf
+  parent.info.version = "8.2.0"
+  assert.equal(sha256(JSON.stringify(parent)), "0599b6504973415a9410e09703b8ea890ad98ef20702192eb6d6d19eda544b3a", "Agent8.2 complete parent drift")
+  return parent
+}
+
 export function assertInteractionContractSchema(document) {
+  const currentDocument = document
+  document = restoreAgent82DisplayContract(document)
   const schemas = record(document.components?.schemas, "Agent schemas")
   assert.deepEqual(schemas.ChatEvent["x-kokoro-decoded-payloads"], {
     discriminator: "event_type",
@@ -163,6 +522,89 @@ export function assertInteractionContractSchema(document) {
     ["tool", "subagent", "skill"],
   )
   for (const branch of schemas.ChatActivity.oneOf) assert.equal(branch.additionalProperties, false)
+  assert.deepEqual(
+    schemas.ChatActivity.oneOf[0].properties.display_code,
+    {
+      type: "string",
+      enum: [
+        "tool.execution",
+        "tool.file.read",
+        "tool.mcp.discover",
+        "tool.mcp.describe",
+        "tool.mcp.call",
+        "tool.web.search",
+        "tool.web.fetch",
+        "tool.file.write",
+        "tool.file.deliver",
+      ],
+    },
+    "Agent tool display closed set drifted",
+  )
+  assert.deepEqual(
+    schemas.ChatActivity.oneOf[1].properties.display_code,
+    { type: "string", const: "subagent.execution" },
+    "Agent subagent display branch drifted",
+  )
+  const tool = schemas.ChatActivity.oneOf[0]
+  assert.deepEqual(tool.required, ["activity", "activity_id", "segment_id", "status", "display_code"])
+  assert.deepEqual(Object.keys(tool.properties), [...tool.required, "display_detail"])
+  assert.deepEqual(
+    tool.properties.display_detail,
+    {
+      type: "object",
+      required: ["kind", "name"],
+      properties: {
+        kind: { type: "string", enum: ["file", "mcp_tool"] },
+        name: {
+          type: "string",
+          minLength: 1,
+          maxLength: 120,
+          "x-kokoro-utf8-byte-limit": 480,
+          "x-kokoro-unicode-domain": "NFC Unicode scalars; no Cc, Cf or Cs",
+        },
+      },
+      additionalProperties: false,
+    },
+    "Agent tool detail closed domain drifted",
+  )
+  assert.deepEqual(
+    tool.allOf,
+    [
+      {
+        if: {
+          required: ["display_detail"],
+          properties: {
+            display_detail: { properties: { kind: { const: "file" } } },
+          },
+        },
+        then: {
+          properties: {
+            display_code: {
+              enum: ["tool.file.read", "tool.file.write", "tool.file.deliver"],
+            },
+            display_detail: {
+              properties: { name: { pattern: "^(?!\\.{1,2}$)[^/\\\\:]+$" } },
+            },
+          },
+        },
+      },
+      {
+        if: {
+          required: ["display_detail"],
+          properties: {
+            display_detail: { properties: { kind: { const: "mcp_tool" } } },
+          },
+        },
+        then: {
+          properties: {
+            display_code: { enum: ["tool.mcp.describe", "tool.mcp.call"] },
+          },
+        },
+      },
+    ],
+    "Agent tool detail category conditions drifted",
+  )
+  assert.deepEqual(Object.keys(schemas.ChatActivity.oneOf[1].properties), ["activity", "activity_id", "segment_id", "status", "display_code"])
   const skill = schemas.ChatActivity.oneOf[2]
   assert.equal(skill.properties.source_refs.minItems, 1)
   assert.equal(skill.properties.source_refs.maxItems, 16)
@@ -170,10 +612,48 @@ export function assertInteractionContractSchema(document) {
   assert.equal(skill.properties.source_refs["x-kokoro-json-byte-limit"], 4096)
   assert.deepEqual(skill.then, { required: ["error_code"] })
   assert.deepEqual(skill.else, { not: { required: ["error_code"] } })
-  return schemas
+  return currentDocument.components.schemas
 }
 
 function schemaZod(schema) {
+  if (schema.properties?.final_message_id && schema.properties?.status) {
+    assert.deepEqual(
+      schema.allOf,
+      [
+        {
+          if: { required: ["final_message_id"] },
+          then: { properties: { status: { const: "completed" } } },
+        },
+      ],
+      "Agent final answer success condition drifted",
+    )
+    const base = { ...schema }
+    delete base.allOf
+    delete base.properties
+    base.properties = { ...schema.properties }
+    // Compile the published condition; recursive lowering below owns all field validation.
+    const fields = Object.entries(base.properties).map(
+      ([name, value]) => JSON.stringify(name) + ":" + schemaZod(value) + ((base.required ?? []).includes(name) ? "" : ".optional()"),
+    )
+    return (
+      "z.object({" +
+      fields.join(",") +
+      '}).strict().refine((value) => value.final_message_id === undefined || value.status === "completed", "Final answer requires completed run")'
+    )
+  }
+  // The new owner RunDisplay adjunct uses required-only anyOf over shared closed fields.
+  // Lower only this exact shape; do not turn generic required-only nodes into unknown unions.
+  if (schema.type === "object" && schema.anyOf) {
+    assert.deepEqual(Object.keys(schema.properties), ["activity_id", "display_detail", "status"], "Agent tool fact fields drifted")
+    assert.deepEqual(schema.required, ["activity_id"], "Agent tool fact required identity drifted")
+    assert.deepEqual(schema.anyOf, [{ required: ["display_detail"] }, { required: ["status"] }], "Agent tool fact evidence alternatives drifted")
+    assert.equal(schema.additionalProperties, false, "Agent tool fact must be closed")
+    const base = { ...schema }
+    delete base.anyOf
+    return (
+      schemaZod(base) + '.refine((value) => value.display_detail !== undefined || value.status !== undefined, "Tool fact requires proved detail or failure")'
+    )
+  }
   if (schema.$ref) return "z" + schema.$ref.split("/").at(-1)
   if (schema.oneOf || schema.anyOf) return "z.union([" + (schema.oneOf ?? schema.anyOf).map(schemaZod).join(",") + "])"
   if (schema.const !== undefined) return "z.literal(" + JSON.stringify(schema.const) + ")"
@@ -206,7 +686,7 @@ async function generateDecodedValidators(directory, document) {
   const schemas = assertInteractionContractSchema(document)
   const file = path.join(directory, "zod.gen.ts")
   let source = await readFile(file, "utf8")
-  for (const name of ["CancelControl", "SteerControl", "ResumeDecision", "ResumeControl"]) {
+  for (const name of ["CancelControl", "SteerControl", "ResumeDecision", "ResumeControl", "SkillDisplay", "RunDisplay", "RunDisplayEnvelope"]) {
     const start = source.indexOf("export const z" + name + " =")
     const end = source.indexOf("export const ", start + 1)
     assert.ok(start >= 0 && end > start, "generated control validator missing: " + name)
@@ -221,6 +701,7 @@ async function generateDecodedValidators(directory, document) {
     "ChatInteractionState",
     "ChatTodo",
     "ChatActivity",
+    "ChatRunCompleted",
   ]) {
     assert.ok(!source.includes("export const z" + name + " ="), "decoded schema is already generated: " + name)
     source += "\nexport const z" + name + " = " + schemaZod(schemas[name]) + ";\n"
@@ -265,6 +746,13 @@ export function parseAgentFailure(value: unknown): AgentFailureProfile | null {
 
 function processProfileSource(document) {
   const schemas = assertInteractionContractSchema(document)
+  assert.equal(schemas.ChatEvent["x-kokoro-decoded-payloads"].mapping.delivery, "#/components/schemas/ChatDelivery")
+  const delivery = schemas.ChatDelivery
+  assert.equal(delivery.additionalProperties, false)
+  assert.ok(!delivery.required.includes("display_path"))
+  const deliveryDisplayPath = delivery.properties.display_path
+  assert.equal(deliveryDisplayPath.type, "string")
+  assert.equal(deliveryDisplayPath["x-kokoro-utf8-byte-limit"], deliveryDisplayPath.maxLength)
   const todo = schemas.ChatTodo
   const todoItems = todo.properties.todos
   const todoContent = todoItems.items.properties.content
@@ -275,7 +763,29 @@ function processProfileSource(document) {
   assert.deepEqual(tool.properties.activity_id, subagent.properties.activity_id)
   assert.deepEqual(tool.properties.activity_id, skill.properties.activity_id)
   assert.deepEqual(tool.properties.segment_id, subagent.properties.segment_id)
+  const detailName = tool.properties.display_detail.properties.name
+  const unicodeDomain = /^(NFC) Unicode scalars; no (Cc), (Cf) or (Cs)$/u.exec(detailName["x-kokoro-unicode-domain"])
+  assert.ok(unicodeDomain, "Agent tool detail Unicode domain is unsupported")
   const profile = {
+    display: {
+      skill: schemas.SkillDisplay,
+      read: schemas.RunDisplay,
+      activitySkill: skill.properties.display_skills,
+      virtualPath: tool.properties.display_detail.properties.virtual_path,
+    },
+    actionTitle: tool.properties.action_title,
+    deliveryDisplayPath,
+    toolDetail: {
+      minScalars: detailName.minLength,
+      maxScalars: detailName.maxLength,
+      utf8ByteLimit: detailName["x-kokoro-utf8-byte-limit"],
+      fileNamePattern: tool.allOf[0].then.properties.display_detail.properties.name.pattern,
+      normalization: unicodeDomain[1],
+      forbiddenCategories: unicodeDomain.slice(2),
+      codesByKind: Object.fromEntries(
+        tool.allOf.map((condition) => [condition.if.properties.display_detail.properties.kind.const, condition.then.properties.display_code.enum]),
+      ),
+    },
     todo: {
       jsonByteLimit: todo["x-kokoro-json-byte-limit"],
       maxItems: todoItems.maxItems,
@@ -338,6 +848,7 @@ async function verifyOwnerSources() {
   const failureArtifact = provenance.generated_artifacts?.find((artifact) => artifact.path === "src/kokoro_agent/protocol/run_failure_generated.py")
   assert.equal(failureArtifact?.source, "contract/openapi/v1/openapi.json", "Agent failure artifact source path drifted")
   assert.equal(failureArtifact?.source_sha256, ownerDigest, "Agent failure artifact source digest drifted")
+  restoreAgent82DisplayRaw(restoreAgent83ToolFactsRaw(restoreAgent84ActivityDetailsRaw(vendor.toString("utf8"))))
   const document = JSON.parse(vendor.toString("utf8"))
   assert.equal(document.info?.version, ownerContractVersion, "Agent HTTP contract version drifted")
   assertFailureContractSchema(document)
@@ -447,7 +958,7 @@ async function normalizeGeneratorCompatibility(directory) {
   ])
   const zodPath = path.join(directory, "zod.gen.ts")
   let zodSource = await readFile(zodPath, "utf8")
-  for (const schema of ["Meta", "Error", "ErrorEnvelope", "LaunchReceipt", "LaunchReceiptEnvelope", "ChatEvent", "ReplayPage", "ReplayPageEnvelope"]) {
+  for (const schema of ["Meta", "Error", "ErrorEnvelope", "LaunchReceipt", "LaunchReceiptEnvelope", "ChatEvent", "ReplayPage", "ReplayPageEnvelope", "WorkspaceOutputVersion"]) {
     const expression = new RegExp(`(export const z${schema} = z\\.object\\(\\{[\\s\\S]*?\\n)\\}\\);`)
     assert.match(zodSource, expression, `${schema} generated object was not found`)
     zodSource = zodSource.replace(expression, "$1}).strict();")
@@ -463,7 +974,11 @@ async function normalizeGeneratorCompatibility(directory) {
 
 async function run(command, args, options = {}) {
   await new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: root, stdio: "inherit", ...options })
+    const child = spawn(command, args, {
+      cwd: root,
+      stdio: "inherit",
+      ...options,
+    })
     child.once("error", reject)
     child.once("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${path.basename(command)} exited ${code}`))))
   })
@@ -492,9 +1007,118 @@ export function assertGeneratedAllowlist(files, directories, label) {
   assert.deepEqual(directories.slice().sort(), generatedDirectories.slice().sort(), `${label} directory allowlist drifted`)
 }
 
+async function generateMcpSelectionValidator(directory, document) {
+  const schema = document.components.schemas.LaunchRequest.properties.selected_mcp_connection_ids
+  assert.equal(schema.type, "array")
+  assert.equal(schema.items.type, "string")
+  assert.equal(schema.uniqueItems, true)
+  assert.equal(schema["x-kokoro-json-byte-limit"], 4096)
+  const file = path.join(directory, "zod.gen.ts")
+  let source = await readFile(file, "utf8")
+  const property = /^[ \t]*selected_mcp_connection_ids:\s*z\.array\([^\r\n]*$/gmu
+  const matches = [...source.matchAll(property)]
+  assert.equal(matches.length, 1, "generated exact MCP selection property drifted")
+  const item = schema.items
+  const expression = `selected_mcp_connection_ids: z.array(z.string().min(${item.minLength}).max(${item.maxLength}).regex(new RegExp(${JSON.stringify(item.pattern)}, "u"))).max(${schema.maxItems}).refine(values => new Set(values).size === values.length && new TextEncoder().encode(JSON.stringify(values)).byteLength <= ${schema["x-kokoro-json-byte-limit"]}).optional(),`
+  source = source.replace(property, () => expression)
+  await writeFile(file, source)
+}
+
+async function generateCustomApiSelectionValidator(directory, document) {
+  const schema = document.components.schemas.LaunchRequest.properties.selected_custom_api_profiles
+  assert.equal(schema.type, "array")
+  assert.equal(schema.uniqueItems, true)
+  assert.equal(schema["x-kokoro-unique-by"], "profile_id")
+  assert.equal(schema.items.additionalProperties, false)
+  assert.deepEqual(schema.items.required, ["profile_id", "expected_state_version"])
+  const { profile_id: id, expected_state_version: version } = schema.items.properties
+  const file = path.join(directory, "zod.gen.ts")
+  let source = await readFile(file, "utf8")
+  const property =
+    /^[ \t]*selected_custom_api_profiles: z\.array\(z\.object\(\{\r?\n[ \t]+profile_id:[^\r\n]+\r?\n[ \t]+expected_state_version:[^\r\n]+\r?\n[ \t]+\}\)\)\.max\(\d+\)\.optional\(\),$/gmu
+  assert.equal([...source.matchAll(property)].length, 1, "generated exact Custom API selection property drifted")
+  const expression = `selected_custom_api_profiles: z.array(z.object({profile_id: z.string().min(${id.minLength}).max(${id.maxLength}).regex(new RegExp(${JSON.stringify(id.pattern)}, "u")), expected_state_version: z.number().int().min(${version.minimum}).max(${version.maximum})}).strict()).max(${schema.maxItems}).refine(values => new Set(values.map(value => value.profile_id)).size === values.length).optional(),`
+  source = source.replace(property, () => expression)
+  await writeFile(file, source)
+}
+
+// Hey API strips closed nested objects and does not enforce the owner array's identity/byte bounds.
+// Compile this small published canonical graph directly, retaining escaped owner patterns exactly.
+function canonicalResourceSchemaZod(schema) {
+  if (schema.const !== undefined) return `z.literal(${JSON.stringify(schema.const)})`
+  if (schema.enum) return `z.enum(${JSON.stringify(schema.enum)})`
+  if (schema.oneOf) return `z.union([${schema.oneOf.map(canonicalResourceSchemaZod).join(",")}])`
+  if (schema.type === "string") {
+    let expression = "z.string()"
+    if (schema.minLength !== undefined) expression += `.min(${schema.minLength})`
+    if (schema.maxLength !== undefined) expression += `.max(${schema.maxLength})`
+    if (schema.pattern) expression += `.regex(new RegExp(${JSON.stringify(schema.pattern)}, "u"))`
+    if (schema.not?.enum) expression += `.refine(value => !${JSON.stringify(schema.not.enum)}.includes(value))`
+    if (schema["x-kokoro-utf8-max-bytes"] !== undefined)
+      expression += `.refine(value => new TextEncoder().encode(value).byteLength <= ${schema["x-kokoro-utf8-max-bytes"]})`
+    return expression
+  }
+  assert.equal(schema.type, "object", "canonical resource schema node drifted")
+  assert.equal(schema.additionalProperties, false, "canonical resource object must be closed")
+  assert.deepEqual(Object.keys(schema.properties).sort(), schema.required.slice().sort(), "canonical resource fields must be required")
+  return `z.object({${Object.entries(schema.properties)
+    .map(([key, value]) => `${JSON.stringify(key)}:${canonicalResourceSchemaZod(value)}`)
+    .join(",")}}).strict()`
+}
+
+async function generateCanonicalResourceValidator(directory, document) {
+  const schema = document.components.schemas.LaunchRequest.properties.selected_resource_refs
+  assert.equal(schema.type, "array")
+  assert.equal(schema.maxItems, 16)
+  assert.equal(schema.uniqueItems, true)
+  assert.equal(schema["x-kokoro-json-byte-limit"], 32768)
+  const file = path.join(directory, "zod.gen.ts")
+  let source = await readFile(file, "utf8")
+  const property = /^[ \t]*selected_resource_refs:[\s\S]*?(?=^[ \t]*personal_context:)/gmu
+  assert.equal([...source.matchAll(property)].length, 1, "generated exact canonical resource property drifted")
+  const expression = `selected_resource_refs: z.array(${canonicalResourceSchemaZod(schema.items)}).max(${schema.maxItems}).refine(values => new Set(values.map(value => value.kind + ":" + value.resource_id)).size === values.length && Array.from(JSON.stringify(values)).reduce((size, char) => size + (char.charCodeAt(0) >= 127 ? char.length * 6 : 1), 0) <= ${schema["x-kokoro-json-byte-limit"]} && values.every(value => value.kind === "asset" ? value.resource_id === value.asset_id : value.kind !== "final_answer" || String(new TextEncoder().encode(value.content).byteLength) === value.size_bytes)).optional(),\n`
+  source = source.replace(property, () => expression)
+  await writeFile(file, source)
+}
+
+async function normalizeProjectInstructionPattern(directory, document) {
+  // Hey API emits the ECMAScript trim-whitespace exclusion as a literal control-character class,
+  // which is not valid TypeScript. Preserve the owner pattern through RegExp construction.
+  const pattern = document.components.schemas.LaunchRequest.properties.project_instruction.pattern
+  const malformed = pattern.replace(
+    /\\u(?:0009|000a|000b|000c|000d|0020|0085|00a0|1680|2000|2001|2002|2003|2004|2005|2006|2007|2008|2009|200a|2028|2029|202f|205f|3000)/gu,
+    (value) => String.fromCodePoint(Number.parseInt(value.slice(2), 16)),
+  )
+  assert.notEqual(malformed, pattern, "Agent 8.12 project instruction pattern must need normalization")
+  await normalizeFile(directory, "zod.gen.ts", [
+    [`regex(/${malformed}/)`, `regex(new RegExp(${JSON.stringify(pattern)}, "u"))`, 1, "owner project instruction whitespace pattern"],
+  ])
+}
+
+async function normalizePersonalContextPatterns(directory, document) {
+  // Hey API 0.99 decodes these escaped UTF-16 classes into NUL and replacement
+  // characters. Restore the exact owner patterns; BFF launch paths still reject the field.
+  const schema = document.components.schemas.LaunchRequest.properties.personal_context.oneOf[1].properties
+  const patterns = [
+    [schema.profile.oneOf[1].properties.nickname.pattern, 4],
+    [schema.knowledge.properties.items.items.properties.name.pattern, 3],
+  ]
+  await normalizeFile(
+    directory,
+    "zod.gen.ts",
+    patterns.map(([pattern, count]) => {
+      const malformed = pattern.replace("\\u0000", "\u0000").replace(/\\uD(?:800|FFF)/gu, "\ufffd")
+      assert.notEqual(malformed, pattern, "Agent 8.11 escaped pattern must need normalization")
+      return [`regex(/${malformed}/)`, `regex(new RegExp(${JSON.stringify(pattern)}, "u"))`, count, "owner UTF-16 character class"]
+    }),
+  )
+}
+
 async function generate(directory) {
   const cli = path.join(root, "node_modules/@hey-api/openapi-ts/bin/run.js")
-  await run(process.execPath, [cli, "--silent", "-f", configPath], { env: { ...process.env, AGENT_HTTP_CLIENT_OUTPUT: directory } })
+  await run(process.execPath, [cli, "--silent", "-f", configPath], {
+    env: { ...process.env, AGENT_HTTP_CLIENT_OUTPUT: directory },
+  })
   const ownerDocument = JSON.parse(await readFile(vendorPath, "utf8"))
   await writeFile(path.join(directory, "failure-profile.gen.ts"), failureProfileSource(ownerDocument))
   await writeFile(path.join(directory, "process-profile.gen.ts"), processProfileSource(ownerDocument))
@@ -502,10 +1126,15 @@ async function generate(directory) {
   assertGeneratedAllowlist(tree.files, tree.directories, "generated")
   await normalizeGeneratorCompatibility(directory)
   await generateDecodedValidators(directory, ownerDocument)
+  await generateMcpSelectionValidator(directory, ownerDocument)
+  await generateCustomApiSelectionValidator(directory, ownerDocument)
+  await generateCanonicalResourceValidator(directory, ownerDocument)
+  await normalizePersonalContextPatterns(directory, ownerDocument)
+  await normalizeProjectInstructionPattern(directory, ownerDocument)
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
-    ["controlRun", "createRun", "replaySessionEvents"],
+    ["controlRun", "createRun", "getRunDisplay", "replaySessionEvents"],
     "Agent HTTP generated operation surface drifted",
   )
   const prettier = path.join(root, "node_modules/prettier/bin/prettier.cjs")
@@ -524,7 +1153,7 @@ async function manifestFor(directory) {
   const packageJson = JSON.parse(packageDocument)
   assert.equal(sha256(vendor), ownerDigest, "vendored AGENT contract digest drifted")
   assert.equal(sha256(provenance), provenanceDigest, "vendored AGENT provenance digest drifted")
-  assert.equal(nodeVersion, "22.22.2\n", ".node-version must pin Node 22.22.2")
+  assert.equal(nodeVersion, "24.20.0\n", ".node-version must pin Node 24.20.0")
   assert.equal(packageJson.packageManager, "pnpm@11.25.0")
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
   assert.equal(packageJson.devDependencies.prettier, "3.9.6")
@@ -548,7 +1177,7 @@ async function manifestFor(directory) {
       config_path: "openapi-ts.agent.config.ts",
       config_sha256: sha256(config),
     },
-    runtime: { node: "22.22.2", pnpm: "11.25.0", zod: "4.5.4" },
+    runtime: { node: process.versions.node, pnpm: "11.25.0", zod: "4.5.4" },
     lockfile_sha256: sha256(lockfile),
     generated: await Promise.all(
       generatedFiles.map(async (file) => ({
@@ -563,6 +1192,8 @@ async function manifestFor(directory) {
 async function main() {
   const mode = process.argv[2]
   assert.ok(mode === "--write" || mode === "--check", "expected --write or --check")
+  assert.equal(process.versions.node, "24.20.0", "Consumer generation requires pinned Node 24.20.0")
+  assert.equal(await readFile(path.join(root, ".node-version"), "utf8"), "24.20.0\n", ".node-version must pin Node 24.20.0")
   await verifyOwnerSources()
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "kokoro-agent-http-"))
   const temporaryOutput = path.join(temporaryRoot, "generated")

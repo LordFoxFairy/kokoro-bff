@@ -1,5 +1,5 @@
 import { parseSkillSourceSelection } from "../../domain/chat/skill-source-selection.js"
-import type { MoveConversationReceipt, MoveConversationResult } from "../../application/ports/chat-repository.js"
+import type { MoveConversationReceipt, MoveConversationResult } from "../../application/chat/types.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { AgentFailureCode, Message, MessageRole, MessageStatus } from "../../domain/chat/message.js"
 import type { Share } from "../../domain/chat/share.js"
@@ -17,6 +17,9 @@ export type ConversationRow = {
 }
 
 export type MessageRow = {
+  origin?: string
+  regenerated_from_message_id?: string | null
+  regeneration_user_message_id?: string | null
   message_id: string
   tenant_id: string
   conversation_id: string
@@ -127,6 +130,9 @@ export function messageFromRow(row: MessageRow): Message {
     role: row.role,
     content: row.content,
     selectedSkillSourceRefs,
+    ...(row.origin === "regeneration_answer" && typeof row.regenerated_from_message_id === "string"
+      ? { regeneratedFromMessageId: row.regenerated_from_message_id }
+      : {}),
     status: row.status,
     failure: row.agent_failure_code === null ? null : { source: "agent", code: row.agent_failure_code, retryable: row.agent_failure_retryable as boolean },
     messageSeq: sequence,

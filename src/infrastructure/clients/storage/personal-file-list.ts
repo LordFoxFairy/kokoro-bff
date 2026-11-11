@@ -1,9 +1,17 @@
 import { createClient, ConnectError, Code, type Client, type Transport } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
-import type { ProjectResourcePageInput } from "../../../application/project-resource-list.types.js"
+import type { LibraryFileType, PersonalFilePageInput } from "../../../application/library-file-filter.js"
 import { ProjectResourceError } from "../../../application/project-resource.error.js"
-import { StorageService } from "../../../generated/storage-connect/kokoro/storage/v3/storage_pb.js"
+import { PersonalLibraryFileType, StorageService } from "../../../generated/storage-connect/kokoro/storage/v3/storage_pb.js"
 import { parseCleanAssetPage } from "./client.js"
+
+const wireFileType = {
+  all: PersonalLibraryFileType.UNSPECIFIED,
+  documents: PersonalLibraryFileType.DOCUMENTS,
+  images: PersonalLibraryFileType.IMAGES,
+  media: PersonalLibraryFileType.MEDIA,
+  other: PersonalLibraryFileType.OTHER,
+} satisfies Record<LibraryFileType, PersonalLibraryFileType>
 
 export type PersonalFileContext = Readonly<{ tenantId: string; subjectId: string; requestId: string }>
 
@@ -34,9 +42,12 @@ export class PersonalFileListClient {
     }
   }
 
-  async listAssets(input: ProjectResourcePageInput, signal: AbortSignal) {
+  async listAssets(input: PersonalFilePageInput, signal: AbortSignal) {
     try {
-      const page = await this.client.listAssets(input, { headers: this.headers, signal })
+      const page = await this.client.listAssets(
+        { limit: input.limit, cursor: input.cursor, query: input.query, fileType: wireFileType[input.type] },
+        { headers: this.headers, signal },
+      )
       const validated = parseCleanAssetPage(page, input)
       return { items: validated.items.map((item) => ({ kind: "file" as const, ...item })), next_cursor: validated.next_cursor }
     } catch (error) {

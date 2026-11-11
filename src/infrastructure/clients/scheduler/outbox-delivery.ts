@@ -1,7 +1,7 @@
 import type { BffConfig } from "../../../config/runtime.js"
 import { isRecord } from "../../../domain/json.js"
 import { parseUtcTimestamp, type ScheduledTaskFact } from "../../../domain/scheduled-task/task.js"
-import type { ScheduledTaskOutboxDeliveryPort, ScheduledTaskOutboxDeliveryResult } from "../../../application/ports/scheduled-task-outbox-delivery.js"
+import type { ScheduledTaskOutboxDeliveryPort, ScheduledTaskOutboxDeliveryResult } from "../../../application/scheduled/scheduled-task-outbox-delivery.js"
 import {
   scheduledTaskOutboxTaskFromPayload,
   type ScheduledTaskOutboxCommand,
