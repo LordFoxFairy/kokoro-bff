@@ -1,6 +1,10 @@
 import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg"
 import { randomUUID } from "node:crypto"
 
+import type { IdempotencyReceipt, MutationTicket } from "../../application/idempotency.js"
+import { PENDING_RECEIPT_STATUS } from "../../application/ports/idempotency-repository.js"
+import { PostgresIdempotencyRepository } from "./idempotency-repository.js"
+
 import type { Project, ProjectInstructionRevision } from "../../contracts/index.js"
 import type { ProjectLookup, ProjectOwnerScope } from "../../application/projects/types.js"
 import {
@@ -107,7 +111,7 @@ export function createProjectReadStore(pool: Pick<Pool, "query" | "connect">) {
 
 export type ProjectReadStore = ReturnType<typeof createProjectReadStore>
 
-export function createProjectMutationStore(pool: Pick<Pool, "query" | "connect">) {
+function projectMutationCommands(pool: Pick<Pool, "query">) {
   async function create(scope: ProjectOwnerScope, name: string, description: string): Promise<Project> {
     const projectId = `project_${randomUUID()}`
     const slug =
@@ -132,33 +136,44 @@ export function createProjectMutationStore(pool: Pick<Pool, "query" | "connect">
   }
 
   async function updateInstruction(scope: ProjectOwnerScope, idOrSlug: string, instruction: string): Promise<Project | null> {
+    const project = await pool.query<ProjectRow>(
+      `UPDATE bff_project SET instruction = $4, updated_at = CURRENT_TIMESTAMP(3)
+          WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL AND (project_id = $3 OR slug = $3)
+          RETURNING project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at`,
+      [scope.tenantId, scope.subjectId, idOrSlug, instruction],
+    )
+    const row = project.rows[0]
+    if (row === undefined) return null
+    await pool.query(
+      `UPDATE bff_project_instruction_revision SET current = false
+          WHERE tenant_id = $1 AND project_id = $2`,
+      [scope.tenantId, row.project_id],
+    )
+    await pool.query(
+      `INSERT INTO bff_project_instruction_revision
+          (revision_id, tenant_id, project_id, instruction, actor_id, current)
+         VALUES ($1, $2, $3, $4, $5, true)`,
+      [`project-instruction-${randomUUID()}`, scope.tenantId, row.project_id, instruction, scope.subjectId],
+    )
+    return projectFromRow(row)
+  }
+
+  return { create, updateInstruction }
+}
+
+export type ProjectMutationReceiptResult = { kind: "receipt"; receipt: IdempotencyReceipt } | { kind: "conflict" } | { kind: "missing" }
+
+export function createProjectMutationStore(pool: Pick<Pool, "query" | "connect">) {
+  const commands = projectMutationCommands(pool)
+
+  async function transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await pool.connect()
     try {
       await client.query("BEGIN")
-      const project = await client.query<ProjectRow>(
-        `UPDATE bff_project SET instruction = $4, updated_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL AND (project_id = $3 OR slug = $3)
-          RETURNING project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at`,
-        [scope.tenantId, scope.subjectId, idOrSlug, instruction],
-      )
-      const row = project.rows[0]
-      if (row === undefined) {
-        await client.query("ROLLBACK")
-        return null
-      }
-      await client.query(
-        `UPDATE bff_project_instruction_revision SET current = false
-          WHERE tenant_id = $1 AND project_id = $2`,
-        [scope.tenantId, row.project_id],
-      )
-      await client.query(
-        `INSERT INTO bff_project_instruction_revision
-          (revision_id, tenant_id, project_id, instruction, actor_id, current)
-         VALUES ($1, $2, $3, $4, $5, true)`,
-        [`project-instruction-${randomUUID()}`, scope.tenantId, row.project_id, instruction, scope.subjectId],
-      )
+      await client.query("SELECT set_config('statement_timeout','5000',true),set_config('lock_timeout','1000',true)")
+      const result = await work(client)
       await client.query("COMMIT")
-      return projectFromRow(row)
+      return result
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined)
       throw error
@@ -167,7 +182,34 @@ export function createProjectMutationStore(pool: Pick<Pool, "query" | "connect">
     }
   }
 
-  return { create, updateInstruction, replaceWebsites: (input: WebsiteWrite) => replaceProjectWebsites(pool, input) }
+  async function withReceipt(
+    mutation: Pick<MutationTicket, "scope" | "fingerprint">,
+    work: (commands: ReturnType<typeof projectMutationCommands>) => Promise<IdempotencyReceipt>,
+  ): Promise<ProjectMutationReceiptResult> {
+    return transaction(async (client) => {
+      // Claim/reclaim and release must wait for this lock. Recheck before *any* business write:
+      // a stale same-intent writer replays a completed receipt rather than running the command again.
+      const locked = await client.query<{ fingerprint: string; status: number; body: unknown }>(
+        "SELECT fingerprint, status, response_body AS body FROM bff_idempotency_receipt WHERE scope = $1 FOR UPDATE",
+        [mutation.scope],
+      )
+      const current = locked.rows[0]
+      if (!current) return { kind: "missing" }
+      if (current.fingerprint !== mutation.fingerprint) return { kind: "conflict" }
+      if (current.status !== PENDING_RECEIPT_STATUS) return { kind: "receipt", receipt: { status: current.status, body: current.body } }
+      const receipt = await work(projectMutationCommands(client))
+      await new PostgresIdempotencyRepository(client).putReceipt(mutation.scope, { fingerprint: mutation.fingerprint, ...receipt })
+      return { kind: "receipt", receipt }
+    })
+  }
+
+  return {
+    create: commands.create,
+    updateInstruction: (scope: ProjectOwnerScope, idOrSlug: string, instruction: string) =>
+      transaction((client) => projectMutationCommands(client).updateInstruction(scope, idOrSlug, instruction)),
+    withReceipt,
+    replaceWebsites: (input: WebsiteWrite) => replaceProjectWebsites(pool, input),
+  }
 }
 
 export type ProjectMutationStore = ReturnType<typeof createProjectMutationStore>

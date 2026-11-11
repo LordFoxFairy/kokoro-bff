@@ -607,7 +607,7 @@ test("a revoked session is denied before an existing idempotency result can repl
   let receiptClaims = 0
   let receiptWrites = 0
   let claimedFingerprint: string | null = null
-  const { base, reads, mutations } = await listenNativeProjectAdmission({ ...config(), tenantId: "tenant-a" }, admission, {
+  const receipts: Pick<IdempotencyRepository, "claimReceipt" | "putReceipt" | "releaseReceipt"> = {
     async claimReceipt(key, fingerprint) {
       assert.equal(key, scope)
       receiptClaims++
@@ -622,7 +622,8 @@ test("a revoked session is denied before an existing idempotency result can repl
     async releaseReceipt() {
       assert.fail("successful Project create must not release its receipt")
     },
-  })
+  }
+  const { base, reads, mutations } = await listenNativeProjectAdmission({ ...config(), tenantId: "tenant-a" }, admission, receipts)
   const project = {
     id: "project-a",
     name: "Project A",
@@ -632,6 +633,11 @@ test("a revoked session is denied before an existing idempotency result can repl
     updated_at: "2026-10-27T00:00:00.000Z",
   }
   const projectCreates = t.mock.method(mutations, "create", async () => project)
+  t.mock.method(mutations, "withReceipt", async (mutation, work) => {
+    const completed = await work(mutations)
+    await receipts.putReceipt(mutation.scope, { fingerprint: mutation.fingerprint, ...completed })
+    return { kind: "receipt" as const, receipt: completed }
+  })
   const projectReads = t.mock.method(reads, "list", async () => [project])
   const headers = {
     "x-kokoro-service": "web-bff",
