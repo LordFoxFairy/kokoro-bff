@@ -15,7 +15,8 @@ import { failure, ok } from "../../contracts/index.js"
 import { isEmptyProjectDeletionRequest, isProjectDeletionId, projectDeletionHeaderValues, validProjectDeletionKey } from "../project-deletion-input.js"
 import { isCanonicalRenameProjectId, parseProjectRenameName, renameProjectHeaderValues, validRenameProjectKey } from "../project-rename-input.js"
 import { projectResourceListInput } from "../project-resource-list-input.js"
-import { idempotencyKey, pathOf, readBody, requestId } from "../request.js"
+import { idempotencyKey, pathOf, requestId } from "../request.js"
+import { readFileUploadBody } from "../file-upload-body.js"
 import { reply, send } from "../response.js"
 import { parseProjectResource } from "../project-resource-input.js"
 import { StorageUploadClient } from "../../infrastructure/clients/storage/client.js"
@@ -43,9 +44,7 @@ export function isProjectCoreReadRequest(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?", 1)[0] ?? ""
   return (
     request.method === "GET" &&
-    (path === "/v1/projects" ||
-      /^\/v1\/projects\/[^/]+$/u.test(path) ||
-      /^\/v1\/projects\/[^/]+\/instruction-revisions$/u.test(path))
+    (path === "/v1/projects" || /^\/v1\/projects\/[^/]+$/u.test(path) || /^\/v1\/projects\/[^/]+\/instruction-revisions$/u.test(path))
   )
 }
 
@@ -127,7 +126,8 @@ export async function handleProjectResourceUploadRequest(
     const key = idempotencyKey(request)
     if (keys.length !== 1 || key === null || keys[0] !== key || key.length > 191 || !/^[\x21-\x7e]+$/u.test(key))
       throw new ProjectResourceError("invalid_idempotency_key", 400)
-    const body = await readBody(request)
+    const body = await readFileUploadBody(request, response, id)
+    if (body === null) return true
     const input = await parseProjectResource(request.headers["content-type"] ?? "", body)
     const context = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId, projectId: project.id, key, requestId: id }
     const ticket = await mutationTicket(

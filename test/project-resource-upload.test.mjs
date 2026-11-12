@@ -130,7 +130,7 @@ function fixture() {
   return { receipts, calls, input, store, storage, context, asset }
 }
 
-test("Projects feature handler owns resource upload with persistent receipt recovery", async () => {
+test("Projects feature handler owns resource upload with persistent receipt recovery", async (t) => {
   const { createServer } = await import("node:http")
   const { once } = await import("node:events")
   const { handleProjectResourceUploadRequest } = await moduleAt("http/routes/project-native")
@@ -169,6 +169,58 @@ test("Projects feature handler owns resource upload with persistent receipt reco
     })
     assert.equal(result.status, 200)
     assert.equal((await result.json()).data.resources[0].asset_id, "asset-1")
+    const receiptsBefore = JSON.stringify([...f.receipts])
+    const storageCallsBefore = [...f.calls]
+    for (const framing of ["content-length", "chunked"]) {
+      await t.test(`unfinished oversized ${framing} upload returns complete 413 without receipt or Storage work`, async () => {
+        const { request: httpRequest } = await import("node:http")
+        let client
+        try {
+          const rejected = await new Promise((resolve, reject) => {
+            client = httpRequest(
+              url,
+              {
+                method: "POST",
+                headers: {
+                  cookie: "kokoro-issuer.session_token=user",
+                  origin: "https://web.example.test",
+                  "x-kokoro-service": "web-bff",
+                  "x-kokoro-internal-secret": "web-secret",
+                  "x-kokoro-request-id": "oversized-project-upload",
+                  "idempotency-key": `oversized-${framing}`,
+                  "content-type": "multipart/form-data; boundary=upload-limit",
+                  ...(framing === "content-length" ? { "content-length": 2 * 1024 * 1024 } : {}),
+                },
+              },
+              (response) => {
+                const chunks = []
+                response.on("data", (chunk) => chunks.push(chunk))
+                response.on("error", reject)
+                response.on("end", () => {
+                  try {
+                    resolve({ status: response.statusCode, complete: response.complete, headers: response.headers, body: JSON.parse(Buffer.concat(chunks)) })
+                  } catch (error) {
+                    reject(error)
+                  }
+                })
+              },
+            )
+            client.on("error", reject)
+            client.setTimeout(3000, () => client.destroy(new Error("oversized project upload did not receive a bounded response")))
+            // No end(): rejection must finish without waiting for the rest of the upload.
+            client.write(Buffer.alloc(1024 * 1024 + 1))
+          })
+          assert.equal(rejected.status, 413)
+          assert.equal(rejected.complete, true)
+          assert.equal(rejected.headers["x-request-id"], "oversized-project-upload")
+          assert.equal(rejected.body.error.code, "request_body_too_large")
+          assert.equal(JSON.stringify([...f.receipts]), receiptsBefore)
+          assert.deepEqual(f.calls, storageCallsBefore)
+        } finally {
+          client?.destroy()
+        }
+      })
+    }
   } finally {
     server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))
