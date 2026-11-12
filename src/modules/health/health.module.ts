@@ -7,7 +7,7 @@ import type { BffConfig } from "../../config/runtime.js"
 @Controller()
 class HealthController {
   public constructor(
-    private readonly readiness: ReadinessIndicator,
+    @Inject(ReadinessIndicator) private readonly readiness: ReadinessIndicator,
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
   ) {}
 
