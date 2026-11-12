@@ -11,6 +11,7 @@ import { once } from "node:events"
 import { test, afterEach } from "node:test"
 import { handleChatBusinessReadRequest } from "../src/http/routes/chat-business-native.ts"
 import { handleChatMutationRequest } from "../dist/http/routes/chat-mutation-native.js"
+import { requestBodyJson } from "../dist/http/request.js"
 import { handleMoveSessionRequest } from "../dist/http/routes/move-session-native.js"
 import {
   AGENT_CANCELLATION_DISPATCHER,
@@ -21,6 +22,7 @@ import {
   CHAT_IDEMPOTENCY,
   CHAT_CONVERSATION_LOOKUP,
   CHAT_TURN_SERVICE,
+  CHAT_SESSION_MUTATIONS,
   PROJECT_LOOKUP,
   SESSION_ADMISSION,
 } from "../dist/common/tokens.js"
@@ -68,12 +70,14 @@ test("Chat business read middleware owns direct collection reads without Project
     },
   }
   const server = createServer((request, response) => {
-    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedConversation, unexpectedProjects, unexpectedProcess).then((handled) => {
-      if (!handled) {
-        response.writeHead(404)
-        response.end()
-      }
-    })
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedConversation, unexpectedProjects, unexpectedProcess).then(
+      (handled) => {
+        if (!handled) {
+          response.writeHead(404)
+          response.end()
+        }
+      },
+    )
   })
   servers.push(server)
   server.listen(0, "127.0.0.1")
@@ -152,12 +156,14 @@ test("Chat business read middleware rechecks the session owner before serving a 
     },
   }
   const server = createServer((request, response) => {
-    void handleChatBusinessReadRequest(request, response, config, admission, chat, chat.findConversation, unexpectedProjects, unexpectedProcess).then((handled) => {
-      if (!handled) {
-        response.writeHead(404)
-        response.end()
-      }
-    })
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, chat.findConversation, unexpectedProjects, unexpectedProcess).then(
+      (handled) => {
+        if (!handled) {
+          response.writeHead(404)
+          response.end()
+        }
+      },
+    )
   })
   servers.push(server)
   server.listen(0, "127.0.0.1")
@@ -273,7 +279,7 @@ test("Move Session denial and authentication dependency failure retain request-i
   assert.equal(moves, 0)
 })
 
-async function messageBoundaryFixture(t) {
+async function messageBoundaryFixture(t, overrides = {}) {
   const admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "owner" } })
   const submissions = [],
     genericCalls = [],
@@ -313,13 +319,14 @@ async function messageBoundaryFixture(t) {
     .overrideProvider(SESSION_ADMISSION)
     .useValue(admission)
     .overrideProvider(CHAT_CONVERSATION_LOOKUP)
-    .useValue(() => assert.fail("Canonical Message admission must not query an unlocked Conversation"))
+    .useValue(overrides.findConversation ?? (() => assert.fail("Canonical Message admission must not query an unlocked Conversation")))
     .overrideProvider(PROJECT_LOOKUP)
     .useValue({ find: async () => null })
     .overrideProvider(CHAT_TURN_SERVICE)
     .useValue(chatTurns)
     .overrideProvider(CHAT_IDEMPOTENCY)
     .useValue(chatIdempotency)
+  if (overrides.mutations !== undefined) builder.overrideProvider(CHAT_SESSION_MUTATIONS).useValue(overrides.mutations)
   for (const token of [AGENT_DISPATCH_DISPATCHER, AGENT_CANCELLATION_DISPATCHER, AGUI_PROJECTOR]) {
     builder.overrideProvider(token).useValue(null)
   }
@@ -329,6 +336,7 @@ async function messageBoundaryFixture(t) {
   await app.listen(0, "127.0.0.1")
   const base = await app.getUrl()
   return {
+    base,
     admission,
     submissions,
     genericCalls,
@@ -504,4 +512,51 @@ test("Message default Skills bind exact installations and a post-read Project lo
   assert.equal(withdrawn.status, 404)
   assert.equal((await withdrawn.json()).error.code, "project_not_found")
   assert.equal(commits.length, 1)
+})
+
+test("native title writes reject damaged UTF-8 before receipts while preserving literal replacement characters", async (t) => {
+  const titles = []
+  const f = await messageBoundaryFixture(t, {
+    findConversation: async () => ({ conversationId: "conv_utf8", ownerId: "owner", tenantId: "tenant", projectRef: null }),
+    mutations: {
+      renameConversation: async (_tenant, _subject, _id, title) => {
+        titles.push(title)
+        return { conversationId: "conv_utf8" }
+      },
+    },
+  })
+  const patch = async (bytes, key) => {
+    const response = await fetch(`${f.base}/v1/sessions/conv_utf8/title`, {
+      method: "PATCH",
+      headers: { ...nativeHeaders, "idempotency-key": key, "x-request-id": key },
+      body: bytes,
+    })
+    return { status: response.status, headers: response.headers, body: await response.json() }
+  }
+  const valid = await patch(Buffer.from('{"title":"A�"}', "utf8"), "utf8-literal")
+  assert.equal(valid.status, 200)
+  assert.deepEqual(titles, ["A�"])
+  const receiptBefore = JSON.stringify([...f.receipts])
+  const callsBefore = [...f.genericCalls]
+  for (const [label, bytes] of [
+    ["invalid-byte", Buffer.concat([Buffer.from('{"title":"A'), Buffer.from([0xff]), Buffer.from('"}')])],
+    ["truncated", Buffer.concat([Buffer.from('{"title":"A'), Buffer.from([0xe2, 0x82]), Buffer.from('"}')])],
+    ["bom", Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('{"title":"B"}')])],
+  ]) {
+    const result = await patch(bytes, `utf8-${label}`)
+    assert.equal(result.status, 400, label)
+    assert.equal(result.body.error.code, "invalid_json", label)
+    assert.equal(result.headers.get("x-request-id"), `utf8-${label}`)
+    assert.deepEqual(titles, ["A�"], "rejected wire bytes cannot change the title")
+    assert.deepEqual(f.genericCalls, callsBefore, "rejected wire bytes cannot claim or complete receipts")
+    assert.equal(JSON.stringify([...f.receipts]), receiptBefore)
+  }
+})
+
+test("shared JSON decoding retains empty, multipart, object and duplicate-key policies", () => {
+  const request = { method: "POST", url: "/v1/sessions", headers: { "content-type": "application/json" } }
+  assert.deepEqual(requestBodyJson(request, Buffer.alloc(0)), {})
+  assert.deepEqual(requestBodyJson({ ...request, headers: { "content-type": "multipart/form-data; boundary=x" } }, Buffer.from([0xff])), {})
+  assert.equal(requestBodyJson(request, Buffer.from("[]")), null)
+  assert.deepEqual(requestBodyJson(request, Buffer.from('{"title":"first","title":"last"}')), { title: "last" })
 })
