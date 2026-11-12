@@ -1,8 +1,12 @@
 import assert from "node:assert/strict"
-import { createServer, type IncomingMessage, type Server } from "node:http"
+import { createServer, IncomingMessage, ServerResponse, type Server } from "node:http"
+import { Socket } from "node:net"
+import { setImmediate as nextTurn } from "node:timers/promises"
 import test from "node:test"
 import { loadConfig } from "../dist/config/runtime.js"
+import { handleBrowserAuthSessionRequest } from "../dist/auth/auth-session.http.js"
 import { nativeSessionCookie } from "../dist/auth/user-admission.js"
+import type { SessionAdmissionInput, SessionAdmissionResult } from "../src/auth/session-admission.types.js"
 import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
 
 const tenant = "tenant-browser"
@@ -118,6 +122,160 @@ async function fixture(
     if (peer.listening) await close(peer)
   }
 }
+
+function statusRequest() {
+  const socket = new Socket()
+  const request = new IncomingMessage(socket)
+  request.url = "/browser/v1/auth/session"
+  request.method = "GET"
+  request.headers = sessionHeaders
+  request.rawHeaders = Object.entries(sessionHeaders).flat()
+  const response = new ServerResponse(request)
+  const config = {
+    ...loadConfig({
+      KOKORO_IAM_WEB_ORIGIN: origin,
+      KOKORO_TENANT_ID: tenant,
+      KOKORO_BFF_SHARED_SECRET: "browser-fixture",
+      KOKORO_BFF_POSTGRES_URL: "postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=kokoro_bff",
+      KOKORO_BFF_REDIS_URL: "redis://127.0.0.1:1/8",
+    }),
+    upstreamTimeoutMs: 20,
+  }
+  return { socket, request, response, config }
+}
+
+const safeAdmission = (): SessionAdmissionResult => ({
+  ok: true,
+  identity: { namespace: tenant, userId: "subject" },
+  platformAdmin: false,
+  expiresAt: "2099-01-01T00:00:00.000Z",
+  setCookies: ["__Secure-kokoro-issuer.session_token=late; Path=/; HttpOnly; Secure; SameSite=Lax"],
+})
+
+test("status deadline retires a non-cooperative admission and never adopts its late cookie", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] })
+  const f = statusRequest()
+  const end = t.mock.method(f.response, "end")
+  let release!: (value: SessionAdmissionResult) => void
+  let input!: SessionAdmissionInput
+  let finished = false
+  const held = new Promise<SessionAdmissionResult>((resolve) => {
+    release = resolve
+  })
+  const pending = handleBrowserAuthSessionRequest(f.request, f.response, f.config, {
+    verify: (value) => {
+      input = value
+      return held
+    },
+  }).then((value) => {
+    finished = true
+    return value
+  })
+  try {
+    t.mock.timers.tick(20)
+    await nextTurn()
+    assert.equal(finished, true, "HTTP must settle even while admission ignores cancellation")
+    assert.equal(input.signal.aborted, true)
+    assert.equal(f.response.statusCode, 503)
+    assert.match(String(end.mock.calls[0]?.arguments[0]), /"code":"iam_admission_unavailable"/u)
+    assert.equal(f.response.getHeader("set-cookie"), undefined)
+    assert.equal(f.request.listenerCount("aborted"), 0)
+    assert.equal(f.response.listenerCount("close"), 0)
+    release(safeAdmission())
+    await nextTurn()
+    assert.equal(end.mock.callCount(), 1)
+    assert.equal(f.response.getHeader("set-cookie"), undefined)
+  } finally {
+    release(safeAdmission())
+    await pending
+    f.socket.destroy()
+  }
+})
+
+test("pre-retired status requests never admit or write, including already-ended responses", async (t) => {
+  for (const state of ["aborted", "destroyed", "ended"] as const) {
+    const f = statusRequest()
+    if (state === "aborted") f.request.destroy()
+    if (state === "destroyed") f.response.destroy()
+    if (state === "ended") f.response.end()
+    const header = t.mock.method(f.response, "setHeader")
+    const end = t.mock.method(f.response, "end")
+    const verify = t.mock.fn(async () => safeAdmission())
+    try {
+      assert.equal(await handleBrowserAuthSessionRequest(f.request, f.response, f.config, { verify }), true)
+      assert.equal(verify.mock.callCount(), 0, state)
+      assert.equal(header.mock.callCount(), 0, state)
+      assert.equal(end.mock.callCount(), 0, state)
+      assert.equal(f.request.listenerCount("aborted"), 0)
+      assert.equal(f.response.listenerCount("close"), 0)
+    } finally {
+      f.socket.destroy()
+    }
+  }
+})
+
+test("browser disconnect finishes the status wait without a late response or unobserved rejection", async (t) => {
+  const f = statusRequest()
+  const end = t.mock.method(f.response, "end")
+  let reject!: (error: Error) => void
+  let input!: SessionAdmissionInput
+  let finished = false
+  const held = new Promise<SessionAdmissionResult>((_resolve, fail) => {
+    reject = fail
+  })
+  const pending = handleBrowserAuthSessionRequest(f.request, f.response, f.config, {
+    verify: (value) => {
+      input = value
+      return held
+    },
+  }).then((value) => {
+    finished = true
+    return value
+  })
+  try {
+    f.response.emit("close")
+    await nextTurn()
+    assert.equal(finished, true)
+    assert.equal(input.signal.aborted, true)
+    assert.equal(end.mock.callCount(), 0)
+    assert.equal(f.request.listenerCount("aborted"), 0)
+    assert.equal(f.response.listenerCount("close"), 0)
+    reject(new Error("late admission failure"))
+    await nextTurn()
+    assert.equal(end.mock.callCount(), 0)
+  } finally {
+    reject(new Error("test cleanup"))
+    await pending
+    f.socket.destroy()
+  }
+})
+
+test("normal and invalid-query status completion release their request resources", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] })
+  for (const invalid of [false, true]) {
+    const f = statusRequest()
+    if (invalid) f.request.url += "?refresh=invalid"
+    const end = t.mock.method(f.response, "end")
+    let input: SessionAdmissionInput | undefined
+    const verify = t.mock.fn(async (value: SessionAdmissionInput) => {
+      input = value
+      return safeAdmission()
+    })
+    try {
+      assert.equal(await handleBrowserAuthSessionRequest(f.request, f.response, f.config, { verify }), true)
+      assert.equal(f.response.statusCode, invalid ? 400 : 200)
+      assert.equal(verify.mock.callCount(), invalid ? 0 : 1)
+      assert.equal(f.request.listenerCount("aborted"), 0)
+      assert.equal(f.response.listenerCount("close"), 0)
+      t.mock.timers.tick(5000)
+      await nextTurn()
+      assert.equal(input?.signal.aborted, invalid ? undefined : false)
+      assert.equal(end.mock.callCount(), 1)
+    } finally {
+      f.socket.destroy()
+    }
+  }
+})
 
 test("native cookie projection rejects Product, duplicate, and malformed cookie headers", () => {
   const request = (rawHeaders: string[]) => ({ rawHeaders, headers: {} }) as IncomingMessage
