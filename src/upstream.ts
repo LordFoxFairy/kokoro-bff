@@ -2,10 +2,7 @@ import { request as httpRequest } from "node:http"
 import { request as httpsRequest } from "node:https"
 
 import type { BffConfig } from "./config/runtime.js"
-import {
-  DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES,
-  DEFAULT_UPSTREAM_TIMEOUT_MS,
-} from "./config/runtime.js"
+import { DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES, DEFAULT_UPSTREAM_TIMEOUT_MS } from "./config/runtime.js"
 
 export type UpstreamResponse = {
   status: number
@@ -15,10 +12,7 @@ export type UpstreamResponse = {
 
 export type TrustedUpstreamHeaders = Readonly<Record<string, string>>
 
-export type UpstreamRequestErrorCode =
-  | "upstream_timeout"
-  | "upstream_connection_error"
-  | "upstream_response_too_large"
+export type UpstreamRequestErrorCode = "upstream_timeout" | "upstream_connection_error" | "upstream_response_too_large"
 
 export class UpstreamRequestError extends Error {
   public readonly code: UpstreamRequestErrorCode
@@ -95,6 +89,7 @@ export async function proxyUpstream(
   serviceToken: string | null = config.upstreamSecret,
   timeoutBudgetMs?: number,
   lastEventId?: string,
+  signal?: AbortSignal,
 ): Promise<UpstreamResponse> {
   const target = new URL(path, `${baseUrl.replace(/\/+$/u, "/")}`)
   const requestFn = target.protocol === "https:" ? httpsRequest : httpRequest
@@ -108,21 +103,33 @@ export async function proxyUpstream(
     let settled = false
     let client: ReturnType<typeof httpRequest> | null = null
     let timeout: ReturnType<typeof setTimeout> | undefined
+    const cleanup = () => {
+      if (timeout !== undefined) clearTimeout(timeout)
+      signal?.removeEventListener("abort", onAbort)
+    }
     const fail = (error: UpstreamRequestError): void => {
       if (settled) return
       settled = true
-      if (timeout !== undefined) clearTimeout(timeout)
+      cleanup()
       reject(error)
     }
     const succeed = (result: UpstreamResponse): void => {
       if (settled) return
       settled = true
-      if (timeout !== undefined) clearTimeout(timeout)
+      cleanup()
       resolve(result)
     }
     const normalizeConnectionError = (error: unknown): UpstreamRequestError => {
       if (error instanceof UpstreamRequestError) return error
       return new UpstreamRequestError("upstream_connection_error", "The upstream connection failed", error)
+    }
+    const onAbort = () => {
+      fail(new UpstreamRequestError("upstream_connection_error", "The upstream request was cancelled"))
+      client?.destroy()
+    }
+    if (signal?.aborted) {
+      onAbort()
+      return
     }
     const headers = requestHeaders({ ...config, upstreamSecret: serviceToken }, requestId, incoming, trustedHeaders, callerService)
     if (lastEventId !== undefined) headers["last-event-id"] = lastEventId
@@ -135,40 +142,45 @@ export async function proxyUpstream(
       fail(new UpstreamRequestError("upstream_timeout", "The upstream request timed out"))
       client?.destroy()
     }
+    signal?.addEventListener("abort", onAbort, { once: true })
     timeout = setTimeout(onTimeout, timeoutMs)
     try {
-      client = requestFn(target, {
-        method,
-        headers,
-      }, (response) => {
-        const chunks: Buffer[] = []
-        let responseBytes = 0
-        response.on("data", (chunk) => {
-          if (settled) return
-          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-          responseBytes += buffer.byteLength
-          if (responseBytes > maxResponseBytes) {
-            fail(new UpstreamRequestError("upstream_response_too_large", "The upstream response body exceeded its limit"))
-            response.destroy()
-            client?.destroy()
-            return
-          }
-          chunks.push(buffer)
-        })
-        response.once("aborted", () => {
-          fail(normalizeConnectionError(new Error("upstream response aborted")))
-        })
-        response.once("error", (error) => {
-          fail(normalizeConnectionError(error))
-        })
-        response.once("end", () => {
-          succeed({
-            status: response.statusCode ?? 502,
-            headers: incomingHeaders(response.headers),
-            body: Buffer.concat(chunks),
+      client = requestFn(
+        target,
+        {
+          method,
+          headers,
+        },
+        (response) => {
+          const chunks: Buffer[] = []
+          let responseBytes = 0
+          response.on("data", (chunk) => {
+            if (settled) return
+            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+            responseBytes += buffer.byteLength
+            if (responseBytes > maxResponseBytes) {
+              fail(new UpstreamRequestError("upstream_response_too_large", "The upstream response body exceeded its limit"))
+              response.destroy()
+              client?.destroy()
+              return
+            }
+            chunks.push(buffer)
           })
-        })
-      })
+          response.once("aborted", () => {
+            fail(normalizeConnectionError(new Error("upstream response aborted")))
+          })
+          response.once("error", (error) => {
+            fail(normalizeConnectionError(error))
+          })
+          response.once("end", () => {
+            succeed({
+              status: response.statusCode ?? 502,
+              headers: incomingHeaders(response.headers),
+              body: Buffer.concat(chunks),
+            })
+          })
+        },
+      )
       client.once("error", (error) => {
         fail(normalizeConnectionError(error))
       })

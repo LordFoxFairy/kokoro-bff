@@ -1,3 +1,11 @@
+## 2026-11-12 PERF-03 模型目录取消与共同期限已验
+
+仅现GET /v1/models沿一次原生Session＋current_membership准入，middleware以min(config.upstreamTimeoutMs,10000)建立共同绝对期限/断连signal；route到现owner transport按剩余预算执行，退役后不再发System、在途请求destroy、投影和实际send前同步检查。移除该GET未使用的幂等Map/no-op reply参数，不新增缓存/重试/身份层/协议/Schema；未传optional参数的其它owner caller保持原行为。取消只证明本方停止发送/接收，不承诺System事务回滚。
+
+writer真实RED1 PASS/9 FAIL（另有首轮fixture提前回收失败已分列）→最终相关34 PASS/0 SKIP；主控停写六SHA复核、同两文件34 PASS/完整types通过，原六文件独审CLEAR。主控另发现首check零预算503缺x-request-id，既有子例补断言RED后outer catch复用原requestId设header，原code不变；该两路径增量由主控复核，其余四SHA不变。writer最终build/scoped lint通过。四源正规格式PASS，两测试全文件在原9cc也有格式告警，保持原prefix、仅新段格式化，不冒全文件格式绿。
+
+依赖为实际localhost HTTP peer与正式SessionAdmissionClient，不冒真实IAM/System、模型或p95；未运行PG/全默认/正常服务，待主控沿原PR17发行与精确组合/受控激活。整个TaskB与原PR完整交付仍OPEN。
+
 ## 2026-11-12 PERF-02 本人 pins GET 重复准入收敛
 
 仅 GET /v1/self/project-pins 从三次完整准入（六次 IAM HTTP）收敛为入口一次原生 Session＋current_membership（两次 HTTP）。保持本人/tenant/未删除 Project SQL；后续检查仅消费本次成功准入的真实 expiresAt，并检查绝对预算、断连与已退休响应，不跨请求保存身份、不新增 cache/token/SDK/认证层。缺失或异常期限拒绝；下一请求仍重新准入并执行撤权。PUT 原入口及写前/写后三次准入、未知结果保障不变，无 wire/Schema/依赖变化。

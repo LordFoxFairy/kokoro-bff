@@ -1203,3 +1203,281 @@ describe("kokoro-bff versioned HTTP contracts", () => {
     assert.equal(ownerCalls, 0)
   })
 })
+
+// Real HTTP peers and the source middleware keep the lifecycle regression small;
+// the original SystemModule tests above retain the normal compiled Nest path.
+async function modelLifecyclePeer(
+  t: import("node:test").TestContext,
+  options: {
+    delayAdmission?: boolean
+    admissionMs?: number
+    ownerMs?: number
+    budgetMs?: number
+    holdOwner?: boolean
+    admission?: import("../src/auth/session-admission.types.ts").SessionAdmission
+  } = {},
+) {
+  const { fixtureNativeSession } = await import("./doubles/iam-native-session.ts")
+  const { mkdtemp, writeFile, rm } = await import("node:fs/promises")
+  const { tmpdir } = await import("node:os")
+  const { join } = await import("node:path")
+  const TEST_IAM_USER_CONTEXT_SECRET = "perf03-test-service-credential-only"
+  const directory = await mkdtemp(join(tmpdir(), "bff-model-lifetime-"))
+  const credentialFile = join(directory, "credential.json")
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  await writeFile(
+    credentialFile,
+    JSON.stringify({
+      version: 1,
+      entries: [{ credential_id: "fixture", caller: "kokoro-bff", surface: "bff_user_context", tenant_id: "ns_test", secret: TEST_IAM_USER_CONTEXT_SECRET }],
+    }),
+    { mode: 0o600 },
+  )
+  const { SessionAdmissionClient } = await import("../src/auth/session-admission.client.ts")
+  await import("reflect-metadata")
+  const { SystemModelCatalogMiddleware } = await import("../src/modules/system/system-model-catalog.middleware.ts")
+  const calls = { iam: 0, owner: 0, ownerClosed: false, iamClosed: false }
+  let closeIam!: () => void, closeOwner!: () => void
+  const iamCancelled = new Promise<void>((resolve) => {
+    closeIam = resolve
+  })
+  const ownerCancelled = new Promise<void>((resolve) => {
+    closeOwner = resolve
+  })
+  let admissionStarted!: () => void, ownerStarted!: () => void, releaseAdmission!: () => void
+  const admitted = new Promise<void>((resolve) => {
+    admissionStarted = resolve
+  })
+  const ownerEntered = new Promise<void>((resolve) => {
+    ownerStarted = resolve
+  })
+  const gate = new Promise<void>((resolve) => {
+    releaseAdmission = resolve
+  })
+  const timers: ReturnType<typeof setTimeout>[] = []
+  const start = async (server: Server) => {
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    t.after(async () => {
+      server.closeAllConnections()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    })
+    const address = server.address()
+    assert.ok(address && typeof address !== "string")
+    return `http://127.0.0.1:${address.port}`
+  }
+  t.after(() => {
+    releaseAdmission()
+    timers.forEach(clearTimeout)
+  })
+  const iam = await start(
+    createServer((request, response) => {
+      calls.iam++
+      response.once("close", () => {
+        if (!response.writableEnded) {
+          calls.iamClosed = true
+          closeIam()
+        }
+      })
+      const session = request.url?.startsWith("/iam/get-session")
+      if (!session) {
+        assert.equal(request.url, "/internal/v1/authorization/check")
+        assert.equal(request.headers.authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+        assert.equal(request.headers.cookie, undefined)
+        assert.equal(request.headers.origin, undefined)
+      }
+      const reply = () => {
+        if (response.destroyed) return
+        response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": request.headers["x-request-id"] })
+        response.end(
+          JSON.stringify(
+            session
+              ? fixtureNativeSession("ns_test", "user_test")
+              : { data: { allowed: true, tenant_id: "ns_test", subject_id: "user_test", decision_source: "current_membership" } },
+          ),
+        )
+      }
+      if (session) {
+        admissionStarted()
+        if (options.delayAdmission) void gate.then(reply)
+        else if (options.admissionMs) timers.push(setTimeout(reply, options.admissionMs))
+        else reply()
+      } else reply()
+    }),
+  )
+  const owner = await start(
+    createServer((request, response) => {
+      calls.owner++
+      assert.equal(request.headers.cookie, undefined)
+      assert.equal(request.headers.origin, undefined)
+      assert.equal(request.headers["x-kokoro-tenant-id"], "ns_test")
+      assert.equal(request.headers["x-kokoro-actor-id"], "user_test")
+      response.once("close", () => {
+        if (!response.writableEnded) {
+          calls.ownerClosed = true
+          closeOwner()
+        }
+      })
+      ownerStarted()
+      if (options.holdOwner) {
+        response.writeHead(200, { "content-type": "application/json" })
+        response.write('{"data":')
+        return
+      }
+      const reply = () => {
+        if (!response.destroyed) response.end(JSON.stringify({ data: { items: [modelCatalogItem], next_cursor: null } }))
+      }
+      if (options.ownerMs) timers.push(setTimeout(reply, options.ownerMs))
+      else reply()
+    }),
+  )
+  const admission =
+    options.admission ??
+    new SessionAdmissionClient({
+      baseUrl: iam,
+      credentialFile,
+      webOrigin: "https://web.example.test",
+      tenantId: "ns_test",
+      timeoutMs: 1000,
+      maxResponseBytes: 65536,
+    })
+  const middleware = new SystemModelCatalogMiddleware(config({ upstreamTimeoutMs: options.budgetMs ?? 500, upstreams: { system: owner } }), admission)
+  const base = await start(
+    createServer((request, response) =>
+      middleware.use(request, response, () => {
+        response.statusCode = 404
+        response.end()
+      }),
+    ),
+  )
+  return { base, calls, admitted, ownerEntered, releaseAdmission, iamCancelled, ownerCancelled }
+}
+
+it("PERF-03 already retired model requests and zero budget start no IAM work", async (t) => {
+  const { IncomingMessage, ServerResponse } = await import("node:http")
+  const { Socket } = await import("node:net")
+  await import("reflect-metadata")
+  const { SystemModelCatalogMiddleware } = await import("../src/modules/system/system-model-catalog.middleware.ts")
+  for (const retired of ["request", "response", "ended", "deadline"])
+    await t.test(retired, async () => {
+      const admission = new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } })
+      const request = new IncomingMessage(new Socket())
+      request.url = "/v1/models"
+      request.method = "GET"
+      request.headers = authHeaders()
+      request.rawHeaders = Object.entries(authHeaders()).flat()
+      if (retired === "deadline") {
+        request.headers["x-kokoro-request-id"] = "model-zero-budget"
+        request.rawHeaders.push("x-kokoro-request-id", "model-zero-budget")
+      }
+      const response = new ServerResponse(request)
+      if (retired === "request") request.aborted = true
+      if (retired === "response") response.destroy()
+      if (retired === "ended") response.end()
+      const middleware = new SystemModelCatalogMiddleware(config({ upstreamTimeoutMs: retired === "deadline" ? 0 : 500 }), admission)
+      middleware.use(request, response, () => assert.fail("model request was not handled"))
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      assert.equal(admission.calls.length, 0)
+      if (retired === "deadline") {
+        assert.equal(response.statusCode, 503)
+        assert.equal(response.getHeader("x-request-id"), "model-zero-budget")
+      }
+    })
+})
+
+it("PERF-03 disconnect during complete admission aborts IAM and never starts System", async (t) => {
+  const { request } = await import("node:http")
+  const f = await modelLifecyclePeer(t, { delayAdmission: true })
+  const client = request(`${f.base}/v1/models`, { headers: authHeaders() })
+  client.on("error", () => undefined)
+  client.end()
+  await f.admitted
+  client.destroy()
+  await cancelledPeer(f.iamCancelled)
+  assert.equal(f.calls.iamClosed, true)
+  f.releaseAdmission()
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.equal(f.calls.iam, 1)
+  assert.equal(f.calls.owner, 0)
+})
+
+it("PERF-03 disconnect during System response closes the actual owner socket without retry", async (t) => {
+  const { request } = await import("node:http")
+  const f = await modelLifecyclePeer(t, { holdOwner: true })
+  const client = request(`${f.base}/v1/models`, { headers: authHeaders() })
+  client.on("error", () => undefined)
+  client.end()
+  await f.ownerEntered
+  client.destroy()
+  await cancelledPeer(f.ownerCancelled)
+  assert.equal(f.calls.ownerClosed, true)
+  assert.equal(f.calls.iam, 2)
+  assert.equal(f.calls.owner, 1)
+})
+
+it("PERF-03 admission time consumes the one absolute model deadline and a late owner success cannot become 200", async (t) => {
+  const f = await modelLifecyclePeer(t, { admissionMs: 120, ownerMs: 120, budgetMs: 200 })
+  const response = await fetch(`${f.base}/v1/models?feature_key=chat`, { headers: authHeaders() })
+  assert.ok(response.status >= 400)
+  const failure = (await response.json()) as { data?: unknown; meta: { request_id: string } }
+  assert.equal(failure.data, undefined)
+  assert.equal(failure.meta.request_id, response.headers.get("x-request-id"))
+  await new Promise((resolve) => setTimeout(resolve, 80))
+  assert.equal(f.calls.iam, 2)
+  assert.equal(f.calls.owner, 1)
+  assert.equal(f.calls.ownerClosed, true)
+})
+
+it("PERF-03 normal complete admission preserves the current model projection without extra reads", async (t) => {
+  const f = await modelLifecyclePeer(t)
+  const response = await fetch(`${f.base}/v1/models?feature_key=chat&limit=50`, { headers: authHeaders() })
+  assert.equal(response.status, 200)
+  const body = (await response.json()) as { data: { models: unknown[]; next_cursor: null } }
+  assert.deepEqual(body.data, {
+    models: [{ name: modelCatalogItem.key, ...Object.fromEntries(Object.entries(modelCatalogItem).filter(([key]) => key !== "key")) }],
+    next_cursor: null,
+  })
+  assert.equal(f.calls.iam, 2)
+  assert.equal(f.calls.owner, 1)
+})
+
+it("PERF-03 a non-cooperative late admission cannot start System after the shared deadline", async (t) => {
+  let signal: AbortSignal | undefined
+  let admissionCalls = 0
+  const f = await modelLifecyclePeer(t, {
+    budgetMs: 30,
+    admission: {
+      verify: async (input) => {
+        signal = input.signal
+        admissionCalls++
+        await new Promise((resolve) => setTimeout(resolve, 70))
+        return {
+          ok: true,
+          identity: { namespace: "ns_test", userId: "user_test" },
+          platformAdmin: false,
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          setCookies: [],
+        }
+      },
+    },
+  })
+  const response = await fetch(`${f.base}/v1/models`, { headers: authHeaders() })
+  assert.equal(response.status, 503)
+  assert.equal(((await response.json()) as { data?: unknown }).data, undefined)
+  assert.equal(signal?.aborted, true)
+  assert.equal(admissionCalls, 1)
+  assert.equal(f.calls.owner, 0)
+})
+
+async function cancelledPeer(closed: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      closed,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("peer was not cancelled")), 500)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
