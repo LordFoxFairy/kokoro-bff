@@ -1,4 +1,4 @@
-## 2026-11-12 B-08 个人设置接线本地已验（待正常native验收）
+## 2026-11-12 B-08 个人设置接线与正常链路已验
 
 同owner已保存profile／知识使用事实在原Chat事务一条有界SELECT冻结到既有私有launch；可信user actor而非Project subject。无事实省略、显式关闭保revision，旧key零重读／regenerate原快照；读失败不当空数据，完整1MiB在Message/outbox/interrupt前拒绝。材料不进公开Message/trace；无新owner/协议/Schema/认证/依赖/记忆服务。固定现Agent7bfb/HTTP8.17/c471 artifact不换；正规generator仅补该personal子树遗漏的闭集／usage条件／ID唯一性，未建平行schema。
 
