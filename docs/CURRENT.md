@@ -1,3 +1,22 @@
+## 2026-11-12 B-T3 — Public 28.36 认证 metadata 与入口纠偏
+
+本片基线 `05a1074950b43ce3b5183e44276fe7b8de9787b7`，未提交。唯一 Public OpenAPI 从 28.35 → 28.36，
+215 operations 的身份／顺序不变；只把普通请求的旧 User Bearer 声明对齐已存在的受信 Web/Admin adapter envelope＋
+配置的原生 issuer Session Cookie＋exact Web Origin。浏览器仍只访问同源 adapter、不持内部 secret；普通内部业务仍走
+服务身份＋可信 actor，不增加 Session-ref／用户 Cookie 或 OAuth 换票。匿名 health、service-only Share／manifest、
+独立 skill.list IAM User API Key/OpenApp、Telegram／LINE provider callback 的显式 override 全部保留。
+
+当前 canonical SHA-256 `7f715f26aa93410514b3876804309e10049f6fc6cbfcbe50847b1ccbd800d434`。
+现 build/test-only helper 精确逆回完整 28.35 SHA `a26431d45ad96c4e80e6751d61e66a14b3933ae7c2ffb6f9e7df57fcc7e6808f`，
+拒绝 child 漂移；原 Public11 历史 Bearer 证明不改。README／INDEX 改为当前入口，移除旧候选流水与过期 bootstrap／Bearer
+指引；非空库强制 clean-slate 重建文字改为保留数据、由 owner 先批准备份／迁移／恢复，本片不执行资源操作。
+
+已实际验证：current 语义先 RED（旧 root Bearer），后 GREEN；相关 OpenAPI contract 99 PASS／0 FAIL／0 SKIP，
+semantic gate 为 215 frozen operations PASS；contract lint exit0（54 warnings）、源码 lint／typecheck／build exit0。
+没有改运行源码、Schema、lockfile、owner generated clients 或独立 browser-private profile；本仓无从自有 Public canonical
+生成的 SDK，不为本片重生无关 owner client。默认全测、真实 PG／IAM／浏览器和部署未运行；消费者固定本次正式发行 commit／digest
+及跨仓配对由主控后续验收。本片不代表 Share metadata、private reauthorize、RSS、personal_context 或权限 enum 已承接。
+
 ## A‑13 — Slack personal connection owner (Public 28.35)
 
 The existing BFF setup adds explicit Slack authorization and an admitted completion. A one-time claim precedes the fixed Slack exchange and workspace verification, and a final guarded write binds the same Kokoro user. Bot credentials are discarded after verification. Readback and disconnect concern this personal association, not the shared remote installation. App exact pairing, authenticated browser evidence and the live provider remain separate gates.

@@ -1,3 +1,12 @@
+## B-T3 — Public 28.36 native Session metadata
+
+This release corrects authentication descriptions to match the existing runtime; all 215 operations retain their exact
+identity and order. `openapi/v1/openapi.yaml` remains the sole editable public artifact. The existing build/test inverse
+restores complete Public 28.35 bytes (`a26431d45ad96c4e80e6751d61e66a14b3933ae7c2ffb6f9e7df57fcc7e6808f`)
+and rejects child drift. This repository has no generated SDK derived from its own public canonical: owner-client and
+independent browser-private generation inputs do not change. Consumers must pin the new owner publication and use their
+normal generators; no historical proof or runtime fallback is introduced. No Schema, migration or data reset belongs to this release.
+
 ## A‑13 — Public 28.35 Slack completion
 
 The current setup adds Slack states and one admitted, single-use completion. Only pre-claim setup has the official Slack authorization URL; the credential-free success receipt is the ordinary connected state. The build-time inverse restores exact Public 28.34 bytes. LINE and Telegram wire are unchanged.
@@ -373,9 +382,18 @@ IAM 私有 allowlist/snapshot 不在 BFF vendoring。BFF 的本地门只证明 p
 Every operation in `openapi/v1/openapi.yaml` is classified as `public`. Browser code still reaches it through the
 `kokoro` same-origin server adapter; `public` describes product-contract visibility and does not expose BFF service
 credentials to a browser. Health and readiness operations use the `anonymous` permission marker. Business operations
-declare a stable permission identifier and normally require the trusted `web-bff` service envelope plus an IAM-verified
-user Bearer. Share and runtime manifest explicitly override the top-level user Bearer requirement with service-only
-security; an irrelevant extra Authorization header does not become an additional credential requirement.
+declare a stable permission identifier. Ordinary Product operations require the trusted Web/Admin server adapter service
+envelope AND the configured native IAM Session cookie AND exact configured Web Origin at the BFF boundary. Browser
+code calls only its same-origin adapter: it never receives an internal service secret or calls BFF directly. IAM verifies
+the Session and current fixed-tenant Product eligibility; ordinary internal business calls carry service identity and the
+trusted actor, not the user's Cookie, Origin, Bearer or Session reference. Plain and Secure cookie security alternatives
+express different configured deployment modes, not a runtime fallback. The Origin header is an admission precondition,
+not an identity credential.
+
+Explicit operation overrides remain authoritative: health/readiness are anonymous; Share and runtime manifest are
+service-only; `GET /v1/skill.list` alone uses the independent IAM User API Key/OpenApp Bearer inside the trusted service
+envelope; Telegram and LINE callbacks use their own provider secret/signature. An irrelevant extra Authorization header
+does not change a service-only operation's credential requirements.
 
 ## Version
 

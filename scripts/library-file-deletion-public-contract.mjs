@@ -3,7 +3,37 @@ import { createHash } from "node:crypto"
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
+export function restorePublic2835NativeSessionContract(source) {
+  if (!/^  version: 28\.36\.0$/mu.test(source)) return source
+  if (hash(source) !== "7f715f26aa93410514b3876804309e10049f6fc6cbfcbe50847b1ccbd800d434") throw Error("Native Session Public28.36 child drift")
+  const parent = source
+    .replaceAll(
+      "      operationId: listSkills\n      security:\n        - serviceHeader: []\n          internalSecret: []\n          userBearer: []\n",
+      "      operationId: listSkills\n",
+    )
+    .replaceAll(
+      "The trusted Web adapter service envelope, configured native IAM Session cookie and exact Web Origin are required at the BFF boundary. IAM verifies the current Session online; the admitted tenant must equal the server-configured Product tenant. Browser code uses only its same-origin adapter and never receives the internal service secret. No caller-supplied tenant or user field is used.",
+      "The trusted Web service and unique user Bearer are verified online through IAM; the admitted tenant must equal the server-configured Product tenant. No caller-supplied tenant or user field is used.",
+    )
+    .replaceAll(
+      "    serviceHeader:\n      type: apiKey\n      in: header\n      name: x-kokoro-service\n      description: Trusted Web or Admin server adapter identity. Browser code calls only its same-origin adapter, never BFF directly.\n    internalSecret:\n      type: apiKey\n      in: header\n      name: x-kokoro-internal-secret\n      description: Internal service envelope secret supplied by the trusted server adapter, never supplied to browser code. This envelope does not establish a human identity.\n    issuerSessionCookie:\n      type: apiKey\n      in: cookie\n      name: kokoro-issuer.session_token\n      description: Native IAM Session cookie in the configured plain-cookie deployment mode, forwarded only through the trusted adapter to the dedicated admission boundary. IAM verifies the current Session and fixed Product tenant online; ordinary internal owner calls do not receive this cookie.\n    secureIssuerSessionCookie:\n      type: apiKey\n      in: cookie\n      name: __Secure-kokoro-issuer.session_token\n      description: Native IAM Session cookie in the configured Secure-cookie deployment mode. The two cookie requirements represent mutually exclusive configured deployment modes, not runtime fallback or acceptance of both names.\n    browserOrigin:\n      type: apiKey\n      in: header\n      name: Origin\n      description: Exact configured Web origin, forwarded by the trusted adapter after its same-origin and CSRF checks. BFF requires exactly one matching Origin; this header is an admission precondition, not a service or human identity credential.\n    userBearer:\n      type: http\n      scheme: bearer\n      bearerFormat: IAM-User-API-Key-or-OpenApp\n      description: Independent skill.list IAM User API Key or registered OAuth OpenApp identity only, inside the trusted service envelope. Ordinary Product operations use native Session admission instead.\n",
+      "    serviceHeader:\n      type: apiKey\n      in: header\n      name: x-kokoro-service\n    internalSecret:\n      type: apiKey\n      in: header\n      name: x-kokoro-internal-secret\n    userBearer:\n      type: http\n      scheme: bearer\n      bearerFormat: opaque-session-token\n",
+    )
+    .replaceAll(
+      "      security:\n        - serviceHeader: []\n          internalSecret: []\n          issuerSessionCookie: []\n          browserOrigin: []\n        - serviceHeader: []\n          internalSecret: []\n          secureIssuerSessionCookie: []\n          browserOrigin: []\n",
+      "      security:\n        - serviceHeader: []\n          internalSecret: []\n          userBearer: []\n",
+    )
+    .replaceAll(
+      "security:\n  - serviceHeader: []\n    internalSecret: []\n    issuerSessionCookie: []\n    browserOrigin: []\n  - serviceHeader: []\n    internalSecret: []\n    secureIssuerSessionCookie: []\n    browserOrigin: []\n",
+      "security:\n  - serviceHeader: []\n    internalSecret: []\n    userBearer: []\n",
+    )
+    .replaceAll("  version: 28.36.0\n", "  version: 28.35.0\n")
+  if (hash(parent) !== "a26431d45ad96c4e80e6751d61e66a14b3933ae7c2ffb6f9e7df57fcc7e6808f") throw Error("Native Session complete Public28.35 parent drift")
+  return parent
+}
+
 export function restorePublic2834SlackConnectionContract(source) {
+  source = restorePublic2835NativeSessionContract(source)
   if (!/^  version: 28\.35\.0$/mu.test(source)) return source
   if (hash(source) !== "a26431d45ad96c4e80e6751d61e66a14b3933ae7c2ffb6f9e7df57fcc7e6808f") throw Error("Slack Public28.35 child drift")
   const parent = source

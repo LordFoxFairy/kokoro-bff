@@ -1,3 +1,12 @@
+## B-T3 — Public 28.36 认证 metadata
+
+普通 Product 请求的 BFF 边界是受信 Web/Admin 服务端 envelope AND 配置的原生 IAM Session Cookie AND exact Web Origin。
+浏览器只调用同源 adapter，不直连 BFF、不持内部 secret。Cookie 仅到具名认证边界；普通内部业务仍走服务身份＋可信 actor。
+plain／Secure Cookie 两个 security requirement 描述配置模式，不是运行 fallback；Origin 是准入前置条件，不是身份凭据。
+匿名 health、service-only Share／manifest、独立 `GET /v1/skill.list` User API Key/OpenApp Bearer 与 provider webhook
+保留各自显式 override。本文不引入统一的额外认证层。机器事实仍仅在 Public OpenAPI；215 operations 不变，
+完整 28.35 字节保留于 build/test 精确逆证。运行代码、Schema、独立 browser-private profiles 与 owner clients 无变化。
+
 ## A‑13 — Slack personal association
 
 The existing setup GET is read-only. Explicit start projects `awaiting_slack` with the single official workspace authorization URL, the exact setup ID as state, and a ten-minute expiry. After a completion claims this attempt, GET projects `awaiting_slack_callback` without a URL. `POST /v1/agents/connections/slack/complete` accepts only `{state,code}` after existing user admission; it returns the ordinary connected receipt with no-store and no-referrer, or rejects invalid, wrong-owner, repeated, expired, canceled, or already-bound attempts. Only Telegram accepts the existing confirm command. A cancel may cross the one claim revision on the exact Slack setup, but never cancels a completed binding. Disconnect removes the personal Kokoro association only; it does not uninstall, revoke, or attest continued Slack workspace access.

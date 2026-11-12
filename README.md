@@ -1,77 +1,10 @@
-## 2026-11-03 原生认证边缘源码候选（未正常激活）
-
-当前普通私有请求只经受信Web/Admin服务envelope＋IAM issuer Cookie＋固定Origin进入唯一显式`AuthenticationModule`；官方`GET /iam/get-session`鲜读后，IAM `tenant/read`核当前Product资格。普通IAM业务只传专用服务身份＋真实actor，不传Cookie、Origin、登录Session或人类Bearer；独立公开API Key/OpenApp与执行／资金proof不变。
-
-- IAM 业务 HTTP 生成消费固定 `b6a9745b340149808afb1aae357574d0aa7bbad3`／internal 0.21，只更新来源、保留已选的 22 个操作。Better Auth 1.7.3 与原生 relay 的独立 provenance 锚仍为 `896405d146c4ff96f5f39d5c2ce1bc788d46c2c7`，不改变认证路径。
-- `KOKORO_BFF_IAM_USER_CONTEXT_SERVICE_CREDENTIAL_FILE`用于17项普通私有业务；`KOKORO_BFF_IAM_ACCOUNT_SESSIONS_SERVICE_CREDENTIAL_FILE`只用于独立账户会话认证生命周期（服务身份 AND Cookie AND exact Origin）。旧ADMISSION配置不再读取。
-- browser-private `GET /browser/v1/auth/session`严格`refresh=true|false`，默认true供可写状态观察；RSC显式false。仅返回安全身份／真实expiry，request ID只在header；逐条安全Set-Cookie，不输出raw Session／set-auth-jwt。
-- 独立合同profile1.0.0及relay3.0.0已由Root提交`34c9f997`；浏览器raw get-session出口关闭。公开`/v1/me`三字段和原envelope保持。
-
-Root已在停写候选完成15个原integration suite、6个独立PG suite及schema补验，合423PASS/0SKIP，1087输入与DB inventory保持、自有资源清理通过；覆盖Message canonical重放/取消/未知提交、Project/Task锁与RR读取边界。Root完整format/check已通过（contract1347、default2369PASS/2条件SKIP；另有真实schema15补证），真实IAM认证relay亦通过；各项证据只覆盖对应停写候选与范围。Skill inspection owner组合及App/Admin浏览器G1仍待，不把PG或认证组件通过当Task A闭环；正常环境未切换。以下较早日期状态按历史读取。
-
-## 2026-10-22 当前内部模型预算入口
-
-Agent使用独立 `KOKORO_BFF_AGENT_MODEL_ADMISSION_CREDENTIAL_FILE` 调用内部POST；BFF从原提交Run来源派生租户／付款用户，再单次调用固定Billing d345025／exp8。无浏览器token回取、用户grant、额外服务或本地receipt；internal1.1新增一操作、public23／186不变。最小运行配置／边界见三设计首节，完整验收与尚待Agent消费者／实际结算见 `docs/CURRENT.md`。以下较早切片仅历史。
-
-## 当前实现入口（2026-10-22）
-
-当前公共契约 Public23.0.0／186 operations，计价费率必须绑定精确System模型修订ID／摘要；固定Billing exp6，旧无绑定rate拒绝。原管理／非现金充值不变，本地完整门与真实owner HTTP／PG已验，详细范围见 [docs/CURRENT.md](docs/CURRENT.md)。App/Admin新字段消费者及Agent实际用量结算后继，正常环境未因本片激活。下方日期段仅保留阶段历史。
-
-## 2026-10-21 个人系列删除候选
-
-当前机器契约 Public22.1.0 /177，新增个人系列 DELETE，保留 distinct withdraw；严格 CAS/publication、当前 IAM delete_series 和原 key 回执。Platform Native 固定883d771、IAM0.15固定4db7012。公开三身份矩阵及 App 页面尚待接线，正常环境未激活；边界与实际验证见 `docs/CURRENT.md`。下方版本段为阶段历史。
-
-## 2026-10-21 Skills 发布确认快照候选
-
-当前源码 Public22.0.0/176，个人与官方发布沿既有路由显式绑定确认的系列publication，旧缺字段请求拒绝；非发布audience编辑不变。原生owner固定e95aba2，Admin详情以meta.publication返回明确空或精确系列指针／版本、HTTP历史仍efe1ed1/6.3；无新服务、表或运行兼容层。App/Admin尚未配对、正常服务未切换，不能据此称恢复旅程闭环；实际验证及下一步见 `docs/CURRENT.md`。下面日期段保留各阶段事实。
-
-## 2026-10-20 MC-02A System5 / Public21 消费者候选
-
-当前源码唯一 Public21.0.0 /165 operations：业务模型保持稳定label name、owner显式provider与精确三ID/feature/request_model，显示名为有效alias或原模型名；管理员label别名nullable、共享revision无feature。System5固定来源/五操作窄生成见 `contract/dependencies/system-http.json`；SQL/其他pins不变。正常配对及完整门收据见 `docs/CURRENT.md`，Key保存/领取未在本片实施，模型/工具/扣费仍暂停。下方旧版本按历史读取。
-
-## 2026-10-20 System4 管理消费者候选
-
-当前源码唯一公开契约 Public20.0.0 /165 operations：管理员修订只读表示使用 System4 的 `request_model` 与 closed `connection`，旧 transport/gateway 字段退休。仍只消费标签、修订、路由列表和路由 PUT 四操作；固定来源/生成见 `contract/dependencies/system-http.json`。其他 owner pins、canonical SQL 与执行暂停保持。实际门禁与未激活边界见 `docs/CURRENT.md`，下方旧版本段按历史读取。
-
-## 2026-10-19 MCP availability 消费者候选
-
-修既有跨仓版本不配对，不新增功能模块。Platform固定已合入4a4e4c4/HTTP6.2，原HTTP/Connect生成链产物固定摘要；Connector/Server按owner五态独立投影当前可用性，不由status/enabled猜测，不兼容旧缺字段或跳过unknown。Public19/165、SQL、权限与独立错误profile保持。
-
-当前原四套projector先33PASS/11FAIL，再44PASS；补原HTTP夹具的必需字段后相关九套108PASS/0SKIP。两方真实descriptor与实际构建decoder/projector证明五态接通、零值/未知enum/额外wire仍拒绝。此前BFF旧descriptor真实拒绝字段13的负控保留。最终747输入冻结无漂移，format/lint/typecheck/contract/architecture/default/build七门均exit0；contract847 PASS、architecture36 PASS、默认1492 PASS/3原资源SKIP。新增仅三条独有风险测试，重复fixture字段已删除并重跑全门。未另跑真实PG/Redis、owner业务HTTP或正常运行/App/Admin整链。正常原mixed不动，模型、实际工具与扣费不启用；隔离验收完成后沿既有授权集中PR交付，不等待CI但不冒称CI通过。
-
-## 2026-10-19 当前 Public19 集成交付
-
-当前唯一契约为 Public19.0.0 / 165 operations。保留本地Skills、项目选择冻结、知识、调度日历、Library与MCP包管理，并合入main账号会话/姓名、共享/归档及完整Team权限；不恢复旧名称关联或旧anchor字段。双父精确证明在 `scripts/verify-closure-integration-contract.mjs`；真实验证和正常配对边界见 `docs/CURRENT.md`。以下日期段是历史切片，不替代当前机器契约。
-
-### 2026-10-18 MCP 管理HTTP接线（未正常加载）
-
-Public18.1 新增受管包 Begin/Complete/Abort/Status/Publish 五操作；沿现 mcpProviderAdmin 配置与正式 SDK、当前人类平台管理员及 mcp_catalog.manage 准入。只有元数据与短时 PUT 引用经 BFF，字节仍直接传 Storage；无新表、配置、自动重试或模型/工具执行。Admin 上传/发布恢复页面待后继，完整验证与未验边界见 docs/CURRENT.md。
-
-### 2026-10-18 MCP 受管包内部消费者
-
-Platform 固定发行物统一至 fa5c5e53151b3c72145b680a3ee4a45d92c17ec7，新增 MCP 包管理五方法窄 client；沿现 mcp_admin direct 服务凭据、固定摘要与总预算，不执行对象上传/工具，不新增公开路由或正常配置。人类管理员 HTTP 准入及 Admin 上传页面仍待接线；发布回执不是运行授权。实际验证与剩余项见 docs/CURRENT.md。
-
-## R356 普通 Skills 生命周期 Public11 预激活纠正（2026-10-09）
-
-唯一当前契约为 Public11.0.0，同 `/v1`、132 operations。普通 CreateVersion 只接 strict metadata，不接收或转发 expected_state_version；Platform 在事务内核当前主体/owner与 active/disabled base，分配新 revision 并创建独立 draft/stateVersion=1，不改 base。普通 Withdraw 实际修改原 Skill，严格要求当前 expected_state_version；原 key/body、digest、receipt、current IAM、取消与绝对预算保持。Admin version、Publish 及其他真实 CAS 不变。
-
-Root 将未正常激活的 beta 以唯一 corrective major 修正；首次公开激活后的 breaking 策略保持。当前机器只改这两个普通输入与 version，先精确逆回完整 Public10.0.0 SHA2f98f529bda413912b5c15e6de45db7cdadf0e0bc51fd5de44818db9727efbb8，再运行全部原 Public9.0.1/8.10 历史门。无 owner 契约、表、Schema、依赖或新框架；DATA_MODEL/canonical schema 原字节保持。消费者等待 Root 正式提交再固定生成；源码验证不代表真实组合、正常激活或 Skills 页面完成。
-
-<!-- R356-LIFECYCLE-PUBLIC11-END -->
-
-## R356 当前 Public10 预激活修正（2026-10-09）
-
-唯一机器契约现为 Public10.0.0 / 132 operations，同 `/v1`；本前缀更新下文历史 Public9 摘要。Publish required closed JSON audience/expected_state_version，同 key/CAS/digest 重放，无空body fallback。首次正常公开激活前 beta clean-slate裁决不改变以后 breaking-major策略；契约/工程候选不代表正常配对或浏览器完成，消费者等Root正式commit后固定生成。现数据库/owner生成/依赖原字节保持。
-
-<!-- R356-PUBLISH-PUBLIC10-ENTRY-END -->
-
 # kokoro-bff
 
 `kokoro-bff` 是 Kokoro 唯一 public HTTP owner，发布 Web-facing Product API，并承担 Conversation、Message、
-Share、Project、ScheduledTask 与 durable AG-UI projection 的目标边界。Browser 不直连本服务；唯一调用方向是：
+Share、Project、ScheduledTask 与 durable AG-UI projection 的目标边界。Browser 不直连本服务、不持有内部服务 secret；唯一调用方向是：
 
 ```text
-Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / Scheduler
+Browser -> kokoro-app same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent
 ```
 
 字段级事实源是 [`contract/openapi/v1/openapi.yaml`](./contract/openapi/v1/openapi.yaml)。当前实现与未完成缺口以
@@ -81,14 +14,14 @@ Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / 
 
 | 能力                           | 当前事实                                                                                                                  |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| Public contract                | Public9 / 132 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata                                      |
-| User admission                 | 源码候选使用受信服务envelope＋原生issuer Cookie／固定Origin；官方Session鲜验与当前Product资格分离，普通业务走服务＋actor |
+| Public contract                | Public28.36 / 215 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata                                      |
+| User admission                 | 受信Web/Admin envelope＋配置的原生issuer Session Cookie＋固定Origin；IAM鲜验Session与当前Product资格；普通内部业务走服务＋actor |
 | Project / ScheduledTask        | Live 使用本仓 PostgreSQL；Redis 用于 readiness/cache coordination                                                         |
-| Idempotency                    | business store 存在时有 PostgreSQL receipt；部分路径仍可能使用进程内 Map                                                  |
+| Idempotency                    | 持久化 command receipt 与未知结果恢复；适用面以各 operation 的幂等声明为准                                                  |
 | Chat / AG-UI                   | Live 先把 Agent source fact 与 AG-UI frame 原子投影到本仓 PostgreSQL，再从 ledger 输出 SSE                                |
 | Conversation / Message / Share | Live 产品事实由本仓 PostgreSQL 的 `bff_conversation`、`bff_message`、`bff_share` canonical tables 提供                    |
 | Durable AG-UI ledger           | PostgreSQL 后台 consumer 以 lease/fence 主动摄取；逐 frame opaque cursor、保留水位、GC 与 expired-cursor tombstone 已闭环 |
-| ScheduledTask durable dispatch | 已实现本仓 bounded outbox、租约/fence、重试/终态；mutation receipt 仍未与事实事务合并                                     |
+| ScheduledTask durable dispatch | 本仓到期执行复用 Chat 提交与 Agent dispatch；canonical ScheduledTask/Execution、恢复与日历见当前契约                                     |
 | Test doubles                   | 只存在于 `test/doubles/`，不编入生产 `src/`                                                                               |
 
 ## Owner 边界
@@ -141,6 +74,12 @@ pnpm dev
 空 `kokoro_bff` schema 安装 canonical schema，不要求其他 owner schema 或 `public` 为空，也不执行历史 migration。
 
 ## 服务调用 envelope 与用户准入
+
+以下是受信 Web/Admin **服务端 adapter → BFF** 的传输示意，不是浏览器调用模板。
+浏览器仅调用本应用同源 adapter；Cookie／Origin 仅通过具名认证边界，内部 secret 不进入浏览器代码。
+Public 28.36 只纠正旧 Bearer metadata，不改变现有运行认证。部署模式选择普通或 `__Secure-` Session Cookie，
+不以两个名字互相 fallback。`/v1/skill.list` 独立保留 IAM User API Key/OpenApp Bearer，
+health、Share／manifest 与 provider webhook 各用 canonical 中的显式 security override。
 
 ```http
 x-kokoro-service: web-bff
@@ -201,17 +140,13 @@ health/ready smoke 尚未在当前治理阶段全部闭环，不应据此 README
 
 ### Single project file upload
 
-Configure `KOKORO_STORAGE_RPC_BASE_URL`, independent `KOKORO_BFF_STORAGE_SECRET`, and exact `KOKORO_STORAGE_OBJECT_ORIGIN` together. The existing project resources POST accepts one `files` multipart part and at most 1 MiB for the entire body. It returns only CLEAN Storage asset metadata. Infected files receive terminal 422; pending/unknown scans receive retryable 503 without a usable resource. Reuse the same key/file after an uncertain response; an aborted upload requires a new key. `GET /v1/library?kind=file` now lists only the admitted subject's personal CLEAN ASSET files through Storage Connect; personal upload/download and Agent Artifacts remain separate slices. Storage provenance/generation: `pnpm contract:check:storage`.
+Configure `KOKORO_STORAGE_RPC_BASE_URL`, independent `KOKORO_BFF_STORAGE_SECRET`, and exact `KOKORO_STORAGE_OBJECT_ORIGIN` together. The existing project resources POST accepts one `files` multipart part and at most 1 MiB for the entire body. It returns only CLEAN Storage asset metadata. Infected files receive terminal 422; pending/unknown scans receive retryable 503 without a usable resource. Reuse the same key/file after an uncertain response; an aborted upload requires a new key. `GET /v1/library?kind=file` now lists only the admitted subject's personal CLEAN ASSET files through Storage Connect; the current personal upload/download and Artifact operations are specified separately in the canonical contract. Storage provenance/generation: `pnpm contract:check:storage`.
 
 Project resources can be reloaded with `GET /v1/projects/{projectId}/resources?limit=50&cursor=...` using the same Storage configuration. The response contains clean asset metadata in `data.items` and opaque `data.next_cursor` (null at the end); no download URL or upload ID is fabricated. Current project ownership is rechecked on every page.
 
-## R59 public4 实现候选（未发布）
+## 既有数据与版本配对
 
-- 唯一公开事实源为 `contract/openapi/v1/openapi.yaml` public4；Agent HTTP4 固定 e977923ea9992cbddaf0cdbc6c8f8d23b3af120e，生成来源见 `contract/dependencies/agent-http.json`。
-- `src/infrastructure/clients/agent/interaction-state.ts` 严格解码固定 owner schema；`src/application/agui/interaction-state.ts` 校验完整 revision/no-op；`src/application/chat-run-control.ts` 校验当前 pause 的完整 decision 集合。
-- `bff_agui_run_interaction` 是最新 run read projection；source/CUSTOM/cursor 与它同事务。`chat-repository.ts` 在授权 RR 中校验 head、完整 state 与 ledger provenance；ACK 不清除 pause。
-- 本轮静态/纯测试证据与未决 fixture 见 `docs/CURRENT.md`。真实 PG/Redis/HTTP、发布及 Web 消费归 Root 后续验收，不能以源码候选代替。
-
-### Agent 7.3 待核对失败码的既有库配对
-
-Public23.1只追加 `model_settlement_pending`（不可自动重试），不改变真实结算规则。新库继续用原 fresh-only installer；旧 schema-evolution CLI 与测试已删除，非空旧 owner 不再由 BFF 运行时承接，必须先完成 clean-slate 数据重建。正常激活须与固定 Agent7.3 和 App 消费者配对，具体当前状态见 `docs/CURRENT.md`；组件测试通过不代表正常整链已验收。
+历史 public4／Agent7.3 等候选说明不再是当前启动指引；版本、固定 owner 来源和验证边界分别以
+canonical contract、`contract/dependencies/` 和 [`docs/CURRENT.md`](./docs/CURRENT.md) 为准。
+本次 metadata 纠偏不授权迁移、清卷或重建任何既有数据。非空 schema 不得交给 fresh-only installer；
+若当前 schema 与代码不匹配，保留数据并由数据 owner 在明确备份、迁移和恢复方案后处理，不以清空数据消除差异。

@@ -28,9 +28,60 @@ const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.me
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 
+test("current public authentication metadata follows native Session admission and preserves named exceptions", async () => {
+  const { load } = await import("js-yaml")
+  const active = load(await readFile(currentOpenapiUrl, "utf8"))
+  const native = ["issuerSessionCookie", "secureIssuerSessionCookie"].map((cookie) => ({
+    serviceHeader: [],
+    internalSecret: [],
+    [cookie]: [],
+    browserOrigin: [],
+  }))
+  assert.deepEqual(active.security, native, "ordinary Product operations describe native Session, not a user Bearer")
+  assert.equal(active.info.version, "28.36.0")
+  const operations = Object.values(active.paths).flatMap((path) =>
+    Object.values(path).filter((operation) => operation && typeof operation === "object" && operation.operationId),
+  )
+  assert.equal(operations.length, 215)
+  const serviceOnly = new Set(["getRuntimeManifest", "getSharedSessionSnapshot"])
+  const exceptions = new Map([
+    ["healthz", []],
+    ["readyz", []],
+    ["listSkills", [{ serviceHeader: [], internalSecret: [], userBearer: [] }]],
+    ["acceptTelegramConnectionUpdate", [{ TelegramWebhookSecret: [] }]],
+    ["acceptLineConnectionEvent", [{ LineWebhookSignature: [] }]],
+  ])
+  for (const operation of operations) {
+    assert.deepEqual(
+      operation.security ?? active.security,
+      exceptions.get(operation.operationId) ?? (serviceOnly.has(operation.operationId) ? [{ serviceHeader: [], internalSecret: [] }] : native),
+      operation.operationId,
+    )
+  }
+  assert.equal(active.components.securitySchemes.issuerSessionCookie.in, "cookie")
+  assert.equal(active.components.securitySchemes.issuerSessionCookie.name, "kokoro-issuer.session_token")
+  assert.equal(active.components.securitySchemes.secureIssuerSessionCookie.name, "__Secure-kokoro-issuer.session_token")
+  assert.equal(active.components.securitySchemes.browserOrigin.name, "Origin")
+  assert.match(active.components.securitySchemes.browserOrigin.description, /configured Web origin/u)
+  assert.match(active.components.securitySchemes.internalSecret.description, /never supplied to browser code/u)
+  assert.match(active.components.securitySchemes.userBearer.description, /User API Key.*OpenApp/u)
+  assert.doesNotMatch(active.paths["/v1/me"].get.description, /user Bearer/u)
+})
+
+test("Public28.36 metadata change restores the exact Public28.35 parent and rejects child drift", async () => {
+  const { restorePublic2835NativeSessionContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const latest = await readFile(currentOpenapiUrl, "utf8")
+  assert.equal(
+    createHash("sha256").update(restorePublic2835NativeSessionContract(latest)).digest("hex"),
+    "a26431d45ad96c4e80e6751d61e66a14b3933ae7c2ffb6f9e7df57fcc7e6808f",
+  )
+  assert.throws(() => restorePublic2835NativeSessionContract(latest + "\n"), /Public28.36 child drift/u)
+})
+
 test("Public28.35 models Slack installation completion without exposing a credential", async () => {
   const { load } = await import("js-yaml")
-  const latest = await readFile(currentOpenapiUrl, "utf8")
+  const { restorePublic2835NativeSessionContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const latest = restorePublic2835NativeSessionContract(await readFile(currentOpenapiUrl, "utf8"))
   const active = load(latest)
   assert.equal(active.info.version, "28.35.0")
   const complete = active.paths["/v1/agents/connections/slack/complete"].post

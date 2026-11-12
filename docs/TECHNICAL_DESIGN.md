@@ -1,3 +1,11 @@
+## 2026-11-12 B-T3：公开认证 metadata 纠偏（Public 28.36）
+
+唯一事实源仍为本仓 Public OpenAPI。当前运行已由 AuthenticationModule 鲜验原生 IAM Session，但旧 public security 仍声明普通用户 Bearer。本片只将 metadata 对齐运行，不改认证、路由、权限、Schema、依赖或 215 项 operation 身份／顺序。
+
+BFF 收到的是受信 Web/Admin same-origin adapter 的服务 envelope、allowlisted issuer Session Cookie 和固定 Origin；浏览器不直连 BFF、不持有或发送内部服务 secret。普通操作声明服务 envelope AND 配置模式对应的 plain／Secure Session Cookie AND exact Web Origin；两种 Cookie requirement 是不同部署模式的表示，不是允许运行时 fallback。Cookie 只到具名认证边界，内部普通业务保持服务身份＋真实 actor。匿名 health、服务-only Share／manifest、独立 skill.list User API Key/OpenApp Bearer 和 provider webhook 显式 override 各自保留，不将它们套成 Session 请求。
+
+正式版本为 28.36.0；构建／测试逆证只允许精确还原完整 28.35 原件及原序 operation inventory，不提供运行时降级。本仓无从 public canonical 派生的业务 SDK；现 owner-client 与独立 browser-private generator 输入不变，不能为了改说明重生或回退它们。消费者固定新发布 commit／digest 后在自身仓正规生成。README／INDEX 只保当前入口并明确历史说明不授数据清理操作；非空库不得按过期文字清除或重建。本片以 current security 语义、例外分类和精确父原件逆证验收；不重跑已验登录旅程、不声明实际部署。
+
 ## A‑13 — Slack workspace authorization boundary
 
 The original admitted Kokoro user starts the existing setup and completes the official Slack workspace authorization. Configure `KOKORO_SLACK_APP_ID`, `KOKORO_SLACK_CLIENT_ID`, `KOKORO_SLACK_CLIENT_SECRET` and the existing HTTPS `KOKORO_IAM_WEB_ORIGIN`; register the exact `/api/agents/connections/slack/callback` URL on that origin. BFF uses only the workspace Bot scope `team:read`, no user scopes. After one exact durable claim it exchanges the code with Slack and uses the returned Bot token once to verify the same workspace through `team.info`. Only the verified app/workspace/member association survives; credentials are not logged, returned, or retained. Provider calls run outside the lock and are not retried. A cancel, expiry or retired caller prevents late local binding, but may occur after Slack completed a workspace installation. No uninstall, Bot revocation, messages, Agent execution, credential store or extra login is introduced.
