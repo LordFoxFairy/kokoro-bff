@@ -632,7 +632,7 @@ export async function handleProjectCoreReadRequest(
   return true
 }
 
-/** Projects-owned pin adapter; the route keeps its own body, CAS and final-admission checks. */
+/** GET reuses this request's complete admission; PUT retains its fresh pre/post-write admission. */
 export async function handleProjectPinRequest(
   request: IncomingMessage,
   response: ServerResponse,
@@ -643,7 +643,6 @@ export async function handleProjectPinRequest(
   if (!isProjectPinRequest(request)) return false
   const id = requestId(request)
   const deadlineAt = performance.now() + Math.min(config.upstreamTimeoutMs, 10_000)
-  response.setHeader("x-request-id", id)
   const abort = new AbortController()
   const timer = setTimeout(() => abort.abort(), Math.max(0, deadlineAt - performance.now()))
   const onAborted = (): void => abort.abort()
@@ -652,22 +651,52 @@ export async function handleProjectPinRequest(
   }
   request.once("aborted", onAborted)
   response.once("close", onClosed)
+  const checkLifetime = (): void => {
+    if (request.aborted || response.destroyed || response.writableEnded || performance.now() >= deadlineAt) abort.abort()
+    abort.signal.throwIfAborted()
+  }
   try {
+    checkLifetime()
+    response.setHeader("x-request-id", id)
     const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal, response)
+    checkLifetime()
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true
     }
-    await projectPinRoute(request, response, admitted.context, pathOf(request).slice(1), projectPins, deadlineAt, async (signal) => {
-      const fresh = await authorizeUserRequest(request, config, admission, id, signal, response)
-      if (!fresh.ok) throw new ProjectPinAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
-      if (fresh.context.identity.namespace !== admitted.context.identity.namespace || fresh.context.identity.userId !== admitted.context.identity.userId)
-        throw new ProjectPinAdmissionError(404, "project_not_found")
-    })
+    const readPins = request.method === "GET" && projectPinPath(request) === "/v1/self/project-pins"
+    const expiresAt = readPins && typeof admitted.expiresAt === "string" ? Date.parse(admitted.expiresAt) : undefined
+    if (readPins && (expiresAt === undefined || !Number.isFinite(expiresAt))) throw new ProjectPinAdmissionError(503, "iam_admission_unavailable")
+    if (expiresAt !== undefined && Date.now() >= expiresAt) throw new ProjectPinAdmissionError(401, "session_invalid")
+    await projectPinRoute(
+      request,
+      response,
+      admitted.context,
+      pathOf(request).slice(1),
+      projectPins,
+      deadlineAt,
+      async (signal) => {
+        if (readPins) {
+          if (Date.now() >= expiresAt!) throw new ProjectPinAdmissionError(401, "session_invalid")
+          checkLifetime()
+          signal.throwIfAborted()
+          return
+        }
+        const fresh = await authorizeUserRequest(request, config, admission, id, signal, response)
+        if (!fresh.ok) throw new ProjectPinAdmissionError(fresh.status, fresh.code, fresh.retryAfter)
+        if (fresh.context.identity.namespace !== admitted.context.identity.namespace || fresh.context.identity.userId !== admitted.context.identity.userId)
+          throw new ProjectPinAdmissionError(404, "project_not_found")
+      },
+      expiresAt,
+    )
     return true
-  } catch {
+  } catch (error) {
     if (!response.headersSent && !response.writableEnded && !response.destroyed)
-      send(response, 503, failure("project_pin_unavailable", "Project pin request failed", id))
+      send(
+        response,
+        error instanceof ProjectPinAdmissionError ? error.status : 503,
+        failure(error instanceof ProjectPinAdmissionError ? error.code : "project_pin_unavailable", "Project pin request failed", id),
+      )
     return true
   } finally {
     clearTimeout(timer)

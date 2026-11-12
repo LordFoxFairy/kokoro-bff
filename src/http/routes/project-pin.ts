@@ -25,18 +25,26 @@ export async function projectPinRoute(
   store: ProjectPinProvider,
   deadlineAt: number,
   currentAdmission: (signal: AbortSignal) => Promise<void>,
+  sessionExpiresAt?: number,
 ): Promise<void> {
+  const remaining = deadlineAt - performance.now()
+  const sessionRemaining = sessionExpiresAt === undefined ? undefined : sessionExpiresAt - Date.now()
+  const sessionFirst = sessionRemaining !== undefined && sessionRemaining <= remaining
   const controller = new AbortController(),
-    timer = setTimeout(() => controller.abort(), Math.max(0, deadlineAt - performance.now()))
+    timer = setTimeout(
+      () => controller.abort(sessionFirst ? new ProjectPinAdmissionError(401, "session_invalid") : undefined),
+      Math.max(0, Math.ceil(sessionFirst ? sessionRemaining : remaining)),
+    )
   const abort = () => {
     if (!response.writableEnded) controller.abort()
   }
   request.once("aborted", abort)
   response.once("close", abort)
-  if (request.aborted || response.destroyed) controller.abort()
+  if (request.aborted || response.destroyed || remaining <= 0) controller.abort()
+  if (sessionRemaining !== undefined && sessionRemaining <= 0) controller.abort(new ProjectPinAdmissionError(401, "session_invalid"))
   const within = <T>(start: () => Promise<T>): Promise<T> =>
     new Promise((resolve, reject) => {
-      const stop = () => reject(new Error("project_pin_unavailable"))
+      const stop = () => reject(controller.signal.reason instanceof ProjectPinAdmissionError ? controller.signal.reason : new Error("project_pin_unavailable"))
       controller.signal.addEventListener("abort", stop, { once: true })
       if (controller.signal.aborted) {
         stop()

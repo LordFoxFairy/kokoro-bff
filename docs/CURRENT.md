@@ -1,3 +1,9 @@
+## 2026-11-12 PERF-02 本人 pins GET 重复准入收敛
+
+仅 GET /v1/self/project-pins 从三次完整准入（六次 IAM HTTP）收敛为入口一次原生 Session＋current_membership（两次 HTTP）。保持本人/tenant/未删除 Project SQL；后续检查仅消费本次成功准入的真实 expiresAt，并检查绝对预算、断连与已退休响应，不跨请求保存身份、不新增 cache/token/SDK/认证层。缺失或异常期限拒绝；下一请求仍重新准入并执行撤权。PUT 原入口及写前/写后三次准入、未知结果保障不变，无 wire/Schema/依赖变化。
+
+writer 实际六跳 RED→两跳 GREEN、生命周期 RED→GREEN，最终 build/完整 types/三源 scoped lint/四文件格式通过。主控停写四输入 SHA 核等，HTTP 路由＋正式 IAM client＋pin repository 定向 51 PASS/0 FAIL/0 SKIP、完整 typecheck 与 diff-check 通过；独立审查 CLEAR。IAM 依赖是实际 localhost HTTP peer，不冒真实 IAM 或正常浏览器测量，也不从调用次数推算 p95。未重跑 PG、模型、全默认或其他路由；正常进程尚未切换本片，待主控精确组合与受控激活。整个 Task B 与原 PR 完整交付仍 OPEN。
+
 ## 2026-11-12 B-08 个人设置接线与正常链路已验
 
 同owner已保存profile／知识使用事实在原Chat事务一条有界SELECT冻结到既有私有launch；可信user actor而非Project subject。无事实省略、显式关闭保revision，旧key零重读／regenerate原快照；读失败不当空数据，完整1MiB在Message/outbox/interrupt前拒绝。材料不进公开Message/trace；无新owner/协议/Schema/认证/依赖/记忆服务。固定现Agent7bfb/HTTP8.17/c471 artifact不换；正规generator仅补该personal子树遗漏的闭集／usage条件／ID唯一性，未建平行schema。
