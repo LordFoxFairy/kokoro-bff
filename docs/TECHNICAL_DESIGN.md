@@ -1,3 +1,15 @@
+## 2026-11-12 B-08 — 既有个人设置接入下一次 Chat（实施门）
+
+当前缺口仅是 BFF 已保存的 personalization／个人知识未进入新 Chat，现 Agent HTTP 8.17 已正式支持顶层 `personal_context`。复用已批准 B-08 owner 与既有协议，不退回旧 8.11、不增加记忆／RAG 服务、认证、SDK、缓存或 Schema；自动长期记忆与外部导入不在此片。
+
+- 最终 ChatTurn 事务在原命令重放检查和 Conversation／Project 资格锁之后，通过现 deadline query 的一条有界 CTE SELECT 读取同 tenant／可信 user actor 的 profile、usage、未删除知识。单 statement snapshot 冻结到原 outbox launch；不嵌套调用自行租连接的账户 repository，不增加个人行锁或声称与设置更新全局线性化。
+- 无 profile／usage 事实时省略 `personal_context`，保持旧无配置字节；显式关闭保真实 usage revision、items 为空。开启仅取当前有效本人知识，按 ID 稳定排序，最多100项，额外一项用于拒绝异常超量。profile 无另造开关。owner user 是可信 actor，不是 Project subject。
+- 同 key 重放先返回旧 receipt，不读取新设置；regenerate 复用源 dispatch 完整私有快照（包括旧省略），沿现 sourceFingerprint 最终复核。设置变更／停用仅作用于新消息／新任务，同 Run 不热替换。
+- 复用固定当前 Agent canonical 与 generated 类型／校验；当前消费生成器遗漏 personal 子对象闭合语义时，由正规 generator 按原 canonical 的 additionalProperties／条件约束修正，不手改 generated、不建第二 schema。拒绝未知字段／身份或开关矛盾，读取／校验失败不得当空配置成功。
+- 保完整 launch UTF-8 1MiB 上限，在任何 Message／outbox／interrupt 副作用前拒绝超限，沿现413；不截断或自造另一预算。材料只存既有私有 outbox／Agent Run，不进入公开 Message、AG-UI、Share 或 trace；不是“不落库”。模型私有提示及完整窗口仍由现 Agent 保护。
+
+写区限现 ChatTurn、dispatch payload／wire／相关类型、必要的同连接 snapshot helper、现 Agent consumer generator及其正规生成物、直接 Chat／regenerate／contract 测试。主控维护本三设计及 Root 唯一 TODO／计划；无公开 API DTO、owner protocol、DDL、依赖、旧兼容层变化。writer 停写后主控跑相关门与隔离真实 PG：新设置冻结、更新／关闭／删除新命令生效、旧 key／regenerate 不变、跨主体隔离、超限／取消零副作用；复用现 Agent 私有 prompt 证据，不重复旧模型成功旅程。
+
 ## 2026-11-12 B-T3 — 本人 Session Share metadata GET（Public 28.37）
 
 owner 沿现 BFF ChatModule／bff_share；`GET /v1/sessions/{id}/share` 复用当前 native Session 准入、Chat read façade 与 PostgresChatSessionStore，不恢复旧 Chat service/repository，不新建表、服务、认证层或 command receipt。只读查询在同一 SQL snapshot 核当前本人／租户、active Conversation、scope／project_ref 及有效本人 Project，再 LEFT JOIN 未撤销且未过期的 conversation share。可见但未分享／已撤销／过期返回 `{share:null}`；不可见统一404，不提前披露share存在。只返回share_id、created_at、expires_at，不返回正文、URL、撤权记录或owner身份。

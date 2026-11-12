@@ -1,3 +1,11 @@
+## 2026-11-12 B-08 — 消费现 Agent 8.17 personal_context（无新 wire）
+
+不新增／放宽浏览器 Chat 字段或公开 BFF operation；浏览器仍不得提交 `personal_context` 或自报 owner。BFF 仅从本 owner 已保存的本人事实形成当前固定 Agent 8.17 顶层私有输入：`schema_version:1`、可信 `owner:{tenant_ref,user_ref}`、nullable profile 和 `{usage_revision,enabled,items}` knowledge。user_ref 是执行的 user actor，不是可能为 Project 的 subject。
+
+revision／文本／100项限制与闭集按已固定 owner canonical；关闭时 items=[] 并保真实 usage revision，只有不存在的 usage 行才是0。缺 profile／usage 时省略，显式状态与省略不在同 key／Run 间互换。既有消费者对 personal_context 的显式 omit 是本片被替代的未接线限制，不恢复旧8.11发行物。生成校验按原机器契约正规纠偏，原独立 profile／pin、Public28.37/216项不变。
+
+新消息冻结读取时 snapshot；重放／regenerate 使用原快照。完整 launch 超过既有 UTF-8 1MiB 返回现413，读失败不是 disabled/null 成功。材料不出现在公开 Message/AG-UI/Share/trace；Agent 仍最终校验可信 actor／tenant、一致性、窗口与 tracing 私密边界。
+
 ## B-T3 — Public 28.37 本人分享状态读取
 
 `GET /v1/sessions/{id}/share` 使用当前普通native Session security与既有scope／project_ref，权限metadata复用`chat.session.read`，无需Idempotency-Key、不创建receipt。200为`{data:{share:null|{share_id,created_at,expires_at}},meta:{request_id}}`，`no-store`与header request ID。可见未分享、撤销、过期均为null，不修写过期状态；不存在／他人／跨租户／失效Project／direct不匹配统一404 session_not_found。scope=direct与project_ref冲突400；原POST/DELETE及service-only匿名分享snapshot不变。只增加当前GET、两个closed schemas与216项operation inventory，build/test精确回28.36，历史证明不改。

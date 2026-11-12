@@ -1,3 +1,9 @@
+## 2026-11-12 B-08 — 私有个人上下文冻结（零 DDL）
+
+事实仍属于现 BFF personalization、personal knowledge、knowledge usage 三张 owner 表；不增表、列、索引、revision 或演进工具。ChatTurn 同连接单条 CTE 读取当前可信 tenant/user actor 的 profile、usage 与未删除知识，统一 statement snapshot 形成 bounded manifest，写入既有 `bff_agent_dispatch_outbox.payload.launch.personal_context`。原公开 Message 只存用户消息，不复制这些材料。
+
+私有材料会随现 dispatch／Agent Run 持久化，不称“不落库”。新设置不重写历史 JSON／原 receipt；同 key 重放与 regenerate 复用源私有快照，包括旧省略；知识启停／删除只影响此后新提交。原 sourceFingerprint 承接整个 launch。无读取失败当空数据、跨 owner SQL、后台自动记忆或旧8.11数据回填；正常数据库不执行 DDL。
+
 ## 2026-11-12 B-T3 — Share metadata 零DDL只读
 
 继续使用本owner的bff_conversation、bff_project、bff_share；无新增表、列、索引或迁移。当前本人Conversation／有效本人Project与活跃分享在单条只读SELECT的同一snapshot判断；未分享、已撤销和到statement时已过期均投影null，不通过GET撤销、清理或延长分享。沿现read-only PG lease释放／取消，仅输出安全metadata；POST/DELETE、原唯一性与share审计事实保持。
