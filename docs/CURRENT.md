@@ -4,7 +4,7 @@
 
 writer实际2 RED→focused6 PASS，完整types/lint/build/18文件正规双生成检查通过。主控停写12输入：旧outbox/composer/regen/wire＋B08共68 PASS、types／正规Agent check通过；真实PG4子旅程＋parent共5 PASS／0 SKIP（无Redis／真实Agent模型）。覆盖新设置快照、原key/regen、跨actor/tenant、合法多语言1MiB、101项、read失败、真实snapshot后取消、零业务副作用与合法interrupt正控。首轮因fixture漏abort/未建立current stream头FAIL保留，只修PG测试；修后PASS及正控后最终PASS分列，三个自有数据库均DROP。生产11路径未变，最终12路径冻结核等，两独审CLEAR。Agent现8.17两owner规则文件主控21 PASS（无源改）。
 
-正常BFF仍609、浏览器完整设置→后续任务的正常验收待主控；不以组件/真实PG冒native模型端到端或整个TaskB完成。不重复旧模型成功链、不部署。
+后继正常BFF143/Appc044在Root21e833c4精确组合补验：原生UI失焦保存临时回复偏好→新消息→正常配置模型一次调用→AI SDK显示标记→硬刷新单条答复恢复。BFF私有快照与Agent request_json.personal_context完全相等，可信owner核等；用户Message不含标记、trace无私有材料，双Message/Run终态，financial ACK已存在，原两未知财务记录保持。原四个空字段经正常UI恢复（revision2，不伪装数据库无写入）；知识启停/删除/原key/regen等独有风险由上述真实PG及现Agent规则证据承接，不声称每组合都重跑模型。浏览器本次提交网络collector无事件，明确不以空trace冒零请求；权威DB/真实模型/刷新结果独立核验。整个TaskB及原PR完整出口仍未完成，不部署。
 
 ## 2026-11-12 · Task B联合候选主控验收
 
