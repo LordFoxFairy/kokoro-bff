@@ -409,7 +409,7 @@ test("personal route keeps durable receipts without a duplicate memory cache, re
   assert.equal(scopes.length, 2, "invalid input does not replay or open Storage")
 })
 
-test("live Product POST recovers lost Complete through personal Connect, persists result, and re-admits before replay", async () => {
+test("live Product POST recovers lost Complete through personal Connect, persists result, and re-admits before replay", async (t) => {
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { ConnectError, Code } = await import("@connectrpc/connect")
@@ -624,6 +624,62 @@ test("live Product POST recovers lost Complete through personal Connect, persist
     assert.equal(denied.status, 401, "current IAM admission precedes any terminal receipt replay")
     assert.equal(puts, 1)
     assert.equal(admissions, 5)
+    revoked = false
+    let ownerRequests = 0
+    servers[1].on("request", () => ownerRequests++)
+    const originalReceipts = JSON.stringify([...rows])
+    for (const framing of ["content-length", "chunked"]) {
+      await t.test(`oversized ${framing} upload returns complete 413 before the body ends without reaching owner or receipts`, async () => {
+        const { request: httpRequest } = await import("node:http")
+        let client
+        try {
+          const result = await new Promise((resolve, reject) => {
+            client = httpRequest(
+              `${bff}/v1/library/files`,
+              {
+                method: "POST",
+                headers: {
+                  cookie: "kokoro-issuer.session_token=owner",
+                  origin: "https://web.example.test",
+                  "x-kokoro-service": "web-bff",
+                  "x-kokoro-internal-secret": "web-secret",
+                  "x-kokoro-request-id": "oversized-upload",
+                  "idempotency-key": `oversized-${framing}`,
+                  "content-type": wire.headers.get("content-type"),
+                  ...(framing === "content-length" ? { "content-length": 2 * 1024 * 1024 } : {}),
+                },
+              },
+              (response) => {
+                const chunks = []
+                response.on("data", (chunk) => chunks.push(chunk))
+                response.on("error", reject)
+                response.on("end", () => {
+                  try {
+                    resolve({ status: response.statusCode, complete: response.complete, headers: response.headers, body: JSON.parse(Buffer.concat(chunks)) })
+                  } catch (error) {
+                    reject(error)
+                  }
+                })
+              },
+            )
+            client.on("error", reject)
+            client.setTimeout(3000, () => client.destroy(new Error("oversized upload did not receive a bounded response")))
+            // Deliberately leave both the declared body and chunked stream unfinished.
+            client.write(Buffer.alloc(1024 * 1024 + 1))
+          })
+          assert.equal(result.status, 413)
+          assert.equal(result.complete, true)
+          assert.equal(result.headers["x-request-id"], "oversized-upload")
+          assert.equal(result.body.error.code, "request_body_too_large")
+          assert.equal(ownerRequests, 0)
+          assert.equal(JSON.stringify([...rows]), originalReceipts)
+          assert.equal(puts, 1)
+          assert.equal(completes, 1)
+        } finally {
+          client?.destroy()
+        }
+      })
+    }
   } finally {
     await Promise.all([app?.close(), ...servers.map((server) => new Promise((resolve) => server.close(resolve)))])
   }
