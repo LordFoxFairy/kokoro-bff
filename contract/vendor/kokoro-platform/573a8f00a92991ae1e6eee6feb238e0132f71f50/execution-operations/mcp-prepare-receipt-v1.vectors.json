@@ -1,0 +1,24 @@
+{
+  "profile": "mcp-prepare-receipt-v1",
+  "version": "1.0.0",
+  "identity": {
+    "tenantId": "prepare-receipt-tenant",
+    "subjectId": "prepare-receipt-subject"
+  },
+  "original": {
+    "server_id": "server-1",
+    "expected_state_version": "7",
+    "request_digest": "69df59995ebc1dfb0572dc17d3d60edf8d6ad5716b8bb4a6c01799648cb2f424"
+  },
+  "changed_cas": {
+    "server_id": "server-1",
+    "expected_state_version": "8",
+    "request_digest": "8f3c09b608cd19ae9924128ebf5fe14be7b06c69b4e181d3bd79dad7962bff62"
+  },
+  "changed_server": {
+    "server_id": "server-2",
+    "expected_state_version": "7",
+    "request_digest": "bd013613747d104bab85507935f92343df23c00ee9039651da1c453622011355"
+  },
+  "request_id_and_command_id_excluded_from_digest": true
+}

@@ -1,3 +1,41 @@
+## 2026-11-12 · Task B联合候选主控验收
+
+当前main基线05a1074、metadata候选3007c16之上，Share GET／既有Team enum对齐／private MCP重新授权联合候选已停写并由主控验证：build、types、lint、216 semantic、两正规generator check、7相关文件337 PASS／0 SKIP。114受影响输入SHA冻结核等；最后仅真实PG fixture补合法deleted_at，其余113输入保持，不重复全默认。独立Share／MCP／Team及退役补口审查均CLEAR。
+
+真实ChatModule/Nest＋独立PG canonical schema的6子旅程（含未分享null、现POST/DELETE、过期／历史、owner/tenant/错scope、Project owner变化／软删、准入撤权）7项计数全通过，GET事实／receipt值与xmin不变。IAM Session准入为显式double、Redis及无关后台worker停用，不冒完整native IAM端到端。首轮夹具URL漏owner schema、次轮deleted seed漏deleted_at失败保留，两轮均回收；正式地址／合法fixture后通过。三个唯一测试库均已DROP，正常数据库和卷未改。
+
+MCP新private profile原Bearer声明已修native Cookie/Origin＋受信Web envelope；初始Session期间断连／0预算原窗口真实4 FAIL→4 PASS，退役后无后续manage/owner，已发Session仍原timeout边界保留。固定573a8f00真实72输入，原publication pin保持。无新权限／Schema／认证框架／自动Prepare。
+
+本候选尚未切正常服务／完成原PR17保历史集成，App正式消费和正常浏览器新授权／Share刷新仍待后继；不以337或PG通过冒Task B完成。
+
+## 2026-11-12 B-T3 — 本人 Session Share metadata GET 候选（Public 28.37）
+
+基线 `3007c1664a5f18ecc680ca7fcd13038f8dbd31bf`，本片未提交。唯一 Public canonical 新增
+`GET /v1/sessions/{id}/share`，Public28.37／216 operations；新增 closed metadata／response，旧215项inventory原序保持。
+canonical SHA `011f69cc516bac3b62f5d6f9d9c3eedb1509dc6a2f9e1ff2cebea32665240235`；build/test逆证精确还原完整28.36，
+再承接原28.35及以下历史证明；未修改历史原件。通用baseline重生入口会重排既有inventory，首轮semantic因历史顺序保护失败，
+已纠正为保留父215原序、只附canonical parser派生的新GET，最终216semantic通过；没有放宽旧逆证。
+
+沿当前Chat native read／createChatSessionReads／PostgresChatSessionStore，不恢复旧Service/Repository。
+现authorizeChatRequest只为该新GET解析原scope，全部Conversation／Project／Share可见性交同一条有界read-only SELECT，
+不经无read-lifetime的解锁预读。严格同tenant／Conversation owner／Project owner，不因项目成员身份披露他人Share locator。
+沿已有未撤销conversation-share唯一索引（包括已过期行），不使用无序LIMIT；异常多行拒绝。可见但未分享／撤销／到statement时已过期
+返回share:null；不可见统一session_not_found404。只输出share_id／created_at／expires_at，无URL、正文、撤权记录或内部身份。
+GET不修写expiry、不发receipt，POST/DELETE和service-only匿名Share snapshot保持原行为。现PG read lease复用本次准入signal与绝对deadline，
+断连／超时后不输出迟到metadata；未新增deadline框架、服务、认证层、Schema、依赖或迁移。
+
+已实际RED：新HTTP在缺路由时404≠200，canonical缺operation。随后3条focused HTTP PASS；相关Chat native／Chat service
+（含现Message parts）／OpenAPI三文件229 PASS／0 FAIL／0 SKIP，216semantic PASS；contract lint exit0／54 warnings，
+源码lint／typecheck／build exit0。这些是本片阶段证据，随后并行MCP writer使全仓静态基线再次变化；联合停写后的完整门由主控重跑，
+不把本次阶段静态当作最终共享输入验收。
+
+新增 `test/session-share-metadata.integration.mjs` 已语法检查，真实Nest＋PG尚未运行，等待主控唯一空临时测试库；
+仅KOKORO_TEST_POSTGRES_URL，库名kokoro_bff_share_metadata_<32hex>，自行确认空owner schema并用原applyCanonicalSchema安装。
+无需Redis：真实ChatModule、provider与HTTP，准入是显式fixture，AGUI／dispatch／cancellation／RunSteer后台全部隔离；
+六个子旅程核unshared零写、原create/revoke、过期替换／历史、owner／tenant／删除／错scope、Project owner／软删、Session撤权。
+GET前后核本owner事实与receipt值及xmin不变。测试仅关闭自身app/pool，主控负责DROP自己登记的库。默认全测／真实IAM／浏览器／部署未运行。
+未夹private reauthorize、RSS、personal_context或权限enum；并行MCP片由另一writer负责，非本片完成范围。
+
 ## 2026-11-12 B-T3 — Public 28.36 认证 metadata 与入口纠偏
 
 本片基线 `05a1074950b43ce3b5183e44276fe7b8de9787b7`，未提交。唯一 Public OpenAPI 从 28.35 → 28.36，

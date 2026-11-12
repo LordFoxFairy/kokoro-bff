@@ -1075,6 +1075,11 @@
       "method": "PUT",
       "path": "/v1/projects/{project_id}/websites",
       "operation_id": "replaceProjectWebsites"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sessions/{id}/share",
+      "operation_id": "getSessionShareMetadata"
     }
   ]
 }

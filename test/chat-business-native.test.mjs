@@ -560,3 +560,112 @@ test("shared JSON decoding retains empty, multipart, object and duplicate-key po
   assert.equal(requestBodyJson(request, Buffer.from("[]")), null)
   assert.deepEqual(requestBodyJson(request, Buffer.from('{"title":"first","title":"last"}')), { title: "last" })
 })
+
+test("Session Share metadata GET uses native admission and returns read-only current metadata", async () => {
+  const admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "owner" } })
+  const calls = []
+  const chat = {
+    readShareMetadata: async (query) => {
+      calls.push(query)
+      return { share: { share_id: "shr_current", created_at: "2026-11-12T00:00:00.000Z", expires_at: null } }
+    },
+  }
+  const server = createServer((request, response) => {
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedConversation, unexpectedProjects, unexpectedProcess).then(
+      (handled) => {
+        if (!handled) response.writeHead(404).end()
+      },
+    )
+  })
+  servers.push(server)
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/sessions/session-1/share`, {
+    headers: { ...nativeHeaders, "x-request-id": "share-read" },
+  })
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    data: { share: { share_id: "shr_current", created_at: "2026-11-12T00:00:00.000Z", expires_at: null } },
+    meta: { request_id: "share-read" },
+  })
+  assert.equal(response.headers.get("cache-control"), "no-store")
+  assert.equal(response.headers.get("x-request-id"), "share-read")
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].tenantId, "tenant")
+  assert.equal(calls[0].subjectId, "owner")
+  assert.equal(calls[0].conversationId, "session-1")
+  assert.equal(calls[0].scope, "all")
+  assert.ok(calls[0].signal instanceof AbortSignal)
+  assert.ok(calls[0].deadlineAt > performance.now())
+})
+
+test("Session Share metadata retains null vs inaccessible and rejects Session or contradictory scope before owner reads", async () => {
+  const admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "owner" } })
+  let result = { share: null },
+    reads = 0
+  const chat = {
+    readShareMetadata: async () => {
+      reads++
+      return result
+    },
+  }
+  const server = createServer((request, response) => {
+    void handleChatBusinessReadRequest(request, response, config, admission, chat, unexpectedConversation, unexpectedProjects, unexpectedProcess).then(
+      (handled) => {
+        if (!handled) response.writeHead(404).end()
+      },
+    )
+  })
+  servers.push(server)
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const url = `http://127.0.0.1:${server.address().port}/v1/sessions/session-1/share`
+  const unshared = await fetch(url, { headers: nativeHeaders })
+  assert.equal(unshared.status, 200)
+  assert.deepEqual((await unshared.json()).data, { share: null })
+  result = null
+  const unavailable = await fetch(url + "?project_ref=unowned", { headers: nativeHeaders })
+  assert.equal(unavailable.status, 404)
+  assert.equal((await unavailable.json()).error.code, "session_not_found")
+  const invalid = await fetch(url + "?scope=direct&project_ref=project-1", { headers: nativeHeaders })
+  assert.equal(invalid.status, 400)
+  const denied = await fetch(url, { headers: { ...nativeHeaders, cookie: "kokoro-issuer.session_token=retired", authorization: "Bearer unrelated" } })
+  assert.equal(denied.status, 401)
+  assert.equal(reads, 2)
+})
+
+test("Session Share metadata carries one admission lifetime into the bounded read and retires it on timeout", async () => {
+  const admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "owner" } })
+  let readSignal, remaining
+  const chat = {
+    readShareMetadata: (query) =>
+      new Promise((resolve, reject) => {
+        readSignal = query.signal
+        remaining = query.deadlineAt - performance.now()
+        const stop = () => reject(new Error("owned read retired"))
+        if (query.signal.aborted) stop()
+        else query.signal.addEventListener("abort", stop, { once: true })
+      }),
+  }
+  const server = createServer((request, response) => {
+    void handleChatBusinessReadRequest(
+      request,
+      response,
+      { ...config, upstreamTimeoutMs: 60 },
+      admission,
+      chat,
+      unexpectedConversation,
+      unexpectedProjects,
+      unexpectedProcess,
+    )
+  })
+  servers.push(server)
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/sessions/session-1/share`, { headers: nativeHeaders })
+  assert.equal(response.status, 503)
+  assert.equal(readSignal, admission.calls[0].signal)
+  assert.equal(readSignal.aborted, true)
+  assert.ok(remaining > 0 && remaining <= 60)
+  assert.equal(admission.calls.length, 1)
+})

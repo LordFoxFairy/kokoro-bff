@@ -27,6 +27,17 @@ export type PrivateMessageRead = (
 export type PrivateMessagePage = { messages: PrivateMessageRead[]; next_cursor: string | null }
 export type MessageReadLifetime = Readonly<{ signal: AbortSignal; deadlineAt: number }>
 export type PrivateMessageReadContext = MessageReadLifetime & Readonly<{ scope: "all" | "direct" }>
+
+export type ShareMetadataQuery = PrivateMessageReadContext &
+  Readonly<{
+    tenantId: string
+    subjectId: string
+    conversationId: string
+    projectRef?: string | undefined
+  }>
+export type ShareMetadataRead = Readonly<{
+  share: Readonly<{ share_id: string; created_at: string; expires_at: string | null }> | null
+}>
 export type MessagePartsQuery = MessageReadLifetime &
   Readonly<{
     tenantId: string

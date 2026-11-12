@@ -1,3 +1,7 @@
+## B-T3 — Public 28.37 本人分享状态读取
+
+`GET /v1/sessions/{id}/share` 使用当前普通native Session security与既有scope／project_ref，权限metadata复用`chat.session.read`，无需Idempotency-Key、不创建receipt。200为`{data:{share:null|{share_id,created_at,expires_at}},meta:{request_id}}`，`no-store`与header request ID。可见未分享、撤销、过期均为null，不修写过期状态；不存在／他人／跨租户／失效Project／direct不匹配统一404 session_not_found。scope=direct与project_ref冲突400；原POST/DELETE及service-only匿名分享snapshot不变。只增加当前GET、两个closed schemas与216项operation inventory，build/test精确回28.36，历史证明不改。
+
 ## B-T3 — Public 28.36 认证 metadata
 
 普通 Product 请求的 BFF 边界是受信 Web/Admin 服务端 envelope AND 配置的原生 IAM Session Cookie AND exact Web Origin。
@@ -3681,3 +3685,10 @@ Existing collection GET/POST stay unchanged. New public beta operations are GET 
 DELETE accepts exactly one existing-format Idempotency-Key and an empty request with no query; it returns data={asset_id,deleted_at,replayed} only after validating the Storage logical-deletion receipt. It is irreversible project Asset deletion, not unlink or guaranteed physical object removal. A lost ACK resumes the identical scoped owner command; its original key can replay after the Asset is no longer visible. A different key on an absent Asset yields 404. No automatic new command or signed URL persistence is allowed. GET is idempotency=none; DELETE idempotency=required. All operations retain current public ErrorEnvelope/RequestMeta conventions.
 
 400 malformed selector/query/framing/key; 401/403 current admission; 404 invisible Project/scoped Asset; 409 trusted owner conflict/digest mismatch (untrusted or in-progress conflict is not a confirmed rejection); 413 declared download above the existing spool capacity; 429 rate limit; 502 invalid owner response/reference/integrity; 503 dependency/deadline/unknown. Existing 300-second presigned URL validity is not an immediate-revocation promise. Metadata does not itself prove downloaded bytes. Actual browser preview formats remain a later consumer decision, never raw active HTML/SVG execution.
+
+
+### Task B private MCP重新授权（2026-11-12）
+
+新增code-first `POST /browser/v1/mcp/servers/{server_id}/reauthorize`，发行物由现connector-command-errors生成入口从 `src/http/mcp-reauthorization.contract.ts` 正规发布。输入闭合source_connector_id与server/connector双CAS，保原Idempotency-Key/自然body身份；ACK只含已绑定server新版本与全新version1/pending/disabled Connector，无Connection或授权成功暗示。正常native Session与受信adapter边界不变，不新增公开operation。固定Platform573a8f00完整provenance及72个来源输入，独立publication发行锚保持；消费者待正式固定commit交付，不以本地候选冒正常App已配对。
+
+同一未发行Public28.37包含Share metadata GET与现IAM既有Skill action `delete_series`枚举纠偏，216 operations保持原215项前缀；无新权限或运行投影，完整逆回28.36父。

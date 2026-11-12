@@ -1,3 +1,4 @@
+import { mcpReauthorizationRequestSchema } from "./mcp-reauthorization.contract.js"
 import { mcpIconSelection } from "../infrastructure/clients/platform/mcp-icon.js"
 import { z } from "zod"
 import { strictParseRawJson } from "../infrastructure/raw-json.js"
@@ -132,6 +133,14 @@ export function parseMcpPersonalServer(operation: McpPersonalServerMutation, bod
   if (body.byteLength > 65_536) throw new Error("mcp_personal_body_too_large")
   try {
     const raw = strictParseRawJson(new TextDecoder("utf-8", { fatal: true }).decode(body))
+    if (operation === "reauthorizeServer") {
+      const value = mcpReauthorizationRequestSchema.parse(raw)
+      return {
+        sourceConnectorId: value.source_connector_id,
+        expectedServerStateVersion: value.expected_server_state_version,
+        expectedConnectorStateVersion: value.expected_connector_state_version,
+      }
+    }
     if (operation === "registerServer") {
       const value = register.parse(raw)
       return {

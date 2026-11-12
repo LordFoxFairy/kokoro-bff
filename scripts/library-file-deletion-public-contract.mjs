@@ -3,7 +3,23 @@ import { createHash } from "node:crypto"
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
+export function restorePublic2836SessionShareContract(source) {
+  if (!/^  version: 28\.37\.0$/mu.test(source)) return source
+  if (hash(source) !== "737688c79fa4fad8216168656d0fe7e4131b496ef2b506e424dbff82d7dca2c8") throw Error("Session Share metadata Public28.37 child drift")
+  const parent = source
+    .replace(/(^  \/v1\/sessions\/\{id\}\/share:\n    parameters:\n      - \$ref: '#\/components\/parameters\/SessionId'\n)    get:\n[\s\S]*?(?=^    post:)/mu, "$1")
+    .replace(/^    SessionShareMetadata:\n[\s\S]*?(?=^    ShareReceipt:)/mu, "")
+    .replace(
+      "            skill: { type: array, minItems: 1, items: { type: string, enum: [create_draft, create_version, delete_series, begin_upload, complete_upload, abort_upload, validate_draft, publish, withdraw, set_status, install, set_installation_enabled, remove_installation, update_draft, discard_draft, set_publication_audience] } }\n",
+      "            skill: { type: array, minItems: 1, items: { type: string, enum: [create_draft, create_version, begin_upload, complete_upload, abort_upload, validate_draft, publish, withdraw, set_status, install, set_installation_enabled, remove_installation, update_draft, discard_draft, set_publication_audience] } }\n",
+    )
+    .replace("  version: 28.37.0\n", "  version: 28.36.0\n")
+  if (hash(parent) !== "7f715f26aa93410514b3876804309e10049f6fc6cbfcbe50847b1ccbd800d434") throw Error("Session Share metadata complete Public28.36 parent drift")
+  return parent
+}
+
 export function restorePublic2835NativeSessionContract(source) {
+  source = restorePublic2836SessionShareContract(source)
   if (!/^  version: 28\.36\.0$/mu.test(source)) return source
   if (hash(source) !== "7f715f26aa93410514b3876804309e10049f6fc6cbfcbe50847b1ccbd800d434") throw Error("Native Session Public28.36 child drift")
   const parent = source
@@ -196,6 +212,12 @@ export function restorePublic2825LibraryFileDeletionContract(source) {
 }
 
 export function libraryFileDeletionParentInventory(inventory) {
+  const shares = inventory.filter((item) => item.operation_id === "getSessionShareMetadata")
+  if (shares.length) {
+    const expected = { method: "GET", path: "/v1/sessions/{id}/share", operation_id: "getSessionShareMetadata" }
+    if (JSON.stringify(shares) !== JSON.stringify([expected])) throw Error("Session Share metadata Public28.37 inventory drift")
+    inventory = inventory.filter((item) => !shares.includes(item))
+  }
   const slack = inventory.filter((item) => item.operation_id === "completeSlackConnection")
   if (slack.length) {
     const expected = { method: "POST", path: "/v1/agents/connections/slack/complete", operation_id: "completeSlackConnection" }

@@ -1,3 +1,7 @@
+## 2026-11-12 B-T3 — Share metadata 零DDL只读
+
+继续使用本owner的bff_conversation、bff_project、bff_share；无新增表、列、索引或迁移。当前本人Conversation／有效本人Project与活跃分享在单条只读SELECT的同一snapshot判断；未分享、已撤销和到statement时已过期均投影null，不通过GET撤销、清理或延长分享。沿现read-only PG lease释放／取消，仅输出安全metadata；POST/DELETE、原唯一性与share审计事实保持。
+
 ## A‑13 — Slack use of the existing slot
 
 Slack uses the same tenant/subject/provider slot. The pending namespace is the configured Slack app ID; the connected namespace is the app ID plus the verified workspace ID. The external user is the actual approving Slack member, not the workspace Bot user. The existing provider/namespace/user uniqueness applies. Claim advances the revision and stores only the code digest until the exact attempt completes, is canceled, or is replaced after expiry. Completion clears transient fields. The slot does not store Slack credentials, workspace details or any remote installation state. Schema installation remains fresh-only; older nonempty BFF schemas are not modified.

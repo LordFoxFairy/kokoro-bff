@@ -20,7 +20,7 @@ export function isChatBusinessReadRequest(request: IncomingMessage): boolean {
   const valid =
     path.length === 2 ||
     path.length === 3 ||
-    (path.length === 4 && path[3] === "messages") ||
+    (path.length === 4 && ["messages", "share"].includes(path[3] ?? "")) ||
     (path.length === 6 && path[3] === "messages" && path[5] === "parts") ||
     (path.length === 6 && path[3] === "runs" && path[5] === "process")
   if (!valid) return false
@@ -51,13 +51,15 @@ export async function handleChatBusinessReadRequest(
   request.once("aborted", onAborted)
   response.once("close", onClosed)
   try {
+    if (request.aborted || response.destroyed) abort.abort()
+    abort.signal.throwIfAborted()
     const admitted = await authorizeUserRequest(request, config, admission, id, abort.signal, response)
     if (!admitted.ok) {
       send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, findConversation, projects)
+    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, findConversation, projects, abort.signal)
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))
@@ -67,7 +69,7 @@ export async function handleChatBusinessReadRequest(
       await sendAgUiRunProcess(request, response, admitted.context, businessPath[1] ?? "", businessPath[3] ?? "", authorization.projectRef, readProcess)
       return true
     }
-    await readChatBusiness(request, response, admitted.context, businessPath, reads, authorization)
+    await readChatBusiness(request, response, admitted.context, businessPath, reads, authorization, { signal: abort.signal, deadlineAt })
     return true
   } catch {
     if (!response.headersSent && !response.writableEnded && !response.destroyed)

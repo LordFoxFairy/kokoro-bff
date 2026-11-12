@@ -7,6 +7,7 @@ import { restorePublic151AccountProfileContract } from "../../scripts/account-pr
 import { restorePublic15AccountSessionContract } from "../../scripts/account-session-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
+import { isDeepStrictEqual } from "node:util"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
@@ -28,6 +29,67 @@ const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.me
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 
+test("Public28.37 Team Skill permissions match the complete fixed IAM role catalog", async () => {
+  const { load } = await import("js-yaml")
+  const canonical = load(await readFile(currentOpenapiUrl, "utf8"))
+  const dependency = JSON.parse(await readFile(new URL("../../contract/dependencies/iam-http.json", import.meta.url), "utf8"))
+  const owner = JSON.parse(await readFile(new URL(`../../contract/vendor/kokoro-iam/${dependency.owner.repository_commit}/iam.internal.v1.json`, import.meta.url), "utf8"))
+  const permissionSchemas = owner.paths["/internal/v1/tenants/{tenant_id}/roles"].get.responses["200"].content["application/json"].schema.properties.data.items.properties.permissions.properties
+  const expected = permissionSchemas.skill.items.enum
+  assert.ok(expected.includes("delete_series"), "the fixed IAM owner has already published series deletion")
+  assert.deepEqual(canonical.components.schemas.TeamRole.properties.permissions.properties.skill.items.enum, expected)
+
+  // The fixed owner reader must preserve the complete catalog, not filter an action to fit stale public metadata.
+  const { zListTenantRolesResponse } = await import("../../src/generated/iam-http/zod.gen.ts")
+  const permissions = Object.fromEntries(Object.entries(permissionSchemas).map(([domain, schema]) => [domain, schema.items.enum]))
+  const page = { data: ["owner", "admin"].map(name => ({
+    role_id: null, name, kind: "builtin", permissions: name === "owner" ? permissions : { ...permissions, ac: ["read"] },
+  })), meta: { next_cursor: null } }
+  assert.deepEqual(zListTenantRolesResponse.parse(page), page)
+  const unknownAction = structuredClone(page)
+  unknownAction.data[0].permissions.skill.push("unknown_action")
+  assert.equal(zListTenantRolesResponse.safeParse(unknownAction).success, false)
+  const unknownDomain = structuredClone(page)
+  unknownDomain.data[0].permissions.unknown_domain = ["read"]
+  const parsed = zListTenantRolesResponse.safeParse(unknownDomain)
+  // Generated Zod may strip unknown domains; the production reader also requires exact raw equality.
+  assert.equal(parsed.success && isDeepStrictEqual(parsed.data, unknownDomain), false)
+})
+
+test("Public28.37 adds Session Share metadata and the fixed owner Team permission while preserving its exact parent", async () => {
+  const { load } = await import("js-yaml")
+  const latest = await readFile(currentOpenapiUrl, "utf8"), active = load(latest)
+  const path = active.paths["/v1/sessions/{id}/share"]
+  assert.equal(path.get?.operationId, "getSessionShareMetadata")
+  assert.equal(active.info.version, "28.37.0")
+  assert.equal(path.get["x-kokoro-idempotency"], "none")
+  assert.equal(path.get["x-kokoro-permission"], "chat.session.read")
+  assert.equal(path.get.security, undefined)
+  assert.deepEqual(path.get.parameters, path.post.parameters.slice(1))
+  const { SessionShareMetadata: metadata, SessionShareMetadataResponse: response } = active.components.schemas
+  assert.deepEqual(metadata.required, ["share_id", "created_at", "expires_at"])
+  assert.equal(metadata.additionalProperties, false)
+  assert.deepEqual(Object.keys(metadata.properties), metadata.required)
+  assert.deepEqual(response.properties.data.properties.share.oneOf, [{ $ref: "#/components/schemas/SessionShareMetadata" }, { type: "null" }])
+  assert.equal(response.additionalProperties, false)
+  assert.equal(response.properties.data.additionalProperties, false)
+  const { restorePublic2836SessionShareContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  assert.equal(createHash("sha256").update(restorePublic2836SessionShareContract(latest)).digest("hex"),
+    "7f715f26aa93410514b3876804309e10049f6fc6cbfcbe50847b1ccbd800d434")
+  assert.throws(() => restorePublic2836SessionShareContract(latest + "\n"), /Public28.37 child drift/u)
+  for (const delta of ["", "delete_series, unknown_action, "]) {
+    const drift = latest.replace("create_version, delete_series, begin_upload", `create_version, ${delta}begin_upload`)
+    assert.notEqual(drift, latest)
+    assert.throws(() => restorePublic2836SessionShareContract(drift), /Public28.37 child drift/u)
+  }
+  const parent = restorePublic2836SessionShareContract(latest)
+  assert.deepEqual(
+    parseOpenApiOperations(latest).filter(operation => operation.fields.get("operationId") !== "getSessionShareMetadata"),
+    parseOpenApiOperations(parent),
+    "Team metadata changes no operation and the Share addition retains the parent operation order",
+  )
+})
+
 test("current public authentication metadata follows native Session admission and preserves named exceptions", async () => {
   const { load } = await import("js-yaml")
   const active = load(await readFile(currentOpenapiUrl, "utf8"))
@@ -38,11 +100,11 @@ test("current public authentication metadata follows native Session admission an
     browserOrigin: [],
   }))
   assert.deepEqual(active.security, native, "ordinary Product operations describe native Session, not a user Bearer")
-  assert.equal(active.info.version, "28.36.0")
+  assert.equal(active.info.version, "28.37.0")
   const operations = Object.values(active.paths).flatMap((path) =>
     Object.values(path).filter((operation) => operation && typeof operation === "object" && operation.operationId),
   )
-  assert.equal(operations.length, 215)
+  assert.equal(operations.length, 216)
   const serviceOnly = new Set(["getRuntimeManifest", "getSharedSessionSnapshot"])
   const exceptions = new Map([
     ["healthz", []],
@@ -69,8 +131,8 @@ test("current public authentication metadata follows native Session admission an
 })
 
 test("Public28.36 metadata change restores the exact Public28.35 parent and rejects child drift", async () => {
-  const { restorePublic2835NativeSessionContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
-  const latest = await readFile(currentOpenapiUrl, "utf8")
+  const { restorePublic2835NativeSessionContract, restorePublic2836SessionShareContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const latest = restorePublic2836SessionShareContract(await readFile(currentOpenapiUrl, "utf8"))
   assert.equal(
     createHash("sha256").update(restorePublic2835NativeSessionContract(latest)).digest("hex"),
     "a26431d45ad96c4e80e6751d61e66a14b3933ae7c2ffb6f9e7df57fcc7e6808f",

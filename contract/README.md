@@ -1,3 +1,11 @@
+## B-T3 — Public 28.37 owned Session Share metadata
+
+One native-Session GET reads current safe metadata from the existing Chat owner. Unshared, revoked and expired visible
+sessions return `share:null`; inaccessible sessions return the same 404. GET does not create a receipt, repair expiry or
+write facts. POST/DELETE and service-only shared snapshots are unchanged. The current 216-operation inventory retains
+the prior 215 entries in their original order; the added operation is derived from canonical parsing. Build/test inverse
+restores complete Public 28.36 bytes; previous raw artifacts and proofs are not edited. No owner client or private profile changes.
+
 ## B-T3 — Public 28.36 native Session metadata
 
 This release corrects authentication descriptions to match the existing runtime; all 215 operations retain their exact

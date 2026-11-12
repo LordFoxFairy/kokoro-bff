@@ -1,8 +1,10 @@
 import type { ChatMessageRead, MessagePartsPage, PrivateChatSessionDetail, ChatSessionSummary } from "../../contracts/index.js"
 import type { ChatSnapshot, ConversationCollectionFilter, ConversationPage, MessagePartsQuery, PrivateMessagePage, PrivateMessageReadContext } from "./types.js"
+import type { ShareMetadataQuery, ShareMetadataRead } from "./types.js"
 import { privateChatMessage, conversationSummary } from "./mappers.js"
 
 type ChatSessionReadSource = {
+  readShareMetadata(query: ShareMetadataQuery): Promise<ShareMetadataRead | null>
   listConversations(tenantId: string, subjectId: string, filter: ConversationCollectionFilter, limit: number, cursor: string | null): Promise<ConversationPage>
   readSnapshot(
     tenantId: string,
@@ -25,6 +27,10 @@ type ChatSessionReadSource = {
 
 export function createChatSessionReads(source: ChatSessionReadSource) {
   return {
+    readShareMetadata(query: ShareMetadataQuery): Promise<ShareMetadataRead | null> {
+      return source.readShareMetadata(query)
+    },
+
     async listConversations(
       tenantId: string,
       subjectId: string,

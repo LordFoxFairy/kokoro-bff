@@ -1,0 +1,37 @@
+{
+  "parent_commit": "36805356a84aaacbc24b18a4c14bf87bbd81fc7a",
+  "inputs": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+      "path": "contract/descriptor/platform-private-mcp-v2-proto.snapshot",
+      "sha256": "26266d24fc1fcffb581662d5a404a97c485c09e3b2e597bb88df3a9cc482ed36"
+    },
+    "contract/descriptor/platform-v1.binpb": {
+      "path": "contract/descriptor/platform-private-mcp-v2-parent.binpb",
+      "sha256": "6c7dadd8ccad5a5a1b56a4c9cf17acb7a1a3f41390e8e0c011fb120dd943483f"
+    },
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+      "path": "contract/descriptor/platform-private-mcp-v2-generated.ts.snapshot",
+      "sha256": "dfc1410f5cf18d18d449b35b7f92499e7b08c778d8f258b80f4abec0927c9d5d"
+    },
+    "contract/provenance.json": {
+      "path": "contract/descriptor/platform-private-mcp-v2-provenance.json.snapshot",
+      "sha256": "c0f9e23eb0e92939f8917f50722b3da759302ed22066bc0332bdd39ccf0744f8"
+    },
+    "contract/execution-operations/mcp-private-server-v1.json": {
+      "path": "contract/descriptor/platform-private-mcp-v2-profile.json.snapshot",
+      "sha256": "066505d4a13cb6fd7a5f625b07eaf5f784b215db2a8584041f14da8ffc98eda1"
+    },
+    "prisma/schema.prisma": {
+      "path": "contract/descriptor/platform-private-mcp-v2-prisma.snapshot",
+      "sha256": "ec3e63999a77fe02019d70337b5b70916fb2ffc87ae2c0a4f52d27e6eaf7d52e"
+    }
+  },
+  "source_git_blobs": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "65700d1744eecf01c5454efc891944efebb0044e",
+    "contract/descriptor/platform-v1.binpb": "590c65bb7fc0ded63ecaa5237599b2614a2f4f13",
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "526c5d2e124ab912354af5c5d3b8258dfd806f07",
+    "contract/provenance.json": "a7b2339dfe134bfa3b74bbc4d453ae62f11b272e",
+    "contract/execution-operations/mcp-private-server-v1.json": "bece039f816688e2b968a32791c059b228aeeef9",
+    "prisma/schema.prisma": "bdbdb3615cecd6e3126645a271ff518e0b5599d9"
+  }
+}

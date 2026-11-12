@@ -105,6 +105,15 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
       "descriptor/platform-mcp-prepare-rejection-parent.platform_runtime.proto.snapshot",
       "descriptor/platform-mcp-prepare-rejection-parent.platform-v1.binpb.snapshot",
       "descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot",
+      "execution-operations/mcp-private-server-v2.json",
+      "execution-operations/mcp-private-server-request-vectors-v2.json",
+      "descriptor/platform-private-mcp-v2-parents.json",
+      "descriptor/platform-private-mcp-v2-proto.snapshot",
+      "descriptor/platform-private-mcp-v2-parent.binpb",
+      "descriptor/platform-private-mcp-v2-generated.ts.snapshot",
+      "descriptor/platform-private-mcp-v2-provenance.json.snapshot",
+      "descriptor/platform-private-mcp-v2-profile.json.snapshot",
+      "descriptor/platform-private-mcp-v2-prisma.snapshot",
     ].map((file) => ({
       path: `contract/${file}`,
       sha256: artifacts[file],
@@ -112,7 +121,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     provenance: { path: "contract/provenance.json", sha256: artifacts["provenance.json"], combined_sha256: combinedSha256 },
     generated: ownerGenerated,
   })
-  assert.equal(manifest.owner.repository_commit, "94e574c68d6c972078b661fa7d917dab90c71042")
+  assert.equal(manifest.owner.repository_commit, "573a8f00a92991ae1e6eee6feb238e0132f71f50")
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.lockfile_sha256, sha256(await requiredFile("pnpm-lock.yaml")))
   for (const [file, bytes] of Object.entries(await sourceBytes())) assert.equal(sha256(bytes), sources[file])
@@ -212,6 +221,7 @@ test("one generated client exposes Skills, private MCP v1 and provider administr
         "registerPersonalMcpServer",
         "getPersonalMcpServer",
         "preparePersonalMcpServer",
+        "reauthorizePersonalMcpServer",
         "updatePersonalMcpServer",
         "deletePersonalMcpServer",
       ],
@@ -413,6 +423,74 @@ async function prePrepareQueryArtifact(file) {
   return parentBytes
 }
 
+// New private generation is first proven back to the complete fixed P368 parent.
+async function prePrivateGenerationArtifact(file, supplied) {
+  const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const { FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
+  const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/`
+  const feature = JSON.parse(await requiredFile(prefix + "execution-operations/mcp-private-server-v2.json"))
+  assert.equal(feature.profile, "mcp-private-server-v2")
+  assert.equal(feature.version, "2.0.0")
+  assert.equal(feature.parents.commit, "36805356a84aaacbc24b18a4c14bf87bbd81fc7a")
+  const pin = feature.inputs.find((value) => value.path === file)
+  assert.ok(pin)
+  const raw = supplied ?? (await requiredFile(prefix + file.replace("contract/", "")))
+  assert.equal(sha256(raw), pin.sha256)
+  const parentPin = feature.parents.inputs[file]
+  const parent = await requiredFile(prefix + parentPin.path.replace("contract/", ""))
+  assert.equal(sha256(parent), parentPin.sha256)
+  let inverse
+  if (file.endsWith(".proto")) {
+    const source = raw.toString("utf8")
+    const method =
+      "  rpc ReauthorizePersonalMcpServer(kokoro.platform.v1.ReauthorizePersonalMcpServerRequest) returns (kokoro.platform.v1.ReauthorizePersonalMcpServerResponse);\n"
+    const marker = "\n// A new local authorization generation never reactivates a revoked identity."
+    assert.equal(source.split(method).length, 2)
+    assert.equal(source.split(marker).length, 2)
+    inverse = Buffer.from(source.slice(0, source.indexOf(marker)).replace(method, ""))
+  } else {
+    const graph = fromBinary(FileDescriptorSetSchema, raw)
+    const targets = graph.file.filter((value) => value.name === "kokoro/platform/v1/platform_runtime.proto")
+    assert.equal(targets.length, 1)
+    const target = targets[0]
+    assert.deepEqual(
+      target.messageType.slice(-2).map((value) => value.name),
+      ["ReauthorizePersonalMcpServerRequest", "ReauthorizePersonalMcpServerResponse"],
+    )
+    const request = target.messageType.at(-2)
+    assert.deepEqual(
+      request.field.map(({ name, number }) => [name, number]),
+      [
+        ["request_id", 1],
+        ["command", 2],
+        ["server_id", 3],
+        ["source_connector_id", 4],
+        ["expected_server_state_version", 5],
+        ["expected_connector_state_version", 6],
+      ],
+    )
+    const services = target.service.filter((value) => value.name === "ProductMcpPersonalService")
+    assert.equal(services.length, 1)
+    const methods = services[0].method.filter((value) => value.name === "ReauthorizePersonalMcpServer")
+    assert.equal(methods.length, 1)
+    assert.equal(methods[0].inputType, ".kokoro.platform.v1.ReauthorizePersonalMcpServerRequest")
+    assert.equal(methods[0].outputType, ".kokoro.platform.v1.ReauthorizePersonalMcpServerResponse")
+    services[0].method = services[0].method.filter((value) => value.name !== "ReauthorizePersonalMcpServer")
+    target.messageType.splice(-2)
+    inverse = Buffer.from(toBinary(FileDescriptorSetSchema, graph))
+  }
+  assert.deepEqual(inverse, parent)
+  return parent
+}
+
+test("private generation preserves the exact full P368 source and descriptor before every old proof", async () => {
+  for (const file of ["contract/proto/kokoro/platform/v1/platform_runtime.proto", "contract/descriptor/platform-v1.binpb"]) {
+    await prePrivateGenerationArtifact(file)
+    const raw = await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/${file.replace("contract/", "")}`)
+    await assert.rejects(prePrivateGenerationArtifact(file, Buffer.concat([raw, Buffer.from([0])])), /Expected values/)
+  }
+})
+
 // Exact Project content inverse proves the complete f294 owner parent before every old enum/query proof.
 async function preProjectContentArtifact(file, supplied) {
   const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
@@ -423,7 +501,7 @@ async function preProjectContentArtifact(file, supplied) {
   assert.deepEqual(feature.methods, ["InspectProjectSkillInstallationPackage", "GetProjectSkillInstallationPackageDownload"])
   const pin = feature.inputs.find((value) => value.path === file)
   assert.ok(pin)
-  const current = supplied ?? (await requiredFile(prefix + file.replace("contract/", "")))
+  const current = await prePrivateGenerationArtifact(file, supplied)
   assert.equal(sha256(current), pin.sha256)
   let parent
   if (file.endsWith(".proto")) {

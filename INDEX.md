@@ -11,7 +11,7 @@
 | [文档索引](./docs/INDEX.md) | 专项文档阅读顺序 |
 | [技术设计](./docs/TECHNICAL_DESIGN.md) | 当前模块、认证边界与有效设计决定 |
 | [API 说明](./docs/API_CONTRACT.md) | 人读契约与例外边界 |
-| [Public OpenAPI](./contract/openapi/v1/openapi.yaml) | 唯一 canonical public contract，当前 Public 28.36 / 215 operations |
+| [Public OpenAPI](./contract/openapi/v1/openapi.yaml) | 唯一 canonical public contract，当前 Public 28.37 / 216 operations |
 | [契约发行说明](./contract/README.md) | owner、visibility、生成、固定来源及 breaking 规则 |
 | [数据模型](./docs/DATA_MODEL.md) | 本 owner 的事实与事务边界 |
 | [canonical schema](./database/schema.sql) | 本 owner 唯一可编辑 PostgreSQL schema |
@@ -41,10 +41,11 @@
 - [`contract/dependencies/`](./contract/dependencies/) 与 [`contract/vendor/`](./contract/vendor/)：消费的固定 owner 版本与原件。
 - [`contract/iam-relay-policy.json`](./contract/iam-relay-policy.json)：独立 browser-private relay profile，不混入 Public OpenAPI。
 - [`scripts/library-file-deletion-public-contract.mjs`](./scripts/library-file-deletion-public-contract.mjs)：
-  含当前 28.36 → 完整 28.35 原字节的 build/test-only 逆证；不是生产 fallback。
+  含当前 28.37 → 完整 28.36 → 完整 28.35 原字节的 build/test-only 逆证；不是生产 fallback。
 - [`scripts/check-contract.mjs`](./scripts/check-contract.mjs)、[`scripts/verify-openapi.ts`](./scripts/verify-openapi.ts)
   与 [`test/contract/openapi-contract.test.mjs`](./test/contract/openapi-contract.test.mjs)：operation inventory、语义与历史原件证明。
 - 实际验证按 [README 质量门禁](./README.md#质量门禁) 和本次影响面选择；真实资源集成不以 mock 或跳过代替。
 
-28.36 只对齐现有认证 metadata；没有改运行认证、业务操作、Schema 或 owner client。新消费者在正式发行后固定
-commit/version/digest，再用自身正规生成入口消费。历史说明不授予清卷、删库、重建或部署权限。
+28.36 对齐既有认证 metadata；28.37 增加本人 Session Share metadata GET，复用当前 Chat read 与 bff_share，
+不建表或额外服务、不改POST/DELETE。新消费者在正式发行后固定commit/version/digest，再用自身正规生成入口消费。
+历史说明不授予清卷、删库、重建或部署权限。

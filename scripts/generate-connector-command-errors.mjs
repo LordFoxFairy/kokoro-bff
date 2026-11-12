@@ -345,6 +345,141 @@ if (process.argv.slice(2).join(" ") === "--write") {
   await writeFile(prepareReceiptTarget, prepareReceiptBytes)
 } else if ((await readFile(prepareReceiptTarget, "utf8")) !== prepareReceiptBytes) throw new Error("MCP Prepare receipt private contract drifted")
 
+// Explicit local generation change; separate private artifact, no Public inventory change.
+const {
+  MCP_REAUTHORIZATION_POLICY: reauthorization,
+  mcpReauthorizationRequestSchema,
+  mcpReauthorizationResponseSchema,
+  mcpReauthorizationIdSchema,
+  mcpReauthorizationKeySchema,
+} = await import("../src/http/mcp-reauthorization.contract.ts")
+const reauthorizationTarget = new URL("../contract/openapi/browser/v1/mcp-reauthorization.json", import.meta.url)
+const reauthorizationDocument = {
+  openapi: "3.1.0",
+  info: { title: "Kokoro BFF browser-private MCP new authorization", version: reauthorization.version },
+  "x-kokoro-reauthorization-policy": reauthorization,
+  "x-kokoro-shared-command-errors": {
+    path: "../../../connector-command-errors-v1.json",
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    group: "mcp",
+  },
+  "x-kokoro-owner-contract": {
+    commit: platformPin.owner.repository_commit,
+    ...platformPin.owner.artifacts.find((value) => value.path === "contract/execution-operations/mcp-private-server-v2.json"),
+  },
+  paths: {
+    [reauthorization.path]: {
+      post: {
+        operationId: reauthorization.operation_id,
+        "x-kokoro-owner": "kokoro-bff",
+        "x-kokoro-visibility": "browser-private",
+        "x-kokoro-stability": "beta",
+        "x-kokoro-idempotency": "permanent-owner-command-receipt",
+        "x-kokoro-permission": reauthorization.permission,
+        description:
+          "The trusted Web adapter service envelope, configured native IAM Session cookie and exact Web Origin are required at the BFF boundary; browser code calls only its same-origin adapter and never receives the internal service secret. Current Session and manage permission are checked before owner access and response, within one total 10-second budget. Original source/double CAS/key are preserved. No management GET before receipt, automatic retry, Prepare or connected guarantee.",
+        security: [
+          { serviceHeader: [], internalSecret: [], issuerSessionCookie: [], browserOrigin: [] },
+          { serviceHeader: [], internalSecret: [], secureIssuerSessionCookie: [], browserOrigin: [] },
+        ],
+        parameters: [
+          { in: "path", name: "server_id", required: true, schema: json(mcpReauthorizationIdSchema) },
+          { in: "header", name: "Idempotency-Key", required: true, schema: json(mcpReauthorizationKeySchema) },
+        ],
+        requestBody: { required: true, content: content(mcpReauthorizationRequestSchema) },
+        responses: {
+          200: {
+            description:
+              "Original safe ACK: exact server version +1; new pending disabled connector version 1, not the source; no connection or execution authorization",
+            headers: { "cache-control": { required: true, schema: { const: "no-store" } }, "x-request-id": { required: true, schema: { type: "string" } } },
+            content: content(z.strictObject({ data: mcpReauthorizationResponseSchema })),
+          },
+          ...Object.fromEntries(
+            [...new Set(reauthorization.errors.map((fault) => fault.status))].map((status) => [
+              status,
+              {
+                description: "Closed original failure; unknown outcome retains original identity and never authorizes a new command",
+                headers: {
+                  "cache-control": { required: true, schema: { const: "no-store" } },
+                  "x-request-id": { required: true, schema: { type: "string" } },
+                  ...(status === 429 ? { "Retry-After": { schema: { type: "string", pattern: "^[1-9][0-9]{0,4}$" } } } : {}),
+                },
+                content: {
+                  "application/json": {
+                    schema: {
+                      oneOf: reauthorization.errors
+                        .filter((fault) => fault.status === status)
+                        .map((fault) => ({
+                          type: "object",
+                          required: ["error"],
+                          additionalProperties: false,
+                          properties: {
+                            error: {
+                              type: "object",
+                              required: ["code", "message", "retryable"],
+                              additionalProperties: false,
+                              properties: {
+                                code: { const: fault.code },
+                                message: { type: "string" },
+                                retryable: { const: fault.retryable },
+                              },
+                            },
+                          },
+                        })),
+                    },
+                  },
+                },
+              },
+            ]),
+          ),
+        },
+      },
+    },
+  },
+  components: {
+    securitySchemes: {
+      serviceHeader: {
+        type: "apiKey",
+        in: "header",
+        name: "x-kokoro-service",
+        description: "Trusted Web or Admin server adapter identity. Browser code calls only its same-origin adapter, never BFF directly.",
+      },
+      internalSecret: {
+        type: "apiKey",
+        in: "header",
+        name: "x-kokoro-internal-secret",
+        description:
+          "Internal service envelope secret supplied by the trusted server adapter, never supplied to browser code. This envelope does not establish a human identity.",
+      },
+      issuerSessionCookie: {
+        type: "apiKey",
+        in: "cookie",
+        name: "kokoro-issuer.session_token",
+        description:
+          "Native IAM Session cookie in the configured plain-cookie deployment mode, forwarded only through the trusted adapter to the dedicated admission boundary. IAM verifies the current Session and fixed Product tenant online; ordinary internal owner calls do not receive this cookie.",
+      },
+      secureIssuerSessionCookie: {
+        type: "apiKey",
+        in: "cookie",
+        name: "__Secure-kokoro-issuer.session_token",
+        description:
+          "Native IAM Session cookie in the configured Secure-cookie deployment mode. The two cookie requirements represent mutually exclusive configured deployment modes, not runtime fallback or acceptance of both names.",
+      },
+      browserOrigin: {
+        type: "apiKey",
+        in: "header",
+        name: "Origin",
+        description:
+          "Exact configured Web origin, forwarded by the trusted adapter after its same-origin and CSRF checks. BFF requires exactly one matching Origin; this header is an admission precondition, not a service or human identity credential.",
+      },
+    },
+  },
+}
+if (!reauthorizationDocument["x-kokoro-owner-contract"].sha256) throw new Error("missing pinned private server v2 owner profile")
+const reauthorizationBytes = JSON.stringify(reauthorizationDocument, null, 2) + "\n"
+if (process.argv.slice(2).join(" ") === "--write") await writeFile(reauthorizationTarget, reauthorizationBytes)
+else if ((await readFile(reauthorizationTarget, "utf8")) !== reauthorizationBytes) throw new Error("MCP new authorization private contract drifted")
+
 // Authentication owns one independent safe browser status, never the raw framework Session.
 const { BROWSER_AUTH_SESSION_POLICY, browserAuthSessionResponse, browserAuthSessionError, browserAuthSessionPublicQuery } =
   await import("../src/auth/auth-session.contract.ts")

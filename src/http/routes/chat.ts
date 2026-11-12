@@ -10,7 +10,7 @@ import { processReadError } from "./agui-process.js"
 import { parseChatMessagePartsInput } from "../chat-message-parts-input.js"
 import type { ChatSessionReads } from "../../application/chat/session-reads.js"
 import type { ChatSessionMutations } from "../../infrastructure/postgres/chat-session-store.js"
-import type { PrivateMessageReadContext } from "../../application/chat/types.js"
+import type { PrivateMessageReadContext, MessageReadLifetime } from "../../application/chat/types.js"
 
 function pageInput(request: IncomingMessage, defaultLimit: number): { limit: number; cursor: string | null } | null {
   const query = queryOf(request)
@@ -44,6 +44,7 @@ async function privateMessageRead<T>(
   response: ServerResponse,
   projectRef: string | undefined,
   read: (context: PrivateMessageReadContext) => Promise<T>,
+  lifetime?: MessageReadLifetime,
 ): Promise<T> {
   const scope = queryOf(request).get("scope")?.trim() === "direct" ? "direct" : "all"
   if (scope === "direct" && projectRef !== undefined) throw new Error("MESSAGE_PARTS_SCOPE_INVALID")
@@ -55,7 +56,7 @@ async function privateMessageRead<T>(
   response.once?.("close", stop)
   if (request.aborted || response.destroyed) controller.abort()
   try {
-    return await read({ signal: controller.signal, deadlineAt: performance.now() + 10000, scope })
+    return await read({ signal: lifetime?.signal ?? controller.signal, deadlineAt: lifetime?.deadlineAt ?? performance.now() + 10000, scope })
   } finally {
     request.removeListener?.("aborted", stop)
     response.removeListener?.("close", stop)
@@ -83,6 +84,7 @@ export async function readChatBusiness(
   businessPath: string[],
   reads: ChatSessionReads,
   authorization: AuthorizedChatRequest,
+  lifetime?: MessageReadLifetime,
 ): Promise<boolean> {
   if (businessPath[0] !== "sessions") return false
   response.setHeader("x-request-id", context.requestId)
@@ -93,6 +95,23 @@ export async function readChatBusiness(
   const projectRef = authorization.projectRef
 
   try {
+    if (businessPath.length === 3 && businessPath[2] === "share" && method === "GET") {
+      const metadata = await privateMessageRead(
+        request,
+        response,
+        projectRef,
+        (readLifetime) => reads.readShareMetadata({ ...readLifetime, tenantId, subjectId, conversationId, projectRef }),
+        lifetime,
+      )
+      if (request.aborted || response.destroyed || response.writableEnded) return true
+      lifetime?.signal.throwIfAborted()
+      send(
+        response,
+        metadata === null ? 404 : 200,
+        metadata === null ? failure("session_not_found", "Session was not found", context.requestId) : ok(metadata, context.requestId),
+      )
+      return true
+    }
     if (businessPath.length === 5 && businessPath[2] === "messages" && businessPath[4] === "parts" && method === "GET") {
       const input = parseChatMessagePartsInput(request)
       if (!input.ok) {
@@ -160,6 +179,7 @@ export async function readChatBusiness(
       return true
     }
   } catch (error) {
+    if (request.aborted || response.destroyed || response.writableEnded) return true
     const { status, body } = chatFailure(error, context)
     send(response, status, body)
     return true

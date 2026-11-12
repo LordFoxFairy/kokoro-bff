@@ -25,6 +25,7 @@ import {
   GetPersonalMcpServerRequestSchema,
   GetPersonalMcpPrepareReceiptRequestSchema,
   PreparePersonalMcpServerRequestSchema,
+  ReauthorizePersonalMcpServerRequestSchema,
   UpdatePersonalMcpServerRequestSchema,
   DeletePersonalMcpServerRequestSchema,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
@@ -287,6 +288,18 @@ export class McpPersonalConnectClient {
             command: bindMcpPersonalServerCommand(operation, input),
             serverId: { value: input.id! },
             expectedStateVersion: BigInt(input.expectedStateVersion!),
+          }),
+          options,
+        )
+      else if (operation === "reauthorizeServer")
+        value = await this.#client.reauthorizePersonalMcpServer(
+          create(ReauthorizePersonalMcpServerRequestSchema, {
+            requestId: input.requestId,
+            command: bindMcpPersonalServerCommand(operation, input),
+            serverId: { value: input.id! },
+            sourceConnectorId: { value: input.sourceConnectorId! },
+            expectedServerStateVersion: BigInt(input.expectedServerStateVersion!),
+            expectedConnectorStateVersion: BigInt(input.expectedConnectorStateVersion!),
           }),
           options,
         )

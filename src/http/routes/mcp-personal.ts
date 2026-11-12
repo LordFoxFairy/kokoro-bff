@@ -73,11 +73,16 @@ export async function handleMcpPersonalRequest(
 ): Promise<boolean> {
   if (!isMcpPersonalRequest(request)) return false
   startMcpRequestBudget(request, 10_000)
+  if (request.aborted || response.destroyed || response.writableEnded) return true
   response.setHeader("cache-control", "no-store")
   const id = requestId(request)
   response.setHeader("x-request-id", id)
   try {
+    if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_personal_deadline")
     const admitted = await authorizeUserRequest(request, config, admission, id, AbortSignal.timeout(10_000), response)
+    // Initial Session admission keeps its existing timeout; never continue a retired request after it settles.
+    if (request.aborted || response.destroyed || response.writableEnded) return true
+    if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_personal_deadline")
     if (!admitted.ok) {
       sendMcpPersonalFailure(response, admitted.status, admitted.code, admitted.status === 429 || admitted.status === 503, admitted.retryAfter)
       return true
@@ -138,6 +143,7 @@ export function mcpPersonalOperation(
   if (path.length === 3 && path[1] === "servers" && method === "PATCH") return "updateServer"
   if (path.length === 3 && path[1] === "servers" && method === "DELETE") return "deleteServer"
   if (path.length === 4 && path[1] === "servers" && path[3] === "prepare" && method === "POST") return "prepareServer"
+  if (path.length === 4 && path[1] === "servers" && path[3] === "reauthorize" && method === "POST") return "reauthorizeServer"
   if (method !== "GET") return null
   if (path.length === 4 && path[1] === "servers" && path[3] === "prepare-receipt") return "prepareReceipt"
   if (path.length === 4 && path[1] === "servers" && path[3] === "icon") return "serverIcon"
@@ -167,7 +173,7 @@ export async function mcpPersonalRoute(
   }
   const iconOperation = ["beginIcon", "completeIcon", "getIcon", "cancelIcon", "importIcon"].includes(operation)
   const authorization = ["begin", "reconnect", "complete", "createConnection"].includes(operation)
-  const serverOperation = ["registerServer", "server", "prepareServer", "updateServer", "deleteServer"].includes(operation)
+  const serverOperation = ["registerServer", "server", "prepareServer", "reauthorizeServer", "updateServer", "deleteServer"].includes(operation)
   const importOperation = operation === "importJson"
   const mutation =
     (iconOperation && operation !== "getIcon") ||
@@ -182,6 +188,7 @@ export async function mcpPersonalRoute(
       "createConnection",
       "registerServer",
       "prepareServer",
+      "reauthorizeServer",
       "updateServer",
       "deleteServer",
       "importJson",
@@ -322,6 +329,8 @@ export async function mcpPersonalRoute(
   const remaining = mcpRequestRemaining(request)
   const deadlineAt = performance.now() + remaining
   const timer = setTimeout(() => controller.abort(), remaining)
+  // A close or deadline may have happened while initial Session admission was pending, before these listeners existed.
+  if (request.aborted || response.destroyed || response.writableEnded || remaining <= 0) controller.abort()
   const within = <T>(work: Promise<T>): Promise<T> =>
     new Promise((resolve, reject) => {
       const aborted = (): void => reject(new Error("mcp_personal_deadline"))
@@ -413,6 +422,8 @@ export async function mcpPersonalRoute(
           commandId: key as string,
         }
     }
+    if (request.aborted || response.destroyed || response.writableEnded || mcpRequestRemaining(request) <= 0) controller.abort()
+    controller.signal.throwIfAborted()
     const result = await within(
       receiptLookup
         ? client.prepareReceipt!(receiptInput!, controller.signal, deadlineAt)

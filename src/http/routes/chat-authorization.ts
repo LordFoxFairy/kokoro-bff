@@ -59,6 +59,12 @@ export async function authorizeChatRequest(
   if (!queryScope.ok) return queryScope
 
   const projectRef = queryScope.projectRef
+  // The metadata read checks owned Conversation/Project and Share together on its bounded read-only PG lease.
+  if (request.method === "GET" && businessPath.length === 3 && businessPath[2] === "share") {
+    if (queryScope.scope === "direct" && projectRef !== undefined)
+      return { ok: false, status: 400, code: "invalid_scope", message: "scope=direct cannot be combined with project_ref" }
+    return projectRef === undefined ? { ok: true } : { ok: true, projectRef }
+  }
   const isConversationCollection = request.method === "GET" && businessPath.length === 1
   if (isConversationCollection && queryScope.scope === "direct" && projectRef !== undefined) {
     return { ok: false, status: 400, code: "invalid_scope", message: "scope=direct cannot be combined with project_ref" }

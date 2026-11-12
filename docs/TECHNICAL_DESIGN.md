@@ -1,3 +1,9 @@
+## 2026-11-12 B-T3 — 本人 Session Share metadata GET（Public 28.37）
+
+owner 沿现 BFF ChatModule／bff_share；`GET /v1/sessions/{id}/share` 复用当前 native Session 准入、Chat read façade 与 PostgresChatSessionStore，不恢复旧 Chat service/repository，不新建表、服务、认证层或 command receipt。只读查询在同一 SQL snapshot 核当前本人／租户、active Conversation、scope／project_ref 及有效本人 Project，再 LEFT JOIN 未撤销且未过期的 conversation share。可见但未分享／已撤销／过期返回 `{share:null}`；不可见统一404，不提前披露share存在。只返回share_id、created_at、expires_at，不返回正文、URL、撤权记录或owner身份。
+
+沿现请求的有限绝对deadline与断连signal进入已有read-only PG lease，不另开生命周期／重试；GET不创建／撤销／清理过期分享。原POST/DELETE及匿名Share snapshot保持原行为。Public28.37在28.36上只增加一个GET和两个schema，operation inventory正规更新、build/test逆证精确还原完整父原件。无DDL、迁移、第三方owner或App实现。本片本地先定向纯回归；真实Nest＋隔离PG由主控统一资源验收，mock不冒称真实integration。
+
 ## 2026-11-12 B-T3：公开认证 metadata 纠偏（Public 28.36）
 
 唯一事实源仍为本仓 Public OpenAPI。当前运行已由 AuthenticationModule 鲜验原生 IAM Session，但旧 public security 仍声明普通用户 Bearer。本片只将 metadata 对齐运行，不改认证、路由、权限、Schema、依赖或 215 项 operation 身份／顺序。
@@ -4714,3 +4720,10 @@ DELETE means irreversible logical deletion of this project-scoped Asset, not unl
 The stable Storage command identity/digest derives from operation version, trusted tenant/subject, canonical Project, asset and the original public Idempotency-Key. Do not precondition recovery on GetAsset still being visible: an ACK may be lost after deletion. Unknown transport/invalid ACK/5xx preserves the same intent; valid owner ACK followed by failed list recovery only rereads. Same-key replay is checked under current project admission; a fresh key for an already deleted Asset remains owner NOT_FOUND. Storage caller/purpose/scope and exact replay behavior are consumed as implemented, without fabricated acknowledgements.
 
 The public source is the existing canonical OpenAPI, with a strict complete Public28 inverse. The pinned d13f33a Storage v3 generated client already includes these operations; current Storage adds connector_icon only, so no unrelated repin or new generator framework is needed. Existing Public28 and all older hashes/negative contracts remain protected. No App source/WIP or normal service is changed by this owner slice.
+
+
+### Task B：MCP显式新授权与请求退役边界（2026-11-12）
+
+复用现personal MCP管理入口及Capability573a8f00的ReauthorizePersonalMcpServer；source Connector与server/connector双CAS纳入同一原command key/body/digest。Capability唯一生成全新pending/disabled身份，旧身份永久无效；不在原命令重放前加current GET，不自动Prepare/OAuth或创建Connection。BFF仅严格投影safe ACK，App后继用fresh exact Server/Connector读取决定当前状态，历史ACK不冒资格。无新owner、Schema、认证层或SDK。
+
+初始Session前后、route注册关闭监听后及owner调用前采样断连／剩余预算，复用现controller和绝对预算；退役请求不再进入后续manage IAM/Platform。已发出的初始Session仍沿原timeout，不冒断连硬中止远端事务。新private发行物描述trusted Web envelope＋plain/Secure native Cookie＋exact Origin，浏览器不持内部secret；旧独立profile不改。
