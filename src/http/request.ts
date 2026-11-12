@@ -195,7 +195,7 @@ export function requestBodyJson(request: IncomingMessage, body: Buffer): Record<
   }
   if (body.byteLength === 0 || requestContentType(request).startsWith("multipart/form-data")) return {}
   try {
-    const parsed: unknown = JSON.parse(body.toString("utf8"))
+    const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(body))
     return isRecord(parsed) ? parsed : null
   } catch {
     return null
