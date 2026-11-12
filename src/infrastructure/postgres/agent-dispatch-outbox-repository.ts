@@ -120,6 +120,8 @@ function claimedAgentDispatch(row: AgentDispatchRow): AgentDispatchCommand {
   if (leaseRemainingMs < 1) throw new Error("AGENT_DISPATCH_LEASE_BUDGET_EXHAUSTED")
   const payload = parseAgentDispatchPayload(row.payload)
   if (
+    (payload.launch.personal_context !== undefined &&
+      (payload.launch.personal_context.owner.tenant_ref !== row.tenant_id || payload.launch.personal_context.owner.user_ref !== row.actor_id)) ||
     payload.launch.project_ref !== row.execution_project_ref ||
     payload.launch.request_id !== row.request_id ||
     payload.launch.run_id !== row.run_id ||

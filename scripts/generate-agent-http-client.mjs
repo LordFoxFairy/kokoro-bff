@@ -1095,23 +1095,67 @@ async function normalizeProjectInstructionPattern(directory, document) {
   ])
 }
 
-async function normalizePersonalContextPatterns(directory, document) {
-  // Hey API 0.99 decodes these escaped UTF-16 classes into NUL and replacement
-  // characters. Restore the exact owner patterns; BFF launch paths still reject the field.
-  const schema = document.components.schemas.LaunchRequest.properties.personal_context.oneOf[1].properties
-  const patterns = [
-    [schema.profile.oneOf[1].properties.nickname.pattern, 4],
-    [schema.knowledge.properties.items.items.properties.name.pattern, 3],
-  ]
-  await normalizeFile(
-    directory,
-    "zod.gen.ts",
-    patterns.map(([pattern, count]) => {
-      const malformed = pattern.replace("\\u0000", "\u0000").replace(/\\uD(?:800|FFF)/gu, "\ufffd")
-      assert.notEqual(malformed, pattern, "Agent 8.11 escaped pattern must need normalization")
-      return [`regex(/${malformed}/)`, `regex(new RegExp(${JSON.stringify(pattern)}, "u"))`, count, "owner UTF-16 character class"]
-    }),
-  )
+async function generatePersonalContextValidator(directory, document) {
+  const schema = document.components.schemas.LaunchRequest.properties.personal_context
+  const material = schema.oneOf.find((value) => value.type === "object")
+  assert.ok(material, "published personal context object missing")
+  const knowledge = material.properties.knowledge
+  assert.match(schema.description, /knowledge items have unique knowledge_id values/u, "published personal identity uniqueness changed")
+  // Lower this published personal subtree only; do not silently ignore new owner conditions.
+  const lower = (node) => {
+    if (node.oneOf) return `z.union([${node.oneOf.map(lower).join(",")}])`
+    if (node.const !== undefined) return `z.literal(${JSON.stringify(node.const)})`
+    if (node.type === "null") return "z.null()"
+    if (node.type === "boolean") return "z.boolean()"
+    if (node.type === "string") return "z.string()" +
+      (node.minLength === undefined ? "" : `.min(${node.minLength})`) +
+      (node.maxLength === undefined ? "" : `.max(${node.maxLength})`) +
+      (node.pattern === undefined ? "" : `.regex(new RegExp(${JSON.stringify(node.pattern)}, "u"))`)
+    if (node.type === "integer") return "z.number().int()" +
+      (node.minimum === undefined ? "" : `.min(${node.minimum})`) +
+      (node.maximum === undefined ? "" : `.max(${node.maximum})`)
+    if (node.type === "array") return `z.array(${lower(node.items)})` +
+      (node.maxItems === undefined ? "" : `.max(${node.maxItems})`)
+    assert.equal(node.type, "object", "unsupported published personal schema node")
+    assert.equal(node.additionalProperties, false, "personal objects must stay closed")
+    const fields = Object.entries(node.properties).map(([key, child]) =>
+      `${JSON.stringify(key)}:${lower(child)}${node.required.includes(key) ? "" : ".optional()"}`)
+    let expression = `z.object({${fields.join(",")}}).strict()`
+    if (node === knowledge) {
+      assert.equal(node.allOf.length, 2, "published personal usage conditions changed")
+      for (const condition of node.allOf) {
+        assert.deepEqual(Object.keys(condition), ["if", "then"])
+        assert.deepEqual(Object.keys(condition.if), ["properties"])
+        assert.deepEqual(Object.keys(condition.then), ["properties"])
+        assert.deepEqual(Object.keys(condition.if.properties), ["enabled"])
+        const enabled = condition.if.properties.enabled.const
+        assert.equal(typeof enabled, "boolean")
+        const entries = Object.entries(condition.then.properties)
+        assert.equal(entries.length, 1)
+        const [field, constraint] = entries[0]
+        assert.ok(Object.hasOwn(node.properties, field))
+        let check
+        if (Object.hasOwn(constraint, "maxItems")) {
+          assert.equal(node.properties[field].type, "array")
+          assert.deepEqual(Object.keys(constraint), ["maxItems"])
+          check = `value[${JSON.stringify(field)}].length <= ${constraint.maxItems}`
+        } else {
+          assert.equal(node.properties[field].type, "integer")
+          assert.deepEqual(Object.keys(constraint), ["minimum"])
+          check = `value[${JSON.stringify(field)}] >= ${constraint.minimum}`
+        }
+        expression += `.refine(value => value.enabled !== ${JSON.stringify(enabled)} || ${check}, "Published personal usage condition")`
+      }
+      assert.ok(node.properties.items.items.properties.knowledge_id)
+      expression += '.refine(value => new Set(value.items.map(item => item.knowledge_id)).size === value.items.length, "Personal knowledge identity must be unique")'
+    } else assert.equal(node.allOf, undefined, "unsupported personal condition")
+    return expression
+  }
+  const file = path.join(directory, "zod.gen.ts")
+  const source = await readFile(file, "utf8")
+  const property = /^[ \t]*personal_context:[\s\S]*?(?=^[ \t]*project_instruction:)/gmu
+  assert.equal([...source.matchAll(property)].length, 1, "generated personal context field missing or duplicated")
+  await writeFile(file, source.replace(property, `personal_context: ${lower(schema)}.optional(),\n`))
 }
 
 async function generate(directory) {
@@ -1129,7 +1173,7 @@ async function generate(directory) {
   await generateMcpSelectionValidator(directory, ownerDocument)
   await generateCustomApiSelectionValidator(directory, ownerDocument)
   await generateCanonicalResourceValidator(directory, ownerDocument)
-  await normalizePersonalContextPatterns(directory, ownerDocument)
+  await generatePersonalContextValidator(directory, ownerDocument)
   await normalizeProjectInstructionPattern(directory, ownerDocument)
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(

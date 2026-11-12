@@ -1,3 +1,4 @@
+import type { LaunchRequest } from "../../generated/agent-http/types.gen.js"
 import { parseCustomApiProfileSelection, type SelectedCustomApiProfile } from "./custom-api-profile-selection.js"
 import { parseMcpConnectionSelection } from "./mcp-connection-selection.js"
 import { parseSkillSourceSelection } from "./skill-source-selection.js"
@@ -18,6 +19,7 @@ export type AgentLaunchBody = {
   content: string
   project_ref: string | null
   project_instruction?: string
+  personal_context?: NonNullable<LaunchRequest["personal_context"]>
   selected_skill_source_refs: string[]
   selected_mcp_connection_ids?: string[]
   selected_custom_api_profiles?: SelectedCustomApiProfile[]

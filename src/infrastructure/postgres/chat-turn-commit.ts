@@ -1,3 +1,4 @@
+import { readChatTurnPersonalContext } from "./chat-turn-personal-context.js"
 import { parseCanonicalResourceReferences } from "../../application/chat/resource-reference-manifest.js"
 import { selectedArtifactInTransaction } from "./conversation-artifact-library.js"
 import { regenerationSourceInTransaction } from "./message-regeneration.js"
@@ -13,7 +14,7 @@ import { performance } from "node:perf_hooks"
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 
 import type { CommitChatTurn, ChatTurnSelectionInput, ChatTurnSelection } from "../../application/agent-dispatch/agent-dispatch-outbox-repository.js"
-import { isInterruptRunId, type AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
+import { isInterruptRunId, type AgentDispatchReceipt, type AgentLaunchBody } from "../../domain/chat/agent-dispatch.js"
 import { bindAgentDispatchPayloadProjectScope, parseAgentDispatchPayload } from "../../application/chat/agent-dispatch-payload.js"
 import { firstMessageConversationTitle, isClientCreatedConversationId } from "../../domain/chat/conversation.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
@@ -342,6 +343,7 @@ export async function commitChatTurn(
     throw new Error("CHAT_TURN_INPUT_INVALID")
   }
   const callerPayload = parseAgentDispatchPayload(command.payload)
+  if (callerPayload.launch.personal_context !== undefined) throw new Error("CHAT_TURN_INPUT_INVALID")
   if (
     callerPayload.launch.request_id !== command.requestId ||
     callerPayload.launch.run_id !== command.runId ||
@@ -468,6 +470,7 @@ export async function commitChatTurn(
           assistant_message_id: existingRow.assistant_message_id,
         }
       }
+      let sourcePersonalContext: AgentLaunchBody["personal_context"]
       if (command.regeneration !== undefined) {
         const original = await regenerationSourceInTransaction(
           { query },
@@ -491,6 +494,12 @@ export async function commitChatTurn(
           throw Error("MESSAGE_REGENERATION_SOURCE_CHANGED")
         if (JSON.stringify(callerPayload.launch.selected_resource_refs ?? []) !== JSON.stringify(original.payload.launch.selected_resource_refs ?? []))
           throw new Error("MESSAGE_REGENERATION_SOURCE_CHANGED")
+        sourcePersonalContext = original.payload.launch.personal_context
+        if (
+          sourcePersonalContext !== undefined &&
+          (sourcePersonalContext.owner.tenant_ref !== command.tenantId || sourcePersonalContext.owner.user_ref !== command.actorId)
+        )
+          throw new Error("MESSAGE_REGENERATION_SOURCE_INVALID")
         const latest = await query<{ message_id: string }>(
           `SELECT message_id FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant' ORDER BY message_seq DESC,message_id DESC LIMIT 1`,
           [command.tenantId, command.conversationId],
@@ -589,11 +598,28 @@ export async function commitChatTurn(
       if (frozenIndex !== frozen.length) throw new Error("CHAT_RESOURCE_SELECTION_CHANGED")
       const canonical = parseCanonicalResourceReferences(resources)
       if (canonical === null) throw new Error("CHAT_RESOURCE_SELECTION_INVALID")
-      const payload = bindAgentDispatchPayloadProjectScope(
+      const boundPayload = bindAgentDispatchPayloadProjectScope(
         canonical.length ? { ...callerPayload, launch: { ...callerPayload.launch, selected_resource_refs: canonical } } : callerPayload,
         scope.canonicalProjectId,
         project?.instruction ?? null,
       )
+      const personalContext =
+        command.regeneration === undefined
+          ? await readChatTurnPersonalContext(query, {
+              tenantId: command.tenantId,
+              actorId: command.actorId,
+            })
+          : sourcePersonalContext
+      const payload =
+        personalContext === undefined
+          ? boundPayload
+          : {
+              ...boundPayload,
+              launch: {
+                ...boundPayload.launch,
+                personal_context: personalContext,
+              },
+            }
       // Agent HTTP accepts at most 1 MiB; reject before any outbox/interrupt effects.
       if (Buffer.byteLength(JSON.stringify(payload.launch)) > 1024 * 1024) throw new Error("request_body_too_large")
       const registration = agUiConsumerRegistration(command.tenantId, command.conversationId, command.subjectId, undefined)

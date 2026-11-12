@@ -1,3 +1,11 @@
+## 2026-11-12 B-08 个人设置接线本地已验（待正常native验收）
+
+同owner已保存profile／知识使用事实在原Chat事务一条有界SELECT冻结到既有私有launch；可信user actor而非Project subject。无事实省略、显式关闭保revision，旧key零重读／regenerate原快照；读失败不当空数据，完整1MiB在Message/outbox/interrupt前拒绝。材料不进公开Message/trace；无新owner/协议/Schema/认证/依赖/记忆服务。固定现Agent7bfb/HTTP8.17/c471 artifact不换；正规generator仅补该personal子树遗漏的闭集／usage条件／ID唯一性，未建平行schema。
+
+writer实际2 RED→focused6 PASS，完整types/lint/build/18文件正规双生成检查通过。主控停写12输入：旧outbox/composer/regen/wire＋B08共68 PASS、types／正规Agent check通过；真实PG4子旅程＋parent共5 PASS／0 SKIP（无Redis／真实Agent模型）。覆盖新设置快照、原key/regen、跨actor/tenant、合法多语言1MiB、101项、read失败、真实snapshot后取消、零业务副作用与合法interrupt正控。首轮因fixture漏abort/未建立current stream头FAIL保留，只修PG测试；修后PASS及正控后最终PASS分列，三个自有数据库均DROP。生产11路径未变，最终12路径冻结核等，两独审CLEAR。Agent现8.17两owner规则文件主控21 PASS（无源改）。
+
+正常BFF仍609、浏览器完整设置→后续任务的正常验收待主控；不以组件/真实PG冒native模型端到端或整个TaskB完成。不重复旧模型成功链、不部署。
+
 ## 2026-11-12 · Task B联合候选主控验收
 
 当前main基线05a1074、metadata候选3007c16之上，Share GET／既有Team enum对齐／private MCP重新授权联合候选已停写并由主控验证：build、types、lint、216 semantic、两正规generator check、7相关文件337 PASS／0 SKIP。114受影响输入SHA冻结核等；最后仅真实PG fixture补合法deleted_at，其余113输入保持，不重复全默认。独立Share／MCP／Team及退役补口审查均CLEAR。

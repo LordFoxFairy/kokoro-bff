@@ -3,7 +3,7 @@ import { isRecord } from "../../../domain/json.js"
 import { parseCanonicalResourceReferences } from "../../../application/chat/resource-reference-manifest.js"
 import type { LaunchRequest, LaunchReceiptEnvelope } from "../../../generated/agent-http/types.gen.js"
 
-const zSavedAgentLaunch = zLaunchRequest.omit({ personal_context: true }).strict()
+const zSavedAgentLaunch = zLaunchRequest.strict()
 
 /** The owner OpenAPI is the sole source of both successful HTTP response schemas. */
 export function parseAgentHttpJson(body: Buffer): unknown {
@@ -40,10 +40,22 @@ export function projectSavedAgentLaunch(value: unknown): LaunchRequest | null {
   if (value.trace.source !== "kokoro-bff" && value.trace.source !== "kokoro-bff-scheduler") return null
   const project = value.trace.project_ref
   if (Object.hasOwn(value.trace, "project_ref") && (typeof project !== "string" || !/^[^\s\u0000-\u001f\u007f]{1,255}$/u.test(project))) return null
-  const projected = zSavedAgentLaunch.safeParse({ ...value, project_ref: project ?? null })
+  if (Object.hasOwn(value, "personal_context") && value.personal_context == null) return null
+  const projected = zSavedAgentLaunch.safeParse({
+    ...value,
+    project_ref: project ?? null,
+  })
   if (!projected.success) return null
-  const { requested_model_label, project_instruction, trace, selected_mcp_connection_ids, selected_custom_api_profiles, selected_resource_refs, ...required } =
-    projected.data
+  const {
+    requested_model_label,
+    project_instruction,
+    trace,
+    selected_mcp_connection_ids,
+    selected_custom_api_profiles,
+    selected_resource_refs,
+    personal_context,
+    ...required
+  } = projected.data
   if (
     selected_resource_refs?.some((ref) => ref.kind === "final_answer") &&
     (value.trace.source !== "kokoro-bff" || parseCanonicalResourceReferences(selected_resource_refs) === null)
@@ -51,6 +63,7 @@ export function projectSavedAgentLaunch(value: unknown): LaunchRequest | null {
     return null
   return {
     ...required,
+    ...(personal_context == null ? {} : { personal_context }),
     ...(requested_model_label === undefined ? {} : { requested_model_label }),
     ...(project_instruction === undefined ? {} : { project_instruction }),
     ...(trace === undefined ? {} : { trace }),

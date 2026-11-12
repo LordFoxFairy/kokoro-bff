@@ -176,41 +176,50 @@ export const zLaunchRequest = z.object({
     )
     .optional(),
   personal_context: z
-    .object({
-      schema_version: z.literal(1),
-      owner: z.object({
-        tenant_ref: z.string().min(1),
-        user_ref: z.string().min(1),
-      }),
-      profile: z
+    .union([
+      z.null(),
+      z
         .object({
-          revision: z.int().gte(1).lte(9007199254740991),
-          nickname: z.string().max(128).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-          occupation: z.string().max(256).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-          about: z.string().max(2000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-          instructions: z.string().max(8000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+          schema_version: z.literal(1),
+          owner: z.object({ tenant_ref: z.string().min(1), user_ref: z.string().min(1) }).strict(),
+          profile: z.union([
+            z.null(),
+            z
+              .object({
+                revision: z.number().int().min(1).max(9007199254740991),
+                nickname: z.string().max(128).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                occupation: z.string().max(256).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                about: z.string().max(2000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                instructions: z.string().max(8000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+              })
+              .strict(),
+          ]),
+          knowledge: z
+            .object({
+              usage_revision: z.number().int().min(0).max(9007199254740991),
+              enabled: z.boolean(),
+              items: z
+                .array(
+                  z
+                    .object({
+                      knowledge_id: z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])", "u")),
+                      revision: z.number().int().min(1).max(9007199254740991),
+                      name: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                      when_to_use: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                      content: z.string().min(1).max(2000).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                    })
+                    .strict(),
+                )
+                .max(100),
+            })
+            .strict()
+            .refine((value) => value.enabled !== false || value["items"].length <= 0, "Published personal usage condition")
+            .refine((value) => value.enabled !== true || value["usage_revision"] >= 1, "Published personal usage condition")
+            .refine((value) => new Set(value.items.map((item) => item.knowledge_id)).size === value.items.length, "Personal knowledge identity must be unique"),
         })
-        .nullable(),
-      knowledge: z.intersection(
-        z.unknown(),
-        z.object({
-          usage_revision: z.int().gte(0).lte(9007199254740991),
-          enabled: z.boolean(),
-          items: z
-            .array(
-              z.object({
-                knowledge_id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\s\S])/),
-                revision: z.int().gte(1).lte(9007199254740991),
-                name: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-                when_to_use: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-                content: z.string().min(1).max(2000).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-              }),
-            )
-            .max(100),
-        }),
-      ),
-    })
-    .nullish(),
+        .strict(),
+    ])
+    .optional(),
   project_instruction: z
     .string()
     .min(1)
