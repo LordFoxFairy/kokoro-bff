@@ -129,7 +129,7 @@ test("the compiled production AppModule resolves its real provider graph without
     assert.equal(typeof tasks.write, "function")
     const projects = module.select(ProjectsModule)
     assert.deepEqual(Reflect.ownKeys(projects.get(PROJECT_READS, { strict: true })), ["list", "revisions", "readWebsites"])
-    assert.deepEqual(Reflect.ownKeys(projects.get(PROJECT_MUTATIONS, { strict: true })), ["create", "updateInstruction", "replaceWebsites"])
+    assert.deepEqual(Reflect.ownKeys(projects.get(PROJECT_MUTATIONS, { strict: true })), ["create", "updateInstruction", "withReceipt", "replaceWebsites"])
     assert.equal(typeof projects.get(PROJECT_RENAME, { strict: true }), "function")
     assert.deepEqual(Reflect.ownKeys(projects.get(PROJECT_DELETION, { strict: true })), ["delete", "deletion"])
     const reader = module.select(AgentRunsModule).get(AGENT_RUNS_READER, { strict: true })
@@ -1321,4 +1321,40 @@ test("production Nest collects finite shutdown failures without skipping cleanup
       }
     })
   }
+})
+
+
+test("source-mode health probes resolve without emitted decorator metadata", async () => {
+  const { spawnSync } = await import("node:child_process")
+  const source = String.raw`
+    import "reflect-metadata";
+    import { Test } from "@nestjs/testing";
+    import { HealthModule } from "./src/modules/health/health.module.ts";
+    import { BFF_CONFIG, BFF_DATABASE } from "./src/common/tokens.ts";
+    let readyCalls = 0;
+    const module = await Test.createTestingModule({ imports: [HealthModule] })
+      .overrideProvider(BFF_CONFIG)
+      .useValue({ mode: "live", iamBaseUrl: "http://iam.invalid", agentEnabled: false })
+      .overrideProvider(BFF_DATABASE)
+      .useValue({ pool: {}, ready: async () => { readyCalls += 1; } })
+      .compile();
+    const app = module.createNestApplication({ logger: false });
+    try {
+      await app.listen(0, "127.0.0.1");
+      const address = app.getHttpServer().address();
+      for (const route of ["healthz", "readyz"]) {
+        const response = await fetch("http://127.0.0.1:" + address.port + "/" + route, { signal: AbortSignal.timeout(3000) });
+        const body = await response.json();
+        if (response.status !== 200 || body.service !== "kokoro-bff" || body.status !== "ok") throw new Error("Probe behavior failed: " + route);
+      }
+      if (readyCalls !== 1) throw new Error("Readiness dependency was not called exactly once");
+    } finally { await app.close(); }
+  `
+  const result = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", source], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 15_000,
+  })
+  assert.equal(result.error, undefined)
+  assert.equal(result.status, 0, result.stderr)
 })
