@@ -1,12 +1,14 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
+import type { IncomingMessage } from "node:http"
 import { test } from "node:test"
 
 import * as relayPolicy from "../dist/http/routes/iam-protocol-relay.policy.js"
 import * as iamSdk from "../dist/generated/iam-http/sdk.gen.js"
 import * as iamZod from "../dist/generated/iam-http/zod.gen.js"
 import { loadConfig } from "../dist/config/runtime.js"
+import { admitBrowserService } from "../dist/auth/browser-service-credential.policy.js"
 
 const { IAM_RELAY_POLICY, iamRelayCookieName, iamRelayRoute } = relayPolicy
 
@@ -309,4 +311,65 @@ test("R357 IAM 0.12 preserves all original fifteen consumer operations and their
   )
   assert.equal(typeof (iamSdk as Record<string, unknown>).checkAuthorization, "function")
   assert.equal(typeof (iamZod as Record<string, unknown>).zCheckAuthorizationResponse, "object")
+})
+
+test("Admin credentials cannot admit any IAM relay surface while Product native relay remains available", () => {
+  const config = {
+    sharedSecret: "web-fixture-secret",
+    adminWebSharedSecret: "admin-fixture-secret",
+  }
+  const incoming = (service: string, secret: string) =>
+    ({
+      rawHeaders: ["x-kokoro-service", service, "x-kokoro-internal-secret", secret],
+    }) as IncomingMessage
+  for (const [path, method] of [
+    ["/jwks", "GET"],
+    ["/oauth2/token", "POST"],
+    ["/oauth2/userinfo", "GET"],
+    ["/oauth2/revoke", "POST"],
+  ]) {
+    assert.equal(iamRelayRoute(`/iam${path}`, method!), null)
+    assert.equal(admitBrowserService(incoming("admin-web-bff", "admin-fixture-secret"), config, { kind: "iam", ownerPath: path! }), null, path)
+  }
+  for (const [path, methods] of Object.entries(IAM_RELAY_POLICY.routes)) {
+    assert.notEqual(iamRelayRoute(`/iam${path}`, methods[0]!), null)
+    assert.equal(
+      admitBrowserService(incoming("web-bff", "web-fixture-secret"), config, {
+        kind: "iam",
+        ownerPath: path,
+      }),
+      "web-bff",
+    )
+    assert.equal(admitBrowserService(incoming("admin-web-bff", "admin-fixture-secret"), config, { kind: "iam", ownerPath: path }), null)
+  }
+})
+
+test("Admin business admission and raw credential rejection are unchanged by IAM relay cleanup", () => {
+  const config = {
+    sharedSecret: "web-fixture-secret",
+    adminWebSharedSecret: "admin-fixture-secret",
+  }
+  const validHeaders = ["x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "admin-fixture-secret"]
+  const business = (method: string, url: string, rawHeaders = validHeaders) =>
+    admitBrowserService({ method, url, rawHeaders } as IncomingMessage, config, { kind: "business" })
+  for (const [method, path] of [
+    ["GET", "/v1/me"],
+    ["GET", "/browser/v1/auth/session"],
+    ["GET", "/v1/admin/model-routing"],
+    ["GET", "/v1/admin/mcp/providers"],
+    ["POST", "/v1/admin/billing/credit-grants"],
+    ["GET", "/v1/admin/billing/metering/pricing"],
+    ["POST", "/v1/admin/billing/metering/rate-revisions"],
+    ["POST", "/v1/admin/billing/metering/policy-revisions"],
+  ])
+    assert.equal(business(method!, path!), "admin-web-bff", `${method} ${path}`)
+  for (const rawHeaders of [
+    [],
+    ["x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "wrong"],
+    ["x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "web-fixture-secret"],
+    [...validHeaders, "x-kokoro-service", "admin-web-bff"],
+    [...validHeaders, "x-kokoro-internal-secret", "admin-fixture-secret"],
+  ])
+    assert.equal(business("GET", "/v1/me", rawHeaders), null)
+  assert.equal(business("POST", "/v1/projects"), null)
 })

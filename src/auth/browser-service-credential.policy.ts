@@ -79,5 +79,5 @@ export function admitBrowserService(
   if (service === "web-bff") return config.sharedSecret !== null && secret === config.sharedSecret ? service : null
   if (service !== "admin-web-bff" || config.adminWebSharedSecret == null || secret !== config.adminWebSharedSecret) return null
   if (surface.kind === "business") return adminBusinessRoute(request.method ?? "", request.url ?? "") ? service : null
-  return ["/jwks", "/oauth2/token", "/oauth2/userinfo", "/oauth2/revoke"].includes(surface.ownerPath) ? service : null
+  return null
 }
