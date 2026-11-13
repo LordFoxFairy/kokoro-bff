@@ -1,3 +1,9 @@
+## 2026-11-13 Shared ScheduledTask 创建的旧 owner-only 接线已修
+
+正常 editor grant 已确认，但两种 ScheduledTask create 的前置检查仍注入 PROJECT_LOOKUP（仅 owner），实际项目地址创建404/project_not_found，原 key 再读404且任务数0。仅将 ScheduledTaskMutationMiddleware 改接现 PROJECT_READ_LOOKUP 做可见性检查；真正 edit 仍由原 repository 锁内 gate 裁决，因此保 readable viewer 的403及无资格404，不新增 token／SQL／认证／协议或兼容层。
+
+既有 scheduler.test.ts 的真实 Nest/HTTP fixture 仅增一条业务回归：两种 create 地址、creator/editor 实际 actor、viewer403、无grant404与原key ACK 零重复create；service／IAM／持久层明确替身。先 RED404≠200，停写后主控整文件15 PASS/0 SKIP、typecheck/lint/build及两输入SHA前后核等，独审CLEAR；原fixture与断言保留，无全文件格式化改写。正常BFF重载与远期QA任务native由Root继续验，不用本片替身证明正常产品已通过。前次private helper把wire role误作grant_role的清理错误已独立恢复QA grant revoked、测试Session退出，失败不删除。
+
 ## 2026-11-13 正常协作源已激活，SSE replay 缺列已实测修复
 
 `adf31d9813ade34b1d51e672c03075cd5eabdb7c` 已沿原 PR #17 提交推送。正常 owner 演进已成功：BFF 原 36 表与 Capability 原 25 表行摘要保持，来源游标精确迁移；下方“未激活／未演进”仅描述当时阶段。Project 双身份 viewer→editor→降权→撤销主路径已验，完整共享成功执行／安全 FINAL 仍待，不以 ACL 通过代替。

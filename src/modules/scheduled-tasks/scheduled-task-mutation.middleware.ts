@@ -1,7 +1,7 @@
 import { scheduledRevisionPrecondition } from "../../domain/scheduled-task/execution-binding.js"
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, PROJECT_LOOKUP, SCHEDULED_TASK_IDEMPOTENCY, SCHEDULED_TASK_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
+import { BFF_CONFIG, PROJECT_READ_LOOKUP, SCHEDULED_TASK_IDEMPOTENCY, SCHEDULED_TASK_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ProjectLookup } from "../../application/projects/types.js"
@@ -31,7 +31,7 @@ export class ScheduledTaskMutationMiddleware implements NestMiddleware {
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(SCHEDULED_TASK_SERVICE)
     private readonly tasks: ScheduledTaskService,
-    @Inject(PROJECT_LOOKUP) private readonly projects: ProjectLookup,
+    @Inject(PROJECT_READ_LOOKUP) private readonly projects: ProjectLookup,
     @Inject(SCHEDULED_TASK_IDEMPOTENCY)
     private readonly persistent: IdempotencyRepository,
   ) {}
