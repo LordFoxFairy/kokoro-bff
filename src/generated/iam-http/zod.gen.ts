@@ -308,6 +308,56 @@ export const zRejectTenantInvitationResponse = z.object({
   }),
 })
 
+export const zListAuditEventsHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+  "x-kokoro-actor-id": z.string().min(1).max(255).optional(),
+})
+
+export const zListAuditEventsQuery = z.object({
+  limit: z.int().gte(1).lte(100).optional().default(50),
+  cursor: z.string().min(1).max(2048).optional(),
+  tenant_id: z.string().min(1).max(255).optional(),
+})
+
+export const zListAuditEventsResponse = z.object({
+  data: z.object({
+    items: z.array(
+      z.object({
+        id: z
+          .uuid()
+          .regex(
+            /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+          ),
+        operation_id: z
+          .uuid()
+          .regex(
+            /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+          ),
+        phase: z.enum(["attempted", "succeeded", "failed", "outcome_unknown"]),
+        tenant_id: z.string().min(1).max(255),
+        actor_id: z.string().min(1).nullable(),
+        client_id: z.string().min(1).nullable(),
+        method: z.string().min(1).max(16),
+        route: z.string().min(1).max(512),
+        resource_type: z.string().min(1).nullable(),
+        resource_id: z.string().min(1).nullable(),
+        result_code: z.string().min(1).max(255),
+        request_id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+        trace_id: z.string().min(1).nullable(),
+        created_at: z.iso
+          .datetime()
+          .regex(
+            /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z))$/,
+          ),
+      }),
+    ),
+    next_cursor: z.string().min(1).max(2048).nullable(),
+  }),
+})
+
 export const zListTenantMembersHeaders = z.object({
   "x-request-id": z
     .string()

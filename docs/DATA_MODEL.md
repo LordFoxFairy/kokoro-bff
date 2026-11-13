@@ -1,3 +1,7 @@
+## 2026-11-13 B13：IAM 审计无 BFF 持久化（本片源码边界）
+
+IAM AuditEvent、User/Member/Organization 与当前 platformAdmin 仍归 IAM。BFF 仅在当前请求投影经 owner 验证的安全页及 opaque cursor，不存事件副本、资格缓存、cursor 映射、审计库或新 Schema；不访问 IAM 数据库。分页按 owner 的 created_at DESC/id DESC，页间是当前事实而非整个翻页过程的固定快照。撤权后下一次请求拒绝，不能收回已向获准人展示的历史字节。
+
 ## 2026-11-13 B10：ProjectGrant 与 Project 访问版本（核心已发行，正常数据未演进）
 
 ### 具名 Project 协作父演进（隔离 PG 已验）

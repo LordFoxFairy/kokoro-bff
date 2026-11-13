@@ -1,3 +1,9 @@
+## 2026-11-13 B13：当前租户 IAM 审计读取（源码候选，待Root验收激活）
+
+AccountModule 现 Admin identity 读取内增加具名 audit 分支，不扩大 TeamReadKind，不增 DI/认证层。Browser→Admin 同源→BFF 原 native Session 准入，每请求要求 platformAdmin；BFF→IAM 沿既有 bff_user_context 服务凭据与可信 actor/tenant，不传 Cookie、Origin、Bearer 或 Session-ref。IAM 在其有界事务重查当前 User/active Tenant/Member/platformAdmin，旧 OAuth user/operator 审计用途保持独立，不据 BFF 布尔快照授予读取。
+
+已固定 IAM `814ba4c423b631cab28929048c7203f2d14822fc`／0.22.0 正式发行的 /internal/v1/audit-events（raw SHA256 `fe0f70f60776e74dc6795f460c4c78010aba7549bf9f6b63e8daae99e035c482`），沿原generator只扩audit filter；窄 reader 用 generated schema 验证闭集安全事件、每项 tenant 与当前可信 tenant 相等，沿现 timeout/AbortSignal/字节预算，无自动重试或允许缓存。Admin allowlist 仅新增 exact GET；读前已取消不派发，断连/超时退休结果。无跨 owner SQL、审计副本、新表、日志平台或 Provider 审计合成；坏响应/依赖失败不伪造空成功。
+
 ## 2026-11-13 B10：同租户 Project 协作设计门（目标态，分阶段实现中、未验收）
 
 ### 本轮具名已知父演进（隔离 PG 已验，正常数据未改）

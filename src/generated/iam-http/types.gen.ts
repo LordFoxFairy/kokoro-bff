@@ -1464,6 +1464,90 @@ export type RejectTenantInvitationResponses = {
 
 export type RejectTenantInvitationResponse = RejectTenantInvitationResponses[keyof RejectTenantInvitationResponses]
 
+export type ListAuditEventsData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+    /**
+     * Required only with bffUserContextServiceBearer. Single real user id; subject equals actor. Receiver credential fixes caller, surface and tenant. Never accepted as independent authentication.
+     */
+    "x-kokoro-actor-id"?: string
+  }
+  path?: never
+  query?: {
+    limit?: number
+    cursor?: string
+    tenant_id?: string
+  }
+  url: "/internal/v1/audit-events"
+}
+
+export type ListAuditEventsErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  404: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  409: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type ListAuditEventsError = ListAuditEventsErrors[keyof ListAuditEventsErrors]
+
+export type ListAuditEventsResponses = {
+  200: {
+    data: {
+      items: Array<{
+        id: string
+        operation_id: string
+        phase: "attempted" | "succeeded" | "failed" | "outcome_unknown"
+        tenant_id: string
+        actor_id: string | null
+        client_id: string | null
+        method: string
+        route: string
+        resource_type: string | null
+        resource_id: string | null
+        result_code: string
+        request_id: string
+        trace_id: string | null
+        created_at: string
+      }>
+      next_cursor: string | null
+    }
+  }
+}
+
+export type ListAuditEventsResponse = ListAuditEventsResponses[keyof ListAuditEventsResponses]
+
 export type ListTenantMembersData = {
   body?: never
   headers?: {

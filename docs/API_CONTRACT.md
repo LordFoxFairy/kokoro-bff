@@ -1,3 +1,9 @@
+## 2026-11-13 B13：IAM 审计公开投影（源码候选，待BFF正式发行）
+
+本片追加 Public29.1 的 GET /v1/admin/identity/audit-events，operationId=listAdminIdentityAuditEvents。只收 limit（1–100，默认25）和 opaque cursor（1–2048）；重复、未知query、body及客户端 tenant/site 参数拒绝。成功 data={items,next_cursor}，meta 沿现请求关联；items 仅 IAM 原安全事件字段（事件/operation、phase、tenant/actor/client、method/route、resource、result_code、request/trace、UTC created_at），无 details、正文、凭据或前后值。游标只由 IAM owner 生成/校验，不是权限凭证；每页重新准入。
+
+普通主体/已撤管理员资格403；坏query/cursor400；依赖故障503；不合法 owner 响应502。no-store、x-request-id、有限取消与大小预算沿现 identity 边界。追加一项操作，原 Public29.0 完整父与有序 operation inventory 保持可逆证明，不重签旧摘要；已正规消费 IAM 0.22.0／814ba4c／fe0f70f6 原始发行物；BFF候选仍待Root正式提交及消费者配对，不冒正常激活。
+
 ## 2026-11-13 B10：ProjectGrant 与协作访问契约设计门（未发行）
 
 普通Chat幂等亦按真实actor隔离：`bff_agent_dispatch_outbox` business unique改为tenant／conversation／actor／key，与现HTTP receipt及prepare／replay主体scope一致；既有identity material已含subject且commit强制subject=actor，不同协作者同key的新run／message／outbox ID天然隔离，无需换派生算法。原持久ID／payload／摘要／回执不重写，精确父仅换约束；一条creator→editor→creator PG同时证明同key独立成功和原actor重放原ACK，不退成跨actor全资源409。

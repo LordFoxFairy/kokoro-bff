@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/iam-http")
 const manifestPath = path.join(root, "contract/dependencies/iam-http.json")
 const configPath = path.join(root, "openapi-ts.iam.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "b6a9745b340149808afb1aae357574d0aa7bbad3"
+const ownerCommit = "814ba4c423b631cab28929048c7203f2d14822fc"
 const vendorPath = path.join(root, `contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`)
-const ownerDigest = "d279907ae52e0f8594ee28a388f22c9d79e298e8e49caeb2efc3ca2291cdf0b9"
+const ownerDigest = "fe0f70f60776e74dc6795f460c4c78010aba7549bf9f6b63e8daae99e035c482"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -215,7 +215,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-iam",
       repository_commit: ownerCommit,
-      contract_version: "0.21.0",
+      contract_version: "0.22.0",
       contract_path: "contract/openapi/iam.internal.v1.json",
       contract_sha256: ownerDigest,
     },

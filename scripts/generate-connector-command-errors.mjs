@@ -238,13 +238,24 @@ if (process.argv.slice(2).join(" ") === "--write") {
 
 // The named history query is not a public API or a generic receipt surface.
 const platformPin = JSON.parse(await readFile(new URL("../contract/dependencies/platform-connect.json", import.meta.url), "utf8"))
+const privateFeatureOwnerCommit = "573a8f00a92991ae1e6eee6feb238e0132f71f50"
+
+/** A compatible runtime is not authority to re-sign an independently issued private feature. */
+export function verifyMcpPrivateFeatureBytes(artifact, pinnedBytes, runtimeBytes) {
+  if (!artifact || createHash("sha256").update(pinnedBytes).digest("hex") !== artifact.sha256 || !pinnedBytes.equals(runtimeBytes))
+    throw new Error("independent private MCP feature and current runtime bytes differ")
+}
+
 const ownerFeaturePath = "contract/execution-operations/mcp-prepare-rejection-v1.json"
 const featurePin = platformPin.owner.artifacts.find((value) => value.path === ownerFeaturePath)
 if (!featurePin) throw new Error("missing formally pinned Prepare outcome feature")
 const featureBytes = await readFile(
+  new URL(`../contract/vendor/kokoro-platform/${privateFeatureOwnerCommit}/execution-operations/mcp-prepare-rejection-v1.json`, import.meta.url),
+)
+const runtimeFeatureBytes = await readFile(
   new URL(`../contract/vendor/kokoro-platform/${platformPin.owner.repository_commit}/execution-operations/mcp-prepare-rejection-v1.json`, import.meta.url),
 )
-if (createHash("sha256").update(featureBytes).digest("hex") !== featurePin.sha256) throw new Error("Prepare outcome owner feature drifted")
+verifyMcpPrivateFeatureBytes(featurePin, featureBytes, runtimeFeatureBytes)
 const ownerFeature = JSON.parse(featureBytes)
 if (
   ownerFeature.profile !== "mcp-prepare-rejection-v1" ||
@@ -260,7 +271,7 @@ if (
 const prepareOutcomes = {
   ...PREPARE_OUTCOME_FAULT_POLICY,
   owner_feature: {
-    commit: platformPin.owner.repository_commit,
+    commit: privateFeatureOwnerCommit,
     path: ownerFeaturePath,
     profile: ownerFeature.profile,
     version: ownerFeature.version,
@@ -354,6 +365,15 @@ const {
   mcpReauthorizationKeySchema,
 } = await import("../src/http/mcp-reauthorization.contract.ts")
 const reauthorizationTarget = new URL("../contract/openapi/browser/v1/mcp-reauthorization.json", import.meta.url)
+const privateServerPath = "contract/execution-operations/mcp-private-server-v2.json"
+const privateServerPin = platformPin.owner.artifacts.find((value) => value.path === privateServerPath)
+const privateServerBytes = await readFile(
+  new URL(`../contract/vendor/kokoro-platform/${privateFeatureOwnerCommit}/execution-operations/mcp-private-server-v2.json`, import.meta.url),
+)
+const runtimePrivateServerBytes = await readFile(
+  new URL(`../contract/vendor/kokoro-platform/${platformPin.owner.repository_commit}/execution-operations/mcp-private-server-v2.json`, import.meta.url),
+)
+verifyMcpPrivateFeatureBytes(privateServerPin, privateServerBytes, runtimePrivateServerBytes)
 const reauthorizationDocument = {
   openapi: "3.1.0",
   info: { title: "Kokoro BFF browser-private MCP new authorization", version: reauthorization.version },
@@ -364,8 +384,8 @@ const reauthorizationDocument = {
     group: "mcp",
   },
   "x-kokoro-owner-contract": {
-    commit: platformPin.owner.repository_commit,
-    ...platformPin.owner.artifacts.find((value) => value.path === "contract/execution-operations/mcp-private-server-v2.json"),
+    commit: privateFeatureOwnerCommit,
+    ...privateServerPin,
   },
   paths: {
     [reauthorization.path]: {

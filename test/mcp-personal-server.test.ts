@@ -1338,6 +1338,7 @@ test("Prepare outcome publication derives its owner pin and links only method-sp
   const { PREPARE_OUTCOME_FAULT_POLICY: source } = await import("../src/infrastructure/clients/platform/connector-command-fault.js")
   const bytes = await readFile(new URL("../contract/mcp-prepare-outcomes-v1.json", import.meta.url))
   const { owner_feature, ...published } = JSON.parse(bytes.toString("utf8"))
+  assert.equal(owner_feature.commit, "573a8f00a92991ae1e6eee6feb238e0132f71f50")
   assert.deepEqual(published, source)
   const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/platform-connect.json", import.meta.url), "utf8"))
   // The private policy retains its independently issued feature pin. A newer compatible
@@ -1367,6 +1368,30 @@ test("Prepare outcome publication derives its owner pin and links only method-sp
   assert.equal(lookup.outcomes_profile, source.profile)
   assert.equal(lookup.outcomes_version, source.version)
   assert.deepEqual(lookup.allowed_faults, source.operations.getMcpPrepareReceipt)
+})
+
+test("private feature generation retains the issued pin and rejects runtime manifest or byte drift", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const outputs = ["mcp-prepare-outcomes-v1.json", "openapi/browser/v1/mcp-prepare-receipt.json", "openapi/browser/v1/mcp-reauthorization.json"]
+  const before = await Promise.all(outputs.map((name) => readFile(new URL(`../contract/${name}`, import.meta.url))))
+  const { verifyMcpPrivateFeatureBytes } = await import("../scripts/generate-connector-command-errors.mjs")
+  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/platform-connect.json", import.meta.url), "utf8"))
+  for (const name of ["mcp-prepare-rejection-v1.json", "mcp-private-server-v2.json"]) {
+    const path = `contract/execution-operations/${name}`
+    const artifact = manifest.owner.artifacts.find((value: { path: string }) => value.path === path)
+    const pinned = await readFile(
+      new URL(`../contract/vendor/kokoro-platform/573a8f00a92991ae1e6eee6feb238e0132f71f50/execution-operations/${name}`, import.meta.url),
+    )
+    const runtime = await readFile(
+      new URL(`../contract/vendor/kokoro-platform/${manifest.owner.repository_commit}/execution-operations/${name}`, import.meta.url),
+    )
+    assert.doesNotThrow(() => verifyMcpPrivateFeatureBytes(artifact, pinned, runtime))
+    assert.throws(() => verifyMcpPrivateFeatureBytes({ ...artifact, sha256: "0".repeat(64) }, pinned, runtime), /bytes differ/u)
+    assert.throws(() => verifyMcpPrivateFeatureBytes(artifact, pinned, Buffer.concat([runtime, Buffer.from("\n")])), /bytes differ/u)
+    assert.throws(() => verifyMcpPrivateFeatureBytes(artifact, Buffer.concat([pinned, Buffer.from("\n")]), runtime), /bytes differ/u)
+  }
+  const after = await Promise.all(outputs.map((name) => readFile(new URL(`../contract/${name}`, import.meta.url))))
+  assert.deepEqual(after, before, "checking provenance never rewrites independently published private artifacts")
 })
 
 test("private new authorization keeps source and double CAS in a strict bounded original intent", () => {

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { restoreAdminIdentityAuditContract, adminIdentityAuditParentBaseline } from "./admin-identity-audit-public-contract.mjs"
 const hash = (value) => createHash("sha256").update(value).digest("hex")
 const parentSha = "f7e327f8281e7f65845dc24c0a226734ce3b0f4d16c7255a6b3beee8a7f04a3d"
 const childSha = "45c54365e75a31684e1dbf841a0c68cd554bf022643919cac591c78ed4499509"
@@ -13,6 +14,7 @@ const expected = [
 // Build-time proof only. The 221-operation B10 candidate is an exact intermediate,
 // not a re-signed released parent; its original complete 28.38 guard remains downstream.
 export function restoreCustomApiAdminContract(source) {
+  source = restoreAdminIdentityAuditContract(source)
   if (!source.includes("  # CUSTOM-API-ADMIN-PATHS-BEGIN\n")) return source
   if (hash(source) !== childSha) throw Error("Custom API Admin current Public29 child drift")
   const parent = source
@@ -22,6 +24,7 @@ export function restoreCustomApiAdminContract(source) {
   return parent
 }
 export function customApiAdminParentBaseline(items) {
+  items = adminIdentityAuditParentBaseline(items)
   const names = new Set(expected.map((item) => item.operation_id))
   const found = items.filter((item) => names.has(item.operation_id))
   if (found.length === 0) return items

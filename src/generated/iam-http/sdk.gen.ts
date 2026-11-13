@@ -27,6 +27,9 @@ import type {
   ListAccountSessionsData,
   ListAccountSessionsErrors,
   ListAccountSessionsResponses,
+  ListAuditEventsData,
+  ListAuditEventsErrors,
+  ListAuditEventsResponses,
   ListTenantInvitationsData,
   ListTenantInvitationsErrors,
   ListTenantInvitationsResponses,
@@ -79,6 +82,7 @@ import {
   zGetTenantInvitationContextResponse,
   zLeaveTenantResponse,
   zListAccountSessionsResponse,
+  zListAuditEventsResponse,
   zListTenantInvitationsResponse,
   zListTenantMembersResponse,
   zListTenantRolesResponse,
@@ -282,6 +286,27 @@ export const rejectTenantInvitation = <ThrowOnError extends boolean = false>(
   (options.client ?? client).post<RejectTenantInvitationResponses, RejectTenantInvitationErrors, ThrowOnError>({
     responseValidator: async (data) => await zRejectTenantInvitationResponse.parseAsync(data),
     url: "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/reject",
+    ...options,
+  })
+
+export const listAuditEvents = <ThrowOnError extends boolean = false>(
+  options?: Options<ListAuditEventsData, ThrowOnError>,
+): RequestResult<ListAuditEventsResponses, ListAuditEventsErrors, ThrowOnError> =>
+  (options?.client ?? client).get<ListAuditEventsResponses, ListAuditEventsErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListAuditEventsResponse.parseAsync(data),
+    security: [
+      {
+        key: "internalBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        key: "bffUserContextServiceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/internal/v1/audit-events",
     ...options,
   })
 

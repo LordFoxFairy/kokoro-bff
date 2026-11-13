@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { load } from "js-yaml"
 import { fromJSONSchema } from "zod"
+import { restoreAdminIdentityAuditContract, adminIdentityAuditParentBaseline } from "../scripts/admin-identity-audit-public-contract.mjs"
 import {
   restoreProjectGrantContract,
   restoreProjectGrantSchema,
@@ -11,7 +12,7 @@ import {
   projectGrantParentOpenApiSha,
   projectGrantParentSqlSha,
 } from "../scripts/project-grant-public-contract.mjs"
-const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+const source = restoreAdminIdentityAuditContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
 const sql = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
 const spec = load(source)
 const hash = (value) => createHash("sha256").update(value).digest("hex")
@@ -30,7 +31,7 @@ test("Public29 restores complete Public28.38/SQL parent and retains the ordered 
   assert.throws(() => restoreProjectGrantContract(source.replace("getProjectAccess", "forgedProjectAccess")), /drift/)
   assert.throws(() => restoreProjectGrantSchema(sql.replace("access_version >= 1", "access_version >= 0")), /drift/)
   const inventory = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8"))
-  const operations = inventory.operations
+  const operations = adminIdentityAuditParentBaseline(inventory.operations)
   assert.equal(operations.length, 227)
   assert.equal(projectGrantParentBaseline(operations).length, 217)
   const changed = structuredClone(operations)

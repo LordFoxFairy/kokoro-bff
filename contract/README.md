@@ -1,3 +1,13 @@
+## Current release — Public29.1 / 228 operations
+
+Adds one current-tenant native-admin IAM audit read. The named inverse restores complete Public29.0/227 bytes and ordered inventory before the existing historical proofs. IAM is fixed to 814ba4c4/0.22 via the existing generator. No Schema or authentication protocol is added; normal native pairing remains a separate Root receipt. Private MCP feature publications retain their independently issued 573 source: the generator proves runtime feature bytes match instead of floating their provenance or re-signing artifacts. Earlier sections describe earlier checkpoints.
+
+## B13 — Public29.1 current-tenant IAM audit candidate
+
+Adds exactly `GET /v1/admin/identity/audit-events` / `listAdminIdentityAuditEvents` (228 ordered operations). It accepts only limit/cursor and returns the IAM-owned safe page, not a cross-owner audit store. The new build/test inverse restores the complete released Public29 bytes (`45c54365e75a31684e1dbf841a0c68cd554bf022643919cac591c78ed4499509`) and ordered 227-operation inventory before the unchanged historical guards. No old digest, SQL or independent browser-private profile is re-signed.
+
+IAM 0.22.0 is consumed from formal `814ba4c423b631cab28929048c7203f2d14822fc`, raw `fe0f70f60776e74dc6795f460c4c78010aba7549bf9f6b63e8daae99e035c482`, through the existing generated client pipeline. BFF does not generate an SDK from its own public canonical. Publication, consumer pins and normal native acceptance remain Root's subsequent steps.
+
 ## Current candidate — Public29.0 / 227 operations
 
 未发行候选；B10 同版 221 operations 补全 current control/regeneration 安全事实（未发行），新增六项 Custom API admin。独立 `scripts/custom-api-admin-public-contract.mjs` 精确恢复修正后 221 中间态，再由原 B10 guard 恢复已发行 Public28.38 / 217 全文；不重签历史 parent。机器入口仍 canonical OpenAPI 与有序 operation inventory，版本不产生未发行的 28.39。Platform 固定 `efe18a1f697f3ff2189e342e40ffed581bedda2b`，仅消费正式六 RPC，public 与正常组合激活验收分开。以下为历史发布记录。

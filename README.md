@@ -14,7 +14,7 @@ Browser -> kokoro-app same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agen
 
 | 能力                           | 当前事实                                                                                                                  |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| Public contract                | Public29.0 候选 / 227 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata                                      |
+| Public contract                | Public29.1 候选 / 228 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata                                      |
 | User admission                 | 受信Web/Admin envelope＋配置的原生issuer Session Cookie＋固定Origin；IAM鲜验Session与当前Product资格；普通内部业务走服务＋actor |
 | Project / ScheduledTask        | Live 使用本仓 PostgreSQL；Redis 用于 readiness/cache coordination                                                         |
 | Idempotency                    | 持久化 command receipt 与未知结果恢复；适用面以各 operation 的幂等声明为准                                                  |

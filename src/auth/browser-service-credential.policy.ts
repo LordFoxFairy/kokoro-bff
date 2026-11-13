@@ -54,6 +54,7 @@ function adminBusinessRoute(method: string, target: string): boolean {
       "/v1/admin/identity/members",
       "/v1/admin/identity/invitations",
       "/v1/admin/identity/roles",
+      "/v1/admin/identity/audit-events",
     ].includes(path)
   )
     return true

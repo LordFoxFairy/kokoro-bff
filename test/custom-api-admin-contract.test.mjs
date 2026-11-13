@@ -4,9 +4,12 @@ import { readFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { load } from "js-yaml"
 import { fromJSONSchema } from "zod"
-const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+import { restoreAdminIdentityAuditContract, adminIdentityAuditParentBaseline } from "../scripts/admin-identity-audit-public-contract.mjs"
+const source = restoreAdminIdentityAuditContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
 const spec = load(source)
-const operations = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+const operations = adminIdentityAuditParentBaseline(
+  JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations,
+)
 const methods = [
   ["/v1/admin/custom-apis", "get", "listAdminCustomApis"],
   ["/v1/admin/custom-apis/{profile_id}", "get", "getAdminCustomApi"],

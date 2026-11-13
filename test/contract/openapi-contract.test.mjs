@@ -156,11 +156,11 @@ test("current public authentication metadata follows native Session admission an
     browserOrigin: [],
   }))
   assert.deepEqual(active.security, native, "ordinary Product operations describe native Session, not a user Bearer")
-  assert.equal(active.info.version, "29.0.0")
+  assert.equal(active.info.version, "29.1.0")
   const operations = Object.values(active.paths).flatMap((path) =>
     Object.values(path).filter((operation) => operation && typeof operation === "object" && operation.operationId),
   )
-  assert.equal(operations.length, 227)
+  assert.equal(operations.length, 228)
   const serviceOnly = new Set(["getRuntimeManifest", "getSharedSessionSnapshot"])
   const exceptions = new Map([
     ["healthz", []],

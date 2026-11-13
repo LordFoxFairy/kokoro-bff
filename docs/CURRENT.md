@@ -1,3 +1,23 @@
+## 2026-11-13 B13：当前租户 IAM 审计读取（源码已验，正常配对待验）
+
+Public29.1.0／228 operations 仅追加 GET /v1/admin/identity/audit-events；完整逆回原Public29/227及有序库存，旧摘要不变。固定 IAM `814ba4c423b631cab28929048c7203f2d14822fc`／0.22.0／raw `fe0f70f60776e74dc6795f460c4c78010aba7549bf9f6b63e8daae99e035c482` 正规生成客户端；无新BFF Schema/服务/认证/缓存。
+
+沿原 Account/native 管理员准入和受信actor/tenant；新窄reader复用原 bounded IAM transport，安全事件strict/逐tenant/页界、明确400/403/429/502/503，断连/超时或迟到准入不派发，入站10秒总预算传剩余时间。IAM同RR鲜验当前管理员资格与事件页，BFF不复制资格事实或跨owner SQL。原Team三读语义保持，不将审计混为Team列表。
+
+主控直接Account/Nest真实HTTP8 PASS/0skip（IAM准入及owner端点为明确fixture）、Private来源4 PASS/0skip、Public父逆证13 PASS/0skip；31停写源码及7private字节核等，独审CLEAR。writer最终正规contract:check全15步／1454 PASS/0skip，types/lint/build/scopedformat通过；63原OpenAPI warnings保留。未重复全默认或不相关BFF-PG，不冒真实IAM/native整链。IAM自身真实PG/Redis10已由Root独立验收，消费者正常配对另列。
+
+前次完整生成检查发现既存private generator误把已发行573独立feature来源浮动到当前Platform efe；仅修generator显式private来源并核两份feature的runtime/pinned bytes相同，7private产物不重签/不重生。原失败与HTTP夹具/类型接线失败保留。新Public raw SHA256 `dea9f3b6dfc03daab3a6fe3b4009635cd0aecf03517c05e7ce42ae116162c925`。
+
+## 2026-11-13 B13 当前租户 IAM 审计源码候选（待Root正式发行/正常验收）
+
+本片增加 Public29.1／228 的一个具名 GET，沿 Account 原 Admin identity/native Session 准入；IAM0.22.0 正式 `814ba4c423b631cab28929048c7203f2d14822fc`／raw `fe0f70f60776e74dc6795f460c4c78010aba7549bf9f6b63e8daae99e035c482` 已由原generator正规固定。仅扩audit filter，旧业务与独立native契约不机械迁移。
+
+新窄reader复用现requestIamHttp；闭集安全事件、逐项tenant与页界鲜验，显式limit默认25；保400/403/429及Retry-After、坏owner502/依赖503。native入口共用10秒总lifetime与剩余预算，已退休不派发，断连/超时不收迟到页；不把网络取消称为IAM数据库物理取消。无BFF表/审计镜像、新配置或认证层。旧Team三个响应shape不变。
+
+初始actual Account/Nest HTTP为403≠200 RED；实现后本文件8 PASS／0 SKIP，覆盖原三读、新分页/权限/秘密与串tenant拒绝/有限I/O/错误映射/取消。新契约focused13 PASS，完整types/build/正式lint的定向结果及最终contract门由本片停写交接manifest记录。原完整历史首扫3失败、首次nullable baseURL编译错误、fetch丢GET Content-Length:0的fixture失败保留；已分别按原逆证、显式类型收窄和真实Node HTTP header修正，不放宽生产校验或补造成功。未运行真实IAM/PG/native，未改正常服务/配置，不据此关闭整个B13或TaskB。
+
+正规contract:check首遇既存private provenance漂移：runtime已是efe，而generator把其commit误写进独立573发行物。按既有政策仅修generator显式573 feature source pin，分别核当前runtime manifest/bytes与原573 vendor相同；Prepare与reauthorization metadata及所有private产物字节不变。现直接provenance4 PASS／0 SKIP，包含两feature的manifest/bytes漂移拒绝；最终整门结果绑定停写manifest，不以重签private产物消除失败。
+
 ## 2026-11-13 Shared ScheduledTask 创建的旧 owner-only 接线已修
 
 正常 editor grant 已确认，但两种 ScheduledTask create 的前置检查仍注入 PROJECT_LOOKUP（仅 owner），实际项目地址创建404/project_not_found，原 key 再读404且任务数0。仅将 ScheduledTaskMutationMiddleware 改接现 PROJECT_READ_LOOKUP 做可见性检查；真正 edit 仍由原 repository 锁内 gate 裁决，因此保 readable viewer 的403及无资格404，不新增 token／SQL／认证／协议或兼容层。
