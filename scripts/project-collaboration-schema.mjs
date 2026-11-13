@@ -102,11 +102,13 @@ async function catalog(query, namespace) {
     }
     const columns = (
       await query(
-        `SELECT a.attnum,a.attname,a.attisdropped,format_type(a.atttypid,a.atttypmod) AS type,a.attnotnull,a.attidentity,a.attgenerated,
+        // Compare live schema semantics, not heap slot order from prior additive
+        // upgrades. Retired attribute slots cannot be read or written.
+        `SELECT a.attname,format_type(a.atttypid,a.atttypmod) AS type,a.attnotnull,a.attidentity,a.attgenerated,
       pg_get_expr(d.adbin,d.adrelid) AS default_expression,n.nspname AS collation_schema,c.collname AS collation
       FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
       LEFT JOIN pg_collation c ON c.oid=a.attcollation LEFT JOIN pg_namespace n ON n.oid=c.collnamespace
-      WHERE a.attrelid=$1::regclass AND a.attnum>0 ORDER BY a.attnum`,
+      WHERE a.attrelid=$1::regclass AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attname COLLATE "C"`,
         [relation],
       )
     ).rows
@@ -124,7 +126,10 @@ async function catalog(query, namespace) {
       WHERE i.indrelid=$1::regclass ORDER BY c.relname COLLATE "C"`,
         [relation],
       )
-    ).rows.map((row) => ({ ...row, definition: row.definition.replace(/ ON (?:(?:pg_temp(?:_[0-9]+)?|kokoro_bff)\.)?(bff_[a-z_]+) /u, " ON OWNER.$1 ") }))
+    ).rows.map((row) => ({
+      ...row,
+      definition: row.definition.replace(/ ON (?:(?:pg_temp(?:_[0-9]+)?|kokoro_bff)\.)?(bff_[a-z_]+) /u, " ON OWNER.$1 "),
+    }))
     const guards = (
       await query(
         `SELECT relkind,relpersistence,relrowsecurity,relforcerowsecurity,reloptions,
@@ -135,7 +140,15 @@ async function catalog(query, namespace) {
         [relation],
       )
     ).rows[0]
-    result[name] = { columns, constraints, indexes, guards: { ...guards, relpersistence: namespace === "pg_temp" ? "p" : guards.relpersistence } }
+    result[name] = {
+      columns,
+      constraints,
+      indexes,
+      guards: {
+        ...guards,
+        relpersistence: namespace === "pg_temp" ? "p" : guards.relpersistence,
+      },
+    }
   }
   return result
 }

@@ -5,6 +5,7 @@
 Public29协作核心已作为 `38d47c9` 发行；正常运行／数据库未激活。仅现 `apply-schema.mjs --evolve-project-collaboration` 增加显式模式，
 fresh 空 owner 语义不变，不改变既有 personalization 具名入口，也不新建 migration 平台／ledger。运行时从 canonical SQL 的现完整逆证识别固定 d875／28.38父；
 测试以该 Git commit 原件核字节，不拿编辑中的文件当历史。受影响9表及新2表用真实 catalog 精确比较（列／约束／完整 index／RLS／触发器／继承）；
+列以名称及完整live属性比较；历史ADD/DROP形成的物理attnum／已退休槽不属于协议，忽略其位置而非忽略真实列。额外live列、类型／nullability／default差异、约束／索引／guard差异仍拒绝；
 owner advisory lock 和具名表锁后重核，30s总期限／1s锁预算，一事务保值回填；unknown／mixed／矛盾来源回滚，current只识别，COMMIT未知不伪称回滚或自动重试。
 实际 Scheduled 接受事务同时持久dispatch与terminal202 receipt，旧revision从该原snapshot精确绑定；允许已删除Task的历史，不猜当前revision。
 旧source仅用已证明consumer／Conversation原creator及一致dispatch/process起源回填独立cursor，保原HWM／state／public payload与ID，不reset或默认owner。

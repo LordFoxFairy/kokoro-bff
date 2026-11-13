@@ -8,14 +8,18 @@ import { projectCollaborationDefinitions } from "../scripts/project-collaboratio
 import { buildScheduledAgentLaunch, scheduledConversationId } from "../dist/infrastructure/clients/agent/launch.js"
 
 // Root creates and reclaims this empty owned DB; this test alone installs the pinned parent instead of the current schema.
-test("real PG exact-parent Project collaboration evolution preserves old executors, payloads and cursors and refuses unknown or mixed state", async (t) => {
+test("real PG exact-parent Project collaboration evolution accepts equivalent historical column layout, preserves facts and refuses live drift or mixed state", async (t) => {
   const raw = process.env.KOKORO_TEST_POSTGRES_URL
   assert.ok(raw, "Root-owned empty Project collaboration fixture URL is required")
   const url = new URL(raw)
   assert.ok(["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))
   assert.match(url.pathname, /^\/kokoro_bff_project_collab_[0-9a-f]{32}$/u)
   assert.deepEqual(url.searchParams.getAll("schema"), ["kokoro_bff"])
-  const pool = new Pool({ connectionString: raw, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 2 })
+  const pool = new Pool({
+    connectionString: raw,
+    options: "-c search_path=kokoro_bff -c timezone=UTC",
+    max: 2,
+  })
   t.after(() => pool.end())
   assert.equal((await pool.query("SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='kokoro_bff' LIMIT 1")).rowCount, 0)
   const current = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
@@ -25,6 +29,10 @@ test("real PG exact-parent Project collaboration evolution preserves old executo
   })
   assert.equal(projectCollaborationDefinitions(current).parent, parent)
   await applyCanonicalSchema(raw, parent)
+  // A supported additive history has the same live schema, but different physical
+  // positions and retired pg_attribute slots. No column order is a wire contract.
+  await pool.query("ALTER TABLE bff_project DROP COLUMN instruction")
+  await pool.query("ALTER TABLE bff_project ADD COLUMN instruction TEXT")
   const tenant = "evolution-tenant",
     owner = "original-owner",
     task = "legacy-task",
@@ -68,7 +76,10 @@ test("real PG exact-parent Project collaboration evolution preserves old executo
     retry_at: null,
     last_error_code: null,
     snapshot,
-    response: { status: 202, body: { data: { task_id: task, run_id: launch.receipt.run_id } } },
+    response: {
+      status: 202,
+      body: { data: { task_id: task, run_id: launch.receipt.run_id } },
+    },
   }
   await pool.query("INSERT INTO bff_idempotency_receipt(scope,fingerprint,status,response_body) VALUES($1,$2,202,$3::jsonb)", [
     JSON.stringify([tenant, "scheduler-dispatch:v1", key]),
@@ -124,7 +135,11 @@ test("real PG exact-parent Project collaboration evolution preserves old executo
         sequence,
         `agui_${String(sequence).padStart(32, "0")}`,
         id,
-        JSON.stringify({ type: "CUSTOM", name: "original-safe-fact", value: { sequence } }),
+        JSON.stringify({
+          type: "CUSTOM",
+          name: "original-safe-fact",
+          value: { sequence },
+        }),
         occurred,
       ],
     )
@@ -145,6 +160,12 @@ test("real PG exact-parent Project collaboration evolution preserves old executo
       ),
     )
   const before = await legacyRows()
+  await pool.query("ALTER TABLE bff_project ADD COLUMN fixture_unissued TEXT")
+  await assert.rejects(evolveProjectCollaborationSchema(raw, current), /PROJECT_COLLABORATION_SCHEMA_UNKNOWN/u)
+  await pool.query("ALTER TABLE bff_project DROP COLUMN fixture_unissued")
+  await pool.query("ALTER TABLE bff_project ALTER COLUMN description DROP NOT NULL")
+  await assert.rejects(evolveProjectCollaborationSchema(raw, current), /PROJECT_COLLABORATION_SCHEMA_UNKNOWN/u)
+  await pool.query("ALTER TABLE bff_project ALTER COLUMN description SET NOT NULL")
   await pool.query("CREATE INDEX fixture_extra_index ON bff_project(name) INCLUDE(owner_id)")
   await assert.rejects(evolveProjectCollaborationSchema(raw, current), /PROJECT_COLLABORATION_SCHEMA_UNKNOWN/u)
   await pool.query("DROP INDEX fixture_extra_index")
@@ -170,7 +191,9 @@ test("real PG exact-parent Project collaboration evolution preserves old executo
   assert.equal(source.length, 1)
   assert.equal(source[0].subject_id, owner)
   assert.equal(source[0].source_high_watermark, "3")
-  assert.deepEqual(source[0].projection_state, { text_message_ids: ["original-text-message"] })
+  assert.deepEqual(source[0].projection_state, {
+    text_message_ids: ["original-text-message"],
+  })
   assert.equal(after.bff_scheduled_task[0].execution_actor_id, owner)
   assert.equal(after.bff_scheduled_agent_dispatch[0].task_revision, 7)
   for (const [table, rows] of Object.entries(after)) {
@@ -182,7 +205,11 @@ test("real PG exact-parent Project collaboration evolution preserves old executo
         assert.equal(row.source_subject_id, owner)
         delete row.source_subject_id
       }
-      if (table === "bff_agui_stream") Object.assign(row, { source_high_watermark: 3, projection_state: source[0].projection_state })
+      if (table === "bff_agui_stream")
+        Object.assign(row, {
+          source_high_watermark: 3,
+          projection_state: source[0].projection_state,
+        })
     }
     assert.deepEqual(rows, before[table], `${table}: original ID/owner/revision/prompt/plan/enabled/payload/cursor/public bytes preserved`)
   }

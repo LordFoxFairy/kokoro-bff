@@ -1,3 +1,9 @@
+## 2026-11-13 正常切换发现的 owner 演进工具缺陷（修复已定向验证）
+
+正常BFF旧库的live父语义与d875一致，但历史ADD/DROP使5表物理列位序不同，ScheduledTask保留两个已删除attribute槽；原工具把attnum当协议导致SCHEMA_UNKNOWN，事务在分类阶段拒绝，无业务变更。仅修具名演进catalog的live列排序／退休槽过滤，完整列属性、约束、索引、guard及锁后重核保留；不加父版本、不手工改正常表。
+既有真实PG用例补物理重排／退休槽、额外live列／nullability拒绝，原来源／receipt矛盾回滚、全保值、current noop保留；真实RED→GREEN 1 PASS／0 SKIP，规则3 PASS。本片自有fixture库均DROP并确认不存在。此前2578 PASS／2条件SKIP绑定6b源码，未重跑全默认；本片仅owner工具／测试／设计说明，不改HTTP runtime或canonical SQL。
+正常Capability已通过正式精确父演进；BFF实际升级／成对激活与native收据由Root后续记录，本段不冒已完成。
+
 ## 2026-11-13 B10 已知协作源码完整默认门收口（正常组合未激活）
 
 源码 `6b1d8a49863d1f32124cd5c0c8b7e1c198f67fde` 的20路径已沿原#17提交推送。后继最终正式 `pnpm test` 实测2580项：2578 PASS／0 FAIL／2条件SKIP；16源码测试+8compiled输入在整轮前后逐SHA保持，正常build/lint/types/scopedformat与相关真实PG/三独审证据见下。原2556/21/2完整失败轮、各定向修复及真正越权/ACK回归的RED均保留；本段明确替代下方“当时未重跑完整默认”的阶段状态，不改写历史失败。
