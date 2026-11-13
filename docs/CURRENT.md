@@ -1,3 +1,9 @@
+## 2026-11-13 Skills early-denial normal activation
+
+c40315b9 is active on the normal source runtime. Main verified the three related native HTTP files:65 PASS/0 FAIL/0 SKIP; nonincremental types and formal build pass. Two wrappers now set the existing request ID before admission; all status/body/permission/owner behavior and strict App validation remain unchanged. The real normal Admin path after restoring the original non-admin role now returns403 skill_forbidden, with UUID request ID, JSON and no-store, rather than502. Admin generates its own ID; the initial external-ID echo assertion was invalid and its failure remains recorded. No contract/schema/version increment.
+
+The separate existing QA Skill restore503 is traced to Storage GetPackageReference and the current Docker/MinIO data-plane failure (ListObjects500/0 drives provided); it is not closed by this header fix. Root retains its original restore command and the unresolved quarantine state. Task B and the original PR remain open; no deployment or main merge.
+
 ## 2026-11-13 Skills 原生早退响应关联头修复
 
 正常native非管理员读取Skills时，owner原403/skill_forbidden缺x-request-id，被Product严格网关映射502；主控已保留正式链FAIL，未放宽消费规则或权限。两个exact Skills匹配入口（Admin、published package）仅在准入前补现requestId响应头；原401/403/429/503/正文/Retry-After及unmatched false零副作用不变，无Schema/契约/依赖/认证变化。
