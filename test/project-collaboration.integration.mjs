@@ -755,6 +755,43 @@ test("real PG creator-editor-creator source cursors preserve public order, same-
     expectedWatermarks.set(subject, start + 4)
     expectedHistory.push({ message_id: ack.user_message_id, sequence: String(expectedHistory.length + 1), role: "user", content: intent.content })
     expectedHistory.push({ message_id: ack.assistant_message_id, sequence: String(expectedHistory.length + 1), role: "assistant", content: `${subject} final` })
+    const { readRunFinalAnswer } = await import("../dist/infrastructure/postgres/run-final-answer-read.js")
+    const finalQuery = (actor = subject) => ({
+      tenantId: tenant,
+      subjectId: actor,
+      conversationId: conversation,
+      runId: ack.run_id,
+      finalMessageId: segment,
+      signal: new AbortController().signal,
+      deadlineAt: performance.now() + 5000,
+    })
+    const revision = (
+      await pool.query("SELECT parts_public_sequence::text AS revision FROM bff_message WHERE tenant_id=$1 AND message_id=$2", [
+        tenant,
+        ack.assistant_message_id,
+      ])
+    ).rows[0].revision
+    assert.deepEqual(
+      await readRunFinalAnswer(pool, finalQuery()),
+      { segment_id: segment, revision },
+      "exact actual actor FINAL binding does not depend on Conversation creator",
+    )
+    assert.equal(
+      await readRunFinalAnswer(pool, finalQuery(subject === "creator" ? "editor" : "creator")),
+      null,
+      "safe sharing never exposes another actor's private final binding",
+    )
+    if (subject === "editor") {
+      assert.equal((await setRole("viewer", "3", "demote-final")).kind, "committed")
+      assert.equal(await readRunFinalAnswer(pool, finalQuery()), null)
+      const safe = await wireReads.snapshot(tenant, subject, conversation, project)
+      assert.ok(
+        safe.messages.some((message) => message.message_id === ack.assistant_message_id),
+        "viewer retains the independently shared confirmed FINAL",
+      )
+      assert.equal(safe.execution_process, null)
+      assert.equal((await setRole("editor", "4", "restore-final")).kind, "committed")
+    }
     const ownDone = await wireReads.snapshot(tenant, subject, conversation, project)
     assert.equal(ownDone.execution_head, undefined)
     assert.equal(ownDone.execution_process, null)

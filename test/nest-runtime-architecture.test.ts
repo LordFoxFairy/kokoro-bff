@@ -22,6 +22,7 @@ test("the compiled production AppModule resolves its real provider graph without
     BFF_POOL,
     BFF_REDIS,
     CHAT_CONVERSATION_LOOKUP,
+    CHAT_READABLE_CONVERSATION_LOOKUP,
     CHAT_SESSION_READS,
     CHAT_SESSION_MUTATIONS,
     CHAT_ARCHIVE,
@@ -139,7 +140,7 @@ test("the compiled production AppModule resolves its real provider graph without
     assert.equal(typeof reader.readSubmittedAgentRun, "function")
     const display = module.select(AgentRunsModule).get(RUN_DISPLAY_PROVIDER, { strict: true })
     assert.equal(display.submittedAgentRuns, reader)
-    assert.equal(display.findConversation, module.select(ChatModule).get(CHAT_CONVERSATION_LOOKUP, { strict: true }))
+    assert.equal(display.findConversation, module.select(ChatModule).get(CHAT_READABLE_CONVERSATION_LOOKUP, { strict: true }))
     assert.equal(display.readRunFinalAnswer, module.select(AgentRunsModule).get(RUN_FINAL_ANSWER_LOOKUP, { strict: true }))
   } finally {
     await module.close()

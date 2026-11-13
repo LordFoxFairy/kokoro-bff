@@ -1,3 +1,11 @@
+## 2026-11-13 共享项目编辑者的本人 RunDisplay（源码阶段）
+
+在 `fbc2025c` 后继沿原 RunDisplay 接 readable Conversation lookup，并同时要求 Project 当前 edit；exact tenant／Run／Conversation／实际执行主体检查不变，owner/editor 不获得 peer 私人过程。原 Agent I/O 后和 verified workspace spool 发头前鲜验保留，迟到降 viewer 返回404且零私人内容。本人 FINAL binder 在同一个原 read-only RR 中核当前访问与 edit，SQL 绑定 dispatch subject=actor=调用者，不再假定 Conversation creator=调用者；唯一 completed slot、revision、durable-final 一致性与 retired 拒绝仍保留。selected FINAL 输入函数未修改。
+
+主控三个完整相关文件123 PASS／0 FAIL／0 SKIP，真实 PG creator→editor→creator 完整片1 PASS／0 SKIP，验证 actor≠creator 的 exact FINAL、peer拒绝、降viewer后私人binding拒绝但共享确认FINAL保持；自有c25e4c3a库已DROP并确认absent，运行输入SHA不变。新的HTTP用例先404/200失败、PG先editor binding=null失败均保留；修后正常build/lint/types及七路径format通过，独审CLEAR。HTTP中的Agent/Storage为明确loopback fixtures，不冒真实owner或native；未重跑无关全默认/模型/旧private-parts全套。
+
+Project aggregate删除与selected FINAL输入资格仍待；正常精确父演进、配对激活与双身份/后台native、文档及整个原PR交付仍OPEN，未合main/部署。
+
 ## 2026-11-13 共享 Project 个人置顶及 Skills 读写接线（源码阶段）
 
 在 `690a787` 后继补齐：个人 pin 按当前 read 资格，仅写本人偏好；Project parent 锁后新 statement 重核 grant。Skills installation GET、包／规格／exact download 使用 read lookup，四类安装命令使用 edit lookup，保真实 actor、私有 finder 和原 I/O 后复核。独审发现半包 body 等待期间失去 edit 后仍发 owner 写的 P2；真实 Nest/HTTP 回归先复现 owner 调用多1，修复后 body/key 解析完、RPC 前重验同 Project，零新增 owner 写。

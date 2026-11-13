@@ -4,7 +4,7 @@ import {
   AGENT_RUNS_READER,
   BFF_DATABASE,
   BFF_POOL,
-  CHAT_CONVERSATION_LOOKUP,
+  CHAT_READABLE_CONVERSATION_LOOKUP,
   RUN_DISPLAY_PROVIDER,
   RUN_FINAL_ANSWER_LOOKUP,
 } from "../../common/tokens.js"
@@ -42,7 +42,7 @@ import type { Pool } from "pg"
     },
     {
       provide: RUN_DISPLAY_PROVIDER,
-      inject: [AGENT_RUNS_READER, CHAT_CONVERSATION_LOOKUP, RUN_FINAL_ANSWER_LOOKUP],
+      inject: [AGENT_RUNS_READER, CHAT_READABLE_CONVERSATION_LOOKUP, RUN_FINAL_ANSWER_LOOKUP],
       useFactory: (reader: AgentRunsReader, findConversation: ChatConversationLookup, readRunFinalAnswer: RunFinalAnswerLookup): RunDisplayProvider => ({
         submittedAgentRuns: reader,
         findConversation,

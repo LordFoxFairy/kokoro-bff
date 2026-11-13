@@ -13,6 +13,7 @@ import {
   BFF_CONFIG,
   BFF_DATABASE,
   CHAT_CONVERSATION_LOOKUP,
+  CHAT_READABLE_CONVERSATION_LOOKUP,
   RUN_FINAL_ANSWER_LOOKUP,
   SESSION_ADMISSION,
 } from "../dist/common/tokens.js"
@@ -79,7 +80,8 @@ async function fixture(t, storage) {
             : { tenantId: q.tenantId, userId: "subject", runId: q.runId, conversationId: "session" }
           : null,
   }
-  const findConversation = async () => (visible ? { id: "session" } : null)
+  let conversation = { conversationId: "session", ownerId: "subject", projectRef: null }
+  const findConversation = async () => (visible ? conversation : null)
   const readRunFinalAnswer = async (q) => {
     finalReads.push(q)
     return typeof finalProof === "function" ? finalProof(q) : finalProof
@@ -95,6 +97,8 @@ async function fixture(t, storage) {
     .overrideProvider(AGENT_RUNS_READER)
     .useValue(reader)
     .overrideProvider(CHAT_CONVERSATION_LOOKUP)
+    .useValue(async () => (visible && conversation.ownerId === "subject" ? conversation : null))
+    .overrideProvider(CHAT_READABLE_CONVERSATION_LOOKUP)
     .useValue(findConversation)
     .overrideProvider(RUN_FINAL_ANSWER_LOOKUP)
     .useValue(readRunFinalAnswer)
@@ -130,6 +134,7 @@ async function fixture(t, storage) {
     admission,
     setBody: (v) => (ownerBody = v),
     setVisible: (v) => (visible = v),
+    setConversation: (v) => (conversation = v),
     setSubmitted: (v) => (submitted = v),
   }
 }
@@ -194,11 +199,54 @@ test("workspace output bytes require published exact Run version and current Con
   assert.equal(result.headers.get("cache-control"), "no-store")
   assert.equal(result.headers.get("location"), null)
   assert.deepEqual(calls, [{ asset: privateAsset, sha, consumerRunId: "", scope: "session", kind: "conversation", subject: "subject" }])
-  releaseDuringGet = () => f.setVisible(false)
+  f.setConversation({ conversationId: "session", ownerId: "creator", projectRef: "project", projectAccess: { capabilities: ["read", "edit"] } })
+  assert.deepEqual((await f.request(content(versionId))).body, bytes, "editor downloads own Run output without creator impersonation")
+  releaseDuringGet = () =>
+    f.setConversation({ conversationId: "session", ownerId: "creator", projectRef: "project", projectAccess: { capabilities: ["read"] } })
   const late = await f.request(content(versionId))
   assert.equal(late.status, 404)
   assert.equal(late.body.data, undefined)
-  assert.equal(calls.length, 2)
+  assert.equal(calls.length, 3)
+})
+test("shared Project editor reads only their actual Run; viewer and late downgrade never expose private process", async (t) => {
+  const f = await fixture(t)
+  const conversation = (role) => ({
+    conversationId: "session",
+    ownerId: "creator",
+    projectRef: "project",
+    projectAccess: {
+      project_id: "project",
+      role,
+      expires_at: null,
+      access_version: "1",
+      capabilities: role === "editor" ? ["read", "edit"] : ["read"],
+    },
+  })
+  const finalId = `msg_${"e".repeat(32)}`
+  f.setConversation(conversation("editor"))
+  f.setBody({ data: { ...display, final_message_id: finalId }, meta: { request_id: "owner" } })
+  f.setFinalProof({ segment_id: finalId, revision: "8" })
+  const own = await f.request()
+  assert.equal(own.status, 200)
+  assert.deepEqual(own.body.data.final_answer, { segment_id: finalId, revision: "8" })
+  assert.equal(f.calls[0].headers["x-kokoro-subject-ref"], "subject")
+  f.setSubmitted({ tenantId: "tenant", userId: "creator", conversationId: "session", runId: "run" })
+  const beforePeer = f.calls.length
+  assert.equal((await f.request()).status, 404)
+  assert.equal(f.calls.length, beforePeer, "even an editor cannot fetch a peer Run")
+  f.setSubmitted(true)
+  f.setConversation(conversation("viewer"))
+  assert.equal((await f.request()).status, 404)
+  assert.equal(f.calls.length, beforePeer, "viewer never reaches the Agent private display")
+  f.setConversation(conversation("editor"))
+  f.setBody((_req, res) => {
+    f.setConversation(conversation("viewer"))
+    res.setHeader("content-type", "application/json")
+    res.end(JSON.stringify({ data: display, meta: { request_id: "owner" } }))
+  })
+  const late = await f.request()
+  assert.equal(late.status, 404)
+  assert.equal(late.body.data, undefined)
 })
 test("exact owned Run display is an on-demand read of original facts, not current catalog or snapshot enrichment", async (t) => {
   const f = await fixture(t),
