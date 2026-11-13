@@ -1,3 +1,7 @@
+## B13 — Public28.38 model revision draft correction
+
+One named conditional `PATCH /v1/admin/model-revisions/{revision_id}` projects the already pinned System6.1 draft update. The 217-operation inventory appends one entry without reordering the previous 216; the existing baseline writer sorts by canonical placement, so this release retains the ordered parent inventory and adds only the new identity. Tests verify its exact parent-array digest and the complete Public28.37 OpenAPI inverse. Historical hashes and checks stay unchanged. System generation expands the existing filter by one operation, preserving the exact owner commit/digest; no public SDK, independent private artifact, Schema or auth protocol changes.
+
 ## B-T3 — Public 28.37 owned Session Share metadata
 
 One native-Session GET reads current safe metadata from the existing Chat owner. Unshared, revoked and expired visible

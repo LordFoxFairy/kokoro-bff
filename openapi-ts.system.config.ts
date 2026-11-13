@@ -31,6 +31,7 @@ export default defineConfig({
           "GET /v1/system/model-catalog/provider-creations",
           "POST /v1/system/model-catalog/definitions",
           "POST /v1/system/model-catalog/revisions",
+          "PATCH /v1/system/model-catalog/revisions/{revision_id}",
           "POST /v1/system/model-catalog/revisions/{revision_id}/publish",
           "POST /v1/system/model-catalog/labels",
           "PATCH /v1/system/model-catalog/labels/{label_id}",

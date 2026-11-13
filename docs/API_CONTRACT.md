@@ -1,3 +1,9 @@
+## 2026-11-13 Public28.38: conditional model revision draft PATCH
+
+`PATCH /v1/admin/model-revisions/{revision_id}` (`updateAdminModelRevisionDraft`) adds one public operation, retaining all 216 prior operations and their ordered inventory. It requires the existing native Session/current platform administrator, `Idempotency-Key`, exact quoted positive-decimal `If-Match`, JSON content type and no query. `AdminModelRevisionDraftUpdate` is nonempty and closed: editable creation fields are optional except immutable `model_id`/`revision`, which are rejected. Omission means unchanged; nullable bounds accept explicit null.
+
+200 returns the exact requested revision ID, matching submitted fields, with `published_at` and `retired_at` both null. System's state/version/idempotency conflicts remain 409, missing CAS 428; malformed inputs 400 and dependency/unknown outcomes retain the existing bounded-error semantics. No automatic retry, implicit publication or provider call occurs. Unknown results preserve original ID/key/body/CAS for explicit replay; a later GET does not prove noncommit. Bounds may be incomplete while a draft, but publication requires both positive bounds and output no greater than context. The canonical OpenAPI remains the only editable wire schema. Build/test inverse restores complete Public28.37 bytes; this is not a runtime fallback. No public App snapshot upgrade is required for an existing opaque Admin transport consumer.
+
 ## 2026-11-12 B-08 — 消费现 Agent 8.17 personal_context（无新 wire）
 
 不新增／放宽浏览器 Chat 字段或公开 BFF operation；浏览器仍不得提交 `personal_context` 或自报 owner。BFF 仅从本 owner 已保存的本人事实形成当前固定 Agent 8.17 顶层私有输入：`schema_version:1`、可信 `owner:{tenant_ref,user_ref}`、nullable profile 和 `{usage_revision,enabled,items}` knowledge。user_ref 是执行的 user actor，不是可能为 Project 的 subject。

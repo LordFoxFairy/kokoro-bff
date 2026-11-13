@@ -146,7 +146,7 @@ async function closeGeneratedObjects(directory) {
   const file = path.join(directory, "zod.gen.ts")
   let source = await readFile(file, "utf8")
   const starts = [...source.matchAll(/z\.object\(/gu)].map((match) => match.index)
-  assert.equal(starts.length, 74, "System generated z.object count drifted")
+  assert.equal(starts.length, 77, "System generated z.object count drifted")
   for (const start of starts.reverse()) {
     let depth = 0
     let closed = false

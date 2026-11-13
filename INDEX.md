@@ -11,7 +11,7 @@
 | [文档索引](./docs/INDEX.md) | 专项文档阅读顺序 |
 | [技术设计](./docs/TECHNICAL_DESIGN.md) | 当前模块、认证边界与有效设计决定 |
 | [API 说明](./docs/API_CONTRACT.md) | 人读契约与例外边界 |
-| [Public OpenAPI](./contract/openapi/v1/openapi.yaml) | 唯一 canonical public contract，当前 Public 28.37 / 216 operations |
+| [Public OpenAPI](./contract/openapi/v1/openapi.yaml) | 唯一 canonical public contract，当前 Public 28.38 / 217 operations |
 | [契约发行说明](./contract/README.md) | owner、visibility、生成、固定来源及 breaking 规则 |
 | [数据模型](./docs/DATA_MODEL.md) | 本 owner 的事实与事务边界 |
 | [canonical schema](./database/schema.sql) | 本 owner 唯一可编辑 PostgreSQL schema |

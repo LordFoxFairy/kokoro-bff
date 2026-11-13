@@ -51,6 +51,9 @@ import type {
   UpdateModelLabelData,
   UpdateModelLabelErrors,
   UpdateModelLabelResponses,
+  UpdateModelRevisionDraftData,
+  UpdateModelRevisionDraftErrors,
+  UpdateModelRevisionDraftResponses,
 } from "./types.gen.js"
 import {
   zCreateModelDefinitionResponse,
@@ -69,6 +72,7 @@ import {
   zPublishModelRevisionResponse,
   zPutRoutingPolicyResponse,
   zUpdateModelLabelResponse,
+  zUpdateModelRevisionDraftResponse,
 } from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
@@ -282,6 +286,28 @@ export const createModelRevision = <ThrowOnError extends boolean = false>(
       { name: "x-kokoro-internal-secret", type: "apiKey" },
     ],
     url: "/v1/system/model-catalog/revisions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * updateModelRevisionDraft
+ *
+ * global scope; global requires authenticated system-admin
+ */
+export const updateModelRevisionDraft = <ThrowOnError extends boolean = false>(
+  options: Options<UpdateModelRevisionDraftData, ThrowOnError>,
+): RequestResult<UpdateModelRevisionDraftResponses, UpdateModelRevisionDraftErrors, ThrowOnError> =>
+  (options.client ?? client).patch<UpdateModelRevisionDraftResponses, UpdateModelRevisionDraftErrors, ThrowOnError>({
+    responseValidator: async (data) => await zUpdateModelRevisionDraftResponse.parseAsync(data),
+    security: [
+      { scheme: "bearer", type: "http" },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+    ],
+    url: "/v1/system/model-catalog/revisions/{revision_id}",
     ...options,
     headers: {
       "Content-Type": "application/json",

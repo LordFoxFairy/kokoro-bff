@@ -895,7 +895,12 @@ test("SET13 actual builtin permission fields are declared by the public contract
   const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
   const permissions = load(source).components.schemas.TeamRole.properties.permissions
   assert.deepEqual(permissions.properties.platform.items.enum, ["execute"])
-  assert.equal(permissions.properties.skill.items.enum.length, 15)
+  // Public28.37 already carries the fixed owner's delete_series permission.
+  // Assert the closed published set, not the earlier 15-action cardinality.
+  assert.deepEqual(permissions.properties.skill.items.enum, [
+    "create_draft", "create_version", "delete_series", "begin_upload", "complete_upload", "abort_upload", "validate_draft", "publish",
+    "withdraw", "set_status", "install", "set_installation_enabled", "remove_installation", "update_draft", "discard_draft", "set_publication_audience",
+  ])
   assert.equal(permissions.additionalProperties, false)
 })
 

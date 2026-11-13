@@ -1,3 +1,9 @@
+## 2026-11-13 B13 existing model revision draft correction
+
+System remains the only revision writer. The existing model-configuration capability table adds one named conditional PATCH to the already pinned System6.1 `updateModelRevisionDraft`; no owner publication, database, authentication protocol or generic proxy is added. Native Session admission and current platform-admin permission precede the management receiver; trusted actor/tenant are derived, never accepted in the patch. Only the exact revision UUID path is admitted for the Admin service envelope.
+
+A nonempty optional-field patch excludes immutable `model_id` and `revision`. Omission preserves owner state, while explicit null clears nullable bounds. The current generated owner artifact omits its nonempty-object refinement, so the public boundary explicitly retains it. A successful ACK must match the requested ID and supplied fields and remain unpublished/unretired; owner published-state/version conflicts remain authoritative. Cancellation, deadline and unknown transport results use the existing bounded single-dispatch path, never automatic replay. Consumers retain the original key/body/CAS for explicit recovery. Draft editing does not discover or execute a provider and does not change a published revision. Admin form/publish feedback and App same-origin closure are separate consumer work.
+
 ## 2026-11-12 B-08 — 既有个人设置接入下一次 Chat（实施门）
 
 当前缺口仅是 BFF 已保存的 personalization／个人知识未进入新 Chat，现 Agent HTTP 8.17 已正式支持顶层 `personal_context`。复用已批准 B-08 owner 与既有协议，不退回旧 8.11、不增加记忆／RAG 服务、认证、SDK、缓存或 Schema；自动长期记忆与外部导入不在此片。

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 28.37.0
+  version: 28.38.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -15724,6 +15724,89 @@ paths:
           $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
         '503':
           $ref: '#/components/responses/AdminModelRoutingUnavailable'
+  /v1/admin/model-revisions/{revision_id}:
+    patch:
+      tags:
+      - Models
+      operationId: updateAdminModelRevisionDraft
+      summary: Update one existing unpublished model revision draft
+      description: Requires the current platform administrator, original idempotency key and exact If-Match version. Omitted properties are unchanged; explicit null clears nullable bounds. model_id and revision are immutable. The nonempty patch edits only the named draft, never publishes it or calls the provider. The 200 acknowledgement is the same ID with published_at and retired_at null; System retains state/version conflicts. Bounds may remain incomplete in a draft but must both be positive and max_output_tokens must not exceed context_window before explicit publication. Unknown outcomes retain the original ID, key, body and CAS for explicit replay; cancellation does not prove rollback.
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.model_configuration.write
+      parameters:
+      - name: revision_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/AdminModelRoutingIdempotencyKey'
+      - name: If-Match
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^"[1-9][0-9]*"$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminModelRevisionDraftUpdate'
+      responses:
+        '200':
+          description: Confirmed model configuration result; never returns an API key.
+          headers:
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Content-Length:
+              required: true
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminModelRevision'
+                  meta:
+                    $ref: '#/components/schemas/RequestMeta'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '404':
+          $ref: '#/components/responses/AdminModelRoutingNotFound'
+        '409':
+          $ref: '#/components/responses/AdminModelRoutingConflict'
+        '428':
+          $ref: '#/components/responses/AdminModelRoutingPreconditionRequired'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
   /v1/admin/model-revisions/{revision_id}/publish:
     post:
       tags:
@@ -17642,6 +17725,65 @@ components:
       - context_window
       - max_output_tokens
       - priority
+      additionalProperties: false
+    AdminModelRevisionDraftUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        provider_id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        provider_model_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        input_modalities:
+          minItems: 1
+          maxItems: 4
+          type: array
+          items:
+            type: string
+            enum:
+            - text
+            - image
+            - audio
+            - video
+        output_modalities:
+          minItems: 1
+          maxItems: 4
+          type: array
+          items:
+            type: string
+            enum:
+            - text
+            - image
+            - audio
+            - video
+        request_model:
+          type: string
+          minLength: 1
+          maxLength: 255
+        context_window:
+          anyOf:
+          - type: integer
+            minimum: 1
+            maximum: 2147483647
+          - type: 'null'
+        max_output_tokens:
+          anyOf:
+          - type: integer
+            minimum: 1
+            maximum: 2147483647
+          - type: 'null'
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100000
       additionalProperties: false
     AdminModelLabelInput:
       type: object

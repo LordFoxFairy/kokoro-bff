@@ -224,6 +224,18 @@ export type Schema74A01A81A2A27C05 = {
   priority: number
 }
 
+export type Schema4Eec9Ad0168Aadad = {
+  provider_id?: string
+  provider_model_name?: string
+  display_name?: string
+  input_modalities?: Array<"text" | "image" | "audio" | "video">
+  output_modalities?: Array<"text" | "image" | "audio" | "video">
+  request_model?: string
+  context_window?: number | null
+  max_output_tokens?: number | null
+  priority?: number
+}
+
 export type SchemaC20E470A1Fcfd743 = {
   data: {
     items: Array<{
@@ -1083,6 +1095,99 @@ export type CreateModelRevisionResponses = {
 }
 
 export type CreateModelRevisionResponse = CreateModelRevisionResponses[keyof CreateModelRevisionResponses]
+
+export type UpdateModelRevisionDraftData = {
+  body: Schema4Eec9Ad0168Aadad
+  headers: {
+    "x-kokoro-service": "web-bff" | "kokoro-agent" | "system-admin" | "model-management"
+    "x-kokoro-tenant-id"?: string
+    "x-kokoro-actor-id": string
+    "x-kokoro-iam-permissions": string
+    "x-request-id"?: string
+    "x-kokoro-trace-id"?: string
+    "Idempotency-Key": string
+    "If-Match": string
+  }
+  path: {
+    revision_id: string
+  }
+  query?: never
+  url: "/v1/system/model-catalog/revisions/{revision_id}"
+}
+
+export type UpdateModelRevisionDraftErrors = {
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  400: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  403: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  404: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  409: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  428: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+  /**
+   * Stable owner error; retryable only for transient dependency/availability failure
+   */
+  503: {
+    error: {
+      code: string
+      message: string
+      retryable: boolean
+    }
+  }
+}
+
+export type UpdateModelRevisionDraftError = UpdateModelRevisionDraftErrors[keyof UpdateModelRevisionDraftErrors]
+
+export type UpdateModelRevisionDraftResponses = {
+  /**
+   * Success
+   */
+  200: SchemaEdc460D150C8281c
+}
+
+export type UpdateModelRevisionDraftResponse = UpdateModelRevisionDraftResponses[keyof UpdateModelRevisionDraftResponses]
 
 export type PublishModelRevisionData = {
   body?: never

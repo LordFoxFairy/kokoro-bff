@@ -3,7 +3,19 @@ import { createHash } from "node:crypto"
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
+export function restorePublic2837ModelDraftContract(source) {
+  if (!/^  version: 28\.38\.0$/mu.test(source)) return source
+  if (hash(source) !== "d6927c3ae844303a5375cf196049a76db4119ab21478357314345cea0dbf13a1") throw Error("Model draft Public28.38 child drift")
+  const parent = source
+    .replace(/^  \/v1\/admin\/model-revisions\/\{revision_id\}:\n[\s\S]*?(?=^  \/v1\/admin\/model-revisions\/\{revision_id\}\/publish:)/mu, "")
+    .replace(/^    AdminModelRevisionDraftUpdate:\n[\s\S]*?(?=^    AdminModelLabelInput:)/mu, "")
+    .replace("  version: 28.38.0\n", "  version: 28.37.0\n")
+  if (hash(parent) !== "737688c79fa4fad8216168656d0fe7e4131b496ef2b506e424dbff82d7dca2c8") throw Error("Model draft complete Public28.37 parent drift")
+  return parent
+}
+
 export function restorePublic2836SessionShareContract(source) {
+  source = restorePublic2837ModelDraftContract(source)
   if (!/^  version: 28\.37\.0$/mu.test(source)) return source
   if (hash(source) !== "737688c79fa4fad8216168656d0fe7e4131b496ef2b506e424dbff82d7dca2c8") throw Error("Session Share metadata Public28.37 child drift")
   const parent = source
@@ -212,6 +224,12 @@ export function restorePublic2825LibraryFileDeletionContract(source) {
 }
 
 export function libraryFileDeletionParentInventory(inventory) {
+  const drafts = inventory.filter((item) => item.operation_id === "updateAdminModelRevisionDraft")
+  if (drafts.length) {
+    const expected = { method: "PATCH", path: "/v1/admin/model-revisions/{revision_id}", operation_id: "updateAdminModelRevisionDraft" }
+    if (JSON.stringify(drafts) !== JSON.stringify([expected])) throw Error("Model draft Public28.38 inventory drift")
+    inventory = inventory.filter((item) => !drafts.includes(item))
+  }
   const shares = inventory.filter((item) => item.operation_id === "getSessionShareMetadata")
   if (shares.length) {
     const expected = { method: "GET", path: "/v1/sessions/{id}/share", operation_id: "getSessionShareMetadata" }

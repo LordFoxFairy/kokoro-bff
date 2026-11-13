@@ -152,6 +152,251 @@ const revision = {
   updated_at: now,
 }
 
+test("draft PATCH preserves nullable versus omitted fields and native Admin key/CAS without browser credentials reaching System", async () => {
+  const patch = { context_window: 8192, max_output_tokens: null }
+  const draft = { ...revision, ...patch, version: "2", digest: "b".repeat(64), published_at: null }
+  const owner = await ownerFixture(() => ({ status: 200, body: { data: draft } }))
+  const bff = await startSystemTestApp(
+    { ...config(owner.origin), adminWebSharedSecret: "admin-adapter-secret", systemModelManagementToken: "model-management-token" },
+    admission(true),
+  )
+  for (const [index, input] of [patch, { context_window: 8192 }].entries()) {
+    const response = await fetch(`${bff}/v1/admin/model-revisions/${revisionId}`, {
+      method: "PATCH",
+      headers: browserHeaders({
+        "x-kokoro-service": "admin-web-bff",
+        "x-kokoro-internal-secret": "admin-adapter-secret",
+        "content-type": "application/json",
+        "idempotency-key": `draft-command-${index}`,
+        "if-match": '"1"',
+      }),
+      body: JSON.stringify(input),
+    })
+    await expectSuccess(response, draft)
+  }
+  assert.equal(owner.calls.length, 2, "each explicit invocation dispatches once, without automatic retry")
+  for (const [index, call] of owner.calls.entries()) {
+    assert.equal(call.method, "PATCH")
+    assert.equal(call.path, `/v1/system/model-catalog/revisions/${revisionId}`)
+    assert.deepEqual(call.body, index === 0 ? patch : { context_window: 8192 })
+    assert.equal(call.headers["if-match"], '"1"')
+    assert.equal(call.headers["idempotency-key"], `draft-command-${index}`)
+    assert.equal(call.headers["x-kokoro-service"], "model-management")
+    assert.equal(call.headers["authorization"], "Bearer model-management-token")
+    assert.equal(call.headers["x-kokoro-tenant-id"], tenantId)
+    assert.equal(call.headers["x-kokoro-actor-id"], actorId)
+    assert.equal(call.headers["x-kokoro-iam-permissions"], "system:write")
+    assert.equal(call.headers["cookie"], undefined)
+    assert.equal(call.headers["origin"], undefined)
+  }
+})
+
+test("draft PATCH rejects empty, immutable, forged, unknown and malformed CAS inputs before owner I/O", async () => {
+  const owner = await ownerFixture()
+  const bff = await startSystemTestApp({ ...config(owner.origin), systemModelManagementToken: "model-management-token" }, admission(true))
+  const headers = { "content-type": "application/json", "idempotency-key": "draft-closed-body", "if-match": '"1"' }
+  for (const input of [
+    {},
+    { model_id: revision.model_id },
+    { revision: 2 },
+    { tenant_id: "forged" },
+    { context_window: 1, unexpected: true },
+    { connection: revision.connection },
+    { max_output_tokens: 0 },
+  ]) {
+    const response = await fetch(`${bff}/v1/admin/model-revisions/${revisionId}`, {
+      method: "PATCH",
+      headers: browserHeaders(headers),
+      body: JSON.stringify(input),
+    })
+    assert.equal(response.status, 400)
+  }
+  for (const [extra, status] of [
+    [{ "content-type": "application/json", "idempotency-key": "draft-cas" }, 428],
+    [{ ...headers, "if-match": "*" }, 400],
+    [{ ...headers, "if-match": '"1", "2"' }, 400],
+    [{ ...headers, "if-none-match": "*" }, 400],
+    [{ "content-type": "application/json", "if-match": '"1"' }, 400],
+  ] as const) {
+    const response = await fetch(`${bff}/v1/admin/model-revisions/${revisionId}`, {
+      method: "PATCH",
+      headers: browserHeaders(extra),
+      body: JSON.stringify({ context_window: null }),
+    })
+    assert.equal(response.status, status)
+  }
+  const queried = await fetch(`${bff}/v1/admin/model-revisions/${revisionId}?tenant_id=forged`, {
+    method: "PATCH",
+    headers: browserHeaders(headers),
+    body: JSON.stringify({ context_window: null }),
+  })
+  assert.equal(queried.status, 400)
+  const wrongPrefix = await fetch(`${bff}/v1/not-admin/model-revisions/${revisionId}`, {
+    method: "PATCH",
+    headers: browserHeaders(headers),
+    body: JSON.stringify({ context_window: 8192 }),
+  })
+  assert.equal(wrongPrefix.status, 404)
+  const bytes = Buffer.from('{"context_window":1,"context_window":2}')
+  const duplicate = await rawRequest(
+    bff,
+    `/v1/admin/model-revisions/${revisionId}`,
+    "PATCH",
+    [...Object.entries(browserHeaders(headers)), ["Content-Length", String(bytes.length)]],
+    bytes,
+  )
+  assert.equal(duplicate.status, 400)
+  const validBytes = Buffer.from('{"context_window":null}')
+  const duplicateCas = await rawRequest(
+    bff,
+    `/v1/admin/model-revisions/${revisionId}`,
+    "PATCH",
+    [...Object.entries(browserHeaders(headers)), ["If-Match", '"2"'], ["Content-Length", String(validBytes.length)]],
+    validBytes,
+  )
+  assert.equal(duplicateCas.status, 400)
+  assert.equal(owner.calls.length, 0)
+})
+
+test("draft PATCH retains owner published-state and version conflicts and rejects mismatched or published ACKs", async () => {
+  let reply: { status: number; body: unknown } = { status: 409, body: { error: { code: "INVALID_STATE", message: "private-owner-detail", retryable: false } } }
+  const owner = await ownerFixture(() => reply)
+  const bff = await startSystemTestApp({ ...config(owner.origin), systemModelManagementToken: "model-management-token" }, admission(true))
+  const sendPatch = () =>
+    fetch(`${bff}/v1/admin/model-revisions/${revisionId}`, {
+      method: "PATCH",
+      headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "draft-owner-state", "if-match": '"1"' }),
+      body: JSON.stringify({ context_window: 8192 }),
+    })
+  for (const code of ["INVALID_STATE", "VERSION_CONFLICT"]) {
+    reply = { status: 409, body: { error: { code, message: "private-owner-detail", retryable: false } } }
+    const response = await sendPatch()
+    assert.equal(response.status, 409)
+    const result = await response.json()
+    assert.equal(result.error.code, code === "INVALID_STATE" ? "admin_model_routing_invalid_state" : "admin_model_routing_version_conflict")
+    assert.equal(JSON.stringify(result).includes("private-owner-detail"), false)
+  }
+  for (const data of [
+    revision,
+    { ...revision, published_at: null, id: labelId },
+    { ...revision, published_at: null, context_window: 4096 },
+    { ...revision, published_at: null, retired_at: now },
+    { ...revision, published_at: null, unknown_field: "private" },
+  ]) {
+    reply = { status: 200, body: { data } }
+    assert.equal((await sendPatch()).status, 502)
+  }
+  assert.equal(owner.calls.length, 7)
+})
+
+test("draft PATCH refuses non-admin and missing owner credentials without dispatch", async () => {
+  const owner = await ownerFixture()
+  for (const [allowed, secret, status] of [
+    [false, "model-management-token", 403],
+    [true, null, 503],
+  ] as const) {
+    const bff = await startSystemTestApp({ ...config(owner.origin), systemModelManagementToken: secret }, admission(allowed))
+    assert.equal(
+      (
+        await fetch(`${bff}/v1/admin/model-revisions/${revisionId}`, {
+          method: "PATCH",
+          headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "draft-admission", "if-match": '"1"' }),
+          body: JSON.stringify({ context_window: 8192 }),
+        })
+      ).status,
+      status,
+    )
+  }
+  const bff = await startSystemTestApp(
+    { ...config(owner.origin), adminWebSharedSecret: "admin-adapter-secret", systemModelManagementToken: "model-management-token" },
+    admission(true),
+  )
+  const response = await fetch(`${bff}/v1/admin/model-revisions/${"x".repeat(36)}`, {
+    method: "PATCH",
+    headers: browserHeaders({
+      "x-kokoro-service": "admin-web-bff",
+      "x-kokoro-internal-secret": "admin-adapter-secret",
+      "content-type": "application/json",
+      "idempotency-key": "draft-admission",
+      "if-match": '"1"',
+    }),
+    body: "{}",
+  })
+  assert.notEqual(response.status, 200)
+  assert.equal(owner.calls.length, 0)
+})
+
+test("draft PATCH unknown transport result is not retried and explicit recovery preserves the original command", async () => {
+  let calls = 0
+  const seen: unknown[] = []
+  const draft = { ...revision, version: "2", published_at: null }
+  const owner = await listen(
+    createServer(async (request, response) => {
+      calls++
+      const chunks: Buffer[] = []
+      for await (const chunk of request) chunks.push(Buffer.from(chunk))
+      seen.push({ body: Buffer.concat(chunks).toString(), key: request.headers["idempotency-key"], cas: request.headers["if-match"] })
+      if (calls === 1) {
+        request.socket.destroy()
+        return
+      }
+      response.writeHead(200, { "content-type": "application/json", "x-request-id": "draft-owner-recovery" })
+      response.end(JSON.stringify({ data: draft }))
+    }),
+  )
+  const bff = await startSystemTestApp({ ...config(owner), systemModelManagementToken: "model-management-token" }, admission(true))
+  const sendPatch = () =>
+    fetch(`${bff}/v1/admin/model-revisions/${revisionId}`, {
+      method: "PATCH",
+      headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "draft-original-recovery", "if-match": '"1"' }),
+      body: '{"context_window":8192}',
+    })
+  assert.equal((await sendPatch()).status, 503)
+  assert.equal(calls, 1)
+  await expectSuccess(await sendPatch(), draft)
+  assert.equal(calls, 2)
+  assert.deepEqual(seen[0], seen[1])
+})
+
+test("draft PATCH cancelled while admission is pending never dispatches the owner", async () => {
+  const owner = await ownerFixture()
+  let entered!: () => void,
+    release!: () => void,
+    didEnter = false
+  const started = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const bff = await startSystemTestApp(
+    { ...config(owner.origin), systemModelManagementToken: "model-management-token" },
+    {
+      verify: async () => {
+        didEnter = true
+        entered()
+        await released
+        return { ok: true, identity: { namespace: tenantId, userId: actorId }, platformAdmin: true } as const
+      },
+    },
+  )
+  const controller = new AbortController()
+  const pending = fetch(`${bff}/v1/admin/model-revisions/${revisionId}`, {
+    method: "PATCH",
+    headers: browserHeaders({ "content-type": "application/json", "idempotency-key": "draft-cancelled", "if-match": '"1"' }),
+    body: '{"context_window":8192}',
+    signal: controller.signal,
+  }).catch(() => null)
+  await Promise.race([started, pending])
+  assert.equal(didEnter, true, "the exact draft route must reach native Session admission")
+  controller.abort()
+  await pending
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  release()
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.equal(owner.calls.length, 0)
+})
+
 type OwnerCall = Readonly<{ method: string; path: string; headers: IncomingMessage["headers"]; body: unknown }>
 
 async function ownerFixture(responder?: (request: IncomingMessage) => Promise<{ status: number; body: unknown }> | { status: number; body: unknown }) {

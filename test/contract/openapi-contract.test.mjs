@@ -29,6 +29,47 @@ const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.me
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 
+test("Public28.38 adds one conditional nonempty draft PATCH and restores the exact complete Public28.37 parent", async () => {
+  const { load } = await import("js-yaml")
+  const source = await readFile(currentOpenapiUrl, "utf8"),
+    current = load(source)
+  const operation = current.paths["/v1/admin/model-revisions/{revision_id}"]?.patch
+  assert.equal(operation?.operationId, "updateAdminModelRevisionDraft")
+  assert.equal(current.info.version, "28.38.0")
+  assert.equal(operation["x-kokoro-permission"], "admin.model_configuration.write")
+  assert.equal(operation["x-kokoro-idempotency"], "required")
+  assert.equal(operation.security, undefined, "uses unchanged native Session admission")
+  assert.ok(operation.parameters.some((p) => p.$ref === "#/components/parameters/AdminModelRoutingIdempotencyKey"))
+  assert.ok(operation.parameters.some((p) => p.name === "If-Match" && p.required === true))
+  assert.equal(operation.requestBody.required, true)
+  const schema = current.components.schemas.AdminModelRevisionDraftUpdate
+  const createProperties = current.components.schemas.AdminModelRevisionInput.properties
+  assert.equal(schema.additionalProperties, false)
+  assert.equal(schema.minProperties, 1)
+  assert.equal(schema.required, undefined)
+  assert.deepEqual(schema.properties, Object.fromEntries(Object.entries(createProperties).filter(([name]) => !["model_id", "revision"].includes(name))))
+  assert.deepEqual(Object.keys(operation.responses), ["200", "400", "401", "403", "404", "409", "428", "429", "502", "503"])
+  const { restorePublic2837ModelDraftContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const parent = restorePublic2837ModelDraftContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "737688c79fa4fad8216168656d0fe7e4131b496ef2b506e424dbff82d7dca2c8")
+  assert.equal(parseOpenApiOperations(source).length, 217)
+  assert.deepEqual(
+    parseOpenApiOperations(source).filter((op) => op.fields.get("operationId") !== "updateAdminModelRevisionDraft"),
+    parseOpenApiOperations(parent),
+  )
+  const inventory = JSON.parse(await readFile(baselineUrl, "utf8")).operations
+  assert.equal(inventory.length, 217)
+  assert.deepEqual(inventory.at(-1), { method: "PATCH", path: "/v1/admin/model-revisions/{revision_id}", operation_id: "updateAdminModelRevisionDraft" })
+  assert.equal(
+    createHash("sha256")
+      .update(JSON.stringify(inventory.slice(0, -1)))
+      .digest("hex"),
+    "205120d59460944e9d371b78e62cc1b505e2f250ed24c4c5ae142fb0742d2c39",
+  )
+  assert.throws(() => restorePublic2837ModelDraftContract(source + "\n"), /Public28.38 child drift/u)
+  assert.throws(() => restorePublic2837ModelDraftContract(source.replace("minProperties: 1", "minProperties: 0")), /Public28.38 child drift/u)
+})
+
 test("Public28.37 Team Skill permissions match the complete fixed IAM role catalog", async () => {
   const { load } = await import("js-yaml")
   const canonical = load(await readFile(currentOpenapiUrl, "utf8"))
@@ -58,7 +99,8 @@ test("Public28.37 Team Skill permissions match the complete fixed IAM role catal
 
 test("Public28.37 adds Session Share metadata and the fixed owner Team permission while preserving its exact parent", async () => {
   const { load } = await import("js-yaml")
-  const latest = await readFile(currentOpenapiUrl, "utf8"), active = load(latest)
+  const { restorePublic2837ModelDraftContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const latest = restorePublic2837ModelDraftContract(await readFile(currentOpenapiUrl, "utf8")), active = load(latest)
   const path = active.paths["/v1/sessions/{id}/share"]
   assert.equal(path.get?.operationId, "getSessionShareMetadata")
   assert.equal(active.info.version, "28.37.0")
@@ -100,11 +142,11 @@ test("current public authentication metadata follows native Session admission an
     browserOrigin: [],
   }))
   assert.deepEqual(active.security, native, "ordinary Product operations describe native Session, not a user Bearer")
-  assert.equal(active.info.version, "28.37.0")
+  assert.equal(active.info.version, "28.38.0")
   const operations = Object.values(active.paths).flatMap((path) =>
     Object.values(path).filter((operation) => operation && typeof operation === "object" && operation.operationId),
   )
-  assert.equal(operations.length, 216)
+  assert.equal(operations.length, 217)
   const serviceOnly = new Set(["getRuntimeManifest", "getSharedSessionSnapshot"])
   const exceptions = new Map([
     ["healthz", []],
