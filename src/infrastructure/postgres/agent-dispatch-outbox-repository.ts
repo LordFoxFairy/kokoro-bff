@@ -47,6 +47,7 @@ type AgentDispatchRow = {
 }
 
 type FailedDispatchRow = {
+  subject_id: string
   outbox_id: string
   tenant_id: string
   conversation_id: string
@@ -187,12 +188,12 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
       outbox_id: string
       run_id: string
       subject_id: string
-      owner_id: string
+      actor_id: string
       conversation_dispatch_seq: string
       created_at: Date | string
     }>(
       [
-        "SELECT dispatch.outbox_id, dispatch.run_id, dispatch.subject_id, conversation.owner_id,",
+        "SELECT dispatch.outbox_id, dispatch.run_id, dispatch.subject_id, dispatch.actor_id,",
         "dispatch.conversation_dispatch_seq, dispatch.created_at",
         "FROM bff_agent_dispatch_outbox AS dispatch JOIN bff_conversation AS conversation",
         "ON conversation.tenant_id=dispatch.tenant_id AND conversation.conversation_id=dispatch.conversation_id",
@@ -204,7 +205,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     )
     const head = heads.rows[0]
     if (head === undefined) return null
-    if (head.subject_id !== head.owner_id) throw new Error("CHAT_EXECUTION_HEAD_IDENTITY_INVALID")
+    if (head.subject_id !== head.actor_id) throw new Error("CHAT_EXECUTION_HEAD_IDENTITY_INVALID")
     const streams = await client.query<{
       next_public_sequence: string
       consumer_subject_id: string | null
@@ -214,9 +215,29 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
       conversationId,
     ])
     const stream = streams.rows[0]
-    if (stream === undefined || stream.consumer_subject_id !== head.subject_id || (stream.expected_run_id !== null && stream.expected_run_id !== head.run_id)) {
+    if (
+      stream === undefined ||
+      (stream.expected_run_id !== null && (stream.expected_run_id !== head.run_id || stream.consumer_subject_id !== head.subject_id))
+    ) {
       throw new Error("CHAT_EXECUTION_HEAD_IDENTITY_INVALID")
     }
+    if (stream.consumer_subject_id !== head.subject_id) {
+      // The prior expected Run was terminally retired under this same Conversation/stream lock.
+      const changed = await client.query(
+        `UPDATE bff_agui_stream SET consumer_subject_id=$3,
+        consumer_fence=consumer_fence+1,consumer_lease_owner=NULL,consumer_lease_token=NULL,consumer_lease_until=NULL,
+        consumer_state='active',consumer_failure_count=0,consumer_last_error_code=NULL,consumer_last_error_at=NULL,
+        consumer_next_poll_at=CURRENT_TIMESTAMP(3),version=version+1,updated_at=CURRENT_TIMESTAMP(3)
+        WHERE tenant_id=$1 AND session_id=$2 AND expected_run_id IS NULL`,
+        [tenantId, conversationId, head.subject_id],
+      )
+      if (changed.rowCount !== 1) throw new Error("CHAT_EXECUTION_HEAD_IDENTITY_INVALID")
+    }
+    await client.query(
+      `INSERT INTO bff_agui_source_cursor(tenant_id,session_id,source_owner,subject_id)
+      VALUES($1,$2,'kokoro-agent',$3) ON CONFLICT DO NOTHING`,
+      [tenantId, conversationId, head.subject_id],
+    )
     const sequence = positiveDecimal(head.conversation_dispatch_seq, "AGENT_DISPATCH_SEQUENCE_INVALID")
     const sourceEventId = "dispatch_queued:" + head.outbox_id
     const cursor =
@@ -261,10 +282,10 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     await client.query(
       [
         "INSERT INTO bff_agui_event",
-        "(tenant_id,session_id,public_sequence,cursor,source_owner,source_event_id,frame_index,event_type,event_payload,source_occurred_at)",
-        "VALUES ($1,$2,$3::bigint,$4,'kokoro-bff',$5,0,'CUSTOM',$6::jsonb,$7::timestamptz)",
+        "(tenant_id,session_id,public_sequence,cursor,source_owner,source_event_id,frame_index,event_type,event_payload,source_occurred_at,source_subject_id)",
+        "VALUES ($1,$2,$3::bigint,$4,'kokoro-bff',$5,0,'CUSTOM',$6::jsonb,$7::timestamptz,$8)",
       ].join("\n"),
-      [tenantId, conversationId, stream.next_public_sequence, cursor, sourceEventId, JSON.stringify(payload), occurredAt],
+      [tenantId, conversationId, stream.next_public_sequence, cursor, sourceEventId, JSON.stringify(payload), occurredAt, head.subject_id],
     )
     const advanced = await client.query(
       [
@@ -323,7 +344,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
             AND EXISTS (SELECT 1 FROM bff_conversation AS conversation
                          WHERE conversation.tenant_id=current.tenant_id
                            AND conversation.conversation_id=current.conversation_id
-                           AND conversation.owner_id=current.subject_id AND conversation.status='active')
+                           AND current.actor_id=current.subject_id AND conversation.status='active')
             AND NOT EXISTS (SELECT 1 FROM bff_agent_dispatch_outbox AS earlier
                              WHERE earlier.tenant_id=current.tenant_id
                                AND earlier.conversation_id=current.conversation_id
@@ -373,7 +394,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
                   FROM bff_conversation AS conversation
                  WHERE conversation.tenant_id = current.tenant_id
                    AND conversation.conversation_id = current.conversation_id
-                   AND conversation.owner_id = current.subject_id
+                   AND current.actor_id = current.subject_id
                    AND conversation.status = 'active'
               )
               AND NOT EXISTS (
@@ -452,7 +473,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
           AND EXISTS (SELECT 1 FROM bff_conversation AS conversation
                        WHERE conversation.tenant_id=current.tenant_id
                          AND conversation.conversation_id=current.conversation_id
-                         AND conversation.owner_id=current.subject_id AND conversation.status='active')
+                         AND current.actor_id=current.subject_id AND conversation.status='active')
           AND NOT EXISTS (SELECT 1 FROM bff_agent_dispatch_outbox AS earlier
                            WHERE earlier.tenant_id=current.tenant_id
                              AND earlier.conversation_id=current.conversation_id
@@ -482,7 +503,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
                 FROM bff_conversation AS conversation
                WHERE conversation.tenant_id = current.tenant_id
                  AND conversation.conversation_id = current.conversation_id
-                 AND conversation.owner_id = current.subject_id
+                 AND current.actor_id = current.subject_id
                  AND conversation.status = 'active'
             )
             AND NOT EXISTS (
@@ -671,7 +692,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
         WHERE tenant_id = $1 AND outbox_id = $2 AND status = 'leased' AND lease_owner = $3
           AND lease_token = $4 AND fence = $5 AND lease_until > $7::timestamptz
           AND admission_unknown_seen = FALSE
-        RETURNING outbox_id, tenant_id, conversation_id, conversation_dispatch_seq, run_id,
+        RETURNING outbox_id, tenant_id, conversation_id, conversation_dispatch_seq, run_id, subject_id,
                   $7::timestamptz AS failed_at`,
       [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, errorCode, dbNow],
     )
@@ -709,8 +730,8 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     await client.query(
       `INSERT INTO bff_agui_source_event
         (tenant_id, session_id, source_owner, source_event_id, source_sequence,
-         source_digest, source_occurred_at)
-       VALUES ($1, $2, $3, $4, $5::bigint, $6, $7::timestamptz)`,
+         source_digest, source_occurred_at,source_subject_id)
+       VALUES ($1, $2, $3, $4, $5::bigint, $6, $7::timestamptz,$8)`,
       [
         row.tenant_id,
         row.conversation_id,
@@ -719,13 +740,14 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
         projection.sourceSequence,
         projection.sourceDigest,
         projection.sourceOccurredAt,
+        row.subject_id,
       ],
     )
     await client.query(
       `INSERT INTO bff_agui_event
         (tenant_id, session_id, public_sequence, cursor, source_owner, source_event_id,
-         frame_index, event_type, event_payload, source_occurred_at)
-       VALUES ($1, $2, $3::bigint, $4, $5, $6, 0, $7, $8::jsonb, $9::timestamptz)`,
+         frame_index, event_type, event_payload, source_occurred_at,source_subject_id)
+       VALUES ($1, $2, $3::bigint, $4, $5, $6, 0, $7, $8::jsonb, $9::timestamptz,$10)`,
       [
         row.tenant_id,
         row.conversation_id,
@@ -736,6 +758,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
         projection.frameType,
         JSON.stringify(projection.framePayload),
         projection.sourceOccurredAt,
+        row.subject_id,
       ],
     )
     const updated = await client.query(

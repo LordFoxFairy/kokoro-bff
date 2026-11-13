@@ -1,3 +1,4 @@
+import { parseAgentFailure } from "../../generated/agent-http/failure-profile.gen.js"
 import { createHash } from "node:crypto"
 import { EventSchemas } from "@ag-ui/core"
 
@@ -16,6 +17,7 @@ import type {
   AgUiProjectionStateSnapshot,
   AgUiProjectionStatus,
   AgUiReplayPage,
+  StoredAgUiFrame,
   AgUiInvalidCursor,
   AgUiExpiredCursor,
   AgUiSourceIdentity,
@@ -312,11 +314,14 @@ export class AgUiProjectionService {
     const identities = sourceIdentities(sources)
 
     for (let attempt = 0; attempt < MAX_COMMIT_ATTEMPTS; attempt += 1) {
-      const stream = await this.repository.readStream(tenantId, sessionId)
+      const stream = await this.repository.readStream(tenantId, sessionId, consumerLease?.subjectId)
+      const sourceSubjectId = consumerLease?.subjectId ?? stream.sourceSubjectId
+      if (!sourceSubjectId || (stream.sourceSubjectId != null && stream.sourceSubjectId !== sourceSubjectId)) throw new AgUiConsumerLeaseLostError()
       await this.repository.assertPersistedSources(
         tenantId,
         sessionId,
         identities.filter((source) => source.sourceSequence <= stream.sourceHighWatermark),
+        sourceSubjectId,
       )
       const pending = sources.filter((source) => source.sourceSequence > stream.sourceHighWatermark)
       if (pending.length === 0) {
@@ -336,6 +341,7 @@ export class AgUiProjectionService {
         tenantId,
         sessionId,
         expectedVersion: stream.version,
+        sourceSubjectId,
         sourceHighWatermark,
         projectionState: snapshotOf(state),
         sources: projections,
@@ -371,4 +377,74 @@ export class AgUiProjectionService {
   public status(tenantId: string, sessionId: string): Promise<AgUiProjectionStatus> {
     return this.repository.status(tenantId, sessionId)
   }
+}
+
+/** A peer's unconfirmed text/process is never a live public fact. FINAL is read through the current safe snapshot at terminal. */
+export function projectReaderAgUiFrames(frames: readonly StoredAgUiFrame[], subjectId: string, canEdit: boolean): StoredAgUiFrame[] {
+  return frames.flatMap<StoredAgUiFrame>((frame) => {
+    if (typeof frame.sourceSubjectId !== "string" || frame.sourceSubjectId.trim() === "") throw new AgUiSourceContractError()
+    const canControl = frame.sourceSubjectId === subjectId && canEdit
+    const payload = frame.payload as Record<string, unknown>
+    const rawMetadata = payload?.metadata as { kokoro?: Record<string, unknown> } | undefined
+    if (canControl) {
+      if (!rawMetadata?.kokoro) throw new AgUiSourceContractError()
+      return [{ ...frame, payload: { ...payload, metadata: { kokoro: { ...rawMetadata.kokoro, can_control: true } } } }]
+    }
+    if (!["RUN_STARTED", "RUN_FINISHED", "RUN_ERROR"].includes(frame.eventType)) return []
+    if (!payload || typeof payload !== "object" || payload.type !== frame.eventType) throw new AgUiSourceContractError()
+    const metadata = payload.metadata as { kokoro?: Record<string, unknown> } | undefined
+    if (!metadata?.kokoro) throw new AgUiSourceContractError()
+    const kokoro = Object.fromEntries(
+      ["event_id", "seq", "session_id", "run_id", "timestamp", "public_sequence", "source_owner"]
+        .filter((key) => Object.hasOwn(metadata.kokoro!, key))
+        .map((key) => [key, metadata.kokoro![key]]),
+    )
+    kokoro.can_control = false
+    const base = { type: frame.eventType, ...(typeof payload.timestamp === "number" ? { timestamp: payload.timestamp } : {}), metadata: { kokoro } }
+    let projected: unknown
+    if (frame.eventType === "RUN_ERROR") {
+      if (kokoro.source_owner !== "kokoro-bff") {
+        const failure = metadata.kokoro.failure as Record<string, unknown> | undefined
+        if (
+          !failure ||
+          failure.source !== "agent" ||
+          payload.code !== failure.code ||
+          parseAgentFailure({ status: "failed", code: failure.code, retryable: failure.retryable }) === null
+        )
+          throw new AgUiSourceContractError()
+        kokoro.failure = { source: "agent", code: failure.code, retryable: failure.retryable }
+      }
+      if (typeof payload.threadId !== "string" || typeof payload.runId !== "string") throw new AgUiSourceContractError()
+      projected = {
+        ...base,
+        threadId: payload.threadId,
+        runId: payload.runId,
+        code: payload.code,
+        message: kokoro.source_owner === "kokoro-bff" ? "Agent launch could not be confirmed" : "Agent run failed",
+      }
+    } else {
+      if (typeof payload.threadId !== "string" || typeof payload.runId !== "string") throw new AgUiSourceContractError()
+      const run = { ...base, threadId: payload.threadId, runId: payload.runId }
+      projected =
+        frame.eventType === "RUN_STARTED"
+          ? run
+          : {
+              ...run,
+              status: payload.status === "cancelled" ? "cancelled" : "completed",
+              outcome:
+                payload.status === "cancelled"
+                  ? { type: "interrupt", interrupts: [{ id: `cancelled:${kokoro.event_id}`, reason: "cancelled", message: "Agent run cancelled" }] }
+                  : { type: "success" },
+              ...(payload.status === "cancelled"
+                ? { result: { status: "cancelled" } }
+                : payload.result &&
+                    typeof payload.result === "object" &&
+                    "final_segment_id" in payload.result &&
+                    typeof payload.result.final_segment_id === "string"
+                  ? { result: { final_segment_id: payload.result.final_segment_id } }
+                  : {}),
+            }
+    }
+    return [{ ...frame, payload: EventSchemas.parse(projected) }]
+  })
 }

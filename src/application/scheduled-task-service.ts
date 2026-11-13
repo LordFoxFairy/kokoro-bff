@@ -1,8 +1,9 @@
-import type { ScheduledTaskFact } from "../domain/scheduled-task/task.js"
+import type { ScheduledTaskFact, ScheduledTaskMutationSnapshot } from "../domain/scheduled-task/task.js"
 import type {
   ScheduledTaskCreateInput,
   ScheduledTaskPatch,
   ScheduledTaskMutationLineage,
+  ScheduledTaskUpdateLineage,
   ScheduledTaskOwnerScope,
 } from "./scheduled/task-facts.js"
 
@@ -14,13 +15,13 @@ type ScheduledTaskMutationStore = {
     input: ScheduledTaskCreateInput,
     requestedTaskId: string | undefined,
     lineage: ScheduledTaskMutationLineage,
-  ): Promise<ScheduledTaskFact>
+  ): Promise<ScheduledTaskMutationSnapshot>
   updateScheduledTask(
     scope: ScheduledTaskOwnerScope,
     taskId: string,
     input: ScheduledTaskPatch,
-    lineage: ScheduledTaskMutationLineage,
-  ): Promise<ScheduledTaskFact | null>
+    lineage: ScheduledTaskUpdateLineage,
+  ): Promise<ScheduledTaskMutationSnapshot | null>
   /** Read-only evidence of a committed delete in the same owner/key lineage. */
   hasCommittedDelete(scope: ScheduledTaskOwnerScope, taskId: string, key: string): Promise<boolean>
   deleteScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean>
@@ -33,10 +34,20 @@ export class ScheduledTaskService {
   public find(scope: ScheduledTaskOwnerScope, taskId: string): Promise<ScheduledTaskFact | null> {
     return this.repository.findScheduledTask(scope, taskId)
   }
-  public create(scope: ScheduledTaskOwnerScope, input: ScheduledTaskCreateInput, requestedTaskId: string | undefined, lineage: ScheduledTaskMutationLineage): Promise<ScheduledTaskFact> {
+  public create(
+    scope: ScheduledTaskOwnerScope,
+    input: ScheduledTaskCreateInput,
+    requestedTaskId: string | undefined,
+    lineage: ScheduledTaskMutationLineage,
+  ): Promise<ScheduledTaskMutationSnapshot> {
     return this.repository.createScheduledTask(scope, input, requestedTaskId, lineage)
   }
-  public update(scope: ScheduledTaskOwnerScope, taskId: string, input: ScheduledTaskPatch, lineage: ScheduledTaskMutationLineage): Promise<ScheduledTaskFact | null> {
+  public update(
+    scope: ScheduledTaskOwnerScope,
+    taskId: string,
+    input: ScheduledTaskPatch,
+    lineage: ScheduledTaskUpdateLineage,
+  ): Promise<ScheduledTaskMutationSnapshot | null> {
     return this.repository.updateScheduledTask(scope, taskId, input, lineage)
   }
   public hasCommittedDelete(scope: ScheduledTaskOwnerScope, taskId: string, key: string): Promise<boolean> {

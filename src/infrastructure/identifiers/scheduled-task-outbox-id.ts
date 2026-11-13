@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto"
 
-import {
-  scheduledTaskOutboxIdentityMaterial,
-  type ScheduledTaskOutboxOperation,
-} from "../../domain/scheduled-task/outbox.js"
+import { scheduledTaskOutboxIdentityMaterial, type ScheduledTaskOutboxOperation } from "../../domain/scheduled-task/outbox.js"
 
 export class Sha256StableIdGenerator {
   public generate(material: string): string {
@@ -18,6 +15,7 @@ export function scheduledTaskOutboxId(
   taskId: string,
   operation: ScheduledTaskOutboxOperation,
   idempotencyKey: string,
+  actorId: string,
 ): string {
-  return `scheduled_outbox_${defaultStableIdGenerator.generate(scheduledTaskOutboxIdentityMaterial(tenantId, taskId, operation, idempotencyKey)).slice(0, 32)}`
+  return `scheduled_outbox_${defaultStableIdGenerator.generate(scheduledTaskOutboxIdentityMaterial(tenantId, taskId, operation, idempotencyKey, actorId)).slice(0, 32)}`
 }

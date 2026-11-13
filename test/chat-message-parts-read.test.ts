@@ -400,6 +400,22 @@ test("parts rejects direct plus project before acquiring resources", async () =>
 
 test("a retained legacy cursor whose captured ledger watermark was collected is explicitly gone", async () => {
   const fixture = readFixture((sql) => {
+    if (sql.includes("FROM bff_conversation conversation"))
+      return [
+        {
+          tenant_id: scope.tenantId,
+          conversation_id: scope.conversationId,
+          owner_id: scope.subjectId,
+          project_ref: null,
+          status: "active",
+          title: "Fixture",
+          archived_at: null,
+          created_at: new Date(0),
+          updated_at: new Date(0),
+          deleted_at: null,
+        },
+      ]
+
     if (sql.startsWith("SELECT message.message_id"))
       return [
         {
@@ -804,3 +820,11 @@ for (const display_code of [
     assert.equal(page.next_cursor, null)
   })
 }
+
+test("shared Project parts disclose only the exact completed FINAL slot, never activity or another text segment", () => {
+  const final = { ...textItem, completed: true }
+  const row = { ordinal: "0", item: final, text_slice: "visible final", total_scalars: "13" }
+  assert.equal(messagePartsPageFromSlices(initial, 1, [row], 16, final.segment_id).items.length, 1)
+  for (const item of [activityItem, { ...final, segment_id: "private-segment" }, { ...final, completed: false }])
+    assert.throws(() => messagePartsPageFromSlices(initial, 1, [{ ...row, item }], 16, final.segment_id), /MESSAGE_PARTS_UNAVAILABLE/)
+})

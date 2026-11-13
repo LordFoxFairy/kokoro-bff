@@ -55,15 +55,15 @@ export async function isCurrentStartlessRun(client: PoolClient, tenantId: string
        SELECT 1 FROM bff_agui_stream AS stream
        JOIN bff_conversation AS conversation ON conversation.tenant_id=stream.tenant_id AND conversation.conversation_id=stream.session_id
        JOIN LATERAL (
-         SELECT run_id,subject_id,status FROM bff_agent_dispatch_outbox
+         SELECT run_id,subject_id,actor_id,status FROM bff_agent_dispatch_outbox
           WHERE tenant_id=stream.tenant_id AND conversation_id=stream.session_id AND status IN ('pending','leased','retryable','admitted')
           ORDER BY conversation_dispatch_seq,outbox_id LIMIT 1
        ) AS head ON TRUE
        WHERE stream.tenant_id=$1 AND stream.session_id=$2 AND stream.expected_run_id=$3
          AND stream.consumer_subject_id=$4 AND stream.consumer_state='active'
          AND stream.terminal_run_id IS DISTINCT FROM $3
-         AND conversation.status='active' AND conversation.owner_id=$4
-         AND head.run_id=$3 AND head.subject_id=$4 AND head.status IN ('leased','retryable','admitted')
+         AND conversation.status='active'
+         AND head.run_id=$3 AND head.subject_id=$4 AND head.actor_id=$4 AND head.status IN ('leased','retryable','admitted')
          AND NOT EXISTS (SELECT 1 FROM bff_agui_run_process WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3)
          AND NOT EXISTS (SELECT 1 FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 AND event_type='RUN_STARTED'
            AND (event_payload->>'runId'=$3 OR event_payload #>> '{metadata,kokoro,run_id}'=$3))
@@ -94,16 +94,16 @@ export async function readRunInteraction(
            AND event_payload #>> '{metadata,kokoro,run_id}'=$3
          ORDER BY public_sequence DESC LIMIT 1) AS frame,
        (SELECT to_jsonb(source) FROM bff_agui_source_event AS source
-         JOIN bff_agui_run_interaction AS projection USING (tenant_id,session_id,source_owner,source_event_id)
+         JOIN bff_agui_run_interaction AS projection ON projection.tenant_id=source.tenant_id AND projection.session_id=source.session_id AND projection.source_owner=source.source_owner AND projection.source_event_id=source.source_event_id AND projection.subject_id=source.source_subject_id
          WHERE projection.tenant_id=$1 AND projection.session_id=$2 AND projection.run_id=$3) AS source,
        EXISTS (SELECT 1 FROM bff_agui_event AS start
-         JOIN bff_agui_source_event AS source USING (tenant_id,session_id,source_owner,source_event_id)
+         JOIN bff_agui_source_event AS source USING (tenant_id,session_id,source_owner,source_subject_id,source_event_id)
          WHERE start.tenant_id=$1 AND start.session_id=$2 AND start.public_sequence=$4
            AND start.event_type='RUN_STARTED' AND start.source_owner='kokoro-agent'
            AND start.event_payload->>'runId'=$3 AND start.event_payload #>> '{metadata,kokoro,run_id}'=$3
            AND start.event_payload->>'threadId'=$2
-           AND source.source_sequence <= $5) AS start_valid`,
-    [tenantId, sessionId, runId, startSequence, sourceWatermark],
+           AND source.source_sequence <= $5 AND start.source_subject_id=$6) AS start_valid`,
+    [tenantId, sessionId, runId, startSequence, sourceWatermark, subjectId],
   )
   const pair = result.rows[0]
   if (pair === undefined) throw new Error("AGUI_INTERACTION_START_INVALID")
@@ -124,6 +124,8 @@ export async function readRunInteraction(
     sourceSequence = Number(row.source_sequence)
   if (
     row.subject_id !== subjectId ||
+    frame.source_subject_id !== subjectId ||
+    source.source_subject_id !== subjectId ||
     row.source_owner !== "kokoro-agent" ||
     row.interaction_digest !== interactionDigest(state) ||
     interactionDigest(frameState) !== row.interaction_digest ||

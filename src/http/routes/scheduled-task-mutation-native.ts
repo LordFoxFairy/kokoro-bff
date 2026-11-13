@@ -1,3 +1,4 @@
+import { scheduledRevisionPrecondition } from "../../domain/scheduled-task/execution-binding.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { ScheduledTaskCreateInput, ScheduledTaskMutationLineage } from "../../application/scheduled/task-facts.js"
@@ -21,8 +22,18 @@ export type ScheduledTaskMutation = Readonly<
 
 export type ScheduledTaskAuthorization =
   | Readonly<{ ok: true }>
-  | Readonly<{ ok: false; status: 400; code: "invalid_scheduled_task"; message: string }>
-  | Readonly<{ ok: false; status: 404; code: "project_not_found" | "scheduled_task_not_found"; message: string }>
+  | Readonly<{
+      ok: false
+      status: 400
+      code: "invalid_scheduled_task"
+      message: string
+    }>
+  | Readonly<{
+      ok: false
+      status: 404
+      code: "project_not_found" | "scheduled_task_not_found"
+      message: string
+    }>
 
 export type ScheduledTaskMutationOwners = Readonly<{
   projects: ProjectLookup
@@ -60,24 +71,48 @@ export async function authorizeScheduledTaskMutation(
   owners: ScheduledTaskMutationOwners,
 ): Promise<ScheduledTaskAuthorization | null> {
   if (!new Set(["POST", "PATCH", "DELETE"]).has(method)) return null
-  const scope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
+  const scope = {
+    tenantId: context.identity.namespace,
+    subjectId: context.identity.userId,
+  }
   if (businessPath[0] === "projects" && businessPath.length > 1) {
     const projectId = businessPath[1]
     if (projectId !== undefined && (await owners.projects.find(scope, projectId)) === null)
-      return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
+      return {
+        ok: false,
+        status: 404,
+        code: "project_not_found",
+        message: "Project was not found",
+      }
     return { ok: true }
   }
   if (businessPath[0] !== "scheduled-tasks") return null
   if (businessPath.length > 1) {
     const taskId = businessPath[1]
     if (taskId !== undefined && (await owners.scheduledTasks.find(scope, taskId)) === null)
-      return { ok: false, status: 404, code: "scheduled_task_not_found", message: "Scheduled task was not found" }
+      return {
+        ok: false,
+        status: 404,
+        code: "scheduled_task_not_found",
+        message: "Scheduled task was not found",
+      }
     return { ok: true }
   }
   if (method === "POST") {
-    if (scheduledCreate === null) return { ok: false, status: 400, code: "invalid_scheduled_task", message: "Scheduled task fields are invalid" }
+    if (scheduledCreate === null)
+      return {
+        ok: false,
+        status: 400,
+        code: "invalid_scheduled_task",
+        message: "Scheduled task fields are invalid",
+      }
     if (scheduledCreate.projectId !== undefined && (await owners.projects.find(scope, scheduledCreate.projectId)) === null)
-      return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
+      return {
+        ok: false,
+        status: 404,
+        code: "project_not_found",
+        message: "Project was not found",
+      }
   }
   return { ok: true }
 }
@@ -111,7 +146,27 @@ export async function handleScheduledTaskMutationBusiness(
     await reply(response, 400, failure("idempotency_key_required", "Mutations require Idempotency-Key", id), context, idempotency, mutation)
     return true
   }
-  const scope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
+  const expectedRevision = route.kind === "patch" || route.kind === "retry" ? scheduledRevisionPrecondition(request.headers["if-match"]) : null
+  if ((route.kind === "patch" || route.kind === "retry") && expectedRevision === null) {
+    const status = request.headers["if-match"] === undefined ? 428 : 400
+    await reply(
+      response,
+      status,
+      failure(
+        status === 428 ? "scheduled_task_precondition_required" : "invalid_scheduled_task_precondition",
+        "Exact current definition revision is required",
+        id,
+      ),
+      context,
+      idempotency,
+      mutation,
+    )
+    return true
+  }
+  const scope = {
+    tenantId: context.identity.namespace,
+    subjectId: context.identity.userId,
+  }
   try {
     if (route.kind === "create" || route.kind === "project_create") {
       const preflight = route.kind === "create" ? checkedCreate : undefined
@@ -145,7 +200,10 @@ export async function handleScheduledTaskMutationBusiness(
         await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", id), context, idempotency, mutation)
         return true
       }
-      const task = await tasks.update(scope, route.taskId, patch, mutationLineage(context, key))
+      const task = await tasks.update(scope, route.taskId, patch, {
+        ...mutationLineage(context, key),
+        expectedRevision: expectedRevision!,
+      })
       await reply(
         response,
         task === null ? 404 : 200,
@@ -168,7 +226,12 @@ export async function handleScheduledTaskMutationBusiness(
       )
       return true
     }
-    const task = await tasks.update(scope, route.taskId, { status: "active", enabled: true }, mutationLineage(context, key))
+    const task = await tasks.update(
+      scope,
+      route.taskId,
+      { status: "active", enabled: true },
+      { ...mutationLineage(context, key), expectedRevision: expectedRevision! },
+    )
     await reply(
       response,
       task === null ? 404 : 200,
@@ -179,14 +242,24 @@ export async function handleScheduledTaskMutationBusiness(
     )
     return true
   } catch (error) {
+    const preconditionFailed = error instanceof Error && error.message === "SCHEDULED_TASK_PRECONDITION_FAILED"
+    const forbidden = error instanceof Error && error.message === "SCHEDULED_TASK_EDIT_FORBIDDEN"
     const projectNotFound = error instanceof Error && error.message === "PROJECT_NOT_FOUND"
     const invalid =
       error instanceof Error && ["SCHEDULED_TASK_CALENDAR_INVALID", "SCHEDULED_TASK_LOCAL_TIME_GAP", "SCHEDULED_TASK_ONCE_NOT_FUTURE"].includes(error.message)
     await reply(
       response,
-      projectNotFound ? 404 : invalid ? 400 : 503,
+      preconditionFailed ? 409 : forbidden ? 403 : projectNotFound ? 404 : invalid ? 400 : 503,
       failure(
-        projectNotFound ? "project_not_found" : invalid ? "invalid_scheduled_task" : "business_store_unavailable",
+        preconditionFailed
+          ? "scheduled_task_revision_conflict"
+          : forbidden
+            ? "scheduled_task_edit_forbidden"
+            : projectNotFound
+              ? "project_not_found"
+              : invalid
+                ? "invalid_scheduled_task"
+                : "business_store_unavailable",
         projectNotFound ? "Project was not found" : invalid ? "Scheduled task fields are invalid" : "The BFF business store is unavailable",
         id,
       ),

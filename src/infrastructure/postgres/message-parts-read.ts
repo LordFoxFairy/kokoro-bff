@@ -1,3 +1,4 @@
+import { readCurrentConversation } from "./chat-conversation-access.js"
 import { withCancelledMessageTerminals } from "./message-terminal-read.js"
 import { Buffer } from "node:buffer"
 import type { Pool, PoolClient, QueryResultRow } from "pg"
@@ -188,6 +189,7 @@ export async function withMessageReadClient<T>(
 }
 
 export type PrivateMessageRow = Omit<MessageRow, "content"> & {
+  project_shared?: boolean
   content: string | null
   parts_format_version: number | null
   parts_public_sequence: string | null
@@ -226,7 +228,7 @@ export function messageRendering(
 export function privateMessageFromRow(row: PrivateMessageRow, scope: Omit<MessagePartsScope, "messageId" | "runId">, head: string | null): PrivateMessageRead {
   if (row.parts_format_version === null && row.parts_public_sequence === null && row.parts_count === null) {
     if (typeof row.content !== "string") return failed()
-    return messageFromRow({ ...row, content: row.content })
+    return { ...messageFromRow({ ...row, content: row.content }), ...(row.project_shared ? { sharedProjectRead: true } : {}) }
   }
   if (
     row.role !== "assistant" ||
@@ -244,6 +246,7 @@ export function privateMessageFromRow(row: PrivateMessageRow, scope: Omit<Messag
     ...(row.origin === "regeneration_answer" && typeof row.regenerated_from_message_id === "string"
       ? { regeneratedFromMessageId: row.regenerated_from_message_id }
       : {}),
+    ...(row.project_shared ? { sharedProjectRead: true } : {}),
     messageId: row.message_id,
     tenantId: row.tenant_id,
     conversationId: row.conversation_id,
@@ -261,6 +264,7 @@ export function privateMessageFromRow(row: PrivateMessageRow, scope: Omit<Messag
 }
 
 type OwnerRow = {
+  private_parts?: boolean
   message_id: string
   run_id: string
   project_ref: string | null
@@ -300,7 +304,14 @@ function parsePositionedPart(raw: unknown, revision: string): Record<string, unk
 type SliceRow = { ordinal: string; item: unknown; text_slice: string | null; total_scalars: string | null; metadata_bytes?: string }
 
 /** Pack only already-bounded SQL slices. No complete ordered document is loaded here. */
-export function messagePartsPageFromSlices(cursor: MessagePartsCursor, count: number, rows: readonly SliceRow[], limit: number): MessagePartsPage {
+export function messagePartsPageFromSlices(
+  cursor: MessagePartsCursor,
+  count: number,
+  rows: readonly SliceRow[],
+  limit: number,
+  allowedFinalSegment?: string,
+): MessagePartsPage {
+  if (allowedFinalSegment !== undefined && count > 1) return failed()
   const items: MessagePartsPage["items"] = []
   let ordinal = BigInt(cursor.ordinal),
     offset = BigInt(cursor.offset),
@@ -312,6 +323,7 @@ export function messagePartsPageFromSlices(cursor: MessagePartsCursor, count: nu
     if (decimal(row.ordinal) !== String(ordinal)) return failed()
     if (row.metadata_bytes !== undefined && BigInt(decimal(row.metadata_bytes)) > BigInt(MAX_PAGE_BYTES)) return failed("MESSAGE_PARTS_BUDGET_EXCEEDED")
     const part = parsePositionedPart(row.item, cursor.revision)
+    if (allowedFinalSegment !== undefined && (part.kind !== "text" || part.segment_id !== allowedFinalSegment || part.completed !== true)) return failed()
     if (BigInt(part.first_sequence as string) <= previousFirst) return failed()
     previousFirst = BigInt(part.first_sequence as string)
     if (part.kind === "text") {
@@ -373,8 +385,18 @@ export function messagePartsPageFromSlices(cursor: MessagePartsCursor, count: nu
   }
 }
 
-async function persistedPage(client: PoolClient, cursor: MessagePartsCursor, count: number, limit: number): Promise<MessagePartsPage> {
+async function persistedPage(
+  client: PoolClient,
+  cursor: MessagePartsCursor,
+  count: number,
+  limit: number,
+  allowedFinalSegment?: string,
+): Promise<MessagePartsPage> {
   if (BigInt(cursor.ordinal) > 2147483647n || BigInt(cursor.offset) > 2147483647n) return failed("MESSAGE_PARTS_CURSOR_INVALID")
+  const slots =
+    allowedFinalSegment === undefined
+      ? "SELECT n AS ordinal, message.ordered_parts->n AS value FROM generate_series($4::int,LEAST($4::int+$6::int-1,jsonb_array_length(message.ordered_parts)-1)) n"
+      : "SELECT 0 AS ordinal,item AS value FROM jsonb_array_elements(message.ordered_parts) item WHERE item->>'kind'='text' AND item->>'segment_id'=$7 AND item->'completed'='true'::jsonb AND message.status='completed' LIMIT 2"
   const rows = await client.query<SliceRow>(
     `SELECT slot.ordinal::text AS ordinal,
        CASE WHEN sum(octet_length((CASE WHEN slot.value->>'kind'='text' THEN slot.value-'text' ELSE slot.value END)::text)) OVER()<=1048576
@@ -383,11 +405,12 @@ async function persistedPage(client: PoolClient, cursor: MessagePartsCursor, cou
        CASE WHEN slot.value->>'kind'='text' THEN substring(slot.value->>'text' FROM (CASE WHEN slot.ordinal=$4::int THEN $5::int ELSE 0 END)+1 FOR 4096) END AS text_slice,
        CASE WHEN slot.value->>'kind'='text' THEN char_length(slot.value->>'text')::text END AS total_scalars
      FROM bff_message message CROSS JOIN LATERAL
-       (SELECT n AS ordinal, message.ordered_parts->n AS value FROM generate_series($4::int,LEAST($4::int+$6::int-1,jsonb_array_length(message.ordered_parts)-1)) n) slot
-     WHERE message.tenant_id=$1 AND message.conversation_id=$2 AND message.message_id=$3 ORDER BY slot.ordinal`,
-    [cursor.tenantId, cursor.conversationId, cursor.messageId, Number(cursor.ordinal), Number(cursor.offset), limit],
+       (${slots}) slot
+     WHERE message.tenant_id=$1 AND message.conversation_id=$2 AND message.message_id=$3 AND slot.ordinal>=$4::int
+       AND ($7::text IS NULL OR message.final_segment_id=$7) ORDER BY slot.ordinal LIMIT $6::int`,
+    [cursor.tenantId, cursor.conversationId, cursor.messageId, Number(cursor.ordinal), Number(cursor.offset), limit, allowedFinalSegment ?? null],
   )
-  return messagePartsPageFromSlices(cursor, count, rows.rows, limit)
+  return messagePartsPageFromSlices(cursor, count, rows.rows, limit, allowedFinalSegment)
 }
 
 type LegacyFrameRow = QueryResultRow & {
@@ -442,9 +465,9 @@ export async function recoverLegacyMessageParts(
     `SELECT process.start_public_sequence, LEAST(process.start_public_sequence,COALESCE((SELECT min(activity.first_public_sequence) FROM bff_agui_run_activity activity WHERE activity.tenant_id=process.tenant_id AND activity.session_id=process.session_id AND activity.run_id=process.run_id AND activity.subject_id=$3),process.start_public_sequence))::text AS first_public_sequence,
        stream.retention_floor_sequence,process.subject_id,
        (EXISTS(SELECT 1 FROM bff_agent_dispatch_outbox dispatch WHERE dispatch.tenant_id=process.tenant_id AND dispatch.conversation_id=process.session_id AND dispatch.run_id=process.run_id AND dispatch.subject_id=$3 AND dispatch.assistant_message_id=$5)
-        AND EXISTS(SELECT 1 FROM bff_agui_source_event source JOIN bff_agui_event event ON event.tenant_id=source.tenant_id AND event.session_id=source.session_id AND event.source_owner=source.source_owner AND event.source_event_id=source.source_event_id
+        AND EXISTS(SELECT 1 FROM bff_agui_source_event source JOIN bff_agui_event event ON event.tenant_id=source.tenant_id AND event.session_id=source.session_id AND event.source_owner=source.source_owner AND event.source_event_id=source.source_event_id AND event.source_subject_id=source.source_subject_id
           WHERE source.tenant_id=process.tenant_id AND source.session_id=process.session_id AND source.source_owner=process.start_source_owner AND source.source_event_id=process.start_source_event_id
-            AND source.source_sequence=process.start_source_sequence AND source.source_digest=process.start_source_digest AND source.source_occurred_at=process.start_source_occurred_at
+            AND source.source_subject_id=process.subject_id AND source.source_sequence=process.start_source_sequence AND source.source_digest=process.start_source_digest AND source.source_occurred_at=process.start_source_occurred_at
             AND event.public_sequence=process.start_public_sequence AND event.cursor=process.start_public_cursor AND event.source_occurred_at=source.source_occurred_at AND event.event_type='RUN_STARTED'
             AND COALESCE(event.event_payload->>'runId',event.event_payload #>> '{metadata,kokoro,run_id}')=process.run_id)) AS source_valid
      FROM bff_agui_run_process process JOIN bff_agui_stream stream ON stream.tenant_id=process.tenant_id AND stream.session_id=process.session_id
@@ -469,17 +492,17 @@ export async function recoverLegacyMessageParts(
   const frames = await client.query<LegacyFrameRow>(
     `SELECT event.public_sequence,event.frame_index,source.source_sequence,event.source_event_id,source.source_digest,event.event_payload,
        (source.source_owner='kokoro-agent' AND source.source_occurred_at=event.source_occurred_at AND source.source_digest~'^[0-9a-f]{64}$') AS source_valid
-     FROM bff_agui_event event LEFT JOIN bff_agui_source_event source ON source.tenant_id=event.tenant_id AND source.session_id=event.session_id AND source.source_owner=event.source_owner AND source.source_event_id=event.source_event_id
-     WHERE event.tenant_id=$1 AND event.session_id=$2 AND event.source_owner='kokoro-agent' AND event.public_sequence BETWEEN $3::bigint AND $4::bigint
+     FROM bff_agui_event event LEFT JOIN bff_agui_source_event source ON source.tenant_id=event.tenant_id AND source.session_id=event.session_id AND source.source_owner=event.source_owner AND source.source_event_id=event.source_event_id AND source.source_subject_id=event.source_subject_id
+     WHERE event.tenant_id=$1 AND event.session_id=$2 AND event.source_owner='kokoro-agent' AND event.source_subject_id=$5 AND event.public_sequence BETWEEN $3::bigint AND $4::bigint
      ORDER BY event.public_sequence LIMIT 513`,
-    [scope.tenantId, scope.conversationId, bound.first, bound.last],
+    [scope.tenantId, scope.conversationId, bound.first, bound.last, scope.subjectId],
   )
   const firstSource = frames.rows[0]?.source_sequence,
     lastSource = frames.rows.at(-1)?.source_sequence
   if (!firstSource || !lastSource) return null
   const sources = await client.query<{ count: string }>(
-    "SELECT count(*)::text AS count FROM bff_agui_source_event WHERE tenant_id=$1 AND session_id=$2 AND source_owner='kokoro-agent' AND source_sequence BETWEEN $3::bigint AND $4::bigint",
-    [scope.tenantId, scope.conversationId, firstSource, lastSource],
+    "SELECT count(*)::text AS count FROM bff_agui_source_event WHERE tenant_id=$1 AND session_id=$2 AND source_owner='kokoro-agent' AND source_subject_id=$5 AND source_sequence BETWEEN $3::bigint AND $4::bigint",
+    [scope.tenantId, scope.conversationId, firstSource, lastSource, scope.subjectId],
   )
   if (BigInt(sources.rows[0]?.count ?? "0") !== BigInt(lastSource) - BigInt(firstSource) + 1n) return null
   return recoverLegacyFrames(scope, body, status, proof.start_public_sequence, frames.rows)
@@ -622,21 +645,39 @@ export async function readMessageParts(pool: Pick<Pool, "connect">, query: Messa
   const parsed = query.cursor === null ? null : decodeMessagePartsCursor(query.cursor)
   try {
     return await withMessageReadClient(pool, query, async (client) => {
+      const current = await readCurrentConversation(client, query.tenantId, query.subjectId, query.conversationId, query.projectRef, query.scope === "direct")
+      if (!current) return null
+      query.onProjectRead?.(current.projectAccess)
+      const privateParts = `(conversation.project_ref IS NULL OR ($5::boolean AND (
+        (dispatch.outbox_id IS NULL AND conversation.owner_id=$2) OR (dispatch.subject_id=$2 AND dispatch.actor_id=$2))))`
+
       const result = await client.query<OwnerRow>(
         `SELECT message.message_id,message.run_id,conversation.project_ref,message.status,message.parts_format_version,message.parts_public_sequence,message.final_segment_id,
-        CASE WHEN message.ordered_parts IS NOT NULL THEN jsonb_array_length(message.ordered_parts) END AS parts_count,
+        ${privateParts} AS private_parts,
+        CASE WHEN message.ordered_parts IS NOT NULL THEN CASE WHEN NOT ${privateParts}
+          THEN (SELECT count(*)::int FROM jsonb_array_elements(message.ordered_parts) part WHERE part->>'kind'='text' AND part->>'segment_id'=message.final_segment_id AND part->'completed'='true'::jsonb)
+          ELSE jsonb_array_length(message.ordered_parts) END END AS parts_count,
         CASE WHEN message.ordered_parts IS NULL AND octet_length(message.content)<=4194304 THEN message.content END AS legacy_text,
         octet_length(message.content)::text AS legacy_bytes, stream.latest_run_id AS selected_run_id,
         (SELECT latest.message_id FROM bff_message latest WHERE latest.tenant_id=message.tenant_id AND latest.conversation_id=message.conversation_id AND latest.role='assistant' ORDER BY latest.message_seq DESC,latest.message_id DESC LIMIT 1) AS latest_assistant_id
        FROM bff_message message JOIN bff_conversation conversation ON conversation.tenant_id=message.tenant_id AND conversation.conversation_id=message.conversation_id
        LEFT JOIN bff_agui_stream stream ON stream.tenant_id=message.tenant_id AND stream.session_id=message.conversation_id
-       WHERE message.tenant_id=$1 AND conversation.owner_id=$2 AND message.conversation_id=$3 AND message.message_id=$4 AND message.role='assistant' AND message.run_id IS NOT NULL
-         AND conversation.status='active' AND ($5::text IS NULL OR conversation.project_ref=$5) AND ($6::boolean=FALSE OR conversation.project_ref IS NULL)
-         AND (conversation.project_ref IS NULL OR EXISTS(SELECT 1 FROM bff_project project WHERE project.tenant_id=conversation.tenant_id AND project.owner_id=conversation.owner_id AND project.deleted_at IS NULL AND (project.project_id=conversation.project_ref OR project.slug=conversation.project_ref)))`,
-        [query.tenantId, query.subjectId, query.conversationId, query.messageId, query.projectRef ?? null, query.scope === "direct"],
+       LEFT JOIN bff_agent_dispatch_outbox dispatch ON dispatch.tenant_id=message.tenant_id AND dispatch.conversation_id=message.conversation_id
+         AND dispatch.run_id=message.run_id AND dispatch.assistant_message_id=message.message_id
+       WHERE message.tenant_id=$1 AND message.conversation_id=$3 AND message.message_id=$4 AND message.role='assistant' AND message.run_id IS NOT NULL
+         AND conversation.status='active'`,
+        [
+          query.tenantId,
+          query.subjectId,
+          query.conversationId,
+          query.messageId,
+          current.projectAccess === null || current.projectAccess.capabilities.includes("edit"),
+        ],
       )
       const row = result.rows[0]
       if (!row) return null
+      const sharedFinal = row.project_ref !== null && row.private_parts !== true
+      if (sharedFinal && (row.status !== "completed" || row.final_segment_id == null || row.parts_format_version !== 1)) return null
       const scope: MessagePartsScope = {
         tenantId: query.tenantId,
         subjectId: query.subjectId,
@@ -672,7 +713,13 @@ export async function readMessageParts(pool: Pick<Pool, "connect">, query: Messa
           return failed()
         const revision = decimal(row.parts_public_sequence)
         if (parsed && parsed.revision !== revision) return failed("MESSAGE_PARTS_CHANGED")
-        page = await persistedPage(client, parsed ?? cursorFor(scope, revision, head, "message"), row.parts_count, query.limit)
+        page = await persistedPage(
+          client,
+          parsed ?? cursorFor(scope, revision, head, "message"),
+          row.parts_count,
+          query.limit,
+          sharedFinal ? identity(row.final_segment_id) : undefined,
+        )
         if (row.final_segment_id != null) page.final_segment_id = identity(row.final_segment_id)
       }
       if (Buffer.byteLength(JSON.stringify({ data: page, meta: { request_id: "r".repeat(256) } })) > MAX_PAGE_BYTES)

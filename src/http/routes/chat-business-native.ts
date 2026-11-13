@@ -37,6 +37,8 @@ export async function handleChatBusinessReadRequest(
   findConversation: ChatConversationLookup,
   projects: ProjectLookup,
   readProcess: AgUiRunProcessReader,
+  findReadableConversation: ChatConversationLookup,
+  readableProjects: ProjectLookup,
 ): Promise<boolean> {
   if (!isChatBusinessReadRequest(request)) return false
   const id = requestId(request)
@@ -59,7 +61,16 @@ export async function handleChatBusinessReadRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, findConversation, projects, abort.signal)
+    const contentRead = businessPath[2] !== "share" && businessPath[2] !== "runs"
+    const lookup = contentRead ? findReadableConversation : findConversation
+    const projectLookup = contentRead ? readableProjects : projects
+    const observed: { current: Awaited<ReturnType<ChatConversationLookup>> } = { current: null }
+    const observeConversation: ChatConversationLookup = async (...args) => {
+      const current = await lookup(...args)
+      observed.current = current
+      return current
+    }
+    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, observeConversation, projectLookup, abort.signal)
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))
@@ -69,7 +80,33 @@ export async function handleChatBusinessReadRequest(
       await sendAgUiRunProcess(request, response, admitted.context, businessPath[1] ?? "", businessPath[3] ?? "", authorization.projectRef, readProcess)
       return true
     }
-    await readChatBusiness(request, response, admitted.context, businessPath, reads, authorization, { signal: abort.signal, deadlineAt })
+    const initialProject = observed.current?.projectAccess?.project_id ?? observed.current?.projectRef ?? null
+    let projection: Readonly<{ projectId: string | null; requiresEdit: boolean }> | undefined
+    await readChatBusiness(
+      request,
+      response,
+      admitted.context,
+      businessPath,
+      reads,
+      authorization,
+      {
+        signal: abort.signal,
+        deadlineAt,
+        onProjectRead: (access) => {
+          if (projection !== undefined) throw new Error("CHAT_READ_PROJECTION_CHANGED")
+          projection = { projectId: access?.project_id ?? null, requiresEdit: access?.capabilities.includes("edit") ?? false }
+        },
+      },
+      async () => {
+        const fresh = await authorizeChatRequest(request, admitted.context, businessPath, observeConversation, projectLookup, abort.signal)
+        if (fresh?.ok !== true) return false
+        if (!contentRead || businessPath.length === 1) return true
+        const currentProject = observed.current?.projectAccess?.project_id ?? observed.current?.projectRef ?? null
+        // Project projections must report their actual RR scope, not fall back to the earlier HTTP lookup.
+        if (projection === undefined) return initialProject === null && currentProject === null
+        return projection.projectId === currentProject && (!projection.requiresEdit || observed.current?.projectAccess?.capabilities.includes("edit") === true)
+      },
+    )
     return true
   } catch {
     if (!response.headersSent && !response.writableEnded && !response.destroyed)

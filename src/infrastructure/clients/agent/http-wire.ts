@@ -41,6 +41,7 @@ export function projectSavedAgentLaunch(value: unknown): LaunchRequest | null {
   const project = value.trace.project_ref
   if (Object.hasOwn(value.trace, "project_ref") && (typeof project !== "string" || !/^[^\s\u0000-\u001f\u007f]{1,255}$/u.test(project))) return null
   if (Object.hasOwn(value, "personal_context") && value.personal_context == null) return null
+  if (Object.hasOwn(value, "shared_conversation_context") && value.shared_conversation_context == null) return null
   const projected = zSavedAgentLaunch.safeParse({
     ...value,
     project_ref: project ?? null,
@@ -54,6 +55,7 @@ export function projectSavedAgentLaunch(value: unknown): LaunchRequest | null {
     selected_custom_api_profiles,
     selected_resource_refs,
     personal_context,
+    shared_conversation_context,
     ...required
   } = projected.data
   if (
@@ -61,8 +63,14 @@ export function projectSavedAgentLaunch(value: unknown): LaunchRequest | null {
     (value.trace.source !== "kokoro-bff" || parseCanonicalResourceReferences(selected_resource_refs) === null)
   )
     return null
+  if (
+    shared_conversation_context &&
+    (shared_conversation_context.project_ref !== project || shared_conversation_context.conversation_id !== required.session_id)
+  )
+    return null
   return {
     ...required,
+    ...(shared_conversation_context === undefined ? {} : { shared_conversation_context }),
     ...(personal_context == null ? {} : { personal_context }),
     ...(requested_model_label === undefined ? {} : { requested_model_label }),
     ...(project_instruction === undefined ? {} : { project_instruction }),

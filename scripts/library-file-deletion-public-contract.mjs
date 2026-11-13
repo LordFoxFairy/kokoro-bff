@@ -1,9 +1,11 @@
+import { restoreProjectGrantContract, projectGrantParentBaseline } from "./project-grant-public-contract.mjs"
 import { createHash } from "node:crypto"
 
 // Build-time proof only; production serves only the current operation.
 const hash = (source) => createHash("sha256").update(source).digest("hex")
 
 export function restorePublic2837ModelDraftContract(source) {
+  source = restoreProjectGrantContract(source)
   if (!/^  version: 28\.38\.0$/mu.test(source)) return source
   if (hash(source) !== "d6927c3ae844303a5375cf196049a76db4119ab21478357314345cea0dbf13a1") throw Error("Model draft Public28.38 child drift")
   const parent = source
@@ -19,14 +21,18 @@ export function restorePublic2836SessionShareContract(source) {
   if (!/^  version: 28\.37\.0$/mu.test(source)) return source
   if (hash(source) !== "737688c79fa4fad8216168656d0fe7e4131b496ef2b506e424dbff82d7dca2c8") throw Error("Session Share metadata Public28.37 child drift")
   const parent = source
-    .replace(/(^  \/v1\/sessions\/\{id\}\/share:\n    parameters:\n      - \$ref: '#\/components\/parameters\/SessionId'\n)    get:\n[\s\S]*?(?=^    post:)/mu, "$1")
+    .replace(
+      /(^  \/v1\/sessions\/\{id\}\/share:\n    parameters:\n      - \$ref: '#\/components\/parameters\/SessionId'\n)    get:\n[\s\S]*?(?=^    post:)/mu,
+      "$1",
+    )
     .replace(/^    SessionShareMetadata:\n[\s\S]*?(?=^    ShareReceipt:)/mu, "")
     .replace(
       "            skill: { type: array, minItems: 1, items: { type: string, enum: [create_draft, create_version, delete_series, begin_upload, complete_upload, abort_upload, validate_draft, publish, withdraw, set_status, install, set_installation_enabled, remove_installation, update_draft, discard_draft, set_publication_audience] } }\n",
       "            skill: { type: array, minItems: 1, items: { type: string, enum: [create_draft, create_version, begin_upload, complete_upload, abort_upload, validate_draft, publish, withdraw, set_status, install, set_installation_enabled, remove_installation, update_draft, discard_draft, set_publication_audience] } }\n",
     )
     .replace("  version: 28.37.0\n", "  version: 28.36.0\n")
-  if (hash(parent) !== "7f715f26aa93410514b3876804309e10049f6fc6cbfcbe50847b1ccbd800d434") throw Error("Session Share metadata complete Public28.36 parent drift")
+  if (hash(parent) !== "7f715f26aa93410514b3876804309e10049f6fc6cbfcbe50847b1ccbd800d434")
+    throw Error("Session Share metadata complete Public28.36 parent drift")
   return parent
 }
 
@@ -66,11 +72,20 @@ export function restorePublic2834SlackConnectionContract(source) {
   if (hash(source) !== "a26431d45ad96c4e80e6751d61e66a14b3933ae7c2ffb6f9e7df57fcc7e6808f") throw Error("Slack Public28.35 child drift")
   const parent = source
     .replace(/^  \/v1\/agents\/connections\/slack\/complete:\n[\s\S]*?(?=^  \/v1\/library:)/mu, "")
-    .replace(/^        - type: object\n          required: \[platform, status, state_version, setup_id, expires_at, continue_url\]\n          additionalProperties: false\n          properties:\n            platform: \{ type: string, const: slack \}[\s\S]*?(?=^    AgentConnectionSetupResponse:)/mu, "")
+    .replace(
+      /^        - type: object\n          required: \[platform, status, state_version, setup_id, expires_at, continue_url\]\n          additionalProperties: false\n          properties:\n            platform: \{ type: string, const: slack \}[\s\S]*?(?=^    AgentConnectionSetupResponse:)/mu,
+      "",
+    )
     .replace(/^    SlackConnectionCompleteRequest:\n[\s\S]*?(?=^    RuntimeManifest:)/mu, "")
     .replaceAll("            platform: { type: string, enum: [telegram, line, slack] }\n", "            platform: { type: string, enum: [telegram, line] }\n")
-    .replace("This read never starts setup or calls a provider. Established personal bindings can still be read after provider configuration is removed. Slack returns an authorization URL only before that exact attempt has claimed a completion.", "This read never starts setup or calls a provider. Telegram and LINE bindings can still be read after bot configuration is removed. Slack is not available through this operation yet.")
-    .replace("Cancel with the same setup ID also accepts the immediately previous revision when a Telegram private callback or Slack completion has only claimed that exact setup; it never cancels a binding. The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack uses the admitted completion; disconnect removes only the personal binding, not the workspace installation.", "Cancel with the same setup ID also accepts the immediately previous revision when a Telegram callback has only advanced that exact setup to awaiting_confirmation; it never cancels a binding. The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack is not available through this operation yet.")
+    .replace(
+      "This read never starts setup or calls a provider. Established personal bindings can still be read after provider configuration is removed. Slack returns an authorization URL only before that exact attempt has claimed a completion.",
+      "This read never starts setup or calls a provider. Telegram and LINE bindings can still be read after bot configuration is removed. Slack is not available through this operation yet.",
+    )
+    .replace(
+      "Cancel with the same setup ID also accepts the immediately previous revision when a Telegram private callback or Slack completion has only claimed that exact setup; it never cancels a binding. The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack uses the admitted completion; disconnect removes only the personal binding, not the workspace installation.",
+      "Cancel with the same setup ID also accepts the immediately previous revision when a Telegram callback has only advanced that exact setup to awaiting_confirmation; it never cancels a binding. The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack is not available through this operation yet.",
+    )
     .replace("  version: 28.35.0\n", "  version: 28.34.0\n")
   if (hash(parent) !== "ea0b6ff7b4ea4a0348a4dd579c2440dca32e58c5958b2374e8555e02b74382a6") throw Error("Slack complete Public28.34 parent drift")
   return parent
@@ -83,11 +98,20 @@ export function restorePublic2833LineConnectionContract(source) {
   const parent = source
     .replace(/^  \/v1\/agents\/connections\/line\/webhook:\n[\s\S]*?(?=^  \/v1\/library:)/mu, "")
     .replace(/^    LineWebhookSignature:\n[\s\S]*?(?=^    TelegramWebhookSecret:)/mu, "")
-    .replace(/^        - type: object\n          required: \[platform, status, state_version, setup_id, expires_at, continue_url\]\n          additionalProperties: false\n          properties:\n            platform: \{ type: string, const: line \}[\s\S]*?(?=^    AgentConnectionSetupResponse:)/mu, "")
+    .replace(
+      /^        - type: object\n          required: \[platform, status, state_version, setup_id, expires_at, continue_url\]\n          additionalProperties: false\n          properties:\n            platform: \{ type: string, const: line \}[\s\S]*?(?=^    AgentConnectionSetupResponse:)/mu,
+      "",
+    )
     .replace(/^    LineConnectionContinueRequest:\n[\s\S]*?(?=^    RuntimeManifest:)/mu, "")
     .replaceAll("            platform: { type: string, enum: [telegram, line] }\n", "            platform: { type: string, const: telegram }\n")
-    .replace("This read never starts setup or calls a provider. Telegram and LINE bindings can still be read after bot configuration is removed. Slack is not available through this operation yet.", "This read never starts setup or calls Telegram. A binding can still be read after bot configuration is removed. LINE and Slack are not available through this operation yet.")
-    .replace("The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack is not available through this operation yet.", "Confirm requires the secret received in private Telegram chat, not merely opening the link. LINE and Slack are not available through this operation yet.")
+    .replace(
+      "This read never starts setup or calls a provider. Telegram and LINE bindings can still be read after bot configuration is removed. Slack is not available through this operation yet.",
+      "This read never starts setup or calls Telegram. A binding can still be read after bot configuration is removed. LINE and Slack are not available through this operation yet.",
+    )
+    .replace(
+      "The confirm command is Telegram-only and requires the secret received in private chat, not merely opening the link. LINE uses the dedicated admitted continuation and signed account-link callback. Slack is not available through this operation yet.",
+      "Confirm requires the secret received in private Telegram chat, not merely opening the link. LINE and Slack are not available through this operation yet.",
+    )
     .replace("  version: 28.34.0\n", "  version: 28.33.0\n")
   if (hash(parent) !== "03d4add75d31c6c4dd22e7fcb3b4269556ad3ced87d29a5640976bc74f39810f") throw Error("LINE complete Public28.33 parent drift")
   return parent
@@ -112,9 +136,14 @@ export function restorePublic2831AgentConnectionContract(source) {
   if (hash(source) !== "e12a8078f5ecaa741c255a3bcec032d398d35309d845d3cf736dc764a0287d33") throw Error("Telegram Public28.32 child drift")
   const parent = source
     .replace(/^    post:\n(?=      tags: \[Agents\]\n      operationId: changeAgentConnection\n)[\s\S]*?(?=^  \/v1\/library:)/mu, "")
-    .replace("      summary: Read the admitted user’s external connection or setup state\n      description: This read never starts setup or calls Telegram. A binding can still be read after bot configuration is removed. LINE and Slack are not available through this operation yet.\n", "      summary: Get agent connection setup\n")
+    .replace(
+      "      summary: Read the admitted user’s external connection or setup state\n      description: This read never starts setup or calls Telegram. A binding can still be read after bot configuration is removed. LINE and Slack are not available through this operation yet.\n",
+      "      summary: Get agent connection setup\n",
+    )
     .replace(/^    TelegramWebhookSecret:\n[\s\S]*?(?=^    [A-Za-z]+:)/mu, "")
-    .replace(/^    AgentConnectionStateVersion:\n[\s\S]*?(?=^    RuntimeManifest:)/mu, `    AgentConnectionSetup:
+    .replace(
+      /^    AgentConnectionStateVersion:\n[\s\S]*?(?=^    RuntimeManifest:)/mu,
+      `    AgentConnectionSetup:
       type: object
       required: [platform, status, qr_value, continue_url, expires_at]
       properties:
@@ -133,7 +162,8 @@ export function restorePublic2831AgentConnectionContract(source) {
       properties:
         data: { $ref: '#/components/schemas/AgentConnectionSetup' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
-`)
+`,
+    )
     .replace("  version: 28.32.0\n", "  version: 28.31.0\n")
   if (hash(parent) !== "9fea8041e3eac479e5ea008e120729fb37637636bb6bf3ad8b94ac161ac8a88c") throw Error("Telegram complete Public28.31 parent drift")
   return parent
@@ -162,7 +192,8 @@ export function restorePublic2829DeliveryDisplayPathContract(source) {
     .replace("        kokoro.delivery.created:\n          $ref: '#/components/schemas/ChatDeliveryCreated'\n", "")
     .replace(/^    ChatDeliveryCreated:\n[\s\S]*?(?=^    FinalAnswerResult:)/mu, "")
     .replace("  version: 28.30.0\n", "  version: 28.29.0\n")
-  if (hash(parent) !== "be6473bfa58332dee9f0417a10f6b21c8320efa79802151fe5b13f93753d4504") throw Error("Artifact display path complete Public28.29 parent drift")
+  if (hash(parent) !== "be6473bfa58332dee9f0417a10f6b21c8320efa79802151fe5b13f93753d4504")
+    throw Error("Artifact display path complete Public28.29 parent drift")
   return parent
 }
 
@@ -171,14 +202,30 @@ export function restorePublic2828LibraryArtifactCommandsContract(source) {
   if (!/^  version: 28\.29\.0$/mu.test(source)) return source
   if (hash(source) !== "be6473bfa58332dee9f0417a10f6b21c8320efa79802151fe5b13f93753d4504") throw Error("Library Artifact commands Public28.29 child drift")
   const parent = source
-    .replace(/^    delete:\n(?=      tags: \[Library\]\n      operationId: deleteLibraryArtifact\n)[\s\S]*?(?=^  \/v1\/library\/artifacts\/\{conversation_id\}\/\{artifact_id\}\/content:)/mu, "")
+    .replace(
+      /^    delete:\n(?=      tags: \[Library\]\n      operationId: deleteLibraryArtifact\n)[\s\S]*?(?=^  \/v1\/library\/artifacts\/\{conversation_id\}\/\{artifact_id\}\/content:)/mu,
+      "",
+    )
     .replace(/^    LibraryArtifactDeletionResponse:\n[\s\S]*?(?=^    LibraryArtifactItem:)/mu, "")
-    .replace("      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. File search filters current authorized Storage files before the stable keyset and limit; only a matching file may occupy a page slot. Artifact favorites-only filtering runs on the owned BFF relationship before its keyset; it never grants visibility. Artifact search matches current authorized FINAL metadata, not unverified delivery claims. Artifact-only q is a case-insensitive NFC substring over title or filename; type uses the documented product taxonomy. Cursors bind kind, tenant, subject, limit and the normalized complete filter tuple. Each Artifact request scans at most min(500, limit * 5) authorized candidates within the existing 30-second deadline; a sparse page may be empty and still have next_cursor. Only next_cursor=null means exhausted. Delivery keyset order is preserved, without relevance ranking or snapshot isolation. Public18 invalidates prior Artifact cursors; clients must restart the query. A cursor never grants access.", "      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. File search filters current authorized Storage files before the stable keyset and limit; only a matching file may occupy a page slot. Artifact search matches current authorized FINAL metadata, not unverified delivery claims. Artifact-only q is a case-insensitive NFC substring over title or filename; type uses the documented product taxonomy. Cursors bind kind, tenant, subject, limit and the normalized complete filter tuple. Each Artifact request scans at most min(500, limit * 5) authorized candidates within the existing 30-second deadline; a sparse page may be empty and still have next_cursor. Only next_cursor=null means exhausted. Delivery keyset order is preserved, without relevance ranking or snapshot isolation. Public18 invalidates prior Artifact cursors; clients must restart the query. A cursor never grants access.")
-    .replace("        - name: favorites_only\n          in: query\n          description: Artifact only. True selects only the current subject's favorited Artifacts; false or absent keeps the ordinary cursor shape. File requests reject this parameter.\n          schema: { type: boolean, default: false }\n", "")
-    .replace("required: [kind, conversation_id, artifact_id, asset_id, artifact_kind, title, filename, mime_type, size_bytes, content_sha256, source_run_id, delivered_at, favorited]", "required: [kind, conversation_id, artifact_id, asset_id, artifact_kind, title, filename, mime_type, size_bytes, content_sha256, source_run_id, delivered_at]")
-    .replace("        favorited: { type: boolean }\n        project_ref:\n          description: Detail-only canonical source Project ID", "        project_ref:\n          description: Detail-only canonical source Project ID")
+    .replace(
+      "      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. File search filters current authorized Storage files before the stable keyset and limit; only a matching file may occupy a page slot. Artifact favorites-only filtering runs on the owned BFF relationship before its keyset; it never grants visibility. Artifact search matches current authorized FINAL metadata, not unverified delivery claims. Artifact-only q is a case-insensitive NFC substring over title or filename; type uses the documented product taxonomy. Cursors bind kind, tenant, subject, limit and the normalized complete filter tuple. Each Artifact request scans at most min(500, limit * 5) authorized candidates within the existing 30-second deadline; a sparse page may be empty and still have next_cursor. Only next_cursor=null means exhausted. Delivery keyset order is preserved, without relevance ranking or snapshot isolation. Public18 invalidates prior Artifact cursors; clients must restart the query. A cursor never grants access.",
+      "      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. File search filters current authorized Storage files before the stable keyset and limit; only a matching file may occupy a page slot. Artifact search matches current authorized FINAL metadata, not unverified delivery claims. Artifact-only q is a case-insensitive NFC substring over title or filename; type uses the documented product taxonomy. Cursors bind kind, tenant, subject, limit and the normalized complete filter tuple. Each Artifact request scans at most min(500, limit * 5) authorized candidates within the existing 30-second deadline; a sparse page may be empty and still have next_cursor. Only next_cursor=null means exhausted. Delivery keyset order is preserved, without relevance ranking or snapshot isolation. Public18 invalidates prior Artifact cursors; clients must restart the query. A cursor never grants access.",
+    )
+    .replace(
+      "        - name: favorites_only\n          in: query\n          description: Artifact only. True selects only the current subject's favorited Artifacts; false or absent keeps the ordinary cursor shape. File requests reject this parameter.\n          schema: { type: boolean, default: false }\n",
+      "",
+    )
+    .replace(
+      "required: [kind, conversation_id, artifact_id, asset_id, artifact_kind, title, filename, mime_type, size_bytes, content_sha256, source_run_id, delivered_at, favorited]",
+      "required: [kind, conversation_id, artifact_id, asset_id, artifact_kind, title, filename, mime_type, size_bytes, content_sha256, source_run_id, delivered_at]",
+    )
+    .replace(
+      "        favorited: { type: boolean }\n        project_ref:\n          description: Detail-only canonical source Project ID",
+      "        project_ref:\n          description: Detail-only canonical source Project ID",
+    )
     .replace("  version: 28.29.0\n", "  version: 28.28.0\n")
-  if (hash(parent) !== "495afa65989a1308194910b0b5ece62b4f9db0c84f8dc34e7e0f3b00f7c5294f") throw Error("Library Artifact commands complete Public28.28 parent drift")
+  if (hash(parent) !== "495afa65989a1308194910b0b5ece62b4f9db0c84f8dc34e7e0f3b00f7c5294f")
+    throw Error("Library Artifact commands complete Public28.28 parent drift")
   return parent
 }
 
@@ -187,10 +234,17 @@ export function restorePublic2827LibraryArtifactSourceContract(source) {
   if (!/^  version: 28\.28\.0$/mu.test(source)) return source
   if (hash(source) !== "495afa65989a1308194910b0b5ece62b4f9db0c84f8dc34e7e0f3b00f7c5294f") throw Error("Library artifact source Public28.28 child drift")
   const parent = source
-    .replace("        project_ref:\n          description: Detail-only canonical source Project ID, null for a direct Conversation, or absent when the canonical destination is not established.\n          type: [string, 'null']\n          pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])'\n    LibraryArtifactResponse:\n", "    LibraryArtifactResponse:\n")
-    .replace("      summary: Read one delivered Artifact from the current subject's active Conversation\n      description: The detail identifies the source Conversation's canonical Project ID, or null only for a direct Conversation. If the canonical source destination is not established, project_ref is omitted. The project reference is not an access grant.\n", "      summary: Read one delivered Artifact from the current subject's active Conversation\n")
+    .replace(
+      "        project_ref:\n          description: Detail-only canonical source Project ID, null for a direct Conversation, or absent when the canonical destination is not established.\n          type: [string, 'null']\n          pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])'\n    LibraryArtifactResponse:\n",
+      "    LibraryArtifactResponse:\n",
+    )
+    .replace(
+      "      summary: Read one delivered Artifact from the current subject's active Conversation\n      description: The detail identifies the source Conversation's canonical Project ID, or null only for a direct Conversation. If the canonical source destination is not established, project_ref is omitted. The project reference is not an access grant.\n",
+      "      summary: Read one delivered Artifact from the current subject's active Conversation\n",
+    )
     .replace("  version: 28.28.0\n", "  version: 28.27.0\n")
-  if (hash(parent) !== "52b59b49be42bc3c1126b6fc94b1d88c440b7ac911c2631e8a0305f43f96bd08") throw Error("Library artifact source complete Public28.27 parent drift")
+  if (hash(parent) !== "52b59b49be42bc3c1126b6fc94b1d88c440b7ac911c2631e8a0305f43f96bd08")
+    throw Error("Library artifact source complete Public28.27 parent drift")
   return parent
 }
 
@@ -199,14 +253,28 @@ export function restorePublic2826LibraryFileSearchContract(source) {
   if (!/^  version: 28\.27\.0$/mu.test(source)) return source
   if (hash(source) !== "52b59b49be42bc3c1126b6fc94b1d88c440b7ac911c2631e8a0305f43f96bd08") throw Error("Library file search Public28.27 child drift")
   const parent = source
-    .replace("enum: [all, slides, documents, spreadsheets, images, video, audio, other, media]", "enum: [all, slides, documents, spreadsheets, images, video, audio, other]")
-    .replace("Kind-specific type. Files accept all, documents, images, media (audio/video), and other based on MIME. Artifacts retain all, slides, documents, spreadsheets, images, video, audio, and other based on current FINAL MIME/title. Other combinations are invalid.", "Artifact-only product type, matched against current FINAL MIME/title according to the Library API taxonomy; file queries reject this parameter.")
-    .replace("Literal text search, at most 200 Unicode code points before normalization. C0 controls and DEL are rejected; empty after trim means no text filter. Files match filename or MIME using NFC and case-insensitive PostgreSQL text semantics. Artifacts match title or filename with trim, NFC and locale-independent lowercase.", "Artifact-only search, at most 200 Unicode code points before normalization; trim, NFC and locale-independent lowercase are applied. C0 control characters and DEL are rejected. Empty means no text filter; file queries reject this parameter.")
-    .replace("Each Artifact request scans at most min(500, limit * 5) authorized candidates", "Each request scans at most min(500, limit * 5) authorized candidates")
-    .replace("File search filters current authorized Storage files before the stable keyset and limit; only a matching file may occupy a page slot. Artifact search matches current authorized FINAL metadata", "Artifact search matches current authorized FINAL metadata")
+    .replace(
+      "enum: [all, slides, documents, spreadsheets, images, video, audio, other, media]",
+      "enum: [all, slides, documents, spreadsheets, images, video, audio, other]",
+    )
+    .replace(
+      "Kind-specific type. Files accept all, documents, images, media (audio/video), and other based on MIME. Artifacts retain all, slides, documents, spreadsheets, images, video, audio, and other based on current FINAL MIME/title. Other combinations are invalid.",
+      "Artifact-only product type, matched against current FINAL MIME/title according to the Library API taxonomy; file queries reject this parameter.",
+    )
+    .replace(
+      "Literal text search, at most 200 Unicode code points before normalization. C0 controls and DEL are rejected; empty after trim means no text filter. Files match filename or MIME using NFC and case-insensitive PostgreSQL text semantics. Artifacts match title or filename with trim, NFC and locale-independent lowercase.",
+      "Artifact-only search, at most 200 Unicode code points before normalization; trim, NFC and locale-independent lowercase are applied. C0 control characters and DEL are rejected. Empty means no text filter; file queries reject this parameter.",
+    )
+    .replace(
+      "Each Artifact request scans at most min(500, limit * 5) authorized candidates",
+      "Each request scans at most min(500, limit * 5) authorized candidates",
+    )
+    .replace(
+      "File search filters current authorized Storage files before the stable keyset and limit; only a matching file may occupy a page slot. Artifact search matches current authorized FINAL metadata",
+      "Artifact search matches current authorized FINAL metadata",
+    )
     .replace("  version: 28.27.0\n", "  version: 28.26.0\n")
-  if (hash(parent) !== "c80d5aaba1732eca0fb7bc8f32f500adef99e7d884f579cfb7944b8b11e8901a")
-    throw Error("Library file search complete Public28.26 parent drift")
+  if (hash(parent) !== "c80d5aaba1732eca0fb7bc8f32f500adef99e7d884f579cfb7944b8b11e8901a") throw Error("Library file search complete Public28.26 parent drift")
   return parent
 }
 
@@ -224,6 +292,7 @@ export function restorePublic2825LibraryFileDeletionContract(source) {
 }
 
 export function libraryFileDeletionParentInventory(inventory) {
+  inventory = projectGrantParentBaseline(inventory)
   const drafts = inventory.filter((item) => item.operation_id === "updateAdminModelRevisionDraft")
   if (drafts.length) {
     const expected = { method: "PATCH", path: "/v1/admin/model-revisions/{revision_id}", operation_id: "updateAdminModelRevisionDraft" }
@@ -253,7 +322,11 @@ export function libraryFileDeletionParentInventory(inventory) {
   }
   const workspaceOperations = inventory.filter((item) => item.operation_id === "getSessionRunWorkspaceOutputContent")
   if (workspaceOperations.length) {
-    const expected = { method: "GET", path: "/v1/sessions/{id}/runs/{runId}/workspace-outputs/{versionId}/content", operation_id: "getSessionRunWorkspaceOutputContent" }
+    const expected = {
+      method: "GET",
+      path: "/v1/sessions/{id}/runs/{runId}/workspace-outputs/{versionId}/content",
+      operation_id: "getSessionRunWorkspaceOutputContent",
+    }
     if (JSON.stringify(workspaceOperations) !== JSON.stringify([expected])) throw Error("Workspace outputs Public28.33 inventory drift")
     inventory = inventory.filter((item) => !workspaceOperations.includes(item))
   }

@@ -1,6 +1,26 @@
 ## 2026-11-13 B10：ProjectGrant 与协作访问契约设计门（未发行）
 
-现 public canonical 仍为已提交发行物；以下是后继需写入 `contract/openapi/v1/openapi.yaml` 并正规生成／发布的目标，不代表路由现已存在。仅受信 native Session＋当前 Product tenant 成员，Browser→App 同源→BFF；不接受 body 自报 tenant/actor/owner，不开放匿名／外部邀请，不复制 IAM 身份或引入 token-link 授权。
+普通Chat幂等亦按真实actor隔离：`bff_agent_dispatch_outbox` business unique改为tenant／conversation／actor／key，与现HTTP receipt及prepare／replay主体scope一致；既有identity material已含subject且commit强制subject=actor，不同协作者同key的新run／message／outbox ID天然隔离，无需换派生算法。原持久ID／payload／摘要／回执不重写，精确父仅换约束；一条creator→editor→creator PG同时证明同key独立成功和原actor重放原ACK，不退成跨actor全资源409。
+
+### B10 同版候选补全：busy、原主体控制与当前再生成资格
+
+Project snapshot 保既有 `data.project_access` 判别：有活跃 head 必返回粗粒 queued/active busy 与 required `execution_head.can_control:boolean`；只有当前读者仍有 edit 且其可信 subject 等于不可变 Run 实际 actor，才为 true 并保原 waiting/resuming/pending_pauses。peer／降权为 false、pending_pauses=[]、execution_process=null，阅读权不授执行控制。每个 Project Message required `can_regenerate:boolean`，由 BFF 基于实际主体、当前 edit、最新合法 terminal/lineage 与无活跃 Run 鲜算；user/peer/历史为 false，不由 App 猜 Session owner 或角色。
+
+消息分页沿原 `data.messages` 新增 optional `data.project_access:ProjectAccess`，同一当前读者事实；有该字段时每项 required can_regenerate，不建 items alias 或第二 mode。direct 非 Project 的 head／Message／page 原形省略这些字段不变。Project SSE 仅扩现 `metadata.kokoro.can_control:boolean`，每批发送资格与 source actor 共同派生，direct省略；peer RUN_ERROR 保已验证 Agent failure 的 source/code/retryable 白名单及 code 一致、message 泛化，BFF synthetic 仍走 source_owner=kokoro-bff 且不冒 Agent failure。确认完成的 final_segment_id 与固定取消 tuple 保原语义，不透 raw CUSTOM/process/usage/private pause。当前 221 与加六 Admin 后 227 同属未发行 Public29 候选，修正当前完整 child/inverse；已发行 28.38/217 raw SHA 与 ordered inventory 不变。
+
+### B10 多来源与共享执行输入门（2026-11-13，待owner固定消费）
+
+public仍是单Conversation AG-UI＋原opaque cursor；source身份在BFF内部加入真实subject，按subject保存唯一来源cursor，旧HWM／state精确保值迁移、不reset／不双写、不将内部多source变成第二套网络协议。切源只由immutable dispatch subject=actor及原terminal/fence边界触发，读者不得注册／切换生产来源；历史public event payload/cursor不重写。peer原AG-UI／private process不得直接透传；安全过滤仍推进public cursor，replay cache后及每批待发送前fresh ProjectGrant／expiry／当前归属，idle沿现最大8s唤醒。资格以既有native准入／到期边界为准，无逐token IAM/OAuth，DB grant fresh不冒IAM成员即时撤权，已发字节不追回。
+
+Project存在过真实grant（包括revoked／expired，现不物理删除）后，owner/editor后续Run一致使用shared执行模式；不新增mode表。需固定消费Agent正式可选typed shared_context：当前权限快照内有序user正文＋确认FINAL的whole-message suffix，最多128条／256KiB，显式has_earlier_messages；只冻结原dispatch与其digest，不向input_text偷拼、不代理creator或读私人checkpoint。具体shape以Agent canonical发行后消费，依赖未闭不激活editor新Run；普通从未共享Project／TaskA无字段原语义保留。FINAL共享metadata另用闭集ProjectArtifactItem（project_access、无asset_id／favorited），Storage真实读取仍当前读者＋exact association，owner I/O与verified spool后鲜验、丢弃撤权迟到结果；private Library／favorite不因此开放。
+
+**BREAKING 候选 Public29.0／221 operations（未发行、未正常激活）**：在正式已发行28.38完整父字节上增加4个Project access/grant操作；仅 ScheduledTask PATCH 与具名retry新增 required精确revision If-Match，缺失428／冲突409，无缺省或第二路由。current ScheduledTaskDetails required公开 revision＋execution_actor_id；immutable mutation ACK／既有receipt／outbox正文保持原形状，不猜历史executor。App须先fresh details冻结CAS并正式升级固定artifact，同片配对后才激活；未发行28.39不是历史父。新协作lookup／编辑锁只接canonical project_id，不接受slug；原私人owner-only finder保原语义，本人旧URL由App从当前Project事实解析ID，不新造服务端alias。
+
+Scheduled命令key沿既有HTTP actor隔离：现outbox business unique改为tenant/task/op/actor/key，新ID派生纳入真实actor；worker以已持久ID及row/payload lineage恢复，不重算/改写历史ID或payload、不建双协议。原key回执从原outbox.task immutable snapshot恢复，不回当前Task或猜历史executor；current binding始终单独fresh Details读取。旧unique更严格，已有合法数据满足新unique，精确父演进只替换该约束/索引并保全原事实。
+
+成员代际规则（主控裁决）：ProjectGrant 绑定稳定 user subject，不绑定 IAM member_id。有效条件为当前 native Product 同 tenant 资格且 grant 未撤销／未到期；退出期间拒绝，同一 subject 重新合法加入后原有效 grant 重新生效，这是显式产品规则。授予时仅复用现 members API 核当前目标；缺 member:read 返回原403，不提升组织权限，分页未完成不当目标不存在；不新增每 Project 请求 IAM members 查询。
+
+已发行基线为28.38；当前canonical已落29.0候选，以下协作范围仍需完整实现／正规发布与真实验收，不把单点接线冒完整支持。仅受信 native Session＋当前 Product tenant 成员，Browser→App 同源→BFF；不接受 body 自报 tenant/actor/owner，不开放匿名／外部邀请，不复制 IAM 身份或引入 token-link 授权。
 
 - `GET /v1/projects/{project_id}/access`：当前获准主体的 role（owner/viewer/editor）、grant 到期时间、Project `access_version` 与 closed capabilities；不以 UI 显示代替服务端权限。Project 列表／详情承接当前可见项目与同一 access 投影；固定消费者必须随正式 artifact 升级，旧 strict decoder 不盲激活新字段。
 - owner-only `GET /v1/projects/{project_id}/grants`：有界 opaque-cursor 授权列表；`PUT .../grants/{subject_id}` 显式设 viewer/editor 与 `expires_at`（UTC instant 或 null）；`DELETE .../grants/{subject_id}` 撤销。PUT body 只含 role/expires_at，DELETE 无 body；两写 required 原 `Idempotency-Key` 和精确正整数 `If-Match: "<access_version>"`，缺 CAS428、版本冲突409，200 ACK 绑定 canonical Project／目标 subject／新访问版本。只允许 IAM 当前同 tenant 成员，目标不合格不区分外部账号是否存在；不能授 owner 或用 grant 降级／删除 Project owner。
@@ -10,11 +30,25 @@ viewer 可读取项目资料／配置、明确归属项目的 Conversation／任
 
 共享 snapshot／parts／结果／AG-UI 仅发送正文、最终答案、安全终态／错误码与正式 artifact 安全投影；原私人 reasoning、工具参数／返回、CUSTOM activity/interaction/delivery 原始值、personal_context、私有 trace／内部位置／临时 URL／资金信息不得透传。保现 AG-UI＋opaque cursor，过滤仍推进 ledger cursor；Session／当前成员沿原 native admission＋service/actor 及既有有界重验；不新增逐 token／逐帧 IAM/OAuth 校验。BFF grant／expiry 鲜查覆盖 replay cache 后、等待唤醒与每批发送前，空闲复用有界 ledger poll（默认最大8s）退休无权 SSE。旧流关闭不发送伪成功；已经获准发送的有限批次不追溯收回。浏览器收到拒绝／断流后退休该私有视图，不自动重放 mutation。
 
-ScheduledTask 共享编辑必须闭合独立执行绑定：任何影响执行的 prompt／计划／工具／输入／启用改动，在既有 CAS 事务先暂停并使旧 definition revision 的 queued/leased fence 退休，绝不沿用他人委托。只有当前操作者显式接受自己的 Connection／资金委托、当前资格校验并持久化新绑定后才可启用；旧 revision 不得新建或派发执行，已真正创建的 Run 保原 actor／账本与原控制资格，不假回滚。现合同若未正式提供该独立安全绑定，共享 ScheduledTask 编辑依赖门保持 **OPEN**、维持现 actor-only；由现 owner 先发行必要增量再承接协作，不以永久禁用缩范围，不另建调度协议。
+ScheduledTask 公开读响应承接现 definition revision，影响执行的修改／启用沿原native命令、required原key与精确revision If-Match。executor只由当前可信actor确定，不允许body指定别人。跨actor编辑执行配置先原子暂停／清executor，后续显式以自己启用；同executor本人以nativeCAS保存即明确沿自己委托，无第二确认层。任意revision变化fence尚未送出的旧revision，已发送／submitted／unknown／已建Run保原payload/actor/proof及账本，不假回滚。仅task.execution_actor_id与dispatch.task_revision新增，确认沿现receipt/outbox lineage及dispatch摘要/身份proof；无新authorization-ref/digest/version。旧合法enabled任务按精确父Schema／原owner=executor语义回填owner，不要求逐行native实录；fresh/父演进证明业务事实及actor等价，未知父或非法行拒绝，不能创造额外绑定。
 
-Run 执行／取消／steer／HITL 权限不随阅读结果授予；BFF 已有 actor-only RunDisplay 不直接向协作成员开放。共享最终答案／已交付 artifact 取现 durable 产品事实并加 Project gate；缺少安全 workspace-result fact 或 Storage 读取用途时，先由对应 owner 正式发行必要窄合同并固定消费；该依赖门未闭时不得实现共享 Run 内容，不改身份冒读。IAM 目标成员接口若不能以当前主体合法证明资格，同样先补正式合同，不代理其它身份。网站 URL 与现任务／文件类型如实承接；未有正式实体的托管网站／网络导入／RSS／Webhook／高级自动化不伪造支持，也不以它们跳过已裁决 Project Conversation／任务结果范围。
+Run 执行／取消／steer／HITL 权限不随阅读结果授予；BFF 已有 actor-only RunDisplay 不直接向协作成员开放。共享最终答案／已交付 artifact 取现 durable 产品事实并加 Project gate；FINAL 已有 Message.final_segment_id／delivery→artifact／scheduled execution exact locator，复用 Storage GetFinalArtifact／Download purpose=artifact，无 Agent／Storage 合同增量。非 FINAL workspace_output 属私人过程，不整包共享或冒原 actor 读取；应交付的内容走现 FINAL 流程。IAM 目标成员接口若不能以当前主体合法证明资格，同样先补正式合同，不代理其它身份。网站 URL 与现任务／文件类型如实承接；未有正式实体的托管网站／网络导入／RSS／Webhook／高级自动化不伪造支持，也不以它们跳过已裁决 Project Conversation／任务结果范围。
 
 最低契约／真实集成验收：metadata 刷新无写、owner grant→viewer 真实读／拒写→editor 改／创建并 owner 回读→降权／撤销／到期拒绝；两主体／跨 tenant、owner 不被自降级、CAS 并发、原 key unknown／replay、Conversation Move／删除、活跃 SSE 和下载撤权、隐藏 trace、原执行者身份／资金不被替代。App 消费者与数据／传输 owner 正式配对后才启用，本节不新增当前公开 operation。
+
+ScheduledTask 最小传输增量为公开definition revision/CAS与当前执行主体投影，现已发行 Scheduler target/callback opaque JSON 已承载可信 task_revision，复用原受信 callback 与严格解析，无 owner 合同增量。跨actor编辑及旧行演进门未闭时，不启用该未完成面，但完整协作目标不永久删减。
+
+
+
+## 2026-11-13 Public29 candidate: Custom API administration design gate
+
+当前未发行 Public29.0 候选累计 **227 operations**：B10 同版修正候选 221 项完整承接，新增六项 `GET /v1/admin/custom-apis`、`GET /v1/admin/custom-apis/{profile_id}`、`POST /v1/admin/custom-apis/{profile_id}/{quarantine|restore|revoke}`、`GET /v1/admin/custom-apis/{profile_id}/audit-events`。唯一 wire 事实源为 canonical OpenAPI；独立 inverse 精确剥六项回修正后的 221 完整字节，再交既有 B10 inverse 回已发行 28.38/217，不重签旧 parent。
+
+Owner 仍为 Platform/CustomApi；BFF 仅安全管理投影，无数据库、receipt、状态或授权镜像。固定消费 Capability `efe18a1f697f3ff2189e342e40ffed581bedda2b` 发布 `custom-api-admin-v1` 和 `bff-service-auth-v2`，复用已生成六 RPC。每请求（含同键 replay）先受信 Web/Admin envelope＋原生 Session 在线鲜验当前 Product tenant 成员，再要求 `platformAdmin === true`；不以 `mcp_catalog.manage` 替代。仅使用独立 `KOKORO_BFF_PLATFORM_CUSTOM_API_ADMIN_CREDENTIALS_FILE`，共用现 Platform URL、tenant-bound `custom_api_admin` credential source 每次完整重读；禁止 personal/mcp_admin fallback。实际管理员 actor 来自可信 admission，不用目标 owner，不向 owner 传用户 Cookie、Origin、Bearer 或 Session-ref。
+
+闭集输入：列表仅 limit/cursor/owner_user_id/governance_status；审计仅 limit/cursor。写命令保留原 `Idempotency-Key`，body 仅 canonical 十进制字符串 `expected_state_version`（1..2147483646）与四项 `reason_code`。拒绝未知/重复 JSON、重复 query/header、调用方身份及模糊路径。owner JCS 精确绑定 method、tenant、actual actor、profile、原 CAS、action、reason；失败/未知不得换 key、自动重试、猜回滚或用 fresh state 改写原命令。
+
+安全 current profile 仅 ID/owner/name/三态 governance/version/timestamps；命令只返回 immutable ACK 的原 status/version/audit_ref/replayed，不做 fresh enrich，当前态另 GET。审计安全事件直接调用 owner audit RPC，profile 删除后仍可读；不先 GET 判断存活。instructions/environment/endpoint/secret、原始 owner error/metadata 不公开。响应统一 `{data:...}`／`{error:{code,message,retryable}}`、列表 `{items,next_cursor}`，request ID 只在 header，均 no-store。非法 owner receipt 分类或安全投影 DataLoss→502 `custom_api_admin_response_invalid`；合法 receipt 明确保原命令恢复语义。整个入口（body、IAM、owner）共享有界 deadline/取消；shutdown close 中止在途调用，禁止迟到成功。只 source HTTP/loopback 验证不代表正常激活，Root 冻结组合、发布与真实验收另门。
 
 ## 2026-11-13 Public28.38: conditional model revision draft PATCH
 

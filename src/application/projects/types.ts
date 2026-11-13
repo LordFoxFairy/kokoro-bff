@@ -8,7 +8,9 @@ export type ProjectOwnerScope = Readonly<{
 }>
 
 /** Current Project ownership by canonical ID or slug; no write capabilities. */
-export type ProjectLookup = Readonly<{ find(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null> }>
+export type ProjectLookup = Readonly<{
+  find(scope: ProjectOwnerScope, idOrSlug: string, lifetime?: Readonly<{ signal: AbortSignal; deadlineAt: number }>): Promise<Project | null>
+}>
 
 export type RenameProjectCommand = ProjectOwnerScope &
   Readonly<{
@@ -23,10 +25,10 @@ export type ProjectSkillSelection = Readonly<{ project_id: string; installation_
 export type ReplaceProjectSkillSelectionCommand = ProjectOwnerScope &
   Readonly<{ projectId: string; installationIds: string[]; receiptScope: string; fingerprint: string; signal: AbortSignal }>
 export type ReplaceProjectSkillSelectionResult =
-  Readonly<{ kind: "replaced"; receipt: Readonly<{ data: ProjectSkillSelection }> }> | Readonly<{ kind: "not_found" | "conflict" }>
+  Readonly<{ kind: "replaced"; receipt: Readonly<{ data: ProjectSkillSelection }> }> | Readonly<{ kind: "not_found" | "forbidden" | "conflict" }>
 
 export type RenameProjectReceipt = Readonly<{ data: Readonly<{ project_id: string; name: string }> }>
-export type RenameProjectResult = Readonly<{ kind: "renamed"; receipt: RenameProjectReceipt }> | Readonly<{ kind: "not_found" | "conflict" }>
+export type RenameProjectResult = Readonly<{ kind: "renamed"; receipt: RenameProjectReceipt }> | Readonly<{ kind: "not_found" | "forbidden" | "conflict" }>
 export type ProjectDeletionResource = Readonly<{
   project_id: string
   logical_release_state: "pending" | "blocked" | "released"
@@ -42,4 +44,5 @@ export type SetProjectPin = ProjectOwnerScope & Readonly<{ projectId: string; is
 export type ProjectMcpRecommendationQuery = ProjectOwnerScope & Readonly<{ projectId: string; signal: AbortSignal; deadlineAt: number }>
 export type ReplaceProjectMcpRecommendations = ProjectMcpRecommendationQuery &
   Readonly<{ expectedStateVersion: string; recommendations: ProjectMcpRecommendation[] }>
-export type ReplaceProjectMcpRecommendationsResult = { kind: "replaced"; data: ProjectMcpRecommendations } | { kind: "not_found" | "precondition_failed" }
+export type ReplaceProjectMcpRecommendationsResult =
+  { kind: "replaced"; data: ProjectMcpRecommendations } | { kind: "not_found" | "forbidden" | "precondition_failed" }

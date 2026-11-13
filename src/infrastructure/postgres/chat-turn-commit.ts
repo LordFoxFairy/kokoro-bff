@@ -1,14 +1,12 @@
+import { readSharedConversationContext } from "./chat-shared-context.js"
+import { projectReadPredicate, projectEditPredicate } from "./project-access.js"
 import { readChatTurnPersonalContext } from "./chat-turn-personal-context.js"
 import { parseCanonicalResourceReferences } from "../../application/chat/resource-reference-manifest.js"
 import { selectedArtifactInTransaction } from "./conversation-artifact-library.js"
 import { regenerationSourceInTransaction } from "./message-regeneration.js"
 import { selectedFinalAnswerInTransaction } from "./run-final-answer-read.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
-import {
-  parseResourceReferenceSelection,
-  type CanonicalFinalAnswerRef,
-  type CanonicalResourceRef,
-} from "../../domain/chat/resource-reference-selection.js"
+import { parseResourceReferenceSelection, type CanonicalFinalAnswerRef, type CanonicalResourceRef } from "../../domain/chat/resource-reference-selection.js"
 import { performance } from "node:perf_hooks"
 
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
@@ -32,6 +30,7 @@ type LockedChatScope =
     }>
   | Readonly<{ kind: "retry" }>
   | Readonly<{ kind: "project_not_found" }>
+  | Readonly<{ kind: "forbidden" }>
   | Readonly<{ kind: "not_found" }>
 
 type ExistingDispatchRow = {
@@ -157,6 +156,7 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
     input.lifetime?.signal.throwIfAborted()
     type SelectionRow = {
       missing_project: boolean
+      forbidden: boolean
       project_id: string | null
       installation_ids: string[] | null
       request_digest: string | null
@@ -166,22 +166,23 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
     }
     const config = {
       text: `WITH current_conversation AS (
-        SELECT project_ref FROM bff_conversation WHERE tenant_id=$1 AND owner_id=$2 AND conversation_id=$3 AND status='active'
+        SELECT project_ref,owner_id FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$3 AND status='active'
+          AND (project_ref IS NOT NULL OR owner_id=$2)
       ), requested_project AS (
-        SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND deleted_at IS NULL AND (project_id=$5 OR slug=$5) LIMIT 1
+        SELECT project_id FROM bff_project WHERE tenant_id=$1 AND deleted_at IS NULL AND project_id=$5
       ), current_scope AS (
-        SELECT CASE WHEN EXISTS (SELECT 1 FROM current_conversation) THEN (SELECT project_ref FROM current_conversation) ELSE (SELECT project_id FROM requested_project) END AS project_ref,
-          (NOT EXISTS (SELECT 1 FROM current_conversation) AND $5::text IS NOT NULL AND NOT EXISTS (SELECT 1 FROM requested_project)) AS missing_project
-        WHERE EXISTS (SELECT 1 FROM current_conversation) OR (
-          $6 AND NOT EXISTS (SELECT 1 FROM bff_conversation WHERE conversation_id=$3)
-        )
+        SELECT CASE WHEN EXISTS(SELECT 1 FROM current_conversation) THEN (SELECT project_ref FROM current_conversation) ELSE (SELECT project_id FROM requested_project) END AS project_ref,
+          COALESCE((SELECT owner_id FROM current_conversation),$2) AS creator_id,
+          (NOT EXISTS(SELECT 1 FROM current_conversation) AND $5::text IS NOT NULL AND NOT EXISTS(SELECT 1 FROM requested_project)) AS missing_project
+        WHERE EXISTS(SELECT 1 FROM current_conversation) OR ($6 AND NOT EXISTS(SELECT 1 FROM bff_conversation WHERE conversation_id=$3))
       )
-      SELECT s.missing_project,p.project_id, CASE WHEN s.project_ref IS NULL THEN '{}'::text[] ELSE p.selected_skill_installation_ids END AS installation_ids,
-             o.request_digest,o.run_id,o.user_message_id,o.assistant_message_id
-        FROM current_scope s
-        LEFT JOIN bff_project p ON p.tenant_id=$1 AND p.owner_id=$2 AND p.deleted_at IS NULL AND (p.project_id=s.project_ref OR p.slug=s.project_ref)
-        LEFT JOIN bff_agent_dispatch_outbox o ON o.tenant_id=$1 AND o.subject_id=$2 AND o.conversation_id=$3 AND o.idempotency_key=$4
-       WHERE s.project_ref IS NULL OR p.project_id IS NOT NULL`,
+      SELECT s.missing_project,p.project_id,CASE WHEN s.project_ref IS NULL THEN '{}'::text[] ELSE p.selected_skill_installation_ids END AS installation_ids,
+        (p.project_id IS NOT NULL AND NOT ${projectEditPredicate.replaceAll("bff_project.", "p.")} AND ${projectReadPredicate.replaceAll("bff_project.", "p.")}) AS forbidden,
+        o.request_digest,o.run_id,o.user_message_id,o.assistant_message_id
+      FROM current_scope s LEFT JOIN bff_project p ON p.tenant_id=$1 AND p.deleted_at IS NULL
+        AND (p.project_id=s.project_ref OR (p.owner_id=s.creator_id AND p.slug=s.project_ref))
+      LEFT JOIN bff_agent_dispatch_outbox o ON o.tenant_id=$1 AND o.subject_id=$2 AND o.actor_id=$2 AND o.conversation_id=$3 AND o.idempotency_key=$4
+      WHERE s.project_ref IS NULL OR (p.project_id IS NOT NULL AND ${projectReadPredicate.replaceAll("bff_project.", "p.")})`,
       values: [
         input.tenantId,
         input.subjectId,
@@ -205,7 +206,9 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
     input.lifetime?.signal.throwIfAborted()
     remainingMilliseconds(deadline)
     const row = result.rows[0]
+    if (result.rows.length > 1) throw Error("CHAT_TURN_PROJECT_NOT_FOUND")
     if (!row) return null
+    if (row.forbidden) throw Error("CHAT_TURN_PROJECT_FORBIDDEN")
     if (row.missing_project) throw new Error("CHAT_TURN_PROJECT_NOT_FOUND")
     if (row.request_digest !== null) {
       if (row.request_digest !== input.requestDigest) throw new Error("CHAT_TURN_IDEMPOTENCY_CONFLICT")
@@ -232,87 +235,74 @@ export async function prepareChatTurnSelection(database: PostgresBffDatabase, in
   }
 }
 
-async function resolveActiveProject(query: DeadlineQuery, tenantId: string, subjectId: string, projectRef: string): Promise<string | null> {
+async function resolveActiveProject(query: DeadlineQuery, tenantId: string, projectRef: string, legacyCreator?: string): Promise<string | null> {
   const result = await query<{ project_id: string }>(
-    `SELECT project_id FROM bff_project
-      WHERE bff_project.deleted_at IS NULL AND tenant_id=$1 AND owner_id=$2 AND (project_id=$3 OR slug=$3)
-      LIMIT 1`,
-    [tenantId, subjectId, projectRef],
+    `SELECT project_id FROM bff_project WHERE tenant_id=$1 AND deleted_at IS NULL
+       AND (project_id=$2 OR ($3::text IS NOT NULL AND owner_id=$3 AND slug=$2)) LIMIT 2`,
+    [tenantId, projectRef, legacyCreator ?? null],
   )
-  return result.rows[0]?.project_id ?? null
+  return result.rows.length === 1 ? result.rows[0]!.project_id : null
 }
 
 export async function lockChatScope(query: DeadlineQuery, command: ChatScopeInput, existingOnly: boolean): Promise<LockedChatScope> {
-  const preRead = await query<{ project_ref: string | null }>(
-    `SELECT project_ref FROM bff_conversation
-      WHERE tenant_id=$1 AND conversation_id=$2 AND owner_id=$3 AND status='active'`,
-    [command.tenantId, command.conversationId, command.subjectId],
-  )
-  const preReadRow = preRead.rows[0]
-  if (preReadRow === undefined && existingOnly) return { kind: "not_found" }
-  const callerProjectId =
-    command.projectRef === undefined ? undefined : await resolveActiveProject(query, command.tenantId, command.subjectId, command.projectRef)
-
-  if (preReadRow === undefined) {
-    if (!isClientCreatedConversationId(command.conversationId)) return { kind: "not_found" }
-    if (command.projectRef !== undefined && callerProjectId === null) return { kind: "project_not_found" }
-    if (callerProjectId !== undefined && callerProjectId !== null) {
-      const locked = await query<{ project_id: string }>(
-        `SELECT project_id FROM bff_project
-          WHERE bff_project.deleted_at IS NULL AND tenant_id=$1 AND owner_id=$2 AND project_id=$3
-          FOR SHARE`,
-        [command.tenantId, command.subjectId, callerProjectId],
-      )
-      if (locked.rows[0] === undefined) return { kind: "not_found" }
+  const pre = (
+    await query<{ project_ref: string | null; owner_id: string }>(
+      "SELECT project_ref,owner_id FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2 AND status='active'",
+      [command.tenantId, command.conversationId],
+    )
+  ).rows[0]
+  if (!pre && existingOnly) return { kind: "not_found" }
+  if (pre?.project_ref === null && pre.owner_id !== command.subjectId) return { kind: "not_found" }
+  const callerProjectId = command.projectRef === undefined ? undefined : await resolveActiveProject(query, command.tenantId, command.projectRef)
+  if (command.projectRef !== undefined && callerProjectId === null) return { kind: "project_not_found" }
+  const canonicalProjectId = pre
+    ? pre.project_ref === null
+      ? null
+      : await resolveActiveProject(query, command.tenantId, pre.project_ref, pre.owner_id)
+    : (callerProjectId ?? null)
+  if (pre?.project_ref != null && canonicalProjectId === null) return { kind: "not_found" }
+  const ids = [...new Set([canonicalProjectId, callerProjectId].filter((id): id is string => typeof id === "string"))].sort()
+  if (ids.length) {
+    const locked = await query<{ project_id: string }>(
+      "SELECT project_id FROM bff_project WHERE tenant_id=$1 AND project_id=ANY($2::text[]) AND deleted_at IS NULL ORDER BY project_id FOR SHARE",
+      [command.tenantId, ids],
+    )
+    if (locked.rows.length !== ids.length) return { kind: "project_not_found" }
+    // Grant mutation locks this same Project row. Read the role after any lock wait, not from the pre-resolution snapshot.
+    const access = await query<{ project_id: string; can_read: boolean; can_edit: boolean }>(
+      `SELECT project_id,${projectReadPredicate} AS can_read,${projectEditPredicate} AS can_edit FROM bff_project
+        WHERE tenant_id=$1 AND project_id=ANY($3::text[]) AND deleted_at IS NULL`,
+      [command.tenantId, command.subjectId, ids],
+    )
+    for (const id of ids) {
+      const allowed = access.rows.find((row) => row.project_id === id)
+      if (!allowed?.can_edit) return { kind: allowed?.can_read ? "forbidden" : "not_found" }
     }
+  }
+  if (!pre) {
+    if (!isClientCreatedConversationId(command.conversationId)) return { kind: "not_found" }
     const inserted = await query(
-      `INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title,status)
-       VALUES ($1,$2,$3,$4,$5,'active') ON CONFLICT (conversation_id) DO NOTHING`,
-      [command.conversationId, command.tenantId, command.subjectId, callerProjectId ?? null, firstMessageConversationTitle(command.content)],
+      `INSERT INTO bff_conversation(conversation_id,tenant_id,owner_id,project_ref,title,status)
+      VALUES($1,$2,$3,$4,$5,'active') ON CONFLICT(conversation_id) DO NOTHING`,
+      [command.conversationId, command.tenantId, command.subjectId, canonicalProjectId, firstMessageConversationTitle(command.content)],
     )
     if (inserted.rowCount !== 1) {
-      const concurrentWinner = await query(
-        `SELECT 1 FROM bff_conversation
-          WHERE tenant_id=$1 AND conversation_id=$2 AND owner_id=$3 AND status='active'`,
-        [command.tenantId, command.conversationId, command.subjectId],
-      )
-      return concurrentWinner.rows[0] === undefined ? { kind: "not_found" } : { kind: "retry" }
-    }
-    await query(
-      `SELECT conversation_id FROM bff_conversation
-        WHERE tenant_id=$1 AND conversation_id=$2 AND owner_id=$3 AND status='active'
-        FOR UPDATE`,
-      [command.tenantId, command.conversationId, command.subjectId],
-    )
-    return {
-      kind: "locked",
-      canonicalProjectId: callerProjectId ?? null,
-      callerProjectId,
+      const winner = await query("SELECT 1 FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2 AND status='active'", [
+        command.tenantId,
+        command.conversationId,
+      ])
+      return { kind: winner.rows.length ? "retry" : "not_found" }
     }
   }
-
-  const canonicalProjectId =
-    preReadRow.project_ref === null ? null : await resolveActiveProject(query, command.tenantId, command.subjectId, preReadRow.project_ref)
-  if (preReadRow.project_ref !== null && canonicalProjectId === null) return { kind: "not_found" }
-  const projectIds = [...new Set([canonicalProjectId, callerProjectId].filter((value): value is string => typeof value === "string"))].sort()
-  if (projectIds.length > 0) {
-    const locked = await query<{ project_id: string }>(
-      `SELECT project_id FROM bff_project
-        WHERE bff_project.deleted_at IS NULL AND tenant_id=$1 AND owner_id=$2 AND project_id=ANY($3::text[])
-        ORDER BY project_id FOR SHARE`,
-      [command.tenantId, command.subjectId, projectIds],
+  const current = (
+    await query<{ project_ref: string | null; owner_id: string }>(
+      "SELECT project_ref,owner_id FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2 AND status='active' FOR UPDATE",
+      [command.tenantId, command.conversationId],
     )
-    if (canonicalProjectId !== null && !locked.rows.some((row) => row.project_id === canonicalProjectId)) return { kind: "not_found" }
-  }
-  const conversation = await query<{ project_ref: string | null }>(
-    `SELECT project_ref FROM bff_conversation
-      WHERE tenant_id=$1 AND conversation_id=$2 AND owner_id=$3 AND status='active'
-      FOR UPDATE`,
-    [command.tenantId, command.conversationId, command.subjectId],
-  )
-  const lockedConversation = conversation.rows[0]
-  if (lockedConversation === undefined) return { kind: "not_found" }
-  if (lockedConversation.project_ref !== preReadRow.project_ref) return { kind: "retry" }
+  ).rows[0]
+  if (!current) return { kind: "not_found" }
+  if (pre && (current.project_ref !== pre.project_ref || current.owner_id !== pre.owner_id)) return { kind: "retry" }
+  if (current.project_ref === null && current.owner_id !== command.subjectId) return { kind: "not_found" }
   return { kind: "locked", canonicalProjectId, callerProjectId }
 }
 
@@ -338,12 +328,14 @@ export async function commitChatTurn(
     command.content,
   ])
     requiredIdentity(value)
+  if (command.actorId !== command.subjectId) throw Error("CHAT_TURN_INPUT_INVALID")
   if (!/^[0-9a-f]{64}$/u.test(command.requestDigest)) throw new Error("CHAT_TURN_DIGEST_INVALID")
   if (command.interruptRunId !== undefined && (!isInterruptRunId(command.interruptRunId) || command.regeneration !== undefined)) {
     throw new Error("CHAT_TURN_INPUT_INVALID")
   }
   const callerPayload = parseAgentDispatchPayload(command.payload)
-  if (callerPayload.launch.personal_context !== undefined) throw new Error("CHAT_TURN_INPUT_INVALID")
+  if (callerPayload.launch.personal_context !== undefined || callerPayload.launch.shared_conversation_context !== undefined)
+    throw new Error("CHAT_TURN_INPUT_INVALID")
   if (
     callerPayload.launch.request_id !== command.requestId ||
     callerPayload.launch.run_id !== command.runId ||
@@ -439,26 +431,12 @@ export async function commitChatTurn(
         `${Math.min(CHAT_TURN_LOCK_BUDGET_MS, remaining)}ms`,
         `${remaining}ms`,
       ])
-      const scope = await lockChatScope(query, command, command.interruptRunId !== undefined)
-      if (scope.kind === "retry") {
-        await rollback()
-        continue
-      }
-      if (scope.kind === "not_found") {
-        await rollback()
-        return null
-      }
-      if (scope.kind === "project_not_found") {
-        await rollback()
-        throw new Error("CHAT_TURN_PROJECT_NOT_FOUND")
-      }
-
       const existing = await query<ExistingDispatchRow>(
         `SELECT request_digest,run_id,user_message_id,assistant_message_id
            FROM bff_agent_dispatch_outbox
-          WHERE tenant_id=$1 AND conversation_id=$2 AND idempotency_key=$3
+          WHERE tenant_id=$1 AND conversation_id=$2 AND idempotency_key=$3 AND subject_id=$4 AND actor_id=$5 AND identity_assertion_ref=$6
           LIMIT 1`,
-        [command.tenantId, command.conversationId, command.idempotencyKey],
+        [command.tenantId, command.conversationId, command.idempotencyKey, command.subjectId, command.actorId, command.identityAssertionRef],
       )
       const existingRow = existing.rows[0]
       if (existingRow !== undefined) {
@@ -470,6 +448,24 @@ export async function commitChatTurn(
           assistant_message_id: existingRow.assistant_message_id,
         }
       }
+      const scope = await lockChatScope(query, command, command.interruptRunId !== undefined)
+      if (scope.kind === "retry") {
+        await rollback()
+        continue
+      }
+      if (scope.kind === "not_found") {
+        await rollback()
+        return null
+      }
+      if (scope.kind === "forbidden") {
+        await rollback()
+        throw Error("CHAT_TURN_PROJECT_FORBIDDEN")
+      }
+      if (scope.kind === "project_not_found") {
+        await rollback()
+        throw new Error("CHAT_TURN_PROJECT_NOT_FOUND")
+      }
+
       let sourcePersonalContext: AgentLaunchBody["personal_context"]
       if (command.regeneration !== undefined) {
         const original = await regenerationSourceInTransaction(
@@ -500,15 +496,6 @@ export async function commitChatTurn(
           (sourcePersonalContext.owner.tenant_ref !== command.tenantId || sourcePersonalContext.owner.user_ref !== command.actorId)
         )
           throw new Error("MESSAGE_REGENERATION_SOURCE_INVALID")
-        const latest = await query<{ message_id: string }>(
-          `SELECT message_id FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant' ORDER BY message_seq DESC,message_id DESC LIMIT 1`,
-          [command.tenantId, command.conversationId],
-        )
-        const active = await query(
-          `SELECT run_id FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted') LIMIT 1`,
-          [command.tenantId, command.conversationId],
-        )
-        if (latest.rows[0]?.message_id !== command.regeneration.sourceMessageId || active.rows.length > 0) throw Error("MESSAGE_REGENERATION_NOT_READY")
       }
       if (command.projectRef !== undefined && (scope.callerProjectId === null || scope.callerProjectId !== scope.canonicalProjectId)) {
         await rollback()
@@ -524,7 +511,7 @@ export async function commitChatTurn(
                 selected_skill_installation_ids: string[]
               }>(
                 `SELECT instruction, selected_skill_installation_ids
-                 FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
+                 FROM bff_project WHERE tenant_id=$1 AND project_id=$3 AND deleted_at IS NULL AND ${projectEditPredicate}`,
                 [command.tenantId, command.subjectId, scope.canonicalProjectId],
               )
             ).rows[0]
@@ -548,7 +535,12 @@ export async function commitChatTurn(
           if (command.scheduledActivation !== undefined) throw new Error("CHAT_RESOURCE_SELECTION_INVALID")
           const answer = await selectedFinalAnswerInTransaction(
             { query },
-            { tenantId: command.tenantId, subjectId: command.subjectId, messageId: intent.resource_id, projectId: scope.canonicalProjectId },
+            {
+              tenantId: command.tenantId,
+              subjectId: command.subjectId,
+              messageId: intent.resource_id,
+              projectId: scope.canonicalProjectId,
+            },
           )
           if (answer === null) throw new Error(command.regeneration === undefined ? "CHAT_RESOURCE_SELECTION_INVALID" : "CHAT_RESOURCE_SELECTION_CHANGED")
           const final: CanonicalFinalAnswerRef = {
@@ -599,7 +591,15 @@ export async function commitChatTurn(
       const canonical = parseCanonicalResourceReferences(resources)
       if (canonical === null) throw new Error("CHAT_RESOURCE_SELECTION_INVALID")
       const boundPayload = bindAgentDispatchPayloadProjectScope(
-        canonical.length ? { ...callerPayload, launch: { ...callerPayload.launch, selected_resource_refs: canonical } } : callerPayload,
+        canonical.length
+          ? {
+              ...callerPayload,
+              launch: {
+                ...callerPayload.launch,
+                selected_resource_refs: canonical,
+              },
+            }
+          : callerPayload,
         scope.canonicalProjectId,
         project?.instruction ?? null,
       )
@@ -610,14 +610,25 @@ export async function commitChatTurn(
               actorId: command.actorId,
             })
           : sourcePersonalContext
+      const sharedContext =
+        scope.canonicalProjectId === null
+          ? undefined
+          : await readSharedConversationContext(
+              query,
+              command.tenantId,
+              scope.canonicalProjectId,
+              command.conversationId,
+              command.regeneration?.originalUserMessageId,
+            )
       const payload =
-        personalContext === undefined
+        personalContext === undefined && sharedContext === undefined
           ? boundPayload
           : {
               ...boundPayload,
               launch: {
                 ...boundPayload.launch,
-                personal_context: personalContext,
+                ...(personalContext === undefined ? {} : { personal_context: personalContext }),
+                ...(sharedContext === undefined ? {} : { shared_conversation_context: sharedContext }),
               },
             }
       // Agent HTTP accepts at most 1 MiB; reject before any outbox/interrupt effects.
@@ -629,17 +640,22 @@ export async function commitChatTurn(
       if (command.scheduledActivation !== undefined) {
         const activation = command.scheduledActivation
         if (activation.tenantId !== command.tenantId || activation.runId !== command.runId) throw new Error("SCHEDULED_ACTIVATION_LOST")
-        // Parent Project / Conversation / stream are locked before the scheduled gate.
+        // Parent Project / Conversation / stream, then definition, scope and dispatch. Definition edits use the same order.
+        await query("SELECT 1 FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2 FOR SHARE", [activation.tenantId, activation.taskId])
         await query("SELECT 1 FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE", [activation.tenantId, activation.taskId])
         const active = await query(
-          `SELECT 1 FROM bff_scheduled_agent_dispatch dispatch,bff_scheduled_agent_scope scope
+          `SELECT 1 FROM bff_scheduled_agent_dispatch dispatch
+            JOIN bff_scheduled_agent_scope scope ON scope.tenant_id=dispatch.tenant_id AND scope.task_id=dispatch.task_id
+            LEFT JOIN bff_scheduled_task definition ON definition.tenant_id=dispatch.tenant_id AND definition.task_id=dispatch.task_id
             WHERE dispatch.tenant_id=$1 AND dispatch.task_id=$2 AND dispatch.dispatch_id=$3 AND dispatch.run_id=$4
               AND dispatch.lease_owner=$5 AND dispatch.lease_token=$6 AND dispatch.fence=$7
               AND dispatch.status='leased' AND dispatch.lease_until>clock_timestamp()
               AND dispatch.subject_id=$8 AND dispatch.idempotency_key=$9 AND dispatch.request_digest=$10
               AND dispatch.user_message_id=$11 AND dispatch.assistant_message_id=$12
               AND scope.tenant_id=dispatch.tenant_id AND scope.task_id=dispatch.task_id
-              AND scope.session_id=$13 AND scope.subject_id=$8
+              AND scope.session_id=$13
+              AND (dispatch.admission_unknown_seen OR (definition.enabled AND definition.status='active'
+                AND definition.execution_actor_id=dispatch.subject_id AND definition.revision=dispatch.task_revision))
               AND scope.active_dispatch_id=dispatch.dispatch_id AND scope.active_run_id=dispatch.run_id
             FOR UPDATE OF dispatch`,
           [

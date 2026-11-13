@@ -14,7 +14,7 @@ Browser -> kokoro-app same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agen
 
 | 能力                           | 当前事实                                                                                                                  |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| Public contract                | Public28.38 / 217 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata                                      |
+| Public contract                | Public29.0 候选 / 227 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata                                      |
 | User admission                 | 受信Web/Admin envelope＋配置的原生issuer Session Cookie＋固定Origin；IAM鲜验Session与当前Product资格；普通内部业务走服务＋actor |
 | Project / ScheduledTask        | Live 使用本仓 PostgreSQL；Redis 用于 readiness/cache coordination                                                         |
 | Idempotency                    | 持久化 command receipt 与未知结果恢复；适用面以各 operation 的幂等声明为准                                                  |
@@ -113,6 +113,13 @@ KOKORO_TEST_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' \
 KOKORO_TEST_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm test:integration
 ```
+
+B10 Project collaboration 的具名真实 PG 入口为 `test/project-collaboration.integration.mjs`，不加入无 fixture 的默认测试。
+资源主控复用受管 PostgreSQL，创建本轮独占 loopback 临时库 `kokoro_bff_project_collab_<32位hex>`；两 URL 均显式
+`?schema=kokoro_bff`，先以 `KOKORO_BFF_POSTGRES_URL` 执行现 `pnpm db:apply-schema`，再 `pnpm build`，
+以 `KOKORO_TEST_POSTGRES_URL` 执行 `node --test --test-concurrency=1 test/project-collaboration.integration.mjs`。
+阶段复验可用原 Node `--test-name-pattern` 选择具名用例；测试缺少/不符隔离 URL 会失败，不跳过、不建库或删库。
+结束由同一资源主控 DROP 本轮自有库并核实不存在，保留失败证据；不得指向正常应用库或清理他人数据。
 
 缺少 fixture 时 integration 是未执行，不是通过。完整矩阵见 [`docs/ACCEPTANCE.md`](./docs/ACCEPTANCE.md)。
 

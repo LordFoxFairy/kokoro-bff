@@ -1,3 +1,7 @@
+## Current candidate — Public29.0 / 227 operations
+
+未发行候选；B10 同版 221 operations 补全 current control/regeneration 安全事实（未发行），新增六项 Custom API admin。独立 `scripts/custom-api-admin-public-contract.mjs` 精确恢复修正后 221 中间态，再由原 B10 guard 恢复已发行 Public28.38 / 217 全文；不重签历史 parent。机器入口仍 canonical OpenAPI 与有序 operation inventory，版本不产生未发行的 28.39。Platform 固定 `efe18a1f697f3ff2189e342e40ffed581bedda2b`，仅消费正式六 RPC，public 与正常组合激活验收分开。以下为历史发布记录。
+
 ## B13 — Public28.38 model revision draft correction
 
 One named conditional `PATCH /v1/admin/model-revisions/{revision_id}` projects the already pinned System6.1 draft update. The 217-operation inventory appends one entry without reordering the previous 216; the existing baseline writer sorts by canonical placement, so this release retains the ordered parent inventory and adds only the new identity. Tests verify its exact parent-array digest and the complete Public28.37 OpenAPI inverse. Historical hashes and checks stay unchanged. System generation expands the existing filter by one operation, preserving the exact owner commit/digest; no public SDK, independent private artifact, Schema or auth protocol changes.

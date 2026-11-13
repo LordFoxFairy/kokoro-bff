@@ -34,6 +34,7 @@ async function fixture(t, patch = {}) {
       replaceMcpRecommendations: async (q) => {
         calls.write++
         if (patch.beforeWrite) await patch.beforeWrite(q)
+        if (patch.writeResult) return patch.writeResult
         if (q.expectedStateVersion !== state.state_version) return { kind: "precondition_failed" }
         if (JSON.stringify(q.recommendations) !== JSON.stringify(state.recommendations))
           state = { ...state, recommendations: q.recommendations, state_version: String(Number(state.state_version) + 1) }
@@ -105,6 +106,15 @@ test("GET/PUT is closed scoped configuration; same values are no-op and stale CA
   assert.equal((await f.request({ expected_state_version: "2", recommendations: [] })).body.data.state_version, "3")
   assert.equal(f.calls.owner.length, 1)
   assert.ok(f.calls.access.includes(true))
+})
+test("visible viewer cannot replace shared Project recommendations", async (t) => {
+  const f = await fixture(t, { writeResult: { kind: "forbidden" } })
+  assert.equal((await f.request()).status, 200)
+  const result = await f.request({ expected_state_version: "1", recommendations: [] })
+  assert.equal(result.status, 403)
+  assert.equal(result.body.error.code, "permission_denied")
+  assert.equal(f.calls.owner.length, 0)
+  assert.deepEqual(f.state().recommendations, [])
 })
 test("bad query/identity/duplicate JSON/command headers never enter Project or owner reads", async (t) => {
   const f = await fixture(t)

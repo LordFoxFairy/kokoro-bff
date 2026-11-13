@@ -1,3 +1,4 @@
+import { restoreProjectGrantSchema } from "../../scripts/project-grant-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 
@@ -42,6 +43,13 @@ const historicalScheduledSourceEvents = `CREATE TABLE IF NOT EXISTS bff_schedule
 // Historical proof input only. Project the exact approved Task A schema back
 // to d166a51 before the existing Final Answer, Message Actions and Project inverses.
 export function restoreTaskAHistoricalSchema(schema) {
+  if (schema.includes("-- PROJECT-GRANT-SQL-BEGIN")) {
+    try {
+      schema = restoreProjectGrantSchema(schema)
+    } catch {
+      assert.fail("Task A current SQL drift")
+    }
+  }
   assert.equal(digest(schema), "ad9a8500129ba74b394b10ad57e7d8e5481622a1a59d7e94de568b2f5653c9df", "Task A current SQL drift")
   const historical = schema
     // A-13: verified external channel connections.

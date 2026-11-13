@@ -126,6 +126,20 @@ export type LaunchRequest = {
    * Private Project owner instruction frozen for this Run. Valid only for trusted user chat with project_ref. Omit when absent; blank, invalid Unicode and NUL text are rejected. Not a Message, trace field or tool authority.
    */
   project_instruction?: string
+  /**
+   * Private BFF-authorized whole-message suffix for this Project Conversation. Presence selects isolated shared Run checkpoint/workspace; actor and subject must be the current same user. Scope equals launch project_ref/session_id. Message sequence is strictly increasing positive i64 decimal, IDs unique. Assistant text is only BFF-confirmed FINAL; no tool, peer reasoning, composer or historical personal material. Total content UTF-8 bytes <=262144; has_earlier_messages explicitly marks omitted earlier whole messages. Agent never truncates this frozen context. Not tool authority; omission preserves existing request bytes and behavior.
+   */
+  shared_conversation_context?: {
+    project_ref: string
+    conversation_id: string
+    messages: Array<{
+      message_id: string
+      sequence: string
+      role: "user" | "assistant"
+      content: string
+    }>
+    has_earlier_messages: boolean
+  }
 }
 
 export type LaunchReceipt = {

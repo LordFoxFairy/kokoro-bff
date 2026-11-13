@@ -436,7 +436,10 @@ describe("ScheduledTask HTTP method ownership", () => {
       ] as const) {
         ownerError = error
         idempotency.clear()
-        const response = await fetch(base + "/v1/scheduled-tasks/task-1", { method: "PATCH", headers: { "idempotency-key": "original-key" } })
+        const response = await fetch(base + "/v1/scheduled-tasks/task-1", {
+          method: "PATCH",
+          headers: { "idempotency-key": "original-key", "if-match": '"1"' },
+        })
         assert.equal(response.status, status)
         assert.equal(response.headers.get("x-request-id"), context.requestId)
         assert.equal(response.headers.get("cache-control"), "no-store")

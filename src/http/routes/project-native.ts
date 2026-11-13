@@ -1,3 +1,4 @@
+import { currentResourceProject } from "../project-resource-access.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { BffConfig } from "../../config/runtime.js"
@@ -5,7 +6,7 @@ import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ProjectLookup } from "../../application/projects/types.js"
 import type { ProjectDeletion, ProjectRenamer } from "../../application/projects/commands.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
-import { mutationTicket, type IdempotencyEntry } from "../../application/idempotency.js"
+import { commitReceipt, mutationTicket, type IdempotencyEntry } from "../../application/idempotency.js"
 import { uploadProjectResource, projectResourceFingerprint } from "../../application/project-resource-upload.js"
 import type { ProjectResourceStorage } from "../../application/project-resource.types.js"
 import { ProjectResourceError } from "../../application/project-resource.error.js"
@@ -118,10 +119,11 @@ export async function handleProjectResourceUploadRequest(
     } catch {
       throw new ProjectResourceError("invalid_project_resource", 400)
     }
-    const project = await projects.find({ tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }, projectRef)
-    if (project === null) throw new ProjectResourceError("project_not_found", 404)
-    if (typeof project !== "object" || project === null || !("id" in project) || typeof project.id !== "string")
-      throw new ProjectResourceError("resource_upload_unavailable", 503, true)
+    const scope = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }
+    const project = { id: await currentResourceProject(projects, scope, projectRef, signal) }
+    const authorize = async (): Promise<void> => {
+      if ((await currentResourceProject(projects, scope, project.id, signal)) !== project.id) throw new ProjectResourceError("project_not_found", 404)
+    }
     const keys = projectDeletionHeaderValues(request.rawHeaders, "idempotency-key")
     const key = idempotencyKey(request)
     if (keys.length !== 1 || key === null || keys[0] !== key || key.length > 191 || !/^[\x21-\x7e]+$/u.test(key))
@@ -140,17 +142,23 @@ export async function handleProjectResourceUploadRequest(
       projects.receipts,
     )
     if (ticket.replay !== null) {
+      await authorize()
       send(response, ticket.replay.status, ticket.replay.body)
       return true
     }
     if (ticket.conflict || ticket.pending) throw new ProjectResourceError(ticket.conflict ? "idempotency_conflict" : "idempotency_in_progress", 409)
     mutation = ticket.ticket
     if (config.storage === undefined) throw new ProjectResourceError("storage_projection_not_configured", 503, true)
-    const resource = await uploadProjectResource(context, input, projects.receipts, clientFactory(config.storage, context), signal)
+    const resource = await uploadProjectResource(context, input, projects.receipts, clientFactory(config.storage, context), signal, authorize)
+    await authorize()
     await reply(response, 200, ok({ resources: [resource] }, id), admitted.context, projects.idempotency, mutation)
   } catch (error) {
     const known = error instanceof ProjectResourceError ? error : new ProjectResourceError("resource_upload_unavailable", 503, true)
-    if (admittedContext === null) send(response, known.status, failure(known.code, "Project resource upload did not complete", id))
+    if (admittedContext !== null && mutation !== null && (known.status === 403 || known.status === 404)) {
+      // Permission retirement is not a terminal receipt for a possibly dispatched owner command.
+      await commitReceipt(projects.idempotency, mutation, 503, null)
+      send(response, known.status, failure(known.code, "Project resource access is no longer available", id))
+    } else if (admittedContext === null) send(response, known.status, failure(known.code, "Project resource upload did not complete", id))
     else
       await reply(response, known.status, failure(known.code, "Project resource upload did not complete", id), admittedContext, projects.idempotency, mutation)
   } finally {
@@ -267,13 +275,11 @@ export async function handleProjectResourceDeleteRequest(
     const key = keys[0]
     if (keys.length !== 1 || key === undefined || !/^[\x21-\x7e]{1,191}$/u.test(key)) throw new ProjectResourceError("invalid_project_resource", 400)
     const scope = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }
-    const project = await projects.find(scope, projectRef)
-    if (project === null) throw new ProjectResourceError("project_not_found", 404)
-    if (typeof project !== "object" || project === null || !("id" in project) || typeof project.id !== "string")
-      throw new ProjectResourceError("project_resource_delete_unknown", 503, true)
+    const project = { id: await currentResourceProject(projects, scope, projectRef, signal) }
     if (config.storage === undefined) throw new ProjectResourceError("storage_projection_not_configured", 503, true)
     const result = await clientFactory(config.storage, { ...scope, projectId: project.id, requestId: id }).delete(assetId, key, signal)
     signal.throwIfAborted()
+    if ((await currentResourceProject(projects, scope, project.id, signal)) !== project.id) throw new ProjectResourceError("project_not_found", 404)
     if (!response.destroyed) send(response, 200, ok(result, id))
   } catch (error) {
     if (response.destroyed || response.writableEnded) return true
@@ -326,10 +332,8 @@ export async function handleProjectResourceListRequest(
     }
     if (request.headers["transfer-encoding"] !== undefined || (request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0"))
       throw new ProjectResourceError("invalid_project_resource_page", 400)
-    const project = await projects.find({ tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }, projectRef)
-    if (project === null) throw new ProjectResourceError("project_not_found", 404)
-    if (typeof project !== "object" || project === null || !("id" in project) || typeof project.id !== "string")
-      throw new ProjectResourceError("project_resources_unavailable", 503, true)
+    const scope = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }
+    const project = { id: await currentResourceProject(projects, scope, projectRef, signal) }
     if (config.storage === undefined) throw new ProjectResourceError("storage_projection_not_configured", 503, true)
     const input = projectResourceListInput(url.searchParams)
     const page = await clientFactory(config.storage, {
@@ -339,6 +343,7 @@ export async function handleProjectResourceListRequest(
       requestId: id,
     }).listAssets(input, signal)
     signal.throwIfAborted()
+    if ((await currentResourceProject(projects, scope, project.id, signal)) !== project.id) throw new ProjectResourceError("project_not_found", 404)
     if (!response.destroyed) send(response, 200, ok(page, id))
   } catch (error) {
     if (response.destroyed || response.writableEnded) return true
@@ -431,6 +436,7 @@ export async function handleProjectRenameRequest(
     )
     if (response.destroyed || response.writableEnded) return true
     if (result.kind === "renamed") send(response, 200, result.receipt)
+    else if (result.kind === "forbidden") fail(403, "project_edit_forbidden", "Project cannot be edited")
     else if (result.kind === "not_found") fail(404, "project_not_found", "Project was not found")
     else fail(409, "idempotency_conflict", "Project rename key was used for different input")
   } catch {

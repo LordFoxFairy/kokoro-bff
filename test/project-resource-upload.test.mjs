@@ -230,11 +230,17 @@ test("Projects feature handler owns resource upload with persistent receipt reco
 test("durable upload checkpoint allows reconstructed service to recover completed upload without a second asset", async () => {
   const { uploadProjectResource } = await moduleAt("application/project-resource-upload")
   const f = fixture()
-  assert.deepEqual(await uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000)), f.asset)
+  assert.deepEqual(await uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000), async () => {}), f.asset)
   f.calls.length = 0
-  assert.deepEqual(await uploadProjectResource({ ...f.context, requestId: "request-2" }, f.input, f.store, f.storage, AbortSignal.timeout(5000)), f.asset)
+  assert.deepEqual(
+    await uploadProjectResource({ ...f.context, requestId: "request-2" }, f.input, f.store, f.storage, AbortSignal.timeout(5000), async () => {}),
+    f.asset,
+  )
   assert.deepEqual(f.calls, ["status", "asset"])
-  await assert.rejects(uploadProjectResource(f.context, { ...f.input, filename: "changed.txt" }, f.store, f.storage, AbortSignal.timeout(5000)), /conflict/)
+  await assert.rejects(
+    uploadProjectResource(f.context, { ...f.input, filename: "changed.txt" }, f.store, f.storage, AbortSignal.timeout(5000), async () => {}),
+    /conflict/,
+  )
 })
 
 test("unknown Complete result retains checkpoint and never aborts an already-completed asset", async () => {
@@ -245,10 +251,10 @@ test("unknown Complete result retains checkpoint and never aborts an already-com
     await complete()
     throw new Error("response lost")
   }
-  await assert.rejects(uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000)))
+  await assert.rejects(uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000), async () => {}))
   assert.equal(f.calls.includes("abort"), false)
   f.calls.length = 0
-  assert.deepEqual(await uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000)), f.asset)
+  assert.deepEqual(await uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000), async () => {}), f.asset)
   assert.deepEqual(f.calls, ["status", "asset"])
 })
 
@@ -258,13 +264,13 @@ test("PUT failure attempts Abort and checkpoint write failure sends no object by
   f.storage.put = async () => {
     throw new Error("PUT unavailable")
   }
-  await assert.rejects(uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000)))
+  await assert.rejects(uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000), async () => {}))
   assert.equal(f.calls.includes("abort"), true)
   const g = fixture()
   g.store.putReceipt = async () => {
     throw new Error("DB unavailable")
   }
-  await assert.rejects(uploadProjectResource(g.context, g.input, g.store, g.storage, AbortSignal.timeout(5000)))
+  await assert.rejects(uploadProjectResource(g.context, g.input, g.store, g.storage, AbortSignal.timeout(5000), async () => {}))
   assert.equal(g.calls.includes("put"), false)
 })
 
@@ -358,12 +364,12 @@ test("outer receipt release/reclaim cannot erase a terminal upload checkpoint", 
     context = { identity: { namespace: "tenant-1", userId: "subject-1" }, requestId: "request-1" },
     memory = new Map()
   const outer = await mutationTicket("public-key", "POST", "/projects/project-1/resources", context, "fingerprint", memory, f.store)
-  await uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000))
+  await uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000), async () => {})
   await commitReceipt(memory, outer.ticket, 503, {})
   const reclaimed = await mutationTicket("public-key", "POST", "/projects/project-1/resources", context, "fingerprint", memory, f.store)
   assert.ok(reclaimed.ticket)
   f.calls.length = 0
-  await uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000))
+  await uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000), async () => {})
   assert.deepEqual(f.calls, ["status", "asset"])
   const checkpoint = [...f.receipts.entries()].find(([key]) => key.includes("project-resource-upload:v1"))
   assert.equal(checkpoint[1].status, 200)
@@ -387,7 +393,8 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
   const { Test } = await import("@nestjs/testing")
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { BFF_CONFIG, BFF_DATABASE, PROJECT_SCOPE_RELEASE_DISPATCHER, PROJECT_LOOKUP, SESSION_ADMISSION } = await import("../dist/common/tokens.js")
+  const { BFF_CONFIG, BFF_DATABASE, PROJECT_SCOPE_RELEASE_DISPATCHER, PROJECT_LOOKUP, PROJECT_READ_LOOKUP, PROJECT_EDIT_LOOKUP, SESSION_ADMISSION } =
+    await import("../dist/common/tokens.js")
   const { BFF_NEST_APPLICATION_OPTIONS } = await import("../dist/main.js")
   const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
   const { PostgresIdempotencyRepository } = await import("../dist/infrastructure/postgres/idempotency-repository.js")
@@ -519,6 +526,10 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
       })
       .overrideProvider(PROJECT_LOOKUP)
       .useValue(projectService)
+      .overrideProvider(PROJECT_READ_LOOKUP)
+      .useValue(projectService)
+      .overrideProvider(PROJECT_EDIT_LOOKUP)
+      .useValue(projectService)
       .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
       .useValue(null)
       .overrideProvider(SESSION_ADMISSION)
@@ -616,4 +627,37 @@ test("both Complete and GetAsset require CLEAN; infection and pending scans have
     await assert.rejects(client.completeUpload("complete", "a".repeat(64), "upload-1", "version-A", f.input, AbortSignal.timeout(5000)), match)
     await assert.rejects(client.getAsset("upload-1", "asset-1", f.input, AbortSignal.timeout(5000)), match)
   }
+})
+
+test("upload stops new writes after editor grant withdrawal but preserves a dispatched Complete outcome", async () => {
+  const { uploadProjectResource } = await import("../src/application/project-resource-upload.ts")
+  const { ProjectResourceError } = await import("../src/application/project-resource.error.ts")
+  const f = fixture()
+  let editable = true
+  const put = f.storage.put
+  f.storage.put = async (...args) => {
+    const version = await put(...args)
+    editable = false
+    return version
+  }
+  const authorized = async () => {
+    if (!editable) throw new ProjectResourceError("project_edit_forbidden", 403)
+  }
+  await assert.rejects(uploadProjectResource(f.context, f.input, f.store, f.storage, AbortSignal.timeout(5000), authorized), (e) => e.status === 403)
+  assert.ok(!f.calls.includes("complete"))
+  assert.ok(!f.calls.includes("asset"))
+  const g = fixture()
+  editable = true
+  const complete = g.storage.completeUpload
+  g.storage.completeUpload = async (...args) => {
+    const result = await complete(...args)
+    editable = false
+    return result
+  }
+  await assert.rejects(uploadProjectResource(g.context, g.input, g.store, g.storage, AbortSignal.timeout(5000), authorized), (e) => e.status === 403)
+  assert.ok(g.calls.includes("complete"))
+  assert.ok(!g.calls.includes("abort"), "a dispatched Complete is never undone or reported as uncommitted")
+  editable = true
+  assert.deepEqual(await uploadProjectResource(g.context, g.input, g.store, g.storage, AbortSignal.timeout(5000), authorized), g.asset)
+  assert.equal(g.calls.filter((call) => call === "complete").length, 1, "original actor recovery reads the committed owner result")
 })

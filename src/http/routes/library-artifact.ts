@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { ArtifactLibraryRepository } from "../../application/account/artifact-library-repository.js"
+import type { ArtifactDetailCandidate, ArtifactLibraryRepository } from "../../application/account/artifact-library-repository.js"
 import { ProjectResourceError } from "../../application/project-resource.error.js"
 import { FinalArtifactClient, type FinalArtifact, type FinalArtifactContext } from "../../infrastructure/clients/storage/final-artifact.js"
 import { failure, ok } from "../../contracts/index.js"
@@ -49,22 +49,52 @@ export async function readPrivateArtifact(
   artifactId: string,
   signal: AbortSignal,
   clientFactory: FinalArtifactFactory,
-): Promise<{ item: FinalArtifact; client: Pick<FinalArtifactClient, "get" | "downloadReference">; projectRef: string | null | undefined; favorited: boolean }> {
+): Promise<{
+  association: ArtifactDetailCandidate
+  item: FinalArtifact
+  client: Pick<FinalArtifactClient, "get" | "downloadReference">
+  projectRef: string | null | undefined
+  favorited: boolean
+}> {
   if (repository === undefined || config.storage === undefined) throw new ProjectResourceError("artifact_library_unavailable", 503, true)
   const tenantId = context.identity.namespace
   const subjectId = context.identity.userId
   let association
   try {
-    association = await repository.findCandidate(tenantId, subjectId, conversationId, artifactId)
+    association = await repository.findCandidate(tenantId, subjectId, conversationId, artifactId, { signal, deadlineAt: performance.now() + 10000 })
   } catch {
     throw new ProjectResourceError("business_store_unavailable", 503, true)
   }
   if (association === null) throw new ProjectResourceError("library_artifact_not_found", 404)
   signal.throwIfAborted()
   const client = clientFactory(config.storage, { tenantId, subjectId, conversationId, requestId: context.requestId })
-  const { projectRef, favorited, ...artifact } = association
+  const { projectRef: _projectRef, favorited: _favorited, projectAccess: _projectAccess, ...artifact } = association
   const item = await client.get(artifact, signal)
-  return { item, client, projectRef, favorited }
+  const current = await assertCurrentArtifact(context, repository, association, signal)
+  return { association: current, item, client, projectRef: current.projectRef, favorited: current.favorited }
+}
+
+/** The association is rechecked after owner I/O/spooling, never by impersonating its Run actor. */
+export async function assertCurrentArtifact(
+  context: RequestContext,
+  repository: ArtifactLibraryRepository,
+  original: ArtifactDetailCandidate,
+  signal: AbortSignal,
+): Promise<ArtifactDetailCandidate> {
+  signal.throwIfAborted()
+  const current = await repository.findCandidate(context.identity.namespace, context.identity.userId, original.conversationId, original.artifactId, {
+    signal,
+    deadlineAt: performance.now() + 10000,
+  })
+  signal.throwIfAborted()
+  if (
+    !current ||
+    ["conversationId", "artifactId", "runId", "sourceAssetId", "sourceArtifactKind", "sourceContentSha256", "deliveredAt", "projectRef"].some(
+      (key) => current[key as keyof ArtifactDetailCandidate] !== original[key as keyof ArtifactDetailCandidate],
+    )
+  )
+    throw new ProjectResourceError("library_artifact_not_found", 404)
+  return current
 }
 
 export async function libraryArtifactRoute(
@@ -92,8 +122,17 @@ export async function libraryArtifactRoute(
       validateArtifactTarget(request, conversationId, artifactId)
       target = await favoriteTarget(request, signal)
     } else validateArtifactSelector(request, conversationId, artifactId)
-    const { item, projectRef, favorited } = await readPrivateArtifact(config, context, repository, conversationId, artifactId, signal, clientFactory)
+    const { association, item, projectRef, favorited } = await readPrivateArtifact(
+      config,
+      context,
+      repository,
+      conversationId,
+      artifactId,
+      signal,
+      clientFactory,
+    )
     if (target !== undefined) {
+      if (association.projectAccess) throw new ProjectResourceError("library_artifact_not_found", 404)
       signal.throwIfAborted()
       if (repository === undefined) throw new ProjectResourceError("artifact_library_unavailable", 503, true)
       let updated
@@ -117,8 +156,19 @@ export async function libraryArtifactRoute(
       if (!response.destroyed) send(response, 200, ok({ conversation_id: conversationId, artifact_id: artifactId, favorited: updated }, context.requestId))
       return
     }
-    if (!response.destroyed)
-      send(response, 200, ok({ ...item, favorited, ...(projectRef === undefined ? {} : { project_ref: projectRef }) }, context.requestId))
+    if (!response.destroyed) {
+      const { asset_id: _assetId, ...sharedItem } = item
+      send(
+        response,
+        200,
+        ok(
+          association.projectAccess
+            ? { ...sharedItem, project_ref: association.projectAccess.project_id, project_access: association.projectAccess }
+            : { ...item, favorited, ...(projectRef === undefined ? {} : { project_ref: projectRef }) },
+          context.requestId,
+        ),
+      )
+    }
   } catch (error) {
     if (response.destroyed) return
     const known = error instanceof ProjectResourceError ? error : new ProjectResourceError("storage_unavailable", 503, true)

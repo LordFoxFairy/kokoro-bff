@@ -16,7 +16,7 @@ export class SchedulerTaskStateReader implements ScheduledTaskStateReader {
   public async read(task: ScheduledTaskFact, scope: ScheduledTaskOwnerScope, requestId: string, signal: AbortSignal): Promise<ScheduledTaskCurrentState> {
     signal.throwIfAborted()
     if (this.client === null || this.targetUrl === null) throw Error("scheduler_current_unavailable")
-    const expected = buildSchedulerSchedule(task, scope.tenantId, scope.subjectId, this.targetUrl)
+    const expected = buildSchedulerSchedule(task, scope.tenantId, task.ownerId, this.targetUrl)
     const attempt = await this.client.current(expected.name, { tenantId: scope.tenantId, requestId }, signal)
     signal.throwIfAborted()
     const current = decodeSchedulerCurrent(attempt)

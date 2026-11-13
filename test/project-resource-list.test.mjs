@@ -1,6 +1,14 @@
 import "reflect-metadata"
 import { Test } from "@nestjs/testing"
-import { BFF_CONFIG, BFF_DATABASE, PROJECT_SCOPE_RELEASE_DISPATCHER, PROJECT_LOOKUP, SESSION_ADMISSION } from "../dist/common/tokens.js"
+import {
+  BFF_CONFIG,
+  BFF_DATABASE,
+  PROJECT_SCOPE_RELEASE_DISPATCHER,
+  PROJECT_LOOKUP,
+  PROJECT_READ_LOOKUP,
+  PROJECT_EDIT_LOOKUP,
+  SESSION_ADMISSION,
+} from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
 import { ProjectsModule } from "../dist/modules/projects/projects.module.js"
 import "./project-resource-access.test.mjs"
@@ -168,6 +176,7 @@ test("GET route checks current owner before Storage and binds every page to cano
   const { handleProjectResourceListRequest } = await import("../dist/http/routes/project-native.js")
   const { EventEmitter } = await import("node:events")
   let calls = 0
+  let visible = true
   const scopes = []
   const projects = {
     async list() {
@@ -175,7 +184,7 @@ test("GET route checks current owner before Storage and binds every page to cano
     },
     async find(scope, ref) {
       scopes.push(scope)
-      return scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
+      return scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && visible && ["slug", "project-1"].includes(ref) ? { id: "project-1" } : null
     },
     async revisions() {
       return []
@@ -287,6 +296,14 @@ test("GET route checks current owner before Storage and binds every page to cano
   assert.equal(res.status, 503)
   assert.equal(res.body.data, undefined)
   assert.ok(!JSON.stringify(res.body).includes("private"))
+  res = await invoke(undefined, "project-1", "", () => ({
+    async listAssets() {
+      visible = false
+      return { items: [{ asset_id: "withheld" }], next_cursor: null }
+    },
+  }))
+  assert.equal(res.status, 404, "grant retirement during owner I/O withholds the whole resource page")
+  assert.equal(res.body.data, undefined)
   assert.ok(scopes.length >= 6)
 })
 
@@ -353,7 +370,7 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
     })
     const projectService = {
       async find(scope, ref) {
-        return scope.subjectId === "subject-1" && ref === "slug" ? { id: "project-1" } : null
+        return scope.subjectId === "subject-1" && ["slug", "project-1"].includes(ref) ? { id: "project-1" } : null
       },
     }
     const admission = {
@@ -371,6 +388,10 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
         redis: Object.freeze({}),
       })
       .overrideProvider(PROJECT_LOOKUP)
+      .useValue(projectService)
+      .overrideProvider(PROJECT_READ_LOOKUP)
+      .useValue(projectService)
+      .overrideProvider(PROJECT_EDIT_LOOKUP)
       .useValue(projectService)
       .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
       .useValue(null)

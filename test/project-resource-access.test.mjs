@@ -5,6 +5,8 @@ import {
   BFF_DATABASE,
   PROJECT_SCOPE_RELEASE_DISPATCHER,
   PROJECT_LOOKUP,
+  PROJECT_READ_LOOKUP,
+  PROJECT_EDIT_LOOKUP,
   SESSION_ADMISSION,
 } from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
@@ -463,7 +465,7 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
       verify: async ({ cookie }) => {
         const token = cookie.slice("kokoro-issuer.session_token=".length)
         admissions++
-        return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "other" : "subject-1" } }
+        return { ok: true, identity: { namespace: "tenant-1", userId: token === "other" ? "other" : token === "viewer" ? "viewer" : "subject-1" } }
       },
     }
     const module = await Test.createTestingModule({ imports: [ProjectsModule] })
@@ -475,6 +477,10 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
         redis: Object.freeze({}),
       })
       .overrideProvider(PROJECT_LOOKUP)
+      .useValue(store.projectService)
+      .overrideProvider(PROJECT_READ_LOOKUP)
+      .useValue({ find: async (scope, ref) => (scope.subjectId === "viewer" && ref === "project-1" ? { id: ref } : store.projectService.find(scope, ref)) })
+      .overrideProvider(PROJECT_EDIT_LOOKUP)
       .useValue(store.projectService)
       .overrideProvider(PROJECT_SCOPE_RELEASE_DISPATCHER)
       .useValue(null)
@@ -504,6 +510,18 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
     result = await fetch(bff + path, { headers: { ...headers, cookie: "kokoro-issuer.session_token=other", origin: "https://web.example.test" } })
     assert.equal(result.status, 404)
     assert.equal(calls.length, before)
+    const viewerHeaders = { ...headers, cookie: "kokoro-issuer.session_token=viewer" }
+    result = await fetch(bff + "/v1/projects/project-1/resources/asset-1", { headers: viewerHeaders })
+    assert.equal(result.status, 200, "an admitted viewer reads current Project resources as self")
+    await result.json()
+    const beforeViewerDelete = calls.length
+    result = await fetch(bff + "/v1/projects/project-1/resources/asset-1", {
+      method: "DELETE",
+      headers: { ...viewerHeaders, "idempotency-key": "viewer-denied" },
+    })
+    assert.equal(result.status, 403)
+    assert.equal((await result.json()).error.code, "project_edit_forbidden")
+    assert.equal(calls.length, beforeViewerDelete, "viewer cannot dispatch a Storage deletion")
     const remove = { method: "DELETE", headers: { ...headers, "idempotency-key": "original-key" } }
     result = await fetch(bff + path, remove)
     assert.equal(result.status, 503)
@@ -511,10 +529,10 @@ test("actual BFF and Connect HTTP registration freshly admits Project item reads
     result = await fetch(bff + path, remove)
     assert.equal(result.status, 200)
     assert.equal((await result.json()).data.replayed, true)
-    assert.equal(admissions, 5)
+    assert.equal(admissions, 7)
     assert.ok(calls.every(([, project]) => project === "project-1"))
     assert.deepEqual(
-      calls.slice(-2).map(([op]) => op),
+      calls.filter(([op]) => op === "delete").map(([op]) => op),
       ["delete", "delete"],
     )
   } finally {
@@ -542,4 +560,29 @@ test("ordinary Project Asset origin is the same closed UPLOADED/GENERATED set as
     const f = await fixture({ asset: (_request, _context, asset) => ({ ...asset, origin }) })
     assert.equal((await f.client.get("asset-1", AbortSignal.timeout(5000))).asset_id, "asset-1")
   }
+})
+
+test("Project viewer metadata is withheld when its grant retires while Storage is replying", async () => {
+  const { projectResourceReadRoute } = await import("../src/http/routes/project-resource-read.ts")
+  let visible = true
+  const res = response()
+  await projectResourceReadRoute(
+    request("GET", "/v1/projects/project-1/resources/asset-1"),
+    res,
+    { storage },
+    { requestId: "request-1", identity: { namespace: "tenant-1", userId: "viewer" } },
+    "project-1",
+    "asset-1",
+    false,
+    { find: async (scope, id) => (visible && scope.subjectId === "viewer" && id === "project-1" ? { id } : null) },
+    (_config, actor) => ({
+      get: async () => {
+        assert.equal(actor.subjectId, "viewer", "a shared read never borrows the creator identity")
+        visible = false
+        return { asset_id: "asset-1", filename: "withheld.txt" }
+      },
+    }),
+  )
+  assert.equal(res.statusCode, 404)
+  assert.ok(!String(res.body).includes("withheld.txt"))
 })

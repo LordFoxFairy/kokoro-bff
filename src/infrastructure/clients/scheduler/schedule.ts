@@ -28,7 +28,7 @@ export function schedulerScheduleName(taskId: string): string {
   return `kokoro.scheduled.${taskId.replace(/[^a-zA-Z0-9._-]/gu, "-")}`.toLowerCase().slice(0, 64)
 }
 
-function trigger(task: ScheduledTaskFact): { schedule: string } | { run_at: string } {
+function trigger(task: Omit<ScheduledTaskFact, "ownerId" | "executionActorId">): { schedule: string } | { run_at: string } {
   const match = /^(\d{2}):(\d{2})$/u.exec(task.time)
   if (match === null) throw new Error("SCHEDULE_LOCAL_TIME_INVALID")
   const hour = Number(match[1]),
@@ -41,7 +41,12 @@ function trigger(task: ScheduledTaskFact): { schedule: string } | { run_at: stri
   throw new Error("SCHEDULE_CALENDAR_INVALID")
 }
 
-export function buildSchedulerSchedule(task: ScheduledTaskFact, tenantId: string, ownerId: string, targetUrl: string): SchedulerScheduleInput {
+export function buildSchedulerSchedule(
+  task: Omit<ScheduledTaskFact, "ownerId" | "executionActorId">,
+  tenantId: string,
+  ownerId: string,
+  targetUrl: string,
+): SchedulerScheduleInput {
   return {
     name: schedulerScheduleName(task.id),
     ...trigger(task),

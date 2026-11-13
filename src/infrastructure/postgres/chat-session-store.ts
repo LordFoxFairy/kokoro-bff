@@ -1,6 +1,9 @@
+import { projectMessageRegeneration } from "./message-regeneration.js"
+import type { MessageReadLifetime } from "../../application/chat/types.js"
+import { projectReadPredicate } from "./project-access.js"
 import type { ShareMetadataQuery, ShareMetadataRead } from "../../application/chat/types.js"
 import { readChatComposerSelection } from "./chat-composer-selection.js"
-import { readOwnedConversationSnapshotRow } from "./chat-conversation-lookup.js"
+import { readCurrentConversation } from "./chat-conversation-access.js"
 import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
 import type { MessagePartsPage } from "../../contracts/chat.js"
@@ -29,7 +32,7 @@ import { readAgUiSnapshotState } from "./agui-run-state-read.js"
 type ArtifactDeliveryRow = {
   conversation_id: string
   artifact_id: string
-  source_asset_id: string
+  source_asset_id: string | null
   source_artifact_kind: string
   source_title: string
   source_mime: string
@@ -45,7 +48,7 @@ function artifactDeliveryFromRow(row: ArtifactDeliveryRow): ChatArtifactDelivery
   return {
     conversationId: row.conversation_id,
     artifactId: row.artifact_id,
-    assetId: row.source_asset_id,
+    ...(row.source_asset_id === null ? {} : { assetId: row.source_asset_id }),
     artifactKind: row.source_artifact_kind,
     title: row.source_title,
     mime: row.source_mime,
@@ -65,32 +68,37 @@ export class PostgresChatSessionStore {
     filter: ConversationCollectionFilter,
     limit: number,
     cursor: string | null,
+    lifetime?: MessageReadLifetime,
   ): Promise<ConversationPage> {
     const position = decodeCursor(cursor, "conv")
     if (position !== null && !("timestamp" in position)) throw new Error("CHAT_CURSOR_INVALID")
     const collectionPredicate =
-      filter.kind === "all" ? "$3::text IS NULL" : filter.kind === "direct" ? "$3::text IS NULL AND project_ref IS NULL" : "project_ref = $3::text"
+      filter.kind === "all"
+        ? "$3::text IS NULL"
+        : filter.kind === "direct"
+          ? "$3::text IS NULL AND project_ref IS NULL"
+          : "EXISTS(SELECT 1 FROM bff_project WHERE bff_project.tenant_id=bff_conversation.tenant_id AND bff_project.project_id=$3 AND (bff_project.project_id=bff_conversation.project_ref OR (bff_project.owner_id=bff_conversation.owner_id AND bff_project.slug=bff_conversation.project_ref)))"
     const projectRef = filter.kind === "project" ? filter.projectRef : null
-    const result = await this.database.pool.query<ConversationRow>(
-      `SELECT ${conversationColumns}
+    const result = await withMessageReadClient(this.database.pool, messageReadLifetime(lifetime), (client) =>
+      client.query<ConversationRow>(
+        `SELECT ${conversationColumns}
          FROM bff_conversation
         WHERE tenant_id = $1
-          AND owner_id = $2
-          AND status = 'active' AND archived_at IS NULL
+          AND status = 'active' AND (owner_id<>$2 OR archived_at IS NULL)
           AND (
-            project_ref IS NULL
+            (project_ref IS NULL AND owner_id=$2)
             OR EXISTS (
-              SELECT 1 FROM bff_project AS project
-               WHERE project.deleted_at IS NULL AND project.tenant_id = bff_conversation.tenant_id
-                 AND project.owner_id = bff_conversation.owner_id
-                 AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
+              SELECT 1 FROM bff_project WHERE bff_project.deleted_at IS NULL AND bff_project.tenant_id=bff_conversation.tenant_id
+                AND (bff_project.project_id=bff_conversation.project_ref OR (bff_project.owner_id=bff_conversation.owner_id AND bff_project.slug=bff_conversation.project_ref))
+                AND ${projectReadPredicate}
             )
           )
           AND (${collectionPredicate})
           AND ($4::timestamptz IS NULL OR updated_at < $4 OR (updated_at = $4 AND conversation_id > $5))
         ORDER BY updated_at DESC, conversation_id ASC
         LIMIT $6`,
-      [tenantId, subjectId, projectRef ?? null, position?.timestamp ?? null, position?.id ?? null, limit + 1],
+        [tenantId, subjectId, projectRef ?? null, position?.timestamp ?? null, position?.id ?? null, limit + 1],
+      ),
     )
     const rows = result.rows.slice(0, limit)
     const last = result.rows.length > limit ? rows.at(-1) : undefined
@@ -111,49 +119,72 @@ export class PostgresChatSessionStore {
     const scope = context.scope
     if (scope === "direct" && projectRef !== undefined) throw new Error("MESSAGE_PARTS_SCOPE_INVALID")
     const read = async (client: PoolClient): Promise<ChatSnapshot | null> => {
-      const row = await readOwnedConversationSnapshotRow(client, tenantId, subjectId, conversationId, projectRef, scope === "direct")
-      if (row === undefined) {
-        return null
-      }
+      const readable = await readCurrentConversation(client, tenantId, subjectId, conversationId, projectRef, scope === "direct")
+      if (!readable) return null
+      context?.onProjectRead?.(readable.projectAccess)
+      const row = readable.conversation
+      const projectView = readable.projectAccess !== null
       const composerSelection = await readChatComposerSelection(client, tenantId, subjectId, conversationId)
       const messages = await client.query<PrivateMessageRow>(
-        `SELECT latest.origin,latest.regenerated_from_message_id,latest.regeneration_user_message_id,latest.message_id, latest.tenant_id, latest.conversation_id, latest.run_id,
-                latest.role, latest.selected_skill_source_refs, latest.content, latest.parts_format_version, latest.parts_public_sequence, latest.final_segment_id, latest.parts_count, latest.status, latest.agent_failure_code, latest.agent_failure_retryable, latest.message_seq,
-                latest.created_at, latest.updated_at
-           FROM (
-             SELECT origin,regenerated_from_message_id,regeneration_user_message_id,message_id, tenant_id, conversation_id, run_id, role, selected_skill_source_refs,
-                    CASE WHEN ordered_parts IS NULL THEN content ELSE NULL END AS content, parts_format_version, parts_public_sequence, final_segment_id,
-                    CASE WHEN ordered_parts IS NOT NULL THEN jsonb_array_length(ordered_parts) END AS parts_count, status, agent_failure_code, agent_failure_retryable,
-                    message_seq, created_at, updated_at
-               FROM bff_message
-              WHERE tenant_id = $1 AND conversation_id = $2 AND origin <> 'regeneration_input'
-              ORDER BY message_seq DESC, message_id DESC
-              LIMIT 100
-           ) AS latest
-          ORDER BY latest.message_seq ASC, latest.message_id ASC`,
-        [tenantId, conversationId],
+        `SELECT latest.origin,latest.regenerated_from_message_id,latest.regeneration_user_message_id,latest.message_id,latest.tenant_id,latest.conversation_id,latest.run_id,
+          latest.role,latest.selected_skill_source_refs,latest.content,latest.parts_format_version,latest.parts_public_sequence,latest.final_segment_id,latest.parts_count,
+          latest.status,latest.agent_failure_code,latest.agent_failure_retryable,latest.message_seq,latest.created_at,latest.updated_at,latest.project_shared
+         FROM (
+           SELECT message.origin,message.regenerated_from_message_id,message.regeneration_user_message_id,message.message_id,message.tenant_id,message.conversation_id,message.run_id,
+             message.role,CASE WHEN $3::boolean AND NOT ($6::boolean AND COALESCE(dispatch.subject_id=$4 AND dispatch.actor_id=$4,$5::boolean))
+               THEN '[]'::jsonb ELSE message.selected_skill_source_refs END AS selected_skill_source_refs,
+             CASE WHEN message.ordered_parts IS NULL THEN message.content END AS content,message.parts_format_version,message.parts_public_sequence,message.final_segment_id,
+             CASE WHEN message.ordered_parts IS NOT NULL THEN CASE WHEN $3::boolean AND NOT ($6::boolean AND COALESCE(dispatch.subject_id=$4 AND dispatch.actor_id=$4,$5::boolean))
+               THEN (SELECT count(*)::int FROM jsonb_array_elements(message.ordered_parts) part WHERE part->>'kind'='text' AND part->>'segment_id'=message.final_segment_id AND part->'completed'='true'::jsonb)
+               ELSE jsonb_array_length(message.ordered_parts) END END AS parts_count,
+             message.status,message.agent_failure_code,message.agent_failure_retryable,message.message_seq,message.created_at,message.updated_at,
+             ($3::boolean AND NOT ($6::boolean AND COALESCE(dispatch.subject_id=$4 AND dispatch.actor_id=$4,$5::boolean))) AS project_shared
+           FROM bff_message message LEFT JOIN bff_agent_dispatch_outbox dispatch ON dispatch.tenant_id=message.tenant_id AND dispatch.conversation_id=message.conversation_id
+             AND dispatch.run_id=message.run_id AND ((message.role='user' AND dispatch.user_message_id=message.message_id) OR (message.role='assistant' AND dispatch.assistant_message_id=message.message_id))
+           WHERE message.tenant_id=$1 AND message.conversation_id=$2 AND message.origin<>'regeneration_input'
+             AND (NOT $3::boolean OR ($6::boolean AND COALESCE(dispatch.subject_id=$4 AND dispatch.actor_id=$4,$5::boolean)) OR message.role='user'
+               OR (message.status='completed' AND message.final_segment_id IS NOT NULL AND message.parts_format_version=1))
+           ORDER BY message.message_seq DESC,message.message_id DESC LIMIT 100
+         ) latest ORDER BY latest.message_seq ASC,latest.message_id ASC`,
+        [tenantId, conversationId, projectView, subjectId, row.owner_id === subjectId, readable.projectAccess?.capabilities.includes("edit") ?? true],
       )
       const deliveries = await client.query<ArtifactDeliveryRow>(
-        `SELECT conversation_id, artifact_id, source_asset_id, source_artifact_kind,
-                source_title, source_mime, source_size_bytes, source_display_path, run_id, delivered_at
-           FROM bff_conversation_artifact
-          WHERE tenant_id = $1 AND conversation_id = $2
-          ORDER BY delivered_at DESC, artifact_id ASC
-          LIMIT 101`,
-        [tenantId, conversationId],
+        `SELECT artifact.conversation_id,artifact.artifact_id,
+           CASE WHEN $3::boolean AND NOT COALESCE(dispatch.subject_id=$4 AND dispatch.actor_id=$4,$5::boolean) THEN NULL ELSE artifact.source_asset_id END AS source_asset_id,
+           artifact.source_artifact_kind,artifact.source_title,artifact.source_mime,artifact.source_size_bytes,
+           CASE WHEN $3::boolean AND NOT COALESCE(dispatch.subject_id=$4 AND dispatch.actor_id=$4,$5::boolean) THEN NULL ELSE artifact.source_display_path END AS source_display_path,
+           artifact.run_id,artifact.delivered_at
+         FROM bff_conversation_artifact artifact LEFT JOIN bff_agent_dispatch_outbox dispatch ON dispatch.tenant_id=artifact.tenant_id
+           AND dispatch.conversation_id=artifact.conversation_id AND dispatch.run_id=artifact.run_id
+         WHERE artifact.tenant_id=$1 AND artifact.conversation_id=$2 AND (NOT $3::boolean OR artifact.source_owner='kokoro-agent')
+         ORDER BY artifact.delivered_at DESC,artifact.artifact_id ASC LIMIT 101`,
+        [tenantId, conversationId, projectView, subjectId, row.owner_id === subjectId],
       )
-      const { watermark, processPage, executionHead } = await readAgUiSnapshotState(client, tenantId, subjectId, conversationId, true)
+      const { watermark, processPage, executionHead } = await readAgUiSnapshotState(
+        client,
+        tenantId,
+        subjectId,
+        conversationId,
+        true,
+        projectView,
+        readable.projectAccess?.capabilities.includes("edit") ?? true,
+      )
+      const visibleMessages = await privateMessagesFromRows(
+        client,
+        messages.rows,
+        { tenantId, subjectId, conversationId, projectRef: row.project_ref, requestedProjectRef: projectRef ?? null, scope },
+        watermark,
+        processPage?.run_id ?? null,
+        [...messages.rows].reverse().find((message) => message.role === "assistant")?.message_id ?? null,
+      )
+      const messagesWithControls = projectView
+        ? await projectMessageRegeneration(client, { tenantId, subjectId, conversationId }, visibleMessages)
+        : visibleMessages
       return {
+        ...(readable.projectAccess === null ? {} : { projectAccess: readable.projectAccess }),
         conversation: conversationFromRow(row),
         ...(composerSelection === undefined ? {} : { composerSelection }),
-        messages: await privateMessagesFromRows(
-          client,
-          messages.rows,
-          { tenantId, subjectId, conversationId, projectRef: row.project_ref, requestedProjectRef: projectRef ?? null, scope },
-          watermark,
-          processPage?.run_id ?? null,
-          [...messages.rows].reverse().find((message) => message.role === "assistant")?.message_id ?? null,
-        ),
+        messages: messagesWithControls,
         deliveries: deliveries.rows.slice(0, 100).map(artifactDeliveryFromRow),
         deliveriesHasMore: deliveries.rows.length > 100,
         eventWatermark: watermark,
@@ -189,50 +220,37 @@ export class PostgresChatSessionStore {
     const position = decodeCursor(cursor, "msg")
     if (position !== null && !("sequence" in position)) throw new Error("CHAT_CURSOR_INVALID")
     return withMessageReadClient(this.database.pool, messageReadLifetime(context), async (client) => {
-      const exists = await client.query<{ conversation_id: string; project_ref: string | null }>(
-        `SELECT conversation_id,project_ref FROM bff_conversation
-        WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
-          AND (
-            project_ref IS NULL
-            OR EXISTS (
-              SELECT 1 FROM bff_project AS project
-               WHERE project.deleted_at IS NULL AND project.tenant_id = bff_conversation.tenant_id
-                 AND project.owner_id = bff_conversation.owner_id
-                 AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
-            )
-          )
-          AND ($4::text IS NULL OR project_ref = $4) AND ($5::boolean=FALSE OR project_ref IS NULL) LIMIT 1`,
-        [tenantId, subjectId, conversationId, projectRef ?? null, context?.scope === "direct"],
-      )
-      if (exists.rows[0] === undefined) return null
+      const readable = await readCurrentConversation(client, tenantId, subjectId, conversationId, projectRef, context?.scope === "direct")
+      if (!readable) return null
+      context?.onProjectRead?.(readable.projectAccess)
       const result = await client.query<PrivateMessageRow>(
-        `SELECT message.origin,message.regenerated_from_message_id,message.regeneration_user_message_id,message.message_id, message.tenant_id, message.conversation_id, message.run_id,
-              message.role, message.selected_skill_source_refs, CASE WHEN message.ordered_parts IS NULL THEN message.content ELSE NULL END AS content,
-              message.parts_format_version,message.parts_public_sequence,message.final_segment_id,CASE WHEN message.ordered_parts IS NOT NULL THEN jsonb_array_length(message.ordered_parts) END AS parts_count,message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
-              message.created_at, message.updated_at
-         FROM bff_message AS message
-        WHERE message.tenant_id = $1 AND message.conversation_id = $3 AND message.origin <> 'regeneration_input'
-          AND EXISTS (
-            SELECT 1 FROM bff_conversation AS conversation
-             WHERE conversation.tenant_id = message.tenant_id
-               AND conversation.conversation_id = message.conversation_id
-               AND conversation.owner_id = $2
-               AND conversation.status = 'active'
-               AND (
-                 conversation.project_ref IS NULL
-                 OR EXISTS (
-                   SELECT 1 FROM bff_project AS project
-                    WHERE project.deleted_at IS NULL AND project.tenant_id = conversation.tenant_id
-                      AND project.owner_id = conversation.owner_id
-                      AND (project.project_id = conversation.project_ref OR project.slug = conversation.project_ref)
-                 )
-               )
-               AND ($4::text IS NULL OR conversation.project_ref = $4)
-          )
-          AND ($5::bigint IS NULL OR (message.message_seq, message.message_id) > ($5, $6))
-        ORDER BY message.message_seq ASC, message.message_id ASC
-        LIMIT $7`,
-        [tenantId, subjectId, conversationId, projectRef ?? null, position?.sequence ?? null, position?.id ?? null, limit + 1],
+        `SELECT message.origin,message.regenerated_from_message_id,message.regeneration_user_message_id,message.message_id,message.tenant_id,message.conversation_id,message.run_id,
+           message.role,CASE WHEN $7::boolean AND NOT ($9::boolean AND COALESCE(dispatch.subject_id=$2 AND dispatch.actor_id=$2,$8::boolean))
+             THEN '[]'::jsonb ELSE message.selected_skill_source_refs END AS selected_skill_source_refs,
+           CASE WHEN message.ordered_parts IS NULL THEN message.content END AS content,message.parts_format_version,message.parts_public_sequence,message.final_segment_id,
+           CASE WHEN message.ordered_parts IS NOT NULL THEN CASE WHEN $7::boolean AND NOT ($9::boolean AND COALESCE(dispatch.subject_id=$2 AND dispatch.actor_id=$2,$8::boolean))
+             THEN (SELECT count(*)::int FROM jsonb_array_elements(message.ordered_parts) part WHERE part->>'kind'='text' AND part->>'segment_id'=message.final_segment_id AND part->'completed'='true'::jsonb)
+             ELSE jsonb_array_length(message.ordered_parts) END END AS parts_count,
+           message.status,message.agent_failure_code,message.agent_failure_retryable,message.message_seq,message.created_at,message.updated_at,
+           ($7::boolean AND NOT ($9::boolean AND COALESCE(dispatch.subject_id=$2 AND dispatch.actor_id=$2,$8::boolean))) AS project_shared
+         FROM bff_message message LEFT JOIN bff_agent_dispatch_outbox dispatch ON dispatch.tenant_id=message.tenant_id AND dispatch.conversation_id=message.conversation_id
+           AND dispatch.run_id=message.run_id AND ((message.role='user' AND dispatch.user_message_id=message.message_id) OR (message.role='assistant' AND dispatch.assistant_message_id=message.message_id))
+         WHERE message.tenant_id=$1 AND message.conversation_id=$3 AND message.origin<>'regeneration_input'
+           AND (NOT $7::boolean OR ($9::boolean AND COALESCE(dispatch.subject_id=$2 AND dispatch.actor_id=$2,$8::boolean)) OR message.role='user'
+             OR (message.status='completed' AND message.final_segment_id IS NOT NULL AND message.parts_format_version=1))
+           AND ($4::bigint IS NULL OR (message.message_seq,message.message_id)>($4::bigint,$5::text))
+         ORDER BY message.message_seq ASC,message.message_id ASC LIMIT $6`,
+        [
+          tenantId,
+          subjectId,
+          conversationId,
+          position?.sequence ?? null,
+          position?.id ?? null,
+          limit + 1,
+          readable.projectAccess !== null,
+          readable.conversation.owner_id === subjectId,
+          readable.projectAccess?.capabilities.includes("edit") ?? true,
+        ],
       )
       const rows = result.rows.slice(0, limit)
       const last = result.rows.length > limit ? rows.at(-1) : undefined
@@ -249,22 +267,27 @@ export class PostgresChatSessionStore {
           [tenantId, conversationId, subjectId],
         )
       ).rows[0]
+      const visibleMessages = await privateMessagesFromRows(
+        client,
+        rows,
+        {
+          tenantId,
+          subjectId,
+          conversationId,
+          projectRef: readable.conversation.project_ref,
+          requestedProjectRef: projectRef ?? null,
+          scope: context?.scope ?? "all",
+        },
+        head,
+        selected?.run_id ?? null,
+        selected?.message_id ?? null,
+      )
+      const messagesWithControls = readable.projectAccess
+        ? await projectMessageRegeneration(client, { tenantId, subjectId, conversationId }, visibleMessages)
+        : visibleMessages
       return {
-        messages: await privateMessagesFromRows(
-          client,
-          rows,
-          {
-            tenantId,
-            subjectId,
-            conversationId,
-            projectRef: exists.rows[0].project_ref,
-            requestedProjectRef: projectRef ?? null,
-            scope: context?.scope ?? "all",
-          },
-          head,
-          selected?.run_id ?? null,
-          selected?.message_id ?? null,
-        ),
+        messages: messagesWithControls,
+        ...(readable.projectAccess ? { projectAccess: readable.projectAccess } : {}),
         next_cursor: last === undefined ? null : encodeCursor({ sequence: String(last.message_seq), id: last.message_id }, "msg"),
       }
     })

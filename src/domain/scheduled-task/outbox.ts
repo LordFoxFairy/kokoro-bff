@@ -192,8 +192,15 @@ export function buildScheduledTaskOutboxPayload(
 }
 
 /** Canonical input for the infrastructure-owned stable ID generator. */
-export function scheduledTaskOutboxIdentityMaterial(tenantId: string, taskId: string, operation: ScheduledTaskOutboxOperation, idempotencyKey: string): string {
-  return [tenantId, taskId, commandType(operation), idempotencyKey].join("\u001f")
+export function scheduledTaskOutboxIdentityMaterial(
+  tenantId: string,
+  taskId: string,
+  operation: ScheduledTaskOutboxOperation,
+  idempotencyKey: string,
+  actorId: string,
+): string {
+  if (!actorId || actorId.trim() !== actorId) throw Error("SCHEDULED_TASK_OUTBOX_ACTOR_INVALID")
+  return JSON.stringify([tenantId, taskId, commandType(operation), actorId, idempotencyKey])
 }
 
 /** Parse JSONB at the infrastructure boundary before a worker can deliver it. */

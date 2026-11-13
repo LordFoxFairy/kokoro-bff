@@ -171,7 +171,7 @@ export async function schedulerDispatch(
       )
       return true
     }
-    if (!record.task.enabled || record.task.status !== "active") {
+    if (!record.task.enabled || record.task.status !== "active" || !record.task.executionActorId) {
       await settle(
         response,
         receipts,
@@ -191,7 +191,7 @@ export async function schedulerDispatch(
       )
       return true
     }
-    const identity = { namespace: wire.tenantId, userId: record.ownerId }
+    const identity = { namespace: wire.tenantId, userId: record.task.executionActorId }
     const launch = buildScheduledAgentLaunch({
       identity,
       requestId: wire.requestId,
@@ -205,7 +205,7 @@ export async function schedulerDispatch(
       schedule: wire.schedule,
       occurrence: wire.occurrence,
       idempotencyKey: wire.idempotencyKey,
-      actorId: record.ownerId,
+      actorId: record.task.executionActorId,
       taskId,
       taskRevision,
       launch: { requestId: wire.requestId, ...launch },

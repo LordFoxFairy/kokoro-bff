@@ -1,9 +1,9 @@
 import type { ScheduledTaskCurrentView } from "../scheduled-task-read-service.js"
 import type { ScheduledTask, ScheduledTaskDetails } from "../../contracts/index.js"
-import type { ScheduledTaskFact } from "../../domain/scheduled-task/task.js"
+import type { ScheduledTaskMutationSnapshot } from "../../domain/scheduled-task/task.js"
 
 /** Map the internal UTC Date aggregate to the public RFC 3339 wire contract. */
-export function scheduledTaskResponse(task: ScheduledTaskFact): ScheduledTask {
+export function scheduledTaskResponse(task: ScheduledTaskMutationSnapshot): ScheduledTask {
   return {
     id: task.id,
     ...(task.projectId === undefined ? {} : { project_id: task.projectId }),
@@ -25,5 +25,11 @@ export function scheduledTaskResponse(task: ScheduledTaskFact): ScheduledTask {
 
 /** A current read must not alter the representation saved in mutation receipts. */
 export function scheduledTaskDetails({ task, state, nextRunAt }: ScheduledTaskCurrentView): ScheduledTaskDetails {
-  return { ...scheduledTaskResponse(task), scheduling_state: state, next_run_at: nextRunAt?.toISOString() ?? null }
+  return {
+    ...scheduledTaskResponse(task),
+    revision: task.revision,
+    execution_actor_id: task.executionActorId,
+    scheduling_state: state,
+    next_run_at: nextRunAt?.toISOString() ?? null,
+  }
 }

@@ -1,4 +1,24 @@
-## 2026-11-13 B10：同租户 Project 协作设计门（目标态，尚未实施）
+## 2026-11-13 B10：同租户 Project 协作设计门（目标态，分阶段实现中、未验收）
+
+### B13 Custom API 管理HTTP候选（同Public29，未正常激活）
+
+Platform仍唯一CustomApi事实、command receipt与audit owner；BFF仅新增六个安全public HTTP投影，不新增SQL/Schema、缓存或授权镜像。复用现Platform URL，独立custom_api_admin credential文件每请求完整重读；tenant与管理员来自native鲜验且platformAdmin必须为true，不借mcp_catalog.manage／本人身份。current profile、immutable ACK与删除后audit读分离；body／IAM／RPC共用有界signal/deadline，不自动retry，shutdown关闭原client。机器契约与HTTP装配由本轮指定writer串行承接，正常组合激活另验。
+
+普通Chat幂等亦按真实actor隔离：`bff_agent_dispatch_outbox` business unique改为tenant／conversation／actor／key，与现HTTP receipt及prepare／replay主体scope一致；既有identity material已含subject且commit强制subject=actor，不同协作者同key的新run／message／outbox ID天然隔离，无需换派生算法。原持久ID／payload／摘要／回执不重写，精确父仅换约束；一条creator→editor→creator PG同时证明同key独立成功和原actor重放原ACK，不退成跨actor全资源409。
+
+### B10 已裁决多执行主体来源（2026-11-13，待实现／未激活）
+
+Agent 的真实 namespace 按 tenant＋user subject 隔离，同 Conversation 换真实 executor 后源 sequence 从其自己的历史继续；沿 creator namespace 代理或 reset 单 HWM 都不成立。保留唯一 `bff_agui_stream` 的 Conversation public sequence／opaque cursor／现 lease与fence，仅新增该流下具名 `bff_agui_source_cursor(tenant_id,session_id,source_owner,subject_id)`，保存各真实来源唯一 high_watermark／projection_state；搬迁后退役 stream 原两个可写 source 字段，不双写。source_event、event 的 source-frame、artifact 的 source 唯一身份带 source_subject_id，历史 public payload／cursor 字节不改，process／interaction／GC／完整性 JOIN 一并用来源主体，不把 seq 当跨主体全序。
+
+锁序沿现 Project／Conversation→stream→对应 source_cursor，immutable dispatch 的 subject=actor／expected Run 是切源依据；前 Run terminal／原fence边界后才能切换，增加现fence并清旧lease，读者注册不切生产来源。投影同事务核真实来源lease、来源连续性／digest，分配单一public序并写Message／FINAL／terminal和该来源cursor；unknown／历史outbox仍原actor恢复。返回creator取其保留cursor，不归零。精确旧父须由原consumer、Conversation owner与已持久dispatch/process的相符事实唯一证明旧origin；旧HWM／state原样转入该来源，未知／缺失／矛盾拒绝，不能默认owner兜底。最低独有PG：creator N→editor 1→creator N+1，public严格递增、重复零新增、来源身份冲突和旧fence拒绝，另验证精确父旧值保留／矛盾拒迁移；不重跑已完成grant／Scheduled三份PG。
+
+共享执行模式由 Project 存在过真实grant记录（含revoked／expired）判定；现无物理删除grant路径，owner后续Run也不得回私人checkpoint模式，无mode表。模型窗口另依赖Agent正式可选typed shared_context：BFF只冻结当前获准user正文与确认FINAL的有序whole-message有界后缀（最多128条／256KiB、显式has_earlier_messages），不拼input_text、不继承creator checkpoint／workspace；具体wire以owner发行后固定消费。该依赖未闭不激活editor新Run。SSE仅原native准入／到期生命周期和每个待发ledger批次fresh grant；idle沿现最大8s轮询，DB grant鲜验不等同IAM成员瞬时撤权，已发字节不承诺收回。
+
+**BREAKING 候选 Public29.0／221 operations（未发行、未正常激活）**：在正式已发行28.38完整父字节上增加4个Project access/grant操作；仅 ScheduledTask PATCH 与具名retry新增 required精确revision If-Match，缺失428／冲突409，无缺省或第二路由。current ScheduledTaskDetails required公开 revision＋execution_actor_id；immutable mutation ACK／既有receipt／outbox正文保持原形状，不猜历史executor。App须先fresh details冻结CAS并正式升级固定artifact，同片配对后才激活；未发行28.39不是历史父。新协作lookup／编辑锁只接canonical project_id，不接受slug；原私人owner-only finder保原语义，本人旧URL由App从当前Project事实解析ID，不新造服务端alias。
+
+Scheduled命令key沿既有HTTP actor隔离：现outbox business unique改为tenant/task/op/actor/key，新ID派生纳入真实actor；worker以已持久ID及row/payload lineage恢复，不重算/改写历史ID或payload、不建双协议。原key回执从原outbox.task immutable snapshot恢复，不回当前Task或猜历史executor；current binding始终单独fresh Details读取。旧unique更严格，已有合法数据满足新unique，精确父演进只替换该约束/索引并保全原事实。
+
+成员代际规则（主控裁决）：ProjectGrant 绑定稳定 user subject，不绑定 IAM member_id。有效条件为当前 native Product 同 tenant 资格且 grant 未撤销／未到期；退出期间拒绝，同一 subject 重新合法加入后原有效 grant 重新生效，这是显式产品规则。授予时仅复用现 members API 核当前目标；缺 member:read 返回原403，不提升组织权限，分页未完成不当目标不存在；不新增每 Project 请求 IAM members 查询。
 
 沿 Root 原 production-closure／B10 已裁决范围：只向同 tenant **现有有效成员**显式授予 viewer/editor，可到期、可撤销；owner 隐式拥有完整管理资格，独占授权、角色调整、撤权和 Project 删除。URL 只定位，不授权；无匿名／外部邮箱／跨 tenant 邀请、IAM 身份副本、OAuth、新 SDK 或权限缓存。BFF 是 Project／ProjectGrant 唯一 writer；IAM 保持原生 Session、当前成员及 Product 资格 owner。目标成员只通过现正式 IAM 成员读证明；该接口自身权限不被 Project owner 身份绕过，若现合同不足以证明目标有效，先由 IAM 发行必要窄增量，不借其它用户身份枚举。
 
@@ -6,7 +26,7 @@
 
 - viewer 可读项目资料／配置、指令与历史、任务、文件／资源、网站 URL、项目 Skills／推荐连接器配置，以及**明确归属该 canonical Project 的 Conversation 与任务结果**；editor 另可编辑上述获准内容、创建项目 Conversation／消息与任务。个人置顶仍是各主体自身偏好。配置引用不暴露 Key／secret_handle／个人 Connection；选用 Skills、连接器、模型及资金的执行资格绝不由项目角色派生。
 - Conversation 的 creator、每次 Run 的可信 actor、Project owner 与当前访问者是不同事实。个人／direct Conversation 永不因 creator 加入 Project 而共享；不得按当前用户 URL 或同 tenant 推断归属。沿既有 Move 事务显式改变归属：移动／移出后的新读、活跃流及结果下载按当前 canonical 归属重核，历史执行 actor、账本、receipt 和来源事实不重写。
-- 项目任务表、ScheduledTask 定义／执行结果分别沿原 owner 链；editor 创建／执行用**自己的**现 IAM 资格、Connection 和资金，不能替原作者执行、取消／steer／审批其 Run 或修改其私有授权。ScheduledTask 的 prompt、计划、工具、输入或启用状态等任何影响执行的改动，均不得沿用他人的原委托：在既有 CAS 事务先暂停定义并退休旧 definition revision 的 queued/leased 执行 fence；重新执行主体必须是当前操作者，由其显式接受自己的 Connection／资金委托，校验并持久化新安全绑定后才可启用。旧 queued/leased revision 不能再创建或派发新执行；已真正创建的 Run 保留原 actor／账本，仅按原执行资格控制，不假回滚或转移。若现正式合同没有独立安全执行绑定，共享 ScheduledTask 编辑依赖门保持 **OPEN**，该能力维持现 actor-only，直至现 owner 正规发行；这不是取消其协作支持范围，不另造调度框架。项目内容协作不是 Run 控制权。Conversation Move／删除与既有匿名 Share 创建／撤销保原资源管理权限，不由 Project viewer/editor 或 owner 身份自动继承；Project ACL 不代替独立公开 Share 的 metadata／expiry／revoke 事实。
+- 项目任务表、ScheduledTask 定义／执行结果分别沿原 owner 链；editor 用自己的现 IAM／Connection／资金资格，不能替别人控制既有 Run。跨 actor 编辑影响执行的 prompt／计划／工具／输入／启用字段时，原 CAS 事务先暂停并清 execution_actor_id，随后当前操作者显式启用才能成为新 executor；同 executor 本人以原 native CAS 明确保存可沿自己的委托，不增第二次确认。任何 definition revision 变化都 fence 尚未送出的旧 revision；已发送／submitted／unknown／已建 Run 保原 immutable payload／actor／proof及账本，沿原恢复，不换人或假回滚。Conversation Move／删除与原公开 Share 创建／撤销仍按原资源管理资格，Project ACL 不替代其 metadata／expiry／revoke。
 - 当前真实资料类型是项目文件／资源、网站 URL、Skills 安装／选择、MCP 推荐等正式资源；“托管网站／搜索网络导入”、RSS／Webhook／高级自动化若无正式实体／合同仍是缺口，不恢复 preview 数据，也不从分享设计冒称交付。
 
 ### 必须共同承接的权限接缝
@@ -21,9 +41,16 @@
 
 复用现 ledger、opaque cursor、AG-UI 网络协议、`runAgUiHttpTransport` 的 AbortSignal 与 writer，不新建流／重放表。当前 SSE 只入口准入，后续须保原 native admission＋service/actor 的准入和有界重验，不新增逐 token／逐帧 IAM 或 OAuth 请求；在每次 replay／等待唤醒、每批发送前及有界空闲轮询鲜查 BFF ProjectGrant／expiry／访问版本与 Conversation 当前归属；即使命中现 raw-ledger replay cache 也先权限检查再过滤，缓存不当授权。复用 ledger 等待的有界轮询（当前默认最大 8s）发现闲置撤权／到期并 abort／关闭，不声称已发送字节可追回。批次按权限检查线性化：撤权后新开始的请求／批次拒绝，已获准开始发送的有限批次不无限续送；真正要求更强即时撤权时须另明确提交／网络 flush 的同步保证。已开 SSE 不改 HTTP 状态伪造成功帧，关闭后重连按当前权限返回拒绝；过滤页仍推进原 opaque cursor，避免空页循环，不把 cursor 当权限。
 
-文件／包／artifact 下载沿现 spool／deadline，在 owner I/O 后、发送前再核权限；权限变化丢弃尚未发送内容。现 BFF 已落库 Message／AG-UI 安全事实与已交付 artifact 可复用；仅存在于 actor-only Agent RunDisplay 的 workspace outputs 不能借 creator 请求读取。若现发行物没有可复用安全结果 fact／受控 Storage 读取用途，须先补 **Agent→BFF 安全结果引用及 Storage 正式读取合同**，再开放该类型；完整任务结果范围仍保留，不能跳过并关闭 B10。
+文件／包／artifact 下载沿现 spool／deadline，在 owner I/O 后、发送前再核权限；权限变化丢弃尚未发送内容。现 Message.final_segment_id 与 delivery.created→bff_conversation_artifact 已持久关联，scheduled execution 也有 exact locator；共享 FINAL 答案／交付取这些现有事实，Storage GetFinalArtifact／Download purpose=artifact 沿既有服务＋当前 actor，增加 BFF ProjectGrant 和 exact source 绑定，不新增 Agent／Storage 合同。actor-only RunDisplay 的非 FINAL workspace_output／私人过程不整包共享；确属交付应先走既有 FINAL 流程，不能冒 creator 身份读私人 Run。
 
-写区限本仓现 Project capability／SQL、Chat read/turn、AG-UI consumer/projection/HTTP、Run/result/resource 读侧及对应契约／Schema／测试，不另造 IAM ACL。App 待 BFF 正规 artifact 后更新同源 adapter／Project 控件与固定消费者。任何必要 Agent／Storage／IAM 读取增量均由 owner 先发布并固定消费；缺少安全共享 Run 内容合同则该部分设计门未闭，禁止先实现或冒现已支持。G0 后先逐项核正式 owner 合同，再生产实现；当前三文档不是代码或 native 已完成证据。验收须覆盖两真实成员的 viewer 读／拒写、editor 实际改／创建、自己资格执行、owner 回读、降权／撤销／到期、Project 删除／Move、并发与未知恢复、活跃 SSE／下载迟到结果、非成员／匿名／跨 tenant 及私人 trace 不泄露。
+写区限本仓现 Project capability／SQL、Chat read/turn、AG-UI consumer/projection/HTTP、Run/result/resource 读侧及对应契约／Schema／测试，不另造 IAM ACL。App 待 BFF 正规 artifact 后更新同源 adapter／Project 控件与固定消费者。FINAL 所需既有 owner 合同已确认，不再把它列为未决阻断；真正新资料类型或 owner 读取增量仍须先发行固定消费。当前三文档不是代码或 native 已完成证据。验收须覆盖两真实成员的 viewer 读／拒写、editor 实际改／创建、自己资格执行、owner 回读、降权／撤销／到期、Project 删除／Move、并发与未知恢复、活跃 SSE／下载迟到结果、非成员／匿名／跨 tenant 及私人 trace 不泄露。
+
+### B10 ScheduledTask 最小执行主体／revision fence（待实现）
+
+现 ScheduledTask PATCH 无公开 revision/CAS，owner_id兼任actor；dispatch仅accept时核revision，已accept queued/leased无task_revision，最终Chat提交未重核当前definition。最小新增仅 task.execution_actor_id（可空；enabled必须具备合法executor）与 dispatch.task_revision；复用已有 task.revision、dispatch.subject_id/request_digest/identity_assertion_ref/payload 及 receipt/outbox actor lineage，不加binding版本／digest／authorization-ref。
+
+原native条件保存／显式启用的当前actor就是确认者；跨actor执行配置编辑须CAS原子暂停／清executor，后续显式以自己启用；同executor原nativeCAS保存沿自己的委托。dispatch接受时冻结task_revision，accept/claim/最终scheduledActivation一并检查当前revision/executor/enabled与原lease fence，定义变化退休未送出的旧revision；已发送／submitted／unknown和历史Run不被重绑。creator owner字段不改。Scheduler 已发行 target/callback opaque JSON 承载可信 task_revision，复用现受信 callback 与严格解析，不增 owner 合同。旧enabled行在精确已识别父Schema与既有owner=executor代码语义下，回填execution_actor_id=owner_id保等原执行事实；fresh/父演进测试须证明owner/revision/prompt/计划/enabled/Run/账本保值、前后actor等价，未知父／非法owner／不一致行拒绝迁移，不额外要求逐行native登录实录。若现两字段＋receipt/proof仍不足，先报告确切事实，不预建更多授权字段／调度框架。
+
 
 ## 2026-11-13 B13 existing model revision draft correction
 

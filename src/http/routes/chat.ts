@@ -56,7 +56,12 @@ async function privateMessageRead<T>(
   response.once?.("close", stop)
   if (request.aborted || response.destroyed) controller.abort()
   try {
-    return await read({ signal: lifetime?.signal ?? controller.signal, deadlineAt: lifetime?.deadlineAt ?? performance.now() + 10000, scope })
+    return await read({
+      signal: lifetime?.signal ?? controller.signal,
+      deadlineAt: lifetime?.deadlineAt ?? performance.now() + 10000,
+      scope,
+      ...(lifetime?.onProjectRead === undefined ? {} : { onProjectRead: lifetime.onProjectRead }),
+    })
   } finally {
     request.removeListener?.("aborted", stop)
     response.removeListener?.("close", stop)
@@ -85,6 +90,7 @@ export async function readChatBusiness(
   reads: ChatSessionReads,
   authorization: AuthorizedChatRequest,
   lifetime?: MessageReadLifetime,
+  beforeSend?: () => Promise<boolean>,
 ): Promise<boolean> {
   if (businessPath[0] !== "sessions") return false
   response.setHeader("x-request-id", context.requestId)
@@ -93,6 +99,12 @@ export async function readChatBusiness(
   const subjectId = context.identity.userId
   const conversationId = businessPath[1] || ""
   const projectRef = authorization.projectRef
+  const fresh = async (): Promise<boolean> => {
+    if (!beforeSend || (await beforeSend())) return true
+    if (!response.headersSent && !response.destroyed && !response.writableEnded)
+      send(response, 404, failure("session_not_found", "Session was not found", context.requestId))
+    return false
+  }
 
   try {
     if (businessPath.length === 3 && businessPath[2] === "share" && method === "GET") {
@@ -105,6 +117,7 @@ export async function readChatBusiness(
       )
       if (request.aborted || response.destroyed || response.writableEnded) return true
       lifetime?.signal.throwIfAborted()
+      if (!(await fresh())) return true
       send(
         response,
         metadata === null ? 404 : 200,
@@ -118,19 +131,26 @@ export async function readChatBusiness(
         send(response, 400, failure(input.code, "Message parts query is invalid", context.requestId))
         return true
       }
-      const page = await privateMessageRead(request, response, projectRef, (lifetime) =>
-        reads.readMessageParts({
-          ...lifetime,
-          tenantId,
-          subjectId,
-          conversationId,
-          messageId: businessPath[3] ?? "",
-          projectRef,
-          scope: input.scope,
-          cursor: input.cursor,
-          limit: input.limit,
-        }),
+      const page = await privateMessageRead(
+        request,
+        response,
+        projectRef,
+        (lifetime) =>
+          reads.readMessageParts({
+            ...lifetime,
+            tenantId,
+            subjectId,
+            conversationId,
+            messageId: businessPath[3] ?? "",
+            projectRef,
+            scope: input.scope,
+            cursor: input.cursor,
+            limit: input.limit,
+          }),
+        lifetime,
       )
+      lifetime?.signal.throwIfAborted()
+      if (!(await fresh())) return true
       if (page === null) send(response, 404, failure("message_not_found", "Owned Message was not found", context.requestId))
       else {
         const body = ok(page, context.requestId)
@@ -146,14 +166,23 @@ export async function readChatBusiness(
         return true
       }
       if (authorization.collectionFilter === undefined) throw new Error("CHAT_COLLECTION_FILTER_MISSING")
-      send(response, 200, ok(await reads.listConversations(tenantId, subjectId, authorization.collectionFilter, page.limit, page.cursor), context.requestId))
+      const current = await reads.listConversations(tenantId, subjectId, authorization.collectionFilter, page.limit, page.cursor, lifetime)
+      lifetime?.signal.throwIfAborted()
+      if (!(await fresh())) return true
+      send(response, 200, ok(current, context.requestId))
       return true
     }
 
     if (businessPath.length === 2 && method === "GET") {
-      const snapshot = await privateMessageRead(request, response, projectRef, (lifetime) =>
-        reads.snapshot(tenantId, subjectId, conversationId, projectRef, lifetime),
+      const snapshot = await privateMessageRead(
+        request,
+        response,
+        projectRef,
+        (lifetime) => reads.snapshot(tenantId, subjectId, conversationId, projectRef, lifetime),
+        lifetime,
       )
+      lifetime?.signal.throwIfAborted()
+      if (!(await fresh())) return true
       if (snapshot === null) {
         send(response, 404, failure("session_not_found", "Session was not found", context.requestId))
         return true
@@ -168,9 +197,15 @@ export async function readChatBusiness(
         send(response, 400, failure("invalid_pagination", "limit must be between 1 and 100", context.requestId))
         return true
       }
-      const result = await privateMessageRead(request, response, projectRef, (lifetime) =>
-        reads.listMessages(tenantId, subjectId, conversationId, page.limit, page.cursor, projectRef, lifetime),
+      const result = await privateMessageRead(
+        request,
+        response,
+        projectRef,
+        (lifetime) => reads.listMessages(tenantId, subjectId, conversationId, page.limit, page.cursor, projectRef, lifetime),
+        lifetime,
       )
+      lifetime?.signal.throwIfAborted()
+      if (!(await fresh())) return true
       if (result === null) {
         send(response, 404, failure("session_not_found", "Session was not found", context.requestId))
       } else {

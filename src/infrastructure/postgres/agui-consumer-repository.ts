@@ -70,7 +70,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
       await client.query("BEGIN")
       const conversations = await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, [{ tenantId, conversationId: sessionId }])
       const conversation = conversations[0]
-      if (conversation === undefined || conversation.status !== "active" || conversation.owner_id !== subjectId) {
+      if (conversation === undefined || conversation.status !== "active" || (expectedRunId === undefined && conversation.owner_id !== subjectId)) {
         throw new Error("AG-UI consumer subject does not match the registered session owner")
       }
       const result = await client.query(registration.text, registration.values)
@@ -132,7 +132,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
         [
           "SELECT conversation.tenant_id,conversation.conversation_id FROM bff_conversation AS conversation",
           "JOIN bff_agui_stream AS stream ON stream.tenant_id=conversation.tenant_id AND stream.session_id=conversation.conversation_id",
-          "WHERE conversation.status='active' AND conversation.owner_id=stream.consumer_subject_id",
+          "WHERE conversation.status='active'",
           "AND stream.consumer_state='active' AND stream.consumer_subject_id IS NOT NULL",
           "AND stream.consumer_next_poll_at<=CURRENT_TIMESTAMP(3)",
           "AND (stream.consumer_lease_until IS NULL OR stream.consumer_lease_until<=CURRENT_TIMESTAMP(3))",
@@ -142,7 +142,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
       )
       const candidates = await client.query<ConsumerRow>(
         [
-          "SELECT tenant_id,session_id,consumer_subject_id,source_high_watermark,consumer_failure_count FROM bff_agui_stream",
+          "SELECT tenant_id,session_id,consumer_subject_id,consumer_failure_count FROM bff_agui_stream",
           "WHERE consumer_state='active' AND consumer_subject_id IS NOT NULL",
           "AND consumer_next_poll_at<=CURRENT_TIMESTAMP(3)",
           "AND (consumer_lease_until IS NULL OR consumer_lease_until<=CURRENT_TIMESTAMP(3))",
@@ -150,7 +150,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
           "WHERE scope.tenant_id=bff_agui_stream.tenant_id AND scope.conversation_id=bff_agui_stream.session_id)",
           "AND EXISTS (SELECT 1 FROM bff_conversation AS conversation",
           "WHERE conversation.tenant_id=bff_agui_stream.tenant_id AND conversation.conversation_id=bff_agui_stream.session_id",
-          "AND conversation.owner_id=bff_agui_stream.consumer_subject_id AND conversation.status='active')",
+          "AND conversation.status='active')",
           "ORDER BY tenant_id,session_id FOR UPDATE SKIP LOCKED",
         ].join("\n"),
         [JSON.stringify(parents.rows)],
@@ -183,6 +183,14 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
           await client.query("ROLLBACK")
           return []
         }
+        const sourceCursor = (
+          await client.query<{ source_high_watermark: string }>(
+            `SELECT source_high_watermark FROM bff_agui_source_cursor WHERE tenant_id=$1 AND session_id=$2
+             AND source_owner='kokoro-agent' AND subject_id=$3 FOR UPDATE`,
+            [candidate.tenant_id, candidate.session_id, candidate.consumer_subject_id],
+          )
+        ).rows[0]
+        if (!sourceCursor) throw new Error("AGUI_SOURCE_CURSOR_MISSING")
         leases.push({
           tenantId: candidate.tenant_id,
           sessionId: candidate.session_id,
@@ -192,7 +200,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
           fence: safeInteger(row.fence, "consumer fence"),
           leaseUntil: row.lease_until.toISOString(),
           leaseRemainingMs: safeInteger(row.lease_remaining_ms, "consumer lease remaining budget"),
-          sourceHighWatermark: safeInteger(candidate.source_high_watermark, "source high watermark"),
+          sourceHighWatermark: safeInteger(sourceCursor.source_high_watermark, "source high watermark"),
           failureCount: safeInteger(candidate.consumer_failure_count, "consumer failure count"),
         })
       }
@@ -454,7 +462,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
                    JOIN bff_agui_event AS start
                      ON start.tenant_id=process.tenant_id AND start.session_id=process.session_id
                     AND start.public_sequence=process.start_public_sequence AND start.cursor=process.start_public_cursor
-                    AND start.source_owner=process.start_source_owner AND start.source_event_id=process.start_source_event_id
+                    AND start.source_owner=process.start_source_owner AND start.source_event_id=process.start_source_event_id AND start.source_subject_id=process.subject_id
                   WHERE activity.tenant_id=bff_agui_stream.tenant_id AND activity.session_id=bff_agui_stream.session_id
                     AND activity.subject_id=bff_agui_stream.consumer_subject_id
                     AND process.start_public_sequence=bff_agui_stream.latest_run_start_sequence

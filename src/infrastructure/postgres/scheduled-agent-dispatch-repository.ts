@@ -22,6 +22,7 @@ type ReceiptRow = {
 }
 type TaskRow = {
   owner_id: string
+  execution_actor_id: string | null
   enabled: boolean
   status: string
   revision: string | number
@@ -117,14 +118,14 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
         await client.query("ROLLBACK")
         return { outcome: "claim_lost" }
       }
-      const task = await client.query<TaskRow>("SELECT owner_id,enabled,status,revision FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE", [
-        input.snapshot.tenantId,
-        input.snapshot.taskId,
-      ])
+      const task = await client.query<TaskRow>(
+        "SELECT owner_id,execution_actor_id,enabled,status,revision FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE",
+        [input.snapshot.tenantId, input.snapshot.taskId],
+      )
       const taskRow = task.rows[0]
       // Classify while holding both locks; never re-read task state after this transaction.
       let rejection: ScheduledAgentRejectionReason | null = null
-      if (!taskRow || taskRow.owner_id !== input.snapshot.actorId) rejection = "task_not_found"
+      if (!taskRow || taskRow.execution_actor_id !== input.snapshot.actorId) rejection = "task_not_found"
       else if (!taskRow.enabled || taskRow.status !== "active") rejection = "task_not_active"
       else if (Number(taskRow.revision) !== input.snapshot.taskRevision) rejection = "task_changed"
       const response = rejection === null ? input.response : input.rejections[rejection]
@@ -136,18 +137,18 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
         await client.query(
           `INSERT INTO bff_scheduled_agent_scope(tenant_id,task_id,session_id,subject_id) VALUES($1,$2,$3,$4)
           ON CONFLICT(tenant_id,task_id) DO NOTHING`,
-          [input.snapshot.tenantId, input.snapshot.taskId, sessionId, input.snapshot.actorId],
+          [input.snapshot.tenantId, input.snapshot.taskId, sessionId, taskRow!.owner_id],
         )
         const scope = await client.query<ScopeIdentityRow>(
           "SELECT subject_id,session_id FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE",
           [input.snapshot.tenantId, input.snapshot.taskId],
         )
-        if (scope.rows[0]?.subject_id !== input.snapshot.actorId || scope.rows[0]?.session_id !== sessionId) throw new Error("SCHEDULED_AGENT_SCOPE_CONFLICT")
+        if (scope.rows[0]?.session_id !== sessionId) throw new Error("SCHEDULED_AGENT_SCOPE_CONFLICT")
         const dispatchId = id(input.snapshot.tenantId, input.snapshot.taskId, input.snapshot.occurrence)
         const inserted = await client.query(
           `INSERT INTO bff_scheduled_agent_dispatch(
-          dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,user_message_id,assistant_message_id)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14) ON CONFLICT(tenant_id,task_id,occurrence) DO NOTHING`,
+          dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload,user_message_id,assistant_message_id,task_revision)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15) ON CONFLICT(tenant_id,task_id,occurrence) DO NOTHING`,
           [
             dispatchId,
             input.snapshot.tenantId,
@@ -163,6 +164,7 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
             JSON.stringify(input.snapshot.launch.body),
             input.snapshot.launch.receipt.user_message_id,
             input.snapshot.launch.receipt.assistant_message_id,
+            input.snapshot.taskRevision,
           ],
         )
         if (inserted.rowCount !== 1) {
@@ -243,6 +245,26 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
         )
       }
       await client.query("SELECT dispatch_id FROM bff_scheduled_agent_dispatch WHERE dispatch_id=$1 FOR UPDATE", [dispatchId])
+      // Claim never upgrades an old known-unsent definition into a fresh execution. No reverse task lock:
+      // an edit owns Task→scope, and the final Chat transaction rechecks the same revision/fence.
+      const obsolete = await client.query(
+        `UPDATE bff_scheduled_agent_dispatch d SET status='failed',lease_owner=NULL,lease_token=NULL,lease_until=NULL,
+          fence=fence+1,completed_at=clock_timestamp(),last_error_code='scheduled_definition_changed',updated_at=clock_timestamp()
+         WHERE d.dispatch_id=$1 AND d.status IN ('pending','retryable','leased') AND NOT d.admission_unknown_seen
+           AND NOT EXISTS (SELECT 1 FROM bff_agent_dispatch_outbox ordinary WHERE ordinary.tenant_id=d.tenant_id AND ordinary.run_id=d.run_id)
+           AND NOT EXISTS (SELECT 1 FROM bff_scheduled_task definition WHERE definition.tenant_id=d.tenant_id AND definition.task_id=d.task_id
+             AND definition.revision=d.task_revision AND definition.execution_actor_id=d.subject_id AND definition.enabled AND definition.status='active')
+         RETURNING d.dispatch_id`,
+        [dispatchId],
+      )
+      if (obsolete.rowCount === 1) {
+        await client.query(
+          "UPDATE bff_scheduled_agent_scope SET active_dispatch_id=NULL,active_run_id=NULL,updated_at=clock_timestamp() WHERE tenant_id=$1 AND task_id=$2 AND active_dispatch_id=$3",
+          [scope.tenant_id, scope.task_id, dispatchId],
+        )
+        await client.query("COMMIT")
+        return null
+      }
       const observedAt = performance.now()
       const dbNow = (await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")).rows[0]?.now
       if (!dbNow) throw new Error("SCHEDULED_AGENT_CLOCK_UNAVAILABLE")
@@ -269,7 +291,10 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
         return null
       }
       await client.query("COMMIT")
-      const command = leaseOf({ ...leased.rows[0], session_id: scope.session_id })
+      const command = leaseOf({
+        ...leased.rows[0],
+        session_id: scope.session_id,
+      })
       command.leaseRemainingMs = remainingBeforeCommit - Math.ceil(performance.now() - observedAt)
       command.leaseObservedAt = performance.now()
       // COMMIT can consume the remaining budget. The runner needs the real
@@ -355,7 +380,11 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
     try {
       await client.query("BEGIN")
       const scope = (
-        await client.query<{ tenant_id: string; task_id: string; active_dispatch_id: string }>(
+        await client.query<{
+          tenant_id: string
+          task_id: string
+          active_dispatch_id: string
+        }>(
           `SELECT scope.tenant_id,scope.task_id,scope.active_dispatch_id
            FROM bff_scheduled_agent_scope scope
            JOIN bff_scheduled_agent_dispatch scheduled ON scheduled.dispatch_id=scope.active_dispatch_id

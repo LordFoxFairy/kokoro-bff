@@ -101,7 +101,7 @@ export class SchedulerOutboxDelivery implements ScheduledTaskOutboxDeliveryPort 
     try {
       const name = schedulerScheduleName(command.taskId)
       const task = scheduledTaskOutboxTaskFromPayload(command.payload.task)
-      const scheduledTask: ScheduledTaskFact = {
+      const scheduledTask: Omit<ScheduledTaskFact, "ownerId" | "executionActorId"> = {
         id: task.taskId,
         ...(task.projectId === undefined ? {} : { projectId: task.projectId }),
         title: task.title,

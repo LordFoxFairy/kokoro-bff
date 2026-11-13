@@ -72,7 +72,7 @@ export async function authorizeChatRequest(
   const ownerScope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
   if (projectRef !== undefined) {
     signal?.throwIfAborted()
-    const project = await projects.find(ownerScope, projectRef)
+    const project = await projects.find(ownerScope, projectRef, signal === undefined ? undefined : { signal, deadlineAt: performance.now() + 10000 })
     signal?.throwIfAborted()
     if (project === null) return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
   }
@@ -87,7 +87,13 @@ export async function authorizeChatRequest(
     let currentConversation = null
     if (conversationId !== undefined && conversationId !== "") {
       signal?.throwIfAborted()
-      currentConversation = await findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
+      currentConversation = await findConversation(
+        ownerScope.tenantId,
+        ownerScope.subjectId,
+        conversationId,
+        projectRef,
+        signal === undefined ? undefined : { signal, deadlineAt: performance.now() + 10000 },
+      )
       signal?.throwIfAborted()
     }
     if (conversationId === undefined || conversationId === "" || currentConversation === null) {

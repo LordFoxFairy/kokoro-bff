@@ -93,3 +93,25 @@ for (const mutate of [
   test(`rejects corrupt durable source identity ${Object.keys(mutate)[0]}`, async () => {
     await assert.rejects(privateMessagesFromRows(client([{ ...terminal(), ...mutate }]), [row()], scope, null, null, null), /MESSAGE_PARTS_UNAVAILABLE/u)
   })
+
+test("a shared user Message keeps the literal user text but not the peer's personal composer skill selection", () => {
+  const message = {
+    messageId: "user",
+    tenantId: "tenant",
+    conversationId: "session",
+    runId: "run",
+    role: "user" as const,
+    content: "Visible user request",
+    selectedSkillSourceRefs: ["skill:private-selection"],
+    status: "completed" as const,
+    failure: null,
+    messageSeq: "1",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    sharedProjectRead: true,
+  }
+  const wire = privateChatMessage(message)
+  assert.equal(wire.content, "Visible user request")
+  assert.equal(Object.hasOwn(wire, "selected_skill_source_refs"), false)
+  assert.deepEqual(privateChatMessage({ ...message, sharedProjectRead: false }).selected_skill_source_refs, ["skill:private-selection"])
+})

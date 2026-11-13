@@ -74,6 +74,7 @@ function messageFault(error: unknown): { status: number; code: string; message: 
       code: "skill_selection_changed",
       message: "Project Skill selection changed before submission; retry the original intent",
     }
+  if (error.message === "CHAT_TURN_PROJECT_FORBIDDEN") return { status: 403, code: "permission_denied", message: "Current Project edit access is required" }
   if (error.message === "CHAT_TURN_PROJECT_NOT_FOUND") {
     return {
       status: 404,

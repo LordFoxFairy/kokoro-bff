@@ -107,6 +107,7 @@ export async function handleProjectWebsitesRequest(
     if (input === null) return invalid()
     const result = await mutations.replaceWebsites({ ...scope, ...input })
     signal.throwIfAborted()
+    if (result.kind === "forbidden") return fail(403, "project_edit_forbidden", "Project cannot be edited")
     if (result.kind === "not_found") return fail(404, "project_not_found", "Project was not found")
     if (result.kind === "precondition_failed") return fail(412, "project_websites_precondition_failed", "Project website state is no longer current")
     send(response, 200, { data: result.data })

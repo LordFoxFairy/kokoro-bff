@@ -423,6 +423,7 @@ it("a new START identity after a full interaction is rejected before committing 
   let commits = 0
   const service = new AgUiProjectionService({
     readStream: async () => ({
+      sourceSubjectId: "user_1",
       version: 2,
       sourceHighWatermark: 2,
       projectionState: { textMessageIds: [] },
@@ -555,7 +556,7 @@ it("R353 carries strict Skill ready and terminal facts into the same source comm
   const commits = []
   const repository = {
     async readStream() {
-      return { version: 0, sourceHighWatermark: 0, projectionState: { textMessageIds: [] }, expectedRunId: "run_1" }
+      return { sourceSubjectId: "user_1", version: 0, sourceHighWatermark: 0, projectionState: { textMessageIds: [] }, expectedRunId: "run_1" }
     },
     async assertPersistedSources() {},
     async commitProjection(command) {
@@ -611,7 +612,13 @@ it("R353 carries strict Skill ready and terminal facts into the same source comm
 it("CHAT-ORDER retains exact text segment identity and distinguishes completed content from a new-segment delta", async () => {
   const commits = []
   const service = new AgUiProjectionService({
-    readStream: async () => ({ version: 0, sourceHighWatermark: 0, projectionState: { textMessageIds: [] }, expectedRunId: "run_1" }),
+    readStream: async () => ({
+      sourceSubjectId: "user_1",
+      version: 0,
+      sourceHighWatermark: 0,
+      projectionState: { textMessageIds: [] },
+      expectedRunId: "run_1",
+    }),
     assertPersistedSources: async () => {},
     commitProjection: async (command) => {
       commits.push(command)
@@ -736,4 +743,46 @@ describe("AG-UI idle eligibility", () => {
       if (!exhausted) assert.equal(progress[0][1], now, "unread pages remain immediately eligible")
     })
   }
+})
+
+it("each real consumer resumes its own source cursor across creator/editor/creator without resetting the Conversation", async () => {
+  const { AgUiProjectionService } = await import("../src/application/agui/project-session-events.ts")
+  const watermarks = new Map([
+    ["creator", 2],
+    ["editor", 0],
+  ])
+  const commits = []
+  const checked = []
+  const repository = {
+    readStream: async (_tenant, _session, subject) => {
+      assert.ok(watermarks.has(subject), "the real leased source subject selects its own cursor")
+      return { sourceSubjectId: subject, version: commits.length, sourceHighWatermark: watermarks.get(subject), projectionState: { textMessageIds: [] } }
+    },
+    assertPersistedSources: async (_tenant, _session, sources, subject) => checked.push({ subject, sequences: sources.map((s) => s.sourceSequence) }),
+    commitProjection: async (command) => {
+      assert.equal(command.sourceSubjectId, command.consumerLease.subjectId)
+      watermarks.set(command.sourceSubjectId, command.sourceHighWatermark)
+      commits.push(command)
+      return { kind: "committed", insertedFrames: 0 }
+    },
+  }
+  const service = new AgUiProjectionService(repository)
+  const event = (sequence) => ({ ...source(sequence), sourceRunId: null })
+  for (const [subject, sequence] of [
+    ["creator", 3],
+    ["editor", 1],
+    ["creator", 4],
+  ])
+    await service.ingest("tenant_1", "session_1", [event(sequence)], lease({ subjectId: subject }))
+  assert.deepEqual(
+    commits.map((c) => [c.sourceSubjectId, c.sourceHighWatermark]),
+    [
+      ["creator", 3],
+      ["editor", 1],
+      ["creator", 4],
+    ],
+  )
+  await service.ingest("tenant_1", "session_1", [event(4)], lease({ subjectId: "creator" }))
+  assert.equal(commits.length, 3, "replaying a source never reallocates Conversation public positions")
+  assert.deepEqual(checked.at(-1), { subject: "creator", sequences: [4] })
 })

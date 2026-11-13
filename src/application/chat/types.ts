@@ -1,3 +1,4 @@
+import type { ProjectAccess } from "../../domain/project/access.js"
 import type { ChatComposerSelection, OrderedMessageRendering } from "../../contracts/chat.js"
 import type { ChatExecutionHead, RunExecutionProcess } from "../agui/run-read.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
@@ -23,9 +24,14 @@ export type PrivateMessageRead = (
       content: null
       rendering: OrderedMessageRendering
     })
-) & { terminal_status?: "cancelled"; regeneratedFromMessageId?: string }
-export type PrivateMessagePage = { messages: PrivateMessageRead[]; next_cursor: string | null }
-export type MessageReadLifetime = Readonly<{ signal: AbortSignal; deadlineAt: number }>
+) & { terminal_status?: "cancelled"; regeneratedFromMessageId?: string; sharedProjectRead?: boolean; canRegenerate?: boolean }
+export type PrivateMessagePage = { messages: PrivateMessageRead[]; next_cursor: string | null; projectAccess?: ProjectAccess }
+export type MessageReadLifetime = Readonly<{
+  signal: AbortSignal
+  deadlineAt: number
+  /** Same-RR projection authority for the original buffered response; never a transport credential. */
+  onProjectRead?: (access: ProjectAccess | null) => void
+}>
 export type PrivateMessageReadContext = MessageReadLifetime & Readonly<{ scope: "all" | "direct" }>
 
 export type ShareMetadataQuery = PrivateMessageReadContext &
@@ -51,6 +57,7 @@ export type MessagePartsQuery = MessageReadLifetime &
   }>
 
 export type ChatSnapshot = {
+  projectAccess?: ProjectAccess
   composerSelection?: ChatComposerSelection
   conversation: Conversation
   messages: PrivateMessageRead[]
@@ -64,7 +71,7 @@ export type ChatSnapshot = {
 export type ChatArtifactDelivery = {
   conversationId: string
   artifactId: string
-  assetId: string
+  assetId?: string
   artifactKind: string
   title: string
   mime: string

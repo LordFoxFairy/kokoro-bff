@@ -225,6 +225,7 @@ export async function projectMcpRecommendationsRoute(
       const changed = await within(store.replaceMcpRecommendations({ ...query, ...input }))
       controller.signal.throwIfAborted()
       if (changed.kind === "not_found") throw new ProjectRecommendationNotFound()
+      if (changed.kind === "forbidden") throw new ConnectError("Project is read-only", Code.PermissionDenied)
       if (changed.kind === "precondition_failed") throw new ConnectError("Project recommendation changed", Code.FailedPrecondition)
       try {
         if (changed.kind !== "replaced") throw new Error()

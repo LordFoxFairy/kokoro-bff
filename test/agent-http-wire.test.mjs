@@ -22,12 +22,22 @@ const page = { data: { events: [event], next_seq: 1, watermark: 1 }, meta: { req
 
 it("projects only an exact safe Agent delivery display path, never inferring it from an old source path", () => {
   const path = "/reports/é.md"
-  const base = { tool_call_id: "tool_1", artifact_id: "artifact_1", asset_id: "asset_1", artifact_kind: "document", title: "Report", mime: "text/markdown", size: 12, content_hash: "a".repeat(64) }
-  const map = (source, displayPath) => mapAgentEvent({
-    ...event,
-    event_type: "delivery",
-    payload_json: JSON.stringify({ ...base, path: source, ...(displayPath === undefined ? {} : { display_path: displayPath }) }),
-  })
+  const base = {
+    tool_call_id: "tool_1",
+    artifact_id: "artifact_1",
+    asset_id: "asset_1",
+    artifact_kind: "document",
+    title: "Report",
+    mime: "text/markdown",
+    size: 12,
+    content_hash: "a".repeat(64),
+  }
+  const map = (source, displayPath) =>
+    mapAgentEvent({
+      ...event,
+      event_type: "delivery",
+      payload_json: JSON.stringify({ ...base, path: source, ...(displayPath === undefined ? {} : { display_path: displayPath }) }),
+    })
   assert.deepEqual(map(path, path).payload, { ...base, path, display_path: path })
   for (const [source, displayPath] of [
     [path, undefined],
@@ -55,19 +65,19 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "7bfbf5ef3febaad710007fcd88992f44333d4740",
-        contract_version: "8.17.0",
+        repository_commit: "3e61c0a1aa30c40d45b14e96bebde3a6ee72e145",
+        contract_version: "8.18.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "c471094369efa80f1182e41c67ef8150835a4544c283fd8d2d4e689707a51aad",
+        contract_sha256: "cc7b8e02f5a110cde705bdbf31e9a408e0371c08fae32798bd928a63cc90642c",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "227015d780a9d9dbb93e5746690fc200bca4663bcf7736fe7b984e5bb9d08832",
+        provenance_sha256: "dca6ca96d41561c323d4a671287625053a92a4faa3502922c2b7396e49ddf03b",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "c471094369efa80f1182e41c67ef8150835a4544c283fd8d2d4e689707a51aad",
+        source_sha256: "cc7b8e02f5a110cde705bdbf31e9a408e0371c08fae32798bd928a63cc90642c",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
@@ -77,18 +87,18 @@ describe("Agent event-protocol provenance", () => {
   it("uses one HTTP8 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "7bfbf5ef3febaad710007fcd88992f44333d4740")
+    assert.equal(manifest.owner.repository_commit, "3e61c0a1aa30c40d45b14e96bebde3a6ee72e145")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "c471094369efa80f1182e41c67ef8150835a4544c283fd8d2d4e689707a51aad",
+      "cc7b8e02f5a110cde705bdbf31e9a408e0371c08fae32798bd928a63cc90642c",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/7bfbf5ef3febaad710007fcd88992f44333d4740/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/3e61c0a1aa30c40d45b14e96bebde3a6ee72e145/openapi.json", import.meta.url), "utf8"),
     )
     assert.deepEqual(owner.components.schemas.ChatActivity.oneOf[0].properties.display_code, {
       type: "string",
@@ -792,4 +802,30 @@ it("Agent canonical resource launch keeps complete immutable owner material and 
     assert.equal(projectSavedAgentLaunch({ ...base, selected_resource_refs: refs }), null, JSON.stringify(refs))
   assert.equal(projectSavedAgentLaunch({ ...base, trace: { source: "kokoro-bff-scheduler" }, selected_resource_refs: [answer] }), null)
   assert.equal(Object.hasOwn(projectSavedAgentLaunch(base), "selected_resource_refs"), false)
+})
+
+it("issued shared context validator preserves a closed ordered whole-message suffix and rejects drift without coercing legacy absence", async () => {
+  const { zLaunchRequest } = await import("../src/generated/agent-http/zod.gen.ts")
+  const context = {
+    project_ref: "project",
+    conversation_id: "session",
+    messages: [
+      { message_id: "u", sequence: "1", role: "user", content: " literal " },
+      { message_id: "a", sequence: "2", role: "assistant", content: "FINAL" },
+    ],
+    has_earlier_messages: false,
+  }
+  const schema = zLaunchRequest.shape.shared_conversation_context
+  assert.deepEqual(schema.parse(context), context)
+  for (const invalid of [
+    { ...context, messages: [context.messages[0], { ...context.messages[1], sequence: "not-decimal" }] },
+    { ...context, private_trace: "private" },
+    { ...context, messages: [context.messages[0], { ...context.messages[1], sequence: "1" }] },
+    { ...context, messages: [context.messages[0], { ...context.messages[1], message_id: "u" }] },
+    { ...context, messages: [{ ...context.messages[0], content: "界".repeat(87382) }] },
+    { ...context, messages: [{ ...context.messages[0], tool_result: "private" }] },
+  ])
+    assert.equal(schema.safeParse(invalid).success, false)
+  assert.equal(schema.safeParse(undefined).success, true)
+  assert.equal(schema.safeParse(null).success, false)
 })

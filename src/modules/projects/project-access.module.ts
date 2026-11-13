@@ -1,9 +1,13 @@
+import { createProjectGrantStore } from "../../infrastructure/postgres/project-grants.js"
 import { Module } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
 import {
   BFF_DATABASE,
   BFF_POOL,
   PROJECT_LOOKUP,
+  PROJECT_READ_LOOKUP,
+  PROJECT_EDIT_LOOKUP,
+  PROJECT_GRANTS,
   PROJECT_MCP_RECOMMENDATIONS_STORE,
   PROJECT_PINS,
   PROJECT_TASKS,
@@ -11,7 +15,7 @@ import {
 } from "../../common/tokens.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
 import type { Pool } from "pg"
-import { createProjectLookup } from "../../infrastructure/postgres/project-store.js"
+import { createProjectLookup, createProjectCapabilityLookup } from "../../infrastructure/postgres/project-store.js"
 import { createProjectTasks } from "../../infrastructure/postgres/project-tasks.js"
 import { createProjectPins } from "../../infrastructure/postgres/project-pin.js"
 import { PostgresIdempotencyRepository } from "../../infrastructure/postgres/idempotency-repository.js"
@@ -24,13 +28,44 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
 @Module({
   imports: [DatabaseModule],
   providers: [
-    { provide: PROJECT_PINS, inject: [BFF_DATABASE], useFactory: createProjectPins },
-    { provide: PROJECT_TASKS, inject: [BFF_DATABASE], useFactory: createProjectTasks },
-    { provide: PROJECT_LOOKUP, inject: [BFF_POOL], useFactory: createProjectLookup },
-    { provide: PROJECT_MCP_RECOMMENDATIONS_STORE, inject: [BFF_DATABASE], useFactory: createProjectMcpRecommendationsStore },
+    {
+      provide: PROJECT_GRANTS,
+      inject: [BFF_POOL],
+      useFactory: createProjectGrantStore,
+    },
+    {
+      provide: PROJECT_PINS,
+      inject: [BFF_DATABASE],
+      useFactory: createProjectPins,
+    },
+    {
+      provide: PROJECT_TASKS,
+      inject: [BFF_DATABASE],
+      useFactory: createProjectTasks,
+    },
+    {
+      provide: PROJECT_READ_LOOKUP,
+      inject: [BFF_POOL],
+      useFactory: (pool: Pool) => createProjectCapabilityLookup(pool, "read"),
+    },
+    {
+      provide: PROJECT_EDIT_LOOKUP,
+      inject: [BFF_POOL],
+      useFactory: (pool: Pool) => createProjectCapabilityLookup(pool, "edit"),
+    },
+    {
+      provide: PROJECT_LOOKUP,
+      inject: [BFF_POOL],
+      useFactory: createProjectLookup,
+    },
+    {
+      provide: PROJECT_MCP_RECOMMENDATIONS_STORE,
+      inject: [BFF_DATABASE],
+      useFactory: createProjectMcpRecommendationsStore,
+    },
     {
       provide: PROJECT_SKILL_SELECTION_PROVIDER,
-      inject: [PROJECT_LOOKUP, BFF_DATABASE, BFF_POOL],
+      inject: [PROJECT_READ_LOOKUP, BFF_DATABASE, BFF_POOL],
       useFactory: (lookup: ProjectLookup, database: PostgresBffDatabase, pool: Pool): ProjectSkillSelectionProvider => {
         const receipts = new PostgresIdempotencyRepository(pool)
         return {
@@ -41,6 +76,15 @@ import type { ProjectSkillSelectionProvider } from "../../http/routes/project-sk
       },
     },
   ],
-  exports: [PROJECT_LOOKUP, PROJECT_MCP_RECOMMENDATIONS_STORE, PROJECT_PINS, PROJECT_TASKS, PROJECT_SKILL_SELECTION_PROVIDER],
+  exports: [
+    PROJECT_GRANTS,
+    PROJECT_LOOKUP,
+    PROJECT_READ_LOOKUP,
+    PROJECT_EDIT_LOOKUP,
+    PROJECT_MCP_RECOMMENDATIONS_STORE,
+    PROJECT_PINS,
+    PROJECT_TASKS,
+    PROJECT_SKILL_SELECTION_PROVIDER,
+  ],
 })
 export class ProjectAccessModule {}

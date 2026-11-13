@@ -117,6 +117,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
           "project_ref",
           "project_instruction",
           "personal_context",
+          "shared_conversation_context",
           "selected_skill_source_refs",
           "selected_mcp_connection_ids",
           "selected_custom_api_profiles",
@@ -161,6 +162,13 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
   if (selectedResourceRefs === null) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const personal = zLaunchRequest.shape.personal_context.safeParse(launchValue.personal_context)
   if (!personal.success || (Object.hasOwn(launchValue, "personal_context") && personal.data == null)) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
+  const shared = zLaunchRequest.shape.shared_conversation_context.safeParse(launchValue.shared_conversation_context)
+  if (
+    !shared.success ||
+    (Object.hasOwn(launchValue, "shared_conversation_context") && shared.data == null) ||
+    (shared.data && (shared.data.project_ref !== launchValue.project_ref || shared.data.conversation_id !== launchValue.session_id))
+  )
+    throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const thinking = traceValue.thinking
   if (thinking !== undefined && typeof thinking !== "boolean") throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const requestedModel = optionalString(launchValue, "requested_model_label")
@@ -176,6 +184,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
       project_ref: executionProject,
       ...(projectInstruction === undefined ? {} : { project_instruction: projectInstruction }),
       ...(personal.data == null ? {} : { personal_context: personal.data }),
+      ...(shared.data == null ? {} : { shared_conversation_context: shared.data }),
       selected_skill_source_refs: selectedSkillSourceRefs,
       ...(selectedMcpConnectionIds === undefined ? {} : { selected_mcp_connection_ids: selectedMcpConnectionIds }),
       ...(selectedCustomApiProfiles === undefined ? {} : { selected_custom_api_profiles: selectedCustomApiProfiles }),

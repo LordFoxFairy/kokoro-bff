@@ -1,3 +1,4 @@
+import { projectReaderAgUiFrames } from "../../application/agui/project-session-events.js"
 import { setTimeout as sleep } from "node:timers/promises"
 import { isRecord } from "../../domain/json.js"
 import type { AgUiRunControlReader } from "../../infrastructure/postgres/agui-run-state-read.js"
@@ -76,6 +77,7 @@ export async function liveAgentSessionEvents(
   sourceProjectionActive: boolean,
   runtime: AgUiSessionRuntime,
   signal: AbortSignal,
+  reader?: Readonly<{ sharedProject: boolean; authorize: () => Promise<boolean | { ok: true; canEdit: boolean } | { status: 401 | 404; code: string }> }>,
 ): Promise<void> {
   const fail = (status: number, code: string, message: string): void => {
     signal.throwIfAborted()
@@ -122,12 +124,23 @@ export async function liveAgentSessionEvents(
         projection.replay(tenantId, sessionId, cursor, config.agUi.replayPageFrames, config.agUi.replayPageBytes),
       )
       signal.throwIfAborted()
+      const access = reader ? await reader.authorize() : true
+      if (access !== true && !(typeof access === "object" && "ok" in access && access.ok)) {
+        const rejection = access === false || !("status" in access) ? { status: 404, code: "session_not_found" } : access
+        if (!response.headersSent) fail(rejection.status, rejection.code, "Session was not found")
+        else if (!response.writableEnded && !response.destroyed) response.end()
+        return { state: "stopped", wroteFrames }
+      }
+      signal.throwIfAborted()
       if (page.kind === "invalid_cursor") return { state: "invalid_cursor", wroteFrames }
       if (page.kind === "expired_cursor") return { state: "expired_cursor", wroteFrames }
       if (page.frames.length > 0) {
         startAgUiStream(response, context.requestId)
         streamStarted = true
-        const write = await writer.writeFrames(page.frames)
+        const visibleFrames = reader?.sharedProject
+          ? projectReaderAgUiFrames(page.frames, context.identity.userId, typeof access === "object" && "ok" in access && access.canEdit)
+          : page.frames
+        const write = await writer.writeFrames(visibleFrames)
         signal.throwIfAborted()
         cursor = write.lastCursor ?? cursor
         wroteFrames = wroteFrames || write.writtenFrames > 0
@@ -136,6 +149,8 @@ export async function liveAgentSessionEvents(
           return { state: "stopped", wroteFrames }
         }
       }
+      // Filtered frames still consume the same durable public positions, without inventing another cursor.
+      cursor = page.frames.at(-1)?.cursor ?? cursor
       if (!page.atHead) continue
       return { state: page.terminalRunId === null ? "head" : "terminal", wroteFrames }
     }

@@ -29,12 +29,16 @@ export function chatMessage(message: Message): ChatMessage {
 }
 
 export function privateChatMessage(message: PrivateMessageRead): ChatMessageRead {
-  if (message.content !== null)
+  if (message.content !== null) {
+    const { selected_skill_source_refs, ...visible } = chatMessage(message)
     return {
-      ...chatMessage(message),
+      ...visible,
+      ...(message.canRegenerate === undefined ? {} : { can_regenerate: message.canRegenerate }),
+      ...(message.sharedProjectRead || selected_skill_source_refs === undefined ? {} : { selected_skill_source_refs }),
       ...(message.regeneratedFromMessageId === undefined ? {} : { regenerated_from_message_id: message.regeneratedFromMessageId }),
       ...(message.terminal_status === undefined ? {} : { terminal_status: message.terminal_status }),
     }
+  }
   return {
     message_id: message.messageId,
     role: "assistant",
@@ -43,6 +47,7 @@ export function privateChatMessage(message: PrivateMessageRead): ChatMessageRead
     created_at: iso(message.createdAt),
     run_id: message.runId,
     rendering: message.rendering,
+    ...(message.canRegenerate === undefined ? {} : { can_regenerate: message.canRegenerate }),
     ...(message.regeneratedFromMessageId === undefined ? {} : { regenerated_from_message_id: message.regeneratedFromMessageId }),
     ...(message.terminal_status === undefined ? {} : { terminal_status: message.terminal_status }),
     ...(message.failure === null ? {} : { failure: message.failure }),
