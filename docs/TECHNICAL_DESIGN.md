@@ -1,18 +1,28 @@
 ## 2026-11-13 B10：同租户 Project 协作设计门（目标态，分阶段实现中、未验收）
 
+### 本轮具名已知父演进（隔离 PG 已验，正常数据未改）
+
+Public29协作核心已作为 `38d47c9` 发行；正常运行／数据库未激活。仅现 `apply-schema.mjs --evolve-project-collaboration` 增加显式模式，
+fresh 空 owner 语义不变，不改变既有 personalization 具名入口，也不新建 migration 平台／ledger。运行时从 canonical SQL 的现完整逆证识别固定 d875／28.38父；
+测试以该 Git commit 原件核字节，不拿编辑中的文件当历史。受影响9表及新2表用真实 catalog 精确比较（列／约束／完整 index／RLS／触发器／继承）；
+owner advisory lock 和具名表锁后重核，30s总期限／1s锁预算，一事务保值回填；unknown／mixed／矛盾来源回滚，current只识别，COMMIT未知不伪称回滚或自动重试。
+实际 Scheduled 接受事务同时持久dispatch与terminal202 receipt，旧revision从该原snapshot精确绑定；允许已删除Task的历史，不猜当前revision。
+旧source仅用已证明consumer／Conversation原creator及一致dispatch/process起源回填独立cursor，保原HWM／state／public payload与ID，不reset或默认owner。
+主控pure3项及真实PG完整演进1项通过（均0跳过），覆盖保值、unknown/mixed拒绝、来源矛盾回滚与current noop，运行输入SHA不变、自有库回收；不是正常数据升级或完整B10验收。
+
 ### B13 Custom API 管理HTTP候选（同Public29，未正常激活）
 
 Platform仍唯一CustomApi事实、command receipt与audit owner；BFF仅新增六个安全public HTTP投影，不新增SQL/Schema、缓存或授权镜像。复用现Platform URL，独立custom_api_admin credential文件每请求完整重读；tenant与管理员来自native鲜验且platformAdmin必须为true，不借mcp_catalog.manage／本人身份。current profile、immutable ACK与删除后audit读分离；body／IAM／RPC共用有界signal/deadline，不自动retry，shutdown关闭原client。机器契约与HTTP装配由本轮指定writer串行承接，正常组合激活另验。
 
 普通Chat幂等亦按真实actor隔离：`bff_agent_dispatch_outbox` business unique改为tenant／conversation／actor／key，与现HTTP receipt及prepare／replay主体scope一致；既有identity material已含subject且commit强制subject=actor，不同协作者同key的新run／message／outbox ID天然隔离，无需换派生算法。原持久ID／payload／摘要／回执不重写，精确父仅换约束；一条creator→editor→creator PG同时证明同key独立成功和原actor重放原ACK，不退成跨actor全资源409。
 
-### B10 已裁决多执行主体来源（2026-11-13，待实现／未激活）
+### B10 已裁决多执行主体来源（2026-11-13，核心已发行／未激活）
 
 Agent 的真实 namespace 按 tenant＋user subject 隔离，同 Conversation 换真实 executor 后源 sequence 从其自己的历史继续；沿 creator namespace 代理或 reset 单 HWM 都不成立。保留唯一 `bff_agui_stream` 的 Conversation public sequence／opaque cursor／现 lease与fence，仅新增该流下具名 `bff_agui_source_cursor(tenant_id,session_id,source_owner,subject_id)`，保存各真实来源唯一 high_watermark／projection_state；搬迁后退役 stream 原两个可写 source 字段，不双写。source_event、event 的 source-frame、artifact 的 source 唯一身份带 source_subject_id，历史 public payload／cursor 字节不改，process／interaction／GC／完整性 JOIN 一并用来源主体，不把 seq 当跨主体全序。
 
 锁序沿现 Project／Conversation→stream→对应 source_cursor，immutable dispatch 的 subject=actor／expected Run 是切源依据；前 Run terminal／原fence边界后才能切换，增加现fence并清旧lease，读者注册不切生产来源。投影同事务核真实来源lease、来源连续性／digest，分配单一public序并写Message／FINAL／terminal和该来源cursor；unknown／历史outbox仍原actor恢复。返回creator取其保留cursor，不归零。精确旧父须由原consumer、Conversation owner与已持久dispatch/process的相符事实唯一证明旧origin；旧HWM／state原样转入该来源，未知／缺失／矛盾拒绝，不能默认owner兜底。最低独有PG：creator N→editor 1→creator N+1，public严格递增、重复零新增、来源身份冲突和旧fence拒绝，另验证精确父旧值保留／矛盾拒迁移；不重跑已完成grant／Scheduled三份PG。
 
-共享执行模式由 Project 存在过真实grant记录（含revoked／expired）判定；现无物理删除grant路径，owner后续Run也不得回私人checkpoint模式，无mode表。模型窗口另依赖Agent正式可选typed shared_context：BFF只冻结当前获准user正文与确认FINAL的有序whole-message有界后缀（最多128条／256KiB、显式has_earlier_messages），不拼input_text、不继承creator checkpoint／workspace；具体wire以owner发行后固定消费。该依赖未闭不激活editor新Run。SSE仅原native准入／到期生命周期和每个待发ledger批次fresh grant；idle沿现最大8s轮询，DB grant鲜验不等同IAM成员瞬时撤权，已发字节不承诺收回。
+共享执行模式由 Project 存在过真实grant记录（含revoked／expired）判定；现无物理删除grant路径，owner后续Run也不得回私人checkpoint模式，无mode表。模型窗口另依赖Agent正式可选typed shared_context：BFF只冻结当前获准user正文与确认FINAL的有序whole-message有界后缀（最多128条／256KiB、显式has_earlier_messages），不拼input_text、不继承creator checkpoint／workspace；具体wire已按Agent3e61c0a1/HTTP8.18正式发行并固定消费；App29、剩余入口、正常Schema/组合与native证据未闭前不激活editor新Run。SSE仅原native准入／到期生命周期和每个待发ledger批次fresh grant；idle沿现最大8s轮询，DB grant鲜验不等同IAM成员瞬时撤权，已发字节不承诺收回。
 
 **BREAKING 候选 Public29.0／221 operations（未发行、未正常激活）**：在正式已发行28.38完整父字节上增加4个Project access/grant操作；仅 ScheduledTask PATCH 与具名retry新增 required精确revision If-Match，缺失428／冲突409，无缺省或第二路由。current ScheduledTaskDetails required公开 revision＋execution_actor_id；immutable mutation ACK／既有receipt／outbox正文保持原形状，不猜历史executor。App须先fresh details冻结CAS并正式升级固定artifact，同片配对后才激活；未发行28.39不是历史父。新协作lookup／编辑锁只接canonical project_id，不接受slug；原私人owner-only finder保原语义，本人旧URL由App从当前Project事实解析ID，不新造服务端alias。
 

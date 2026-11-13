@@ -73,6 +73,10 @@ pnpm dev
 只复用一个本地 PostgreSQL 和一个 Redis，不为 BFF 重复启动基础设施。`db:apply-schema` 仅在同一应用数据库的
 空 `kokoro_bff` schema 安装 canonical schema，不要求其他 owner schema 或 `public` 为空，也不执行历史 migration。
 
+B10 的显式 `pnpm db:evolve-project-collaboration`（同 installer 的 `--evolve-project-collaboration`）与 fresh 模式分离：
+只识别固定已发行 d875／Public28.38父的受影响事实或 exact current；未知／混合 catalog、矛盾旧来源拒绝，current 不改 owner 数据。
+既有应用数据的演进和正常激活仍需资源主控明确授权；本轮源码候选不授权直接对正常库运行。
+
 ## 服务调用 envelope 与用户准入
 
 以下是受信 Web/Admin **服务端 adapter → BFF** 的传输示意，不是浏览器调用模板。
@@ -120,6 +124,10 @@ B10 Project collaboration 的具名真实 PG 入口为 `test/project-collaborati
 以 `KOKORO_TEST_POSTGRES_URL` 执行 `node --test --test-concurrency=1 test/project-collaboration.integration.mjs`。
 阶段复验可用原 Node `--test-name-pattern` 选择具名用例；测试缺少/不符隔离 URL 会失败，不跳过、不建库或删库。
 结束由同一资源主控 DROP 本轮自有库并核实不存在，保留失败证据；不得指向正常应用库或清理他人数据。
+
+独立已知父演进验证用 `pnpm test:project-collaboration-schema:integration`，同样只接受上述本轮独占 URL，先 `pnpm build`。
+此具名测试需要**空**自有库，由测试调用原正式 installer 安装固定 Git d875父，随后验证保值演进／拒绝未知与混态／current noop；
+不要预装 current，也不要与前一组 current-schema 用例并发或共用数据。仍由 Root 创建／DROP／核不存在，不加入无资源默认测试。
 
 缺少 fixture 时 integration 是未执行，不是通过。完整矩阵见 [`docs/ACCEPTANCE.md`](./docs/ACCEPTANCE.md)。
 

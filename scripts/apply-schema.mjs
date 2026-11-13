@@ -1,3 +1,4 @@
+import { evolveLockedProjectCollaboration, projectCollaborationDefinitions } from "./project-collaboration-schema.mjs"
 import { messageFinalAnswerDefinitions } from "./message-final-answer-schema.mjs"
 import {
   messageRegenerationDefinitions,
@@ -110,11 +111,68 @@ export async function applyCanonicalSchema(databaseUrl, schema) {
   }
 }
 
+/** Explicit owner-only evolution of the issued Public28.38 Project facts; never a fresh-install fallback. */
+export async function evolveProjectCollaborationSchema(databaseUrl, schema) {
+  assertBffSchemaUrl(databaseUrl)
+  const definitions = projectCollaborationDefinitions(schema)
+  const deadline = performance.now() + 30_000
+  const pool = new Pool({ connectionString: databaseUrl, max: 1, connectionTimeoutMillis: 5000, options: `-c search_path=${OWNER_SCHEMA} -c timezone=UTC` })
+  let client,
+    open = false,
+    committing = false,
+    broken = false
+  const query = async (text, values) => {
+    const remaining = Math.floor(deadline - performance.now())
+    if (remaining < 1) {
+      broken = true
+      throw Error("PROJECT_COLLABORATION_EVOLUTION_TIMEOUT")
+    }
+    try {
+      return await client.query({ text, values, query_timeout: remaining })
+    } catch (error) {
+      broken = true
+      throw error
+    }
+  }
+  try {
+    client = await pool.connect()
+    await query("BEGIN")
+    open = true
+    await query("SELECT set_config('lock_timeout','1000ms',true),set_config('statement_timeout',$1,true)", [
+      String(Math.max(1, Math.floor(deadline - performance.now()))),
+    ])
+    await query("SELECT pg_advisory_xact_lock(hashtext(current_database()),hashtext($1))", [OWNER_SCHEMA])
+    const state = await evolveLockedProjectCollaboration(query, definitions)
+    committing = true
+    await query("COMMIT")
+    open = false
+    return state
+  } catch (error) {
+    if (open && !committing && !broken)
+      await client.query({ text: "ROLLBACK", query_timeout: 1000 }).catch(() => {
+        broken = true
+      })
+    if (committing) throw Error("PROJECT_COLLABORATION_EVOLUTION_COMMIT_UNKNOWN")
+    if (error instanceof Error && /^PROJECT_COLLABORATION_[A-Z_]+$/u.test(error.message)) throw error
+    const sqlstate = typeof error?.code === "string" && /^[0-9A-Z]{5}$/u.test(error.code) ? `:${error.code}` : ""
+    throw Error(`PROJECT_COLLABORATION_EVOLUTION_FAILED${sqlstate}`)
+  } finally {
+    client?.release(broken || open)
+    await pool.end()
+  }
+}
+
 async function main() {
   const databaseUrl = process.env.KOKORO_BFF_POSTGRES_URL?.trim()
   if (!databaseUrl) throw new Error("KOKORO_BFF_POSTGRES_URL is required")
-  await applyCanonicalSchema(databaseUrl, await loadCanonicalSchema())
-  console.log("Applied database/schema.sql to an empty kokoro_bff schema")
+  const args = process.argv.slice(2)
+  if (args.length === 1 && args[0] === "--evolve-project-collaboration") {
+    const state = await evolveProjectCollaborationSchema(databaseUrl, await loadCanonicalSchema())
+    console.log(`Project collaboration owner schema: ${state}`)
+  } else if (args.length === 0) {
+    await applyCanonicalSchema(databaseUrl, await loadCanonicalSchema())
+    console.log("Applied database/schema.sql to an empty kokoro_bff schema")
+  } else throw Error("Unknown schema command")
 }
 
 const invokedPath = process.argv[1] === undefined ? null : pathToFileURL(path.resolve(process.argv[1])).href

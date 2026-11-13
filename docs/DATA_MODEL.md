@@ -1,4 +1,14 @@
-## 2026-11-13 B10：ProjectGrant 与 Project 访问版本设计门（未执行 DDL）
+## 2026-11-13 B10：ProjectGrant 与 Project 访问版本（核心已发行，正常数据未演进）
+
+### 具名 Project 协作父演进（隔离 PG 已验）
+
+canonical SQL维持 `5d02adc16da062e69e8d88423d911f73b55bb02af4934bb9e2d209268e23d8c7`；没有第二份可编辑Schema。
+显式owner入口只承接固定 d875／Public28.38完整父，受影响9旧表必须全为父或全为current，新2表缺失／存在须一致；未知或混态拒绝。
+旧Task `execution_actor_id=owner_id`保原可信executor事实，非法owner拒绝；旧dispatch的`task_revision`来自原原子接受receipt内snapshot，不由现Task猜。
+原Task owner／revision／prompt／计划／enabled及已派发Run／payload／ID／账本不改，business unique只纳真实actor。
+旧stream的HWM/state在已证明真实subject后移入source cursor，再退役原两可写列；三个source身份表补同一已证subject，public序／cursor／payload字节不重写。
+缺原consumer、矛盾dispatch/process或来源identity失败即整事务回滚；current noop不重写事实。新ProjectGrant不物理删除，曾共享触发事实保留。
+主控真实 PG 一条完整用例通过（0失败／0跳过），证明旧事实保值、未知／混态拒绝、矛盾来源回滚及current noop；pure3项和运行输入SHA亦已复验，自有测试库已DROP。正常应用库未执行此命令，不以隔离证据冒正常升级。
 
 ### B13 Custom API 管理HTTP候选（同Public29，未正常激活）
 

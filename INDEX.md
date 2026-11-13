@@ -11,7 +11,7 @@
 | [文档索引](./docs/INDEX.md) | 专项文档阅读顺序 |
 | [技术设计](./docs/TECHNICAL_DESIGN.md) | 当前模块、认证边界与有效设计决定 |
 | [API 说明](./docs/API_CONTRACT.md) | 人读契约与例外边界 |
-| [Public OpenAPI](./contract/openapi/v1/openapi.yaml) | 唯一 canonical public contract，当前 Public 28.38 / 217 operations |
+| [Public OpenAPI](./contract/openapi/v1/openapi.yaml) | 唯一 canonical public contract，当前 Public 29.0 / 227 operations |
 | [契约发行说明](./contract/README.md) | owner、visibility、生成、固定来源及 breaking 规则 |
 | [数据模型](./docs/DATA_MODEL.md) | 本 owner 的事实与事务边界 |
 | [canonical schema](./database/schema.sql) | 本 owner 唯一可编辑 PostgreSQL schema |
@@ -19,6 +19,14 @@
 | [命令](./package.json) | 本仓真实质量门禁 |
 
 ## 当前源码地图
+
+Public29 协作核心正式基线为 `38d47c9`；源码发行不表示正常运行已切换，未完入口及验收边界见 CURRENT。
+`ProjectAccessModule`／`project-grants`、Chat 安全投影／冻结 shared context 与 AG-UI 每 subject source cursor 是现有业务模块内的能力；
+Agent 固定 HTTP8.18，已有消费者需正规升级29，不能用未知字段容忍替代。
+具名数据演进仅见 [`scripts/apply-schema.mjs`](./scripts/apply-schema.mjs) 的 `--evolve-project-collaboration` 与
+[`scripts/project-collaboration-schema.mjs`](./scripts/project-collaboration-schema.mjs)；canonical 仍只有 `database/schema.sql`。
+该入口已由主控真实隔离 PG 验证固定父演进／拒绝未知及混态／来源矛盾回滚／current noop，测试库已回收；旧正常数据未演进。不恢复通用 migration 链或第二运行框架。
+
 
 - [`src/modules/`](./src/modules/)：按业务能力装配的 Nest 模块；认证归
   [`src/modules/authentication/`](./src/modules/authentication/)，不存在旧 `src/bootstrap/` 入口。

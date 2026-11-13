@@ -1,3 +1,18 @@
+## 2026-11-13 Public29 / Agent8.18 协作核心已发布，正常组合未激活
+
+正式源码基线 `38d47c958cecdc072ee60d5a96ad17c48ac691c6`（原 Draft PR #17）发布 Public29.0／227 operations，固定消费 Agent HTTP8.18。
+已交付 ProjectGrant／当前访问版本、viewer/editor 基础读写、ScheduledTask 独立 executor 与 revision fence、按真实 subject 的 AG-UI source cursor、
+共享 Conversation 的安全快照／消息／确认 FINAL、当前 actor 冻结的 typed shared context、SSE 权限投影，以及资源读／编辑分流；六个 Custom API Admin HTTP 同版发行。
+PATCH／retry 的 required revision If-Match 是明确 breaking，前端需正规固定29消费者配对；不是旧消费者的宽容分支。
+Root 在135路径停写核等后复验 focused240、历史 contract102（均0失败／0跳过）、正规 Agent generation 与 build，通过后提交；
+隔离 PG 的 grant／Scheduled executor／同key actor隔离／多source／安全读取及 context-control 分阶段证据不替代真实 Agent/native 整旅程。
+两个实际 SQL 缺陷、跨 subject orphan 误判与发送前降权旧体泄漏均已按各自证据修复；失败原件保留，不拼作全量首次绿色。
+
+正常 BFF／既有数据库未切换或演进；App/Admin 的29消费与完整 native 验收仍由各 owner 和 Root 负责。
+原 B10 未闭合：具名已知父演进的正常应用、Skills 安装／包／规格权限接线、本人 Project pin、Project 聚合删除、选中 FINAL 输入资格及本人 editor RunDisplay。
+本轮后继 `--evolve-project-collaboration` 只接受固定 d875／28.38父或 exact current，不是 fresh fallback；主控纯规则3例与真实 PG 完整演进用例1项均0失败／0跳过，运行输入SHA核等、自有库已DROP，
+不因此宣称正常 schema 已升级或整个协作完成。
+
 ## 2026-11-13 Skills early-denial normal activation
 
 c40315b9 is active on the normal source runtime. Main verified the three related native HTTP files:65 PASS/0 FAIL/0 SKIP; nonincremental types and formal build pass. Two wrappers now set the existing request ID before admission; all status/body/permission/owner behavior and strict App validation remain unchanged. The real normal Admin path after restoring the original non-admin role now returns403 skill_forbidden, with UUID request ID, JSON and no-store, rather than502. Admin generates its own ID; the initial external-ID echo assertion was invalid and its failure remains recorded. No contract/schema/version increment.
