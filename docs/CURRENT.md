@@ -1,4 +1,10 @@
-## 2026-11-13 B10 已知剩余输入与聚合删除源码收口（候选）
+## 2026-11-13 B10 已知协作源码完整默认门收口（正常组合未激活）
+
+源码 `6b1d8a49863d1f32124cd5c0c8b7e1c198f67fde` 的20路径已沿原#17提交推送。后继最终正式 `pnpm test` 实测2580项：2578 PASS／0 FAIL／2条件SKIP；16源码测试+8compiled输入在整轮前后逐SHA保持，正常build/lint/types/scopedformat与相关真实PG/三独审证据见下。原2556/21/2完整失败轮、各定向修复及真正越权/ACK回归的RED均保留；本段明确替代下方“当时未重跑完整默认”的阶段状态，不改写历史失败。
+
+这只收口当前BFF源码门，不冒全产品native或正常Schema已升级。Root当前只读预检：正常BFF53 dispatch均terminal，取消／scheduled dispatch空、启用Task0、活跃consumer lease0；Agent53 Run均terminal、活跃lease0，53条历史claimed dispatch均有对应已终态Run、event outbox全published。记录未被清零，不触发模型/资金/清卷；实际切换前仍须重验quiet。下一步正常exact父/catalog核验、受控配对激活、真实双身份及Admin治理，随后公开Portal29文档和原PR整体main/清理。Goal保持active。
+
+## 2026-11-13 前一检查点：输入与聚合删除候选及修复证据
 
 在 `5cb7b13d` 后继补齐共享 Project 的 selected FINAL／Artifact 来源资格：同 tenant、唯一解析的同 canonical Project、当前 read，私人来源仍限本人；来源 executor／asset／Run 不被改成 caller，目标仍在原事务核 edit，Storage metadata 用当前 caller 在事务外读取。复跑真实 PG/Nest 还暴露 current latest/active 预读误拦已接受 regeneration 的同键重放；现分开不可变 source 事实读与 fresh commit/UI eligibility，原 key receipt 先返回，fresh 资格未放宽。
 
