@@ -12,10 +12,11 @@ function fixture({ found = true, commitFailure = false } = {}) {
     async query(sql: string, values?: unknown[]) {
       calls.push({ sql, ...(values ? { values } : {}) })
       if (sql.startsWith("SELECT project_id FROM bff_project")) return { rows: found ? [{ project_id: "project" }] : [] }
+      if (sql.includes("AS can_read FROM bff_project")) return { rows: found ? [{ can_read: true }] : [] }
       if (sql.startsWith("INSERT INTO bff_project_pin")) current ??= new Date("2026-10-27T00:00:00.000Z")
       if (sql.startsWith("DELETE FROM bff_project_pin")) current = null
       if (sql.startsWith("SELECT project_id,pinned_at")) return { rows: current ? [{ project_id: "project", pinned_at: current }] : [] }
-      if (sql.startsWith("SELECT p.project_id")) return { rows: found ? [{ project_id: "project", pinned_at: current }] : [] }
+      if (sql.startsWith("SELECT bff_project.project_id")) return { rows: found ? [{ project_id: "project", pinned_at: current }] : [] }
       if (sql === "COMMIT" && commitFailure) throw new Error("wire lost")
       return { rows: [] }
     },
@@ -40,7 +41,7 @@ test("pin state is naturally idempotent, keeps the first timestamp, and never up
   assert.ok(
     f.calls
       .filter((c) => c.sql.startsWith("SELECT project_id FROM bff_project"))
-      .every((c) => c.sql.endsWith("FOR UPDATE") && JSON.stringify(c.values) === JSON.stringify(["tenant", "subject", "project"])),
+      .every((c) => c.sql.endsWith("FOR UPDATE") && JSON.stringify(c.values) === JSON.stringify(["tenant", "project"])),
   )
   assert.ok(f.releases.every((value) => value === false))
 })

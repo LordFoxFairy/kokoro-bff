@@ -1,6 +1,6 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, PROJECT_LOOKUP, SESSION_ADMISSION, SKILL_INSTALLATION_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT } from "../../common/tokens.js"
+import { BFF_CONFIG, PROJECT_READ_LOOKUP, SESSION_ADMISSION, SKILL_INSTALLATION_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ProjectLookup } from "../../application/projects/types.js"
@@ -13,14 +13,23 @@ export class ProjectSkillPackageInspectionMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(PROJECT_LOOKUP) private readonly project: ProjectLookup,
+    @Inject(PROJECT_READ_LOOKUP) private readonly project: ProjectLookup,
     @Inject(SKILL_PACKAGE_INSPECTION_CLIENT) private readonly client: SkillPackageInspectionConnectClient | null,
     @Inject(SKILL_INSTALLATION_CLIENT) private readonly installations: SkillInstallationConnectClient | null,
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
-    void handleSkillPackageInspectionRequest(request, response, this.config, this.admission, { client: this.client, installations: this.installations }, this.project)
-      .then((handled) => { if (!handled && !response.writableEnded && !response.destroyed) next() })
+    void handleSkillPackageInspectionRequest(
+      request,
+      response,
+      this.config,
+      this.admission,
+      { client: this.client, installations: this.installations },
+      this.project,
+    )
+      .then((handled) => {
+        if (!handled && !response.writableEnded && !response.destroyed) next()
+      })
       .catch(() => {
         if (!response.headersSent && !response.destroyed) {
           response.statusCode = 500

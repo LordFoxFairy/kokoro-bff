@@ -3,6 +3,7 @@ import type { ProjectPinQuery, SetProjectPin } from "../../application/projects/
 import type { ProjectPin, ProjectPinList, ProjectPinState } from "../../domain/project/pin.js"
 import { projectPinId } from "../../domain/project/pin.js"
 import type { PostgresBffDatabase } from "./client.js"
+import { projectReadPredicate } from "./project-access.js"
 type PinLifetime = Readonly<{ signal: AbortSignal; deadlineAt: number }>
 /** A single bounded Project configuration transaction. It never touches command receipts. */
 async function transaction<T>(
@@ -120,9 +121,9 @@ export function listProjectPins(database: PostgresBffDatabase, input: ProjectPin
     async (query) => {
       if (input.projectId !== null) {
         const result = await query<PinRow>(
-          `SELECT p.project_id,pin.pinned_at FROM bff_project p
-        LEFT JOIN bff_project_pin pin ON pin.tenant_id=p.tenant_id AND pin.project_id=p.project_id AND pin.subject_id=$2
-        WHERE p.tenant_id=$1 AND p.owner_id=$2 AND p.project_id=$3 AND p.deleted_at IS NULL`,
+          `SELECT bff_project.project_id,pin.pinned_at FROM bff_project
+        LEFT JOIN bff_project_pin pin ON pin.tenant_id=bff_project.tenant_id AND pin.project_id=bff_project.project_id AND pin.subject_id=$2
+        WHERE bff_project.tenant_id=$1 AND ${projectReadPredicate} AND bff_project.project_id=$3 AND bff_project.deleted_at IS NULL`,
           [input.tenantId, input.subjectId, input.projectId],
         )
         const row = result.rows[0]
@@ -130,8 +131,8 @@ export function listProjectPins(database: PostgresBffDatabase, input: ProjectPin
       }
       const rows = await query<PinRow>(
         `SELECT pin.project_id,pin.pinned_at FROM bff_project_pin pin
-      JOIN bff_project p ON p.tenant_id=pin.tenant_id AND p.project_id=pin.project_id AND p.owner_id=$2 AND p.deleted_at IS NULL
-      WHERE pin.tenant_id=$1 AND pin.subject_id=$2
+      JOIN bff_project ON bff_project.tenant_id=pin.tenant_id AND bff_project.project_id=pin.project_id AND bff_project.deleted_at IS NULL
+      WHERE pin.tenant_id=$1 AND pin.subject_id=$2 AND ${projectReadPredicate}
         AND ($3::timestamptz IS NULL OR pin.pinned_at<$3 OR (pin.pinned_at=$3 AND pin.project_id COLLATE "C">$4::text COLLATE "C"))
       ORDER BY pin.pinned_at DESC,pin.project_id COLLATE "C" ASC LIMIT $5`,
         [input.tenantId, input.subjectId, input.position?.pinnedAt ?? null, input.position?.projectId ?? null, input.limit + 1],
@@ -148,12 +149,18 @@ export function setProjectPin(database: PostgresBffDatabase, input: SetProjectPi
     database,
     input,
     async (query) => {
-      const parent = await query(`SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL FOR UPDATE`, [
+      const parent = await query(`SELECT project_id FROM bff_project WHERE tenant_id=$1 AND project_id=$2 AND deleted_at IS NULL FOR UPDATE`, [
         input.tenantId,
-        input.subjectId,
         input.projectId,
       ])
       if (!parent.rows[0]) return null
+      // Grant mutations use the same parent lock. Read again after any wait so a
+      // revoked/expired grant cannot authorize a new personal preference write.
+      const access = await query<{ can_read: boolean }>(
+        `SELECT ${projectReadPredicate} AS can_read FROM bff_project WHERE tenant_id=$1 AND project_id=$3 AND deleted_at IS NULL`,
+        [input.tenantId, input.subjectId, input.projectId],
+      )
+      if (!access.rows[0]?.can_read) return null
       if (!input.isPinned) {
         await query(`DELETE FROM bff_project_pin WHERE tenant_id=$1 AND subject_id=$2 AND project_id=$3`, [input.tenantId, input.subjectId, input.projectId])
         return { projectId: input.projectId, isPinned: false, pinnedAt: null }

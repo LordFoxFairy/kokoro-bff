@@ -24,7 +24,7 @@ Platform仍唯一CustomApi事实、command receipt与audit owner；BFF仅新增�
 
 Project曾存在grant（含已撤销／过期行）是后续shared执行模式的既有持久事实；revoke保row，现无物理删除路径，不新增mode表。共享context冻结到现dispatch payload及原摘要，不建影子历史表；只含当前获准user正文和确认FINAL，128条／256KiB whole-message suffix及has_earlier_messages，Agent正式wire发布后承接，私有checkpoint／workspace不复用。FINAL既有Storage读取合同无需变化，此新Agent执行输入依赖是不同边界。
 
-**BREAKING 候选 Public29.0／221 operations（未发行、未正常激活）**：在正式已发行28.38完整父字节上增加4个Project access/grant操作；仅 ScheduledTask PATCH 与具名retry新增 required精确revision If-Match，缺失428／冲突409，无缺省或第二路由。current ScheduledTaskDetails required公开 revision＋execution_actor_id；immutable mutation ACK／既有receipt／outbox正文保持原形状，不猜历史executor。App须先fresh details冻结CAS并正式升级固定artifact，同片配对后才激活；未发行28.39不是历史父。新协作lookup／编辑锁只接canonical project_id，不接受slug；原私人owner-only finder保原语义，本人旧URL由App从当前Project事实解析ID，不新造服务端alias。
+**BREAKING Public29.0／227 operations（源码已发行、未正常激活）**：在正式已发行28.38完整父字节上增加4个Project access/grant操作；仅 ScheduledTask PATCH 与具名retry新增 required精确revision If-Match，缺失428／冲突409，无缺省或第二路由。current ScheduledTaskDetails required公开 revision＋execution_actor_id；immutable mutation ACK／既有receipt／outbox正文保持原形状，不猜历史executor。App须先fresh details冻结CAS并正式升级固定artifact，同片配对后才激活；未发行28.39不是历史父。新协作lookup／编辑锁只接canonical project_id，不接受slug；原私人owner-only finder保原语义，本人旧URL由App从当前Project事实解析ID，不新造服务端alias。
 
 Scheduled命令key沿既有HTTP actor隔离：现outbox business unique改为tenant/task/op/actor/key，新ID派生纳入真实actor；worker以已持久ID及row/payload lineage恢复，不重算/改写历史ID或payload、不建双协议。原key回执从原outbox.task immutable snapshot恢复，不回当前Task或猜历史executor；current binding始终单独fresh Details读取。旧unique更严格，已有合法数据满足新unique，精确父演进只替换该约束/索引并保全原事实。
 
@@ -247,7 +247,7 @@ GET的server、原expected_state_version、原Idempotency-Key仅在请求内定�
 | 读序索引 | (tenant_id,subject_id,pinned_at DESC,project_id ASC)，project_id 比较／排序显式 C 字节序；服务当前个人 keyset 列表 |
 | parent 清理索引 | (tenant_id,project_id)，服务现 Project 删除事务清所有 subject 关联，不以个人查询索引假称覆盖该路径 |
 
-这是可逆设置的存在性关联，无独立历史／软删除恢复窗口；不加 is_pinned、updated_at、deleted_at、version、CAS、receipt、outbox、rank、扩展 JSON 或 pin 总 quota，不引 FOREIGN KEY／REFERENCES。应用层按同一 Project parent 锁维护引用：写入先核 tenant／当前 subject 的可见 owner-only、未删除 parent，删除墓碑的同一事务内清所有关联；回滚同时恢复墓碑／pin／原删除事实，不改原 release outbox 语义。当前读以本 owner 同库 join 过滤 parent，孤儿或不可见关联不返回；GET 不承担清理。关联偏好不授 Project 权限，不把表预留 subject 维度冒现有共享 ACL。
+这是可逆设置的存在性关联，无独立历史／软删除恢复窗口；不加 is_pinned、updated_at、deleted_at、version、CAS、receipt、outbox、rank、扩展 JSON 或 pin 总 quota，不引 FOREIGN KEY／REFERENCES。应用层按同一 Project parent 锁维护引用：写入先锁同 tenant 的未删除 parent，再用锁后新 statement 核当前 subject 的 read 资格（owner 或有效 viewer/editor grant）；只修改该 subject 的偏好，删除墓碑的同一事务内清所有关联；回滚同时恢复墓碑／pin／原删除事实，不改原 release outbox 语义。当前读以本 owner 同库 join 过滤 parent，孤儿或不可见关联不返回；GET 不承担清理。关联偏好不授 Project 权限，共享资格唯一来自 Project grant，pin 行本身不授访问或编辑权限。
 
 并发以 parent 锁顺序串行、已提交状态 LWW；重复 true 采用冲突 no-op 并返回原 timestamp，不写 Project.updated_at，不伪造时间排序；false 的删除无历史命令回执。Project 墓碑先赢后续 pin／unpin404，pin先赢由后续删除清掉，取消／COMMIT未知交由当前状态只读确认，不能假称回滚。时间只用于稳定显示顺序，等毫秒用 project_id C 序消歧，不是跨设备逻辑时钟。
 

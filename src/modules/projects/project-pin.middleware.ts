@@ -6,7 +6,6 @@ import {
   BFF_POOL,
   PROJECT_PINS,
   PROJECT_TASKS,
-  PROJECT_LOOKUP,
   PROJECT_READ_LOOKUP,
   PROJECT_EDIT_LOOKUP,
   PROJECT_READS,
@@ -58,7 +57,6 @@ export class ProjectPinMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(PROJECT_LOOKUP) private readonly lookup: ProjectLookup,
     @Inject(PROJECT_READ_LOOKUP) private readonly readLookup: ProjectLookup,
     @Inject(PROJECT_EDIT_LOOKUP) private readonly editLookup: ProjectLookup,
     @Inject(PROJECT_READS) private readonly reads: ProjectReadStore,
@@ -89,7 +87,15 @@ export class ProjectPinMiddleware implements NestMiddleware {
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void (
       isProjectSkillInstallationRequest(request)
-        ? handleProjectSkillInstallationRequest(request, response, this.config, this.admission, this.skillAuthorization, this.lookup, this.installationClient)
+        ? handleProjectSkillInstallationRequest(
+            request,
+            response,
+            this.config,
+            this.admission,
+            this.skillAuthorization,
+            request.method === "GET" ? this.readLookup : this.editLookup,
+            this.installationClient,
+          )
         : isProjectSkillSelectionRequest(request)
           ? handleProjectSkillSelectionRequest(request, response, this.config, this.admission, this.projectSkillSelection, this.installationClient)
           : Promise.resolve(false)

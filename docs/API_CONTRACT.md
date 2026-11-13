@@ -14,7 +14,7 @@ public仍是单Conversation AG-UI＋原opaque cursor；source身份在BFF内部�
 
 Project存在过真实grant（包括revoked／expired，现不物理删除）后，owner/editor后续Run一致使用shared执行模式；不新增mode表。需固定消费Agent正式可选typed shared_context：当前权限快照内有序user正文＋确认FINAL的whole-message suffix，最多128条／256KiB，显式has_earlier_messages；只冻结原dispatch与其digest，不向input_text偷拼、不代理creator或读私人checkpoint。具体shape以Agent canonical发行后消费，依赖未闭不激活editor新Run；普通从未共享Project／TaskA无字段原语义保留。FINAL共享metadata另用闭集ProjectArtifactItem（project_access、无asset_id／favorited），Storage真实读取仍当前读者＋exact association，owner I/O与verified spool后鲜验、丢弃撤权迟到结果；private Library／favorite不因此开放。
 
-**BREAKING 候选 Public29.0／221 operations（未发行、未正常激活）**：在正式已发行28.38完整父字节上增加4个Project access/grant操作；仅 ScheduledTask PATCH 与具名retry新增 required精确revision If-Match，缺失428／冲突409，无缺省或第二路由。current ScheduledTaskDetails required公开 revision＋execution_actor_id；immutable mutation ACK／既有receipt／outbox正文保持原形状，不猜历史executor。App须先fresh details冻结CAS并正式升级固定artifact，同片配对后才激活；未发行28.39不是历史父。新协作lookup／编辑锁只接canonical project_id，不接受slug；原私人owner-only finder保原语义，本人旧URL由App从当前Project事实解析ID，不新造服务端alias。
+**BREAKING Public29.0／227 operations（源码已发行、未正常激活）**：在正式已发行28.38完整父字节上增加4个Project access/grant操作；仅 ScheduledTask PATCH 与具名retry新增 required精确revision If-Match，缺失428／冲突409，无缺省或第二路由。current ScheduledTaskDetails required公开 revision＋execution_actor_id；immutable mutation ACK／既有receipt／outbox正文保持原形状，不猜历史executor。App须先fresh details冻结CAS并正式升级固定artifact，同片配对后才激活；未发行28.39不是历史父。新协作lookup／编辑锁只接canonical project_id，不接受slug；原私人owner-only finder保原语义，本人旧URL由App从当前Project事实解析ID，不新造服务端alias。
 
 Scheduled命令key沿既有HTTP actor隔离：现outbox business unique改为tenant/task/op/actor/key，新ID派生纳入真实actor；worker以已持久ID及row/payload lineage恢复，不重算/改写历史ID或payload、不建双协议。原key回执从原outbox.task immutable snapshot恢复，不回当前Task或猜历史executor；current binding始终单独fresh Details读取。旧unique更严格，已有合法数据满足新unique，精确父演进只替换该约束/索引并保全原事实。
 
@@ -411,7 +411,7 @@ lookup1.1 `completed_only=true` 明确仅success_wrapper；`negative_ack=true` �
 
 ## PROJECT-PIN-D0：个人固定读取与状态 PUT（2026-10-27，Root 已核 D0，Public28.5 本地候选）
 
-固定偏好归 BFF Project owner，不修改原 Project closed 表示；后继只新增两条 public／beta operation，正式 canonical 仍 `contract/openapi/v1/openapi.yaml`，本节不是第二份机器 schema。身份沿当前 Session 和受信 tenant／subject，Root 已裁决 operation permission 均为 project.read＋现 owner-only、未删除 Project 可见性；这是 own preference write，不授 Project 共享写权限；完整 Session、服务身份方法边界和同源 CSRF 保持，body 不含 tenant／actor／subject，不新增 IAM action／协作 ACL。具体 owner／并发／部署门见 [技术设计](TECHNICAL_DESIGN.md) 同名 D0，数据见 [数据模型](DATA_MODEL.md)。
+固定偏好归 BFF Project owner，不修改原 Project closed 表示；后继只新增两条 public／beta operation，正式 canonical 仍 `contract/openapi/v1/openapi.yaml`，本节不是第二份机器 schema。身份沿当前 Session 和受信 tenant／subject，Root 已裁决 operation permission 均为 project.read＋当前有效 read 资格（owner／viewer／editor）及未删除 Project 可见性；这是 own preference write，不授 Project 共享写权限；完整 Session、服务身份方法边界和同源 CSRF 保持，body 不含 tenant／actor／subject，不新增 IAM action／协作 ACL。具体 owner／并发／部署门见 [技术设计](TECHNICAL_DESIGN.md) 同名 D0，数据见 [数据模型](DATA_MODEL.md)。
 
 | 候选 operation | 闭合输入 | 200 当前表示 |
 | --- | --- | --- |

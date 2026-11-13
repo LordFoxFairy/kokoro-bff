@@ -1,3 +1,11 @@
+## 2026-11-13 共享 Project 个人置顶及 Skills 读写接线（源码阶段）
+
+在 `690a787` 后继补齐：个人 pin 按当前 read 资格，仅写本人偏好；Project parent 锁后新 statement 重核 grant。Skills installation GET、包／规格／exact download 使用 read lookup，四类安装命令使用 edit lookup，保真实 actor、私有 finder 和原 I/O 后复核。独审发现半包 body 等待期间失去 edit 后仍发 owner 写的 P2；真实 Nest/HTTP 回归先复现 owner 调用多1，修复后 body/key 解析完、RPC 前重验同 Project，零新增 owner 写。
+
+主控五个相关完整文件183 PASS／0 FAIL／0 SKIP，正式 build／lint／types／12路径 scoped format 通过；真实 PG 两项（原个人 pin 和新增共享 pin）0 FAIL／0 SKIP，包含偏好隔离、锁等待撤权及到期隐藏，自有库已DROP并确认不存在。最初新 PG1 PASS/1 FAIL、接线两例失败、半包回归失败均保留，不拼首次全绿。额外 Nest/DI fixture 对齐正式 readable/read tokens 与完整 Conversation 事实，原零 I/O、关闭阶段断言不删除；两文件最终74 PASS／0 FAIL／0 SKIP；前两轮65/9及69/5失败原件保留。未运行完整默认／真实 IAM、Platform 或浏览器，不替代正常组合/native验收；无公开合同或 Schema 修改。
+
+剩余：Project aggregate 删除、selected FINAL 资格、本人 editor RunDisplay、正常演进与双身份旅程，整个 B10／Task B 仍 OPEN。
+
 ## 2026-11-13 Public29 / Agent8.18 协作核心已发布，正常组合未激活
 
 正式源码基线 `38d47c958cecdc072ee60d5a96ad17c48ac691c6`（原 Draft PR #17）发布 Public29.0／227 operations，固定消费 Agent HTTP8.18。
@@ -9,7 +17,7 @@ Root 在135路径停写核等后复验 focused240、历史 contract102（均0失
 两个实际 SQL 缺陷、跨 subject orphan 误判与发送前降权旧体泄漏均已按各自证据修复；失败原件保留，不拼作全量首次绿色。
 
 正常 BFF／既有数据库未切换或演进；App/Admin 的29消费与完整 native 验收仍由各 owner 和 Root 负责。
-原 B10 未闭合：具名已知父演进的正常应用、Skills 安装／包／规格权限接线、本人 Project pin、Project 聚合删除、选中 FINAL 输入资格及本人 editor RunDisplay。
+原 B10 未闭合：具名已知父演进的正常应用、Project 聚合删除、选中 FINAL 输入资格及本人 editor RunDisplay（pins／Skills 源码后继已验，native仍待）。
 本轮后继 `--evolve-project-collaboration` 只接受固定 d875／28.38父或 exact current，不是 fresh fallback；主控纯规则3例与真实 PG 完整演进用例1项均0失败／0跳过，运行输入SHA核等、自有库已DROP，
 不因此宣称正常 schema 已升级或整个协作完成。
 

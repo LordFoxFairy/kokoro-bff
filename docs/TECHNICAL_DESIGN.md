@@ -16,6 +16,10 @@ Platform仍唯一CustomApi事实、command receipt与audit owner；BFF仅新增�
 
 普通Chat幂等亦按真实actor隔离：`bff_agent_dispatch_outbox` business unique改为tenant／conversation／actor／key，与现HTTP receipt及prepare／replay主体scope一致；既有identity material已含subject且commit强制subject=actor，不同协作者同key的新run／message／outbox ID天然隔离，无需换派生算法。原持久ID／payload／摘要／回执不重写，精确父仅换约束；一条creator→editor→creator PG同时证明同key独立成功和原actor重放原ACK，不退成跨actor全资源409。
 
+### B10 已接线的个人置顶与 Skills 资格（2026-11-13，源码已验／未正常激活）
+
+Project pin 是本人的偏好写，复用现 read predicate；写入沿同一个 parent 锁，锁后新 statement 鲜验 grant，列表过滤已撤销／到期资格，不写 Project metadata。Skills installation 的 GET 与包／spec／exact download 使用 read lookup，其四类安装命令使用 edit lookup；不全局放宽私有 finder，不借 creator subject。请求体解析后、owner 写 RPC 前重核同 canonical Project，owner I/O 后原出口检查保留；不声称跨服务原子撤销或回滚已发命令。无 Schema、wire、owner protocol、依赖或内部认证新增。实际双身份浏览器与正常组合激活仍由 Root 收口。
+
 ### B10 已裁决多执行主体来源（2026-11-13，核心已发行／未激活）
 
 Agent 的真实 namespace 按 tenant＋user subject 隔离，同 Conversation 换真实 executor 后源 sequence 从其自己的历史继续；沿 creator namespace 代理或 reset 单 HWM 都不成立。保留唯一 `bff_agui_stream` 的 Conversation public sequence／opaque cursor／现 lease与fence，仅新增该流下具名 `bff_agui_source_cursor(tenant_id,session_id,source_owner,subject_id)`，保存各真实来源唯一 high_watermark／projection_state；搬迁后退役 stream 原两个可写 source 字段，不双写。source_event、event 的 source-frame、artifact 的 source 唯一身份带 source_subject_id，历史 public payload／cursor 字节不改，process／interaction／GC／完整性 JOIN 一并用来源主体，不把 seq 当跨主体全序。
@@ -24,7 +28,7 @@ Agent 的真实 namespace 按 tenant＋user subject 隔离，同 Conversation �
 
 共享执行模式由 Project 存在过真实grant记录（含revoked／expired）判定；现无物理删除grant路径，owner后续Run也不得回私人checkpoint模式，无mode表。模型窗口另依赖Agent正式可选typed shared_context：BFF只冻结当前获准user正文与确认FINAL的有序whole-message有界后缀（最多128条／256KiB、显式has_earlier_messages），不拼input_text、不继承creator checkpoint／workspace；具体wire已按Agent3e61c0a1/HTTP8.18正式发行并固定消费；App29、剩余入口、正常Schema/组合与native证据未闭前不激活editor新Run。SSE仅原native准入／到期生命周期和每个待发ledger批次fresh grant；idle沿现最大8s轮询，DB grant鲜验不等同IAM成员瞬时撤权，已发字节不承诺收回。
 
-**BREAKING 候选 Public29.0／221 operations（未发行、未正常激活）**：在正式已发行28.38完整父字节上增加4个Project access/grant操作；仅 ScheduledTask PATCH 与具名retry新增 required精确revision If-Match，缺失428／冲突409，无缺省或第二路由。current ScheduledTaskDetails required公开 revision＋execution_actor_id；immutable mutation ACK／既有receipt／outbox正文保持原形状，不猜历史executor。App须先fresh details冻结CAS并正式升级固定artifact，同片配对后才激活；未发行28.39不是历史父。新协作lookup／编辑锁只接canonical project_id，不接受slug；原私人owner-only finder保原语义，本人旧URL由App从当前Project事实解析ID，不新造服务端alias。
+**BREAKING Public29.0／227 operations（源码已发行、未正常激活）**：在正式已发行28.38完整父字节上增加4个Project access/grant操作；仅 ScheduledTask PATCH 与具名retry新增 required精确revision If-Match，缺失428／冲突409，无缺省或第二路由。current ScheduledTaskDetails required公开 revision＋execution_actor_id；immutable mutation ACK／既有receipt／outbox正文保持原形状，不猜历史executor。App须先fresh details冻结CAS并正式升级固定artifact，同片配对后才激活；未发行28.39不是历史父。新协作lookup／编辑锁只接canonical project_id，不接受slug；原私人owner-only finder保原语义，本人旧URL由App从当前Project事实解析ID，不新造服务端alias。
 
 Scheduled命令key沿既有HTTP actor隔离：现outbox business unique改为tenant/task/op/actor/key，新ID派生纳入真实actor；worker以已持久ID及row/payload lineage恢复，不重算/改写历史ID或payload、不建双协议。原key回执从原outbox.task immutable snapshot恢复，不回当前Task或猜历史executor；current binding始终单独fresh Details读取。旧unique更严格，已有合法数据满足新unique，精确父演进只替换该约束/索引并保全原事实。
 

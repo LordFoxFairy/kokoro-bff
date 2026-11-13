@@ -4,7 +4,7 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import {
   BFF_CONFIG,
   PROJECT_EXACT_DOWNLOAD_SOURCE,
-  PROJECT_LOOKUP,
+  PROJECT_READ_LOOKUP,
   SESSION_ADMISSION,
   SKILL_DOWNLOAD_HANDLES,
   SKILL_EXACT_DOWNLOAD_SOURCE,
@@ -38,7 +38,7 @@ export class ProjectSkillDownloadMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(PROJECT_LOOKUP) private readonly project: ProjectLookup,
+    @Inject(PROJECT_READ_LOOKUP) private readonly project: ProjectLookup,
     @Inject(PROJECT_EXACT_DOWNLOAD_SOURCE) private readonly exact: ExactSkillDownloadSource | null,
     @Inject(SKILL_EXACT_DOWNLOAD_SOURCE) private readonly personalExact: ExactSkillDownloadSource | null,
     @Inject(SKILL_SPECIFICATION_SOURCE) private readonly specification: SkillSpecificationSource | null,
