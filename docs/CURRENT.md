@@ -1,3 +1,9 @@
+## 2026-11-13 Skills 原生早退响应关联头修复
+
+正常native非管理员读取Skills时，owner原403/skill_forbidden缺x-request-id，被Product严格网关映射502；主控已保留正式链FAIL，未放宽消费规则或权限。两个exact Skills匹配入口（Admin、published package）仅在准入前补现requestId响应头；原401/403/429/503/正文/Retry-After及unmatched false零副作用不变，无Schema/契约/依赖/认证变化。
+
+主控四输入SHA核等，原三HTTP文件65 PASS/0FAIL/0SKIP、非增量types/正式build通过，writer相关format/lint-source亦通过、独审CLEAR；首主控漏--import tsx导致两TS入口未加载的命令错误保留，已按正式入口复验。正常激活和端到端403补验由Root串行负责，不以源码门冒已激活/整个B13完成。
+
 ## 2026-11-13 主控草稿更新交付复验
 
 原aad81e7c基线，21输入停写核等；主控正常工作区tsc build和五相关完整文件190 PASS/0FAIL/0SKIP，含正式Nest/loopback owner传输与旧oracle修正。writer完整lint/types/正规generator/semantic已通过，独审CLEAR。完整contract:check首1400 PASS/2旧oracleFAIL保留；准确修正既有16权限枚举和必需消息operation负控后两文件44 PASS，主控最终五文件190包含这些覆盖；未重跑完整contract，未拼全绿。无Schema/auth协议/System owner pin变化；真实native草稿修正/发布待Root精确组合验收，不冒正常运行已激活或完整TaskB交付。
