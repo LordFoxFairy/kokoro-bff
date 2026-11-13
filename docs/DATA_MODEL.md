@@ -1,3 +1,19 @@
+## 2026-11-13 B10：ProjectGrant 与 Project 访问版本设计门（未执行 DDL）
+
+BFF 为 Project／ProjectGrant 唯一数据 writer；ACL 优先在本仓 `database/schema.sql` canonical 中新增一张具名 **`bff_project_grant`**，并为 `bff_project` 增 **`access_version BIGINT NOT NULL DEFAULT 1`**（正数、最大有符号64位）。这两项只覆盖 ACL，不声称覆盖全部协作数据变化。优先不增加邀请／身份／权限缓存／重放流表，不维护 IAM 用户或 tenant 成员副本；不在正常数据库执行未批准 DDL。安装／演进沿现本仓正式入口与 fresh／精确父增量门，非另造迁移框架。
+
+ProjectGrant 以 `(tenant_id,project_id,subject_id)` 唯一，持久化 role（仅 viewer/editor）、`expires_at` nullable UTC instant、`revoked_at` nullable、创建／更新时间与真实管理 actor 引用；无外键、无跨 owner JOIN。owner 仍由现 `bff_project.owner_id` 隐式管理，不复制成可被降级 grant。索引支持同 tenant／主体有效授权项目列表和 owner 分页；过期不需要后台改写才能生效，revoked 行保留以承接恢复／版本语义，不把过期或撤权行当仍有权限。
+
+grant 授予／角色或期限调整／撤销与 Project 访问版本递增、现持久幂等 receipt 在同事务完成。锁序沿现 Project→Conversation／目标行；所有协作写在事务锁下核当前 Project 未删除、有效 grant、能力及访问版本，撤权／降权与其串行。IAM 当前成员／Product 资格来自正式准入与有界成员 API，不持久镜像，不因旧 grant 允许已离开 tenant 的主体。读取沿现 IAM native admission 与有界重验，owner I/O 后／发送前鲜核 DB grant／expiry；不新增逐 token IAM/OAuth 请求；列表、分页 cursor、旧 metadata／receipt／缓存都不是授权事实。
+
+ScheduledTask 仍属于现 BFF 业务 owner。任何影响执行的 prompt／计划／工具／输入／启用改动，须在既有 CAS 事务先持久暂停及旧 definition revision 的 queued/leased fence 退休；旧绑定不得被编辑者沿用。重新启用必须持久化当前操作者作为执行主体、其显式接受且已验证的 Connection／资金委托安全绑定，并与新 definition revision／dispatch fence 一致；存引用及确认事实，不复制秘密。已真正创建的 Run／原资金账本不可换 actor、转移或假回滚，仍按原资格控制。若现合同尚无独立绑定，所需执行主体／授权绑定引用或确认版本／definition revision 与 fence 的具体字段及原子约束，先由现 ScheduledTask owner 与相应执行 owner 过门并正规发行；共享编辑依赖保持 **OPEN**、现 actor-only，不把仅 ProjectGrant＋access_version 当已闭合，也不永久删掉协作范围或另造调度框架。
+
+`bff_conversation.owner_id` 保留 creator，不换成 Project owner 或当前查看者；共享只取其当前明确归属的 canonical Project。历史 slug 通过同 tenant／原归属 owner 解析唯一 ID，不把另一个协作者同名 slug 混为同项目。现 dispatch 的 `subject_id/actor_id/user_message_id/run_id` 继续证明每次真实执行者和消息来源；不得将已有个人 Conversation／Run、账本、personal_context 或 source receipt 回填为共享／换 actor。新 editor turn 的当前 actor 与 creator 可以不同：相应 Chat commit、execution binding、AG-UI producer／artifact 的 creator=actor 旧断言需按 immutable per-run dispatch 事实一起承接，不仅放宽查找 SQL。
+
+共享快照是现 canonical Message／ledger／task／artifact 的权限受控安全投影，不复制完整私人 snapshot，不新增第二套 AG-UI 网络协议或授权缓存。项目配置、正文与已交付任务结果按 TECH/API 明确白名单；private reasoning／tool payload／personal_context／Secrets／临时 URL／个人 Connection／资金材料不成为 grant 的附带资产。actor-only Agent RunDisplay 独有 workspace outputs 若未有正式安全 fact，不从 BFF 伪造、向原 actor 借身份或静默略去；需先完成相应 Agent／Storage owner 契约后再决定是否确有必要增加最窄产品结果字段／来源绑定，任何额外 DDL须回本设计门，不预建重复结果库。
+
+Project 删除即时切断全部 grant／新读写及活跃内容流；沿原删除 outbox 处理资源归属与物理回收，不因 revoke 单个成员删除项目资产或篡改其历史执行事实。可在原删除事务标记 grant 失效并递增访问版本，不放宽原 owner-only 删除资格。fixture 验证须含 fresh schema、真实父增量／回滚或当前正式安装策略要求、双主体 CAS／撤销与执行绑定；mock 及文档不称资源验收。
+
 ## 2026-11-12 B-08 — 私有个人上下文冻结（零 DDL）
 
 事实仍属于现 BFF personalization、personal knowledge、knowledge usage 三张 owner 表；不增表、列、索引、revision 或演进工具。ChatTurn 同连接单条 CTE 读取当前可信 tenant/user actor 的 profile、usage 与未删除知识，统一 statement snapshot 形成 bounded manifest，写入既有 `bff_agent_dispatch_outbox.payload.launch.personal_context`。原公开 Message 只存用户消息，不复制这些材料。

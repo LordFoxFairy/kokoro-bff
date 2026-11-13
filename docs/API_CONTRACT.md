@@ -1,3 +1,21 @@
+## 2026-11-13 B10：ProjectGrant 与协作访问契约设计门（未发行）
+
+现 public canonical 仍为已提交发行物；以下是后继需写入 `contract/openapi/v1/openapi.yaml` 并正规生成／发布的目标，不代表路由现已存在。仅受信 native Session＋当前 Product tenant 成员，Browser→App 同源→BFF；不接受 body 自报 tenant/actor/owner，不开放匿名／外部邀请，不复制 IAM 身份或引入 token-link 授权。
+
+- `GET /v1/projects/{project_id}/access`：当前获准主体的 role（owner/viewer/editor）、grant 到期时间、Project `access_version` 与 closed capabilities；不以 UI 显示代替服务端权限。Project 列表／详情承接当前可见项目与同一 access 投影；固定消费者必须随正式 artifact 升级，旧 strict decoder 不盲激活新字段。
+- owner-only `GET /v1/projects/{project_id}/grants`：有界 opaque-cursor 授权列表；`PUT .../grants/{subject_id}` 显式设 viewer/editor 与 `expires_at`（UTC instant 或 null）；`DELETE .../grants/{subject_id}` 撤销。PUT body 只含 role/expires_at，DELETE 无 body；两写 required 原 `Idempotency-Key` 和精确正整数 `If-Match: "<access_version>"`，缺 CAS428、版本冲突409，200 ACK 绑定 canonical Project／目标 subject／新访问版本。只允许 IAM 当前同 tenant 成员，目标不合格不区分外部账号是否存在；不能授 owner 或用 grant 降级／删除 Project owner。
+- 无权限的项目／Conversation／内容对猜 ID、slug、跨 tenant 返回统一404；已合法读取项目但动作不在当前 capabilities 内返回403；身份失效沿现401，依赖／未确认沿原失败闭集。过期由读／写时钟判定，不通过 GET 改状态或续期；重放保原正文／key／CAS，内容仍先核当前权限，禁止重放借旧授权取新内容。
+
+viewer 可读取项目资料／配置、明确归属项目的 Conversation／任务安全结果；editor 可真实修改／创建获准内容，但执行仍使用自己的当前 IAM／模型／Connection／资金资格。owner 独占授权、角色／撤销和 Project 删除。Conversation Move／删除及公开 Share 创建／撤销不因 Project 角色自动开放，沿原资源管理资格；Project access 与原公开 Share metadata／expiry／revoke 是不同事实。个人 Conversation／Secrets／个人 Connection／资金不继承；Move、已删除项目、到期、撤销均在每个入口／发送前重核，不能仅改 Project finder 或代理 creator。
+
+共享 snapshot／parts／结果／AG-UI 仅发送正文、最终答案、安全终态／错误码与正式 artifact 安全投影；原私人 reasoning、工具参数／返回、CUSTOM activity/interaction/delivery 原始值、personal_context、私有 trace／内部位置／临时 URL／资金信息不得透传。保现 AG-UI＋opaque cursor，过滤仍推进 ledger cursor；Session／当前成员沿原 native admission＋service/actor 及既有有界重验；不新增逐 token／逐帧 IAM/OAuth 校验。BFF grant／expiry 鲜查覆盖 replay cache 后、等待唤醒与每批发送前，空闲复用有界 ledger poll（默认最大8s）退休无权 SSE。旧流关闭不发送伪成功；已经获准发送的有限批次不追溯收回。浏览器收到拒绝／断流后退休该私有视图，不自动重放 mutation。
+
+ScheduledTask 共享编辑必须闭合独立执行绑定：任何影响执行的 prompt／计划／工具／输入／启用改动，在既有 CAS 事务先暂停并使旧 definition revision 的 queued/leased fence 退休，绝不沿用他人委托。只有当前操作者显式接受自己的 Connection／资金委托、当前资格校验并持久化新绑定后才可启用；旧 revision 不得新建或派发执行，已真正创建的 Run 保原 actor／账本与原控制资格，不假回滚。现合同若未正式提供该独立安全绑定，共享 ScheduledTask 编辑依赖门保持 **OPEN**、维持现 actor-only；由现 owner 先发行必要增量再承接协作，不以永久禁用缩范围，不另建调度协议。
+
+Run 执行／取消／steer／HITL 权限不随阅读结果授予；BFF 已有 actor-only RunDisplay 不直接向协作成员开放。共享最终答案／已交付 artifact 取现 durable 产品事实并加 Project gate；缺少安全 workspace-result fact 或 Storage 读取用途时，先由对应 owner 正式发行必要窄合同并固定消费；该依赖门未闭时不得实现共享 Run 内容，不改身份冒读。IAM 目标成员接口若不能以当前主体合法证明资格，同样先补正式合同，不代理其它身份。网站 URL 与现任务／文件类型如实承接；未有正式实体的托管网站／网络导入／RSS／Webhook／高级自动化不伪造支持，也不以它们跳过已裁决 Project Conversation／任务结果范围。
+
+最低契约／真实集成验收：metadata 刷新无写、owner grant→viewer 真实读／拒写→editor 改／创建并 owner 回读→降权／撤销／到期拒绝；两主体／跨 tenant、owner 不被自降级、CAS 并发、原 key unknown／replay、Conversation Move／删除、活跃 SSE 和下载撤权、隐藏 trace、原执行者身份／资金不被替代。App 消费者与数据／传输 owner 正式配对后才启用，本节不新增当前公开 operation。
+
 ## 2026-11-13 Public28.38: conditional model revision draft PATCH
 
 `PATCH /v1/admin/model-revisions/{revision_id}` (`updateAdminModelRevisionDraft`) adds one public operation, retaining all 216 prior operations and their ordered inventory. It requires the existing native Session/current platform administrator, `Idempotency-Key`, exact quoted positive-decimal `If-Match`, JSON content type and no query. `AdminModelRevisionDraftUpdate` is nonempty and closed: editable creation fields are optional except immutable `model_id`/`revision`, which are rejected. Omission means unchanged; nullable bounds accept explicit null.
