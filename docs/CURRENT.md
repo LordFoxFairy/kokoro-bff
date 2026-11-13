@@ -1,3 +1,8 @@
+## 2026-11-13 SSE replay 实际 SQL 接线缺陷（定向已验，正常重载待Root）
+
+主控正常 native SSE读取503/agui_ledger_unavailable，与浏览器active阶段Connection interrupted一致。真实PG现有creator→editor→creator用例补实际replay即RED42703：frame_page漏透传source_subject_id。仅补这一列，不改权限、wire、分页、byte预算、cursor或ledger；现用例校验三轮actor来源/公开顺序、opaque cursor后缀、全页含两来源及末尾空页，原scope/重放/fence等断言保持。
+主控真实隔离PG同用例GREEN1 PASS/0skip，RED/GREEN两库均DROP+absence、源码/test/dist输入核等；正式build/types/lint通过，相关纯回归及独审结果由Root同片登记。无canonical SQL/HTTP版本或认证改变；正常重载与native SSE恢复不能用纯门替代。
+
 ## 2026-11-13 正常切换发现的 owner 演进工具缺陷（修复已定向验证）
 
 正常BFF旧库的live父语义与d875一致，但历史ADD/DROP使5表物理列位序不同，ScheduledTask保留两个已删除attribute槽；原工具把attnum当协议导致SCHEMA_UNKNOWN，事务在分类阶段拒绝，无业务变更。仅修具名演进catalog的live列排序／退休槽过滤，完整列属性、约束、索引、guard及锁后重核保留；不加父版本、不手工改正常表。

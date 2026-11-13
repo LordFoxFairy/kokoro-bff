@@ -813,7 +813,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
            FROM frame_candidates AS candidate
        ),
        frame_page AS (
-         SELECT page.public_sequence, page.cursor, page.event_type, page.event_payload
+         SELECT page.public_sequence, page.source_subject_id, page.cursor, page.event_type, page.event_payload
            FROM sized_frame_page AS page
           WHERE page.frame_number = 1 OR page.cumulative_bytes <= $5
        )

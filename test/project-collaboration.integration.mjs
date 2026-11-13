@@ -652,7 +652,8 @@ test("real PG creator-editor-creator source cursors preserve public order, same-
   const firstInput = input("creator", "same-key"),
     first = await turns.submit(firstInput)
   let firstLease,
-    lastPublic = "0"
+    lastPublic = "0",
+    lastReplayCursor = null
   const expectedWatermarks = new Map([
     ["creator", 0],
     ["editor", 0],
@@ -806,6 +807,15 @@ test("real PG creator-editor-creator source cursors preserve public order, same-
       ])
     ).rows
     assert.ok(BigInt(positions.at(-1).public_sequence) > BigInt(lastPublic))
+    const replay = await projection.replay(tenant, conversation, lastReplayCursor, 1000)
+    assert.equal(replay.kind, "page", "the actual SSE replay SQL must return a page")
+    assert.ok(replay.frames.length > 0)
+    assert.deepEqual([...new Set(replay.frames.map((frame) => frame.sourceSubjectId))], [subject])
+    assert.deepEqual(
+      replay.frames.map((frame) => frame.publicSequence),
+      positions.filter((row) => BigInt(row.public_sequence) > BigInt(lastPublic)).map((row) => Number(row.public_sequence)),
+    )
+    lastReplayCursor = replay.frames.at(-1).cursor
     lastPublic = positions.at(-1).public_sequence
     assert.equal((await projection.ingest(tenant, conversation, events, lease)).insertedSources, 0)
     await assert.rejects(
@@ -821,6 +831,12 @@ test("real PG creator-editor-creator source cursors preserve public order, same-
     ).rows[0]
     assert.deepEqual(artifactRow, { source_subject_id: subject, run_id: ack.run_id })
   }
+  const replayAll = await projection.replay(tenant, conversation, null, 1000)
+  assert.equal(replayAll.kind, "page")
+  assert.deepEqual([...new Set(replayAll.frames.map((frame) => frame.sourceSubjectId))].sort(), ["creator", "editor"])
+  const emptyReplay = await projection.replay(tenant, conversation, lastReplayCursor, 1000)
+  assert.equal(emptyReplay.kind, "page")
+  assert.deepEqual(emptyReplay.frames, [])
   assert.deepEqual(
     (
       await pool.query("SELECT subject_id,source_high_watermark::text FROM bff_agui_source_cursor WHERE tenant_id=$1 AND session_id=$2 ORDER BY subject_id", [
