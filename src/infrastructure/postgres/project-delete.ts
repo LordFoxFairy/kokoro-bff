@@ -19,6 +19,7 @@ type DeletionRow = {
   location: string
 }
 type ConversationRow = {
+  owner_id: string
   conversation_id: string
   status: string
   deleted_at: Date | null
@@ -173,28 +174,27 @@ export async function deleteProjectAggregate(
       return { kind: "not_found" } as const
     }
     const conversations = await query<ConversationRow>(
-      `SELECT conversation_id,status,deleted_at FROM bff_conversation WHERE tenant_id=$1 AND owner_id=$2 AND project_ref IN ($3,$4) ORDER BY conversation_id FOR UPDATE`,
+      `SELECT conversation_id,owner_id,status,deleted_at FROM bff_conversation WHERE tenant_id=$1 AND (project_ref=$3 OR (owner_id=$2 AND project_ref=$4)) ORDER BY conversation_id FOR UPDATE`,
       [scope.tenantId, scope.subjectId, projectId, current.slug],
     )
     for (const conversation of conversations.rows) {
       if (conversation.status !== "deleted") {
         await query(
           `UPDATE bff_conversation SET status='deleted',deleted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND owner_id=$2 AND conversation_id=$3`,
-          [scope.tenantId, scope.subjectId, conversation.conversation_id],
+          [scope.tenantId, conversation.owner_id, conversation.conversation_id],
         )
-        await deleteLockedConversationFacts(bounded, scope.tenantId, scope.subjectId, conversation.conversation_id, requestId)
       }
+      await deleteLockedConversationFacts(bounded, scope.tenantId, conversation.owner_id, conversation.conversation_id, requestId, scope.subjectId)
       await enqueueStorageScopeRelease(bounded, scope, projectId, "conversation", conversation.conversation_id)
     }
     await pauseProjectScheduledTasks(bounded, scope, projectId, requestId, key)
     await enqueueStorageScopeRelease(bounded, scope, projectId, "project", projectId)
     await query("DELETE FROM bff_project_pin WHERE tenant_id=$1 AND project_id=$2", [scope.tenantId, projectId])
     await query("DELETE FROM bff_project_task WHERE tenant_id=$1 AND project_id=$2", [scope.tenantId, projectId])
-    await query(`UPDATE bff_project SET deleted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3),website_urls='[]'::jsonb WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3`, [
-      scope.tenantId,
-      scope.subjectId,
-      projectId,
-    ])
+    await query(
+      `UPDATE bff_project SET deleted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3),website_urls='[]'::jsonb WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3`,
+      [scope.tenantId, scope.subjectId, projectId],
+    )
     const resource: ProjectDeletionResource = {
       project_id: projectId,
       logical_release_state: "pending",
@@ -314,10 +314,10 @@ export async function readProjectDeletion(
                 count(o.command_id) FILTER (WHERE o.scope_kind='conversation') AS actual_conversation_count,
                 count(o.command_id) FILTER (WHERE o.scope_kind='conversation' AND EXISTS (
                   SELECT 1 FROM bff_conversation member
-                   WHERE member.tenant_id=d.tenant_id AND member.owner_id=d.owner_subject_id
-                     AND member.conversation_id=o.scope_id AND member.project_ref IN (p.project_id,p.slug)
+                   WHERE member.tenant_id=d.tenant_id AND member.conversation_id=o.scope_id
+                     AND (member.project_ref=p.project_id OR (member.owner_id=d.owner_subject_id AND member.project_ref=p.slug))
                 )) AS matched_conversation_count,
-                (SELECT count(*) FROM bff_conversation c WHERE c.tenant_id=d.tenant_id AND c.owner_id=d.owner_subject_id AND c.project_ref IN (p.project_id,p.slug)) AS expected_conversation_count,
+                (SELECT count(*) FROM bff_conversation c WHERE c.tenant_id=d.tenant_id AND (c.project_ref=p.project_id OR (c.owner_id=d.owner_subject_id AND c.project_ref=p.slug))) AS expected_conversation_count,
                 count(o.command_id) FILTER (WHERE o.scope_kind='project' AND o.scope_id=p.project_id) AS correct_project_count,
                 bool_and(o.owner_subject_id=d.owner_subject_id AND o.actor_id=d.owner_subject_id) AS trusted_identity,
                 bool_or(o.state='blocked') AS blocked,bool_or(o.state<>'released') AS unreleased

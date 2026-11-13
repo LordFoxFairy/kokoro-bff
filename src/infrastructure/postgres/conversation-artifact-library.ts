@@ -1,3 +1,4 @@
+import { projectReadPredicate } from "./project-access.js"
 import { once } from "node:events"
 import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 import { readCurrentConversation } from "./chat-conversation-access.js"
@@ -56,10 +57,14 @@ export async function selectedArtifactInTransaction(
     `SELECT a.conversation_id,a.artifact_id,a.run_id,a.source_asset_id,a.source_artifact_kind,a.source_content_sha256,a.delivered_at
        FROM bff_conversation_artifact a
        JOIN bff_conversation c ON c.tenant_id=a.tenant_id AND c.conversation_id=a.conversation_id
-      WHERE a.tenant_id=$1 AND c.owner_id=$2 AND c.status='active' AND a.artifact_id=$3 AND a.source_owner='kokoro-agent'
-        AND (c.project_ref IS NULL OR EXISTS (
-          SELECT 1 FROM bff_project p WHERE p.tenant_id=c.tenant_id AND p.owner_id=c.owner_id AND p.deleted_at IS NULL
-            AND (p.project_id=c.project_ref OR p.slug=c.project_ref) AND p.project_id=$4
+      WHERE a.tenant_id=$1 AND c.status='active' AND a.artifact_id=$3 AND a.source_owner='kokoro-agent'
+        AND ((c.project_ref IS NULL AND c.owner_id=$2) OR EXISTS (
+          SELECT 1 FROM bff_project WHERE bff_project.tenant_id=c.tenant_id AND bff_project.deleted_at IS NULL
+            AND bff_project.project_id=$4 AND ${projectReadPredicate}
+            AND (bff_project.project_id=c.project_ref OR (bff_project.owner_id=c.owner_id AND bff_project.slug=c.project_ref))
+            AND NOT EXISTS (SELECT 1 FROM bff_project other WHERE other.tenant_id=c.tenant_id AND other.deleted_at IS NULL
+              AND (other.project_id=c.project_ref OR (other.owner_id=c.owner_id AND other.slug=c.project_ref))
+              AND other.project_id<>bff_project.project_id)
         )) LIMIT 2${lockForCommit ? " FOR SHARE OF c,a NOWAIT" : ""}`,
     [input.tenantId, input.subjectId, input.artifactId, input.projectId],
   )

@@ -20,6 +20,12 @@ Platform仍唯一CustomApi事实、command receipt与audit owner；BFF仅新增�
 
 Project pin 是本人的偏好写，复用现 read predicate；写入沿同一个 parent 锁，锁后新 statement 鲜验 grant，列表过滤已撤销／到期资格，不写 Project metadata。Skills installation 的 GET 与包／spec／exact download 使用 read lookup，其四类安装命令使用 edit lookup；不全局放宽私有 finder，不借 creator subject。请求体解析后、owner 写 RPC 前重核同 canonical Project，owner I/O 后原出口检查保留；不声称跨服务原子撤销或回滚已发命令。无 Schema、wire、owner protocol、依赖或内部认证新增。实际双身份浏览器与正常组合激活仍由 Root 收口。
 
+### B10 已接线的聚合删除与输入来源（源码阶段，未正常激活）
+
+Project 删除仍限 owner；成员按 canonical ID 跨 creator 收口，legacy slug 只匹配 Project owner 的历史会话。Project／排序 Conversation 锁内处理全部成员，已删除成员也 fence 遗留 producer 而不改删除时间；本地 cleanup 分开 data creator 和真实 actor。全部确定未发 dispatch 退休，只有真实删除 actor 的 subject=actor 才发取消；peer admitted／unknown 保原身份和事实，不声称 Agent 已终结。N+1 Storage release 始终用真实 Project owner，并以同一成员集合等齐全部 ACK，缺 collaborator ACK 不提前 released。
+
+输入候选与提交复核共用上述当前 read／唯一 canonical 来源资格；目标提交仍需锁内 edit。Storage I/O 在事务外、仅传当前调用者和原来源 scope；同键重放沿原冻结快照。再生成的不可变 source 预读不强加新命令的 latest／idle 条件：原 key commit receipt 先返回；fresh commit 与 UI eligibility 仍由同一带 latest／active 检查的函数裁决。无 owner 协议、Schema、认证或新层，失败／unknown 不改原意图。
+
 ### B10 已裁决多执行主体来源（2026-11-13，核心已发行／未激活）
 
 Agent 的真实 namespace 按 tenant＋user subject 隔离，同 Conversation 换真实 executor 后源 sequence 从其自己的历史继续；沿 creator namespace 代理或 reset 单 HWM 都不成立。保留唯一 `bff_agui_stream` 的 Conversation public sequence／opaque cursor／现 lease与fence，仅新增该流下具名 `bff_agui_source_cursor(tenant_id,session_id,source_owner,subject_id)`，保存各真实来源唯一 high_watermark／projection_state；搬迁后退役 stream 原两个可写 source 字段，不双写。source_event、event 的 source-frame、artifact 的 source 唯一身份带 source_subject_id，历史 public payload／cursor 字节不改，process／interaction／GC／完整性 JOIN 一并用来源主体，不把 seq 当跨主体全序。
@@ -164,11 +170,11 @@ error tuples fail closed; uncertain completion is recovered only by explicit sam
 
 公开选择与派发身份规则仍在领域层；冻结 manifest、SHA‑256 字节校验与 durable launch 构建／读取属于应用层，由 Storage resolver、Chat 提交和 Agent 发送共用。公开协议、JSONB schema version、摘要输入和拒绝条件均不变。
 
-历史最终答复沿同一 Chat 提交处理。公开输入只带 `final_answer` 和 exact assistant Message ID；同键 replay 在任何来源读取之前返回。新请求仅在事务外解析 Asset/Artifact 子序列，最终在现 Project/Conversation 事务锁内按原选择顺序合并历史答复，不在数据库行锁中访问 Storage。final-only 不依赖 Storage。私有 launch 只消费固定 Agent HTTP8.15.0（`9d53f36fb549c49b8bc7a05b07776df5cb000698`）三类 canonical refs，不加表、路由、身份或第二提交者。
+历史最终答复沿同一 Chat 提交处理。公开输入只带 `final_answer` 和 exact assistant Message ID；同键 replay 在任何来源读取之前返回。新请求仅在事务外解析 Asset/Artifact 子序列，最终在现 Project/Conversation 事务锁内按原选择顺序合并历史答复，不在数据库行锁中访问 Storage。final-only 不依赖 Storage。当前私有 launch 正式消费固定 Agent HTTP8.18（`3e61c0a1`）三类 canonical refs，不加表、路由、身份或第二提交者。
 
-历史源必须为可信本人 active 同 direct 或同 canonical Project 会话、exact completed assistant 及其未退休投递。原事务以 `FOR SHARE OF c,m,d NOWAIT` 获取来源，校 durable marker 对应唯一已完成 ordered text、正版本、原 UTF‑8、长度和摘要；拒绝缺 marker、错误范围或坏字节，不走 display 或 aggregate fallback。单答复最多24 KiB，仍需通过整组32 KiB ASCII JSON/16项及最终1 MiB launch；不截断。再生成新 Run 在同事务重验与原冻结来源的版本及全部字节精确相等，既有 Run 和已提交同键仍沿原回执。私有正文不进入公开 Message／AG‑UI／Share／诊断。真实组合验收另行执行。
+历史源在 direct 分支仍限可信本人；共享分支必须为当前获准 read 的同 canonical Project active 会话，允许 creator／source executor 不同于调用者，来源 subject=actor 事实不改写。两者均要求 exact completed assistant 及其未退休投递。原事务以 `FOR SHARE OF c,m,d NOWAIT` 获取来源，校 durable marker 对应唯一已完成 ordered text、正版本、原 UTF‑8、长度和摘要；拒绝缺 marker、错误范围或坏字节，不走 display 或 aggregate fallback。单答复最多24 KiB，仍需通过整组32 KiB ASCII JSON/16项及最终1 MiB launch；不截断。再生成新 Run 在同事务重验与原冻结来源的版本及全部字节精确相等，既有 Run 和已提交同键仍沿原回执。私有正文不进入公开 Message／AG‑UI／Share／诊断。真实组合验收另行执行。
 
-公共选择只接受有限去重的 `{kind,resource_id}`，`version_id` 没有 owner 语义并明确拒绝。Chat 先沿现 prepare 返回同键回执；新请求在事务外通过正式 Storage 元数据和本人 Artifact 关联解析，再于原 Project/Conversation 锁内重验 scope/关联并冻结唯一 launch。显式 Skill 选择不继承默认。personal scope 固定可信 subject，Project Asset 必须属于当前 canonical Project，历史 Artifact 仅来自本人 active 源会话且不得跨项目。网络调用共享原总期限与取消，不持数据库锁调用 owner。
+公共选择只接受有限去重的 `{kind,resource_id}`，`version_id` 没有 owner 语义并明确拒绝。Chat 先沿现 prepare 返回同键回执；新请求在事务外通过正式 Storage 元数据和当前获准 Artifact 关联解析，再于原 Project/Conversation 锁内重验 scope/关联并冻结唯一 launch。显式 Skill 选择不继承默认。personal scope 固定可信 subject，Project Asset 必须属于当前 canonical Project，历史 Artifact 的私人源仍限本人，Project 源按唯一 canonical 归属及当前 read 核验、不得跨项目。网络调用共享原总期限与取消，不持数据库锁调用 owner。
 
 Agent 内部 `selected_resource_refs` 的 Storage 两类共同字段为 kind/resource_id/asset_id/content_sha256/size_bytes（十进制字符串）/mime_type/filename/source_scope，Artifact 另含 source_run_id。BFF 只读 Storage metadata，不下载对象或持久 signed URL；consumer Run 仍取顶层 run_id。重新生成保留原 canonical manifest，不重复解析 Storage；当前资格失效时拒绝，不重写原快照。空选择保持旧持久字节与摘要。Storage 固定 `c31a0657`；历史 Agent HTTP8.14（`55beed29`）只作父版本证明。
 

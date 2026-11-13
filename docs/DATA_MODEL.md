@@ -10,6 +10,12 @@ canonical SQL维持 `5d02adc16da062e69e8d88423d911f73b55bb02af4934bb9e2d209268e2
 缺原consumer、矛盾dispatch/process或来源identity失败即整事务回滚；current noop不重写事实。新ProjectGrant不物理删除，曾共享触发事实保留。
 主控真实 PG 一条完整用例通过（0失败／0跳过），证明旧事实保值、未知／混态拒绝、矛盾来源回滚及current noop；pure3项和运行输入SHA亦已复验，自有测试库已DROP。正常应用库未执行此命令，不以隔离证据冒正常升级。
 
+### B10 聚合删除与选中输入（无新增数据结构）
+
+成员集合统一为同 tenant 的 canonical Project 引用，以及 Project owner 下的历史 slug 引用；跨 creator 的成员也进入原 deletion conversation_count／N+1 release_count，状态读取与 settle 使用相同集合。已 tombstone 成员保原 deleted_at，仍补清遗留 producer fence；所有已确认未发队列退休。data creator 与真实 cleanup actor 是请求内已有事实，不增列；取消只用真实 actor，peer admitted／unknown 的 payload／身份／proof 不变。Storage 整 scope release 保 owner subject=actor，不改成 child creator 或 workspace-only RPC。
+
+选中 FINAL/Artifact 保原 source Conversation／Run／asset／digest；当前同 canonical Project grant 只授读取资格，不复制或重新拥有资源。私有冻结 launch 与旧回执均沿原 JSONB，不新增字段；fresh regeneration 的 latest/idle 与 UI 资格仍在事务裁决，预读不可变 source 不拦截原 key replay。
+
 ### B13 Custom API 管理HTTP候选（同Public29，未正常激活）
 
 Platform仍唯一CustomApi事实、command receipt与audit owner；BFF仅新增六个安全public HTTP投影，不新增SQL/Schema、缓存或授权镜像。复用现Platform URL，独立custom_api_admin credential文件每请求完整重读；tenant与管理员来自native鲜验且platformAdmin必须为true，不借mcp_catalog.manage／本人身份。current profile、immutable ACK与删除后audit读分离；body／IAM／RPC共用有界signal/deadline，不自动retry，shutdown关闭原client。机器契约与HTTP装配由本轮指定writer串行承接，正常组合激活另验。

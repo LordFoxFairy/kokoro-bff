@@ -344,7 +344,7 @@ export class PostgresChatSessionStore {
         await client.query("ROLLBACK")
         return false
       }
-      await deleteLockedConversationFacts(client, tenantId, subjectId, conversationId, requestId)
+      await deleteLockedConversationFacts(client, tenantId, subjectId, conversationId, requestId, subjectId)
       await enqueueStorageScopeRelease(client, { tenantId, subjectId }, null, "conversation_workspace", conversationId)
       await client.query("COMMIT")
       return true

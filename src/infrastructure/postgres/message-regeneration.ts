@@ -23,7 +23,7 @@ type SourceRow = {
   source_user: string | null
   input_user: string | null
 }
-export async function regenerationSourceInTransaction(
+async function readRegenerationSourceFacts(
   client: { query: <Row extends QueryResultRow = QueryResultRow>(sql: string, values?: unknown[]) => Promise<QueryResult<Row>> },
   input: Pick<RegenerateMessageInput, "tenantId" | "subjectId" | "conversationId" | "sourceMessageId">,
 ): Promise<RegenerationSource | null> {
@@ -52,14 +52,6 @@ export async function regenerationSourceInTransaction(
     (row.dispatch_status === "failed" && row.admission_unknown_seen)
   )
     throw Error("MESSAGE_REGENERATION_NOT_READY")
-  const eligibility = (
-    await client.query<{ latest_message_id: string | null; has_active: boolean }>(
-      `SELECT (SELECT message_id FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant' ORDER BY message_seq DESC,message_id DESC LIMIT 1) AS latest_message_id,
-      EXISTS(SELECT 1 FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted')) AS has_active`,
-      [input.tenantId, input.conversationId],
-    )
-  ).rows[0]
-  if (!eligibility || eligibility.latest_message_id !== input.sourceMessageId || eligibility.has_active) throw new Error("MESSAGE_REGENERATION_NOT_READY")
   const payload = parseAgentDispatchPayload(row.payload)
   if (
     payload.launch.run_id !== row.source_run_id ||
@@ -87,8 +79,26 @@ export async function regenerationSourceInTransaction(
     sourceFingerprint: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
   }
 }
+/** Only a fresh command or the UI eligibility projection requires a current idle/latest head.
+ * Same-key replay still reaches the original commit receipt before this check. */
+export async function regenerationSourceInTransaction(
+  client: { query: <Row extends QueryResultRow = QueryResultRow>(sql: string, values?: unknown[]) => Promise<QueryResult<Row>> },
+  input: Pick<RegenerateMessageInput, "tenantId" | "subjectId" | "conversationId" | "sourceMessageId">,
+): Promise<RegenerationSource | null> {
+  const source = await readRegenerationSourceFacts(client, input)
+  if (source === null) return null
+  const eligibility = (
+    await client.query<{ latest_message_id: string | null; has_active: boolean }>(
+      `SELECT (SELECT message_id FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant' ORDER BY message_seq DESC,message_id DESC LIMIT 1) AS latest_message_id,
+      EXISTS(SELECT 1 FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted')) AS has_active`,
+      [input.tenantId, input.conversationId],
+    )
+  ).rows[0]
+  if (!eligibility || eligibility.latest_message_id !== input.sourceMessageId || eligibility.has_active) throw new Error("MESSAGE_REGENERATION_NOT_READY")
+  return source
+}
 export function readRegenerationSource(database: PostgresBffDatabase, input: RegenerateMessageInput): Promise<RegenerationSource | null> {
-  return withMessageReadClient(database.pool, input, (client) => regenerationSourceInTransaction(client, input))
+  return withMessageReadClient(database.pool, input, (client) => readRegenerationSourceFacts(client, input))
 }
 
 /** The read projection asks the same regeneration predicate as the native command, not a second owner/role guess. */

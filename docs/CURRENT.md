@@ -1,3 +1,19 @@
+## 2026-11-13 B10 已知剩余输入与聚合删除源码收口（候选）
+
+在 `5cb7b13d` 后继补齐共享 Project 的 selected FINAL／Artifact 来源资格：同 tenant、唯一解析的同 canonical Project、当前 read，私人来源仍限本人；来源 executor／asset／Run 不被改成 caller，目标仍在原事务核 edit，Storage metadata 用当前 caller 在事务外读取。复跑真实 PG/Nest 还暴露 current latest/active 预读误拦已接受 regeneration 的同键重放；现分开不可变 source 事实读与 fresh commit/UI eligibility，原 key receipt 先返回，fresh 资格未放宽。
+
+Project aggregate 删除保 owner-only authority，canonical 成员跨 creator、legacy slug 绑定 Project owner；已 deleted child 也清遗留 producer fence，保原删除时间。cleanup creator／actual actor 分离，全部 known-unsent 退休、只为真实删除 actor 发取消，peer admitted/unknown 原事实保留。N+1 scope release 保真实 Project owner identity，status／settle 使用完整相同成员集合，不漏 collaborator ACK。
+
+主控真实 PG/Nest 输入文件11 PASS／0 SKIP，聚合删除完整片1 PASS／0 SKIP；先缺 source_subject_id 的旧fixture失败、7/4（含真实 replay 及新共享拒绝）与漏 editor-child 的RED均保留。自有7d694d84、af3181e8库DROP并确认不存在；格式化后最终复验由同片记录。两独审CLEAR，无Schema/public wire/owner协议/认证/SDK新增。六相关纯/HTTP文件首28/1旧scope夹具失败，按实际current/eligibility查询修夹具、保原lineage负控并补fresh idle/latest拒绝后29 PASS／0 SKIP。
+
+本轮一次完整默认实测2579项：2556 PASS／21 FAIL／2条件SKIP，未冒全绿。失败组来自旧 control/private lookup夹具、SQL别名/owner-only/锁语句字符串oracle、独立Prepare feature pin被误绑runtime、public Skills read夹具及Scheduler完整owner/executor事实。保全部原状态/调用次数/取消/deadline/重放负控；按真实readable/read、canonical Project及独立feature两份实际vendor字节修正。SQL排序和租户/actor行为由现真实PG承接，不锁SQL别名/owner-only实现。五文件定向最终134 PASS／0 SKIP，未重跑完整默认，不拼成整仓绿色。
+
+该轮独审另发现真正Project cancel越权：降viewer后新键仍发1次Agent请求。最小修复保readable准入及本次edit事实，普通cancel/resume先原replay/conflict/pending分类，再挡新投递并释放本次未发送claim；steer沿原事务门，direct/startup重试不新增查询。新回归先验证越权RED及临时早拒误挡安全ACK的RED，再证明viewer新键0调用、editor原单调用、降viewer后同key旧ACK零重发恢复；独审CLEAR，无新认证/owner协议。
+
+最终停写16个源码/测试与8个compiled输入逐SHA核等；主控11个相关完整文件163 PASS／0 FAIL／0 SKIP，build/lint/types/16路径format通过。全默认仍仅有上述失败轮与后继相关修复证据，未冒最终整仓通过。
+
+这不是正常源激活或真实双身份/后台native完成；整个B10/TaskB及原PR仍OPEN，下一步精确组合正常演进/激活与native收据，再公开文档和原PR总交付。
+
 ## 2026-11-13 共享项目编辑者的本人 RunDisplay（源码阶段）
 
 在 `fbc2025c` 后继沿原 RunDisplay 接 readable Conversation lookup，并同时要求 Project 当前 edit；exact tenant／Run／Conversation／实际执行主体检查不变，owner/editor 不获得 peer 私人过程。原 Agent I/O 后和 verified workspace spool 发头前鲜验保留，迟到降 viewer 返回404且零私人内容。本人 FINAL binder 在同一个原 read-only RR 中核当前访问与 edit，SQL 绑定 dispatch subject=actor=调用者，不再假定 Conversation creator=调用者；唯一 completed slot、revision、durable-final 一致性与 retired 拒绝仍保留。selected FINAL 输入函数未修改。

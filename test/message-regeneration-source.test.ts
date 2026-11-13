@@ -34,7 +34,26 @@ const row = {
   payload,
 }
 const input = { tenantId: "tenant", subjectId: "owner", conversationId: "session", sourceMessageId: "answer" }
-const read = (value: unknown) => regenerationSourceInTransaction({ query: async () => ({ rows: [value] }) } as never, input)
+const read = (value: unknown, eligibility = { latest_message_id: "answer", has_active: false }) =>
+  regenerationSourceInTransaction(
+    {
+      query: async (sql: string) => ({
+        rows: [
+          sql.includes("source.run_id AS source_run_id")
+            ? value
+            : sql.includes("latest_message_id")
+              ? eligibility
+              : {
+                  tenant_id: "tenant",
+                  owner_id: "owner",
+                  conversation_id: "session",
+                  project_ref: null,
+                },
+        ],
+      }),
+    } as never,
+    input,
+  )
 test("regeneration source binds the typed frozen payload to the exact immutable user choices and mirror lineage", async () => {
   assert.equal((await read(row))?.originalUserMessageId, "user")
   const mirror = {
@@ -58,6 +77,11 @@ test("regeneration source binds the typed frozen payload to the exact immutable 
     { ...row, payload: { ...payload, launch: { ...payload.launch, session_id: "other" } } },
   ])
     await assert.rejects(read(wrong), /SOURCE_INVALID/)
+  for (const eligibility of [
+    { latest_message_id: "newer-answer", has_active: false },
+    { latest_message_id: "answer", has_active: true },
+  ])
+    await assert.rejects(read(row, eligibility), /NOT_READY/)
   for (const wrong of [
     { ...row, source_status: "pending" },
     { ...row, dispatch_status: "retryable" },

@@ -62,7 +62,13 @@ export async function handleAgentControlRequest(
       return true
     }
     const businessPath = pathOf(request).slice(1)
-    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, findConversation, projects)
+    let canDispatchControl = false
+    const findControlConversation: ChatConversationLookup = async (...args) => {
+      const conversation = await findConversation(...args)
+      canDispatchControl = conversation !== null && (conversation.projectRef === null || conversation.projectAccess?.capabilities.includes("edit") === true)
+      return conversation
+    }
+    const authorization = await authorizeChatRequest(request, admitted.context, businessPath, findControlConversation, projects)
     if (authorization === null) return false
     if (!authorization.ok) {
       send(response, authorization.status, failure(authorization.code, authorization.message, id))
@@ -88,10 +94,17 @@ export async function handleAgentControlRequest(
       }
       const { namespace, userId } = admitted.context.identity
       const result = await commitRunSteer(database, {
-        tenantId: namespace, subjectId: userId, actorId: userId, conversationId: sessionId, runId, requestId: id,
+        tenantId: namespace,
+        subjectId: userId,
+        actorId: userId,
+        conversationId: sessionId,
+        runId,
+        requestId: id,
         scope: queryOf(request).get("scope")?.trim() === "direct" ? "direct" : "all",
         ...(authorization.projectRef === undefined ? {} : { projectRef: authorization.projectRef }),
-        idempotencyKey: key, clientMessageId: control.message_id, content: control.content,
+        idempotencyKey: key,
+        clientMessageId: control.message_id,
+        content: control.content,
         lifetime: { signal: abort.signal, deadlineAt: performance.now() + config.upstreamTimeoutMs },
       })
       abort.signal.throwIfAborted()
@@ -131,6 +144,14 @@ export async function handleAgentControlRequest(
     }
     if (ticket.pending) {
       send(response, 409, failure("idempotency_in_progress", "An identical mutation is already in progress", id))
+      return true
+    }
+    if (!canDispatchControl) {
+      // Read access still permits an original actor's safe ACK replay above.
+      // This newly claimed command was never sent; release only our own claim.
+      if (ticket.ticket?.persistent) await ticket.ticket.persistent.releaseReceipt(ticket.ticket.scope, ticket.ticket.fingerprint)
+      else if (ticket.ticket) idempotency.delete(ticket.ticket.scope)
+      send(response, 404, failure("session_not_found", "Session was not found", id))
       return true
     }
     await runAgentControl(

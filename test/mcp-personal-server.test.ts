@@ -1340,8 +1340,14 @@ test("Prepare outcome publication derives its owner pin and links only method-sp
   const { owner_feature, ...published } = JSON.parse(bytes.toString("utf8"))
   assert.deepEqual(published, source)
   const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/platform-connect.json", import.meta.url), "utf8"))
-  assert.equal(owner_feature.commit, manifest.owner.repository_commit)
+  // The private policy retains its independently issued feature pin. A newer compatible
+  // runtime must publish identical feature bytes, not rewrite this policy's commit.
   assert.equal(owner_feature.sha256, manifest.owner.artifacts.find((item: { path: string }) => item.path === owner_feature.path).sha256)
+  const featurePath = owner_feature.path.replace(/^contract\//u, "")
+  for (const commit of [owner_feature.commit, manifest.owner.repository_commit]) {
+    const feature = await readFile(new URL(`../contract/vendor/kokoro-platform/${commit}/${featurePath}`, import.meta.url))
+    assert.equal(createHash("sha256").update(feature).digest("hex"), owner_feature.sha256)
+  }
   assert.deepEqual(source.operations.prepareServer, ["rejected"])
   assert.deepEqual(source.operations.getMcpPrepareReceipt, ["rejected", "execution_fenced"])
   assert.equal(source.faults.rejected.outcome, "definite_rejection")

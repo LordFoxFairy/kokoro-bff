@@ -851,3 +851,161 @@ test("real PG creator-editor-creator source cursors preserve public order, same-
   )
   assert.notEqual(sameKeys[0].outbox_id, sameKeys[1].outbox_id)
 })
+
+test("real PG Project aggregate deletion fences collaborator children without impersonating peer execution and waits for every scope ACK", async (t) => {
+  const raw = process.env.KOKORO_TEST_POSTGRES_URL
+  assert.ok(raw, "Root-owned Project collaboration fixture URL is required")
+  const url = new URL(raw)
+  assert.match(url.pathname, /^\/kokoro_bff_project_collab_[0-9a-f]{32}$/u)
+  assert.deepEqual(url.searchParams.getAll("schema"), ["kokoro_bff"])
+  const pool = new Pool({ connectionString: raw, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 5 })
+  t.after(() => pool.end())
+  const [{ deleteProjectAggregate, readProjectDeletion }, { PostgresProjectScopeReleaseOutboxRepository }, { PostgresScheduledTaskRepository }] =
+    await Promise.all([
+      import("../dist/infrastructure/postgres/project-delete.js"),
+      import("../dist/infrastructure/postgres/project-scope-release-outbox-repository.js"),
+      import("../dist/infrastructure/postgres/scheduled-task-repository.js"),
+    ])
+  const tenantId = `delete_${randomUUID()}`,
+    projectId = `project_${randomUUID()}`,
+    otherId = `project_${randomUUID()}`
+  const owner = { tenantId, subjectId: "owner" },
+    editor = { tenantId, subjectId: "editor" }
+  const database = { pool, notifyAgUiProjection: async () => undefined },
+    releases = new PostgresProjectScopeReleaseOutboxRepository(database)
+  const tasks = new PostgresScheduledTaskRepository(database)
+  await pool.query(
+    "INSERT INTO bff_project(project_id,tenant_id,owner_id,name,slug) VALUES($1,$3,'owner','Delete shared','shared-slug'),($2,$3,'editor','Keep foreign','shared-slug')",
+    [projectId, otherId, tenantId],
+  )
+  await pool.query("INSERT INTO bff_project_grant(tenant_id,project_id,subject_id,grant_role,granted_by) VALUES($1,$2,'editor','editor','owner')", [
+    tenantId,
+    projectId,
+  ])
+  const members = ["owner-child", "editor-child", "owner-legacy", "deleted-editor-child"]
+  for (const [id, subject, ref, deleted] of [
+    [members[0], "owner", projectId, false],
+    [members[1], "editor", projectId, false],
+    [members[2], "owner", "shared-slug", false],
+    [members[3], "editor", projectId, true],
+    ["foreign-legacy", "editor", "shared-slug", false],
+    ["foreign-project", "editor", otherId, false],
+  ])
+    await pool.query(
+      "INSERT INTO bff_conversation(conversation_id,tenant_id,owner_id,project_ref,title,status,deleted_at) VALUES($1,$2,$3,$4,$1,$5,CASE WHEN $6 THEN '2026-11-01'::timestamptz ELSE NULL END)",
+      [id, tenantId, subject, ref, deleted ? "deleted" : "active", deleted],
+    )
+  await pool.query("INSERT INTO bff_conversation(conversation_id,tenant_id,owner_id,project_ref,title) VALUES('other-tenant',$1,'editor',$2,'Keep tenant')", [
+    tenantId + "_other",
+    projectId,
+  ])
+  await pool.query("INSERT INTO bff_agui_stream(tenant_id,session_id,consumer_subject_id) VALUES($1,$2,'editor'),($1,$3,'editor')", [
+    tenantId,
+    members[0],
+    members[3],
+  ])
+  for (const [id, subject, conversation, seq, status, attempts, unknown] of [
+    ["owner-sent", "owner", members[0], 1, "admitted", 1, false],
+    ["peer-unknown", "editor", members[1], 1, "retryable", 1, true],
+    ["peer-unsent", "editor", members[1], 2, "pending", 0, false],
+    ["peer-admitted", "editor", members[1], 3, "admitted", 1, false],
+  ]) {
+    await pool.query(
+      `INSERT INTO bff_agent_dispatch_outbox(outbox_id,tenant_id,conversation_id,conversation_dispatch_seq,subject_id,actor_id,request_id,idempotency_key,request_digest,run_id,user_message_id,assistant_message_id,identity_assertion_ref,execution_project_ref,payload,status,attempt_count,admission_unknown_seen,admitted_at)
+      VALUES($1,$2,$3,$4,$5,$5,$1,$1,repeat('a',64),'run-'||$1,'user-'||$1,'assistant-'||$1,'proof-'||$1,$6,jsonb_build_object('original_actor',$5::text),$7,$8,$9,CASE WHEN $7='admitted' THEN CURRENT_TIMESTAMP(3) ELSE NULL END)`,
+      [id, tenantId, conversation, seq, subject, projectId, status, attempts, unknown],
+    )
+    await pool.query(
+      "INSERT INTO bff_message(message_id,tenant_id,conversation_id,run_id,role,content,status,message_seq) VALUES('assistant-'||$1,$2,$3,'run-'||$1,'assistant','Original in-flight','streaming',$4)",
+      [id, tenantId, conversation, seq],
+    )
+  }
+  for (const scope of [owner, editor]) {
+    const key = `task-${scope.subjectId}`
+    await tasks.createScheduledTask(
+      scope,
+      { projectId, title: key, prompt: "fixture only", frequency: "daily", time: "08:00", timezone: "UTC", autoApprove: false },
+      key,
+      { ...scope, actorId: scope.subjectId, requestId: key, idempotencyKey: key },
+    )
+  }
+  const snapshot = async () => {
+    const value = {}
+    for (const table of [
+      "bff_project",
+      "bff_conversation",
+      "bff_message",
+      "bff_agui_stream",
+      "bff_agent_dispatch_outbox",
+      "bff_agent_cancellation_outbox",
+      "bff_scheduled_task",
+      "bff_scheduled_task_outbox",
+      "bff_project_deletion",
+      "bff_project_scope_release_outbox",
+    ])
+      value[table] = (await pool.query(`SELECT to_jsonb(row) AS value FROM ${table} row WHERE tenant_id=$1 ORDER BY to_jsonb(row)::text`, [tenantId])).rows
+    return value
+  }
+  const before = await snapshot(),
+    fingerprint = createHash("sha256")
+      .update(JSON.stringify(["project.delete:v1", projectId]))
+      .digest("hex")
+  const del = (scope, digest = fingerprint) =>
+    deleteProjectAggregate(database, scope, projectId, "delete", digest, "actual-delete-owner", new AbortController().signal)
+  assert.equal((await del(editor)).kind, "not_found")
+  assert.deepEqual(await snapshot(), before, "editor never obtains aggregate delete authority")
+  await assert.rejects(del(owner, "invalid-digest"))
+  assert.deepEqual(await snapshot(), before, "late receipt failure rolls back all creators' tombstones and cleanup")
+  assert.equal((await del(owner)).kind, "accepted")
+  const after = await snapshot()
+  const conversations = after.bff_conversation.map(({ value }) => value)
+  assert.deepEqual(
+    conversations
+      .filter((c) => c.status === "deleted")
+      .map((c) => c.conversation_id)
+      .sort(),
+    [...members].sort(),
+  )
+  assert.equal(new Date(conversations.find((c) => c.conversation_id === members[3]).deleted_at).toISOString(), "2026-11-01T00:00:00.000Z")
+  for (const id of ["foreign-legacy", "foreign-project"]) assert.equal(conversations.find((c) => c.conversation_id === id).status, "active")
+  assert.equal(
+    (await pool.query("SELECT status FROM bff_conversation WHERE tenant_id=$1 AND conversation_id='other-tenant'", [tenantId + "_other"])).rows[0].status,
+    "active",
+  )
+  for (const { value: stream } of after.bff_agui_stream) {
+    assert.equal(stream.consumer_state, "stopped")
+    assert.equal(String(stream.consumer_fence), "1")
+    assert.equal(stream.consumer_subject_id, "editor", "stopping a peer producer never rebinds its identity")
+  }
+  for (const id of ["peer-unknown", "peer-admitted"])
+    assert.deepEqual(
+      after.bff_agent_dispatch_outbox.find(({ value }) => value.outbox_id === id),
+      before.bff_agent_dispatch_outbox.find(({ value }) => value.outbox_id === id),
+      "peer admitted/unknown facts stay byte-equivalent",
+    )
+  assert.equal(after.bff_agent_dispatch_outbox.find(({ value }) => value.outbox_id === "peer-unsent").value.status, "failed")
+  assert.deepEqual(
+    after.bff_agent_cancellation_outbox.map(({ value }) => [value.subject_id, value.actor_id, value.run_id]),
+    [["owner", "owner", "run-owner-sent"]],
+  )
+  assert.ok(after.bff_message.every(({ value }) => value.status === "failed"))
+  assert.deepEqual(after.bff_scheduled_task.map(({ value }) => [value.owner_id, value.enabled, value.execution_actor_id, value.revision]).sort(), [
+    ["editor", false, null, 2],
+    ["owner", false, null, 2],
+  ])
+  const commands = await releases.claimProjectScopeReleases(
+    { workerId: "delete-fixture", limit: 10, leaseDurationMs: 30000, includeOneCredentialRecovery: false },
+    new AbortController().signal,
+    5000,
+  )
+  assert.equal(commands.length, members.length + 1)
+  assert.ok(commands.every((command) => command.ownerSubjectId === "owner" && command.actorId === "owner"))
+  const held = commands.find((command) => command.scopeId === members[1])
+  assert.ok(held)
+  for (const command of commands.filter((command) => command !== held))
+    assert.equal(await releases.markProjectScopeReleased(command, new AbortController().signal, 5000), true)
+  const state = () => readProjectDeletion(database, owner, projectId, new AbortController().signal)
+  assert.equal((await state()).logical_release_state, "pending", "missing editor-child ACK cannot be mistaken for completion")
+  assert.equal(await releases.markProjectScopeReleased(held, new AbortController().signal, 5000), true)
+  assert.equal((await state()).logical_release_state, "released")
+})
