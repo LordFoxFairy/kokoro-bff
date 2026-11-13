@@ -9,6 +9,7 @@ fresh 空 owner 语义不变，不改变既有 personalization 具名入口，�
 owner advisory lock 和具名表锁后重核，30s总期限／1s锁预算，一事务保值回填；unknown／mixed／矛盾来源回滚，current只识别，COMMIT未知不伪称回滚或自动重试。
 实际 Scheduled 接受事务同时持久dispatch与terminal202 receipt，旧revision从该原snapshot精确绑定；允许已删除Task的历史，不猜当前revision。
 旧source仅用已证明consumer／Conversation原creator及一致dispatch/process起源回填独立cursor，保原HWM／state／public payload与ID，不reset或默认owner。
+原BFF queued帧不拥有Agent source行；仅对真正缺source的`dispatch_queued:<outbox>`按原tenant/Conversation/dispatch、subject=actor、完整queued payload/metadata、创建时间及cursor SHA证明。已有source但矛盾／其它无来源帧拒绝；不补source或推进Agent HWM，不要求历史dispatch仍pending/head。
 主控pure3项及真实PG完整演进1项通过（均0跳过），覆盖保值、unknown/mixed拒绝、来源矛盾回滚与current noop，运行输入SHA不变、自有库回收；不是正常数据升级或完整B10验收。
 
 ### B13 Custom API 管理HTTP候选（同Public29，未正常激活）

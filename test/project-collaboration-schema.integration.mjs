@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { execFileSync } from "node:child_process"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
@@ -149,6 +150,37 @@ test("real PG exact-parent Project collaboration evolution accepts equivalent hi
     VALUES($1,$2,'artifact-original','run-original','source-2',2,$3,'asset-original','document',$3,'Original output','text/plain',5,'1970-01-01T00:00:02Z')`,
     [tenant, conversation, fingerprint],
   )
+  // Queued events are BFF-owned dispatch facts, deliberately not Agent source events.
+  const queuedId = "dispatch_queued:original-chat-outbox"
+  const queuedAt = "1970-01-01T00:00:00.000Z"
+  const queuedPayload = {
+    type: "CUSTOM",
+    timestamp: 0,
+    name: "kokoro.run.queued",
+    value: { run_id: "original-chat-run", dispatch_sequence: "1" },
+    metadata: {
+      kokoro: { event_id: queuedId, seq: "1", session_id: conversation, run_id: "original-chat-run", timestamp: queuedAt, source_owner: "kokoro-bff" },
+    },
+  }
+  const queuedCursor =
+    "agui_" +
+    createHash("sha256")
+      .update(JSON.stringify([tenant, conversation, queuedId]))
+      .digest("hex")
+      .slice(0, 32)
+  await pool.query(
+    `INSERT INTO bff_agent_dispatch_outbox
+    (outbox_id,tenant_id,conversation_id,conversation_dispatch_seq,subject_id,actor_id,request_id,idempotency_key,request_digest,run_id,user_message_id,assistant_message_id,identity_assertion_ref,payload,created_at)
+    VALUES('original-chat-outbox',$1,$2,1,$3,$3,'chat-request','chat-key',$4,'original-chat-run','chat-user','chat-assistant','chat-proof','{}',$5)`,
+    [tenant, conversation, owner, fingerprint, queuedAt],
+  )
+  await pool.query(
+    `INSERT INTO bff_agui_event
+    (tenant_id,session_id,public_sequence,cursor,source_owner,source_event_id,frame_index,event_type,event_payload,source_occurred_at)
+    VALUES($1,$2,4,$3,'kokoro-bff',$4,0,'CUSTOM',$5::jsonb,$6)`,
+    [tenant, conversation, queuedCursor, queuedId, JSON.stringify(queuedPayload), queuedAt],
+  )
+  await pool.query("UPDATE bff_agui_stream SET next_public_sequence=5")
   const definitions = projectCollaborationDefinitions(current)
   const legacyRows = async () =>
     Object.fromEntries(
@@ -185,6 +217,22 @@ test("real PG exact-parent Project collaboration evolution accepts equivalent hi
   await pool.query("UPDATE bff_idempotency_receipt SET response_body=jsonb_set(response_body,'{snapshot,taskRevision}','0')")
   await assert.rejects(evolveProjectCollaborationSchema(raw, current), /PROJECT_COLLABORATION_DISPATCH_ORIGIN_INVALID/u)
   await pool.query("UPDATE bff_idempotency_receipt SET response_body=$1::jsonb", [JSON.stringify(envelope)])
+  await pool.query("UPDATE bff_agui_event SET event_payload=jsonb_set(event_payload,'{value,run_id}','\"unproved-run\"') WHERE source_owner='kokoro-bff'")
+  await assert.rejects(evolveProjectCollaborationSchema(raw, current), /PROJECT_COLLABORATION_SOURCE_ORIGIN_INVALID/u)
+  await pool.query("UPDATE bff_agui_event SET event_payload=$1::jsonb WHERE source_owner='kokoro-bff'", [JSON.stringify(queuedPayload)])
+  await pool.query("UPDATE bff_agui_event SET source_owner='kokoro-agent' WHERE source_event_id='dispatch_queued:original-chat-outbox'")
+  await assert.rejects(evolveProjectCollaborationSchema(raw, current), /PROJECT_COLLABORATION_SOURCE_ORIGIN_INVALID/u)
+  await pool.query("UPDATE bff_agui_event SET source_owner='kokoro-bff' WHERE source_event_id='dispatch_queued:original-chat-outbox'")
+  await pool.query("UPDATE bff_agui_source_event SET source_occurred_at='1970-01-01T00:00:10Z' WHERE source_event_id='source-1'")
+  await assert.rejects(evolveProjectCollaborationSchema(raw, current), /PROJECT_COLLABORATION_SOURCE_ORIGIN_INVALID/u)
+  await pool.query("UPDATE bff_agui_source_event SET source_occurred_at='1970-01-01T00:00:01Z' WHERE source_event_id='source-1'")
+  await pool.query(
+    "INSERT INTO bff_agui_source_event(tenant_id,session_id,source_owner,source_event_id,source_sequence,source_digest,source_occurred_at) VALUES($1,$2,'kokoro-bff',$3,1,$4,'1970-01-01T00:00:10Z')",
+    [tenant, conversation, queuedId, fingerprint],
+  )
+  await assert.rejects(evolveProjectCollaborationSchema(raw, current), /PROJECT_COLLABORATION_SOURCE_ORIGIN_INVALID/u)
+  await pool.query("DELETE FROM bff_agui_source_event WHERE source_owner='kokoro-bff'")
+  assert.deepEqual(await legacyRows(), before, "queued and Agent origin failures roll back without changing original facts")
   assert.equal(await evolveProjectCollaborationSchema(raw, current), "evolved")
   const after = await legacyRows()
   const source = (await pool.query("SELECT * FROM bff_agui_source_cursor")).rows

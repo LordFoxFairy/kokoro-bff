@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util"
+import { createHash } from "node:crypto"
 import { projectGrantParentSqlSha, restoreProjectGrantSchema } from "./project-grant-public-contract.mjs"
 
 const oldTables = [
@@ -174,6 +175,75 @@ async function expectedCatalog(query, definitions, current) {
 async function rejectRows(query, sql, values = [], kind = "SOURCE_ORIGIN_INVALID") {
   if ((await query(sql, values)).rows.length) invalid(kind)
 }
+/** Queued public frames originate in the immutable BFF dispatch, not Agent's source ledger. */
+async function assertLegacyFrameOrigins(query) {
+  let position = null
+  while (true) {
+    const rows = (
+      await query(
+        `SELECT frame.*,dispatch.outbox_id AS dispatch_outbox_id,dispatch.subject_id AS dispatch_subject,
+      dispatch.actor_id AS dispatch_actor,dispatch.run_id AS dispatch_run,dispatch.conversation_dispatch_seq AS dispatch_sequence,
+      dispatch.created_at AS dispatch_created_at,
+      EXISTS(SELECT 1 FROM bff_agui_source_event source WHERE source.tenant_id=frame.tenant_id AND source.session_id=frame.session_id
+        AND source.source_owner=frame.source_owner AND source.source_event_id=frame.source_event_id) AS has_source
+      FROM bff_agui_event frame LEFT JOIN bff_agent_dispatch_outbox dispatch ON dispatch.tenant_id=frame.tenant_id
+        AND dispatch.conversation_id=frame.session_id AND frame.source_event_id='dispatch_queued:'||dispatch.outbox_id
+      WHERE ($1::text IS NULL OR (frame.tenant_id COLLATE "C",frame.session_id COLLATE "C",frame.public_sequence)>($1 COLLATE "C",$2 COLLATE "C",$3::bigint))
+        AND NOT EXISTS(SELECT 1 FROM bff_agui_source_event source WHERE source.tenant_id=frame.tenant_id AND source.session_id=frame.session_id
+          AND source.source_owner=frame.source_owner AND source.source_event_id=frame.source_event_id
+          AND source.source_subject_id=frame.source_subject_id AND source.source_occurred_at=frame.source_occurred_at)
+      ORDER BY frame.tenant_id COLLATE "C",frame.session_id COLLATE "C",frame.public_sequence LIMIT 128`,
+        position ?? [null, null, null],
+      )
+    ).rows
+    if (!rows.length) return
+    for (const row of rows) {
+      if (
+        row.has_source ||
+        row.source_owner !== "kokoro-bff" ||
+        typeof row.dispatch_outbox_id !== "string" ||
+        row.dispatch_subject !== row.source_subject_id ||
+        row.dispatch_actor !== row.source_subject_id ||
+        row.frame_index !== 0 ||
+        row.event_type !== "CUSTOM" ||
+        !/^[1-9][0-9]*$/u.test(row.dispatch_sequence)
+      )
+        invalid("SOURCE_ORIGIN_INVALID")
+      const occurred = new Date(row.dispatch_created_at)
+      const sourceId = "dispatch_queued:" + row.dispatch_outbox_id
+      const cursor =
+        "agui_" +
+        createHash("sha256")
+          .update(JSON.stringify([row.tenant_id, row.session_id, sourceId]))
+          .digest("hex")
+          .slice(0, 32)
+      if (
+        !Number.isFinite(occurred.getTime()) ||
+        new Date(row.source_occurred_at).getTime() !== occurred.getTime() ||
+        row.cursor !== cursor ||
+        !isDeepStrictEqual(row.event_payload, {
+          type: "CUSTOM",
+          timestamp: occurred.getTime(),
+          name: "kokoro.run.queued",
+          value: { run_id: row.dispatch_run, dispatch_sequence: row.dispatch_sequence },
+          metadata: {
+            kokoro: {
+              event_id: sourceId,
+              seq: row.dispatch_sequence,
+              session_id: row.session_id,
+              run_id: row.dispatch_run,
+              timestamp: occurred.toISOString(),
+              source_owner: "kokoro-bff",
+            },
+          },
+        })
+      )
+        invalid("SOURCE_ORIGIN_INVALID")
+    }
+    const last = rows.at(-1)
+    position = [last.tenant_id, last.session_id, last.public_sequence]
+  }
+}
 async function bindLegacyDispatches(query) {
   let after = ""
   while (true) {
@@ -303,12 +373,7 @@ export async function evolveLockedProjectCollaboration(query, definitions) {
   for (const name of ["bff_agui_source_event", "bff_agui_event", "bff_conversation_artifact"])
     await query(`ALTER TABLE ${name} ADD COLUMN source_subject_id TEXT`)
   await bindLegacySources(query)
-  await rejectRows(
-    query,
-    `SELECT 1 FROM bff_agui_event frame WHERE NOT EXISTS(SELECT 1 FROM bff_agui_source_event source
-    WHERE source.tenant_id=frame.tenant_id AND source.session_id=frame.session_id AND source.source_owner=frame.source_owner AND source.source_event_id=frame.source_event_id
-      AND source.source_subject_id=frame.source_subject_id AND source.source_occurred_at=frame.source_occurred_at) LIMIT 1`,
-  )
+  await assertLegacyFrameOrigins(query)
   await rejectRows(
     query,
     `SELECT 1 FROM bff_conversation_artifact artifact WHERE NOT EXISTS(SELECT 1 FROM bff_agui_source_event source

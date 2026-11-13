@@ -2,6 +2,7 @@
 
 正常BFF旧库的live父语义与d875一致，但历史ADD/DROP使5表物理列位序不同，ScheduledTask保留两个已删除attribute槽；原工具把attnum当协议导致SCHEMA_UNKNOWN，事务在分类阶段拒绝，无业务变更。仅修具名演进catalog的live列排序／退休槽过滤，完整列属性、约束、索引、guard及锁后重核保留；不加父版本、不手工改正常表。
 既有真实PG用例补物理重排／退休槽、额外live列／nullability拒绝，原来源／receipt矛盾回滚、全保值、current noop保留；真实RED→GREEN 1 PASS／0 SKIP，规则3 PASS。本片自有fixture库均DROP并确认不存在。此前2578 PASS／2条件SKIP绑定6b源码，未重跑全默认；本片仅owner工具／测试／设计说明，不改HTTP runtime或canonical SQL。
+第二次正式演进识别13条合法BFF queued帧无Agent source行，原全来源假设导致SOURCE_ORIGIN_INVALID并整笔回滚，原36表摘要核等。仅补原不可变dispatch的具名queued证明；真实PG同一用例覆盖原queued保值、坏payload、Agent缺source及同身份source矛盾拒绝，保原完整来源／receipt与noop断言。首轮RED、临时错误分类／非法fixture失败均保留；最终定向结果另附Root，不冒normal已升级。
 正常Capability已通过正式精确父演进；BFF实际升级／成对激活与native收据由Root后续记录，本段不冒已完成。
 
 ## 2026-11-13 B10 已知协作源码完整默认门收口（正常组合未激活）
