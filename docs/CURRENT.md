@@ -1,3 +1,11 @@
+## 2026-11-13 正常协作源已激活，SSE replay 缺列已实测修复
+
+`adf31d9813ade34b1d51e672c03075cd5eabdb7c` 已沿原 PR #17 提交推送。正常 owner 演进已成功：BFF 原 36 表与 Capability 原 25 表行摘要保持，来源游标精确迁移；下方“未激活／未演进”仅描述当时阶段。Project 双身份 viewer→editor→降权→撤销主路径已验，完整共享成功执行／安全 FINAL 仍待，不以 ACL 通过代替。
+
+本轮实际 SSE 503 的 replay SQL 缺列已修：原有真实 PG creator→editor→creator 用例先 RED 42703，再 GREEN；格式化后最终同一用例 1 PASS／0 SKIP，自有库 DROP＋absence，源码／test／dist 输入核等。相关四纯文件 91 PASS／0 SKIP，build／typecheck／lint／scoped format 与独审通过，未重跑全默认。只补 frame_page 的 source_subject_id，无 schema／HTTP／权限／cursor／分页语义变更。
+
+主控仅受控重载 BFF，healthz 200；真实 native Session→Web 同源 adapter→BFF SSE 返回 200 text/event-stream，读到真实 id／data 回放帧，自己的测试 Session 正式退出且 Cookie 文件回收，原角色不变。正常 Chrome 硬刷新恢复新 Run 的 Stopped，同时保留旧 Run 的 incompatible 失败，两者不混作成功。最新 55 Run 全终态／dispatch pending 0、两笔历史财务 unknown 保留；这是当时快照，不是今后重载的通行证。整体 B10／Task B 与原 PR 仍未完成。
+
 ## 2026-11-13 SSE replay 实际 SQL 接线缺陷（定向已验，正常重载待Root）
 
 主控正常 native SSE读取503/agui_ledger_unavailable，与浏览器active阶段Connection interrupted一致。真实PG现有creator→editor→creator用例补实际replay即RED42703：frame_page漏透传source_subject_id。仅补这一列，不改权限、wire、分页、byte预算、cursor或ledger；现用例校验三轮actor来源/公开顺序、opaque cursor后缀、全页含两来源及末尾空页，原scope/重放/fence等断言保持。
