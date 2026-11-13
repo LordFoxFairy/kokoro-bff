@@ -17,6 +17,7 @@ const profile = z
   .object({
     icon: mcpIconBindingSchema.optional(),
     profile_id: identifier,
+    governance_status: z.enum(["active", "quarantined", "revoked"]),
     name: z.string().min(1).max(400),
     instructions: z.string().min(1).max(4000).optional(),
     state_version: version,
@@ -25,6 +26,9 @@ const profile = z
     environment: z.array(environment).max(128),
   })
   .strict()
+// An immutable receipt is not a current eligibility read. Legacy protobuf ACKs
+// decode an absent governance_status as the empty string; preserve absence.
+const receiptProfile = profile.partial({ governance_status: true })
 const page = z
   .object({
     next_cursor: z
@@ -35,10 +39,10 @@ const page = z
   .strict()
 export const customApiPublic = {
   profile,
-  create: z.object({ custom_api: profile, replayed: z.boolean() }).strict(),
+  create: z.object({ custom_api: receiptProfile, replayed: z.boolean() }).strict(),
   get: z.object({ custom_api: profile }).strict(),
   list: z.object({ items: z.array(profile).max(100), page }).strict(),
-  update: z.object({ custom_api: profile, replayed: z.boolean() }).strict(),
+  update: z.object({ custom_api: receiptProfile, replayed: z.boolean() }).strict(),
   remove: z
     .object({
       profile_id: identifier,
@@ -54,13 +58,14 @@ function timestamp(value: unknown): string | undefined {
     throw new Error("custom_api_response_invalid")
   return new Date(Number(item.seconds) * 1000 + Math.floor(item.nanos / 1_000_000)).toISOString()
 }
-function profileProjection(raw: unknown): unknown {
+function profileProjection(raw: unknown, receipt = false): unknown {
   if (typeof raw !== "object" || raw === null) throw new Error("custom_api_response_invalid")
   const value = raw as Record<string, unknown>
   const profileId = value.profileId as { value?: unknown } | undefined
   return {
     ...(value.icon === undefined ? {} : { icon: projectMcpIconBinding(value.icon) }),
     profile_id: profileId?.value,
+    ...(receipt && (value.governanceStatus === undefined || value.governanceStatus === "") ? {} : { governance_status: value.governanceStatus }),
     name: value.name,
     ...(value.instructions === undefined ? {} : { instructions: value.instructions }),
     state_version: typeof value.stateVersion === "bigint" ? String(value.stateVersion) : undefined,
@@ -88,7 +93,7 @@ function projectResponse(
   const value = raw as Record<string, unknown>
   if (operation === "list") {
     const result = {
-      items: Array.isArray(value.profiles) ? value.profiles.map(profileProjection) : undefined,
+      items: Array.isArray(value.profiles) ? value.profiles.map((value) => profileProjection(value)) : undefined,
       page: {
         next_cursor: (value.page as Record<string, unknown> | undefined)?.nextCursor ?? null,
       },
@@ -101,7 +106,7 @@ function projectResponse(
       deleted: value.deleted,
       replayed: value.replayed,
     })
-  const projected = profile.parse(profileProjection(value.profile))
+  const projected = (operation === "get" ? profile : receiptProfile).parse(profileProjection(value.profile, operation !== "get"))
   if (
     (operation === "create" || operation === "update") &&
     input !== undefined &&

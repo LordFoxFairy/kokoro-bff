@@ -3,8 +3,9 @@ import { createHash } from "node:crypto"
 import { access, readFile } from "node:fs/promises"
 import { test } from "node:test"
 import { getTextEncoding } from "@bufbuild/protobuf/wire"
-import { configureBffProtobufTextEncoding } from "../dist/infrastructure/protobuf-text-encoding.js"
+import { configureBffProtobufTextEncoding } from "../src/infrastructure/protobuf-text-encoding.js"
 import {
+  restoreCustomApiAdminArtifact,
   artifactDigests as artifacts,
   ownerCommit,
   ownerGenerated,
@@ -56,6 +57,8 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
       "execution-operations/skill-publication-precondition-v1.vectors.json",
       "errors/command-receipt-v1.json",
       "auth/bff-service-auth-v1.json",
+      "auth/bff-service-auth-v2.json",
+      "execution-operations/custom-api-admin-v1.json",
       "execution-operations/skill-installation-update-v1.json",
       "execution-operations/custom-api-v1.json",
       "execution-operations/mcp-private-server-v1.json",
@@ -121,7 +124,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     provenance: { path: "contract/provenance.json", sha256: artifacts["provenance.json"], combined_sha256: combinedSha256 },
     generated: ownerGenerated,
   })
-  assert.equal(manifest.owner.repository_commit, "573a8f00a92991ae1e6eee6feb238e0132f71f50")
+  assert.equal(manifest.owner.repository_commit, "efe18a1f697f3ff2189e342e40ffed581bedda2b")
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.lockfile_sha256, sha256(await requiredFile("pnpm-lock.yaml")))
   for (const [file, bytes] of Object.entries(await sourceBytes())) assert.equal(sha256(bytes), sources[file])
@@ -204,8 +207,8 @@ test("Platform generator rejects input, artifact, provenance and vendor-layout d
 })
 
 test("one generated client exposes Skills, private MCP v1 and provider administration", async () => {
-  const generated = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
-  const { McpPackageAdminService } = await import("../dist/generated/platform-connect/kokoro/platform/v1/mcp_package_admin_pb.js")
+  const generated = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { McpPackageAdminService } = await import("../src/generated/platform-connect/kokoro/platform/v1/mcp_package_admin_pb.js")
   assert.deepEqual(
     McpPackageAdminService.methods.map((method) => method.name),
     ["BeginMcpPackageUpload", "CompleteMcpPackageUpload", "AbortMcpPackageUpload", "GetMcpPackageUploadStatus", "PublishMcpPackage"],
@@ -235,7 +238,7 @@ test("one generated client exposes Skills, private MCP v1 and provider administr
 
 test("current CreateSkillDraft wire data is generated rather than handwritten", async () => {
   const { create, fromBinary, toBinary } = await import("@bufbuild/protobuf")
-  const { CreateSkillDraftRequestSchema } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { CreateSkillDraftRequestSchema } = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   const request = create(CreateSkillDraftRequestSchema, {
     requestId: "request-1",
     command: { commandId: "command-1", requestDigest: "a".repeat(64) },
@@ -256,7 +259,7 @@ test("BFF initializes one strict Protobuf text codec", () => {
 
 test("MCP availability publication pins the exact required enum without activating normal execution", async () => {
   const profile = JSON.parse(await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/execution-operations/mcp-availability-v1.json`))
-  const { McpAvailability } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { McpAvailability } = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   assert.equal(profile.profile, "mcp-local-availability-v1")
   assert.equal(profile.version, "1.0.0")
   assert.equal(profile.status, "prepared")
@@ -274,7 +277,7 @@ test("MCP availability publication pins the exact required enum without activati
 test("independent publication pins exact committed owner artifacts without claiming execution readiness", async () => {
   const { fromBinary } = await import("@bufbuild/protobuf")
   const { FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
-  const { canonicalizeJcs } = await import("../dist/infrastructure/clients/platform/jcs.js")
+  const { canonicalizeJcs } = await import("../src/infrastructure/clients/platform/jcs.js")
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   const candidate = manifest.publication
   assert.ok(candidate, "missing exact committed publication manifest")
@@ -292,7 +295,7 @@ test("independent publication pins exact committed owner artifacts without claim
   assert.equal(profile.vectors_sha256, sha256(canonicalizeJcs(vectors)))
   assert.equal(profile.semantics.execution_ready, "required presence and false")
   const descriptor = fromBinary(FileDescriptorSetSchema, await requiredFile(`${candidate.vendor}/descriptor/mcp-project-publication-v1.binpb`))
-  const generated = await import("../dist/generated/platform-connect/kokoro/platform/v1/mcp_project_publication_pb.js")
+  const generated = await import("../src/generated/platform-connect/kokoro/platform/v1/mcp_project_publication_pb.js")
   const published = descriptor.file.find((file) => file.name === "kokoro/platform/v1/mcp_project_publication.proto")
   assert.deepEqual(generated.file_kokoro_platform_v1_mcp_project_publication.proto, published)
   assert.deepEqual(
@@ -357,7 +360,7 @@ test("private publication schemas publish exact status-code-retryable tuples fro
 test("SSE successor: generated native optional fields match the fixed descriptor known shape and pinned profile", async () => {
   const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
   const { FileDescriptorSetSchema, FileDescriptorProtoSchema } = await import("@bufbuild/protobuf/wkt")
-  const generated = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const generated = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   const graph = fromBinary(FileDescriptorSetSchema, await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`))
   const current = graph.file.find((file) => file.name === "kokoro/platform/v1/platform_runtime.proto")
   assert.ok(current)
@@ -434,7 +437,7 @@ async function prePrivateGenerationArtifact(file, supplied) {
   assert.equal(feature.parents.commit, "36805356a84aaacbc24b18a4c14bf87bbd81fc7a")
   const pin = feature.inputs.find((value) => value.path === file)
   assert.ok(pin)
-  const raw = supplied ?? (await requiredFile(prefix + file.replace("contract/", "")))
+  const raw = await restoreCustomApiAdminArtifact(file, supplied)
   assert.equal(sha256(raw), pin.sha256)
   const parentPin = feature.parents.inputs[file]
   const parent = await requiredFile(prefix + parentPin.path.replace("contract/", ""))
@@ -584,7 +587,7 @@ test("Prepare typed outcomes pin the exact operation scope and preserve their en
       [5, ["GetPersonalMcpPrepareReceipt"]],
     ],
   )
-  const { PersonalMcpErrorReason } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { PersonalMcpErrorReason } = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   assert.equal(PersonalMcpErrorReason.PREPARE_CONNECTION_REJECTED, 4)
   assert.equal(PersonalMcpErrorReason.PREPARE_EXECUTION_FENCED, 5)
   await prePrepareOutcomeArtifact("contract/proto/kokoro/platform/v1/platform_runtime.proto")
@@ -641,4 +644,15 @@ test("Native successor retains the independently pinned unchanged HTTP7 source",
   const bytes = await requiredFile(`contract/vendor/kokoro-platform/${http.owner.repository_commit}/openapi/platform-http.openapi.json`)
   assert.equal(sha256(bytes), http.owner.contract_sha256)
   assert.equal(sha256(bytes), "085e1367f69c34edc6b80cbfb448596f36039f9857cee3bd5a407befbc295361")
+})
+
+test("Custom API governance leaf restores complete 573a source/descriptor/provenance and rejects mixed inputs", async () => {
+  const previous = "contract/vendor/kokoro-platform/573a8f00a92991ae1e6eee6feb238e0132f71f50/"
+  for (const file of ["contract/proto/kokoro/platform/v1/platform_runtime.proto", "contract/descriptor/platform-v1.binpb", "contract/provenance.json"]) {
+    const parent = await requiredFile(previous + file.slice(9))
+    assert.deepEqual(await restoreCustomApiAdminArtifact(file), parent)
+    await assert.rejects(restoreCustomApiAdminArtifact(file, parent), /Expected values/u)
+    const current = await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/` + file.slice(9))
+    await assert.rejects(restoreCustomApiAdminArtifact(file, Buffer.concat([current, Buffer.from([0])])), /Expected values/u)
+  }
 })

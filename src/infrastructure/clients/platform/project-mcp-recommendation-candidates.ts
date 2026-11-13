@@ -39,7 +39,8 @@ export async function validateProjectMcpRecommendationCandidates(
             const raw = await clients.customApiClient.execute("get", { ...identity, profileId: ref.profile_id }, signal, deadlineAt)
             current()
             const parsed = customApiPublic.get.safeParse(raw)
-            if (!parsed.success || parsed.data.custom_api.profile_id !== ref.profile_id) invalid()
+            if (!parsed.success || parsed.data.custom_api.profile_id !== ref.profile_id) return invalid()
+            if (parsed.data.custom_api.governance_status !== "active") throw new ConnectError("Recommendation unavailable", Code.FailedPrecondition)
           } else {
             if (!clients.mcpPersonalClient) throw new ConnectError("MCP owner unavailable", Code.Unavailable)
             const operation = ref.kind === "provider" ? "provider" : "connector"

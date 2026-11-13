@@ -1,13 +1,13 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createHash } from "node:crypto"
-import { create } from "@bufbuild/protobuf"
+import { create, fromJson } from "@bufbuild/protobuf"
 import { timestampFromDate } from "@bufbuild/protobuf/wkt"
 import "reflect-metadata"
 import { Test } from "@nestjs/testing"
-import { BFF_CONFIG, BFF_DATABASE, CUSTOM_API_CLIENT, SESSION_ADMISSION } from "../dist/common/tokens.js"
-import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
-import { McpModule } from "../dist/modules/mcp/mcp.module.js"
+import { BFF_CONFIG, BFF_DATABASE, CUSTOM_API_CLIENT, SESSION_ADMISSION } from "../src/common/tokens.js"
+import { BFF_NEST_APPLICATION_OPTIONS } from "../src/main.js"
+import { McpModule } from "../src/modules/mcp/mcp.module.js"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.js"
 import { bindCustomApiCommand } from "../src/infrastructure/clients/platform/custom-api-binding.js"
 import { projectCustomApiResponse } from "../src/infrastructure/clients/platform/custom-api-response.js"
@@ -24,6 +24,7 @@ const identity = {
 
 const profile = {
   profile_id: "profile-one",
+  governance_status: "active",
   name: "Partner API",
   instructions: "Use the partner endpoint for supported requests.",
   state_version: "1",
@@ -368,4 +369,71 @@ test("invalid owner icon ACK is 502 inspect-owner, not a new browser error or re
   } finally {
     await f.close()
   }
+})
+
+// Fresh owner reads and immutable receipt profiles have different governance presence.
+const governanceWireProfile = (governanceStatus?: unknown) =>
+  Object.assign(
+    create(PersonalCustomApiSchema, {
+      profileId: { value: "governance-profile" },
+      name: "Safe API",
+      stateVersion: 7n,
+      createdAt: timestampFromDate(new Date("2026-11-13T00:00:00.000Z")),
+      updatedAt: timestampFromDate(new Date("2026-11-13T00:00:00.000Z")),
+      environment: [],
+    }),
+    governanceStatus === undefined ? {} : { governanceStatus },
+  )
+test("fresh Custom API get/list preserves all three owner governance states", () => {
+  for (const state of ["active", "quarantined", "revoked"]) {
+    const wire = governanceWireProfile(state)
+    const get = projectCustomApiResponse("get", { profile: wire }) as { custom_api: { governance_status: string } }
+    const list = projectCustomApiResponse("list", { profiles: [wire], page: {} }) as { items: Array<{ governance_status: string }> }
+    assert.equal(get.custom_api.governance_status, state)
+    assert.equal(list.items[0]!.governance_status, state)
+  }
+})
+test("fresh Custom API reads reject absent, empty or unknown governance instead of inferring active", () => {
+  for (const state of [undefined, "", "disabled", null, 1]) {
+    const wire = governanceWireProfile(state)
+    for (const operation of ["get", "list"] as const)
+      assert.throws(
+        () => projectCustomApiResponse(operation, operation === "get" ? { profile: wire } : { profiles: [wire], page: {} }),
+        /custom_api_response_invalid/u,
+      )
+  }
+})
+test("historical create/update ACK omits missing governance, keeps recorded version and never enriches from fresh state", () => {
+  for (const operation of ["create", "update"] as const) {
+    for (const missing of [undefined, ""]) {
+      const result = projectCustomApiResponse(operation, { profile: governanceWireProfile(missing), replayed: true }) as { custom_api: Record<string, unknown> }
+      assert.equal(Object.hasOwn(result.custom_api, "governance_status"), false)
+      assert.equal(result.custom_api.state_version, "7")
+    }
+    for (const state of ["active", "quarantined", "revoked"]) {
+      const result = projectCustomApiResponse(operation, { profile: governanceWireProfile(state), replayed: true }) as { custom_api: Record<string, unknown> }
+      assert.equal(result.custom_api.governance_status, state)
+    }
+    for (const state of ["disabled", null, 1])
+      assert.throws(() => projectCustomApiResponse(operation, { profile: governanceWireProfile(state), replayed: true }), /custom_api_response_invalid/u)
+  }
+})
+
+test("actual protobuf receipt decoding leaves legacy governance empty while a fresh read must reject it", () => {
+  const historical = fromJson(CreatePersonalCustomApiResponseSchema, {
+    profile: {
+      profileId: { value: "legacy-api" },
+      name: "Legacy API",
+      stateVersion: "3",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      environment: [],
+    },
+    replayed: true,
+  })
+  assert.equal(historical.profile!.governanceStatus, "")
+  const ack = projectCustomApiResponse("create", historical) as { custom_api: Record<string, unknown> }
+  assert.equal(Object.hasOwn(ack.custom_api, "governance_status"), false)
+  assert.equal(ack.custom_api.state_version, "3")
+  assert.throws(() => projectCustomApiResponse("get", { profile: historical.profile }), /custom_api_response_invalid/u)
 })

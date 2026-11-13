@@ -1,0 +1,58 @@
+{
+  "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.platform.proto.snapshot",
+    "sha256": "e406e4b0d637f2e1a6736741482c71d6a2285ff36a67db12c68284d9e49e52f6"
+  },
+  "contract/descriptor/platform-v1.binpb": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.platform.binpb.snapshot",
+    "sha256": "81ae8a8c825b87b82b21b7892f7f9bb7a3b70bb3294e4a62d39d72dc34b428a5"
+  },
+  "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.platform.generated.ts.snapshot",
+    "sha256": "e73a4ca8241ec2ee06822a7987957b3433b43ce7e3c761723a465acf9df7817b"
+  },
+  "contract/openapi/platform-http.openapi.json": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.http.openapi.json.snapshot",
+    "sha256": "3a187ad6e98b1824cf8d8e50c80218e77c7f14f4eb2a5cfcfe8d4be97c677a08"
+  },
+  "contract/provenance.json": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.provenance.json.snapshot",
+    "sha256": "157b21b188b867938a629b2d6bfec817496ba3bcd18ff497ed16c7c3a1810516"
+  },
+  "contract/execution-operations/mcp-private-server-v1.json": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.private-server.profile.json.snapshot",
+    "sha256": "c3246a5d88b79f1358205e67658570bf6ced4b805fb414b3016f816e88dbc92a"
+  },
+  "contract/execution-operations/mcp-personal-product-v1.json": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.personal-product.profile.json.snapshot",
+    "sha256": "b996af5f1897fb97c78f1f41e522e6b99af885c8319200a50a6a0865e19b34d0"
+  },
+  "contract/execution-operations/mcp-icon-v1.json": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.icon.profile.json.snapshot",
+    "sha256": "a6dd6d0bfe134c3c46b8c5fd442a7a7d1715c22ce6cea272148c50192e04504c"
+  },
+  "contract/execution-operations/mcp-availability-v1.json": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.availability.profile.json.snapshot",
+    "sha256": "44202f4b491d90414775654fdcfa0538fa5e1ce7585713040c8b7a8052d65e63"
+  },
+  "contract/proto/kokoro/platform/v1/mcp_runtime.proto": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.runtime.proto.snapshot",
+    "sha256": "1c0e942b56c9b711207f9f4e1155c7b5d24ce2632e18adc98cf9884542ab0b17"
+  },
+  "contract/descriptor/mcp-runtime-v1.binpb": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.runtime.binpb.snapshot",
+    "sha256": "d72ae692023b474534c2b0711c7ba70f54e3ca525d2a36576009988897dd7a81"
+  },
+  "src/generated/proto/kokoro/platform/v1/mcp_runtime_pb.ts": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.runtime.generated.ts.snapshot",
+    "sha256": "0dad7af6d2d9d6b359f88d37fa113f7f53db9267356126f9f7fe7ff1c499136e"
+  },
+  "contract/execution-operations/mcp-runtime-v1.json": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.runtime.profile.json.snapshot",
+    "sha256": "b8fb5d4682256e531594976004fec62968e1e5492864da53a0b0f4da2b9685a0"
+  },
+  "contract/execution-operations/mcp-runtime-request-vectors-v1.json": {
+    "path": "contract/descriptor/platform-mcp-personal-sse-parent.runtime.request-vectors.json.snapshot",
+    "sha256": "1217049c5a0833349765ab6d364771264f2dcfda410cb1c63b24abc7dcf2a397"
+  }
+}

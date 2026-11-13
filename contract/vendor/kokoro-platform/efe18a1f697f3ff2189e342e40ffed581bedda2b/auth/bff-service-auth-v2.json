@@ -1,0 +1,35 @@
+{
+  "profile": "platform-bff-service-auth",
+  "version": "2.0.0",
+  "owner": "kokoro-platform",
+  "visibility": "internal-owner",
+  "parent": {
+    "source": "auth/bff-service-auth-v1.json",
+    "sha256": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef"
+  },
+  "caller": "kokoro-bff",
+  "surfaces": [
+    "catalog",
+    "projection",
+    "skills_admin",
+    "mcp_personal",
+    "custom_api_personal",
+    "mcp_admin",
+    "custom_api_admin"
+  ],
+  "custom_api_admin": {
+    "human_authorization": "bff_fresh_native_session_current_product_tenant_member_and_platform_admin",
+    "actor": "trusted_actual_administrator_never_target_profile_owner",
+    "tenant": "fixed_credential_binding",
+    "fallback": "forbidden"
+  },
+  "authentication": {
+    "scheme": "Bearer",
+    "credential": "opaque_owner_only_file",
+    "file_version": 1,
+    "purposes_per_credential": 1,
+    "tenant": "fixed_credential_binding",
+    "freshness": "reread_complete_current_file_per_request",
+    "fallback": "forbidden"
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "profile": "mcp-private-server-v2",
+  "version": "2.0.0",
+  "owner": "Platform/MCP",
+  "visibility": "internal-owner",
+  "normal_activation": false,
+  "service": "kokoro.platform.v1.ProductMcpPersonalService",
+  "methods": [
+    {
+      "name": "RegisterPersonalMcpServer",
+      "command": true
+    },
+    {
+      "name": "ImportPersonalMcpJson",
+      "command": true
+    },
+    {
+      "name": "GetPersonalMcpServer",
+      "command": false
+    },
+    {
+      "name": "PreparePersonalMcpServer",
+      "command": true
+    },
+    {
+      "name": "UpdatePersonalMcpServer",
+      "command": true
+    },
+    {
+      "name": "DeletePersonalMcpServer",
+      "command": true
+    },
+    {
+      "name": "GetPersonalMcpPrepareReceipt",
+      "command": false
+    },
+    {
+      "name": "ReauthorizePersonalMcpServer",
+      "command": true
+    }
+  ],
+  "request": {
+    "fields": {
+      "request_id": 1,
+      "command": 2,
+      "server_id": 3,
+      "source_connector_id": 4,
+      "expected_server_state_version": 5,
+      "expected_connector_state_version": 6
+    },
+    "state_version": {
+      "minimum": 1,
+      "maximum": 2147483646
+    },
+    "identity": "fresh trusted workload tenant and human subject; never request supplied"
+  },
+  "semantics": {
+    "save": "one current private configuration per canonical URL; no connection created",
+    "remove": "permanent old connector revocation; configuration remains manageable",
+    "reauthorize": "explicit owner personal_remove only; double CAS; new connector and later new connection; no external call",
+    "delete": "private disabled/current NULL tombstone; remove all configuration secrets; preserve permanent safety identities",
+    "receipts": "fresh identity and original safety binding first; completed safe ACK survives later Delete; expired never reexecutes; unknown retains original key/body",
+    "execution": "current binding plus original runtime eligibility; management visibility never grants execution",
+    "global": "currentConnectorId is always NULL; ordinary Provider behavior unchanged",
+    "migration": "exact unique existing owner binding or whole transaction fails; never choose latest row"
+  },
+  "parents": {
+    "commit": "36805356a84aaacbc24b18a4c14bf87bbd81fc7a",
+    "inputs": {
+      "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+        "path": "contract/descriptor/platform-private-mcp-v2-proto.snapshot",
+        "sha256": "26266d24fc1fcffb581662d5a404a97c485c09e3b2e597bb88df3a9cc482ed36"
+      },
+      "contract/descriptor/platform-v1.binpb": {
+        "path": "contract/descriptor/platform-private-mcp-v2-parent.binpb",
+        "sha256": "6c7dadd8ccad5a5a1b56a4c9cf17acb7a1a3f41390e8e0c011fb120dd943483f"
+      },
+      "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+        "path": "contract/descriptor/platform-private-mcp-v2-generated.ts.snapshot",
+        "sha256": "dfc1410f5cf18d18d449b35b7f92499e7b08c778d8f258b80f4abec0927c9d5d"
+      },
+      "contract/provenance.json": {
+        "path": "contract/descriptor/platform-private-mcp-v2-provenance.json.snapshot",
+        "sha256": "c0f9e23eb0e92939f8917f50722b3da759302ed22066bc0332bdd39ccf0744f8"
+      },
+      "contract/execution-operations/mcp-private-server-v1.json": {
+        "path": "contract/descriptor/platform-private-mcp-v2-profile.json.snapshot",
+        "sha256": "066505d4a13cb6fd7a5f625b07eaf5f784b215db2a8584041f14da8ffc98eda1"
+      },
+      "prisma/schema.prisma": {
+        "path": "contract/descriptor/platform-private-mcp-v2-prisma.snapshot",
+        "sha256": "ec3e63999a77fe02019d70337b5b70916fb2ffc87ae2c0a4f52d27e6eaf7d52e"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
+      "sha256": "7bc9253cd91a03f20e263a79be7183436497cc205d321e704e3c2338cdc8fe9c"
+    },
+    {
+      "path": "contract/descriptor/platform-v1.binpb",
+      "sha256": "c023847f5f080311eb93273db44afc063467d9af27343c6645b7e73b3d67c731"
+    },
+    {
+      "path": "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
+      "sha256": "1f007e57ccf3a0926b1e07f533dd1d35bdedc108885e5ab34bf67cd33d93b5ae"
+    },
+    {
+      "path": "contract/descriptor/platform-private-mcp-v2-parents.json",
+      "sha256": "6c5dfead3ed39ba3adf403d9608a70ccd12cb0291e85d97ef3ca1bd70b066bec"
+    }
+  ]
+}

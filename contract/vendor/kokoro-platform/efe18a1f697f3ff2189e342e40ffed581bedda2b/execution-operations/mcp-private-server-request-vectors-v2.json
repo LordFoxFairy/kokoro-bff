@@ -1,0 +1,45 @@
+{
+  "profile": "mcp-private-server-v2",
+  "version": "2.0.0",
+  "method": "ReauthorizePersonalMcpServer",
+  "identity": {
+    "tenantId": "tenant-private-v2",
+    "subjectId": "owner-private-v2"
+  },
+  "accepted": {
+    "request_id": "reauthorize-private-v2",
+    "command": {
+      "command_id": "reauthorize-private-v2",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "server_id": {
+      "value": "server-private-v2"
+    },
+    "source_connector_id": {
+      "value": "connector-private-v2"
+    },
+    "expected_server_state_version": "4",
+    "expected_connector_state_version": "7"
+  },
+  "rejected_versions": [
+    "0",
+    "-1",
+    "1.0",
+    "01",
+    "2147483647",
+    "18446744073709551615"
+  ],
+  "forbidden_fields": [
+    "tenant_id",
+    "actor_id",
+    "subject_id",
+    "owner_scope",
+    "target_owner_scope",
+    "product_context",
+    "execution_proof",
+    "attestation",
+    "headers",
+    "oauth_client",
+    "connection_id"
+  ]
+}

@@ -246,6 +246,7 @@ async function bootstrapFixture(t, { denyMcp = false } = {}) {
       return {
         custom_api: {
           profile_id: q.profileId,
+          governance_status: "active",
           name: "API",
           state_version: "1",
           environment: [],

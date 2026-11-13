@@ -3695,6 +3695,12 @@ Audit、全局用户目录、用户生命周期、session revoke、角色 grant 
 
 ## Connector command browser-private 恢复错误（2026-10-16，候选）
 
+### 2026-11-13 个人 Custom API 治理状态消费（本轮候选）
+
+沿现 browser-private code-first 适配固定 Platform `efe18a1f697f3ff2189e342e40ffed581bedda2b`，provenance SHA `b9c5d9da16097023987fbd72263e22691f47fa3710f8c62d47b286642c505fad`；不新增 Public OpenAPI operation。fresh GET/List 的 profile 必须带 `governance_status=active|quarantined|revoked`，缺失、空串或未知值均为 owner response_invalid，不补 active。create/update 是 immutable ACK：历史 protobuf 缺状态解成空串时省略该字段；有值仍严格三态，保留原版本与状态，不补读或改写旧 ACK。UI 的当前状态须另一次 fresh 本人读取，ACK 不作为当前可执行依据。
+
+仅新增 Project Custom API 推荐引用的现 fresh GET 验证要求 active；non-active 沿原 FailedPrecondition，不静默删除或重验已有绑定，不触发连接/Prepare、不授执行权限。Session、执行 wire 与数据库不变；新 Admin HTTP 尚待配对，正常服务不提前激活。
+
 本片修正历史计划“接public OpenAPI”的表述：现/browser/v1/mcp/*、/browser/v1/connectors/custom-apis*不是public139 operations，Public14.8原字节保持。唯一code-first窄错误policy在src/infrastructure/clients/platform/connector-command-fault.ts，正规生成contract/connector-command-errors-v1.json；与local-import private policy一致，不新增外部operation或错误envelope。
 
 只有Platform固定receipt metadata/code组合才能映射本仓恢复错误，RPC的unknown/expired/conflict/ownership-lost不表示未提交。无marker按原领域处理，畸形/未知/重复/错code/混合detail及read上的marker统一response_invalid/502。MCP三项既有PersonalMcpErrorDetail原因独立可辨，不能按message猜。具体HTTP code/status/retryable/recovery以本仓生成profile为准；成功/CAS/key/no-store/x-request-id/human准入不变。所有恢复指引都不授自动执行、新command或新key许可，未消费App前不声称UX闭环。
