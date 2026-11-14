@@ -1,3 +1,11 @@
+## 2026-11-13 Task B：BFF 独立 owner 交付门通过，沿原 PR 交付
+
+原 PR #17 当前代码基线 `bec8584f0b185a3ce0a32366199142b945d8812b` 的完整需求范围已完成独立验收与只读审查：包含原生 Session／Share／重授权、个人上下文、模型管理、Custom API 治理消费者、Project 协作与 actor-scoped 执行／多来源回放、共享输入与聚合生命周期、Scheduled 协作及 IAM 管理审计，不仅是最后一个审计切片。
+
+当前源码完整默认门为 2591 PASS／0 FAIL／2 条件 SKIP，1322 个 tracked 输入起终逐 SHA 核等；正式 `contract:check` 全 15 步、1454 PASS／0 SKIP，types／lint／build 通过。权限、事务、回放、精确父演进等风险有对应真实 PG／HTTP 收据；正常双身份 ACL／到期撤权、SSE、Scheduled 身份／CAS、IAM 审计分页与保 Session 撤权亦已由 Root 验收。条件跳过不称通过，不据此宣称全部 integration 已运行。下方“全默认／正常配对未验”等只描述对应旧阶段，历史失败原样保留，不覆盖本检查点。
+
+本检查点只支持该 owner 沿原 PR 正常合入 main，不代表整个 B10／Task B 完成或部署。Storage 数据路径、共享成功 Run→安全 FINAL／Artifact 组合旅程及原 unknown 命令仍归 Root 后续验收；不可逆 QA 动作待各自确认，真实外部授权／完整 E2B 沿已接受边界暂存，不重复模型或强行改写未知结果。最终 fetch、集成与精确 Root gitlink 由主控串行负责。
+
 ## 2026-11-13 B13：当前租户 IAM 审计读取（源码已验，正常配对待验）
 
 Public29.1.0／228 operations 仅追加 GET /v1/admin/identity/audit-events；完整逆回原Public29/227及有序库存，旧摘要不变。固定 IAM `814ba4c423b631cab28929048c7203f2d14822fc`／0.22.0／raw `fe0f70f60776e74dc6795f460c4c78010aba7549bf9f6b63e8daae99e035c482` 正规生成客户端；无新BFF Schema/服务/认证/缓存。
